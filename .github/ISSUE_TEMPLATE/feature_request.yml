@@ -1,0 +1,51 @@
+# FEAT-CONTRIB-002
+name: Feature request
+description: Propose an improvement to syu, its workflow, or its documentation.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        `syu` is intentionally small and specification-driven.
+        Please describe the user problem first, then the feature you want.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: Explain the workflow gap or pain point.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What change do you want?
+      description: Describe the behavior, command, or repository change you expect.
+    validations:
+      required: true
+
+  - type: textarea
+    id: specification
+    attributes:
+      label: Specification impact
+      description: Note any philosophy, policy, requirement, or feature layers that may need updates.
+      placeholder: This likely needs a new requirement plus docs and examples.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Share any workarounds or competing ideas you already evaluated.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched for existing issues and discussions first.
+          required: true
+        - label: I can help validate the change against a real project story.
+          required: false

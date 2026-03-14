@@ -27,6 +27,7 @@ See the detailed guides:
 - [`docs/guide/concepts.md`](docs/guide/concepts.md)
 - [`docs/guide/getting-started.md`](docs/guide/getting-started.md)
 - [`docs/guide/configuration.md`](docs/guide/configuration.md)
+- [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ## Install from GitHub Packages
 
@@ -176,6 +177,7 @@ Each one is validated in the automated test suite.
 For VS Code / Codespaces-style development, use the devcontainer:
 
 - [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json)
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) for the GitHub Flow contribution path
 
 ## Local quality gates
 
@@ -237,7 +239,7 @@ For self-hosting repository automation and metadata, it also ships adapters for:
 The repository includes:
 
 - GitHub Actions CI for pre-commit, quality gates, coverage, and workflow linting
-- release-please automation for `alpha`, `beta`, and `main` (stable) release tracks
+- release-please automation on `main` so stable releases stay aligned with GitHub Flow
 - release artifact packaging for Linux, macOS (Intel/Apple Silicon), and Windows
 
 Release notes come from GitHub Releases rather than a committed `CHANGELOG.md`.

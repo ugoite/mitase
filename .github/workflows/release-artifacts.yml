@@ -15,6 +15,10 @@ on:
         required: true
         type: string
 
+concurrency:
+  group: release-artifacts-${{ github.event.release.tag_name || inputs.tag || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
   packages: write
@@ -52,6 +56,9 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      - name: Restore Rust cache
+        uses: Swatinem/rust-cache@v2
 
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }}

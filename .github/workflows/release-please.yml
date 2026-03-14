@@ -8,9 +8,11 @@ on:
   push:
     branches:
       - main
-      - beta
-      - alpha
   workflow_dispatch:
+
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -18,8 +20,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  release-please-stable:
-    if: github.ref_name == 'main'
+  release-please:
     runs-on: ubuntu-latest
     steps:
       - name: Check release-please permissions
@@ -40,68 +41,10 @@ jobs:
           if [[ "$enabled" != "true" ]]; then
             echo "::notice title=release-please skipped::Enable read/write workflow permissions and allow GitHub Actions to create pull requests to run release-please automatically."
           fi
-      - name: Run stable release-please
+      - name: Run release-please
         if: steps.permissions.outputs.enabled == 'true'
         uses: googleapis/release-please-action@v4.4.0
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
           target-branch: main
-  release-please-beta:
-    if: github.ref_name == 'beta'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check release-please permissions
-        id: permissions
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          payload="$(gh api "repos/${GITHUB_REPOSITORY}/actions/permissions/workflow" 2>/dev/null || true)"
-          if [[ -z "$payload" ]]; then
-            echo "enabled=false" >>"$GITHUB_OUTPUT"
-            echo "::notice title=release-please skipped::Unable to inspect workflow pull-request permissions. Skipping release-please."
-            exit 0
-          fi
-          enabled="$(printf '%s' "$payload" | python3 -c 'import json,sys; payload=json.load(sys.stdin); print("true" if payload.get("default_workflow_permissions") == "write" and payload.get("can_approve_pull_request_reviews") else "false")')"
-          echo "enabled=$enabled" >>"$GITHUB_OUTPUT"
-          if [[ "$enabled" != "true" ]]; then
-            echo "::notice title=release-please skipped::Enable read/write workflow permissions and allow GitHub Actions to create pull requests to run release-please automatically."
-          fi
-      - name: Run beta release-please
-        if: steps.permissions.outputs.enabled == 'true'
-        uses: googleapis/release-please-action@v4.4.0
-        with:
-          config-file: release-please-config.beta.json
-          manifest-file: .release-please-manifest.beta.json
-          target-branch: beta
-  release-please-alpha:
-    if: github.ref_name == 'alpha'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check release-please permissions
-        id: permissions
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          payload="$(gh api "repos/${GITHUB_REPOSITORY}/actions/permissions/workflow" 2>/dev/null || true)"
-          if [[ -z "$payload" ]]; then
-            echo "enabled=false" >>"$GITHUB_OUTPUT"
-            echo "::notice title=release-please skipped::Unable to inspect workflow pull-request permissions. Skipping release-please."
-            exit 0
-          fi
-          enabled="$(printf '%s' "$payload" | python3 -c 'import json,sys; payload=json.load(sys.stdin); print("true" if payload.get("default_workflow_permissions") == "write" and payload.get("can_approve_pull_request_reviews") else "false")')"
-          echo "enabled=$enabled" >>"$GITHUB_OUTPUT"
-          if [[ "$enabled" != "true" ]]; then
-            echo "::notice title=release-please skipped::Enable read/write workflow permissions and allow GitHub Actions to create pull requests to run release-please automatically."
-          fi
-      - name: Run alpha release-please
-        if: steps.permissions.outputs.enabled == 'true'
-        uses: googleapis/release-please-action@v4.4.0
-        with:
-          config-file: release-please-config.alpha.json
-          manifest-file: .release-please-manifest.alpha.json
-          target-branch: alpha

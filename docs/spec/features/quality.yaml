@@ -4,11 +4,12 @@ version: 1
 features:
   - id: FEAT-QUALITY-001
     title: Repository quality automation
-    summary: Keep self-validation, quality gates, and coverage enforcement executable and shared across hooks and CI.
+    summary: Keep self-validation, dependency hygiene, and CI execution fast enough to run on every pull request.
     status: implemented
     linked_requirements:
       - REQ-CORE-005
       - REQ-CORE-006
+      - REQ-CORE-014
     implementations:
       shell:
         - file: scripts/ci/quality-gates.sh
@@ -30,3 +31,11 @@ features:
             - quality
             - coverage
             - actionlint
+            - Restore Rust cache
+            - Set up Python with pip cache
+            - Review dependency changes
+        - file: .github/dependabot.yml
+          symbols:
+            - FEAT-QUALITY-001
+            - package-ecosystem
+            - target-branch

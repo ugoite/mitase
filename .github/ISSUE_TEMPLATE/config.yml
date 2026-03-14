@@ -1,0 +1,6 @@
+# FEAT-CONTRIB-002
+blank_issues_enabled: false
+contact_links:
+  - name: Read the syu docs
+    url: https://github.com/ugoite/syu/blob/main/README.md
+    about: Start with the README, concepts guide, and getting-started guide before opening a support issue.

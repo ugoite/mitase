@@ -22,3 +22,38 @@ features:
             - rust_only_example_validates
             - python_only_example_validates
             - polyglot_example_validates
+
+  - id: FEAT-CONTRIB-002
+    title: Contributor workflow templates
+    summary: Guide GitHub Flow contributions with repository-native docs and forms.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-013
+    implementations:
+      markdown:
+        - file: CONTRIBUTING.md
+          symbols:
+            - FEAT-CONTRIB-002
+            - GitHub Flow
+            - scripts/ci/quality-gates.sh
+        - file: .github/pull_request_template.md
+          symbols:
+            - FEAT-CONTRIB-002
+            - scripts/ci/quality-gates.sh
+            - cargo run -- validate .
+      yaml:
+        - file: .github/ISSUE_TEMPLATE/bug_report.yml
+          symbols:
+            - FEAT-CONTRIB-002
+            - What happened?
+            - Steps to reproduce
+        - file: .github/ISSUE_TEMPLATE/feature_request.yml
+          symbols:
+            - FEAT-CONTRIB-002
+            - What problem are you trying to solve?
+            - Specification impact
+        - file: .github/ISSUE_TEMPLATE/config.yml
+          symbols:
+            - FEAT-CONTRIB-002
+            - blank_issues_enabled
+            - contact_links

@@ -4,7 +4,7 @@ version: 1
 features:
   - id: FEAT-INSTALL-001
     title: Release installer
-    summary: Install the matching packaged binary with one shell command and a sane default repository.
+    summary: Install the matching packaged binary with one shell command and a release-asset fallback.
     status: implemented
     linked_requirements:
       - REQ-CORE-008
@@ -18,5 +18,6 @@ features:
             - resolve_target_triple
             - resolve_package_tag
             - download_package_archive
+            - download_release_archive
             - extract_archive
             - install_syu

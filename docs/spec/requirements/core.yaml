@@ -137,11 +137,11 @@ requirements:
   - id: REQ-CORE-007
     title: Automate releases with release-please and artifact packaging
     description: |
-      The repository MUST provide release automation that prepares release PRs,
-      supports alpha / beta / stable tracks, publishes GitHub release notes
-      without a committed changelog file, builds installable artifacts for
-      supported platforms, and publishes install packages to GitHub Packages /
-      GHCR.
+      The repository MUST provide release automation that prepares stable release
+      PRs from `main`, keeps `main` releaseable under GitHub Flow, publishes
+      GitHub release notes without a committed changelog file, builds installable
+      artifacts for supported platforms, and publishes install packages to
+      GitHub Packages / GHCR.
     priority: high
     status: implemented
     linked_policies:
@@ -158,8 +158,9 @@ requirements:
     title: Provide a one-line installer for package artifacts
     description: |
       The repository MUST ship an installer script that resolves the current
-      platform, downloads the matching package artifact from GitHub Packages /
-      GHCR, defaults to `ugoite/syu`, and installs the binary into a
+      platform, prefers the matching package artifact from GitHub Packages /
+      GHCR, falls back to GitHub release assets when package download is not
+      available, defaults to `ugoite/syu`, and installs the binary into a
       user-controlled location.
     priority: medium
     status: implemented
@@ -258,3 +259,43 @@ requirements:
         - file: tests/repository_quality.rs
           symbols:
             - repository_ships_example_workspaces
+
+  - id: REQ-CORE-013
+    title: Provide GitHub Flow contributor workflow assets
+    description: |
+      The repository MUST document its GitHub Flow process, keep `main` as the
+      only long-lived branch, ship pull-request and issue templates that guide
+      high-signal contributions, and explain the local verification steps that
+      contributors should run before opening a pull request.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-005
+      - POL-006
+      - POL-007
+    linked_features:
+      - FEAT-CONTRIB-002
+    tests:
+      rust:
+        - file: tests/repository_quality.rs
+          symbols:
+            - repository_declares_contribution_workflow_assets
+
+  - id: REQ-CORE-014
+    title: Keep dependency hygiene and CI execution current
+    description: |
+      The repository MUST cache repeatable CI build state, keep GitHub Actions
+      runs concise enough for pull-request-first development, and use Dependabot
+      to update Rust and GitHub Actions dependencies against `main`.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-006
+      - POL-007
+    linked_features:
+      - FEAT-QUALITY-001
+    tests:
+      rust:
+        - file: tests/repository_quality.rs
+          symbols:
+            - repository_declares_dependency_hygiene_and_ci_caching

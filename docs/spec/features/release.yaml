@@ -4,7 +4,7 @@ version: 1
 features:
   - id: FEAT-RELEASE-001
     title: Release automation
-    summary: Create alpha, beta, and stable releases predictably and package binaries for distribution.
+    summary: Prepare stable releases from main and package binaries for stable or prerelease distribution.
     status: implemented
     linked_requirements:
       - REQ-CORE-007
@@ -20,9 +20,9 @@ features:
       yaml:
         - file: .github/workflows/release-please.yml
           symbols:
-            - release-please-stable
-            - release-please-beta
-            - release-please-alpha
+            - release-please
+            - Run release-please
+            - "target-branch: main"
         - file: .github/workflows/release-artifacts.yml
           symbols:
             - release-artifacts

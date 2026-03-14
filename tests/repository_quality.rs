@@ -33,11 +33,13 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(ci_workflow.contains("quality:"));
     assert!(ci_workflow.contains("actionlint:"));
     assert!(ci_workflow.contains("dependency-audit:"));
+    assert!(ci_workflow.contains("dependency-review:"));
     assert!(ci_workflow.contains("installer-smoke:"));
     assert!(ci_workflow.contains("--hook-stage pre-commit"));
     assert!(ci_workflow.contains("--hook-stage pre-push"));
     assert!(ci_workflow.contains("scripts/ci/quality-gates.sh"));
     assert!(ci_workflow.contains("cargo audit"));
+    assert!(ci_workflow.contains("Review dependency changes"));
     assert!(ci_workflow.contains("scripts/ci/installer-smoke.sh"));
 }
 
@@ -66,16 +68,15 @@ fn repository_declares_release_automation() {
     let package_script = read_file("scripts/ci/package-release.sh");
     let publish_script = read_file("scripts/ci/publish-package.sh");
     let release_config = read_file("release-please-config.json");
-    let beta_config = read_file("release-please-config.beta.json");
-    let alpha_config = read_file("release-please-config.alpha.json");
     let manifest = read_file(".release-please-manifest.json");
 
     assert!(release_please.contains("FEAT-RELEASE-001"));
     assert!(release_please.contains("googleapis/release-please-action@v4.4.0"));
-    assert!(release_please.contains("release-please-stable"));
-    assert!(release_please.contains("release-please-beta"));
-    assert!(release_please.contains("release-please-alpha"));
+    assert!(release_please.contains("release-please:"));
+    assert!(release_please.contains("target-branch: main"));
     assert!(release_please.contains("release-please skipped"));
+    assert!(!release_please.contains("target-branch: alpha"));
+    assert!(!release_please.contains("target-branch: beta"));
 
     assert!(release_artifacts.contains("FEAT-RELEASE-001"));
     assert!(release_artifacts.contains("release-artifacts"));
@@ -97,11 +98,23 @@ fn repository_declares_release_automation() {
     assert!(release_config.contains("\"skip-changelog\": true"));
     assert!(release_config.contains("\"changelog-type\": \"github\""));
     assert!(release_config.contains("\"initial-version\": \"0.0.1\""));
-    assert!(beta_config.contains("\"prerelease\": true"));
-    assert!(beta_config.contains("\"prerelease-type\": \"beta\""));
-    assert!(alpha_config.contains("\"prerelease\": true"));
-    assert!(alpha_config.contains("\"prerelease-type\": \"alpha\""));
     assert!(manifest.contains("\".\": \"0.0.0\""));
+    assert!(
+        !repo_root()
+            .join("release-please-config.alpha.json")
+            .exists()
+    );
+    assert!(!repo_root().join("release-please-config.beta.json").exists());
+    assert!(
+        !repo_root()
+            .join(".release-please-manifest.alpha.json")
+            .exists()
+    );
+    assert!(
+        !repo_root()
+            .join(".release-please-manifest.beta.json")
+            .exists()
+    );
     assert!(!repo_root().join("CHANGELOG.md").exists());
 }
 
@@ -148,6 +161,7 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("syu init"));
     assert!(readme.contains("syu validate"));
     assert!(readme.contains("examples/polyglot"));
+    assert!(readme.contains("CONTRIBUTING.md"));
 
     assert!(concepts.contains("philosophy"));
     assert!(concepts.contains("policy"));
@@ -189,4 +203,62 @@ fn repository_ships_example_workspaces() {
     assert!(example_tests.contains("rust_only_example_validates"));
     assert!(example_tests.contains("python_only_example_validates"));
     assert!(example_tests.contains("polyglot_example_validates"));
+}
+
+#[test]
+// REQ-CORE-013
+fn repository_declares_contribution_workflow_assets() {
+    let contributing = read_file("CONTRIBUTING.md");
+    let pr_template = read_file(".github/pull_request_template.md");
+    let bug_report = read_file(".github/ISSUE_TEMPLATE/bug_report.yml");
+    let feature_request = read_file(".github/ISSUE_TEMPLATE/feature_request.yml");
+    let issue_config = read_file(".github/ISSUE_TEMPLATE/config.yml");
+
+    assert!(contributing.contains("FEAT-CONTRIB-002"));
+    assert!(contributing.contains("GitHub Flow"));
+    assert!(contributing.contains("main"));
+    assert!(contributing.contains("scripts/ci/quality-gates.sh"));
+
+    assert!(pr_template.contains("FEAT-CONTRIB-002"));
+    assert!(pr_template.contains("scripts/ci/quality-gates.sh"));
+    assert!(pr_template.contains("cargo run -- validate ."));
+
+    assert!(bug_report.contains("FEAT-CONTRIB-002"));
+    assert!(bug_report.contains("What happened?"));
+    assert!(bug_report.contains("Steps to reproduce"));
+
+    assert!(feature_request.contains("FEAT-CONTRIB-002"));
+    assert!(feature_request.contains("What problem are you trying to solve?"));
+    assert!(feature_request.contains("Specification impact"));
+
+    assert!(issue_config.contains("FEAT-CONTRIB-002"));
+    assert!(issue_config.contains("blank_issues_enabled: false"));
+    assert!(issue_config.contains("contact_links"));
+}
+
+#[test]
+// REQ-CORE-014
+fn repository_declares_dependency_hygiene_and_ci_caching() {
+    let ci_workflow = read_file(".github/workflows/ci.yml");
+    let release_artifacts = read_file(".github/workflows/release-artifacts.yml");
+    let dependabot = read_file(".github/dependabot.yml");
+
+    assert!(ci_workflow.contains("concurrency:"));
+    assert!(ci_workflow.contains("cancel-in-progress: true"));
+    assert!(ci_workflow.contains("permissions:"));
+    assert!(ci_workflow.contains("Restore Rust cache"));
+    assert!(ci_workflow.contains("Swatinem/rust-cache@v2"));
+    assert!(ci_workflow.contains("Set up Python with pip cache"));
+    assert!(ci_workflow.contains("cache: pip"));
+    assert!(ci_workflow.contains("cache-dependency-path: .pre-commit-config.yaml"));
+
+    assert!(release_artifacts.contains("Restore Rust cache"));
+    assert!(release_artifacts.contains("Swatinem/rust-cache@v2"));
+
+    assert!(dependabot.contains("FEAT-QUALITY-001"));
+    assert!(dependabot.contains("package-ecosystem: cargo"));
+    assert!(dependabot.contains("package-ecosystem: github-actions"));
+    assert!(dependabot.contains("target-branch: main"));
+    assert!(dependabot.contains("rust-crates"));
+    assert!(dependabot.contains("github-actions"));
 }

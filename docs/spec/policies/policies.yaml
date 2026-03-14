@@ -73,6 +73,7 @@ policies:
       - REQ-CORE-004
       - REQ-CORE-010
       - REQ-CORE-012
+      - REQ-CORE-013
 
   - id: POL-006
     title: Contributor tooling must self-host the same discipline
@@ -88,6 +89,8 @@ policies:
     linked_requirements:
       - REQ-CORE-011
       - REQ-CORE-012
+      - REQ-CORE-013
+      - REQ-CORE-014
 
   - id: POL-007
     title: Self-hosting operations must stay reproducible
@@ -104,3 +107,5 @@ policies:
       - REQ-CORE-006
       - REQ-CORE-007
       - REQ-CORE-008
+      - REQ-CORE-013
+      - REQ-CORE-014
