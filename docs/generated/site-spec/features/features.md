@@ -9,7 +9,7 @@ description: "Generated reference for docs/syu/features/features.yaml"
 
 ### Version
 
-- 0.0.1-alpha.5
+- 0.0.1-alpha.6
 
 ### Updated
 
@@ -41,7 +41,7 @@ description: "Generated reference for docs/syu/features/features.yaml"
 ## Source YAML
 
 ```yaml
-version: "0.0.1-alpha.5"
+version: "0.0.1-alpha.6"
 updated: "2026-03"
 
 files:

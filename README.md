@@ -61,7 +61,7 @@ curl -fsSL https://raw.githubusercontent.com/ugoite/syu/main/scripts/install-syu
 Install a specific prerelease:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ugoite/syu/main/scripts/install-syu.sh | env SYU_VERSION=v0.0.1-alpha.5 bash
+curl -fsSL https://raw.githubusercontent.com/ugoite/syu/main/scripts/install-syu.sh | env SYU_VERSION=v0.0.1-alpha.6 bash
 ```
 
 ## Quick start
@@ -139,7 +139,7 @@ The self-hosted repository keeps its latest generated report at
 `syu` looks for `syu.yaml` in the workspace root:
 
 ```yaml
-version: 0.0.1-alpha.5
+version: 0.0.1-alpha.6
 spec:
   root: docs/syu
 validate:
