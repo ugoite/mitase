@@ -168,6 +168,9 @@ fn repository_declares_documentation_guides() {
     let concepts = read_file("docs/guide/concepts.md");
     let getting_started = read_file("docs/guide/getting-started.md");
     let configuration = read_file("docs/guide/configuration.md");
+    let ci_workflow = read_file(".github/workflows/ci.yml");
+    let docs_deploy_workflow = read_file(".github/workflows/deploy-pages.yml");
+    let docs_build_action = read_file(".github/actions/build-docs-site/action.yml");
     let docs_package = read_file("website/package.json");
     let docs_config = read_file("website/docusaurus.config.js");
     let docs_home = read_file("website/src/pages/index.js");
@@ -182,6 +185,7 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("CONTRIBUTING.md"));
     assert!(readme.contains("Documentation site"));
     assert!(readme.contains("scripts/install-precommit.sh"));
+    assert!(readme.contains("https://ugoite.github.io/syu/"));
 
     assert!(concepts.contains("philosophy"));
     assert!(concepts.contains("policy"));
@@ -199,8 +203,19 @@ fn repository_declares_documentation_guides() {
     assert!(configuration.contains("validate.default_fix"));
     assert!(configuration.contains("validate.allow_planned"));
     assert!(configuration.contains(&format!("version: {current_version}")));
+    assert!(ci_workflow.contains("./.github/actions/build-docs-site"));
+    assert!(docs_build_action.contains("FEAT-DOCS-002"));
+    assert!(docs_build_action.contains("actions/setup-node@v6"));
+    assert!(docs_build_action.contains("npm install"));
+    assert!(docs_build_action.contains("npm run build"));
     assert!(docs_package.contains("@docusaurus/core"));
     assert!(docs_package.contains("\"build\": \"docusaurus build\""));
+    assert!(docs_deploy_workflow.contains("permissions:"));
+    assert!(docs_deploy_workflow.contains("./.github/actions/build-docs-site"));
+    assert!(docs_deploy_workflow.contains("actions/configure-pages@v5"));
+    assert!(docs_deploy_workflow.contains("actions/upload-pages-artifact@v4"));
+    assert!(docs_deploy_workflow.contains("actions/deploy-pages@v4"));
+    assert!(docs_deploy_workflow.contains("github-pages"));
     assert!(docs_config.contains("FEAT-DOCS-002"));
     assert!(docs_config.contains("routeBasePath: 'docs'"));
     assert!(docs_config.contains("projectName: 'syu'"));
@@ -258,6 +273,7 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(contributing.contains("main"));
     assert!(contributing.contains("scripts/ci/quality-gates.sh"));
     assert!(contributing.contains("scripts/install-precommit.sh"));
+    assert!(contributing.contains("GitHub Pages"));
     assert!(contributing.contains("release track"));
 
     assert!(pr_template.contains("FEAT-CONTRIB-002"));
@@ -281,6 +297,7 @@ fn repository_declares_contribution_workflow_assets() {
 // REQ-CORE-014
 fn repository_declares_dependency_hygiene_and_ci_caching() {
     let ci_workflow = read_file(".github/workflows/ci.yml");
+    let docs_build_action = read_file(".github/actions/build-docs-site/action.yml");
     let release_artifacts = read_file(".github/workflows/release-artifacts.yml");
     let dependabot = read_file(".github/dependabot.yml");
 
@@ -293,8 +310,9 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(ci_workflow.contains("cache: pip"));
     assert!(ci_workflow.contains("cache-dependency-path: .pre-commit-config.yaml"));
     assert!(ci_workflow.contains("docs-site:"));
-    assert!(ci_workflow.contains("actions/setup-node@v6"));
-    assert!(ci_workflow.contains("npm run build"));
+    assert!(ci_workflow.contains("./.github/actions/build-docs-site"));
+    assert!(docs_build_action.contains("actions/setup-node@v6"));
+    assert!(docs_build_action.contains("npm run build"));
 
     assert!(release_artifacts.contains("Restore Rust cache"));
     assert!(release_artifacts.contains("Swatinem/rust-cache@v2"));
