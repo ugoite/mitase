@@ -252,6 +252,9 @@ npm install
 npm run start
 ```
 
+The landing page links the core guides, the self-hosted specification reference,
+and the latest checked-in validation report.
+
 ## Agent skill
 
 <!-- FEAT-SKILLS-001 -->
