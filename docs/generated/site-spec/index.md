@@ -1,9 +1,9 @@
 ---
 title: "Specification Reference"
-description: "Generated site pages for docs/spec YAML definitions."
+description: "Generated site pages for docs/syu YAML definitions."
 ---
 
-This section is generated from the YAML source under `docs/spec/`.
+This section is generated from the YAML source under `docs/syu/`.
 
 ## Available documents
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate Docusaurus-friendly markdown pages from docs/spec YAML files."""
+"""Generate Docusaurus-friendly markdown pages from the configured spec root."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import yaml
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SPEC_ROOT = REPO_ROOT / "docs" / "spec"
+DEFAULT_SPEC_ROOT = Path("docs/syu")
 OUTPUT_ROOT = REPO_ROOT / "docs" / "generated" / "site-spec"
 
 
@@ -19,10 +19,11 @@ def display_name(value: str) -> str:
 
 
 def frontmatter(title: str, source_path: Path) -> list[str]:
+    source_display = display_source_path(source_path)
     return [
         "---",
         f'title: "{title}"',
-        f'description: "Generated reference for {source_path.as_posix()}"',
+        f'description: "Generated reference for {source_display}"',
         "---",
         "",
     ]
@@ -90,8 +91,46 @@ def page_title(relative_path: Path, document: dict) -> str:
     return display_name(relative_path.stem)
 
 
-def write_markdown(source_path: Path) -> tuple[str, str]:
-    relative_path = source_path.relative_to(SPEC_ROOT)
+def resolve_spec_root() -> Path:
+    config_path = REPO_ROOT / "syu.yaml"
+    default_root = REPO_ROOT / DEFAULT_SPEC_ROOT
+    if not config_path.is_file():
+        return default_root
+
+    document = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(document, dict):
+        return default_root
+
+    spec_config = document.get("spec")
+    if not isinstance(spec_config, dict):
+        return default_root
+
+    raw_root = spec_config.get("root")
+    if not isinstance(raw_root, str) or not raw_root.strip():
+        return default_root
+
+    candidate = Path(raw_root.strip())
+    if candidate.is_absolute():
+        return candidate
+    return REPO_ROOT / candidate
+
+
+def relative_source_root(spec_root: Path) -> str:
+    try:
+        return spec_root.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return spec_root.as_posix()
+
+
+def display_source_path(source_path: Path) -> str:
+    try:
+        return source_path.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        return source_path.as_posix()
+
+
+def write_markdown(source_path: Path, spec_root: Path) -> tuple[str, str]:
+    relative_path = source_path.relative_to(spec_root)
     output_path = OUTPUT_ROOT / relative_path.with_suffix(".md")
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -101,10 +140,11 @@ def write_markdown(source_path: Path) -> tuple[str, str]:
         document = {"content": document}
 
     title = page_title(relative_path, document)
-    lines = frontmatter(title, source_path.relative_to(REPO_ROOT))
+    source_display = display_source_path(source_path)
+    lines = frontmatter(title, source_path)
     lines.extend(
         [
-            f"> Generated from `{source_path.relative_to(REPO_ROOT).as_posix()}`.",
+            f"> Generated from `{source_display}`.",
             "",
             "## Parsed content",
             "",
@@ -129,15 +169,16 @@ def write_markdown(source_path: Path) -> tuple[str, str]:
     return title, doc_link
 
 
-def write_index(entries: list[tuple[str, str]]) -> None:
+def write_index(entries: list[tuple[str, str]], spec_root: Path) -> None:
     index_path = OUTPUT_ROOT / "index.md"
+    source_root = relative_source_root(spec_root)
     lines = [
         "---",
         'title: "Specification Reference"',
-        'description: "Generated site pages for docs/spec YAML definitions."',
+        f'description: "Generated site pages for {source_root} YAML definitions."',
         "---",
         "",
-        "This section is generated from the YAML source under `docs/spec/`.",
+        f"This section is generated from the YAML source under `{source_root}/`.",
         "",
         "## Available documents",
         "",
@@ -151,12 +192,16 @@ def write_index(entries: list[tuple[str, str]]) -> None:
 
 
 def main() -> None:
+    spec_root = resolve_spec_root()
+    if not spec_root.is_dir():
+        raise SystemExit(f"configured spec root does not exist: {spec_root}")
+
     if OUTPUT_ROOT.exists():
         shutil.rmtree(OUTPUT_ROOT)
     OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 
-    entries = [write_markdown(path) for path in sorted(SPEC_ROOT.rglob("*.yaml"))]
-    write_index(entries)
+    entries = [write_markdown(path, spec_root) for path in sorted(spec_root.rglob("*.yaml"))]
+    write_index(entries, spec_root)
 
 
 if __name__ == "__main__":

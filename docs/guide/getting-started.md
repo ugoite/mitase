@@ -16,7 +16,7 @@ Or scaffold another directory:
 syu init path/to/workspace --name my-project
 ```
 
-This creates `syu.yaml` and a starter `docs/spec/` tree.
+This creates `syu.yaml` and a starter `docs/syu/` tree.
 
 Starter requirements and features begin as `status: planned`. Keep them planned
 until you are ready to declare real tests and implementation traces.
@@ -25,10 +25,10 @@ until you are ready to declare real tests and implementation traces.
 
 Start by editing:
 
-- `docs/spec/philosophy/foundation.yaml`
-- `docs/spec/policies/policies.yaml`
-- `docs/spec/requirements/core.yaml`
-- `docs/spec/features/core.yaml`
+- `docs/syu/philosophy/foundation.yaml`
+- `docs/syu/policies/policies.yaml`
+- `docs/syu/requirements/core.yaml`
+- `docs/syu/features/core.yaml`
 
 Make sure links are reciprocal:
 

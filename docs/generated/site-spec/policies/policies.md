@@ -1,9 +1,9 @@
 ---
 title: "Policies / Policies"
-description: "Generated reference for docs/spec/policies/policies.yaml"
+description: "Generated reference for docs/syu/policies/policies.yaml"
 ---
 
-> Generated from `docs/spec/policies/policies.yaml`.
+> Generated from `docs/syu/policies/policies.yaml`.
 
 ## Parsed content
 

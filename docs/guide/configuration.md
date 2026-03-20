@@ -9,7 +9,7 @@
 ```yaml
 version: 0.0.1-alpha.5
 spec:
-  root: docs/spec
+  root: docs/syu
 validate:
   default_fix: false
   allow_planned: true
@@ -38,8 +38,11 @@ Use a relative path for normal workspaces:
 
 ```yaml
 spec:
-  root: docs/spec
+  root: docs/syu
 ```
+
+New workspaces default to `docs/syu`. Existing repositories can keep another
+layout, including `docs/spec`, by setting `spec.root` explicitly.
 
 ### `validate.default_fix`
 

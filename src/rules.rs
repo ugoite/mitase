@@ -39,11 +39,11 @@ pub struct ReferencedRule {
 }
 
 static RULE_FILES: &[&str] = &[
-    include_str!("../docs/spec/errors/workspace.yaml"),
-    include_str!("../docs/spec/errors/graph.yaml"),
-    include_str!("../docs/spec/errors/delivery.yaml"),
-    include_str!("../docs/spec/errors/traceability.yaml"),
-    include_str!("../docs/spec/errors/coverage.yaml"),
+    include_str!("../docs/syu/errors/workspace.yaml"),
+    include_str!("../docs/syu/errors/graph.yaml"),
+    include_str!("../docs/syu/errors/delivery.yaml"),
+    include_str!("../docs/syu/errors/traceability.yaml"),
+    include_str!("../docs/syu/errors/coverage.yaml"),
 ];
 
 static RULES_BY_CODE: LazyLock<BTreeMap<String, ReferencedRule>> = LazyLock::new(load_rules);

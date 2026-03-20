@@ -35,7 +35,7 @@ pub enum Commands {
 
 #[derive(Debug, Clone, Args)]
 pub struct BrowseArgs {
-    #[arg(help = "Workspace root containing syu.yaml and docs/spec")]
+    #[arg(help = "Workspace root containing syu.yaml and the spec tree (default: docs/syu)")]
     #[arg(default_value = ".")]
     pub workspace: PathBuf,
 }
@@ -50,7 +50,7 @@ impl Default for BrowseArgs {
 
 #[derive(Debug, Clone, Args)]
 pub struct ValidateArgs {
-    #[arg(help = "Workspace root containing syu.yaml and docs/spec")]
+    #[arg(help = "Workspace root containing syu.yaml and the spec tree (default: docs/syu)")]
     #[arg(default_value = ".")]
     pub workspace: PathBuf,
 
@@ -71,7 +71,7 @@ pub type CheckArgs = ValidateArgs;
 
 #[derive(Debug, Clone, Args)]
 pub struct ReportArgs {
-    #[arg(help = "Workspace root containing syu.yaml and docs/spec")]
+    #[arg(help = "Workspace root containing syu.yaml and the spec tree (default: docs/syu)")]
     #[arg(default_value = ".")]
     pub workspace: PathBuf,
 

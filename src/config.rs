@@ -147,7 +147,7 @@ fn default_require_non_orphaned_items() -> bool {
 }
 
 fn default_spec_root() -> PathBuf {
-    PathBuf::from("docs/spec")
+    PathBuf::from("docs/syu")
 }
 
 fn default_runtime_command() -> String {
@@ -217,7 +217,7 @@ mod tests {
         assert_eq!(loaded.path, tempdir.path().join(CONFIG_FILE_NAME));
         assert_eq!(
             loaded.config.spec.root,
-            std::path::PathBuf::from("docs/spec")
+            std::path::PathBuf::from("docs/syu")
         );
         assert_eq!(loaded.config.version, current_cli_version());
         assert_eq!(loaded.config.runtimes.python.command, "auto");
@@ -266,7 +266,7 @@ mod tests {
     fn resolve_spec_root_handles_relative_and_absolute_paths() {
         let tempdir = tempdir().expect("tempdir should exist");
         let relative = resolve_spec_root(tempdir.path(), &SyuConfig::default());
-        assert_eq!(relative, tempdir.path().join("docs/spec"));
+        assert_eq!(relative, tempdir.path().join("docs/syu"));
 
         let absolute = SyuConfig {
             spec: super::SpecConfig {

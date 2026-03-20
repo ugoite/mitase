@@ -1,9 +1,9 @@
 ---
 title: "Contributor Experience / Contributor"
-description: "Generated reference for docs/spec/features/contributor.yaml"
+description: "Generated reference for docs/syu/features/contributor.yaml"
 ---
 
-> Generated from `docs/spec/features/contributor.yaml`.
+> Generated from `docs/syu/features/contributor.yaml`.
 
 ## Parsed content
 

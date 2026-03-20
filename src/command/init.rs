@@ -14,11 +14,11 @@ use crate::{
 #[cfg(test)]
 const GENERATED_PATHS: &[&str] = &[
     "syu.yaml",
-    "docs/spec/philosophy/foundation.yaml",
-    "docs/spec/policies/policies.yaml",
-    "docs/spec/requirements/core.yaml",
-    "docs/spec/features/features.yaml",
-    "docs/spec/features/core.yaml",
+    "docs/syu/philosophy/foundation.yaml",
+    "docs/syu/policies/policies.yaml",
+    "docs/syu/requirements/core.yaml",
+    "docs/syu/features/features.yaml",
+    "docs/syu/features/core.yaml",
 ];
 
 // FEAT-INIT-001
@@ -100,23 +100,23 @@ fn scaffold_files(project_name: &str) -> Vec<(String, String)> {
             render_default_config().expect("config template should render"),
         ),
         (
-            "docs/spec/philosophy/foundation.yaml".to_string(),
+            "docs/syu/philosophy/foundation.yaml".to_string(),
             philosophy_template(project_name),
         ),
         (
-            "docs/spec/policies/policies.yaml".to_string(),
+            "docs/syu/policies/policies.yaml".to_string(),
             policy_template(project_name),
         ),
         (
-            "docs/spec/requirements/core.yaml".to_string(),
+            "docs/syu/requirements/core.yaml".to_string(),
             requirement_template(project_name),
         ),
         (
-            "docs/spec/features/features.yaml".to_string(),
+            "docs/syu/features/features.yaml".to_string(),
             feature_registry_template(),
         ),
         (
-            "docs/spec/features/core.yaml".to_string(),
+            "docs/syu/features/core.yaml".to_string(),
             feature_template(project_name),
         ),
     ]
@@ -249,11 +249,11 @@ mod tests {
         let files = scaffold_files("demo");
         let requirement = files
             .iter()
-            .find(|(path, _)| path == "docs/spec/requirements/core.yaml")
+            .find(|(path, _)| path == "docs/syu/requirements/core.yaml")
             .expect("requirement template");
         let feature = files
             .iter()
-            .find(|(path, _)| path == "docs/spec/features/core.yaml")
+            .find(|(path, _)| path == "docs/syu/features/core.yaml")
             .expect("feature template");
 
         assert!(requirement.1.contains("status: planned"));
@@ -300,7 +300,7 @@ mod tests {
     fn init_command_reports_file_write_failures() {
         let tempdir = tempdir().expect("tempdir should exist");
         let workspace = tempdir.path().join("demo");
-        fs::create_dir_all(workspace.join("docs/spec/features/core.yaml"))
+        fs::create_dir_all(workspace.join("docs/syu/features/core.yaml"))
             .expect("blocking directory should exist");
 
         let error = run_init_command(&InitArgs {

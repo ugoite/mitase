@@ -158,7 +158,10 @@ impl CheckResult {
                 "workspace",
                 None,
                 message.into(),
-                Some("Create a valid docs/spec tree and feature registry before running `syu validate`.".to_string()),
+                Some(
+                    "Create a valid spec tree (default: `docs/syu`) and feature registry before running `syu validate`."
+                        .to_string(),
+                ),
             )],
             referenced_rules: Vec::new(),
         }

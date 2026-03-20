@@ -1,9 +1,9 @@
 ---
 title: "Core CLI / Core"
-description: "Generated reference for docs/spec/requirements/core.yaml"
+description: "Generated reference for docs/syu/requirements/core.yaml"
 ---
 
-> Generated from `docs/spec/requirements/core.yaml`.
+> Generated from `docs/syu/requirements/core.yaml`.
 
 ## Parsed content
 
@@ -237,7 +237,7 @@ description: "Generated reference for docs/spec/requirements/core.yaml"
   - **description**:
     - |
       The `init` command MUST create a starter `syu.yaml` whose version matches
-      the running CLI and a valid `docs/spec/` tree whose starter requirements
+      the running CLI and a valid `docs/syu/` tree whose starter requirements
       and features begin as `planned` so users can begin from a working
       structure instead of manually creating directories and placeholder YAML
       files.
@@ -281,6 +281,9 @@ description: "Generated reference for docs/spec/requirements/core.yaml"
       - **file**: tests/repository_quality.rs
         - **symbols**:
           - repository_declares_documentation_guides
+      - **file**: tests/site_docs_generator.rs
+        - **symbols**:
+          - site_docs_generator_accepts_absolute_spec_roots_outside_repo
 - **id**: REQ-CORE-011
   - **title**: Provide a contributor devcontainer
   - **description**:
@@ -640,7 +643,7 @@ requirements:
     title: Bootstrap a workspace with syu init and syu.yaml
     description: |
       The `init` command MUST create a starter `syu.yaml` whose version matches
-      the running CLI and a valid `docs/spec/` tree whose starter requirements
+      the running CLI and a valid `docs/syu/` tree whose starter requirements
       and features begin as `planned` so users can begin from a working
       structure instead of manually creating directories and placeholder YAML
       files.
@@ -684,6 +687,9 @@ requirements:
         - file: tests/repository_quality.rs
           symbols:
             - repository_declares_documentation_guides
+        - file: tests/site_docs_generator.rs
+          symbols:
+            - site_docs_generator_accepts_absolute_spec_roots_outside_repo
 
   - id: REQ-CORE-011
     title: Provide a contributor devcontainer

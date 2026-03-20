@@ -9,15 +9,15 @@ fn write_workspace(
     feature_status: &str,
     include_traces: bool,
 ) {
-    fs::create_dir_all(root.join("docs/spec/philosophy")).expect("philosophy dir");
-    fs::create_dir_all(root.join("docs/spec/policies")).expect("policies dir");
-    fs::create_dir_all(root.join("docs/spec/requirements")).expect("requirements dir");
-    fs::create_dir_all(root.join("docs/spec/features")).expect("features dir");
+    fs::create_dir_all(root.join("docs/syu/philosophy")).expect("philosophy dir");
+    fs::create_dir_all(root.join("docs/syu/policies")).expect("policies dir");
+    fs::create_dir_all(root.join("docs/syu/requirements")).expect("requirements dir");
+    fs::create_dir_all(root.join("docs/syu/features")).expect("features dir");
 
     fs::write(
         root.join("syu.yaml"),
         format!(
-            "version: {version}\nspec:\n  root: docs/spec\nvalidate:\n  default_fix: false\n  allow_planned: {allow_planned}\nruntimes:\n  python:\n    command: auto\n  node:\n    command: auto\n",
+            "version: {version}\nspec:\n  root: docs/syu\nvalidate:\n  default_fix: false\n  allow_planned: {allow_planned}\nruntimes:\n  python:\n    command: auto\n  node:\n    command: auto\n",
             version = env!("CARGO_PKG_VERSION"),
             allow_planned = if allow_planned { "true" } else { "false" },
         ),
@@ -25,13 +25,13 @@ fn write_workspace(
     .expect("config");
 
     fs::write(
-        root.join("docs/spec/philosophy/foundation.yaml"),
+        root.join("docs/syu/philosophy/foundation.yaml"),
         "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: PHIL-001\n    title: Executable agreement\n    product_design_principle: Keep change traceable.\n    coding_guideline: Prefer explicit links.\n    linked_policies:\n      - POL-001\n",
     )
     .expect("philosophy");
 
     fs::write(
-        root.join("docs/spec/policies/policies.yaml"),
+        root.join("docs/syu/policies/policies.yaml"),
         "category: Policies\nversion: 1\nlanguage: en\n\npolicies:\n  - id: POL-001\n    title: Keep delivery states explicit\n    summary: Planned items stay unimplemented until traces exist.\n    description: Delivery state controls whether traces must be absent or present.\n    linked_philosophies:\n      - PHIL-001\n    linked_requirements:\n      - REQ-001\n",
     )
     .expect("policy");
@@ -42,7 +42,7 @@ fn write_workspace(
         "    tests: {}\n"
     };
     fs::write(
-        root.join("docs/spec/requirements/core.yaml"),
+        root.join("docs/syu/requirements/core.yaml"),
         format!(
             "category: Core Requirements\nprefix: REQ\n\nrequirements:\n  - id: REQ-001\n    title: Keep requirement delivery state explicit\n    description: Requirement delivery state must match trace expectations.\n    priority: high\n    status: {status}\n    linked_policies:\n      - POL-001\n    linked_features:\n      - FEAT-001\n{traces}",
             status = requirement_status,
@@ -52,7 +52,7 @@ fn write_workspace(
     .expect("requirement");
 
     fs::write(
-        root.join("docs/spec/features/features.yaml"),
+        root.join("docs/syu/features/features.yaml"),
         format!(
             "version: \"{}\"\nfiles:\n  - kind: core\n    file: core.yaml\n",
             env!("CARGO_PKG_VERSION")
@@ -66,7 +66,7 @@ fn write_workspace(
         "    implementations: {}\n"
     };
     fs::write(
-        root.join("docs/spec/features/core.yaml"),
+        root.join("docs/syu/features/core.yaml"),
         format!(
             "category: Core Features\nversion: 1\n\nfeatures:\n  - id: FEAT-001\n    title: Keep feature delivery state explicit\n    summary: Feature delivery state must match implementation traces.\n    status: {status}\n    linked_requirements:\n      - REQ-001\n{traces}",
             status = feature_status,

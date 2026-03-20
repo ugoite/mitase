@@ -560,7 +560,7 @@ mod tests {
     fn entity_entries_follow_workspace_contents() {
         let workspace = Workspace {
             root: PathBuf::from("."),
-            spec_root: PathBuf::from("docs/spec"),
+            spec_root: PathBuf::from("docs/syu"),
             config: crate::config::SyuConfig::default(),
             philosophies: vec![Philosophy {
                 id: "PHIL-001".to_string(),
