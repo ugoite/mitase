@@ -1,2 +1,5 @@
 /target
 .DS_Store
+website/.docusaurus
+website/build
+website/node_modules

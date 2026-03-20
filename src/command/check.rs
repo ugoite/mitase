@@ -1,3 +1,6 @@
+// FEAT-CHECK-001
+// REQ-CORE-001
+
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt::Write,
@@ -10,12 +13,14 @@ use anyhow::Result;
 use crate::{
     cli::{CheckArgs, OutputFormat},
     config::SyuConfig,
+    coverage::validate_symbol_trace_coverage,
     inspect::{apply_symbol_doc_fix, inspect_symbol, supports_rich_inspection},
     language::adapter_for_language,
     model::{
         CheckResult, DefinitionCounts, Feature, Issue, Philosophy, Policy, Requirement, TraceCount,
         TraceReference, TraceSummary,
     },
+    rules::{attach_referenced_rules, rule_by_code},
     workspace::{Workspace, load_workspace},
 };
 
@@ -119,7 +124,10 @@ pub fn run_check_command(args: &CheckArgs) -> Result<i32> {
 pub fn collect_check_result(workspace_path: &Path) -> CheckResult {
     match load_workspace(workspace_path) {
         Ok(workspace) => collect_check_result_from_workspace(&workspace),
-        Err(error) => CheckResult::from_load_error(workspace_path.to_path_buf(), error.to_string()),
+        Err(error) => attach_referenced_rules(CheckResult::from_load_error(
+            workspace_path.to_path_buf(),
+            error.to_string(),
+        )),
     }
 }
 
@@ -212,6 +220,9 @@ fn collect_check_result_from_workspace(workspace: &Workspace) -> CheckResult {
         );
     }
 
+    validate_orphaned_definitions(workspace, &mut issues);
+    validate_symbol_trace_coverage(workspace, &mut issues);
+
     issues.sort_by(|left, right| {
         (
             format!("{:?}", left.severity),
@@ -229,12 +240,13 @@ fn collect_check_result_from_workspace(workspace: &Workspace) -> CheckResult {
             ))
     });
 
-    CheckResult {
+    attach_referenced_rules(CheckResult {
         workspace_root: workspace.root.clone(),
         definition_counts,
         trace_summary,
         issues,
-    }
+        referenced_rules: Vec::new(),
+    })
 }
 
 fn effective_fix(args: &CheckArgs, config: &SyuConfig) -> bool {
@@ -337,7 +349,7 @@ fn apply_autofix_for_reference(
         .symbols
         .iter()
         .map(|symbol| symbol.trim())
-        .filter(|symbol| !symbol.is_empty())
+        .filter(|symbol| !symbol.is_empty() && *symbol != "*")
     {
         let mut required = reference.doc_contains.clone();
         if !contents.contains(owner_id) {
@@ -415,14 +427,64 @@ fn render_text_report(result: &CheckResult) -> String {
                 .unwrap_or_default();
             writeln!(
                 &mut output,
-                "- [{:?}] {} {}{}: {}",
-                issue.severity, issue.code, issue.subject, location, issue.message
+                "- [{:?}] {}{} {}{}: {}",
+                issue.severity,
+                issue.code,
+                rule_title_suffix(&issue.code),
+                issue.subject,
+                location,
+                issue.message
+            )
+            .expect("writing to String must succeed");
+            if let Some(rule) = rule_by_code(&issue.code) {
+                writeln!(
+                    &mut output,
+                    "  rule: {} / {} / {}",
+                    rule.genre, rule.code, rule.title
+                )
+                .expect("writing to String must succeed");
+            }
+        }
+    }
+
+    if !result.referenced_rules.is_empty() {
+        writeln!(&mut output).expect("writing to String must succeed");
+        writeln!(&mut output, "referenced rules:").expect("writing to String must succeed");
+        for rule in &result.referenced_rules {
+            writeln!(
+                &mut output,
+                "- [{}] {} ({})",
+                rule.severity, rule.code, rule.genre
+            )
+            .expect("writing to String must succeed");
+            writeln!(&mut output, "  title: {}", rule.title)
+                .expect("writing to String must succeed");
+            writeln!(
+                &mut output,
+                "  summary: {}",
+                collapse_whitespace(&rule.summary)
+            )
+            .expect("writing to String must succeed");
+            writeln!(
+                &mut output,
+                "  description: {}",
+                collapse_whitespace(&rule.description)
             )
             .expect("writing to String must succeed");
         }
     }
 
     output
+}
+
+fn rule_title_suffix(code: &str) -> String {
+    rule_by_code(code)
+        .map(|rule| format!(" ({})", rule.title))
+        .unwrap_or_default()
+}
+
+fn collapse_whitespace(value: &str) -> String {
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 fn normalize_delivery_status(status: &str) -> Option<DeliveryStatus> {
@@ -982,6 +1044,71 @@ fn validate_trace_map(
     }
 }
 
+fn validate_orphaned_definitions(workspace: &Workspace, issues: &mut Vec<Issue>) {
+    if !workspace.config.validate.require_non_orphaned_items {
+        return;
+    }
+
+    for philosophy in &workspace.philosophies {
+        report_orphaned_definition(
+            "philosophy",
+            &philosophy.id,
+            philosophy.linked_policies.len(),
+            issues,
+        );
+    }
+
+    for policy in &workspace.policies {
+        report_orphaned_definition(
+            "policy",
+            &policy.id,
+            policy.linked_philosophies.len() + policy.linked_requirements.len(),
+            issues,
+        );
+    }
+
+    for requirement in &workspace.requirements {
+        report_orphaned_definition(
+            "requirement",
+            &requirement.id,
+            requirement.linked_policies.len() + requirement.linked_features.len(),
+            issues,
+        );
+    }
+
+    for feature in &workspace.features {
+        report_orphaned_definition(
+            "feature",
+            &feature.id,
+            feature.linked_requirements.len(),
+            issues,
+        );
+    }
+}
+
+fn report_orphaned_definition(
+    kind: &str,
+    id: &str,
+    adjacent_link_count: usize,
+    issues: &mut Vec<Issue>,
+) {
+    if adjacent_link_count > 0 {
+        return;
+    }
+
+    issues.push(Issue::error(
+        "orphaned-definition",
+        format!("{kind} {id}"),
+        None,
+        format!(
+            "{kind} `{id}` is isolated from the layered graph and does not link to any adjacent definitions."
+        ),
+        Some(format!(
+            "Link `{id}` to at least one adjacent-layer definition so it participates in the specification graph."
+        )),
+    ));
+}
+
 fn verify_trace_reference(
     root: &Path,
     config: &SyuConfig,
@@ -1119,6 +1246,27 @@ fn verify_trace_reference(
             )),
         ));
         success = false;
+    }
+
+    let has_wildcard = reference.symbols.iter().any(|symbol| symbol.trim() == "*");
+    if has_wildcard {
+        if !reference.doc_contains.is_empty() {
+            issues.push(Issue::error(
+                "trace-doc-unsupported",
+                subject.clone(),
+                Some(format_reference_location(language, reference)),
+                format!(
+                    "Wildcard trace mappings in `{}` cannot use `doc_contains` because they do not point to a single symbol.",
+                    reference.file.display()
+                ),
+                Some(
+                    "Remove `doc_contains` or replace `*` with explicit symbol names for documentation checks."
+                        .to_string(),
+                ),
+            ));
+            success = false;
+        }
+        return success;
     }
 
     for symbol in &reference.symbols {
@@ -1403,6 +1551,7 @@ mod tests {
             definition_counts: Default::default(),
             trace_summary: Default::default(),
             issues: vec![Issue::warning("warn", "subject", None, "message", None)],
+            referenced_rules: Vec::new(),
         };
 
         let report = render_text_report(&result);
@@ -2014,6 +2163,29 @@ mod tests {
         ));
         assert!(
             shell_issues
+                .iter()
+                .any(|issue| issue.code == "trace-doc-unsupported")
+        );
+
+        let wildcard_path = tempdir.path().join("wildcard.rs");
+        fs::write(&wildcard_path, "/// REQ-1\npub fn expected() {}\n")
+            .expect("wildcard file should exist");
+        let mut wildcard_issues = Vec::new();
+        assert!(!verify_trace_reference(
+            tempdir.path(),
+            &SyuConfig::default(),
+            "REQ-1",
+            TraceRole::RequirementTest,
+            "rust",
+            &TraceReference {
+                file: PathBuf::from("wildcard.rs"),
+                symbols: vec!["*".to_string()],
+                doc_contains: vec!["Explain expected".to_string()],
+            },
+            &mut wildcard_issues,
+        ));
+        assert!(
+            wildcard_issues
                 .iter()
                 .any(|issue| issue.code == "trace-doc-unsupported")
         );

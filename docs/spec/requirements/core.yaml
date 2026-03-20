@@ -3,49 +3,63 @@ prefix: REQ-CORE
 
 requirements:
   - id: REQ-CORE-001
-    title: Validate the layered specification graph
+    title: Validate the linked specification graph with rule-backed diagnostics
     description: |
       The `validate` command MUST load philosophy, policy, requirement, and
       feature YAML definitions, validate required fields, reject broken
-      references, verify reciprocal links across the adjacent-layer graph, and
-      enforce `planned` / `implemented` delivery-state rules for requirements
-      and features. `check` MAY remain as a compatibility alias, but `validate`
-      is the canonical command name.
+      references, verify reciprocal links across the adjacent-layer graph,
+      report isolated definitions by default, enforce `planned` /
+      `implemented` delivery-state rules for requirements and features, and
+      surface rule codes with human-readable titles and explanations in
+      validation output. `check` MAY remain as a compatibility alias, but
+      `validate` is the canonical command name.
     priority: high
     status: implemented
     linked_policies:
       - POL-001
       - POL-002
-      - POL-003
     linked_features:
       - FEAT-CHECK-001
     tests:
       rust:
         - file: tests/check_command.rs
           symbols:
-            - check_command_accepts_passing_workspace
-            - check_command_reports_missing_definition_links
+            - "*"
         - file: tests/status_validation.rs
           symbols:
-            - validate_accepts_planned_entries_without_traces
-            - validate_rejects_implemented_entries_without_traces
-            - validate_rejects_planned_entries_with_traces
-            - validate_rejects_planned_entries_when_config_disallows_them
+            - "*"
+        - file: tests/orphan_validation.rs
+          symbols:
+            - "*"
+        - file: src/command/check.rs
+          symbols:
+            - "*"
+        - file: src/model.rs
+          symbols:
+            - "*"
+        - file: src/rules.rs
+          symbols:
+            - "*"
+        - file: src/workspace.rs
+          symbols:
+            - "*"
 
   - id: REQ-CORE-002
-    title: Verify multi-language traceability with language-aware inspection
+    title: Verify multi-language traces and optionally require full symbol ownership
     description: |
       The `validate` command MUST verify requirement-to-test and
-      feature-to-implementation traceability in the languages used by `ugoite`
-      today: Rust, Python, and TypeScript. For those languages, symbol and
-      documentation inspection SHOULD use maintained parsers or language
-      runtimes where practical. A declared trace is valid only when the file
-      exists, the symbol exists, the file explicitly mentions the owning ID, and
-      any `doc_contains` snippets are present in the symbol documentation.
+      feature-to-implementation traceability in the languages used by `syu`
+      today: Rust, Python, and TypeScript. A declared trace is valid only when
+      the file exists, the symbol exists, the file explicitly mentions the
+      owning ID, and any `doc_contains` snippets are present in the symbol
+      documentation. Validation MUST also support wildcard file ownership and an
+      optional mode that requires every public Rust symbol to belong to some
+      feature and every Rust test to belong to some requirement.
     priority: high
     status: implemented
     linked_policies:
       - POL-003
+      - POL-006
     linked_features:
       - FEAT-CHECK-001
     tests:
@@ -54,6 +68,21 @@ requirements:
           symbols:
             - check_command_verifies_requirement_test_traceability_in_all_supported_languages
             - check_command_verifies_feature_implementation_traceability_in_all_supported_languages
+        - file: tests/trace_coverage_validation.rs
+          symbols:
+            - "*"
+        - file: src/coverage.rs
+          symbols:
+            - "*"
+        - file: src/inspect.rs
+          symbols:
+            - "*"
+        - file: src/language.rs
+          symbols:
+            - "*"
+        - file: src/runtime.rs
+          symbols:
+            - "*"
         - file: tests/example_workspaces.rs
           symbols:
             - python_only_example_validates
@@ -76,19 +105,21 @@ requirements:
       rust:
         - file: tests/validate_fix_command.rs
           symbols:
-            - validate_fix_repairs_missing_trace_docs_for_rust_sources
-            - validate_uses_config_default_fix_and_no_fix_disables_it
+            - "*"
 
   - id: REQ-CORE-004
-    title: Generate a Markdown validation report
+    title: Generate and preserve a Markdown validation report
     description: |
       The `report` command MUST reuse the same verification engine as `validate`
       and render a Markdown report that summarizes counts, failures, and
       corrective suggestions. It MUST support writing the report to stdout or a
-      file path.
+      file path, and the self-hosted repository SHOULD keep a checked-in report
+      artifact so contributors can inspect the current state without running the
+      command first.
     priority: medium
     status: implemented
     linked_policies:
+      - POL-002
       - POL-005
     linked_features:
       - FEAT-REPORT-001
@@ -96,20 +127,31 @@ requirements:
       rust:
         - file: tests/report_command.rs
           symbols:
-            - report_command_generates_markdown_output
-            - report_command_writes_markdown_file
+            - "*"
+        - file: tests/main_binary.rs
+          symbols:
+            - "*"
+        - file: src/command/report.rs
+          symbols:
+            - "*"
+        - file: src/report.rs
+          symbols:
+            - "*"
 
   - id: REQ-CORE-005
     title: Enforce repository quality gates
     description: |
       The repository MUST provide repeatable quality automation for formatting,
       linting, tests, workflow linting, pre-commit / pre-push hooks, and
-      self-validation so `syu`'s own promises stay continuously checkable.
+      self-validation so `syu`'s own promises stay continuously checkable. The
+      repository MUST also check in a root `syu.yaml` that enables non-orphaned
+      validation and strict symbol/test ownership for self-hosting.
     priority: high
     status: implemented
     linked_policies:
       - POL-007
     linked_features:
+      - FEAT-CHECK-001
       - FEAT-QUALITY-001
     tests:
       rust:
@@ -139,9 +181,10 @@ requirements:
     description: |
       The repository MUST provide release automation that prepares stable release
       PRs from `main`, keeps `main` releaseable under GitHub Flow, publishes
-      GitHub release notes without a committed changelog file, builds installable
-      artifacts for supported platforms, and publishes install packages to
-      GitHub Packages / GHCR.
+      GitHub release notes without a committed changelog file, generates alpha,
+      beta, and stable release notes against the previous tag in the same track,
+      builds installable artifacts for supported platforms, and publishes
+      install packages to GitHub Packages / GHCR.
     priority: high
     status: implemented
     linked_policies:
@@ -193,23 +236,30 @@ requirements:
       rust:
         - file: tests/init_command.rs
           symbols:
-            - init_command_bootstraps_a_workspace_that_validate_accepts
-            - init_command_requires_force_when_generated_files_exist
+            - "*"
+        - file: src/command/init.rs
+          symbols:
+            - "*"
+        - file: src/config.rs
+          symbols:
+            - "*"
 
   - id: REQ-CORE-010
-    title: Provide English documentation for concepts and workflows
+    title: Provide English documentation for concepts, workflows, and the docs site
     description: |
       The repository MUST explain philosophy, policy, requirements, and
       features in English, describe why each layer exists, document how to
-      define them, explain `planned` / `implemented` delivery states, and show
-      how to use `init`, `validate`, `report`, config, and autofix.
+      define them, explain `planned` / `implemented` delivery states, show how
+      to use `init`, `browse`, `validate`, `report`, config, and autofix, and
+      publish the checked-in `docs/` tree through a Docusaurus site.
     priority: medium
     status: implemented
     linked_policies:
-      - POL-001
+      - POL-002
       - POL-005
     linked_features:
       - FEAT-DOCS-001
+      - FEAT-DOCS-002
     tests:
       rust:
         - file: tests/repository_quality.rs
@@ -253,28 +303,26 @@ requirements:
       rust:
         - file: tests/example_workspaces.rs
           symbols:
-            - rust_only_example_validates
-            - python_only_example_validates
-            - polyglot_example_validates
+            - "*"
         - file: tests/repository_quality.rs
           symbols:
             - repository_ships_example_workspaces
 
   - id: REQ-CORE-013
-    title: Provide GitHub Flow contributor workflow assets
+    title: Provide GitHub Flow contributor workflow assets and low-friction hook setup
     description: |
       The repository MUST document its GitHub Flow process, keep `main` as the
       only long-lived branch, ship pull-request and issue templates that guide
       high-signal contributions, and explain the local verification steps that
-      contributors should run before opening a pull request.
+      contributors should run before opening a pull request. Installing
+      pre-commit hooks SHOULD be a one-command experience.
     priority: medium
     status: implemented
     linked_policies:
-      - POL-005
       - POL-006
-      - POL-007
     linked_features:
       - FEAT-CONTRIB-002
+      - FEAT-CONTRIB-003
     tests:
       rust:
         - file: tests/repository_quality.rs
@@ -299,3 +347,53 @@ requirements:
         - file: tests/repository_quality.rs
           symbols:
             - repository_declares_dependency_hygiene_and_ci_caching
+
+  - id: REQ-CORE-015
+    title: Provide a resilient interactive browse CLI
+    description: |
+      Running `syu` without a subcommand in a terminal MUST open an interactive
+      browser that shows philosophy, policy, feature, requirement, and error
+      counts; allows drilling into linked definitions; and still explains the
+      workspace when validation issues exist. When standard input/output are not
+      terminals, `syu` SHOULD fall back to help text instead of crashing.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-001
+      - POL-002
+      - POL-004
+    linked_features:
+      - FEAT-BROWSE-001
+    tests:
+      rust:
+        - file: tests/browse_command.rs
+          symbols:
+            - "*"
+        - file: src/lib.rs
+          symbols:
+            - dispatches_interactive_bare_invocations_to_browse_defaults
+        - file: src/command/browse.rs
+          symbols:
+            - "*"
+
+  - id: REQ-CORE-016
+    title: Ship an agent skill for maintaining syu-driven repositories
+    description: |
+      The repository MUST include at least one checked-in agent skill inspired
+      by Anthropics Skills that teaches an agent how to work with `syu`
+      repositories. The skill SHOULD explain when to inspect the layered model,
+      how to update philosophy / policy / requirement / feature links, which
+      commands to run to validate and regenerate reports, and how to keep
+      changes reviewable instead of treating YAML as disconnected prose.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-005
+      - POL-006
+    linked_features:
+      - FEAT-SKILLS-001
+    tests:
+      rust:
+        - file: tests/repository_quality.rs
+          symbols:
+            - repository_ships_agent_skill

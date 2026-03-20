@@ -71,6 +71,7 @@ implementations:
 
 ```bash
 syu validate .
+syu browse .
 ```
 
 Use JSON when integrating with automation:

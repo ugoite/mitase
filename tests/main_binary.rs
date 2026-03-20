@@ -8,6 +8,7 @@ fn fixture_path(name: &str) -> std::path::PathBuf {
         .join(name)
 }
 
+// REQ-CORE-004
 #[test]
 fn binary_surfaces_report_io_errors() {
     let tempdir = tempdir().expect("tempdir should exist");

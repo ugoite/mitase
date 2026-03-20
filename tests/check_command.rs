@@ -43,6 +43,8 @@ fn check_command_reports_missing_definition_links() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("missing-reference"));
+    assert!(stdout.contains("referenced rules:"));
+    assert!(stdout.contains("Linked definitions must exist"));
     assert!(stdout.contains("REQ-MISSING-999"));
 }
 

@@ -1,0 +1,14 @@
+# FEAT-CHECK-001
+version: 0.0.1-alpha.5
+spec:
+  root: docs/spec
+validate:
+  default_fix: false
+  allow_planned: false
+  require_non_orphaned_items: true
+  require_symbol_trace_coverage: true
+runtimes:
+  python:
+    command: auto
+  node:
+    command: auto

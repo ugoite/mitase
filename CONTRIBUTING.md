@@ -27,8 +27,7 @@ cargo run -- validate .
 If you use the hooks, install them once:
 
 ```bash
-python -m pip install pre-commit
-pre-commit install --hook-type pre-commit --hook-type pre-push
+scripts/install-precommit.sh
 ```
 
 ## Expectations for changes
@@ -43,3 +42,6 @@ pre-commit install --hook-type pre-commit --hook-type pre-push
 Stable releases are prepared from `main` with release-please.
 Prereleases are cut from `main` as needed after the same quality gates and user
 story validation pass.
+
+GitHub release notes are generated per release track so alpha, beta, and stable
+releases each compare against the previous tag in the same track.
