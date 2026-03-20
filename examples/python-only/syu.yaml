@@ -1,6 +1,6 @@
 version: 0.0.1-alpha.5
 spec:
-  root: docs/spec
+  root: docs/syu
 validate:
   default_fix: false
   allow_planned: true

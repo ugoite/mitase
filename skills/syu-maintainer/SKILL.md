@@ -24,7 +24,7 @@ Use this skill when you need to make or review changes in a repository that uses
 1. Inspect the current layered model before editing.
    - Run `syu` or `syu browse .` to see counts, linked definitions, and current
      validation errors.
-   - Read the relevant files under `docs/spec/`.
+   - Read the relevant files under `docs/syu/`.
 2. When changing intent, update adjacent layers together.
    - Philosophy should link to policy.
    - Policy should link to requirement.
@@ -39,7 +39,7 @@ Use this skill when you need to make or review changes in a repository that uses
 4. Refresh generated artifacts when relevant.
    - Run `syu report . --output docs/generated/syu-report.md` after spec or
      validation changes.
-   - Regenerate docs derived from `docs/spec/` when spec files change.
+   - Regenerate docs derived from `docs/syu/` when spec files change.
 5. Finish by running the repository quality checks and summarizing what changed.
 
 ## Commands

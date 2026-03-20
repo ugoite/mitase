@@ -1,9 +1,9 @@
 ---
 title: "Features"
-description: "Generated reference for docs/spec/features/features.yaml"
+description: "Generated reference for docs/syu/features/features.yaml"
 ---
 
-> Generated from `docs/spec/features/features.yaml`.
+> Generated from `docs/syu/features/features.yaml`.
 
 ## Parsed content
 

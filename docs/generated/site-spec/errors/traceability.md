@@ -1,9 +1,9 @@
 ---
 title: "Traceability"
-description: "Generated reference for docs/spec/errors/traceability.yaml"
+description: "Generated reference for docs/syu/errors/traceability.yaml"
 ---
 
-> Generated from `docs/spec/errors/traceability.yaml`.
+> Generated from `docs/syu/errors/traceability.yaml`.
 
 ## Parsed content
 

@@ -1,9 +1,9 @@
 ---
 title: "Coverage"
-description: "Generated reference for docs/spec/errors/coverage.yaml"
+description: "Generated reference for docs/syu/errors/coverage.yaml"
 ---
 
-> Generated from `docs/spec/errors/coverage.yaml`.
+> Generated from `docs/syu/errors/coverage.yaml`.
 
 ## Parsed content
 

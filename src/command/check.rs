@@ -1491,10 +1491,10 @@ mod tests {
     fn run_check_command_propagates_autofix_errors() {
         let tempdir = tempdir().expect("tempdir should exist");
         let workspace = tempdir.path().join("workspace");
-        fs::create_dir_all(workspace.join("docs/spec/philosophy")).expect("philosophy dir");
-        fs::create_dir_all(workspace.join("docs/spec/policies")).expect("policies dir");
-        fs::create_dir_all(workspace.join("docs/spec/requirements")).expect("requirements dir");
-        fs::create_dir_all(workspace.join("docs/spec/features")).expect("features dir");
+        fs::create_dir_all(workspace.join("docs/syu/philosophy")).expect("philosophy dir");
+        fs::create_dir_all(workspace.join("docs/syu/policies")).expect("policies dir");
+        fs::create_dir_all(workspace.join("docs/syu/requirements")).expect("requirements dir");
+        fs::create_dir_all(workspace.join("docs/syu/features")).expect("features dir");
 
         fs::write(
             workspace.join("syu.yaml"),
@@ -1502,27 +1502,27 @@ mod tests {
         )
         .expect("config should exist");
         fs::write(
-            workspace.join("docs/spec/philosophy/foundation.yaml"),
+            workspace.join("docs/syu/philosophy/foundation.yaml"),
             "category: Foundations\nversion: 1\n\nphilosophies:\n  - id: PHIL-1\n    title: Foundation\n    product_design_principle: Keep it clear.\n    coding_guideline: Keep it explicit.\n    linked_policies:\n      - POL-1\n",
         )
         .expect("philosophy should exist");
         fs::write(
-            workspace.join("docs/spec/policies/policies.yaml"),
+            workspace.join("docs/syu/policies/policies.yaml"),
             "category: Policies\nversion: 1\n\npolicies:\n  - id: POL-1\n    title: Policy\n    summary: Rule summary.\n    description: Rule description.\n    linked_philosophies:\n      - PHIL-1\n    linked_requirements:\n      - REQ-1\n",
         )
         .expect("policy should exist");
         fs::write(
-            workspace.join("docs/spec/requirements/core.yaml"),
+            workspace.join("docs/syu/requirements/core.yaml"),
             "category: Core Requirements\nprefix: REQ\n\nrequirements:\n  - id: REQ-1\n    title: Requirement\n    description: Requirement description.\n    priority: high\n    status: implemented\n    linked_policies:\n      - POL-1\n    linked_features:\n      - FEAT-1\n    tests:\n      python:\n        - file: tests/test_sample.py\n          symbols:\n            - requirement_test\n          doc_contains:\n            - Requirement docs\n",
         )
         .expect("requirement should exist");
         fs::write(
-            workspace.join("docs/spec/features/features.yaml"),
+            workspace.join("docs/syu/features/features.yaml"),
             "version: 1\nfiles:\n  - kind: core\n    file: core.yaml\n",
         )
         .expect("feature registry should exist");
         fs::write(
-            workspace.join("docs/spec/features/core.yaml"),
+            workspace.join("docs/syu/features/core.yaml"),
             "category: Core Features\nversion: 1\n\nfeatures:\n  - id: FEAT-1\n    title: Feature\n    summary: Feature summary.\n    status: implemented\n    linked_requirements:\n      - REQ-1\n    implementations: {}\n",
         )
         .expect("feature should exist");
@@ -2311,7 +2311,7 @@ mod tests {
 
         let summary = apply_autofix(&Workspace {
             root: root.clone(),
-            spec_root: root.join("docs/spec"),
+            spec_root: root.join("docs/syu"),
             config: SyuConfig::default(),
             philosophies: Vec::new(),
             policies: Vec::new(),
@@ -2369,7 +2369,7 @@ mod tests {
 
         let summary = apply_autofix(&Workspace {
             root: root.clone(),
-            spec_root: root.join("docs/spec"),
+            spec_root: root.join("docs/syu"),
             config: SyuConfig::default(),
             philosophies: Vec::new(),
             policies: Vec::new(),
@@ -2412,7 +2412,7 @@ mod tests {
 
         let workspace = Workspace {
             root,
-            spec_root: tempdir.path().join("docs/spec"),
+            spec_root: tempdir.path().join("docs/syu"),
             config: SyuConfig {
                 runtimes: crate::config::RuntimeConfigSet {
                     python: crate::config::RuntimeConfig {
@@ -2457,7 +2457,7 @@ mod tests {
 
         let workspace = Workspace {
             root,
-            spec_root: tempdir.path().join("docs/spec"),
+            spec_root: tempdir.path().join("docs/syu"),
             config: SyuConfig::default(),
             philosophies: Vec::new(),
             policies: Vec::new(),

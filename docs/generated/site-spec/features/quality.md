@@ -1,9 +1,9 @@
 ---
 title: "Quality Automation / Quality"
-description: "Generated reference for docs/spec/features/quality.yaml"
+description: "Generated reference for docs/syu/features/quality.yaml"
 ---
 
-> Generated from `docs/spec/features/quality.yaml`.
+> Generated from `docs/syu/features/quality.yaml`.
 
 ## Parsed content
 

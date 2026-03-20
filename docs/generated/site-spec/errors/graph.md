@@ -1,9 +1,9 @@
 ---
 title: "Graph"
-description: "Generated reference for docs/spec/errors/graph.yaml"
+description: "Generated reference for docs/syu/errors/graph.yaml"
 ---
 
-> Generated from `docs/spec/errors/graph.yaml`.
+> Generated from `docs/syu/errors/graph.yaml`.
 
 ## Parsed content
 

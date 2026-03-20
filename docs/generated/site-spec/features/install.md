@@ -1,9 +1,9 @@
 ---
 title: "Installer / Install"
-description: "Generated reference for docs/spec/features/install.yaml"
+description: "Generated reference for docs/syu/features/install.yaml"
 ---
 
-> Generated from `docs/spec/features/install.yaml`.
+> Generated from `docs/syu/features/install.yaml`.
 
 ## Parsed content
 

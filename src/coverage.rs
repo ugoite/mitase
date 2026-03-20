@@ -629,7 +629,7 @@ mod tests {
         config.validate.require_symbol_trace_coverage = true;
         let workspace = Workspace {
             root: tempdir.path().to_path_buf(),
-            spec_root: tempdir.path().join("docs/spec"),
+            spec_root: tempdir.path().join("docs/syu"),
             config,
             philosophies: Vec::new(),
             policies: Vec::new(),

@@ -1,9 +1,9 @@
 ---
 title: "Delivery"
-description: "Generated reference for docs/spec/errors/delivery.yaml"
+description: "Generated reference for docs/syu/errors/delivery.yaml"
 ---
 
-> Generated from `docs/spec/errors/delivery.yaml`.
+> Generated from `docs/syu/errors/delivery.yaml`.
 
 ## Parsed content
 

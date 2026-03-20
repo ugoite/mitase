@@ -1,9 +1,9 @@
 ---
 title: "Validate Command / Check"
-description: "Generated reference for docs/spec/features/check.yaml"
+description: "Generated reference for docs/syu/features/check.yaml"
 ---
 
-> Generated from `docs/spec/features/check.yaml`.
+> Generated from `docs/syu/features/check.yaml`.
 
 ## Parsed content
 

@@ -24,12 +24,12 @@ fn init_command_bootstraps_a_workspace_that_validate_accepts() {
         String::from_utf8_lossy(&init.stderr)
     );
     assert!(workspace.join("syu.yaml").exists());
-    assert!(workspace.join("docs/spec/features/core.yaml").exists());
+    assert!(workspace.join("docs/syu/features/core.yaml").exists());
 
     let config = fs::read_to_string(workspace.join("syu.yaml")).expect("config should exist");
-    let requirement = fs::read_to_string(workspace.join("docs/spec/requirements/core.yaml"))
+    let requirement = fs::read_to_string(workspace.join("docs/syu/requirements/core.yaml"))
         .expect("requirement should exist");
-    let feature = fs::read_to_string(workspace.join("docs/spec/features/core.yaml"))
+    let feature = fs::read_to_string(workspace.join("docs/syu/features/core.yaml"))
         .expect("feature should exist");
 
     assert!(config.contains(env!("CARGO_PKG_VERSION")));

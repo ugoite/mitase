@@ -1,9 +1,9 @@
 ---
 title: "Workspace"
-description: "Generated reference for docs/spec/errors/workspace.yaml"
+description: "Generated reference for docs/syu/errors/workspace.yaml"
 ---
 
-> Generated from `docs/spec/errors/workspace.yaml`.
+> Generated from `docs/syu/errors/workspace.yaml`.
 
 ## Parsed content
 

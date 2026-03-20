@@ -1,9 +1,9 @@
 ---
 title: "Report Command / Report"
-description: "Generated reference for docs/spec/features/report.yaml"
+description: "Generated reference for docs/syu/features/report.yaml"
 ---
 
-> Generated from `docs/spec/features/report.yaml`.
+> Generated from `docs/syu/features/report.yaml`.
 
 ## Parsed content
 

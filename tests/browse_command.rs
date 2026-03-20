@@ -79,7 +79,7 @@ fn browse_command_walks_all_sections_in_a_passing_workspace() {
 #[test]
 fn browse_command_handles_detail_views_without_links() {
     let tempdir = tempdir().expect("tempdir should exist");
-    let docs_root = tempdir.path().join("docs/spec");
+    let docs_root = tempdir.path().join("docs/syu");
     fs::create_dir_all(docs_root.join("philosophy")).expect("philosophy dir");
     fs::create_dir_all(docs_root.join("policies")).expect("policies dir");
     fs::create_dir_all(docs_root.join("requirements")).expect("requirements dir");

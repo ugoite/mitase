@@ -215,7 +215,7 @@ mod tests {
     #[test]
     fn load_workspace_fails_when_feature_registry_is_empty() {
         let tempdir = tempdir().expect("tempdir should exist");
-        let spec_root = tempdir.path().join("docs/spec");
+        let spec_root = tempdir.path().join("docs/syu");
         fs::create_dir_all(spec_root.join("philosophy")).expect("dir");
         fs::create_dir_all(spec_root.join("policies")).expect("dir");
         fs::create_dir_all(spec_root.join("requirements")).expect("dir");
@@ -253,7 +253,7 @@ mod tests {
     #[test]
     fn load_workspace_fails_when_philosophy_directory_is_missing() {
         let tempdir = tempdir().expect("tempdir should exist");
-        let spec_root = tempdir.path().join("docs/spec");
+        let spec_root = tempdir.path().join("docs/syu");
         fs::create_dir_all(spec_root.join("policies")).expect("dir");
         fs::create_dir_all(spec_root.join("requirements")).expect("dir");
         fs::create_dir_all(spec_root.join("features")).expect("dir");
@@ -265,7 +265,7 @@ mod tests {
     #[test]
     fn load_workspace_fails_when_feature_registry_is_invalid() {
         let tempdir = tempdir().expect("tempdir should exist");
-        let spec_root = tempdir.path().join("docs/spec");
+        let spec_root = tempdir.path().join("docs/syu");
         fs::create_dir_all(spec_root.join("philosophy")).expect("dir");
         fs::create_dir_all(spec_root.join("policies")).expect("dir");
         fs::create_dir_all(spec_root.join("requirements")).expect("dir");
@@ -299,7 +299,7 @@ mod tests {
     #[test]
     fn load_workspace_fails_when_feature_document_is_invalid() {
         let tempdir = tempdir().expect("tempdir should exist");
-        let spec_root = tempdir.path().join("docs/spec");
+        let spec_root = tempdir.path().join("docs/syu");
         fs::create_dir_all(spec_root.join("philosophy")).expect("dir");
         fs::create_dir_all(spec_root.join("policies")).expect("dir");
         fs::create_dir_all(spec_root.join("requirements")).expect("dir");
@@ -343,7 +343,7 @@ mod tests {
     #[test]
     fn load_workspace_fails_when_feature_documents_have_no_features() {
         let tempdir = tempdir().expect("tempdir should exist");
-        let spec_root = tempdir.path().join("docs/spec");
+        let spec_root = tempdir.path().join("docs/syu");
         fs::create_dir_all(spec_root.join("philosophy")).expect("dir");
         fs::create_dir_all(spec_root.join("policies")).expect("dir");
         fs::create_dir_all(spec_root.join("requirements")).expect("dir");
@@ -435,7 +435,7 @@ mod tests {
     #[test]
     fn ensure_yaml_directory_fails_for_empty_directory() {
         let tempdir = tempdir().expect("tempdir should exist");
-        let directory = tempdir.path().join("docs/spec/philosophy");
+        let directory = tempdir.path().join("docs/syu/philosophy");
         fs::create_dir_all(&directory).expect("directory should exist");
 
         let error = ensure_yaml_directory(&directory, "philosophy")

@@ -242,11 +242,11 @@ fn repository_declares_devcontainer_configuration() {
 // REQ-CORE-012
 fn repository_ships_example_workspaces() {
     let current_version = env!("CARGO_PKG_VERSION");
-    let rust_example_requirement = read_file("examples/rust-only/docs/spec/requirements/core.yaml");
+    let rust_example_requirement = read_file("examples/rust-only/docs/syu/requirements/core.yaml");
     let rust_example_config = read_file("examples/rust-only/syu.yaml");
     let python_example_requirement =
-        read_file("examples/python-only/docs/spec/requirements/core.yaml");
-    let polyglot_feature = read_file("examples/polyglot/docs/spec/features/polyglot.yaml");
+        read_file("examples/python-only/docs/syu/requirements/core.yaml");
+    let polyglot_feature = read_file("examples/polyglot/docs/syu/features/polyglot.yaml");
     let example_tests = read_file("tests/example_workspaces.rs");
 
     assert!(rust_example_requirement.contains("REQ-RUST-001"));

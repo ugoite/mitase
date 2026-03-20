@@ -80,10 +80,10 @@ are attached to a terminal.
 `syu init` creates:
 
 - `syu.yaml`
-- `docs/spec/philosophy/`
-- `docs/spec/policies/`
-- `docs/spec/requirements/`
-- `docs/spec/features/`
+- `docs/syu/philosophy/`
+- `docs/syu/policies/`
+- `docs/syu/requirements/`
+- `docs/syu/features/`
 
 ## Commands
 
@@ -141,7 +141,7 @@ The self-hosted repository keeps its latest generated report at
 ```yaml
 version: 0.0.1-alpha.5
 spec:
-  root: docs/spec
+  root: docs/syu
 validate:
   default_fix: false
   allow_planned: true
@@ -274,7 +274,7 @@ adjacent links, running `syu validate .`, and refreshing
 ## Specification layout
 
 ```text
-docs/spec/
+docs/syu/
   philosophy/*.yaml
   policies/*.yaml
   requirements/*.yaml
@@ -313,4 +313,4 @@ releases compare against the previous stable tag.
 Release binaries are packaged with `scripts/ci/package-release.sh`, published to
 GitHub Packages / GHCR, and uploaded as GitHub release assets.
 
-See `docs/spec/` for `syu`'s own self-hosted specification.
+See `docs/syu/` for `syu`'s own self-hosted specification.

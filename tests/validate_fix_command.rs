@@ -3,16 +3,16 @@ use std::{fs, path::Path, process::Command};
 use tempfile::tempdir;
 
 fn write_workspace(root: &Path, default_fix: bool) {
-    fs::create_dir_all(root.join("docs/spec/philosophy")).expect("philosophy dir");
-    fs::create_dir_all(root.join("docs/spec/policies")).expect("policies dir");
-    fs::create_dir_all(root.join("docs/spec/requirements")).expect("requirements dir");
-    fs::create_dir_all(root.join("docs/spec/features")).expect("features dir");
+    fs::create_dir_all(root.join("docs/syu/philosophy")).expect("philosophy dir");
+    fs::create_dir_all(root.join("docs/syu/policies")).expect("policies dir");
+    fs::create_dir_all(root.join("docs/syu/requirements")).expect("requirements dir");
+    fs::create_dir_all(root.join("docs/syu/features")).expect("features dir");
     fs::create_dir_all(root.join("src")).expect("src dir");
 
     fs::write(
         root.join("syu.yaml"),
         format!(
-            "version: {version}\nspec:\n  root: docs/spec\nvalidate:\n  default_fix: {default_fix}\n  allow_planned: true\nruntimes:\n  python:\n    command: auto\n  node:\n    command: auto\n",
+            "version: {version}\nspec:\n  root: docs/syu\nvalidate:\n  default_fix: {default_fix}\n  allow_planned: true\nruntimes:\n  python:\n    command: auto\n  node:\n    command: auto\n",
             version = env!("CARGO_PKG_VERSION"),
             default_fix = if default_fix { "true" } else { "false" }
         ),
@@ -20,25 +20,25 @@ fn write_workspace(root: &Path, default_fix: bool) {
     .expect("config");
 
     fs::write(
-        root.join("docs/spec/philosophy/foundation.yaml"),
+        root.join("docs/syu/philosophy/foundation.yaml"),
         "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: PHIL-001\n    title: Executable agreement\n    product_design_principle: Keep change traceable.\n    coding_guideline: Prefer explicit links.\n    linked_policies:\n      - POL-001\n",
     )
     .expect("philosophy");
 
     fs::write(
-        root.join("docs/spec/policies/policies.yaml"),
+        root.join("docs/syu/policies/policies.yaml"),
         "category: Policies\nversion: 1\nlanguage: en\n\npolicies:\n  - id: POL-001\n    title: Keep symbols documented\n    summary: Requirements and features should remain explainable.\n    description: Every trace should point to a documented symbol.\n    linked_philosophies:\n      - PHIL-001\n    linked_requirements:\n      - REQ-001\n",
     )
     .expect("policy");
 
     fs::write(
-        root.join("docs/spec/requirements/core.yaml"),
+        root.join("docs/syu/requirements/core.yaml"),
         "category: Core Requirements\nprefix: REQ\n\nrequirements:\n  - id: REQ-001\n    title: Validate a documented Rust trace\n    description: A Rust trace should expose the requirement in documentation.\n    priority: high\n    status: implemented\n    linked_policies:\n      - POL-001\n    linked_features:\n      - FEAT-001\n    tests:\n      rust:\n        - file: src/trace.rs\n          symbols:\n            - req_trace\n          doc_contains:\n            - requirement doc line\n",
     )
     .expect("requirement");
 
     fs::write(
-        root.join("docs/spec/features/features.yaml"),
+        root.join("docs/syu/features/features.yaml"),
         format!(
             "version: \"{}\"\nfiles:\n  - kind: core\n    file: core.yaml\n",
             env!("CARGO_PKG_VERSION")
@@ -47,7 +47,7 @@ fn write_workspace(root: &Path, default_fix: bool) {
     .expect("feature registry");
 
     fs::write(
-        root.join("docs/spec/features/core.yaml"),
+        root.join("docs/syu/features/core.yaml"),
         "category: Core Features\nversion: 1\n\nfeatures:\n  - id: FEAT-001\n    title: Rust trace implementation\n    summary: Keep the implementation symbol documented.\n    status: implemented\n    linked_requirements:\n      - REQ-001\n    implementations:\n      rust:\n        - file: src/trace.rs\n          symbols:\n            - req_trace\n          doc_contains:\n            - feature doc line\n",
     )
     .expect("feature");
