@@ -139,12 +139,12 @@ mod tests {
         assert!(
             rules
                 .iter()
-                .any(|rule| rule.code == "SYU-graph-orphaned-004")
+                .any(|rule| rule.code == "SYU-graph-orphaned-001")
         );
         assert!(
             rules
                 .iter()
-                .any(|rule| rule.code == "SYU-coverage-public-002")
+                .any(|rule| rule.code == "SYU-coverage-public-001")
         );
     }
 
@@ -152,14 +152,14 @@ mod tests {
     fn referenced_rules_follow_issue_codes_without_duplicates() {
         let issues = vec![
             Issue::error(
-                "SYU-workspace-duplicate-003",
+                "SYU-workspace-duplicate-001",
                 "subject",
                 None,
                 "message",
                 None,
             ),
             Issue::warning(
-                "SYU-workspace-duplicate-003",
+                "SYU-workspace-duplicate-001",
                 "subject",
                 None,
                 "message",
@@ -171,7 +171,7 @@ mod tests {
 
         let rules = referenced_rules(&issues);
         assert_eq!(rules.len(), 2);
-        assert_eq!(rules[0].code, "SYU-workspace-duplicate-003");
+        assert_eq!(rules[0].code, "SYU-workspace-duplicate-001");
         assert_eq!(rules[1].code, "SYU-graph-reference-001");
     }
 

@@ -112,7 +112,7 @@ fn validate_rejects_implemented_entries_without_traces() {
 
     assert!(!output.status.success(), "implemented entries should fail");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("SYU-delivery-implemented-004"));
+    assert!(stdout.contains("SYU-delivery-implemented-001"));
 }
 
 #[test]
@@ -133,7 +133,7 @@ fn validate_rejects_planned_entries_with_traces() {
         "planned entries with traces should fail"
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("SYU-delivery-planned-003"));
+    assert!(stdout.contains("SYU-delivery-planned-002"));
 }
 
 #[test]
@@ -151,5 +151,5 @@ fn validate_rejects_planned_entries_when_config_disallows_them() {
 
     assert!(!output.status.success(), "planned entries should fail");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("SYU-delivery-status-002"));
+    assert!(stdout.contains("SYU-delivery-planned-001"));
 }
