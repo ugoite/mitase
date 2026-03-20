@@ -1,0 +1,31 @@
+{
+  "name": "syu-app",
+  "version": "0.0.1-alpha.6",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vp dev --host 0.0.0.0 --port 4173",
+    "build": "vp build",
+    "check": "vp check src/App.tsx src/main.tsx src/types.ts src/index.css tests/browser-app.spec.ts scripts/build-wasm.mjs vite.config.ts playwright.config.ts",
+    "preview": "vp preview --host 0.0.0.0 --port 4173",
+    "build:wasm": "node ./scripts/build-wasm.mjs",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@tailwindcss/vite": "^4.2.2",
+    "@types/node": "^25.5.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "tailwindcss": "^4.2.2",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.1",
+    "vite-plus": "^0.1.13"
+  },
+  "packageManager": "npm@11.8.0"
+}

@@ -1,0 +1,17 @@
+[package]
+name = "syu-app-wasm"
+version = "0.0.1-alpha.6"
+edition = "2024"
+description = "WebAssembly bridge for the syu browser app"
+license = "MIT"
+license-file = "../../LICENSE"
+repository = "https://github.com/ugoite/syu"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+console_error_panic_hook = "0.1.7"
+serde-wasm-bindgen = "0.6.5"
+syu-core = { path = "../../crates/syu-core" }
+wasm-bindgen = "0.2.105"

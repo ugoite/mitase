@@ -189,9 +189,11 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("syu init"));
     assert!(readme.contains("syu validate"));
     assert!(readme.contains("syu browse"));
+    assert!(readme.contains("syu app"));
     assert!(readme.contains("examples/polyglot"));
     assert!(readme.contains("CONTRIBUTING.md"));
     assert!(readme.contains("Documentation site"));
+    assert!(readme.contains("Browser app"));
     assert!(readme.contains("scripts/install-precommit.sh"));
     assert!(readme.contains("https://ugoite.github.io/syu/"));
     assert!(readme.contains("docs/syu/config/"));
@@ -206,6 +208,7 @@ fn repository_declares_documentation_guides() {
     assert!(concepts.contains("Specification Reference"));
     assert!(getting_started.contains("syu validate . --fix"));
     assert!(getting_started.contains("syu browse ."));
+    assert!(getting_started.contains("syu app ."));
     assert!(getting_started.contains("status: implemented"));
     assert!(getting_started.contains("Keep exploring"));
     assert!(getting_started.contains("latest validation report"));
@@ -358,6 +361,32 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(dependabot.contains("target-branch: main"));
     assert!(dependabot.contains("rust-crates"));
     assert!(dependabot.contains("github-actions"));
+}
+
+#[test]
+// REQ-CORE-017
+fn repository_ships_browser_app() {
+    let ci_workflow = read_file(".github/workflows/ci.yml");
+    let app_package = read_file("app/package.json");
+    let app_source = read_file("app/src/App.tsx");
+    let app_vite = read_file("app/vite.config.ts");
+    let app_playwright = read_file("app/tests/browser-app.spec.ts");
+    let app_wasm = read_file("app/wasm/src/lib.rs");
+    let shared_core = read_file("crates/syu-core/src/lib.rs");
+
+    assert!(ci_workflow.contains("browser-app:"));
+    assert!(ci_workflow.contains("npm run build:wasm"));
+    assert!(ci_workflow.contains("npm run build"));
+    assert!(app_package.contains("\"vite-plus\""));
+    assert!(app_package.contains("\"@playwright/test\""));
+    assert!(app_source.contains("FEAT-APP-001"));
+    assert!(app_source.contains("philosophy"));
+    assert!(app_source.contains("requirements"));
+    assert!(app_vite.contains("@tailwindcss/vite"));
+    assert!(app_playwright.contains("REQ-CORE-017"));
+    assert!(app_playwright.contains("FEAT-CHECK-001"));
+    assert!(app_wasm.contains("FEAT-APP-001"));
+    assert!(shared_core.contains("FEAT-APP-001"));
 }
 
 #[test]

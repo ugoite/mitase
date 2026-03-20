@@ -22,6 +22,8 @@ pub enum Commands {
         about = "Browse philosophies, policies, features, requirements, and validation errors"
     )]
     Browse(BrowseArgs),
+    #[command(about = "Start a local browser app for exploring the current workspace")]
+    App(AppArgs),
     #[command(
         visible_alias = "check",
         about = "Validate the layered graph, traces, and optional autofixes"
@@ -46,6 +48,21 @@ impl Default for BrowseArgs {
             workspace: PathBuf::from("."),
         }
     }
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct AppArgs {
+    #[arg(help = "Workspace root containing syu.yaml and the spec tree (default: docs/syu)")]
+    #[arg(default_value = ".")]
+    pub workspace: PathBuf,
+
+    #[arg(help = "IP address to bind the local app server to")]
+    #[arg(long, default_value = "127.0.0.1")]
+    pub bind: String,
+
+    #[arg(help = "Port to bind the local app server to")]
+    #[arg(short, long, default_value_t = 3000)]
+    pub port: u16,
 }
 
 #[derive(Debug, Clone, Args)]

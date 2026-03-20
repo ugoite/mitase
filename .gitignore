@@ -1,4 +1,5 @@
 /target
+.tooling
 .DS_Store
 website/.docusaurus
 website/build

@@ -72,6 +72,43 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       - **file**: src/command/browse.rs
         - **symbols**:
           - *
+- **id**: REQ-CORE-017
+  - **title**: Serve a local browser app backed by shared Rust and WebAssembly logic
+  - **description**:
+    - |
+      The `app` command MUST start a local server that lets contributors inspect
+      the current workspace in a browser. The UI MUST expose tabs for
+      philosophy, policies, features, and requirements; keep file- and
+      folder-oriented subnavigation for each layer; show linked items and
+      current validation issues even when the workspace is imperfect; and reuse
+      browser-safe Rust logic through WebAssembly instead of reimplementing the
+      layered model only in JavaScript.
+  - **priority**: medium
+  - **status**: implemented
+  - **linked_policies**:
+    - POL-002
+    - POL-004
+    - POL-005
+  - **linked_features**:
+    - FEAT-APP-001
+  - **tests**:
+    - **rust**:
+      - **file**: src/lib.rs
+        - **symbols**:
+          - dispatches_app_subcommands_without_rewriting_them
+      - **file**: tests/repository_quality.rs
+        - **symbols**:
+          - repository_ships_browser_app
+      - **file**: tests/app_command.rs
+        - **symbols**:
+          - *
+      - **file**: src/command/app.rs
+        - **symbols**:
+          - *
+    - **typescript**:
+      - **file**: app/tests/browser-app.spec.ts
+        - **symbols**:
+          - *
 
 ## Source YAML
 
@@ -130,6 +167,42 @@ requirements:
           symbols:
             - dispatches_interactive_bare_invocations_to_browse_defaults
         - file: src/command/browse.rs
+          symbols:
+            - '*'
+  - id: REQ-CORE-017
+    title: Serve a local browser app backed by shared Rust and WebAssembly logic
+    description: |
+      The `app` command MUST start a local server that lets contributors inspect
+      the current workspace in a browser. The UI MUST expose tabs for
+      philosophy, policies, features, and requirements; keep file- and
+      folder-oriented subnavigation for each layer; show linked items and
+      current validation issues even when the workspace is imperfect; and reuse
+      browser-safe Rust logic through WebAssembly instead of reimplementing the
+      layered model only in JavaScript.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-002
+      - POL-004
+      - POL-005
+    linked_features:
+      - FEAT-APP-001
+    tests:
+      rust:
+        - file: src/lib.rs
+          symbols:
+            - dispatches_app_subcommands_without_rewriting_them
+        - file: tests/repository_quality.rs
+          symbols:
+            - repository_ships_browser_app
+        - file: tests/app_command.rs
+          symbols:
+            - '*'
+        - file: src/command/app.rs
+          symbols:
+            - '*'
+      typescript:
+        - file: app/tests/browser-app.spec.ts
           symbols:
             - '*'
 ```
