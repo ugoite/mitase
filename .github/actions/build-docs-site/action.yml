@@ -1,0 +1,23 @@
+# FEAT-DOCS-002
+name: Build docs site
+description: Install dependencies and build the checked-in Docusaurus site
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: "20"
+        cache: npm
+        cache-dependency-path: website/package.json
+
+    - name: Install docs dependencies
+      working-directory: website
+      shell: bash
+      run: npm install
+
+    - name: Build documentation site
+      working-directory: website
+      shell: bash
+      run: npm run build

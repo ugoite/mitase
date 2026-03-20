@@ -35,6 +35,7 @@ scripts/install-precommit.sh
 - update the self-hosted specification in `docs/spec/` when behavior changes
 - update docs and examples when user-facing workflows change
 - add or update tests for new behavior
+- keep the GitHub Pages docs deployment working when `website/` or docs-site workflow files change
 - keep `main` ready for the next release
 
 ## Releases

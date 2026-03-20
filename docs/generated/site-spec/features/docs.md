@@ -56,7 +56,7 @@ description: "Generated reference for docs/spec/features/docs.yaml"
           - runtimes.python.command
 - **id**: FEAT-DOCS-002
   - **title**: Docusaurus documentation site
-  - **summary**: Render the checked-in docs tree as a documentation site without maintaining a separate content source.
+  - **summary**: Render and publish the checked-in docs tree as a documentation site without maintaining a separate content source.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-010
@@ -74,6 +74,13 @@ description: "Generated reference for docs/spec/features/docs.yaml"
       - **file**: website/src/pages/index.js
         - **symbols**:
           - Home
+    - **yaml**:
+      - **file**: .github/workflows/deploy-pages.yml
+        - **symbols**:
+          - deploy-pages
+          - actions/configure-pages@v5
+          - actions/upload-pages-artifact@v4
+          - actions/deploy-pages@v4
 
 ## Source YAML
 
@@ -122,7 +129,7 @@ features:
 
   - id: FEAT-DOCS-002
     title: Docusaurus documentation site
-    summary: Render the checked-in docs tree as a documentation site without maintaining a separate content source.
+    summary: Render and publish the checked-in docs tree as a documentation site without maintaining a separate content source.
     status: implemented
     linked_requirements:
       - REQ-CORE-010
@@ -140,4 +147,11 @@ features:
         - file: website/src/pages/index.js
           symbols:
             - Home
+      yaml:
+        - file: .github/workflows/deploy-pages.yml
+          symbols:
+            - deploy-pages
+            - actions/configure-pages@v5
+            - actions/upload-pages-artifact@v4
+            - actions/deploy-pages@v4
 ```

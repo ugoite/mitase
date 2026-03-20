@@ -253,7 +253,9 @@ npm run start
 ```
 
 The landing page links the core guides, the self-hosted specification reference,
-and the latest checked-in validation report.
+the latest checked-in validation report, and the published site is deployed
+from `main` to GitHub Pages at `https://ugoite.github.io/syu/` via
+`.github/workflows/deploy-pages.yml`.
 
 ## Agent skill
 
