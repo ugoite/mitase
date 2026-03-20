@@ -243,6 +243,7 @@ fn repository_declares_documentation_guides() {
     assert!(docs_config.contains("projectName: 'syu'"));
     assert!(docs_config.contains("Concepts"));
     assert!(docs_config.contains("Validation report"));
+    assert!(docs_config.contains("/docs/generated/site-spec/features/documentation/docs"));
     assert!(docs_home.contains("Four specification layers"));
     assert!(docs_home.contains("Common journeys"));
     assert!(docs_home.contains("Stay close to checked-in source"));
@@ -264,11 +265,12 @@ fn repository_declares_devcontainer_configuration() {
 // REQ-CORE-012
 fn repository_ships_example_workspaces() {
     let current_version = env!("CARGO_PKG_VERSION");
-    let rust_example_requirement = read_file("examples/rust-only/docs/syu/requirements/core.yaml");
+    let rust_example_requirement =
+        read_file("examples/rust-only/docs/syu/requirements/core/rust.yaml");
     let rust_example_config = read_file("examples/rust-only/syu.yaml");
     let python_example_requirement =
-        read_file("examples/python-only/docs/syu/requirements/core.yaml");
-    let polyglot_feature = read_file("examples/polyglot/docs/syu/features/polyglot.yaml");
+        read_file("examples/python-only/docs/syu/requirements/core/python.yaml");
+    let polyglot_feature = read_file("examples/polyglot/docs/syu/features/languages/polyglot.yaml");
     let example_tests = read_file("tests/example_workspaces.rs");
 
     assert!(rust_example_requirement.contains("REQ-RUST-001"));

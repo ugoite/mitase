@@ -4,7 +4,7 @@
 use anyhow::{Context, Result, bail};
 use std::{
     fs,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 use crate::{
@@ -49,7 +49,7 @@ pub fn load_workspace(root: &Path) -> Result<Workspace> {
 
     let mut features = Vec::new();
     for file in registry.files {
-        let path = feature_root.join(&file.file);
+        let path = resolve_feature_document_path(&feature_root, &file.file)?;
         let document = load_feature_document(&path, &file.kind)?;
         features.extend(document.features);
     }
@@ -108,7 +108,7 @@ fn load_policy_documents(directory: &Path) -> Result<Vec<PolicyDocument>> {
 }
 
 fn load_requirement_documents(directory: &Path) -> Result<Vec<RequirementDocument>> {
-    let files = ensure_yaml_directory(directory, "requirement")?;
+    let files = ensure_yaml_directory_recursive(directory, "requirement")?;
     let mut documents = Vec::new();
     for path in files {
         let label = format!("requirement document `{}`", path.display());
@@ -148,6 +148,20 @@ fn ensure_yaml_directory(directory: &Path, label: &str) -> Result<Vec<PathBuf>> 
     Ok(files)
 }
 
+fn ensure_yaml_directory_recursive(directory: &Path, label: &str) -> Result<Vec<PathBuf>> {
+    if !directory.is_dir() {
+        bail!("missing {label} directory `{}`", directory.display());
+    }
+
+    let mut files = yaml_file_paths_recursive(directory)?;
+    if files.is_empty() {
+        bail!("no YAML files found in `{}`", directory.display());
+    }
+
+    files.sort();
+    Ok(files)
+}
+
 fn yaml_file_paths(directory: &Path) -> Result<Vec<PathBuf>> {
     let entries = fs::read_dir(directory)
         .with_context(|| format!("failed to read directory `{}`", directory.display()))?;
@@ -155,15 +169,73 @@ fn yaml_file_paths(directory: &Path) -> Result<Vec<PathBuf>> {
 
     for entry in entries {
         let path = entry?.path();
-        if matches!(
-            path.extension().and_then(|ext| ext.to_str()),
-            Some("yaml" | "yml")
-        ) {
+        if is_yaml_path(&path) {
             files.push(path);
         }
     }
 
     Ok(files)
+}
+
+fn yaml_file_paths_recursive(directory: &Path) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    collect_yaml_file_paths(directory, &mut files)?;
+    Ok(files)
+}
+
+fn collect_yaml_file_paths(directory: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
+    let entries = fs::read_dir(directory)
+        .with_context(|| format!("failed to read directory `{}`", directory.display()))?;
+
+    for entry in entries {
+        let path = entry?.path();
+        if path.is_dir() {
+            collect_yaml_file_paths(&path, files)?;
+        } else if is_yaml_path(&path) {
+            files.push(path);
+        }
+    }
+
+    Ok(())
+}
+
+fn is_yaml_path(path: &Path) -> bool {
+    matches!(
+        path.extension().and_then(|ext| ext.to_str()),
+        Some("yaml" | "yml")
+    )
+}
+
+fn resolve_feature_document_path(feature_root: &Path, relative_path: &Path) -> Result<PathBuf> {
+    if relative_path.is_absolute() {
+        bail!(
+            "feature registry entry must use a relative path inside `{}`: `{}`",
+            feature_root.display(),
+            relative_path.display()
+        );
+    }
+
+    if relative_path.components().any(|component| {
+        matches!(
+            component,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_)
+        )
+    }) {
+        bail!(
+            "feature registry entry must stay within `{}`: `{}`",
+            feature_root.display(),
+            relative_path.display()
+        );
+    }
+
+    if !is_yaml_path(relative_path) {
+        bail!(
+            "feature registry entry must point to a YAML file: `{}`",
+            relative_path.display()
+        );
+    }
+
+    Ok(feature_root.join(relative_path))
 }
 
 fn read_yaml_text(path: &Path, label: &str) -> Result<String> {
@@ -181,9 +253,10 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
-        ensure_yaml_directory, load_feature_document, load_feature_registry,
-        load_philosophy_documents, load_policy_documents, load_requirement_documents,
-        load_workspace, read_yaml_text, yaml_file_paths,
+        ensure_yaml_directory, ensure_yaml_directory_recursive, load_feature_document,
+        load_feature_registry, load_philosophy_documents, load_policy_documents,
+        load_requirement_documents, load_workspace, read_yaml_text, resolve_feature_document_path,
+        yaml_file_paths, yaml_file_paths_recursive,
     };
 
     fn fixture_root(name: &str) -> PathBuf {
@@ -199,6 +272,48 @@ mod tests {
         assert_eq!(workspace.policies.len(), 2);
         assert_eq!(workspace.requirements.len(), 3);
         assert_eq!(workspace.features.len(), 3);
+    }
+
+    #[test]
+    fn load_workspace_reads_nested_requirement_and_feature_documents() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let spec_root = tempdir.path().join("docs/syu");
+        fs::create_dir_all(spec_root.join("philosophy")).expect("dir");
+        fs::create_dir_all(spec_root.join("policies")).expect("dir");
+        fs::create_dir_all(spec_root.join("requirements/core")).expect("dir");
+        fs::create_dir_all(spec_root.join("features/core")).expect("dir");
+
+        fs::write(
+            spec_root.join("philosophy/foundation.yaml"),
+            "category: Philosophy\nversion: 1\nphilosophies:\n  - id: PHIL-1\n    title: T\n    product_design_principle: A\n    coding_guideline: B\n    linked_policies:\n      - POL-1\n",
+        )
+        .expect("write");
+        fs::write(
+            spec_root.join("policies/policies.yaml"),
+            "category: Policies\nversion: 1\npolicies:\n  - id: POL-1\n    title: T\n    summary: S\n    description: D\n    linked_philosophies:\n      - PHIL-1\n    linked_requirements:\n      - REQ-1\n",
+        )
+        .expect("write");
+        fs::write(
+            spec_root.join("requirements/core/core.yaml"),
+            "category: Core\nprefix: REQ\nrequirements:\n  - id: REQ-1\n    title: T\n    description: D\n    priority: high\n    status: planned\n    linked_policies:\n      - POL-1\n    linked_features:\n      - FEAT-1\n    tests: {}\n",
+        )
+        .expect("write");
+        fs::write(
+            spec_root.join("features/features.yaml"),
+            "version: '0.1'\nfiles:\n  - kind: core\n    file: core/core.yaml\n",
+        )
+        .expect("write");
+        fs::write(
+            spec_root.join("features/core/core.yaml"),
+            "category: Core\nversion: 1\nfeatures:\n  - id: FEAT-1\n    title: T\n    summary: S\n    status: planned\n    linked_requirements:\n      - REQ-1\n    implementations: {}\n",
+        )
+        .expect("write");
+
+        let workspace = load_workspace(tempdir.path()).expect("nested workspace should load");
+        assert_eq!(workspace.requirements.len(), 1);
+        assert_eq!(workspace.features.len(), 1);
+        assert_eq!(workspace.requirements[0].id, "REQ-1");
+        assert_eq!(workspace.features[0].id, "FEAT-1");
     }
 
     #[test]
@@ -424,6 +539,23 @@ mod tests {
     }
 
     #[test]
+    fn resolve_feature_document_path_rejects_escaping_paths() {
+        let feature_root = Path::new("/tmp/syu/features");
+
+        let absolute = resolve_feature_document_path(feature_root, Path::new("/tmp/escape.yaml"))
+            .expect_err("absolute paths should fail");
+        assert!(absolute.to_string().contains("must use a relative path"));
+
+        let parent_dir = resolve_feature_document_path(feature_root, Path::new("../escape.yaml"))
+            .expect_err("parent traversal should fail");
+        assert!(parent_dir.to_string().contains("must stay within"));
+
+        let not_yaml = resolve_feature_document_path(feature_root, Path::new("nested/escape.txt"))
+            .expect_err("non-yaml files should fail");
+        assert!(not_yaml.to_string().contains("must point to a YAML file"));
+    }
+
+    #[test]
     fn ensure_yaml_directory_fails_for_missing_directory() {
         let tempdir = tempdir().expect("tempdir should exist");
         let error = ensure_yaml_directory(&tempdir.path().join("missing"), "philosophy")
@@ -439,6 +571,18 @@ mod tests {
         fs::create_dir_all(&directory).expect("directory should exist");
 
         let error = ensure_yaml_directory(&directory, "philosophy")
+            .expect_err("empty directory should fail");
+
+        assert!(error.to_string().contains("no YAML files found"));
+    }
+
+    #[test]
+    fn ensure_yaml_directory_recursive_fails_for_empty_directory() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let directory = tempdir.path().join("docs/syu/requirements");
+        fs::create_dir_all(&directory).expect("directory should exist");
+
+        let error = ensure_yaml_directory_recursive(&directory, "requirement")
             .expect_err("empty directory should fail");
 
         assert!(error.to_string().contains("no YAML files found"));
@@ -477,6 +621,30 @@ mod tests {
             .filter_map(|path| path.file_name().and_then(|name| name.to_str()))
             .collect();
         assert_eq!(names, vec!["a.yaml", "b.yml"]);
+    }
+
+    #[test]
+    fn yaml_file_paths_recursive_collect_nested_yaml_files() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        fs::create_dir_all(tempdir.path().join("nested/deeper")).expect("dirs");
+        fs::write(tempdir.path().join("a.yaml"), "a: 1\n").expect("write");
+        fs::write(tempdir.path().join("nested/b.yml"), "b: 2\n").expect("write");
+        fs::write(tempdir.path().join("nested/deeper/c.txt"), "c\n").expect("write");
+
+        let mut files =
+            yaml_file_paths_recursive(tempdir.path()).expect("yaml files should be listed");
+        files.sort();
+
+        let names: Vec<_> = files
+            .iter()
+            .map(|path| {
+                path.strip_prefix(tempdir.path())
+                    .expect("relative path")
+                    .to_string_lossy()
+                    .replace('\\', "/")
+            })
+            .collect();
+        assert_eq!(names, vec!["a.yaml", "nested/b.yml"]);
     }
 
     #[test]

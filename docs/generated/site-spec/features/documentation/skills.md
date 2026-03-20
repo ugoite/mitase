@@ -1,9 +1,9 @@
 ---
 title: "Agent Skills / Skills"
-description: "Generated reference for docs/syu/features/skills.yaml"
+description: "Generated reference for docs/syu/features/documentation/skills.yaml"
 ---
 
-> Generated from `docs/syu/features/skills.yaml`.
+> Generated from `docs/syu/features/documentation/skills.yaml`.
 
 ## Parsed content
 

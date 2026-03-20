@@ -1,0 +1,341 @@
+---
+title: "Core Repository / Repository"
+description: "Generated reference for docs/syu/requirements/core/repository.yaml"
+---
+
+> Generated from `docs/syu/requirements/core/repository.yaml`.
+
+## Parsed content
+
+### Category
+
+- Core Repository
+
+### Prefix
+
+- REQ-CORE
+
+### Requirements
+
+- **id**: REQ-CORE-005
+  - **title**: Enforce repository quality gates
+  - **description**:
+    - |
+      The repository MUST provide repeatable quality automation for formatting,
+      linting, tests, workflow linting, pre-commit / pre-push hooks, and
+      self-validation so `syu`'s own promises stay continuously checkable. The
+      repository MUST also check in a root `syu.yaml` that enables non-orphaned
+      validation and strict symbol/test ownership for self-hosting.
+  - **priority**: high
+  - **status**: implemented
+  - **linked_policies**:
+    - POL-007
+  - **linked_features**:
+    - FEAT-CHECK-001
+    - FEAT-QUALITY-001
+  - **tests**:
+    - **rust**:
+      - **file**: tests/repository_quality.rs
+        - **symbols**:
+          - repository_declares_precommit_and_quality_gates
+- **id**: REQ-CORE-006
+  - **title**: Enforce 100 percent line coverage in CI
+  - **description**:
+    - |
+      The repository MUST gate CI on 100 percent Rust line coverage using a
+      repeatable command so regressions in verification logic remain visible.
+  - **priority**: high
+  - **status**: implemented
+  - **linked_policies**:
+    - POL-007
+  - **linked_features**:
+    - FEAT-QUALITY-001
+  - **tests**:
+    - **rust**:
+      - **file**: tests/repository_quality.rs
+        - **symbols**:
+          - repository_declares_coverage_gate_at_one_hundred_percent
+- **id**: REQ-CORE-007
+  - **title**: Automate releases with release-please and artifact packaging
+  - **description**:
+    - |
+      The repository MUST provide release automation that prepares stable release
+      PRs from `main`, keeps `main` releaseable under GitHub Flow, publishes
+      GitHub release notes without a committed changelog file, generates alpha,
+      beta, and stable release notes against the previous tag in the same track,
+      builds installable artifacts for supported platforms, and publishes
+      install packages to GitHub Packages / GHCR.
+  - **priority**: high
+  - **status**: implemented
+  - **linked_policies**:
+    - POL-007
+  - **linked_features**:
+    - FEAT-RELEASE-001
+  - **tests**:
+    - **rust**:
+      - **file**: tests/repository_quality.rs
+        - **symbols**:
+          - repository_declares_release_automation
+- **id**: REQ-CORE-008
+  - **title**: Provide a one-line installer for package artifacts
+  - **description**:
+    - |
+      The repository MUST ship an installer script that resolves the current
+      platform, prefers the matching package artifact from GitHub Packages /
+      GHCR, falls back to GitHub release assets when package download is not
+      available, defaults to `ugoite/syu`, and installs the binary into a
+      user-controlled location.
+  - **priority**: medium
+  - **status**: implemented
+  - **linked_policies**:
+    - POL-007
+  - **linked_features**:
+    - FEAT-INSTALL-001
+  - **tests**:
+    - **rust**:
+      - **file**: tests/repository_quality.rs
+        - **symbols**:
+          - repository_declares_installer_contract
+- **id**: REQ-CORE-011
+  - **title**: Provide a contributor devcontainer
+  - **description**:
+    - |
+      The repository MUST provide a devcontainer that installs the core
+      contributor toolchain needed to work on `syu`, including Rust quality
+      tooling and the runtimes used by the documented workflow.
+  - **priority**: medium
+  - **status**: implemented
+  - **linked_policies**:
+    - POL-004
+    - POL-006
+  - **linked_features**:
+    - FEAT-CONTRIB-001
+  - **tests**:
+    - **rust**:
+      - **file**: tests/repository_quality.rs
+        - **symbols**:
+          - repository_declares_devcontainer_configuration
+- **id**: REQ-CORE-012
+  - **title**: Ship curated example workspaces and validate them in tests
+  - **description**:
+    - |
+      The repository MUST include example projects for Rust-only, Python-only,
+      and polyglot workflows and MUST validate them in the automated test suite
+      so contributors can learn from working patterns.
+  - **priority**: medium
+  - **status**: implemented
+  - **linked_policies**:
+    - POL-004
+    - POL-005
+    - POL-006
+  - **linked_features**:
+    - FEAT-CONTRIB-001
+  - **tests**:
+    - **rust**:
+      - **file**: tests/example_workspaces.rs
+        - **symbols**:
+          - *
+      - **file**: tests/repository_quality.rs
+        - **symbols**:
+          - repository_ships_example_workspaces
+- **id**: REQ-CORE-013
+  - **title**: Provide GitHub Flow contributor workflow assets and low-friction hook setup
+  - **description**:
+    - |
+      The repository MUST document its GitHub Flow process, keep `main` as the
+      only long-lived branch, ship pull-request and issue templates that guide
+      high-signal contributions, and explain the local verification steps that
+      contributors should run before opening a pull request. Installing
+      pre-commit hooks SHOULD be a one-command experience.
+  - **priority**: medium
+  - **status**: implemented
+  - **linked_policies**:
+    - POL-006
+  - **linked_features**:
+    - FEAT-CONTRIB-002
+    - FEAT-CONTRIB-003
+  - **tests**:
+    - **rust**:
+      - **file**: tests/repository_quality.rs
+        - **symbols**:
+          - repository_declares_contribution_workflow_assets
+- **id**: REQ-CORE-014
+  - **title**: Keep dependency hygiene and CI execution current
+  - **description**:
+    - |
+      The repository MUST cache repeatable CI build state, keep GitHub Actions
+      runs concise enough for pull-request-first development, and use Dependabot
+      to update Rust and GitHub Actions dependencies against `main`.
+  - **priority**: medium
+  - **status**: implemented
+  - **linked_policies**:
+    - POL-006
+    - POL-007
+  - **linked_features**:
+    - FEAT-QUALITY-001
+  - **tests**:
+    - **rust**:
+      - **file**: tests/repository_quality.rs
+        - **symbols**:
+          - repository_declares_dependency_hygiene_and_ci_caching
+
+## Source YAML
+
+```yaml
+category: Core Repository
+prefix: REQ-CORE
+requirements:
+  - id: REQ-CORE-005
+    title: Enforce repository quality gates
+    description: |
+      The repository MUST provide repeatable quality automation for formatting,
+      linting, tests, workflow linting, pre-commit / pre-push hooks, and
+      self-validation so `syu`'s own promises stay continuously checkable. The
+      repository MUST also check in a root `syu.yaml` that enables non-orphaned
+      validation and strict symbol/test ownership for self-hosting.
+    priority: high
+    status: implemented
+    linked_policies:
+      - POL-007
+    linked_features:
+      - FEAT-CHECK-001
+      - FEAT-QUALITY-001
+    tests:
+      rust:
+        - file: tests/repository_quality.rs
+          symbols:
+            - repository_declares_precommit_and_quality_gates
+  - id: REQ-CORE-006
+    title: Enforce 100 percent line coverage in CI
+    description: |
+      The repository MUST gate CI on 100 percent Rust line coverage using a
+      repeatable command so regressions in verification logic remain visible.
+    priority: high
+    status: implemented
+    linked_policies:
+      - POL-007
+    linked_features:
+      - FEAT-QUALITY-001
+    tests:
+      rust:
+        - file: tests/repository_quality.rs
+          symbols:
+            - repository_declares_coverage_gate_at_one_hundred_percent
+  - id: REQ-CORE-007
+    title: Automate releases with release-please and artifact packaging
+    description: |
+      The repository MUST provide release automation that prepares stable release
+      PRs from `main`, keeps `main` releaseable under GitHub Flow, publishes
+      GitHub release notes without a committed changelog file, generates alpha,
+      beta, and stable release notes against the previous tag in the same track,
+      builds installable artifacts for supported platforms, and publishes
+      install packages to GitHub Packages / GHCR.
+    priority: high
+    status: implemented
+    linked_policies:
+      - POL-007
+    linked_features:
+      - FEAT-RELEASE-001
+    tests:
+      rust:
+        - file: tests/repository_quality.rs
+          symbols:
+            - repository_declares_release_automation
+  - id: REQ-CORE-008
+    title: Provide a one-line installer for package artifacts
+    description: |
+      The repository MUST ship an installer script that resolves the current
+      platform, prefers the matching package artifact from GitHub Packages /
+      GHCR, falls back to GitHub release assets when package download is not
+      available, defaults to `ugoite/syu`, and installs the binary into a
+      user-controlled location.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-007
+    linked_features:
+      - FEAT-INSTALL-001
+    tests:
+      rust:
+        - file: tests/repository_quality.rs
+          symbols:
+            - repository_declares_installer_contract
+  - id: REQ-CORE-011
+    title: Provide a contributor devcontainer
+    description: |
+      The repository MUST provide a devcontainer that installs the core
+      contributor toolchain needed to work on `syu`, including Rust quality
+      tooling and the runtimes used by the documented workflow.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-004
+      - POL-006
+    linked_features:
+      - FEAT-CONTRIB-001
+    tests:
+      rust:
+        - file: tests/repository_quality.rs
+          symbols:
+            - repository_declares_devcontainer_configuration
+  - id: REQ-CORE-012
+    title: Ship curated example workspaces and validate them in tests
+    description: |
+      The repository MUST include example projects for Rust-only, Python-only,
+      and polyglot workflows and MUST validate them in the automated test suite
+      so contributors can learn from working patterns.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-004
+      - POL-005
+      - POL-006
+    linked_features:
+      - FEAT-CONTRIB-001
+    tests:
+      rust:
+        - file: tests/example_workspaces.rs
+          symbols:
+            - '*'
+        - file: tests/repository_quality.rs
+          symbols:
+            - repository_ships_example_workspaces
+  - id: REQ-CORE-013
+    title: Provide GitHub Flow contributor workflow assets and low-friction hook setup
+    description: |
+      The repository MUST document its GitHub Flow process, keep `main` as the
+      only long-lived branch, ship pull-request and issue templates that guide
+      high-signal contributions, and explain the local verification steps that
+      contributors should run before opening a pull request. Installing
+      pre-commit hooks SHOULD be a one-command experience.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-006
+    linked_features:
+      - FEAT-CONTRIB-002
+      - FEAT-CONTRIB-003
+    tests:
+      rust:
+        - file: tests/repository_quality.rs
+          symbols:
+            - repository_declares_contribution_workflow_assets
+  - id: REQ-CORE-014
+    title: Keep dependency hygiene and CI execution current
+    description: |
+      The repository MUST cache repeatable CI build state, keep GitHub Actions
+      runs concise enough for pull-request-first development, and use Dependabot
+      to update Rust and GitHub Actions dependencies against `main`.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-006
+      - POL-007
+    linked_features:
+      - FEAT-QUALITY-001
+    tests:
+      rust:
+        - file: tests/repository_quality.rs
+          symbols:
+            - repository_declares_dependency_hygiene_and_ci_caching
+```

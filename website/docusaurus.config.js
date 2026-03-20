@@ -69,7 +69,7 @@ const config = {
           title: 'Self-hosted spec',
           items: [
             { label: 'Reference index', to: '/docs/generated/site-spec' },
-            { label: 'Docs feature', to: '/docs/generated/site-spec/features/docs' }
+            { label: 'Docs feature', to: '/docs/generated/site-spec/features/documentation/docs' }
           ]
         }
       ]

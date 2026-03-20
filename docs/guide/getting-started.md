@@ -27,8 +27,12 @@ Start by editing:
 
 - `docs/syu/philosophy/foundation.yaml`
 - `docs/syu/policies/policies.yaml`
-- `docs/syu/requirements/core.yaml`
-- `docs/syu/features/core.yaml`
+- `docs/syu/requirements/core/core.yaml`
+- `docs/syu/features/core/core.yaml`
+
+As the workspace grows, you can group requirement and feature files into nested
+folders. Keep feature discovery explicit by updating `docs/syu/features/features.yaml`
+whenever you add or move a feature document.
 
 Make sure links are reciprocal:
 

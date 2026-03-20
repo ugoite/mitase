@@ -1,9 +1,9 @@
 ---
 title: "Init Command / Init"
-description: "Generated reference for docs/syu/features/init.yaml"
+description: "Generated reference for docs/syu/features/cli/init.yaml"
 ---
 
-> Generated from `docs/syu/features/init.yaml`.
+> Generated from `docs/syu/features/cli/init.yaml`.
 
 ## Parsed content
 

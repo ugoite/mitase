@@ -1,0 +1,295 @@
+---
+title: "Core Validation / Validation"
+description: "Generated reference for docs/syu/requirements/core/validation.yaml"
+---
+
+> Generated from `docs/syu/requirements/core/validation.yaml`.
+
+## Parsed content
+
+### Category
+
+- Core Validation
+
+### Prefix
+
+- REQ-CORE
+
+### Requirements
+
+- **id**: REQ-CORE-001
+  - **title**: Validate the linked specification graph with rule-backed diagnostics
+  - **description**:
+    - |
+      The `validate` command MUST load philosophy, policy, requirement, and
+      feature YAML definitions, validate required fields, reject broken
+      references, verify reciprocal links across the adjacent-layer graph,
+      report isolated definitions by default, enforce `planned` /
+      `implemented` delivery-state rules for requirements and features, and
+      surface rule codes with human-readable titles and explanations in
+      validation output. `check` MAY remain as a compatibility alias, but
+      `validate` is the canonical command name.
+  - **priority**: high
+  - **status**: implemented
+  - **linked_policies**:
+    - POL-001
+    - POL-002
+  - **linked_features**:
+    - FEAT-CHECK-001
+  - **tests**:
+    - **rust**:
+      - **file**: tests/check_command.rs
+        - **symbols**:
+          - *
+      - **file**: tests/status_validation.rs
+        - **symbols**:
+          - *
+      - **file**: tests/orphan_validation.rs
+        - **symbols**:
+          - *
+      - **file**: src/command/check.rs
+        - **symbols**:
+          - *
+      - **file**: src/model.rs
+        - **symbols**:
+          - *
+      - **file**: src/rules.rs
+        - **symbols**:
+          - *
+      - **file**: src/workspace.rs
+        - **symbols**:
+          - *
+- **id**: REQ-CORE-002
+  - **title**: Verify multi-language traces and optionally require full symbol ownership
+  - **description**:
+    - |
+      The `validate` command MUST verify requirement-to-test and
+      feature-to-implementation traceability in the languages used by `syu`
+      today: Rust, Python, and TypeScript. A declared trace is valid only when
+      the file exists, the symbol exists, the file explicitly mentions the
+      owning ID, and any `doc_contains` snippets are present in the symbol
+      documentation. Validation MUST also support wildcard file ownership and an
+      optional mode that requires every public Rust symbol to belong to some
+      feature and every Rust test to belong to some requirement.
+  - **priority**: high
+  - **status**: implemented
+  - **linked_policies**:
+    - POL-003
+    - POL-006
+  - **linked_features**:
+    - FEAT-CHECK-001
+  - **tests**:
+    - **rust**:
+      - **file**: tests/check_command.rs
+        - **symbols**:
+          - check_command_verifies_requirement_test_traceability_in_all_supported_languages
+          - check_command_verifies_feature_implementation_traceability_in_all_supported_languages
+      - **file**: tests/trace_coverage_validation.rs
+        - **symbols**:
+          - *
+      - **file**: src/coverage.rs
+        - **symbols**:
+          - *
+      - **file**: src/inspect.rs
+        - **symbols**:
+          - *
+      - **file**: src/language.rs
+        - **symbols**:
+          - *
+      - **file**: src/runtime.rs
+        - **symbols**:
+          - *
+      - **file**: tests/example_workspaces.rs
+        - **symbols**:
+          - python_only_example_validates
+          - polyglot_example_validates
+- **id**: REQ-CORE-003
+  - **title**: Support conservative autofix and config-driven default_fix
+  - **description**:
+    - |
+      The `validate` command MUST provide a `--fix` mode that performs safe,
+      mechanical repairs for documentation-style trace gaps. `syu.yaml` MUST be
+      able to configure default fix behavior, and `--no-fix` MUST disable it.
+      Autofix MUST stay conservative and avoid speculative structural edits.
+  - **priority**: high
+  - **status**: implemented
+  - **linked_policies**:
+    - POL-003
+  - **linked_features**:
+    - FEAT-CHECK-001
+  - **tests**:
+    - **rust**:
+      - **file**: tests/validate_fix_command.rs
+        - **symbols**:
+          - *
+- **id**: REQ-CORE-004
+  - **title**: Generate and preserve a Markdown validation report
+  - **description**:
+    - |
+      The `report` command MUST reuse the same verification engine as `validate`
+      and render a Markdown report that summarizes counts, failures, and
+      corrective suggestions. It MUST support writing the report to stdout or a
+      file path, and the self-hosted repository SHOULD keep a checked-in report
+      artifact so contributors can inspect the current state without running the
+      command first.
+  - **priority**: medium
+  - **status**: implemented
+  - **linked_policies**:
+    - POL-002
+    - POL-005
+  - **linked_features**:
+    - FEAT-REPORT-001
+  - **tests**:
+    - **rust**:
+      - **file**: tests/report_command.rs
+        - **symbols**:
+          - *
+      - **file**: tests/main_binary.rs
+        - **symbols**:
+          - *
+      - **file**: src/command/report.rs
+        - **symbols**:
+          - *
+      - **file**: src/report.rs
+        - **symbols**:
+          - *
+
+## Source YAML
+
+```yaml
+category: Core Validation
+prefix: REQ-CORE
+requirements:
+  - id: REQ-CORE-001
+    title: Validate the linked specification graph with rule-backed diagnostics
+    description: |
+      The `validate` command MUST load philosophy, policy, requirement, and
+      feature YAML definitions, validate required fields, reject broken
+      references, verify reciprocal links across the adjacent-layer graph,
+      report isolated definitions by default, enforce `planned` /
+      `implemented` delivery-state rules for requirements and features, and
+      surface rule codes with human-readable titles and explanations in
+      validation output. `check` MAY remain as a compatibility alias, but
+      `validate` is the canonical command name.
+    priority: high
+    status: implemented
+    linked_policies:
+      - POL-001
+      - POL-002
+    linked_features:
+      - FEAT-CHECK-001
+    tests:
+      rust:
+        - file: tests/check_command.rs
+          symbols:
+            - '*'
+        - file: tests/status_validation.rs
+          symbols:
+            - '*'
+        - file: tests/orphan_validation.rs
+          symbols:
+            - '*'
+        - file: src/command/check.rs
+          symbols:
+            - '*'
+        - file: src/model.rs
+          symbols:
+            - '*'
+        - file: src/rules.rs
+          symbols:
+            - '*'
+        - file: src/workspace.rs
+          symbols:
+            - '*'
+  - id: REQ-CORE-002
+    title: Verify multi-language traces and optionally require full symbol ownership
+    description: |
+      The `validate` command MUST verify requirement-to-test and
+      feature-to-implementation traceability in the languages used by `syu`
+      today: Rust, Python, and TypeScript. A declared trace is valid only when
+      the file exists, the symbol exists, the file explicitly mentions the
+      owning ID, and any `doc_contains` snippets are present in the symbol
+      documentation. Validation MUST also support wildcard file ownership and an
+      optional mode that requires every public Rust symbol to belong to some
+      feature and every Rust test to belong to some requirement.
+    priority: high
+    status: implemented
+    linked_policies:
+      - POL-003
+      - POL-006
+    linked_features:
+      - FEAT-CHECK-001
+    tests:
+      rust:
+        - file: tests/check_command.rs
+          symbols:
+            - check_command_verifies_requirement_test_traceability_in_all_supported_languages
+            - check_command_verifies_feature_implementation_traceability_in_all_supported_languages
+        - file: tests/trace_coverage_validation.rs
+          symbols:
+            - '*'
+        - file: src/coverage.rs
+          symbols:
+            - '*'
+        - file: src/inspect.rs
+          symbols:
+            - '*'
+        - file: src/language.rs
+          symbols:
+            - '*'
+        - file: src/runtime.rs
+          symbols:
+            - '*'
+        - file: tests/example_workspaces.rs
+          symbols:
+            - python_only_example_validates
+            - polyglot_example_validates
+  - id: REQ-CORE-003
+    title: Support conservative autofix and config-driven default_fix
+    description: |
+      The `validate` command MUST provide a `--fix` mode that performs safe,
+      mechanical repairs for documentation-style trace gaps. `syu.yaml` MUST be
+      able to configure default fix behavior, and `--no-fix` MUST disable it.
+      Autofix MUST stay conservative and avoid speculative structural edits.
+    priority: high
+    status: implemented
+    linked_policies:
+      - POL-003
+    linked_features:
+      - FEAT-CHECK-001
+    tests:
+      rust:
+        - file: tests/validate_fix_command.rs
+          symbols:
+            - '*'
+  - id: REQ-CORE-004
+    title: Generate and preserve a Markdown validation report
+    description: |
+      The `report` command MUST reuse the same verification engine as `validate`
+      and render a Markdown report that summarizes counts, failures, and
+      corrective suggestions. It MUST support writing the report to stdout or a
+      file path, and the self-hosted repository SHOULD keep a checked-in report
+      artifact so contributors can inspect the current state without running the
+      command first.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-002
+      - POL-005
+    linked_features:
+      - FEAT-REPORT-001
+    tests:
+      rust:
+        - file: tests/report_command.rs
+          symbols:
+            - '*'
+        - file: tests/main_binary.rs
+          symbols:
+            - '*'
+        - file: src/command/report.rs
+          symbols:
+            - '*'
+        - file: src/report.rs
+          symbols:
+            - '*'
+```

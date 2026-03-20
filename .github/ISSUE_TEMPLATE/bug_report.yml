@@ -51,7 +51,7 @@ body:
       description: Share the exact commands, files, or repo layout needed to reproduce the issue.
       placeholder: |
         1. Run `syu init .`
-        2. Edit `docs/syu/requirements/core.yaml`
+        2. Edit `docs/syu/requirements/core/core.yaml`
         3. Run `syu validate .`
     validations:
       required: true
