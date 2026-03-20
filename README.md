@@ -162,6 +162,9 @@ Key behaviors:
 - `validate.require_symbol_trace_coverage` opt-in checks that public Rust symbols belong to features and tests belong to requirements
 - `runtimes.*.command` can be set to `auto` or an explicit executable name/path
 
+The self-hosted repository keeps a structured reference for supported config
+fields under [`docs/syu/config/`](docs/syu/config).
+
 The `syu` repository itself enables both `validate.require_non_orphaned_items`
 and `validate.require_symbol_trace_coverage` in its root `syu.yaml`.
 
@@ -280,6 +283,7 @@ docs/syu/
   requirements/*.yaml
   features/features.yaml
   features/*.yaml
+  config/*.yaml
 skills/*/SKILL.md
 ```
 

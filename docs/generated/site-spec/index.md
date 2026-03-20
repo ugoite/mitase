@@ -7,6 +7,10 @@ This section is generated from the YAML source under `docs/syu/`.
 
 ## Available documents
 
+- [Configuration / Overview](/docs/generated/site-spec/config/overview)
+- [Configuration / Runtimes](/docs/generated/site-spec/config/runtimes)
+- [Configuration / Spec](/docs/generated/site-spec/config/spec)
+- [Configuration / Validate](/docs/generated/site-spec/config/validate)
 - [Interactive CLI / Browse](/docs/generated/site-spec/features/browse)
 - [Validate Command / Check](/docs/generated/site-spec/features/check)
 - [Contributor Experience / Contributor](/docs/generated/site-spec/features/contributor)

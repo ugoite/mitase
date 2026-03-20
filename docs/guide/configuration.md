@@ -4,6 +4,17 @@
 
 `syu` reads `syu.yaml` from the workspace root.
 
+The self-hosted repository also keeps a structured configuration reference
+under `docs/syu/config/`:
+
+- `docs/syu/config/overview.yaml`
+- `docs/syu/config/spec.yaml`
+- `docs/syu/config/validate.yaml`
+- `docs/syu/config/runtimes.yaml`
+
+Add new supported config items there first, then update this guide when the
+change also needs narrative explanation or new examples.
+
 ## Minimal configuration
 
 ```yaml
