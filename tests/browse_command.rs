@@ -23,7 +23,7 @@ fn browse_command_shows_linked_details_without_failing_validation_errors() {
     assert!(output.status.success(), "browse UI should not fail");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("errors ("));
-    assert!(stdout.contains("missing-reference"));
+    assert!(stdout.contains("SYU-graph-reference-001"));
     assert!(stdout.contains("Linked definitions must exist"));
 }
 

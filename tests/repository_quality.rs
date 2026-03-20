@@ -297,6 +297,7 @@ fn repository_declares_contribution_workflow_assets() {
 // REQ-CORE-014
 fn repository_declares_dependency_hygiene_and_ci_caching() {
     let ci_workflow = read_file(".github/workflows/ci.yml");
+    let codeql_workflow = read_file(".github/workflows/codeql.yml");
     let docs_build_action = read_file(".github/actions/build-docs-site/action.yml");
     let release_artifacts = read_file(".github/workflows/release-artifacts.yml");
     let dependabot = read_file(".github/dependabot.yml");
@@ -306,6 +307,7 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(ci_workflow.contains("permissions:"));
     assert!(ci_workflow.contains("Restore Rust cache"));
     assert!(ci_workflow.contains("Swatinem/rust-cache@v2"));
+    assert!(ci_workflow.contains("merge_group:"));
     assert!(ci_workflow.contains("Set up Python with pip cache"));
     assert!(ci_workflow.contains("cache: pip"));
     assert!(ci_workflow.contains("cache-dependency-path: .pre-commit-config.yaml"));
@@ -313,6 +315,15 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(ci_workflow.contains("./.github/actions/build-docs-site"));
     assert!(docs_build_action.contains("actions/setup-node@v6"));
     assert!(docs_build_action.contains("npm run build"));
+    assert!(codeql_workflow.contains("FEAT-QUALITY-001"));
+    assert!(codeql_workflow.contains("merge_group:"));
+    assert!(codeql_workflow.contains("security-events: write"));
+    assert!(codeql_workflow.contains("Analyze (rust)"));
+    assert!(codeql_workflow.contains("dtolnay/rust-toolchain@stable"));
+    assert!(codeql_workflow.contains("Swatinem/rust-cache@v2"));
+    assert!(codeql_workflow.contains("github/codeql-action/init@v3"));
+    assert!(codeql_workflow.contains("github/codeql-action/autobuild@v3"));
+    assert!(codeql_workflow.contains("github/codeql-action/analyze@v3"));
 
     assert!(release_artifacts.contains("Restore Rust cache"));
     assert!(release_artifacts.contains("Swatinem/rust-cache@v2"));
