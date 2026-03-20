@@ -4,7 +4,7 @@ version: 1
 features:
   - id: FEAT-RELEASE-001
     title: Release automation
-    summary: Prepare stable releases from main and package binaries for stable or prerelease distribution.
+    summary: Prepare stable releases from main and package binaries for stable or prerelease distribution, with track-specific GitHub notes.
     status: implemented
     linked_requirements:
       - REQ-CORE-007
@@ -17,6 +17,11 @@ features:
         - file: scripts/ci/publish-package.sh
           symbols:
             - publish_package_artifact
+        - file: scripts/ci/release-track-notes.sh
+          symbols:
+            - release_track
+            - previous_track_tag
+            - generate_release_notes
       yaml:
         - file: .github/workflows/release-please.yml
           symbols:
@@ -26,3 +31,4 @@ features:
         - file: .github/workflows/release-artifacts.yml
           symbols:
             - release-artifacts
+            - release-notes

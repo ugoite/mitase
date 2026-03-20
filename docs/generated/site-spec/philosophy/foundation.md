@@ -1,0 +1,135 @@
+---
+title: "Philosophy / Foundation"
+description: "Generated reference for docs/spec/philosophy/foundation.yaml"
+---
+
+> Generated from `docs/spec/philosophy/foundation.yaml`.
+
+## Parsed content
+
+### Category
+
+- Philosophy
+
+### Version
+
+- 1
+
+### Language
+
+- en
+
+### Philosophies
+
+- **id**: PHIL-001
+  - **title**: Specification-driven development must stay accountable through implementation and maintenance
+  - **product_design_principle**:
+    - |
+      `syu` should not stop at writing nice YAML. The specification must remain
+      connected to implementation work, maintenance work, release work, and the
+      day-to-day reality of a repository after the first feature lands.
+  - **coding_guideline**:
+    - |
+      Prefer checks, reports, and navigation flows that keep ideals connected to
+      policies, requirements, features, code, and tests throughout the life of
+      the project.
+  - **linked_policies**:
+    - POL-001
+    - POL-002
+    - POL-003
+    - POL-007
+- **id**: PHIL-002
+  - **title**: The model must fit repositories regardless of primary programming language
+  - **product_design_principle**:
+    - |
+      A specification system becomes niche if it only works for one preferred
+      stack. The layered model should stay language-agnostic, and language-aware
+      inspection should strengthen validation without forcing every repository
+      into the same implementation language.
+  - **coding_guideline**:
+    - |
+      Keep the core graph portable, then add language-specific inspection only
+      where it improves trust and stays easy to adopt.
+  - **linked_policies**:
+    - POL-003
+    - POL-005
+    - POL-006
+- **id**: PHIL-003
+  - **title**: Adopting specification-driven development should stay simple and non-intrusive
+  - **product_design_principle**:
+    - |
+      Teams should be able to introduce `syu` without feeling that the tool has
+      taken over the repository. Setup, browsing, validation, contributor
+      workflow, and documentation should help the project move forward without
+      adding ceremonial drag.
+  - **coding_guideline**:
+    - |
+      Prefer one-command setup, optional stricter checks, clear help text,
+      approachable docs, and failure modes that still explain the current
+      workspace instead of collapsing.
+  - **linked_policies**:
+    - POL-001
+    - POL-002
+    - POL-004
+    - POL-005
+    - POL-006
+    - POL-007
+
+## Source YAML
+
+```yaml
+category: Philosophy
+version: 1
+language: en
+
+philosophies:
+  - id: PHIL-001
+    title: Specification-driven development must stay accountable through implementation and maintenance
+    product_design_principle: |
+      `syu` should not stop at writing nice YAML. The specification must remain
+      connected to implementation work, maintenance work, release work, and the
+      day-to-day reality of a repository after the first feature lands.
+    coding_guideline: |
+      Prefer checks, reports, and navigation flows that keep ideals connected to
+      policies, requirements, features, code, and tests throughout the life of
+      the project.
+    linked_policies:
+      - POL-001
+      - POL-002
+      - POL-003
+      - POL-007
+
+  - id: PHIL-002
+    title: The model must fit repositories regardless of primary programming language
+    product_design_principle: |
+      A specification system becomes niche if it only works for one preferred
+      stack. The layered model should stay language-agnostic, and language-aware
+      inspection should strengthen validation without forcing every repository
+      into the same implementation language.
+    coding_guideline: |
+      Keep the core graph portable, then add language-specific inspection only
+      where it improves trust and stays easy to adopt.
+    linked_policies:
+      - POL-003
+      - POL-005
+      - POL-006
+
+  - id: PHIL-003
+    title: Adopting specification-driven development should stay simple and non-intrusive
+    product_design_principle: |
+      Teams should be able to introduce `syu` without feeling that the tool has
+      taken over the repository. Setup, browsing, validation, contributor
+      workflow, and documentation should help the project move forward without
+      adding ceremonial drag.
+    coding_guideline: |
+      Prefer one-command setup, optional stricter checks, clear help text,
+      approachable docs, and failure modes that still explain the current
+      workspace instead of collapsing.
+    linked_policies:
+      - POL-001
+      - POL-002
+      - POL-004
+      - POL-005
+      - POL-006
+      - POL-007
+```

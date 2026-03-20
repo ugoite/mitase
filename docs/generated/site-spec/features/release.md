@@ -1,0 +1,88 @@
+---
+title: "Release Automation / Release"
+description: "Generated reference for docs/spec/features/release.yaml"
+---
+
+> Generated from `docs/spec/features/release.yaml`.
+
+## Parsed content
+
+### Category
+
+- Release Automation
+
+### Version
+
+- 1
+
+### Features
+
+- **id**: FEAT-RELEASE-001
+  - **title**: Release automation
+  - **summary**: Prepare stable releases from main and package binaries for stable or prerelease distribution, with track-specific GitHub notes.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-007
+  - **implementations**:
+    - **shell**:
+      - **file**: scripts/ci/package-release.sh
+        - **symbols**:
+          - package_release_artifact
+          - write_sha256
+      - **file**: scripts/ci/publish-package.sh
+        - **symbols**:
+          - publish_package_artifact
+      - **file**: scripts/ci/release-track-notes.sh
+        - **symbols**:
+          - release_track
+          - previous_track_tag
+          - generate_release_notes
+    - **yaml**:
+      - **file**: .github/workflows/release-please.yml
+        - **symbols**:
+          - release-please
+          - Run release-please
+          - target-branch: main
+      - **file**: .github/workflows/release-artifacts.yml
+        - **symbols**:
+          - release-artifacts
+          - release-notes
+
+## Source YAML
+
+```yaml
+category: Release Automation
+version: 1
+
+features:
+  - id: FEAT-RELEASE-001
+    title: Release automation
+    summary: Prepare stable releases from main and package binaries for stable or prerelease distribution, with track-specific GitHub notes.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-007
+    implementations:
+      shell:
+        - file: scripts/ci/package-release.sh
+          symbols:
+            - package_release_artifact
+            - write_sha256
+        - file: scripts/ci/publish-package.sh
+          symbols:
+            - publish_package_artifact
+        - file: scripts/ci/release-track-notes.sh
+          symbols:
+            - release_track
+            - previous_track_tag
+            - generate_release_notes
+      yaml:
+        - file: .github/workflows/release-please.yml
+          symbols:
+            - release-please
+            - Run release-please
+            - "target-branch: main"
+        - file: .github/workflows/release-artifacts.yml
+          symbols:
+            - release-artifacts
+            - release-notes
+```

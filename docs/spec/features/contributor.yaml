@@ -57,3 +57,18 @@ features:
             - FEAT-CONTRIB-002
             - blank_issues_enabled
             - contact_links
+
+  - id: FEAT-CONTRIB-003
+    title: One-command pre-commit setup
+    summary: Install pre-commit and activate local hooks without asking contributors to assemble the commands themselves.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-013
+    implementations:
+      shell:
+        - file: scripts/install-precommit.sh
+          symbols:
+            - find_python
+            - install_precommit
+            - install_hooks
+            - main

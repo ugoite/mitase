@@ -6,8 +6,7 @@
       "package-name": "syu",
       "include-v-in-tag": true,
       "skip-changelog": true,
-      "changelog-type": "github",
-      "initial-version": "0.0.1"
+      "changelog-type": "github"
     }
   }
 }

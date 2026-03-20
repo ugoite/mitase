@@ -5,6 +5,12 @@
 `syu` uses four specification layers on purpose. They answer different
 questions, and mixing them together makes both design and validation weaker.
 
+The model is guided by three product ideas:
+
+- stay involved through implementation and maintenance, not only early design
+- fit repositories regardless of their primary programming language
+- stay simple enough to adopt without resenting the tool
+
 ## Philosophy
 
 Philosophy describes the ideal state a project is trying to protect.
@@ -16,7 +22,8 @@ It is intentionally high-level. A philosophy entry should explain:
 - what trade-offs the project prefers
 
 Good philosophy is stable. It should change less often than code, features, or
-individual requirements.
+individual requirements, and it should remain relevant after the project moves
+from initial design into maintenance.
 
 ## Policy
 
@@ -31,6 +38,7 @@ Examples:
 
 - every requirement must link to at least one feature
 - every traced symbol must carry a stable ID in its documentation
+- every isolated philosophy / policy / requirement / feature should be treated as drift
 - generated reports must be readable by both humans and automation
 
 ## Requirements
@@ -50,6 +58,8 @@ Requirements also carry delivery intent:
 - `status: implemented` means the requirement must already declare valid tests
 
 Requirements are where verification begins to become operational.
+They are also where you decide how much discipline the repository wants: some
+checks can stay optional until the project is ready for them.
 
 ## Features
 
@@ -75,7 +85,8 @@ Without requirements, policy cannot be verified concretely.
 Without features, requirements never connect to running software.
 
 `syu` keeps all four layers explicit because traceability is strongest when the
-repository can explain itself from ideals down to code and tests.
+repository can explain itself from ideals down to code and tests without being
+tied to a single implementation language.
 
 ## Authoring guidelines
 

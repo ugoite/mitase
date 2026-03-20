@@ -1,0 +1,143 @@
+---
+title: "Documentation / Docs"
+description: "Generated reference for docs/spec/features/docs.yaml"
+---
+
+> Generated from `docs/spec/features/docs.yaml`.
+
+## Parsed content
+
+### Category
+
+- Documentation
+
+### Version
+
+- 1
+
+### Features
+
+- **id**: FEAT-DOCS-001
+  - **title**: English concepts and workflow documentation
+  - **summary**: Explain the four-layer model, delivery states, configuration, and command workflow in English.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-010
+  - **implementations**:
+    - **markdown**:
+      - **file**: README.md
+        - **symbols**:
+          - FEAT-DOCS-001
+          - syu validate
+          - syu browse
+          - philosophy
+          - planned
+      - **file**: docs/guide/concepts.md
+        - **symbols**:
+          - FEAT-DOCS-001
+          - policy
+          - requirements
+          - features
+          - planned
+          - implemented
+      - **file**: docs/guide/getting-started.md
+        - **symbols**:
+          - FEAT-DOCS-001
+          - syu init
+          - syu browse
+          - syu validate
+      - **file**: docs/guide/configuration.md
+        - **symbols**:
+          - FEAT-DOCS-001
+          - validate.default_fix
+          - validate.allow_planned
+          - validate.require_non_orphaned_items
+          - validate.require_symbol_trace_coverage
+          - runtimes.python.command
+- **id**: FEAT-DOCS-002
+  - **title**: Docusaurus documentation site
+  - **summary**: Render the checked-in docs tree as a documentation site without maintaining a separate content source.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-010
+  - **implementations**:
+    - **json**:
+      - **file**: website/package.json
+        - **symbols**:
+          - FEAT-DOCS-002
+          - @docusaurus/core
+          - docusaurus build
+    - **javascript**:
+      - **file**: website/docusaurus.config.js
+        - **symbols**:
+          - config
+      - **file**: website/src/pages/index.js
+        - **symbols**:
+          - Home
+
+## Source YAML
+
+```yaml
+category: Documentation
+version: 1
+
+features:
+  - id: FEAT-DOCS-001
+    title: English concepts and workflow documentation
+    summary: Explain the four-layer model, delivery states, configuration, and command workflow in English.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-010
+    implementations:
+      markdown:
+        - file: README.md
+          symbols:
+            - FEAT-DOCS-001
+            - syu validate
+            - syu browse
+            - philosophy
+            - planned
+        - file: docs/guide/concepts.md
+          symbols:
+            - FEAT-DOCS-001
+            - policy
+            - requirements
+            - features
+            - planned
+            - implemented
+        - file: docs/guide/getting-started.md
+          symbols:
+            - FEAT-DOCS-001
+            - syu init
+            - syu browse
+            - syu validate
+        - file: docs/guide/configuration.md
+          symbols:
+            - FEAT-DOCS-001
+            - validate.default_fix
+            - validate.allow_planned
+            - validate.require_non_orphaned_items
+            - validate.require_symbol_trace_coverage
+            - runtimes.python.command
+
+  - id: FEAT-DOCS-002
+    title: Docusaurus documentation site
+    summary: Render the checked-in docs tree as a documentation site without maintaining a separate content source.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-010
+    implementations:
+      json:
+        - file: website/package.json
+          symbols:
+            - FEAT-DOCS-002
+            - "@docusaurus/core"
+            - docusaurus build
+      javascript:
+        - file: website/docusaurus.config.js
+          symbols:
+            - config
+        - file: website/src/pages/index.js
+          symbols:
+            - Home
+```

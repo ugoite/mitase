@@ -24,7 +24,21 @@ permissions:
   packages: write
 
 jobs:
+  release-notes:
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Generate track-specific release notes
+        shell: bash
+        run: scripts/ci/release-track-notes.sh "${RELEASE_TAG}"
+
   release-artifacts:
+    needs:
+      - release-notes
     if: github.event_name == 'release' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
     strategy:
       fail-fast: false

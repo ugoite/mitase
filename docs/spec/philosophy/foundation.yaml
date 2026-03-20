@@ -4,59 +4,51 @@ language: en
 
 philosophies:
   - id: PHIL-001
-    title: Philosophy should protect ideals while lower layers operationalize them
+    title: Specification-driven development must stay accountable through implementation and maintenance
     product_design_principle: |
-      Philosophy is the constitutional layer of a specification-driven project.
-      It defines the ideal end-state and the values that should survive changing
-      implementations, tools, and release cycles.
+      `syu` should not stop at writing nice YAML. The specification must remain
+      connected to implementation work, maintenance work, release work, and the
+      day-to-day reality of a repository after the first feature lands.
     coding_guideline: |
-      Keep philosophy stable, value-oriented, and free from file-level trivia.
-      Let policy, requirements, and features carry the operational detail.
+      Prefer checks, reports, and navigation flows that keep ideals connected to
+      policies, requirements, features, code, and tests throughout the life of
+      the project.
     linked_policies:
       - POL-001
       - POL-002
-      - POL-005
-
-  - id: PHIL-002
-    title: Requirements and features should be provable from repository contents
-    product_design_principle: |
-      A specification layer is trustworthy only when the repository can prove
-      it. Requirements should point to tests, features should point to
-      implementations, and validation should inspect real symbols rather than
-      trusting filenames or YAML alone.
-    coding_guideline: |
-      Prefer maintained parsers or language runtimes for symbol and
-      documentation inspection when the language can support them.
-    linked_policies:
       - POL-003
-      - POL-006
       - POL-007
 
-  - id: PHIL-003
-    title: Onboarding and explanation are product behavior
+  - id: PHIL-002
+    title: The model must fit repositories regardless of primary programming language
     product_design_principle: |
-      A specification-driven tool fails if new contributors cannot start
-      quickly or understand what each layer means. Bootstrapping, examples,
-      and documentation are part of the product, not secondary assets.
+      A specification system becomes niche if it only works for one preferred
+      stack. The layered model should stay language-agnostic, and language-aware
+      inspection should strengthen validation without forcing every repository
+      into the same implementation language.
     coding_guideline: |
-      Treat scaffolding, guides, examples, and contributor tooling as
-      first-class behavior that should be versioned and validated.
+      Keep the core graph portable, then add language-specific inspection only
+      where it improves trust and stays easy to adopt.
     linked_policies:
-      - POL-001
-      - POL-004
+      - POL-003
       - POL-005
       - POL-006
 
-  - id: PHIL-004
-    title: Self-hosting keeps the tool honest
+  - id: PHIL-003
+    title: Adopting specification-driven development should stay simple and non-intrusive
     product_design_principle: |
-      `syu` should use its own model. If the repository cannot validate its own
-      policies, examples, automation, and release flow, the tool is asking more
-      discipline from users than it requires from itself.
+      Teams should be able to introduce `syu` without feeling that the tool has
+      taken over the repository. Setup, browsing, validation, contributor
+      workflow, and documentation should help the project move forward without
+      adding ceremonial drag.
     coding_guideline: |
-      Keep the command surface small, but make repository automation,
-      contributor setup, and distribution explicit enough to self-validate.
+      Prefer one-command setup, optional stricter checks, clear help text,
+      approachable docs, and failure modes that still explain the current
+      workspace instead of collapsing.
     linked_policies:
+      - POL-001
+      - POL-002
+      - POL-004
       - POL-005
       - POL-006
       - POL-007

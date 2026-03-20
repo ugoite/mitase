@@ -1,3 +1,5 @@
+// REQ-CORE-004
+
 use std::{collections::BTreeSet, fmt::Write};
 
 use crate::model::{CheckResult, Issue, Severity};
@@ -72,17 +74,22 @@ pub fn render_markdown_report(result: &CheckResult) -> String {
     } else {
         writeln!(
             &mut output,
-            "| Severity | Code | Subject | Location | Message |"
+            "| Severity | Code | Rule | Subject | Location | Message |"
         )
         .expect("writing to String must succeed");
-        writeln!(&mut output, "| --- | --- | --- | --- | --- |")
+        writeln!(&mut output, "| --- | --- | --- | --- | --- | --- |")
             .expect("writing to String must succeed");
         for issue in &result.issues {
             writeln!(
                 &mut output,
-                "| {} | {} | {} | {} | {} |",
+                "| {} | {} | {} | {} | {} | {} |",
                 severity_label(&issue.severity),
                 escape_cell(&issue.code),
+                escape_cell(
+                    &crate::rules::rule_by_code(&issue.code)
+                        .map(|rule| rule.title.clone())
+                        .unwrap_or_else(|| "-".to_string())
+                ),
                 escape_cell(&issue.subject),
                 escape_cell(issue.location.as_deref().unwrap_or("-")),
                 escape_cell(&issue.message)
@@ -91,6 +98,33 @@ pub fn render_markdown_report(result: &CheckResult) -> String {
         }
     }
     writeln!(&mut output).expect("writing to String must succeed");
+
+    if !result.referenced_rules.is_empty() {
+        writeln!(&mut output, "## Referenced rules").expect("writing to String must succeed");
+        writeln!(&mut output).expect("writing to String must succeed");
+        for rule in &result.referenced_rules {
+            writeln!(&mut output, "### `{}` — {}", rule.code, rule.title)
+                .expect("writing to String must succeed");
+            writeln!(&mut output).expect("writing to String must succeed");
+            writeln!(&mut output, "- Genre: {}", rule.genre)
+                .expect("writing to String must succeed");
+            writeln!(&mut output, "- Severity: {}", rule.severity)
+                .expect("writing to String must succeed");
+            writeln!(
+                &mut output,
+                "- Summary: {}",
+                collapse_whitespace(&rule.summary)
+            )
+            .expect("writing to String must succeed");
+            writeln!(
+                &mut output,
+                "- Description: {}",
+                collapse_whitespace(&rule.description)
+            )
+            .expect("writing to String must succeed");
+            writeln!(&mut output).expect("writing to String must succeed");
+        }
+    }
 
     writeln!(&mut output, "## Suggested next actions").expect("writing to String must succeed");
     writeln!(&mut output).expect("writing to String must succeed");
@@ -124,6 +158,10 @@ fn escape_cell(value: &str) -> String {
     value.replace('|', "\\|")
 }
 
+fn collapse_whitespace(value: &str) -> String {
+    value.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
@@ -153,6 +191,7 @@ mod tests {
                 },
             },
             issues: Vec::new(),
+            referenced_rules: Vec::new(),
         };
 
         let report = render_markdown_report(&result);
@@ -169,7 +208,7 @@ mod tests {
             trace_summary: TraceSummary::default(),
             issues: vec![
                 Issue {
-                    code: "broken|pipe".to_string(),
+                    code: "duplicate-id".to_string(),
                     severity: Severity::Error,
                     subject: "feature|subject".to_string(),
                     location: Some("yaml:file.yml".to_string()),
@@ -184,15 +223,33 @@ mod tests {
                     Some("fix it".to_string()),
                 ),
             ],
+            referenced_rules: crate::rules::referenced_rules(&[
+                Issue {
+                    code: "duplicate-id".to_string(),
+                    severity: Severity::Error,
+                    subject: "feature|subject".to_string(),
+                    location: Some("yaml:file.yml".to_string()),
+                    message: "message|with pipe".to_string(),
+                    suggestion: Some("fix it".to_string()),
+                },
+                Issue::warning(
+                    "warn",
+                    "workspace",
+                    None,
+                    "warning",
+                    Some("fix it".to_string()),
+                ),
+            ]),
         };
 
         let report = render_markdown_report(&result);
         assert!(report.contains("Result: **FAIL**"));
         assert!(report.contains("error"));
         assert!(report.contains("warning"));
-        assert!(report.contains("broken\\|pipe"));
+        assert!(report.contains("duplicate-id"));
         assert!(report.contains("feature\\|subject"));
         assert!(report.contains("message\\|with pipe"));
+        assert!(report.contains("## Referenced rules"));
         assert_eq!(report.matches("- fix it").count(), 1);
     }
 }

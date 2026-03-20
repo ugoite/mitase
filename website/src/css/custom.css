@@ -1,0 +1,9 @@
+/* FEAT-DOCS-002 */
+
+:root {
+  --ifm-color-primary: #2f6feb;
+  --ifm-color-primary-dark: #255fdb;
+  --ifm-color-primary-darker: #235ad0;
+  --ifm-color-primary-light: #437cf0;
+  --ifm-color-primary-lighter: #5487f2;
+}

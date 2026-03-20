@@ -14,6 +14,7 @@ features:
           symbols:
             - FEAT-DOCS-001
             - syu validate
+            - syu browse
             - philosophy
             - planned
         - file: docs/guide/concepts.md
@@ -28,10 +29,34 @@ features:
           symbols:
             - FEAT-DOCS-001
             - syu init
+            - syu browse
             - syu validate
         - file: docs/guide/configuration.md
           symbols:
             - FEAT-DOCS-001
             - validate.default_fix
             - validate.allow_planned
+            - validate.require_non_orphaned_items
+            - validate.require_symbol_trace_coverage
             - runtimes.python.command
+
+  - id: FEAT-DOCS-002
+    title: Docusaurus documentation site
+    summary: Render the checked-in docs tree as a documentation site without maintaining a separate content source.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-010
+    implementations:
+      json:
+        - file: website/package.json
+          symbols:
+            - FEAT-DOCS-002
+            - "@docusaurus/core"
+            - docusaurus build
+      javascript:
+        - file: website/docusaurus.config.js
+          symbols:
+            - config
+        - file: website/src/pages/index.js
+          symbols:
+            - Home

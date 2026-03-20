@@ -1,0 +1,66 @@
+---
+title: "Installer / Install"
+description: "Generated reference for docs/spec/features/install.yaml"
+---
+
+> Generated from `docs/spec/features/install.yaml`.
+
+## Parsed content
+
+### Category
+
+- Installer
+
+### Version
+
+- 1
+
+### Features
+
+- **id**: FEAT-INSTALL-001
+  - **title**: Release installer
+  - **summary**: Install the matching packaged binary with one shell command and a release-asset fallback.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-008
+  - **implementations**:
+    - **shell**:
+      - **file**: scripts/install-syu.sh
+        - **symbols**:
+          - DEFAULT_REPOSITORY
+          - resolve_repository
+          - resolve_package_repository
+          - resolve_target_triple
+          - resolve_package_tag
+          - download_package_archive
+          - download_release_archive
+          - extract_archive
+          - install_syu
+
+## Source YAML
+
+```yaml
+category: Installer
+version: 1
+
+features:
+  - id: FEAT-INSTALL-001
+    title: Release installer
+    summary: Install the matching packaged binary with one shell command and a release-asset fallback.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-008
+    implementations:
+      shell:
+        - file: scripts/install-syu.sh
+          symbols:
+            - DEFAULT_REPOSITORY
+            - resolve_repository
+            - resolve_package_repository
+            - resolve_target_triple
+            - resolve_package_tag
+            - download_package_archive
+            - download_release_archive
+            - extract_archive
+            - install_syu
+```
