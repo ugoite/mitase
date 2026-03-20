@@ -65,7 +65,7 @@ description: "Generated reference for docs/syu/features/cli/check.yaml"
         - **symbols**:
           - SYU-workspace-load-001
           - SYU-graph-reference-001
-          - SYU-coverage-test-003
+          - SYU-coverage-test-001
 
 ## Source YAML
 
@@ -122,5 +122,5 @@ features:
           symbols:
             - SYU-workspace-load-001
             - SYU-graph-reference-001
-            - SYU-coverage-test-003
+            - SYU-coverage-test-001
 ```

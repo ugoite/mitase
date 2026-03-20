@@ -522,7 +522,7 @@ fn validate_delivery_status(
 
     if normalized == DeliveryStatus::Planned && !config.validate.allow_planned {
         issues.push(Issue::error(
-            "SYU-delivery-status-002",
+            "SYU-delivery-planned-001",
             format!("{kind} {id}"),
             Some("status".to_string()),
             format!("{kind} `{id}` is marked `planned`, but `syu.yaml` forbids planned items."),
@@ -544,7 +544,7 @@ fn validate_unique_ids<'a>(
     for id in ids {
         if !seen.insert(id.to_string()) {
             issues.push(Issue::error(
-                "SYU-workspace-duplicate-003",
+                "SYU-workspace-duplicate-001",
                 format!("{kind} {id}"),
                 None,
                 format!("Duplicate {kind} id `{id}` was found in the specification set."),
@@ -578,7 +578,7 @@ fn validate_philosophy(
 
     if philosophy.linked_policies.is_empty() {
         issues.push(Issue::warning(
-            "SYU-graph-links-003",
+            "SYU-graph-links-001",
             format!("philosophy {}", philosophy.id),
             None,
             "Philosophy does not link to any policies.".to_string(),
@@ -598,7 +598,7 @@ fn validate_philosophy(
                     .any(|item| item == &philosophy.id)
                 {
                     issues.push(Issue::error(
-                        "SYU-graph-reciprocal-002",
+                        "SYU-graph-reciprocal-001",
                         format!("philosophy {}", philosophy.id),
                         Some(policy_id.clone()),
                         format!(
@@ -639,7 +639,7 @@ fn validate_policy(
 
     if policy.linked_philosophies.is_empty() {
         issues.push(Issue::warning(
-            "SYU-graph-links-003",
+            "SYU-graph-links-001",
             format!("policy {}", policy.id),
             None,
             "Policy does not link to any philosophies.".to_string(),
@@ -652,7 +652,7 @@ fn validate_policy(
 
     if policy.linked_requirements.is_empty() {
         issues.push(Issue::warning(
-            "SYU-graph-links-003",
+            "SYU-graph-links-001",
             format!("policy {}", policy.id),
             None,
             "Policy does not link to any requirements.".to_string(),
@@ -672,7 +672,7 @@ fn validate_policy(
                     .any(|item| item == &policy.id)
                 {
                     issues.push(Issue::error(
-                        "SYU-graph-reciprocal-002",
+                        "SYU-graph-reciprocal-001",
                         format!("policy {}", policy.id),
                         Some(philosophy_id.clone()),
                         format!(
@@ -708,7 +708,7 @@ fn validate_policy(
                     .any(|item| item == &policy.id)
                 {
                     issues.push(Issue::error(
-                        "SYU-graph-reciprocal-002",
+                        "SYU-graph-reciprocal-001",
                         format!("policy {}", policy.id),
                         Some(requirement_id.clone()),
                         format!(
@@ -765,7 +765,7 @@ fn validate_requirement(
 
     if requirement.linked_policies.is_empty() {
         issues.push(Issue::warning(
-            "SYU-graph-links-003",
+            "SYU-graph-links-001",
             format!("requirement {}", requirement.id),
             None,
             "Requirement does not link to any policies.".to_string(),
@@ -778,7 +778,7 @@ fn validate_requirement(
 
     if requirement.linked_features.is_empty() {
         issues.push(Issue::warning(
-            "SYU-graph-links-003",
+            "SYU-graph-links-001",
             format!("requirement {}", requirement.id),
             None,
             "Requirement does not link to any features.".to_string(),
@@ -798,7 +798,7 @@ fn validate_requirement(
                     .any(|item| item == &requirement.id)
                 {
                     issues.push(Issue::error(
-                        "SYU-graph-reciprocal-002",
+                        "SYU-graph-reciprocal-001",
                         format!("requirement {}", requirement.id),
                         Some(policy_id.clone()),
                         format!(
@@ -834,7 +834,7 @@ fn validate_requirement(
                     .any(|item| item == &requirement.id)
                 {
                     issues.push(Issue::error(
-                        "SYU-graph-reciprocal-002",
+                        "SYU-graph-reciprocal-001",
                         format!("requirement {}", requirement.id),
                         Some(feature_id.clone()),
                         format!(
@@ -891,7 +891,7 @@ fn validate_feature(
 
     if feature.linked_requirements.is_empty() {
         issues.push(Issue::warning(
-            "SYU-graph-links-003",
+            "SYU-graph-links-001",
             format!("feature {}", feature.id),
             None,
             "Feature does not link to any requirements.".to_string(),
@@ -911,7 +911,7 @@ fn validate_feature(
                     .any(|item| item == &feature.id)
                 {
                     issues.push(Issue::error(
-                        "SYU-graph-reciprocal-002",
+                        "SYU-graph-reciprocal-001",
                         format!("feature {}", feature.id),
                         Some(requirement_id.clone()),
                         format!(
@@ -965,7 +965,7 @@ fn validate_trace_map(
         Some(DeliveryStatus::Planned) => {
             if !references_by_language.is_empty() {
                 issues.push(Issue::error(
-                    "SYU-delivery-planned-003",
+                    "SYU-delivery-planned-002",
                     subject,
                     Some("status".to_string()),
                     format!(
@@ -986,7 +986,7 @@ fn validate_trace_map(
         Some(DeliveryStatus::Implemented) => {
             if references_by_language.is_empty() {
                 issues.push(Issue::error(
-                    "SYU-delivery-implemented-004",
+                    "SYU-delivery-implemented-001",
                     subject,
                     Some("status".to_string()),
                     format!(
@@ -1006,7 +1006,7 @@ fn validate_trace_map(
         }
         None if references_by_language.is_empty() => {
             issues.push(Issue::warning(
-                "SYU-delivery-missing-005",
+                "SYU-delivery-missing-001",
                 subject,
                 None,
                 format!(
@@ -1097,7 +1097,7 @@ fn report_orphaned_definition(
     }
 
     issues.push(Issue::error(
-        "SYU-graph-orphaned-004",
+        "SYU-graph-orphaned-001",
         format!("{kind} {id}"),
         None,
         format!(
@@ -1136,7 +1136,7 @@ fn verify_trace_reference(
 
     if reference.file.as_os_str().is_empty() {
         issues.push(Issue::error(
-            "SYU-trace-file-002",
+            "SYU-trace-file-001",
             subject.clone(),
             Some(format_reference_location(language, reference)),
             format!(
@@ -1174,7 +1174,7 @@ fn verify_trace_reference(
     let mut success = true;
     if !adapter.supports_path(&path) {
         issues.push(Issue::error(
-            "SYU-trace-extension-004",
+            "SYU-trace-extension-001",
             subject.clone(),
             Some(format_reference_location(language, reference)),
             format!(
@@ -1195,7 +1195,7 @@ fn verify_trace_reference(
         Ok(contents) => contents,
         Err(error) => {
             issues.push(Issue::error(
-                "SYU-trace-unreadable-003",
+                "SYU-trace-unreadable-001",
                 subject,
                 Some(format_reference_location(language, reference)),
                 format!(
@@ -1214,7 +1214,7 @@ fn verify_trace_reference(
 
     if !contents.contains(owner_id) {
         issues.push(Issue::error(
-            "SYU-trace-id-005",
+            "SYU-trace-id-001",
             subject.clone(),
             Some(format_reference_location(language, reference)),
             format!(
@@ -1233,7 +1233,7 @@ fn verify_trace_reference(
 
     if reference.symbols.is_empty() {
         issues.push(Issue::error(
-            "SYU-trace-symbol-006",
+            "SYU-trace-symbol-001",
             subject.clone(),
             Some(format_reference_location(language, reference)),
             format!(
@@ -1252,7 +1252,7 @@ fn verify_trace_reference(
     if has_wildcard {
         if !reference.doc_contains.is_empty() {
             issues.push(Issue::error(
-                "SYU-trace-support-009",
+                "SYU-trace-docscope-001",
                 subject.clone(),
                 Some(format_reference_location(language, reference)),
                 format!(
@@ -1272,7 +1272,7 @@ fn verify_trace_reference(
     for symbol in &reference.symbols {
         if symbol.trim().is_empty() {
             issues.push(Issue::error(
-                "SYU-trace-symbol-006",
+                "SYU-trace-symbol-002",
                 subject.clone(),
                 Some(format_reference_location(language, reference)),
                 format!(
@@ -1293,7 +1293,7 @@ fn verify_trace_reference(
                 Ok(result) => result,
                 Err(error) => {
                     issues.push(Issue::error(
-                        "SYU-trace-inspection-007",
+                        "SYU-trace-inspection-001",
                         subject.clone(),
                         Some(format_reference_location(language, reference)),
                         format!(
@@ -1316,7 +1316,7 @@ fn verify_trace_reference(
         let symbol_exists = inspection.is_some() || adapter.symbol_exists(&contents, symbol);
         if !symbol_exists {
             issues.push(Issue::error(
-                "SYU-trace-symbol-006",
+                "SYU-trace-symbol-003",
                 subject.clone(),
                 Some(format_reference_location(language, reference)),
                 format!(
@@ -1342,7 +1342,7 @@ fn verify_trace_reference(
 
                         if !inspection.docs.contains(snippet) {
                             issues.push(Issue::error(
-                                "SYU-trace-doc-008",
+                                "SYU-trace-doc-001",
                                 subject.clone(),
                                 Some(format_reference_location(language, reference)),
                                 format!(
@@ -1359,7 +1359,7 @@ fn verify_trace_reference(
                 }
                 None => {
                     issues.push(Issue::error(
-                        "SYU-trace-support-009",
+                        "SYU-trace-docsupport-001",
                         subject.clone(),
                         Some(format_reference_location(language, reference)),
                         format!(
@@ -1385,7 +1385,7 @@ fn format_reference_location(language: &str, reference: &TraceReference) -> Stri
 fn validate_non_empty_field(kind: &str, field_name: &str, value: &str, issues: &mut Vec<Issue>) {
     if value.trim().is_empty() {
         issues.push(Issue::error(
-            "SYU-workspace-blank-002",
+            "SYU-workspace-blank-001",
             kind.to_string(),
             Some(field_name.to_string()),
             format!("Field `{field_name}` must not be blank."),
@@ -1565,7 +1565,7 @@ mod tests {
         let mut issues = Vec::new();
         validate_unique_ids("feature", ["FEAT-1", "FEAT-1"].into_iter(), &mut issues);
         assert_eq!(issues.len(), 1);
-        assert_eq!(issues[0].code, "SYU-workspace-duplicate-003");
+        assert_eq!(issues[0].code, "SYU-workspace-duplicate-001");
     }
 
     #[test]
@@ -1573,7 +1573,7 @@ mod tests {
         let mut issues = Vec::new();
         validate_non_empty_field("feature", "title", "   ", &mut issues);
         assert_eq!(issues.len(), 1);
-        assert_eq!(issues[0].code, "SYU-workspace-blank-002");
+        assert_eq!(issues[0].code, "SYU-workspace-blank-001");
         assert_eq!(issues[0].location.as_deref(), Some("title"));
     }
 
@@ -1589,7 +1589,7 @@ mod tests {
         assert!(
             issues
                 .iter()
-                .any(|issue| issue.code == "SYU-workspace-blank-002")
+                .any(|issue| issue.code == "SYU-workspace-blank-001")
         );
         assert!(
             issues
@@ -1606,7 +1606,7 @@ mod tests {
         assert!(
             issues
                 .iter()
-                .any(|issue| issue.code == "SYU-graph-links-003")
+                .any(|issue| issue.code == "SYU-graph-links-001")
         );
     }
 
@@ -1626,7 +1626,7 @@ mod tests {
         assert!(
             issues
                 .iter()
-                .any(|issue| issue.code == "SYU-graph-reciprocal-002")
+                .any(|issue| issue.code == "SYU-graph-reciprocal-001")
         );
     }
 
@@ -1651,12 +1651,12 @@ mod tests {
         assert!(
             issues
                 .iter()
-                .any(|issue| issue.code == "SYU-workspace-blank-002")
+                .any(|issue| issue.code == "SYU-workspace-blank-001")
         );
         assert!(
             issues
                 .iter()
-                .filter(|issue| issue.code == "SYU-graph-reciprocal-002")
+                .filter(|issue| issue.code == "SYU-graph-reciprocal-001")
                 .count()
                 >= 2
         );
@@ -1670,7 +1670,7 @@ mod tests {
         assert!(
             issues
                 .iter()
-                .filter(|issue| issue.code == "SYU-graph-links-003")
+                .filter(|issue| issue.code == "SYU-graph-links-001")
                 .count()
                 >= 2
         );
@@ -1715,17 +1715,17 @@ mod tests {
         assert!(
             issues
                 .iter()
-                .any(|issue| issue.code == "SYU-workspace-blank-002")
+                .any(|issue| issue.code == "SYU-workspace-blank-001")
         );
         assert!(
             issues
                 .iter()
-                .any(|issue| issue.code == "SYU-graph-links-003")
+                .any(|issue| issue.code == "SYU-graph-links-001")
         );
         assert!(
             issues
                 .iter()
-                .any(|issue| issue.code == "SYU-delivery-missing-005")
+                .any(|issue| issue.code == "SYU-delivery-missing-001")
         );
         assert_eq!(trace_count.declared, 0);
     }
@@ -1757,14 +1757,14 @@ mod tests {
         );
 
         assert!(issues.iter().any(|issue| {
-            issue.code == "SYU-graph-reciprocal-002" && issue.location.as_deref() == Some("POL-1")
+            issue.code == "SYU-graph-reciprocal-001" && issue.location.as_deref() == Some("POL-1")
         }));
         assert!(issues.iter().any(|issue| {
             issue.code == "SYU-graph-reference-001"
                 && issue.location.as_deref() == Some("POL-MISSING")
         }));
         assert!(issues.iter().any(|issue| {
-            issue.code == "SYU-graph-reciprocal-002" && issue.location.as_deref() == Some("FEAT-1")
+            issue.code == "SYU-graph-reciprocal-001" && issue.location.as_deref() == Some("FEAT-1")
         }));
         assert!(issues.iter().any(|issue| {
             issue.code == "SYU-graph-reference-001"
@@ -1791,17 +1791,17 @@ mod tests {
         assert!(
             issues
                 .iter()
-                .any(|issue| issue.code == "SYU-workspace-blank-002")
+                .any(|issue| issue.code == "SYU-workspace-blank-001")
         );
         assert!(
             issues
                 .iter()
-                .any(|issue| issue.code == "SYU-graph-links-003")
+                .any(|issue| issue.code == "SYU-graph-links-001")
         );
         assert!(
             issues
                 .iter()
-                .any(|issue| issue.code == "SYU-delivery-implemented-004")
+                .any(|issue| issue.code == "SYU-delivery-implemented-001")
         );
         assert_eq!(trace_count.validated, 0);
     }
@@ -1834,7 +1834,7 @@ mod tests {
         assert!(
             issues
                 .iter()
-                .any(|issue| issue.code == "SYU-delivery-planned-003")
+                .any(|issue| issue.code == "SYU-delivery-planned-002")
         );
         assert_eq!(trace_count.declared, 0);
     }
@@ -1923,7 +1923,7 @@ mod tests {
         assert!(
             issues
                 .iter()
-                .any(|issue| issue.code == "SYU-delivery-status-002")
+                .any(|issue| issue.code == "SYU-delivery-planned-001")
         );
     }
 
@@ -1948,7 +1948,7 @@ mod tests {
         );
 
         assert!(issues.iter().any(|issue| {
-            issue.code == "SYU-graph-reciprocal-002" && issue.location.as_deref() == Some("REQ-1")
+            issue.code == "SYU-graph-reciprocal-001" && issue.location.as_deref() == Some("REQ-1")
         }));
         assert!(issues.iter().any(|issue| {
             issue.code == "SYU-graph-reference-001"
@@ -1993,7 +1993,7 @@ mod tests {
             &reference,
             &mut issues,
         ));
-        assert_eq!(issues[0].code, "SYU-trace-file-002");
+        assert_eq!(issues[0].code, "SYU-trace-file-001");
     }
 
     #[test]
@@ -2041,13 +2041,13 @@ mod tests {
         assert!(
             issues
                 .iter()
-                .any(|issue| issue.code == "SYU-trace-extension-004")
+                .any(|issue| issue.code == "SYU-trace-extension-001")
         );
-        assert!(issues.iter().any(|issue| issue.code == "SYU-trace-id-005"));
+        assert!(issues.iter().any(|issue| issue.code == "SYU-trace-id-001"));
         assert!(
             issues
                 .iter()
-                .filter(|issue| issue.code == "SYU-trace-symbol-006")
+                .filter(|issue| issue.code == "SYU-trace-symbol-002")
                 .count()
                 >= 1
         );
@@ -2077,7 +2077,7 @@ mod tests {
         assert!(
             issues
                 .iter()
-                .any(|issue| issue.code == "SYU-trace-symbol-006")
+                .any(|issue| issue.code == "SYU-trace-symbol-003")
         );
     }
 
@@ -2105,7 +2105,7 @@ mod tests {
         assert!(
             issues
                 .iter()
-                .any(|issue| issue.code == "SYU-trace-symbol-006")
+                .any(|issue| issue.code == "SYU-trace-symbol-001")
         );
     }
 
@@ -2166,7 +2166,7 @@ mod tests {
         assert!(
             python_issues
                 .iter()
-                .any(|issue| issue.code == "SYU-trace-inspection-007")
+                .any(|issue| issue.code == "SYU-trace-inspection-001")
         );
 
         let rust_path = tempdir.path().join("trace.rs");
@@ -2188,7 +2188,7 @@ mod tests {
         assert_eq!(
             rust_issues
                 .iter()
-                .filter(|issue| issue.code == "SYU-trace-doc-008")
+                .filter(|issue| issue.code == "SYU-trace-doc-001")
                 .count(),
             1
         );
@@ -2213,7 +2213,7 @@ mod tests {
         assert!(
             shell_issues
                 .iter()
-                .any(|issue| issue.code == "SYU-trace-support-009")
+                .any(|issue| issue.code == "SYU-trace-docsupport-001")
         );
 
         let wildcard_path = tempdir.path().join("wildcard.rs");
@@ -2236,7 +2236,7 @@ mod tests {
         assert!(
             wildcard_issues
                 .iter()
-                .any(|issue| issue.code == "SYU-trace-support-009")
+                .any(|issue| issue.code == "SYU-trace-docscope-001")
         );
     }
 
@@ -2620,7 +2620,7 @@ mod tests {
         assert!(
             issues
                 .iter()
-                .any(|issue| issue.code == "SYU-trace-unreadable-003")
+                .any(|issue| issue.code == "SYU-trace-unreadable-001")
         );
     }
 

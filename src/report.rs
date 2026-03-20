@@ -208,7 +208,7 @@ mod tests {
             trace_summary: TraceSummary::default(),
             issues: vec![
                 Issue {
-                    code: "SYU-workspace-duplicate-003".to_string(),
+                    code: "SYU-workspace-duplicate-001".to_string(),
                     severity: Severity::Error,
                     subject: "feature|subject".to_string(),
                     location: Some("yaml:file.yml".to_string()),
@@ -225,7 +225,7 @@ mod tests {
             ],
             referenced_rules: crate::rules::referenced_rules(&[
                 Issue {
-                    code: "SYU-workspace-duplicate-003".to_string(),
+                    code: "SYU-workspace-duplicate-001".to_string(),
                     severity: Severity::Error,
                     subject: "feature|subject".to_string(),
                     location: Some("yaml:file.yml".to_string()),
@@ -246,7 +246,7 @@ mod tests {
         assert!(report.contains("Result: **FAIL**"));
         assert!(report.contains("error"));
         assert!(report.contains("warning"));
-        assert!(report.contains("SYU-workspace-duplicate-003"));
+        assert!(report.contains("SYU-workspace-duplicate-001"));
         assert!(report.contains("feature\\|subject"));
         assert!(report.contains("message\\|with pipe"));
         assert!(report.contains("## Referenced rules"));

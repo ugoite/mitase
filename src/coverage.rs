@@ -55,7 +55,7 @@ pub fn validate_symbol_trace_coverage(workspace: &Workspace, issues: &mut Vec<Is
                 if !feature_coverage.covers(&target.file, &target.symbol) =>
             {
                 issues.push(Issue::error(
-                    "SYU-coverage-public-002",
+                    "SYU-coverage-public-001",
                     format!("public symbol {}", target.symbol),
                     Some(format!("{}::{}", target.file.display(), target.symbol)),
                     format!(
@@ -74,7 +74,7 @@ pub fn validate_symbol_trace_coverage(workspace: &Workspace, issues: &mut Vec<Is
                 if !requirement_coverage.covers(&target.file, &target.symbol) =>
             {
                 issues.push(Issue::error(
-                    "SYU-coverage-test-003",
+                    "SYU-coverage-test-001",
                     format!("test {}", target.symbol),
                     Some(format!("{}::{}", target.file.display(), target.symbol)),
                     format!(
@@ -161,7 +161,7 @@ fn discover_rust_targets(root: &Path) -> Result<Vec<CoverageTarget>, Box<Issue>>
     for path in files {
         let contents = fs::read_to_string(&path).map_err(|error| {
             Box::new(Issue::error(
-                "SYU-coverage-scan-001",
+                "SYU-coverage-read-001",
                 "trace coverage inventory",
                 Some(path.display().to_string()),
                 format!("Failed to read `{}` while building trace coverage inventory: {error}", path.display()),
@@ -171,7 +171,7 @@ fn discover_rust_targets(root: &Path) -> Result<Vec<CoverageTarget>, Box<Issue>>
 
         let file = syn::parse_file(&contents).map_err(|error| {
             Box::new(Issue::error(
-                "SYU-coverage-scan-001",
+                "SYU-coverage-parse-001",
                 "trace coverage inventory",
                 Some(path.display().to_string()),
                 format!("Failed to parse `{}` while building trace coverage inventory: {error}", path.display()),
@@ -317,7 +317,7 @@ fn rust_files_under(root: &Path) -> Result<Vec<PathBuf>, Box<Issue>> {
     let mut files = Vec::new();
     collect_rust_files_recursive(root, &mut files).map_err(|error| {
         Box::new(Issue::error(
-            "SYU-coverage-scan-001",
+            "SYU-coverage-walk-001",
             "trace coverage inventory",
             Some(root.display().to_string()),
             format!("Failed to walk `{}` while building trace coverage inventory: {error}", root.display()),
@@ -596,7 +596,7 @@ mod tests {
         let file_root = tempdir.path().join("not-a-dir.rs");
         fs::write(&file_root, "pub fn nope() {}\n").expect("file");
         let issue = rust_files_under(&file_root).expect_err("file roots should fail");
-        assert_eq!(issue.code, "SYU-coverage-scan-001");
+        assert_eq!(issue.code, "SYU-coverage-walk-001");
     }
 
     #[test]
@@ -606,7 +606,7 @@ mod tests {
         fs::write(tempdir.path().join("src/broken.rs"), "pub fn broken( {}\n").expect("broken");
 
         let issue = discover_rust_targets(tempdir.path()).expect_err("broken rust should fail");
-        assert_eq!(issue.code, "SYU-coverage-scan-001");
+        assert_eq!(issue.code, "SYU-coverage-parse-001");
     }
 
     #[cfg(unix)]
@@ -645,7 +645,7 @@ mod tests {
         fs::set_permissions(&unreadable, restore).expect("restore");
 
         assert_eq!(issues.len(), 1);
-        assert_eq!(issues[0].code, "SYU-coverage-scan-001");
+        assert_eq!(issues[0].code, "SYU-coverage-read-001");
     }
 
     #[test]

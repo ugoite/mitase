@@ -14,7 +14,7 @@ rules:
       paths, or trace mappings should exist. This rule exists to fail early and
       honestly when the repository shape itself is broken.
 
-  - code: SYU-workspace-blank-002
+  - code: SYU-workspace-blank-001
     genre: workspace
     severity: error
     title: Required specification fields must not be blank
@@ -27,7 +27,7 @@ rules:
       the spec usable both for humans trying to understand intent and for
       automation trying to verify it.
 
-  - code: SYU-workspace-duplicate-003
+  - code: SYU-workspace-duplicate-001
     genre: workspace
     severity: error
     title: Definition IDs must be unique
@@ -51,7 +51,7 @@ rules:
       This rule forces contributors to either declare the missing item or remove
       the stale relationship before the graph drifts further.
 
-  - code: SYU-graph-reciprocal-002
+  - code: SYU-graph-reciprocal-001
     genre: graph
     severity: error
     title: Adjacent-layer links must be reciprocal
@@ -63,7 +63,7 @@ rules:
       rule preserves explainability by requiring each adjacent layer to confirm
       the relationship from its own point of view.
 
-  - code: SYU-graph-links-003
+  - code: SYU-graph-links-001
     genre: graph
     severity: warning
     title: Adjacent-layer expectations should be explicit
@@ -74,7 +74,7 @@ rules:
       This warning nudges authors to keep the graph richly connected so the
       repository remains easy to browse, audit, and evolve over time.
 
-  - code: SYU-graph-orphaned-004
+  - code: SYU-graph-orphaned-001
     genre: graph
     severity: error
     title: Definitions must not be isolated from the layered graph
@@ -98,7 +98,7 @@ rules:
       This rule keeps workflow semantics predictable by limiting the state
       vocabulary to supported values.
 
-  - code: SYU-delivery-status-002
+  - code: SYU-delivery-planned-001
     genre: delivery
     severity: error
     title: Planned items can be forbidden by project policy
@@ -110,7 +110,7 @@ rules:
       the entire validation engine. The goal is to support both exploratory
       workflows and locked-down release workflows through explicit config.
 
-  - code: SYU-delivery-planned-003
+  - code: SYU-delivery-planned-002
     genre: delivery
     severity: error
     title: Planned items must not claim delivered traces
@@ -122,7 +122,7 @@ rules:
       trust. This rule preserves the meaning of planning by keeping future work
       distinct from delivered work.
 
-  - code: SYU-delivery-implemented-004
+  - code: SYU-delivery-implemented-001
     genre: delivery
     severity: error
     title: Implemented items must prove delivery
@@ -133,7 +133,7 @@ rules:
       rather than evidence. This rule exists to make implementation status
       reviewable and to keep status labels from drifting away from reality.
 
-  - code: SYU-delivery-missing-005
+  - code: SYU-delivery-missing-001
     genre: delivery
     severity: warning
     title: Undefined delivery state leaves trace expectations unclear
@@ -156,19 +156,30 @@ rules:
       security by declaring traces in languages the current validator cannot
       actually inspect.
 
+  - code: SYU-trace-file-001
+    genre: trace
+    severity: error
+    title: Trace mappings must declare a file path
+    summary: A trace without an explicit file path cannot identify repository evidence.
+    description: |
+      Traceability depends on concrete, inspectable files. If a mapping omits the
+      file path entirely, the validator has nowhere to look for evidence and
+      reviewers cannot tell which artifact is supposed to satisfy the spec. This
+      rule keeps every declared trace grounded in an explicit repository path.
+
   - code: SYU-trace-file-002
     genre: trace
     severity: error
-    title: Trace files must exist and be named explicitly
-    summary: A trace without a real file cannot prove anything about the repository.
+    title: Declared trace files must exist
+    summary: A trace that points to a missing file cannot prove anything about the repository.
     description: |
-      Traceability depends on concrete, inspectable files. If a path is absent,
-      blank, or stale, the spec stops pointing to real evidence and starts
-      pointing to an aspiration. This rule ensures that every declared trace is
-      grounded in a repository artifact that reviewers and automation can both
-      inspect.
+      Traceability depends on concrete, inspectable files. If a path is stale or
+      points outside the current repository contents, the spec stops pointing to
+      real evidence and starts pointing to an aspiration. This rule ensures that
+      every declared trace remains grounded in a repository artifact that both
+      reviewers and automation can actually inspect.
 
-  - code: SYU-trace-unreadable-003
+  - code: SYU-trace-unreadable-001
     genre: trace
     severity: error
     title: Trace files must be readable to the validator
@@ -180,7 +191,7 @@ rules:
       This rule exists to surface those operational failures instead of silently
       assuming the trace is probably fine.
 
-  - code: SYU-trace-extension-004
+  - code: SYU-trace-extension-001
     genre: trace
     severity: error
     title: The declared trace language must match the traced file
@@ -192,7 +203,7 @@ rules:
       means. This rule keeps the declared language and the referenced artifact in
       sync.
 
-  - code: SYU-trace-id-005
+  - code: SYU-trace-id-001
     genre: trace
     severity: error
     title: Traced files must mention the owning specification ID
@@ -204,18 +215,41 @@ rules:
       link without consulting another system. This rule keeps traceability visible
       at the point where work actually happens.
 
-  - code: SYU-trace-symbol-006
+  - code: SYU-trace-symbol-001
     genre: trace
     severity: error
-    title: Trace mappings must identify concrete symbols
-    summary: Validation needs a real symbol to inspect instead of a vague file-level hint.
+    title: Trace mappings must identify at least one symbol
+    summary: Validation needs a concrete symbol target instead of an empty mapping.
     description: |
-      Files often contain many behaviors. Without a symbol target, a trace may
-      point at a broad area of the repository while still leaving uncertainty
-      about what actually satisfies the requirement or feature. This rule keeps
-      traces precise enough to support audits, refactors, and future maintenance.
+      Files often contain many behaviors. If a trace mapping does not name any
+      symbols at all, the validator cannot tell which implementation or test case
+      is supposed to satisfy the requirement or feature. This rule keeps traces
+      precise enough to support audits, refactors, and future maintenance.
 
-  - code: SYU-trace-inspection-007
+  - code: SYU-trace-symbol-002
+    genre: trace
+    severity: error
+    title: Trace symbol entries must not be blank
+    summary: Whitespace-only symbol entries hide which repository behavior the trace intends to verify.
+    description: |
+      A symbol list that contains blank entries looks more complete than it is.
+      Reviewers and tooling still lack a usable target, but the mapping no longer
+      reads as obviously empty. This rule keeps symbol declarations explicit by
+      requiring every listed entry to name a real symbol.
+
+  - code: SYU-trace-symbol-003
+    genre: trace
+    severity: error
+    title: Declared trace symbols must exist in the traced file
+    summary: A trace can only prove ownership when the named symbol is present in the referenced file.
+    description: |
+      Symbol-level traces are useful because they point to the exact behavior a
+      requirement or feature relies on. If the named symbol is missing, the spec
+      no longer identifies real evidence and may be drifting behind refactors or
+      stale documentation. This rule keeps symbol traces anchored to actual code
+      and tests.
+
+  - code: SYU-trace-inspection-001
     genre: trace
     severity: error
     title: Rich symbol inspection must succeed when required
@@ -227,7 +261,7 @@ rules:
       success-shaped assumption. This rule protects trust in the validator's
       conclusions.
 
-  - code: SYU-trace-doc-008
+  - code: SYU-trace-doc-001
     genre: trace
     severity: error
     title: Required trace documentation snippets must be present
@@ -238,11 +272,23 @@ rules:
       documentation snippets so that code, tests, and generated reports all
       preserve the rationale the spec asked for.
 
-  - code: SYU-trace-support-009
+  - code: SYU-trace-docscope-001
     genre: trace
     severity: error
-    title: Documentation assertions need a language that can verify them
-    summary: "`doc_contains` promises should only be made where the validator can inspect docs."
+    title: Wildcard traces cannot carry symbol-level doc assertions
+    summary: "`doc_contains` checks need a single symbol target instead of a wildcard file claim."
+    description: |
+      Wildcard ownership is useful when one specification item intentionally owns
+      every relevant symbol in a file. Documentation assertions are different:
+      they need one concrete symbol so the validator knows exactly which docs to
+      inspect. This rule keeps doc-level checks precise instead of letting them
+      ride on an ambiguous wildcard mapping.
+
+  - code: SYU-trace-docsupport-001
+    genre: trace
+    severity: error
+    title: Documentation assertions require rich symbol inspection
+    summary: "`doc_contains` promises should only be made where the validator can inspect symbol docs."
     description: |
       A repository should not declare documentation constraints that the current
       adapter cannot verify. Otherwise the spec would appear stricter than the
@@ -250,19 +296,42 @@ rules:
       doc-level checks to stay within languages with meaningful documentation
       inspection support.
 
-  - code: SYU-coverage-scan-001
+  - code: SYU-coverage-walk-001
     genre: coverage
     severity: error
-    title: Coverage inventory must be inspectable
-    summary: Opt-in trace coverage cannot be enforced unless `syu` can scan the workspace.
+    title: Coverage inventory paths must be walkable
+    summary: Strict trace coverage starts by discovering Rust sources under `src/` and `tests/`.
     description: |
-      The strict trace coverage rule only means something when `syu` can read and
-      parse the files it is supposed to inventory. If source or test files cannot
-      be scanned, the safest behavior is to fail loudly instead of pretending the
-      workspace is fully covered. This rule protects the credibility of the
-      100-percent coverage claim.
+      The strict trace coverage rule only means something when `syu` can walk the
+      repository paths that are supposed to contain owned Rust source and test
+      files. If directory discovery fails, the inventory itself is incomplete and
+      any 100-percent coverage conclusion would be misleading. This rule surfaces
+      repository layout problems before coverage claims become untrustworthy.
 
-  - code: SYU-coverage-public-002
+  - code: SYU-coverage-read-001
+    genre: coverage
+    severity: error
+    title: Coverage inventory files must be readable
+    summary: Unreadable Rust sources prevent honest trace coverage verification.
+    description: |
+      Trace coverage can only be enforced when `syu` can read the Rust source and
+      test files it is supposed to inventory. If a file is unreadable, the safest
+      behavior is to fail loudly instead of pretending the workspace was fully
+      scanned. This rule protects the credibility of strict coverage mode.
+
+  - code: SYU-coverage-parse-001
+    genre: coverage
+    severity: error
+    title: Coverage inventory sources must parse successfully
+    summary: Broken Rust syntax prevents reliable coverage inventory.
+    description: |
+      Strict trace coverage relies on understanding the Rust items that appear in
+      the workspace. When a source file does not parse, `syu` cannot build a
+      trustworthy inventory of public APIs or tests. This rule keeps coverage
+      results explicit by surfacing syntax failures instead of hiding them behind
+      incomplete scans.
+
+  - code: SYU-coverage-public-001
     genre: coverage
     severity: error
     title: Public API symbols must belong to at least one feature
@@ -274,7 +343,7 @@ rules:
       or which behavior owns it. This rule encourages deliberate API growth by
       forcing public surface area to stay attached to an explicit feature.
 
-  - code: SYU-coverage-test-003
+  - code: SYU-coverage-test-001
     genre: coverage
     severity: error
     title: Tests must belong to at least one requirement
