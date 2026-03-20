@@ -19,7 +19,7 @@ description: "Generated reference for docs/syu/features/quality.yaml"
 
 - **id**: FEAT-QUALITY-001
   - **title**: Repository quality automation
-  - **summary**: Keep self-validation, dependency hygiene, and CI execution fast enough to run on every pull request.
+  - **summary**: Keep self-validation, dependency hygiene, code scanning, and merge-queue-safe CI execution fast enough to run on every pull request.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-005
@@ -42,6 +42,7 @@ description: "Generated reference for docs/syu/features/quality.yaml"
           - syu-coverage-gate
       - **file**: .github/workflows/ci.yml
         - **symbols**:
+          - merge_group
           - precommit
           - quality
           - coverage
@@ -49,6 +50,11 @@ description: "Generated reference for docs/syu/features/quality.yaml"
           - Restore Rust cache
           - Set up Python with pip cache
           - Review dependency changes
+      - **file**: .github/workflows/codeql.yml
+        - **symbols**:
+          - merge_group
+          - Analyze (rust)
+          - github/codeql-action/init@v3
       - **file**: .github/dependabot.yml
         - **symbols**:
           - FEAT-QUALITY-001
@@ -64,7 +70,7 @@ version: 1
 features:
   - id: FEAT-QUALITY-001
     title: Repository quality automation
-    summary: Keep self-validation, dependency hygiene, and CI execution fast enough to run on every pull request.
+    summary: Keep self-validation, dependency hygiene, code scanning, and merge-queue-safe CI execution fast enough to run on every pull request.
     status: implemented
     linked_requirements:
       - REQ-CORE-005
@@ -87,6 +93,7 @@ features:
             - syu-coverage-gate
         - file: .github/workflows/ci.yml
           symbols:
+            - merge_group
             - precommit
             - quality
             - coverage
@@ -94,6 +101,11 @@ features:
             - Restore Rust cache
             - Set up Python with pip cache
             - Review dependency changes
+        - file: .github/workflows/codeql.yml
+          symbols:
+            - merge_group
+            - Analyze (rust)
+            - github/codeql-action/init@v3
         - file: .github/dependabot.yml
           symbols:
             - FEAT-QUALITY-001

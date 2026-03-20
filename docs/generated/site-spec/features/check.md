@@ -61,6 +61,11 @@ description: "Generated reference for docs/syu/features/check.yaml"
           - FEAT-CHECK-001
           - require_non_orphaned_items
           - require_symbol_trace_coverage
+      - **file**: docs/syu/features/validation.yaml
+        - **symbols**:
+          - SYU-workspace-load-001
+          - SYU-graph-reference-001
+          - SYU-coverage-test-003
 
 ## Source YAML
 
@@ -113,4 +118,9 @@ features:
             - FEAT-CHECK-001
             - require_non_orphaned_items
             - require_symbol_trace_coverage
+        - file: docs/syu/features/validation.yaml
+          symbols:
+            - SYU-workspace-load-001
+            - SYU-graph-reference-001
+            - SYU-coverage-test-003
 ```

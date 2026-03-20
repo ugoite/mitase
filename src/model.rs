@@ -154,7 +154,7 @@ impl CheckResult {
             definition_counts: DefinitionCounts::default(),
             trace_summary: TraceSummary::default(),
             issues: vec![Issue::error(
-                "load-failed",
+                "SYU-workspace-load-001",
                 "workspace",
                 None,
                 message.into(),
@@ -238,7 +238,7 @@ mod tests {
         let result = CheckResult::from_load_error(PathBuf::from("."), "boom");
         assert!(!result.is_success());
         assert_eq!(result.issues.len(), 1);
-        assert_eq!(result.issues[0].code, "load-failed");
+        assert_eq!(result.issues[0].code, "SYU-workspace-load-001");
     }
 
     #[test]

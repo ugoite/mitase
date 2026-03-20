@@ -93,8 +93,8 @@ fn validate_reports_untracked_public_symbols_and_tests() {
 
     assert!(!output.status.success(), "coverage gaps should fail");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("public-symbol-untracked"));
-    assert!(stdout.contains("test-symbol-untracked"));
+    assert!(stdout.contains("SYU-coverage-public-002"));
+    assert!(stdout.contains("SYU-coverage-test-003"));
 }
 
 #[test]

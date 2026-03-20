@@ -68,7 +68,7 @@ fn validate_rejects_orphaned_definitions_by_default() {
 
     assert!(!output.status.success(), "orphaned definitions should fail");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("orphaned-definition"));
+    assert!(stdout.contains("SYU-graph-orphaned-004"));
     assert!(stdout.contains("Definitions must not be isolated from the layered graph"));
 }
 
