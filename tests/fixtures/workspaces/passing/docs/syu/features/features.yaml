@@ -3,4 +3,4 @@ updated: "2026-03"
 
 files:
   - kind: traceability
-    file: core.yaml
+    file: traceability/core.yaml

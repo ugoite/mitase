@@ -1,9 +1,9 @@
 ---
 title: "Release Automation / Release"
-description: "Generated reference for docs/syu/features/release.yaml"
+description: "Generated reference for docs/syu/features/repository/release.yaml"
 ---
 
-> Generated from `docs/syu/features/release.yaml`.
+> Generated from `docs/syu/features/repository/release.yaml`.
 
 ## Parsed content
 

@@ -18,25 +18,25 @@ description: "Generated reference for docs/syu/features/features.yaml"
 ### Files
 
 - **kind**: browse
-  - **file**: browse.yaml
+  - **file**: cli/browse.yaml
 - **kind**: check
-  - **file**: check.yaml
+  - **file**: cli/check.yaml
 - **kind**: init
-  - **file**: init.yaml
+  - **file**: cli/init.yaml
 - **kind**: report
-  - **file**: report.yaml
+  - **file**: cli/report.yaml
 - **kind**: docs
-  - **file**: docs.yaml
+  - **file**: documentation/docs.yaml
 - **kind**: skills
-  - **file**: skills.yaml
+  - **file**: documentation/skills.yaml
 - **kind**: contributor
-  - **file**: contributor.yaml
+  - **file**: repository/contributor.yaml
 - **kind**: quality
-  - **file**: quality.yaml
+  - **file**: repository/quality.yaml
 - **kind**: release
-  - **file**: release.yaml
+  - **file**: repository/release.yaml
 - **kind**: install
-  - **file**: install.yaml
+  - **file**: repository/install.yaml
 
 ## Source YAML
 
@@ -46,23 +46,23 @@ updated: "2026-03"
 
 files:
   - kind: browse
-    file: browse.yaml
+    file: cli/browse.yaml
   - kind: check
-    file: check.yaml
+    file: cli/check.yaml
   - kind: init
-    file: init.yaml
+    file: cli/init.yaml
   - kind: report
-    file: report.yaml
+    file: cli/report.yaml
   - kind: docs
-    file: docs.yaml
+    file: documentation/docs.yaml
   - kind: skills
-    file: skills.yaml
+    file: documentation/skills.yaml
   - kind: contributor
-    file: contributor.yaml
+    file: repository/contributor.yaml
   - kind: quality
-    file: quality.yaml
+    file: repository/quality.yaml
   - kind: release
-    file: release.yaml
+    file: repository/release.yaml
   - kind: install
-    file: install.yaml
+    file: repository/install.yaml
 ```

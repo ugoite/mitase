@@ -1,9 +1,9 @@
 ---
 title: "Validate Command / Check"
-description: "Generated reference for docs/syu/features/check.yaml"
+description: "Generated reference for docs/syu/features/cli/check.yaml"
 ---
 
-> Generated from `docs/syu/features/check.yaml`.
+> Generated from `docs/syu/features/cli/check.yaml`.
 
 ## Parsed content
 
@@ -61,7 +61,7 @@ description: "Generated reference for docs/syu/features/check.yaml"
           - FEAT-CHECK-001
           - require_non_orphaned_items
           - require_symbol_trace_coverage
-      - **file**: docs/syu/features/validation.yaml
+      - **file**: docs/syu/features/cli/validation.yaml
         - **symbols**:
           - SYU-workspace-load-001
           - SYU-graph-reference-001
@@ -118,7 +118,7 @@ features:
             - FEAT-CHECK-001
             - require_non_orphaned_items
             - require_symbol_trace_coverage
-        - file: docs/syu/features/validation.yaml
+        - file: docs/syu/features/cli/validation.yaml
           symbols:
             - SYU-workspace-load-001
             - SYU-graph-reference-001

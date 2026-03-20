@@ -3,4 +3,4 @@ updated: "2026-03"
 
 files:
   - kind: broken
-    file: core.yaml
+    file: broken/core.yaml

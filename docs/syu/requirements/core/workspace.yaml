@@ -1,0 +1,56 @@
+category: Core Workspace
+prefix: REQ-CORE
+requirements:
+  - id: REQ-CORE-009
+    title: Bootstrap a workspace with syu init and syu.yaml
+    description: |
+      The `init` command MUST create a starter `syu.yaml` whose version matches
+      the running CLI and a valid `docs/syu/` tree whose starter requirements
+      and features begin as `planned` so users can begin from a working
+      structure instead of manually creating directories and placeholder YAML
+      files.
+    priority: high
+    status: implemented
+    linked_policies:
+      - POL-001
+      - POL-004
+    linked_features:
+      - FEAT-INIT-001
+    tests:
+      rust:
+        - file: tests/init_command.rs
+          symbols:
+            - '*'
+        - file: src/command/init.rs
+          symbols:
+            - '*'
+        - file: src/config.rs
+          symbols:
+            - '*'
+  - id: REQ-CORE-015
+    title: Provide a resilient interactive browse CLI
+    description: |
+      Running `syu` without a subcommand in a terminal MUST open an interactive
+      browser that shows philosophy, policy, feature, requirement, and error
+      counts; allows drilling into linked definitions; and still explains the
+      workspace when validation issues exist. When standard input/output are not
+      terminals, `syu` SHOULD fall back to help text instead of crashing.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-001
+      - POL-002
+      - POL-004
+    linked_features:
+      - FEAT-BROWSE-001
+    tests:
+      rust:
+        - file: tests/browse_command.rs
+          symbols:
+            - '*'
+        - file: src/lib.rs
+          symbols:
+            - dispatches_interactive_bare_invocations_to_browse_defaults
+        - file: src/command/browse.rs
+          symbols:
+            - '*'

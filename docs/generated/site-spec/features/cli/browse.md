@@ -1,9 +1,9 @@
 ---
 title: "Interactive CLI / Browse"
-description: "Generated reference for docs/syu/features/browse.yaml"
+description: "Generated reference for docs/syu/features/cli/browse.yaml"
 ---
 
-> Generated from `docs/syu/features/browse.yaml`.
+> Generated from `docs/syu/features/cli/browse.yaml`.
 
 ## Parsed content
 
