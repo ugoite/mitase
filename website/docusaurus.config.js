@@ -40,8 +40,10 @@ const config = {
     navbar: {
       title: 'syu',
       items: [
-        { to: '/docs/guide/getting-started', label: 'Docs', position: 'left' },
-        { to: '/docs/generated/site-spec', label: 'Spec', position: 'left' },
+        { to: '/docs/guide/getting-started', label: 'Getting started', position: 'left' },
+        { to: '/docs/guide/concepts', label: 'Concepts', position: 'left' },
+        { to: '/docs/generated/site-spec', label: 'Spec reference', position: 'left' },
+        { to: '/docs/generated/syu-report', label: 'Validation report', position: 'left' },
         { href: 'https://github.com/ugoite/syu', label: 'GitHub', position: 'right' }
       ]
     },
@@ -49,17 +51,25 @@ const config = {
       style: 'dark',
       links: [
         {
-          title: 'Docs',
+          title: 'Guides',
           items: [
             { label: 'Getting started', to: '/docs/guide/getting-started' },
+            { label: 'Concepts', to: '/docs/guide/concepts' },
             { label: 'Configuration', to: '/docs/guide/configuration' }
           ]
         },
         {
-          title: 'Specification',
+          title: 'Repository workflow',
+          items: [
+            { label: 'Validation report', to: '/docs/generated/syu-report' },
+            { label: 'Contributing', href: 'https://github.com/ugoite/syu/blob/main/CONTRIBUTING.md' }
+          ]
+        },
+        {
+          title: 'Self-hosted spec',
           items: [
             { label: 'Reference index', to: '/docs/generated/site-spec' },
-            { label: 'Validation report', to: '/docs/generated/syu-report' }
+            { label: 'Docs feature', to: '/docs/generated/site-spec/features/docs' }
           ]
         }
       ]

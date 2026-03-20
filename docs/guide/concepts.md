@@ -109,3 +109,10 @@ A requirement should be concrete enough that you can point to tests and say,
 
 A feature should map to symbols, commands, or files that clearly implement the
 behavior. If the link is too fuzzy to validate, tighten it.
+
+## Continue with these pages
+
+- [Getting started](./getting-started.md) to scaffold a workspace and run the CLI
+- [Configuration](./configuration.md) to tune validation and runtime behavior
+- [Specification Reference](../generated/site-spec/index.md) to inspect the self-hosted repository contract
+- [Latest validation report](../generated/syu-report.md) to see the current repository state
