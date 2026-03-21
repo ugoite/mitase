@@ -6,19 +6,25 @@ import { expect, test } from "@playwright/test";
 test("renders top tabs and linked spec content", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: "syu app" })).toBeVisible();
-  await expect(page.getByRole("button", { name: /philosophy/i })).toBeVisible();
-  await expect(page.getByRole("button", { name: /policies/i })).toBeVisible();
-  await expect(page.getByRole("button", { name: /features/i })).toBeVisible();
-  await expect(page.getByRole("button", { name: /requirements/i })).toBeVisible();
+  const topLevelSections = page.getByRole("navigation", { name: "Top level sections" });
 
-  await page.getByRole("button", { name: /^features/i }).click();
-  await expect(page.getByText("FEAT-CHECK-001")).toBeVisible();
-  await expect(page.getByText("Unified validation command")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "syu app" })).toBeVisible();
+  await expect(topLevelSections.getByRole("button", { name: /^philosophy\b/i })).toBeVisible();
+  await expect(topLevelSections.getByRole("button", { name: /^policies\b/i })).toBeVisible();
+  await expect(topLevelSections.getByRole("button", { name: /^features\b/i })).toBeVisible();
+  await expect(topLevelSections.getByRole("button", { name: /^requirements\b/i })).toBeVisible();
+
+  await topLevelSections.getByRole("button", { name: /^features\b/i }).click();
+  await page.getByRole("button", { name: /check\.yaml/i }).click();
+  await expect(
+    page.getByRole("heading", { name: /FEAT-CHECK-001 .* Unified validation command/i }),
+  ).toBeVisible();
+  await expect(page.getByText("SYU-workspace-load-001").first()).toBeVisible();
 
   await page.getByRole("button", { name: "REQ-CORE-001" }).click();
   await expect(
-    page.getByText("Validate the linked specification graph with rule-backed diagnostics"),
+    page.getByRole("heading", {
+      name: /REQ-CORE-001 .* Validate the linked specification graph with rule-backed diagnostics/i,
+    }),
   ).toBeVisible();
-  await expect(page.getByText("SYU-workspace-load-001")).toBeVisible();
 });

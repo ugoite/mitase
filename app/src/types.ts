@@ -111,6 +111,6 @@ export interface BrowserWorkspace {
   workspace_root: string;
   spec_root: string;
   sections: BrowserSection[];
-  item_index: Record<string, BrowserIndexEntry>;
+  item_index: Map<string, BrowserIndexEntry>;
   validation: ValidationSnapshot;
 }

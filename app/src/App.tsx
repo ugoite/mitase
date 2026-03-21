@@ -168,7 +168,7 @@ function App() {
       return;
     }
 
-    const target = workspace.item_index[id];
+    const target = workspace.item_index.get(id);
     if (!target) {
       return;
     }

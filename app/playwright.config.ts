@@ -1,16 +1,20 @@
 import { defineConfig } from "@playwright/test";
 
+const appHost = "127.0.0.1";
+const appPort = process.env.SYU_APP_E2E_PORT ?? "3000";
+const appBaseUrl = `http://${appHost}:${appPort}`;
+
 export default defineConfig({
   testDir: "./tests",
   fullyParallel: true,
   use: {
-    baseURL: "http://127.0.0.1:3000",
+    baseURL: appBaseUrl,
     headless: true,
   },
   webServer: {
-    command: "cargo run -- app . --bind 127.0.0.1 --port 3000",
+    command: `cargo run -- app . --bind ${appHost} --port ${appPort}`,
     cwd: "..",
-    url: "http://127.0.0.1:3000/healthz",
+    url: `${appBaseUrl}/healthz`,
     reuseExistingServer: true,
     timeout: 120000,
   },
