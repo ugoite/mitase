@@ -342,7 +342,14 @@ fn validation_snapshot(result: CheckResult) -> ValidationSnapshot {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::PathBuf, sync::Arc};
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        sync::Arc,
+    };
+
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
 
     use axum::{
         body::{Body, to_bytes},
@@ -352,14 +359,29 @@ mod tests {
     use tower::util::ServiceExt;
 
     use super::{
-        AppPayload, AppState, SectionKind, app_router, build_app_payload, collect_feature_sources,
-        content_type_for_path, is_asset_like, normalized_asset_path,
+        AppPayload, AppState, SectionKind, Severity, app_router, build_app_payload,
+        collect_feature_sources, collect_yaml_sources_recursive, content_type_for_path,
+        is_asset_like, normalized_asset_path, relative_display, validation_snapshot,
     };
 
     fn fixture_root(name: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("tests/fixtures/workspaces")
             .join(name)
+    }
+
+    fn create_workspace_skeleton(root: &Path) -> PathBuf {
+        let spec_root = root.join("docs/syu");
+        fs::create_dir_all(spec_root.join("philosophy")).expect("philosophy dir");
+        fs::create_dir_all(spec_root.join("policies")).expect("policies dir");
+        fs::create_dir_all(spec_root.join("requirements")).expect("requirements dir");
+        fs::create_dir_all(spec_root.join("features")).expect("features dir");
+        spec_root
+    }
+
+    #[cfg(unix)]
+    fn set_mode(path: &Path, mode: u32) {
+        fs::set_permissions(path, fs::Permissions::from_mode(mode)).expect("permissions");
     }
 
     #[test]
@@ -428,6 +450,203 @@ mod tests {
     }
 
     #[test]
+    fn build_app_payload_surfaces_validation_snapshot_details() {
+        let payload = build_app_payload(&fixture_root("failing")).expect("payload should build");
+
+        assert!(!payload.validation.issues.is_empty());
+        assert!(!payload.validation.referenced_rules.is_empty());
+        assert!(
+            payload
+                .validation
+                .issues
+                .iter()
+                .all(|issue| !issue.message.is_empty())
+        );
+        assert!(
+            payload
+                .validation
+                .referenced_rules
+                .iter()
+                .all(|rule| !rule.title.is_empty() && !rule.description.is_empty())
+        );
+    }
+
+    #[test]
+    fn validation_snapshot_maps_warning_issues() {
+        let snapshot = validation_snapshot(crate::model::CheckResult {
+            workspace_root: PathBuf::from("/repo"),
+            definition_counts: crate::model::DefinitionCounts::default(),
+            trace_summary: crate::model::TraceSummary::default(),
+            issues: vec![crate::model::Issue::warning(
+                "SYU-graph-orphan-001",
+                "policy",
+                None,
+                "warning message",
+                Some("warning suggestion".to_string()),
+            )],
+            referenced_rules: Vec::new(),
+        });
+
+        assert_eq!(snapshot.issues.len(), 1);
+        assert_eq!(snapshot.issues[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn build_app_payload_reports_missing_workspace_roots() {
+        let missing = fixture_root("passing").join("missing-workspace-root");
+        let error = build_app_payload(&missing).expect_err("missing roots should error");
+        assert!(
+            error
+                .to_string()
+                .contains("failed to resolve workspace root")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn build_app_payload_propagates_philosophy_directory_errors() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let spec_root = create_workspace_skeleton(tempdir.path());
+        let philosophy_root = spec_root.join("philosophy");
+        set_mode(&philosophy_root, 0o000);
+
+        let result = build_app_payload(tempdir.path());
+        set_mode(&philosophy_root, 0o755);
+
+        let error = result.expect_err("unreadable philosophy directory should fail");
+        assert!(error.to_string().contains("failed to read directory"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn build_app_payload_propagates_policies_directory_errors() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let spec_root = create_workspace_skeleton(tempdir.path());
+        let policies_root = spec_root.join("policies");
+        set_mode(&policies_root, 0o000);
+
+        let result = build_app_payload(tempdir.path());
+        set_mode(&policies_root, 0o755);
+
+        let error = result.expect_err("unreadable policies directory should fail");
+        assert!(error.to_string().contains("failed to read directory"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn build_app_payload_propagates_requirements_directory_errors() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let spec_root = create_workspace_skeleton(tempdir.path());
+        let requirements_root = spec_root.join("requirements");
+        set_mode(&requirements_root, 0o000);
+
+        let result = build_app_payload(tempdir.path());
+        set_mode(&requirements_root, 0o755);
+
+        let error = result.expect_err("unreadable requirements directory should fail");
+        assert!(error.to_string().contains("failed to read directory"));
+    }
+
+    #[test]
+    fn feature_source_collection_returns_empty_when_feature_root_is_missing() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let sources = collect_feature_sources(&tempdir.path().join("docs/syu/features"))
+            .expect("missing roots should be empty");
+        assert!(sources.is_empty());
+    }
+
+    #[test]
+    fn feature_source_collection_falls_back_when_registry_is_missing() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let feature_root = tempdir.path().join("docs/syu/features");
+        fs::create_dir_all(&feature_root).expect("dir");
+        fs::write(
+            feature_root.join("browser.yaml"),
+            "category: Browser\nversion: 1\nfeatures:\n  - id: FEAT-001\n    title: Browser\n    summary: Summary\n    status: implemented\n",
+        )
+        .expect("feature");
+
+        let sources = collect_feature_sources(&feature_root).expect("fallback should work");
+        assert_eq!(sources.len(), 1);
+        assert_eq!(sources[0].path, "browser.yaml");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn feature_source_collection_reports_unreadable_registry_files() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let feature_root = tempdir.path().join("docs/syu/features");
+        fs::create_dir_all(&feature_root).expect("dir");
+        let registry_path = feature_root.join("features.yaml");
+        fs::write(&registry_path, "version: \"1\"\nfiles: []\n").expect("registry");
+        set_mode(&registry_path, 0o000);
+
+        let result = collect_feature_sources(&feature_root);
+        set_mode(&registry_path, 0o644);
+
+        let error = result.expect_err("unreadable registries should fail");
+        assert!(
+            error
+                .to_string()
+                .contains("failed to read feature registry")
+        );
+    }
+
+    #[test]
+    fn recursive_yaml_collection_ignores_non_directories() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let file_path = tempdir.path().join("feature.yaml");
+        fs::write(
+            &file_path,
+            "category: Placeholder\nversion: 1\nfeatures: []\n",
+        )
+        .expect("file");
+
+        let sources = collect_yaml_sources_recursive(&file_path, SectionKind::Features)
+            .expect("non-directories should be ignored");
+        assert!(sources.is_empty());
+    }
+
+    #[test]
+    fn recursive_yaml_collection_reads_nested_yaml_files() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let source_root = tempdir.path().join("nested");
+        fs::create_dir_all(source_root.join("inner")).expect("dirs");
+        fs::write(
+            source_root.join("top.yaml"),
+            "category: Top\nversion: 1\nfeatures: []\n",
+        )
+        .expect("top yaml");
+        fs::write(
+            source_root.join("inner/leaf.yml"),
+            "category: Leaf\nversion: 1\nfeatures: []\n",
+        )
+        .expect("leaf yaml");
+        fs::write(source_root.join("inner/readme.txt"), "ignore").expect("txt");
+
+        let sources = collect_yaml_sources_recursive(&source_root, SectionKind::Features)
+            .expect("recursive collection should work");
+        let paths: Vec<_> = sources.into_iter().map(|source| source.path).collect();
+        assert_eq!(
+            paths,
+            vec!["inner/leaf.yml".to_string(), "top.yaml".to_string()]
+        );
+    }
+
+    #[test]
+    fn relative_display_errors_for_paths_outside_the_root() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let root = tempdir.path().join("root");
+        let outside = tempdir.path().join("outside/file.yaml");
+        fs::create_dir_all(&root).expect("root dir");
+        fs::create_dir_all(outside.parent().expect("parent")).expect("outside dir");
+        fs::write(&outside, "category: Outside\nversion: 1\nfeatures: []\n").expect("outside file");
+
+        let error = relative_display(&root, &outside).expect_err("outside paths should fail");
+        assert!(error.to_string().contains("failed to make"));
+    }
+
+    #[test]
     fn feature_source_collection_falls_back_when_registry_is_invalid() {
         let tempdir = tempdir().expect("tempdir should exist");
         let feature_root = tempdir.path().join("docs/syu/features");
@@ -471,6 +690,25 @@ mod tests {
             .expect("body");
         let json = String::from_utf8(body.to_vec()).expect("utf8");
         assert!(json.contains("\"workspace_root\":\"/repo\""));
+    }
+
+    #[tokio::test]
+    async fn api_like_paths_return_not_found() {
+        let router = app_router(AppState {
+            payload: Arc::new(AppPayload::default()),
+        });
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/api/not-a-real-endpoint")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]
