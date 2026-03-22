@@ -39,7 +39,7 @@ description: "Generated reference for docs/syu/features/repository/contributor.y
           - polyglot_example_validates
 - **id**: FEAT-CONTRIB-002
   - **title**: Contributor workflow templates
-  - **summary**: Guide GitHub Flow contributions with repository-native docs and forms.
+  - **summary**: Guide GitHub Flow contributions with repository-native docs, forms, and low-noise status defaults.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-013
@@ -49,6 +49,7 @@ description: "Generated reference for docs/syu/features/repository/contributor.y
         - **symbols**:
           - FEAT-CONTRIB-002
           - GitHub Flow
+          - .worktrees/
           - scripts/ci/quality-gates.sh
       - **file**: .github/pull_request_template.md
         - **symbols**:
@@ -116,7 +117,7 @@ features:
 
   - id: FEAT-CONTRIB-002
     title: Contributor workflow templates
-    summary: Guide GitHub Flow contributions with repository-native docs and forms.
+    summary: Guide GitHub Flow contributions with repository-native docs, forms, and low-noise status defaults.
     status: implemented
     linked_requirements:
       - REQ-CORE-013
@@ -126,6 +127,7 @@ features:
           symbols:
             - FEAT-CONTRIB-002
             - GitHub Flow
+            - .worktrees/
             - scripts/ci/quality-gates.sh
         - file: .github/pull_request_template.md
           symbols:

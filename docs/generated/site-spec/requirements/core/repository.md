@@ -144,9 +144,11 @@ description: "Generated reference for docs/syu/requirements/core/repository.yaml
     - |
       The repository MUST document its GitHub Flow process, keep `main` as the
       only long-lived branch, ship pull-request and issue templates that guide
-      high-signal contributions, and explain the local verification steps that
-      contributors should run before opening a pull request. Installing
-      pre-commit hooks SHOULD be a one-command experience.
+      high-signal contributions, keep contributor-local helper artifacts out of
+      normal status output through repository ignore rules, and explain the
+      local verification steps that contributors should run before opening a
+      pull request. Installing pre-commit hooks SHOULD be a one-command
+      experience.
   - **priority**: medium
   - **status**: implemented
   - **linked_policies**:
@@ -305,9 +307,11 @@ requirements:
     description: |
       The repository MUST document its GitHub Flow process, keep `main` as the
       only long-lived branch, ship pull-request and issue templates that guide
-      high-signal contributions, and explain the local verification steps that
-      contributors should run before opening a pull request. Installing
-      pre-commit hooks SHOULD be a one-command experience.
+      high-signal contributions, keep contributor-local helper artifacts out of
+      normal status output through repository ignore rules, and explain the
+      local verification steps that contributors should run before opening a
+      pull request. Installing pre-commit hooks SHOULD be a one-command
+      experience.
     priority: medium
     status: implemented
     linked_policies:

@@ -1,6 +1,8 @@
 /target
 .tooling
 .DS_Store
+# FEAT-CONTRIB-002: keep contributor-local helper worktrees out of routine status output
+/.worktrees/
 website/.docusaurus
 website/build
 website/node_modules

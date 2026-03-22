@@ -14,6 +14,10 @@ releaseable at all times.
 5. Merge with squash once CI is green and review conversations are resolved.
 6. Delete the branch after merge.
 
+Local helper worktrees under `.worktrees/` are treated as contributor-local
+state and ignored by the repository so `git status` stays focused on the main
+checkout.
+
 ## Local checks
 
 Run the shared repository gates before opening or updating a pull request:
