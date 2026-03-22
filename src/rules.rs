@@ -50,6 +50,10 @@ pub fn rule_by_code(code: &str) -> Option<&'static ReferencedRule> {
     RULES_BY_CODE.get(code)
 }
 
+pub fn rule_genre(code: &str) -> Option<&'static str> {
+    rule_by_code(code).map(|rule| rule.genre.as_str())
+}
+
 pub fn attach_referenced_rules(mut result: CheckResult) -> CheckResult {
     result.referenced_rules = referenced_rules(&result.issues);
     result
@@ -125,7 +129,8 @@ mod tests {
     use crate::model::{CheckResult, DefinitionCounts, Issue, TraceSummary};
 
     use super::{
-        all_rules, attach_referenced_rules, is_structured_rule_code, referenced_rules, rule_by_code,
+        all_rules, attach_referenced_rules, is_structured_rule_code, referenced_rules,
+        rule_by_code, rule_genre,
     };
 
     #[test]
@@ -199,6 +204,12 @@ mod tests {
     #[test]
     fn rule_lookup_returns_none_for_unknown_codes() {
         assert!(rule_by_code("warn").is_none());
+    }
+
+    #[test]
+    fn rule_genre_follows_built_in_catalog() {
+        assert_eq!(rule_genre("SYU-graph-reference-001"), Some("graph"));
+        assert_eq!(rule_genre("warn"), None);
     }
 
     #[test]

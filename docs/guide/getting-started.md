@@ -83,7 +83,11 @@ Use JSON when integrating with automation:
 
 ```bash
 syu validate . --format json
+syu validate . --severity error --genre trace
 ```
+
+Filters stay view-oriented: they narrow the visible diagnostics while preserving
+the full validation result and exit code.
 
 ## 5. Apply safe autofixes
 

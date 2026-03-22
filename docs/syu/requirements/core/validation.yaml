@@ -10,8 +10,10 @@ requirements:
       report isolated definitions by default, enforce `planned` /
       `implemented` delivery-state rules for requirements and features, and
       surface rule codes with human-readable titles and explanations in
-      validation output. `check` MAY remain as a compatibility alias, but
-      `validate` is the canonical command name.
+      validation output. It MUST also support optional filtered views by
+      severity, rule genre, and exact rule code for both text and JSON output
+      without changing the underlying validation result. `check` MAY remain as
+      a compatibility alias, but `validate` is the canonical command name.
     priority: high
     status: implemented
     linked_policies:
@@ -24,6 +26,9 @@ requirements:
         - file: tests/check_command.rs
           symbols:
             - '*'
+        - file: tests/validate_filter_command.rs
+          symbols:
+            - '*'
         - file: tests/status_validation.rs
           symbols:
             - '*'
@@ -31,6 +36,9 @@ requirements:
           symbols:
             - '*'
         - file: src/command/check.rs
+          symbols:
+            - '*'
+        - file: src/cli.rs
           symbols:
             - '*'
         - file: src/model.rs

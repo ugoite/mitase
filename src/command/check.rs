@@ -9,18 +9,19 @@ use std::{
 };
 
 use anyhow::Result;
+use serde::Serialize;
 
 use crate::{
-    cli::{CheckArgs, OutputFormat},
+    cli::{CheckArgs, OutputFormat, ValidationGenreFilter, ValidationSeverityFilter},
     config::SyuConfig,
     coverage::validate_symbol_trace_coverage,
     inspect::{apply_symbol_doc_fix, inspect_symbol, supports_rich_inspection},
     language::adapter_for_language,
     model::{
-        CheckResult, DefinitionCounts, Feature, Issue, Philosophy, Policy, Requirement, TraceCount,
-        TraceReference, TraceSummary,
+        CheckResult, DefinitionCounts, Feature, Issue, Philosophy, Policy, Requirement, Severity,
+        TraceCount, TraceReference, TraceSummary,
     },
-    rules::{attach_referenced_rules, rule_by_code},
+    rules::{attach_referenced_rules, referenced_rules, rule_by_code, rule_genre},
     workspace::{Workspace, load_workspace},
 };
 
@@ -49,6 +50,34 @@ struct AutofixSummary {
     symbol_updates: usize,
 }
 
+#[derive(Debug, Clone, Default)]
+struct IssueFilters {
+    severities: BTreeSet<ValidationSeverityFilter>,
+    genres: BTreeSet<ValidationGenreFilter>,
+    rules: BTreeSet<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct FilteredIssueView {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    severities: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    genres: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    rules: Vec<String>,
+    displayed_issue_count: usize,
+    total_issue_count: usize,
+    hidden_issue_count: usize,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonCheckOutput<'a> {
+    #[serde(flatten)]
+    result: &'a CheckResult,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    filtered_view: Option<&'a FilteredIssueView>,
+}
+
 impl TraceRole {
     fn label(self) -> &'static str {
         match self {
@@ -69,6 +98,82 @@ impl TraceRole {
             Self::RequirementTest => "tests",
             Self::FeatureImplementation => "implementations",
         }
+    }
+}
+
+impl IssueFilters {
+    fn from_args(args: &CheckArgs) -> Self {
+        Self {
+            severities: args.severity.iter().copied().collect(),
+            genres: args.genre.iter().copied().collect(),
+            rules: args
+                .rule
+                .iter()
+                .map(|rule| rule.trim())
+                .filter(|rule| !rule.is_empty())
+                .map(ToOwned::to_owned)
+                .collect(),
+        }
+    }
+
+    fn is_active(&self) -> bool {
+        !self.severities.is_empty() || !self.genres.is_empty() || !self.rules.is_empty()
+    }
+
+    fn matches(&self, issue: &Issue) -> bool {
+        (self.severities.is_empty()
+            || self
+                .severities
+                .iter()
+                .any(|candidate| candidate.as_str() == severity_label(&issue.severity)))
+            && (self.rules.is_empty() || self.rules.contains(&issue.code))
+            && (self.genres.is_empty()
+                || rule_genre(&issue.code).is_some_and(|genre| {
+                    self.genres
+                        .iter()
+                        .any(|candidate| candidate.as_str() == genre)
+                }))
+    }
+}
+
+impl FilteredIssueView {
+    fn from_filters(
+        filters: &IssueFilters,
+        displayed_issue_count: usize,
+        total_issue_count: usize,
+    ) -> Self {
+        Self {
+            severities: filters
+                .severities
+                .iter()
+                .map(|severity| severity.as_str().to_string())
+                .collect(),
+            genres: filters
+                .genres
+                .iter()
+                .map(|genre| genre.as_str().to_string())
+                .collect(),
+            rules: filters.rules.iter().cloned().collect(),
+            displayed_issue_count,
+            total_issue_count,
+            hidden_issue_count: total_issue_count.saturating_sub(displayed_issue_count),
+        }
+    }
+
+    fn describe_filters(&self) -> String {
+        let mut parts = Vec::new();
+
+        if !self.severities.is_empty() {
+            parts.push(format!("severity={}", self.severities.join(",")));
+        }
+        if !self.genres.is_empty() {
+            parts.push(format!("genre={}", self.genres.join(",")));
+        }
+        if !self.rules.is_empty() {
+            parts.push(format!("rule={}", self.rules.join(",")));
+        }
+
+        parts.join(" ")
     }
 }
 
@@ -94,6 +199,9 @@ pub fn run_check_command(args: &CheckArgs) -> Result<i32> {
             None,
         ),
     };
+    let overall_success = result.is_success();
+    let filters = IssueFilters::from_args(args);
+    let (result, filtered_view) = filter_check_result(result, &filters);
 
     match args.format {
         OutputFormat::Text => {
@@ -106,18 +214,25 @@ pub fn run_check_command(args: &CheckArgs) -> Result<i32> {
                     summary.updated_files.len()
                 );
             }
-            print!("{}", render_text_report(&result));
+            print!(
+                "{}",
+                render_text_report(overall_success, &result, filtered_view.as_ref())
+            );
         }
         OutputFormat::Json => {
+            let output = JsonCheckOutput {
+                result: &result,
+                filtered_view: filtered_view.as_ref(),
+            };
             println!(
                 "{}",
-                serde_json::to_string_pretty(&result)
-                    .expect("serializing CheckResult to JSON should succeed")
+                serde_json::to_string_pretty(&output)
+                    .expect("serializing validate output to JSON should succeed")
             );
         }
     }
 
-    Ok(if result.is_success() { 0 } else { 1 })
+    Ok(if overall_success { 0 } else { 1 })
 }
 
 // FEAT-CHECK-001
@@ -247,6 +362,51 @@ fn collect_check_result_from_workspace(workspace: &Workspace) -> CheckResult {
         issues,
         referenced_rules: Vec::new(),
     })
+}
+
+fn severity_label(severity: &Severity) -> &'static str {
+    match severity {
+        Severity::Error => "error",
+        Severity::Warning => "warning",
+    }
+}
+
+fn filter_check_result(
+    result: CheckResult,
+    filters: &IssueFilters,
+) -> (CheckResult, Option<FilteredIssueView>) {
+    if !filters.is_active() {
+        return (result, None);
+    }
+
+    let CheckResult {
+        workspace_root,
+        definition_counts,
+        trace_summary,
+        issues: existing_issues,
+        referenced_rules: _,
+    } = result;
+
+    let total_issue_count = existing_issues.len();
+    let issues: Vec<_> = existing_issues
+        .into_iter()
+        .filter(|issue| filters.matches(issue))
+        .collect();
+    let displayed_issue_count = issues.len();
+    let filtered_view =
+        FilteredIssueView::from_filters(filters, displayed_issue_count, total_issue_count);
+    let referenced_rules = referenced_rules(&issues);
+
+    (
+        CheckResult {
+            workspace_root,
+            definition_counts,
+            trace_summary,
+            issues,
+            referenced_rules,
+        },
+        Some(filtered_view),
+    )
 }
 
 fn effective_fix(args: &CheckArgs, config: &SyuConfig) -> bool {
@@ -382,15 +542,21 @@ fn apply_autofix_for_reference(
     Ok(())
 }
 
-fn render_text_report(result: &CheckResult) -> String {
+fn render_text_report(
+    overall_success: bool,
+    result: &CheckResult,
+    filtered_view: Option<&FilteredIssueView>,
+) -> String {
     let mut output = String::new();
-    let status = if result.is_success() {
-        "passed"
+    let status = if overall_success { "passed" } else { "failed" };
+    let filtered_suffix = if filtered_view.is_some() {
+        " (filtered view)"
     } else {
-        "failed"
+        ""
     };
 
-    writeln!(&mut output, "syu validate {status}").expect("writing to String must succeed");
+    writeln!(&mut output, "syu validate {status}{filtered_suffix}")
+        .expect("writing to String must succeed");
     writeln!(
         &mut output,
         "workspace: {}",
@@ -415,6 +581,17 @@ fn render_text_report(result: &CheckResult) -> String {
         result.trace_summary.feature_traces.declared
     )
     .expect("writing to String must succeed");
+
+    if let Some(filtered_view) = filtered_view {
+        writeln!(&mut output, "filters: {}", filtered_view.describe_filters())
+            .expect("writing to String must succeed");
+        writeln!(
+            &mut output,
+            "showing {} of {} issues after filtering",
+            filtered_view.displayed_issue_count, filtered_view.total_issue_count
+        )
+        .expect("writing to String must succeed");
+    }
 
     if !result.issues.is_empty() {
         writeln!(&mut output).expect("writing to String must succeed");
@@ -445,6 +622,13 @@ fn render_text_report(result: &CheckResult) -> String {
                 .expect("writing to String must succeed");
             }
         }
+    } else if let Some(filtered_view) = filtered_view
+        && filtered_view.total_issue_count > 0
+    {
+        writeln!(&mut output).expect("writing to String must succeed");
+        writeln!(&mut output, "issues:").expect("writing to String must succeed");
+        writeln!(&mut output, "- no issues matched the active filters.")
+            .expect("writing to String must succeed");
     }
 
     if !result.referenced_rules.is_empty() {
@@ -1399,7 +1583,7 @@ fn validate_non_empty_field(kind: &str, field_name: &str, value: &str, issues: &
 #[cfg(test)]
 mod tests {
     use std::{
-        collections::{BTreeMap, HashMap},
+        collections::{BTreeMap, BTreeSet, HashMap},
         fs,
         path::{Path, PathBuf},
     };
@@ -1410,16 +1594,18 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::{
+        cli::{ValidationGenreFilter, ValidationSeverityFilter},
         config::SyuConfig,
         model::{Feature, Issue, Philosophy, Policy, Requirement, TraceReference},
+        rules::referenced_rules,
         workspace::Workspace,
     };
 
     use super::{
-        TraceRole, apply_autofix, apply_autofix_for_reference, collect_check_result,
-        format_reference_location, render_text_report, run_check_command, validate_feature,
-        validate_non_empty_field, validate_philosophy, validate_policy, validate_requirement,
-        validate_unique_ids, verify_trace_reference,
+        FilteredIssueView, IssueFilters, TraceRole, apply_autofix, apply_autofix_for_reference,
+        collect_check_result, filter_check_result, format_reference_location, render_text_report,
+        run_check_command, validate_feature, validate_non_empty_field, validate_philosophy,
+        validate_policy, validate_requirement, validate_unique_ids, verify_trace_reference,
     };
 
     fn philosophy(id: &str) -> Philosophy {
@@ -1479,6 +1665,9 @@ mod tests {
         let code = run_check_command(&crate::cli::CheckArgs {
             workspace: PathBuf::from("/definitely/missing-syu-workspace"),
             format: crate::cli::OutputFormat::Json,
+            severity: Vec::new(),
+            genre: Vec::new(),
+            rule: Vec::new(),
             fix: false,
             no_fix: false,
         })
@@ -1536,6 +1725,9 @@ mod tests {
         let error = run_check_command(&crate::cli::CheckArgs {
             workspace,
             format: crate::cli::OutputFormat::Text,
+            severity: Vec::new(),
+            genre: Vec::new(),
+            rule: Vec::new(),
             fix: true,
             no_fix: false,
         })
@@ -1554,10 +1746,81 @@ mod tests {
             referenced_rules: Vec::new(),
         };
 
-        let report = render_text_report(&result);
+        let report = render_text_report(true, &result, None);
         assert!(report.contains("syu validate passed"));
         assert!(report.contains("issues:"));
         assert!(report.contains("[Warning] warn subject: message"));
+    }
+
+    #[test]
+    fn filter_check_result_scopes_visible_issues() {
+        let issues = vec![
+            Issue::warning("SYU-graph-links-001", "subject", None, "message", None),
+            Issue::error("SYU-trace-file-001", "subject", None, "message", None),
+        ];
+        let result = crate::model::CheckResult {
+            workspace_root: PathBuf::from("."),
+            definition_counts: Default::default(),
+            trace_summary: Default::default(),
+            referenced_rules: referenced_rules(&issues),
+            issues,
+        };
+        let filters = IssueFilters {
+            severities: [ValidationSeverityFilter::Warning].into_iter().collect(),
+            genres: [ValidationGenreFilter::Graph].into_iter().collect(),
+            rules: BTreeSet::new(),
+        };
+
+        let (filtered, filtered_view) = filter_check_result(result, &filters);
+
+        assert_eq!(filtered.issues.len(), 1);
+        assert_eq!(filtered.issues[0].code, "SYU-graph-links-001");
+        assert_eq!(filtered.referenced_rules.len(), 1);
+        assert_eq!(filtered.referenced_rules[0].code, "SYU-graph-links-001");
+        let filtered_view = filtered_view.expect("filters should produce filtered metadata");
+        assert_eq!(filtered_view.displayed_issue_count, 1);
+        assert_eq!(filtered_view.total_issue_count, 2);
+        assert_eq!(filtered_view.hidden_issue_count, 1);
+    }
+
+    #[test]
+    fn render_text_report_explains_filtered_views_without_matches() {
+        let result = crate::model::CheckResult {
+            workspace_root: PathBuf::from("."),
+            definition_counts: Default::default(),
+            trace_summary: Default::default(),
+            referenced_rules: Vec::new(),
+            issues: Vec::new(),
+        };
+        let filtered_view = FilteredIssueView {
+            severities: vec!["warning".to_string()],
+            genres: Vec::new(),
+            rules: Vec::new(),
+            displayed_issue_count: 0,
+            total_issue_count: 2,
+            hidden_issue_count: 2,
+        };
+
+        let report = render_text_report(false, &result, Some(&filtered_view));
+
+        assert!(report.contains("syu validate failed (filtered view)"));
+        assert!(report.contains("filters: severity=warning"));
+        assert!(report.contains("showing 0 of 2 issues after filtering"));
+        assert!(report.contains("no issues matched the active filters."));
+    }
+
+    #[test]
+    fn filtered_issue_view_describes_genre_filters() {
+        let filtered_view = FilteredIssueView {
+            severities: Vec::new(),
+            genres: vec!["trace".to_string()],
+            rules: Vec::new(),
+            displayed_issue_count: 1,
+            total_issue_count: 1,
+            hidden_issue_count: 0,
+        };
+
+        assert_eq!(filtered_view.describe_filters(), "genre=trace");
     }
 
     #[test]

@@ -1,4 +1,5 @@
 // FEAT-BROWSE-001
+// REQ-CORE-001
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
@@ -75,6 +76,18 @@ pub struct ValidateArgs {
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
     pub format: OutputFormat,
 
+    #[arg(help = "Filter visible diagnostics by severity (repeat or use commas)")]
+    #[arg(long, value_enum, value_delimiter = ',')]
+    pub severity: Vec<ValidationSeverityFilter>,
+
+    #[arg(help = "Filter visible diagnostics by rule genre (repeat or use commas)")]
+    #[arg(long, value_enum, value_delimiter = ',')]
+    pub genre: Vec<ValidationGenreFilter>,
+
+    #[arg(help = "Filter visible diagnostics by exact rule code (repeat or use commas)")]
+    #[arg(long, value_delimiter = ',')]
+    pub rule: Vec<String>,
+
     #[arg(help = "Apply conservative documentation autofixes")]
     #[arg(long, action = ArgAction::SetTrue)]
     pub fix: bool,
@@ -116,4 +129,56 @@ pub struct InitArgs {
 pub enum OutputFormat {
     Text,
     Json,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum ValidationSeverityFilter {
+    Error,
+    Warning,
+}
+
+impl ValidationSeverityFilter {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Error => "error",
+            Self::Warning => "warning",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+pub enum ValidationGenreFilter {
+    Workspace,
+    Graph,
+    Delivery,
+    Trace,
+    Coverage,
+}
+
+impl ValidationGenreFilter {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Workspace => "workspace",
+            Self::Graph => "graph",
+            Self::Delivery => "delivery",
+            Self::Trace => "trace",
+            Self::Coverage => "coverage",
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ValidationGenreFilter, ValidationSeverityFilter};
+
+    #[test]
+    fn validation_filter_enums_expose_expected_labels() {
+        assert_eq!(ValidationSeverityFilter::Error.as_str(), "error");
+        assert_eq!(ValidationSeverityFilter::Warning.as_str(), "warning");
+        assert_eq!(ValidationGenreFilter::Workspace.as_str(), "workspace");
+        assert_eq!(ValidationGenreFilter::Graph.as_str(), "graph");
+        assert_eq!(ValidationGenreFilter::Delivery.as_str(), "delivery");
+        assert_eq!(ValidationGenreFilter::Trace.as_str(), "trace");
+        assert_eq!(ValidationGenreFilter::Coverage.as_str(), "coverage");
+    }
 }
