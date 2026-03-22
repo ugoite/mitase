@@ -53,6 +53,16 @@ description: "Generated reference for docs/syu/config/validate.yaml"
     - |
       This keeps the adjacent-layer graph deliberate by requiring every item to
       stay connected to at least one neighboring layer.
+- **key**: validate.require_reciprocal_links
+  - **type**: boolean
+  - **default**: True
+  - **summary**: Requires adjacent-layer links to be confirmed from both sides.
+  - **description**:
+    - |
+      This keeps navigation explainable by making philosophy, policy,
+      requirement, and feature relationships agree in both directions.
+      Repositories doing a gradual migration can temporarily set it to `false`
+      while still keeping broken-reference validation enabled.
 - **key**: validate.require_symbol_trace_coverage
   - **type**: boolean
   - **default**: False
@@ -97,6 +107,15 @@ items:
     description: |
       This keeps the adjacent-layer graph deliberate by requiring every item to
       stay connected to at least one neighboring layer.
+  - key: validate.require_reciprocal_links
+    type: boolean
+    default: true
+    summary: Requires adjacent-layer links to be confirmed from both sides.
+    description: |
+      This keeps navigation explainable by making philosophy, policy,
+      requirement, and feature relationships agree in both directions.
+      Repositories doing a gradual migration can temporarily set it to `false`
+      while still keeping broken-reference validation enabled.
   - key: validate.require_symbol_trace_coverage
     type: boolean
     default: false

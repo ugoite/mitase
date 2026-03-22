@@ -25,7 +25,8 @@ description: "Generated reference for docs/syu/requirements/core/repository.yaml
       linting, tests, workflow linting, pre-commit / pre-push hooks, and
       self-validation so `syu`'s own promises stay continuously checkable. The
       repository MUST also check in a root `syu.yaml` that enables non-orphaned
-      validation and strict symbol/test ownership for self-hosting.
+      validation, reciprocal-link validation, and strict symbol/test ownership
+      for self-hosting.
   - **priority**: high
   - **status**: implemented
   - **linked_policies**:
@@ -194,7 +195,8 @@ requirements:
       linting, tests, workflow linting, pre-commit / pre-push hooks, and
       self-validation so `syu`'s own promises stay continuously checkable. The
       repository MUST also check in a root `syu.yaml` that enables non-orphaned
-      validation and strict symbol/test ownership for self-hosting.
+      validation, reciprocal-link validation, and strict symbol/test ownership
+      for self-hosting.
     priority: high
     status: implemented
     linked_policies:

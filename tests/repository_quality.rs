@@ -45,6 +45,7 @@ fn repository_declares_precommit_and_quality_gates() {
 
     assert!(repo_config.contains("FEAT-CHECK-001"));
     assert!(repo_config.contains("require_non_orphaned_items: true"));
+    assert!(repo_config.contains("require_reciprocal_links: true"));
     assert!(repo_config.contains("require_symbol_trace_coverage: true"));
 }
 

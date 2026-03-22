@@ -25,6 +25,7 @@ validate:
   default_fix: false
   allow_planned: true
   require_non_orphaned_items: true
+  require_reciprocal_links: true
   require_symbol_trace_coverage: false
 runtimes:
   python:
@@ -73,6 +74,17 @@ When `true`, philosophy, policy, requirement, and feature entries must each
 connect to at least one adjacent layer. This is on by default because isolated
 definitions usually mean the specification has drifted away from the repository.
 
+### `validate.require_reciprocal_links`
+
+When `true`, adjacent-layer relationships must be confirmed from both sides.
+
+- `true`: `SYU-graph-reciprocal-001` remains an error
+- `false`: missing backlinks stop failing validation, but broken references still do
+
+Keep this enabled for steady-state self-hosting. Turning it off is mainly useful
+when a repository is migrating an existing spec graph and wants to phase in
+backlinks after the forward links are already trustworthy.
+
 ### `validate.require_symbol_trace_coverage`
 
 When `true`, `syu` scans Rust source and test files to confirm that every public
@@ -107,7 +119,8 @@ For autofix behavior, CLI flags override config:
 `validate.allow_planned` is configuration-only. There is no CLI flag to
 override it.
 
-`validate.require_non_orphaned_items` and
+`validate.require_non_orphaned_items`,
+`validate.require_reciprocal_links`, and
 `validate.require_symbol_trace_coverage` are also configuration-only.
 
 ## Wildcard file ownership
@@ -134,6 +147,8 @@ want strict ownership checks without enumerating every public symbol by hand.
   forbid backlog items
 - leave `validate.require_non_orphaned_items: true` unless you are doing a
   deliberate migration
+- leave `validate.require_reciprocal_links: true` unless you are phasing in
+  backlinks after stabilizing the forward graph
 - turn on `validate.require_symbol_trace_coverage: true` once the repository
   wants public APIs and tests to remain fully owned by the spec
 - treat runtime overrides as environment-specific, not project-specific, unless

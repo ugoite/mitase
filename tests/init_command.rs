@@ -33,6 +33,7 @@ fn init_command_bootstraps_a_workspace_that_validate_accepts() {
         .expect("feature should exist");
 
     assert!(config.contains(env!("CARGO_PKG_VERSION")));
+    assert!(config.contains("require_reciprocal_links: true"));
     assert!(requirement.contains("status: planned"));
     assert!(feature.contains("status: planned"));
 

@@ -52,6 +52,7 @@ description: "Generated reference for docs/syu/features/documentation/docs.yaml"
           - validate.default_fix
           - validate.allow_planned
           - validate.require_non_orphaned_items
+          - validate.require_reciprocal_links
           - validate.require_symbol_trace_coverage
           - runtimes.python.command
 - **id**: FEAT-DOCS-002
@@ -124,6 +125,7 @@ features:
             - validate.default_fix
             - validate.allow_planned
             - validate.require_non_orphaned_items
+            - validate.require_reciprocal_links
             - validate.require_symbol_trace_coverage
             - runtimes.python.command
 
