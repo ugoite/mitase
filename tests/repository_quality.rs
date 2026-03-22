@@ -300,10 +300,12 @@ fn repository_declares_contribution_workflow_assets() {
     let bug_report = read_file(".github/ISSUE_TEMPLATE/bug_report.yml");
     let feature_request = read_file(".github/ISSUE_TEMPLATE/feature_request.yml");
     let issue_config = read_file(".github/ISSUE_TEMPLATE/config.yml");
+    let gitignore = read_file(".gitignore");
 
     assert!(contributing.contains("FEAT-CONTRIB-002"));
     assert!(contributing.contains("GitHub Flow"));
     assert!(contributing.contains("main"));
+    assert!(contributing.contains(".worktrees/"));
     assert!(contributing.contains("scripts/ci/quality-gates.sh"));
     assert!(contributing.contains("scripts/install-precommit.sh"));
     assert!(contributing.contains("GitHub Pages"));
@@ -324,6 +326,9 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(issue_config.contains("FEAT-CONTRIB-002"));
     assert!(issue_config.contains("blank_issues_enabled: false"));
     assert!(issue_config.contains("contact_links"));
+
+    assert!(gitignore.contains("FEAT-CONTRIB-002"));
+    assert!(gitignore.contains(".worktrees/"));
 }
 
 #[test]
