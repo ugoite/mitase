@@ -69,6 +69,7 @@ curl -fsSL https://raw.githubusercontent.com/ugoite/syu/main/scripts/install-syu
 ```bash
 cargo run -- init .
 cargo run -- browse .
+cargo run -- app .
 cargo run -- validate .
 cargo run -- validate . --fix
 cargo run -- report . --output reports/syu.md
@@ -121,6 +122,18 @@ syu
 syu browse .
 ```
 
+### `syu app`
+
+Start a local browser app for the current workspace:
+
+```bash
+syu app .
+syu app . --bind 127.0.0.1 --port 3000
+```
+
+The browser app serves a VitePlus / React / Tailwind UI and uses Rust plus
+WebAssembly to build the layered browser view from the live workspace data.
+
 ### `syu report`
 
 Generate a Markdown validation report:
@@ -133,6 +146,23 @@ syu report . --output docs/generated/syu-report.md
 
 The self-hosted repository keeps its latest generated report at
 `docs/generated/syu-report.md`.
+
+## Browser app
+
+The repository also ships a local browser app rooted at `app/` for richer spec
+exploration.
+
+```bash
+cd app
+npm install
+npm run build:wasm
+npm run build
+cd ..
+cargo run -- app .
+```
+
+It keeps the source UI in `app/`, checks in the generated production bundle in
+`app/dist/`, and serves that bundle directly from the `syu app` command.
 
 ## Configuration
 

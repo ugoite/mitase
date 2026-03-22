@@ -10,15 +10,21 @@ categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
 anyhow = "1.0.100"
+axum = "0.8.6"
 clap = { version = "4.5.50", features = ["derive"] }
+include_dir = "0.7.4"
 regex = "1.12.2"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 serde_yaml = "0.9.34"
+syu-core = { path = "crates/syu-core" }
 syn = { version = "2.0.117", features = ["full"] }
+tokio = { version = "1.48.0", features = ["macros", "net", "rt-multi-thread", "signal"] }
 tree-sitter = "0.26.7"
 tree-sitter-typescript = "0.23.2"
 
 [dev-dependencies]
 assert_cmd = "2.1.1"
+libc = "0.2.177"
 tempfile = "3.23.0"
+tower = { version = "0.5.2", features = ["util"] }

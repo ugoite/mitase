@@ -11,6 +11,7 @@ This section is generated from the YAML source under `docs/syu/`.
 - [Configuration / Runtimes](/docs/generated/site-spec/config/runtimes)
 - [Configuration / Spec](/docs/generated/site-spec/config/spec)
 - [Configuration / Validate](/docs/generated/site-spec/config/validate)
+- [Browser App / App](/docs/generated/site-spec/features/browser/app)
 - [Interactive CLI / Browse](/docs/generated/site-spec/features/cli/browse)
 - [Validate Command / Check](/docs/generated/site-spec/features/cli/check)
 - [Init Command / Init](/docs/generated/site-spec/features/cli/init)

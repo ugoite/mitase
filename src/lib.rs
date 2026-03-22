@@ -18,6 +18,7 @@ use std::io::IsTerminal;
 
 enum Dispatch {
     Browse(cli::BrowseArgs),
+    App(cli::AppArgs),
     PrintHelp,
     Validate(cli::ValidateArgs),
     Report(cli::ReportArgs),
@@ -27,6 +28,7 @@ enum Dispatch {
 fn dispatch(cli: cli::Cli, stdin_is_terminal: bool, stdout_is_terminal: bool) -> Dispatch {
     match cli.command {
         Some(cli::Commands::Browse(args)) => Dispatch::Browse(args),
+        Some(cli::Commands::App(args)) => Dispatch::App(args),
         None if stdin_is_terminal && stdout_is_terminal => {
             Dispatch::Browse(cli::BrowseArgs::default())
         }
@@ -40,6 +42,7 @@ fn dispatch(cli: cli::Cli, stdin_is_terminal: bool, stdout_is_terminal: bool) ->
 fn run_dispatch(dispatch: Dispatch) -> Result<i32> {
     match dispatch {
         Dispatch::Browse(args) => command::browse::run_browse_command(&args),
+        Dispatch::App(args) => command::app::run_app_command(&args),
         Dispatch::PrintHelp => {
             let mut command = cli::Cli::command();
             command.print_help()?;
@@ -63,9 +66,9 @@ pub fn run() -> Result<i32> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
-    use crate::cli::Cli;
+    use crate::cli::{AppArgs, Cli, Commands};
 
     // REQ-CORE-015
     #[test]
@@ -75,6 +78,28 @@ mod tests {
             action,
             super::Dispatch::Browse(crate::cli::BrowseArgs { workspace })
                 if workspace == Path::new(".")
+        ));
+    }
+
+    #[test]
+    // REQ-CORE-017
+    fn dispatches_app_subcommands_without_rewriting_them() {
+        let action = super::dispatch(
+            Cli {
+                command: Some(Commands::App(AppArgs {
+                    workspace: PathBuf::from("workspace"),
+                    bind: "127.0.0.1".to_string(),
+                    port: 4173,
+                })),
+            },
+            true,
+            true,
+        );
+
+        assert!(matches!(
+            action,
+            super::Dispatch::App(crate::cli::AppArgs { workspace, port, .. })
+                if workspace == Path::new("workspace") && port == 4173
         ));
     }
 }

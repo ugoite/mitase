@@ -54,6 +54,7 @@ description: "Generated reference for docs/syu/policies/policies.yaml"
     - REQ-CORE-004
     - REQ-CORE-010
     - REQ-CORE-015
+    - REQ-CORE-017
 - **id**: POL-003
   - **title**: Traceability should prove ownership from specification to code and tests
   - **summary**: Declared traces should map to real files, real symbols, and optional full-file ownership.
@@ -86,6 +87,7 @@ description: "Generated reference for docs/syu/policies/policies.yaml"
     - REQ-CORE-011
     - REQ-CORE-012
     - REQ-CORE-015
+    - REQ-CORE-017
 - **id**: POL-005
   - **title**: Documentation and examples must lower adoption friction
   - **summary**: Guides, reports, sites, and examples are part of the product surface.
@@ -103,6 +105,7 @@ description: "Generated reference for docs/syu/policies/policies.yaml"
     - REQ-CORE-010
     - REQ-CORE-012
     - REQ-CORE-016
+    - REQ-CORE-017
 - **id**: POL-006
   - **title**: The self-hosted repository should demonstrate polyglot, contributor-friendly use
   - **summary**: `syu` should prove that its model works in the kind of mixed repositories it claims to support.
@@ -180,6 +183,7 @@ policies:
       - REQ-CORE-004
       - REQ-CORE-010
       - REQ-CORE-015
+      - REQ-CORE-017
 
   - id: POL-003
     title: Traceability should prove ownership from specification to code and tests
@@ -212,6 +216,7 @@ policies:
       - REQ-CORE-011
       - REQ-CORE-012
       - REQ-CORE-015
+      - REQ-CORE-017
 
   - id: POL-005
     title: Documentation and examples must lower adoption friction
@@ -229,6 +234,7 @@ policies:
       - REQ-CORE-010
       - REQ-CORE-012
       - REQ-CORE-016
+      - REQ-CORE-017
 
   - id: POL-006
     title: The self-hosted repository should demonstrate polyglot, contributor-friendly use
