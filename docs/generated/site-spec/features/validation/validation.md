@@ -215,6 +215,18 @@ description: "Generated reference for docs/syu/features/validation/validation.ya
       real evidence and starts pointing to an aspiration. This rule ensures that
       every declared trace remains grounded in a repository artifact that both
       reviewers and automation can actually inspect.
+- **code**: SYU-trace-file-003
+  - **genre**: trace
+  - **severity**: warning
+  - **title**: Trace file paths should use canonical repository-relative form
+  - **summary**: Portable path spelling keeps checked-in traces easier to review and reuse.
+  - **description**:
+    - |
+      Trace paths become harder to review when they rely on redundant `./` or
+      `..` segments, backslash separators, or other spellings that are not the
+      repository's canonical relative form. This rule warns on path notation
+      drift and suggests the normalized repository-relative path so the spec can
+      stay portable without silently rewriting checked-in YAML.
 - **code**: SYU-trace-unreadable-001
   - **genre**: trace
   - **severity**: error
@@ -612,6 +624,18 @@ rules:
       real evidence and starts pointing to an aspiration. This rule ensures that
       every declared trace remains grounded in a repository artifact that both
       reviewers and automation can actually inspect.
+
+  - code: SYU-trace-file-003
+    genre: trace
+    severity: warning
+    title: Trace file paths should use canonical repository-relative form
+    summary: Portable path spelling keeps checked-in traces easier to review and reuse.
+    description: |
+      Trace paths become harder to review when they rely on redundant `./` or
+      `..` segments, backslash separators, or other spellings that are not the
+      repository's canonical relative form. This rule warns on path notation
+      drift and suggests the normalized repository-relative path so the spec can
+      stay portable without silently rewriting checked-in YAML.
 
   - code: SYU-trace-unreadable-001
     genre: trace
