@@ -343,13 +343,15 @@ fn collect_rust_files_recursive(directory: &Path, files: &mut Vec<PathBuf>) -> s
     Ok(())
 }
 
-fn normalize_relative_path(path: &Path) -> PathBuf {
+pub(crate) fn normalize_relative_path(path: &Path) -> PathBuf {
     let mut normalized = PathBuf::new();
     for component in path.components() {
         match component {
             Component::CurDir => {}
             Component::ParentDir => {
-                normalized.pop();
+                if !normalized.pop() {
+                    normalized.push(component.as_os_str());
+                }
             }
             Component::Normal(segment) => normalized.push(segment),
             Component::RootDir | Component::Prefix(_) => normalized.push(component.as_os_str()),
@@ -657,6 +659,10 @@ mod tests {
         assert_eq!(
             normalize_relative_path(Path::new("/tmp/coverage.rs")),
             PathBuf::from("/tmp/coverage.rs")
+        );
+        assert_eq!(
+            normalize_relative_path(Path::new("../spec/trace.rs")),
+            PathBuf::from("../spec/trace.rs")
         );
     }
 }

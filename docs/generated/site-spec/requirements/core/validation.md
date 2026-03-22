@@ -79,12 +79,13 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       The `validate` command MUST verify requirement-to-test and
       feature-to-implementation traceability in the languages used by `syu`
       today: Rust, Python, and TypeScript. A declared trace is valid only when
-      the file exists, the symbol exists, the file explicitly mentions the
-      owning ID, and any `doc_contains` snippets are present in the symbol
-      documentation. Validation MUST also reject duplicate trace mappings inside
-      a single language list, support wildcard file ownership, and provide an
-      optional mode that requires every public Rust symbol to belong to some
-      feature and every Rust test to belong to some requirement.
+      the file exists, the symbol exists, the trace path uses canonical
+      repository-relative form, the file explicitly mentions the owning ID, and
+      any `doc_contains` snippets are present in the symbol documentation.
+      Validation MUST also reject duplicate trace mappings inside a single
+      language list, support wildcard file ownership, and provide an optional
+      mode that requires every public Rust symbol to belong to some feature and
+      every Rust test to belong to some requirement.
   - **priority**: high
   - **status**: implemented
   - **linked_policies**:
@@ -98,6 +99,8 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
         - **symbols**:
           - check_command_verifies_requirement_test_traceability_in_all_supported_languages
           - check_command_verifies_feature_implementation_traceability_in_all_supported_languages
+          - check_command_warns_for_non_canonical_relative_trace_paths
+          - check_command_warns_for_backslash_trace_paths
       - **file**: tests/trace_coverage_validation.rs
         - **symbols**:
           - *
@@ -237,12 +240,13 @@ requirements:
       The `validate` command MUST verify requirement-to-test and
       feature-to-implementation traceability in the languages used by `syu`
       today: Rust, Python, and TypeScript. A declared trace is valid only when
-      the file exists, the symbol exists, the file explicitly mentions the
-      owning ID, and any `doc_contains` snippets are present in the symbol
-      documentation. Validation MUST also reject duplicate trace mappings inside
-      a single language list, support wildcard file ownership, and provide an
-      optional mode that requires every public Rust symbol to belong to some
-      feature and every Rust test to belong to some requirement.
+      the file exists, the symbol exists, the trace path uses canonical
+      repository-relative form, the file explicitly mentions the owning ID, and
+      any `doc_contains` snippets are present in the symbol documentation.
+      Validation MUST also reject duplicate trace mappings inside a single
+      language list, support wildcard file ownership, and provide an optional
+      mode that requires every public Rust symbol to belong to some feature and
+      every Rust test to belong to some requirement.
     priority: high
     status: implemented
     linked_policies:
@@ -256,6 +260,8 @@ requirements:
           symbols:
             - check_command_verifies_requirement_test_traceability_in_all_supported_languages
             - check_command_verifies_feature_implementation_traceability_in_all_supported_languages
+            - check_command_warns_for_non_canonical_relative_trace_paths
+            - check_command_warns_for_backslash_trace_paths
         - file: tests/trace_coverage_validation.rs
           symbols:
             - '*'

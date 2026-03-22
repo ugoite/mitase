@@ -5,7 +5,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt::Write,
     fs,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 use anyhow::Result;
@@ -14,7 +14,7 @@ use serde::Serialize;
 use crate::{
     cli::{CheckArgs, OutputFormat, ValidationGenreFilter, ValidationSeverityFilter},
     config::SyuConfig,
-    coverage::validate_symbol_trace_coverage,
+    coverage::{normalize_relative_path, validate_symbol_trace_coverage},
     inspect::{apply_symbol_doc_fix, inspect_symbol, supports_rich_inspection},
     language::adapter_for_language,
     model::{
@@ -868,6 +868,22 @@ fn validate_duplicate_trace_references(
     }
 }
 
+fn preferred_trace_file_path(file: &Path) -> Option<PathBuf> {
+    let portable = file.to_string_lossy().replace('\\', "/");
+    let normalized = normalize_relative_path(Path::new(&portable));
+
+    if normalized.as_os_str().is_empty()
+        || normalized.is_absolute()
+        || normalized
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        return None;
+    }
+
+    Some(normalized)
+}
+
 fn describe_trace_reference(reference: &TraceReference) -> String {
     let symbols = reference
         .symbols
@@ -1583,7 +1599,33 @@ fn verify_trace_reference(
         return false;
     }
 
-    let path = root.join(&reference.file);
+    let preferred_path = preferred_trace_file_path(&reference.file);
+    if let Some(preferred_path) = preferred_path
+        .as_ref()
+        .filter(|preferred_path| *preferred_path != &reference.file)
+    {
+        issues.push(Issue::warning(
+            "SYU-trace-file-003",
+            subject.clone(),
+            Some(format_reference_location(language, reference)),
+            format!(
+                "Declared {} file path `{}` is not written in canonical repository-relative form; prefer `{}`.",
+                role.label(),
+                reference.file.display(),
+                preferred_path.display()
+            ),
+            Some(format!(
+                "Change the `{language}` {} path for `{owner_id}` to `{}`.",
+                role.relation_name(),
+                preferred_path.display()
+            )),
+        ));
+    }
+
+    let display_path = preferred_path
+        .as_deref()
+        .unwrap_or(reference.file.as_path());
+    let path = root.join(display_path);
     if !path.is_file() {
         issues.push(Issue::error(
             "SYU-trace-file-002",
@@ -1592,11 +1634,11 @@ fn verify_trace_reference(
             format!(
                 "Declared {} file `{}` does not exist.",
                 role.label(),
-                reference.file.display()
+                display_path.display()
             ),
             Some(format!(
                 "Create `{}` or update `{owner_id}` to point to the correct {} file.",
-                reference.file.display(),
+                display_path.display(),
                 role.label()
             )),
         ));
@@ -1611,13 +1653,13 @@ fn verify_trace_reference(
             Some(format_reference_location(language, reference)),
             format!(
                 "File `{}` does not match the `{}` adapter extensions.",
-                reference.file.display(),
+                display_path.display(),
                 adapter.canonical_name()
             ),
             Some(format!(
                 "Use a `{}` file extension or change the declared language for `{}`.",
                 adapter.canonical_name(),
-                reference.file.display()
+                display_path.display()
             )),
         ));
         success = false;
@@ -1633,11 +1675,11 @@ fn verify_trace_reference(
                 format!(
                     "Declared {} file `{}` could not be read: {error}",
                     role.label(),
-                    reference.file.display()
+                    display_path.display()
                 ),
                 Some(format!(
                     "Ensure `{}` is readable before running `syu validate`.",
-                    reference.file.display()
+                    display_path.display()
                 )),
             ));
             return false;
@@ -1652,11 +1694,11 @@ fn verify_trace_reference(
             format!(
                 "Declared {} file `{}` does not mention `{owner_id}`.",
                 role.label(),
-                reference.file.display()
+                display_path.display()
             ),
             Some(format!(
                 "Add `{owner_id}` to `{}` so the {} remains explicitly traceable.",
-                reference.file.display(),
+                display_path.display(),
                 role.label()
             )),
         ));
@@ -1671,7 +1713,7 @@ fn verify_trace_reference(
             format!(
                 "Declared {} file `{}` does not list any symbols to verify.",
                 role.label(),
-                reference.file.display()
+                display_path.display()
             ),
             Some(format!(
                 "Add one or more symbols to the `{language}` mapping for `{owner_id}`."
@@ -1689,7 +1731,7 @@ fn verify_trace_reference(
                 Some(format_reference_location(language, reference)),
                 format!(
                     "Wildcard trace mappings in `{}` cannot use `doc_contains` because they do not point to a single symbol.",
-                    reference.file.display()
+                    display_path.display()
                 ),
                 Some(
                     "Remove `doc_contains` or replace `*` with explicit symbol names for documentation checks."
@@ -1710,7 +1752,7 @@ fn verify_trace_reference(
                 format!(
                     "Declared {} file `{}` contains an empty symbol entry.",
                     role.label(),
-                    reference.file.display()
+                    display_path.display()
                 ),
                 Some(format!(
                     "Remove blank symbol entries from the `{language}` mapping for `{owner_id}`."
@@ -1730,11 +1772,11 @@ fn verify_trace_reference(
                         Some(format_reference_location(language, reference)),
                         format!(
                             "Failed to inspect symbol `{symbol}` in `{}` with the `{language}` inspector: {error}",
-                            reference.file.display()
+                            display_path.display()
                         ),
                         Some(format!(
                             "Fix the parser/runtime configuration for `{language}` or update `{}` so `syu validate` can inspect it.",
-                            reference.file.display()
+                            display_path.display()
                         )),
                     ));
                     success = false;
@@ -1753,11 +1795,11 @@ fn verify_trace_reference(
                 Some(format_reference_location(language, reference)),
                 format!(
                     "Declared symbol `{symbol}` was not found in `{}`.",
-                    reference.file.display()
+                    display_path.display()
                 ),
                 Some(format!(
                     "Add symbol `{symbol}` to `{}` or update the YAML mapping for `{owner_id}`.",
-                    reference.file.display()
+                    display_path.display()
                 )),
             ));
             success = false;
@@ -1779,7 +1821,7 @@ fn verify_trace_reference(
                                 Some(format_reference_location(language, reference)),
                                 format!(
                                     "Documentation for symbol `{symbol}` in `{}` does not include `{snippet}`.",
-                                    reference.file.display()
+                                    display_path.display()
                                 ),
                                 Some(format!(
                                     "Add `{snippet}` to the documentation for `{symbol}` or run `syu validate --fix`."
@@ -1852,10 +1894,10 @@ mod tests {
     use super::{
         FilteredIssueView, IssueFilters, TraceRole, apply_autofix, apply_autofix_for_reference,
         collect_check_result, describe_trace_reference, filter_check_result,
-        format_reference_location, render_text_report, run_check_command, validate_duplicate_links,
-        validate_duplicate_trace_references, validate_feature, validate_non_empty_field,
-        validate_philosophy, validate_policy, validate_requirement, validate_unique_ids,
-        verify_trace_reference,
+        format_reference_location, preferred_trace_file_path, render_text_report,
+        run_check_command, validate_duplicate_links, validate_duplicate_trace_references,
+        validate_feature, validate_non_empty_field, validate_philosophy, validate_policy,
+        validate_requirement, validate_unique_ids, verify_trace_reference,
     };
 
     fn philosophy(id: &str) -> Philosophy {
@@ -2738,6 +2780,76 @@ mod tests {
             &mut issues,
         ));
         assert_eq!(issues[0].code, "SYU-trace-file-002");
+    }
+
+    #[test]
+    fn verify_trace_reference_warns_for_non_canonical_relative_paths() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let source = tempdir.path().join("src");
+        fs::create_dir_all(&source).expect("src dir should exist");
+        fs::write(source.join("trace.rs"), "/// REQ-1\npub fn expected() {}\n")
+            .expect("trace file should exist");
+
+        let reference = TraceReference {
+            file: PathBuf::from("./src/../src/trace.rs"),
+            symbols: vec!["expected".to_string()],
+            doc_contains: Vec::new(),
+        };
+        let mut issues = Vec::new();
+        assert!(verify_trace_reference(
+            tempdir.path(),
+            &SyuConfig::default(),
+            "REQ-1",
+            TraceRole::RequirementTest,
+            "rust",
+            &reference,
+            &mut issues,
+        ));
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "SYU-trace-file-003")
+        );
+        assert!(
+            issues
+                .iter()
+                .all(|issue| issue.code != "SYU-trace-file-002")
+        );
+    }
+
+    #[test]
+    fn verify_trace_reference_warns_for_backslash_path_spellings() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let source = tempdir.path().join("src");
+        fs::create_dir_all(&source).expect("src dir should exist");
+        fs::write(source.join("trace.rs"), "/// REQ-1\npub fn expected() {}\n")
+            .expect("trace file should exist");
+
+        let reference = TraceReference {
+            file: PathBuf::from(r"src\trace.rs"),
+            symbols: vec!["expected".to_string()],
+            doc_contains: Vec::new(),
+        };
+        let mut issues = Vec::new();
+        assert!(verify_trace_reference(
+            tempdir.path(),
+            &SyuConfig::default(),
+            "REQ-1",
+            TraceRole::RequirementTest,
+            "rust",
+            &reference,
+            &mut issues,
+        ));
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "SYU-trace-file-003")
+        );
+    }
+
+    #[test]
+    fn preferred_trace_file_path_rejects_paths_that_escape_the_workspace() {
+        assert!(preferred_trace_file_path(Path::new("../trace.rs")).is_none());
     }
 
     #[test]
