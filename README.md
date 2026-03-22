@@ -106,11 +106,15 @@ Validate definitions and traceability:
 ```bash
 syu validate .
 syu validate . --format json
+syu validate . --severity error --genre trace
+syu validate . --rule SYU-trace-file-002
 syu validate . --fix
 syu validate . --no-fix
 ```
 
 `check` remains available as a compatibility alias for `validate`.
+Use `--severity`, `--genre`, and `--rule` to narrow the rendered issue list
+without changing the underlying validation result or exit code.
 
 ### `syu browse`
 
