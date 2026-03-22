@@ -300,7 +300,7 @@ fn collect_check_result_from_workspace(workspace: &Workspace) -> CheckResult {
         .collect();
 
     for philosophy in &workspace.philosophies {
-        validate_philosophy(philosophy, &policies_by_id, &mut issues);
+        validate_philosophy(philosophy, &policies_by_id, &workspace.config, &mut issues);
     }
 
     for policy in &workspace.policies {
@@ -308,6 +308,7 @@ fn collect_check_result_from_workspace(workspace: &Workspace) -> CheckResult {
             policy,
             &philosophies_by_id,
             &requirements_by_id,
+            &workspace.config,
             &mut issues,
         );
     }
@@ -907,6 +908,7 @@ fn describe_trace_reference(reference: &TraceReference) -> String {
 fn validate_philosophy(
     philosophy: &Philosophy,
     policies_by_id: &HashMap<&str, &Policy>,
+    config: &SyuConfig,
     issues: &mut Vec<Issue>,
 ) {
     validate_non_empty_field("philosophy", "id", &philosophy.id, issues);
@@ -948,10 +950,11 @@ fn validate_philosophy(
     for policy_id in &philosophy.linked_policies {
         match policies_by_id.get(policy_id.as_str()) {
             Some(policy) => {
-                if !policy
-                    .linked_philosophies
-                    .iter()
-                    .any(|item| item == &philosophy.id)
+                if config.validate.require_reciprocal_links
+                    && !policy
+                        .linked_philosophies
+                        .iter()
+                        .any(|item| item == &philosophy.id)
                 {
                     issues.push(Issue::error(
                         "SYU-graph-reciprocal-001",
@@ -986,6 +989,7 @@ fn validate_policy(
     policy: &Policy,
     philosophies_by_id: &HashMap<&str, &Philosophy>,
     requirements_by_id: &HashMap<&str, &Requirement>,
+    config: &SyuConfig,
     issues: &mut Vec<Issue>,
 ) {
     validate_non_empty_field("policy", "id", &policy.id, issues);
@@ -1038,10 +1042,11 @@ fn validate_policy(
     for philosophy_id in &policy.linked_philosophies {
         match philosophies_by_id.get(philosophy_id.as_str()) {
             Some(philosophy) => {
-                if !philosophy
-                    .linked_policies
-                    .iter()
-                    .any(|item| item == &policy.id)
+                if config.validate.require_reciprocal_links
+                    && !philosophy
+                        .linked_policies
+                        .iter()
+                        .any(|item| item == &policy.id)
                 {
                     issues.push(Issue::error(
                         "SYU-graph-reciprocal-001",
@@ -1074,10 +1079,11 @@ fn validate_policy(
     for requirement_id in &policy.linked_requirements {
         match requirements_by_id.get(requirement_id.as_str()) {
             Some(requirement) => {
-                if !requirement
-                    .linked_policies
-                    .iter()
-                    .any(|item| item == &policy.id)
+                if config.validate.require_reciprocal_links
+                    && !requirement
+                        .linked_policies
+                        .iter()
+                        .any(|item| item == &policy.id)
                 {
                     issues.push(Issue::error(
                         "SYU-graph-reciprocal-001",
@@ -1180,10 +1186,11 @@ fn validate_requirement(
     for policy_id in &requirement.linked_policies {
         match policies_by_id.get(policy_id.as_str()) {
             Some(policy) => {
-                if !policy
-                    .linked_requirements
-                    .iter()
-                    .any(|item| item == &requirement.id)
+                if config.validate.require_reciprocal_links
+                    && !policy
+                        .linked_requirements
+                        .iter()
+                        .any(|item| item == &requirement.id)
                 {
                     issues.push(Issue::error(
                         "SYU-graph-reciprocal-001",
@@ -1216,10 +1223,11 @@ fn validate_requirement(
     for feature_id in &requirement.linked_features {
         match features_by_id.get(feature_id.as_str()) {
             Some(feature) => {
-                if !feature
-                    .linked_requirements
-                    .iter()
-                    .any(|item| item == &requirement.id)
+                if config.validate.require_reciprocal_links
+                    && !feature
+                        .linked_requirements
+                        .iter()
+                        .any(|item| item == &requirement.id)
                 {
                     issues.push(Issue::error(
                         "SYU-graph-reciprocal-001",
@@ -1321,10 +1329,11 @@ fn validate_feature(
     for requirement_id in &feature.linked_requirements {
         match requirements_by_id.get(requirement_id.as_str()) {
             Some(requirement) => {
-                if !requirement
-                    .linked_features
-                    .iter()
-                    .any(|item| item == &feature.id)
+                if config.validate.require_reciprocal_links
+                    && !requirement
+                        .linked_features
+                        .iter()
+                        .any(|item| item == &feature.id)
                 {
                     issues.push(Issue::error(
                         "SYU-graph-reciprocal-001",
@@ -2185,7 +2194,7 @@ mod tests {
         entry.linked_policies.push("POL-1".to_string());
 
         let mut issues = Vec::new();
-        validate_philosophy(&entry, &HashMap::new(), &mut issues);
+        validate_philosophy(&entry, &HashMap::new(), &SyuConfig::default(), &mut issues);
 
         assert!(
             issues
@@ -2203,7 +2212,7 @@ mod tests {
     fn validate_philosophy_warns_when_unlinked() {
         let entry = philosophy("PHIL-1");
         let mut issues = Vec::new();
-        validate_philosophy(&entry, &HashMap::new(), &mut issues);
+        validate_philosophy(&entry, &HashMap::new(), &SyuConfig::default(), &mut issues);
         assert!(
             issues
                 .iter()
@@ -2223,7 +2232,7 @@ mod tests {
         policy_map.insert("POL-1", &linked_policy);
 
         let mut issues = Vec::new();
-        validate_philosophy(&entry, &policy_map, &mut issues);
+        validate_philosophy(&entry, &policy_map, &SyuConfig::default(), &mut issues);
         assert!(
             issues
                 .iter()
@@ -2247,7 +2256,13 @@ mod tests {
         requirements.insert("REQ-1", &referenced_requirement);
 
         let mut issues = Vec::new();
-        validate_policy(&entry, &philosophies, &requirements, &mut issues);
+        validate_policy(
+            &entry,
+            &philosophies,
+            &requirements,
+            &SyuConfig::default(),
+            &mut issues,
+        );
 
         assert!(
             issues
@@ -2267,7 +2282,13 @@ mod tests {
     fn validate_policy_warns_when_unlinked() {
         let entry = policy("POL-1");
         let mut issues = Vec::new();
-        validate_policy(&entry, &HashMap::new(), &HashMap::new(), &mut issues);
+        validate_policy(
+            &entry,
+            &HashMap::new(),
+            &HashMap::new(),
+            &SyuConfig::default(),
+            &mut issues,
+        );
         assert!(
             issues
                 .iter()
@@ -2284,7 +2305,13 @@ mod tests {
         entry.linked_requirements.push("REQ-MISSING".to_string());
 
         let mut issues = Vec::new();
-        validate_policy(&entry, &HashMap::new(), &HashMap::new(), &mut issues);
+        validate_policy(
+            &entry,
+            &HashMap::new(),
+            &HashMap::new(),
+            &SyuConfig::default(),
+            &mut issues,
+        );
 
         assert!(issues.iter().any(|issue| {
             issue.code == "SYU-graph-reference-001"

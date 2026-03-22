@@ -60,6 +60,7 @@ description: "Generated reference for docs/syu/features/cli/check.yaml"
         - **symbols**:
           - FEAT-CHECK-001
           - require_non_orphaned_items
+          - require_reciprocal_links
           - require_symbol_trace_coverage
       - **file**: docs/syu/features/validation/validation.yaml
         - **symbols**:
@@ -117,6 +118,7 @@ features:
           symbols:
             - FEAT-CHECK-001
             - require_non_orphaned_items
+            - require_reciprocal_links
             - require_symbol_trace_coverage
         - file: docs/syu/features/validation/validation.yaml
           symbols:

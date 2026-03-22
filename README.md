@@ -179,6 +179,9 @@ spec:
 validate:
   default_fix: false
   allow_planned: true
+  require_non_orphaned_items: true
+  require_reciprocal_links: true
+  require_symbol_trace_coverage: false
 runtimes:
   python:
     command: auto
@@ -193,14 +196,16 @@ Key behaviors:
 - `validate.default_fix` enables conservative autofix by default
 - `validate.allow_planned` controls whether `planned` requirements and features are allowed at all
 - `validate.require_non_orphaned_items` turns isolated layered definitions into validation errors
+- `validate.require_reciprocal_links` keeps adjacent-layer backlinks mandatory by default while still allowing phased migration when disabled
 - `validate.require_symbol_trace_coverage` opt-in checks that public Rust symbols belong to features and tests belong to requirements
 - `runtimes.*.command` can be set to `auto` or an explicit executable name/path
 
 The self-hosted repository keeps a structured reference for supported config
 fields under [`docs/syu/config/`](docs/syu/config).
 
-The `syu` repository itself enables both `validate.require_non_orphaned_items`
-and `validate.require_symbol_trace_coverage` in its root `syu.yaml`.
+The `syu` repository itself enables `validate.require_non_orphaned_items`,
+`validate.require_reciprocal_links`, and
+`validate.require_symbol_trace_coverage` in its root `syu.yaml`.
 
 ## Traceability rules
 
