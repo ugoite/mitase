@@ -76,6 +76,7 @@ implementations:
 ```bash
 syu validate .
 syu browse .
+syu app .
 ```
 
 Use JSON when integrating with automation:
@@ -113,5 +114,6 @@ The repository includes complete examples:
 
 - Read [syu concepts](./concepts.md) for the reasoning behind the four layers
 - Review [configuration](./configuration.md) before tightening validation in a real repository
+- Start [`syu app .`](../../README.md#syu-app) when you want a browser view of the same workspace
 - Browse the [Specification Reference](../generated/site-spec/index.md) to see how `syu` self-hosts its own contract
 - Open the [latest validation report](../generated/syu-report.md) to inspect the checked-in repository status
