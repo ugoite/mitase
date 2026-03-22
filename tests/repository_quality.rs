@@ -328,7 +328,7 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(issue_config.contains("contact_links"));
 
     assert!(gitignore.contains("FEAT-CONTRIB-002"));
-    assert!(gitignore.contains(".worktrees/"));
+    assert!(gitignore.contains("/.worktrees/"));
 }
 
 #[test]
