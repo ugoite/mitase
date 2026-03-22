@@ -24,6 +24,7 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       The `validate` command MUST load philosophy, policy, requirement, and
       feature YAML definitions, validate required fields, reject broken
       references, verify reciprocal links across the adjacent-layer graph,
+      reject duplicate adjacent-layer IDs inside a single relationship list,
       report isolated definitions by default, enforce `planned` /
       `implemented` delivery-state rules for requirements and features, and
       surface rule codes with human-readable titles and explanations in
@@ -46,6 +47,9 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       - **file**: tests/validate_filter_command.rs
         - **symbols**:
           - *
+      - **file**: tests/duplicate_validation.rs
+        - **symbols**:
+          - validate_reports_duplicate_relationship_entries
       - **file**: tests/status_validation.rs
         - **symbols**:
           - *
@@ -76,7 +80,8 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       today: Rust, Python, and TypeScript. A declared trace is valid only when
       the file exists, the symbol exists, the file explicitly mentions the
       owning ID, and any `doc_contains` snippets are present in the symbol
-      documentation. Validation MUST also support wildcard file ownership and an
+      documentation. Validation MUST also reject duplicate trace mappings inside
+      a single language list, support wildcard file ownership, and provide an
       optional mode that requires every public Rust symbol to belong to some
       feature and every Rust test to belong to some requirement.
   - **priority**: high
@@ -95,6 +100,9 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       - **file**: tests/trace_coverage_validation.rs
         - **symbols**:
           - *
+      - **file**: tests/duplicate_validation.rs
+        - **symbols**:
+          - validate_reports_duplicate_trace_entries
       - **file**: src/coverage.rs
         - **symbols**:
           - *
@@ -174,6 +182,7 @@ requirements:
       The `validate` command MUST load philosophy, policy, requirement, and
       feature YAML definitions, validate required fields, reject broken
       references, verify reciprocal links across the adjacent-layer graph,
+      reject duplicate adjacent-layer IDs inside a single relationship list,
       report isolated definitions by default, enforce `planned` /
       `implemented` delivery-state rules for requirements and features, and
       surface rule codes with human-readable titles and explanations in
@@ -196,6 +205,9 @@ requirements:
         - file: tests/validate_filter_command.rs
           symbols:
             - '*'
+        - file: tests/duplicate_validation.rs
+          symbols:
+            - validate_reports_duplicate_relationship_entries
         - file: tests/status_validation.rs
           symbols:
             - '*'
@@ -225,7 +237,8 @@ requirements:
       today: Rust, Python, and TypeScript. A declared trace is valid only when
       the file exists, the symbol exists, the file explicitly mentions the
       owning ID, and any `doc_contains` snippets are present in the symbol
-      documentation. Validation MUST also support wildcard file ownership and an
+      documentation. Validation MUST also reject duplicate trace mappings inside
+      a single language list, support wildcard file ownership, and provide an
       optional mode that requires every public Rust symbol to belong to some
       feature and every Rust test to belong to some requirement.
     priority: high
@@ -244,6 +257,9 @@ requirements:
         - file: tests/trace_coverage_validation.rs
           symbols:
             - '*'
+        - file: tests/duplicate_validation.rs
+          symbols:
+            - validate_reports_duplicate_trace_entries
         - file: src/coverage.rs
           symbols:
             - '*'

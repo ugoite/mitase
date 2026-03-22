@@ -740,6 +740,93 @@ fn validate_unique_ids<'a>(
     }
 }
 
+fn validate_duplicate_links(
+    owner_kind: &str,
+    owner_id: &str,
+    relation_name: &str,
+    target_kind: &str,
+    values: &[String],
+    issues: &mut Vec<Issue>,
+) {
+    let mut seen = HashSet::new();
+
+    for value in values {
+        if seen.insert(value.as_str()) {
+            continue;
+        }
+
+        issues.push(Issue::error(
+            "SYU-graph-duplicate-001",
+            format!("{owner_kind} {owner_id}"),
+            Some(relation_name.to_string()),
+            format!(
+                "{owner_kind} `{owner_id}` repeats linked {target_kind} `{value}` in `{relation_name}`."
+            ),
+            Some(format!(
+                "Remove the duplicate `{value}` entry from `{relation_name}` in {owner_kind} `{owner_id}`."
+            )),
+        ));
+    }
+}
+
+fn validate_duplicate_trace_references(
+    owner_id: &str,
+    role: TraceRole,
+    language: &str,
+    references: &[TraceReference],
+    issues: &mut Vec<Issue>,
+) {
+    let mut seen = HashSet::new();
+    let subject = format!("{} {}", role.subject_kind(), owner_id);
+
+    for reference in references {
+        let key = (
+            reference.file.clone(),
+            reference.symbols.clone(),
+            reference.doc_contains.clone(),
+        );
+        if seen.insert(key) {
+            continue;
+        }
+
+        issues.push(Issue::error(
+            "SYU-trace-duplicate-001",
+            subject.clone(),
+            Some(format_reference_location(language, reference)),
+            format!(
+                "{} `{owner_id}` repeats the same `{language}` {} entry: {}.",
+                role.subject_kind(),
+                role.relation_name(),
+                describe_trace_reference(reference),
+            ),
+            Some(format!(
+                "Remove the duplicate `{language}` {} entry from `{owner_id}`.",
+                role.relation_name()
+            )),
+        ));
+    }
+}
+
+fn describe_trace_reference(reference: &TraceReference) -> String {
+    let symbols = reference
+        .symbols
+        .iter()
+        .map(|symbol| format!("`{symbol}`"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let doc_contains = reference
+        .doc_contains
+        .iter()
+        .map(|snippet| format!("`{snippet}`"))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    format!(
+        "file=`{}` symbols=[{symbols}] doc_contains=[{doc_contains}]",
+        reference.file.display()
+    )
+}
+
 fn validate_philosophy(
     philosophy: &Philosophy,
     policies_by_id: &HashMap<&str, &Policy>,
@@ -757,6 +844,14 @@ fn validate_philosophy(
         "philosophy",
         "coding_guideline",
         &philosophy.coding_guideline,
+        issues,
+    );
+    validate_duplicate_links(
+        "philosophy",
+        &philosophy.id,
+        "linked_policies",
+        "policy",
+        &philosophy.linked_policies,
         issues,
     );
 
@@ -820,6 +915,22 @@ fn validate_policy(
     validate_non_empty_field("policy", "title", &policy.title, issues);
     validate_non_empty_field("policy", "summary", &policy.summary, issues);
     validate_non_empty_field("policy", "description", &policy.description, issues);
+    validate_duplicate_links(
+        "policy",
+        &policy.id,
+        "linked_philosophies",
+        "philosophy",
+        &policy.linked_philosophies,
+        issues,
+    );
+    validate_duplicate_links(
+        "policy",
+        &policy.id,
+        "linked_requirements",
+        "requirement",
+        &policy.linked_requirements,
+        issues,
+    );
 
     if policy.linked_philosophies.is_empty() {
         issues.push(Issue::warning(
@@ -944,6 +1055,22 @@ fn validate_requirement(
         &requirement.id,
         &requirement.status,
         config,
+        issues,
+    );
+    validate_duplicate_links(
+        "requirement",
+        &requirement.id,
+        "linked_policies",
+        "policy",
+        &requirement.linked_policies,
+        issues,
+    );
+    validate_duplicate_links(
+        "requirement",
+        &requirement.id,
+        "linked_features",
+        "feature",
+        &requirement.linked_features,
         issues,
     );
 
@@ -1072,6 +1199,14 @@ fn validate_feature(
     validate_non_empty_field("feature", "summary", &feature.summary, issues);
     validate_non_empty_field("feature", "status", &feature.status, issues);
     let status = validate_delivery_status("feature", &feature.id, &feature.status, config, issues);
+    validate_duplicate_links(
+        "feature",
+        &feature.id,
+        "linked_requirements",
+        "requirement",
+        &feature.linked_requirements,
+        issues,
+    );
 
     if feature.linked_requirements.is_empty() {
         issues.push(Issue::warning(
@@ -1145,6 +1280,16 @@ fn validate_trace_map(
     trace_count: &mut TraceCount,
 ) {
     let subject = format!("{} {}", target.role.subject_kind(), target.owner_id);
+    for (language, references) in references_by_language {
+        validate_duplicate_trace_references(
+            target.owner_id,
+            target.role,
+            language,
+            references,
+            issues,
+        );
+    }
+
     match target.status {
         Some(DeliveryStatus::Planned) => {
             if !references_by_language.is_empty() {
@@ -1603,9 +1748,11 @@ mod tests {
 
     use super::{
         FilteredIssueView, IssueFilters, TraceRole, apply_autofix, apply_autofix_for_reference,
-        collect_check_result, filter_check_result, format_reference_location, render_text_report,
-        run_check_command, validate_feature, validate_non_empty_field, validate_philosophy,
-        validate_policy, validate_requirement, validate_unique_ids, verify_trace_reference,
+        collect_check_result, describe_trace_reference, filter_check_result,
+        format_reference_location, render_text_report, run_check_command, validate_duplicate_links,
+        validate_duplicate_trace_references, validate_feature, validate_non_empty_field,
+        validate_philosophy, validate_policy, validate_requirement, validate_unique_ids,
+        verify_trace_reference,
     };
 
     fn philosophy(id: &str) -> Philosophy {
@@ -1829,6 +1976,52 @@ mod tests {
         validate_unique_ids("feature", ["FEAT-1", "FEAT-1"].into_iter(), &mut issues);
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].code, "SYU-workspace-duplicate-001");
+    }
+
+    #[test]
+    fn validate_duplicate_links_reports_repeated_relationships() {
+        let mut issues = Vec::new();
+        validate_duplicate_links(
+            "requirement",
+            "REQ-1",
+            "linked_features",
+            "feature",
+            &["FEAT-1".to_string(), "FEAT-1".to_string()],
+            &mut issues,
+        );
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].code, "SYU-graph-duplicate-001");
+        assert_eq!(issues[0].location.as_deref(), Some("linked_features"));
+        assert!(issues[0].message.contains("linked feature `FEAT-1`"));
+    }
+
+    #[test]
+    fn validate_duplicate_trace_references_reports_exact_entries() {
+        let mut issues = Vec::new();
+        let duplicate = TraceReference {
+            file: PathBuf::from("src/lib.rs"),
+            symbols: vec!["trace_symbol".to_string()],
+            doc_contains: vec!["REQ-1".to_string()],
+        };
+
+        validate_duplicate_trace_references(
+            "REQ-1",
+            TraceRole::RequirementTest,
+            "rust",
+            &[duplicate.clone(), duplicate.clone()],
+            &mut issues,
+        );
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].code, "SYU-trace-duplicate-001");
+        assert_eq!(issues[0].location.as_deref(), Some("rust:src/lib.rs"));
+        assert!(issues[0].message.contains("file=`src/lib.rs`"));
+        assert!(issues[0].message.contains("symbols=[`trace_symbol`]"));
+        assert_eq!(
+            describe_trace_reference(&duplicate),
+            "file=`src/lib.rs` symbols=[`trace_symbol`] doc_contains=[`REQ-1`]"
+        );
     }
 
     #[test]

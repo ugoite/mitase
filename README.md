@@ -207,11 +207,13 @@ and `validate.require_symbol_trace_coverage` in its root `syu.yaml`.
 - philosophy ↔ policy links must exist and be reciprocal
 - policy ↔ requirement links must exist and be reciprocal
 - requirement ↔ feature links must exist and be reciprocal
+- duplicate linked IDs inside one relationship list are rejected
 - requirements and features must use `status: planned` or `status: implemented`
 - `planned` items must not declare tests or implementations yet
 - `implemented` items must declare valid tests or implementations
 - requirement test mappings must point to existing files and symbols
 - feature implementation mappings must point to existing files and symbols
+- duplicate trace mappings inside one language list are rejected
 - traced files must mention the owning requirement / feature ID
 - optional `doc_contains` snippets must be present in the traced symbol's
   documentation
