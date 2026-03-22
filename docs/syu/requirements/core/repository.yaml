@@ -45,8 +45,9 @@ requirements:
       PRs from `main`, keeps `main` releaseable under GitHub Flow, publishes
       GitHub release notes without a committed changelog file, generates alpha,
       beta, and stable release notes against the previous tag in the same track,
-      builds installable artifacts for supported platforms, and publishes
-      install packages to GitHub Packages / GHCR.
+      builds installable artifacts for supported platforms, publishes the
+      one-line installer as a GitHub release asset, and publishes install
+      packages to GitHub Packages / GHCR.
     priority: high
     status: implemented
     linked_policies:
@@ -61,11 +62,11 @@ requirements:
   - id: REQ-CORE-008
     title: Provide a one-line installer for package artifacts
     description: |
-      The repository MUST ship an installer script that resolves the current
-      platform, prefers the matching package artifact from GitHub Packages /
-      GHCR, falls back to GitHub release assets when package download is not
-      available, defaults to `ugoite/syu`, and installs the binary into a
-      user-controlled location.
+      The repository MUST ship a release-hosted installer script that resolves
+      the current platform, prefers the matching package artifact from GitHub
+      Packages / GHCR, falls back to GitHub release assets when package
+      download is not available, defaults to `ugoite/syu`, and installs the
+      binary into a user-controlled location.
     priority: medium
     status: implemented
     linked_policies:

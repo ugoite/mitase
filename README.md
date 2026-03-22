@@ -34,34 +34,35 @@ See the detailed guides:
 - [`docs/guide/configuration.md`](docs/guide/configuration.md)
 - [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
-## Install from GitHub Packages
+## Install from published releases
 
-`syu` publishes repository-scoped GHCR packages under `ghcr.io/ugoite/syu` and
-falls back to matching GitHub release assets if anonymous package pulls are not
-available yet.
+`syu` publishes a release-hosted installer entrypoint and repository-scoped
+GHCR packages under `ghcr.io/ugoite/syu`. Download the installer from the
+current CLI release; the script prefers the matching package artifact and falls
+back to GitHub release assets if anonymous package pulls are not available yet.
 
-Latest published package for your platform:
+Current installer entrypoint:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ugoite/syu/main/scripts/install-syu.sh | bash
+curl -fsSL https://github.com/ugoite/syu/releases/download/v0.0.1-alpha.7/install-syu.sh | bash
 ```
 
 Pin a specific release track:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ugoite/syu/main/scripts/install-syu.sh | env SYU_VERSION=alpha bash
+curl -fsSL https://github.com/ugoite/syu/releases/download/v0.0.1-alpha.7/install-syu.sh | env SYU_VERSION=alpha bash
 ```
 
 Install to a custom directory:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ugoite/syu/main/scripts/install-syu.sh | env SYU_INSTALL_DIR=$HOME/bin bash
+curl -fsSL https://github.com/ugoite/syu/releases/download/v0.0.1-alpha.7/install-syu.sh | env SYU_INSTALL_DIR=$HOME/bin bash
 ```
 
 Install a specific prerelease:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ugoite/syu/main/scripts/install-syu.sh | env SYU_VERSION=v0.0.1-alpha.7 bash
+curl -fsSL https://github.com/ugoite/syu/releases/download/v0.0.1-alpha.7/install-syu.sh | env SYU_VERSION=v0.0.1-alpha.7 bash
 ```
 
 ## Quick start

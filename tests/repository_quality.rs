@@ -92,6 +92,7 @@ fn repository_declares_release_automation() {
     assert!(release_artifacts.contains("x86_64-pc-windows-msvc"));
     assert!(release_artifacts.contains("PACKAGE_REPOSITORY"));
     assert!(release_artifacts.contains("publish-package.sh"));
+    assert!(release_artifacts.contains("install-syu.sh"));
     assert!(release_artifacts.contains("release-notes:"));
     assert!(release_artifacts.contains("release-track-notes.sh"));
 
@@ -133,6 +134,7 @@ fn repository_declares_release_automation() {
 #[test]
 // REQ-CORE-008
 fn repository_declares_installer_contract() {
+    let current_version = env!("CARGO_PKG_VERSION");
     let installer = read_file("scripts/install-syu.sh");
     let installer_smoke = read_file("scripts/ci/installer-smoke.sh");
     let mock_registry = read_file("scripts/ci/mock_package_registry.py");
@@ -158,7 +160,11 @@ fn repository_declares_installer_contract() {
     assert!(readme.contains("install-syu.sh"));
     assert!(readme.contains("ugoite/syu"));
     assert!(readme.contains("SYU_VERSION"));
+    assert!(readme.contains(&format!(
+        "https://github.com/ugoite/syu/releases/download/v{current_version}/install-syu.sh"
+    )));
     assert!(readme.contains("GitHub Packages"));
+    assert!(!readme.contains("raw.githubusercontent.com/ugoite/syu/main/scripts/install-syu.sh"));
 }
 
 #[test]
