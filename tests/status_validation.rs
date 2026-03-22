@@ -7,12 +7,21 @@ fn write_workspace(
     allow_planned: bool,
     requirement_status: &str,
     feature_status: &str,
-    include_traces: bool,
+    include_requirement_traces: bool,
+    include_feature_traces: bool,
 ) {
     fs::create_dir_all(root.join("docs/syu/philosophy")).expect("philosophy dir");
     fs::create_dir_all(root.join("docs/syu/policies")).expect("policies dir");
     fs::create_dir_all(root.join("docs/syu/requirements")).expect("requirements dir");
     fs::create_dir_all(root.join("docs/syu/features")).expect("features dir");
+    if include_requirement_traces || include_feature_traces {
+        fs::create_dir_all(root.join("src")).expect("src dir");
+        fs::write(
+            root.join("src/trace.rs"),
+            "// REQ-001\n// FEAT-001\npub fn req_trace() {}\n",
+        )
+        .expect("trace source");
+    }
 
     fs::write(
         root.join("syu.yaml"),
@@ -36,7 +45,7 @@ fn write_workspace(
     )
     .expect("policy");
 
-    let requirement_traces = if include_traces {
+    let requirement_traces = if include_requirement_traces {
         "    tests:\n      rust:\n        - file: src/trace.rs\n          symbols:\n            - req_trace\n"
     } else {
         "    tests: {}\n"
@@ -60,7 +69,7 @@ fn write_workspace(
     )
     .expect("feature registry");
 
-    let feature_traces = if include_traces {
+    let feature_traces = if include_feature_traces {
         "    implementations:\n      rust:\n        - file: src/trace.rs\n          symbols:\n            - req_trace\n"
     } else {
         "    implementations: {}\n"
@@ -80,7 +89,7 @@ fn write_workspace(
 // REQ-CORE-001
 fn validate_accepts_planned_entries_without_traces() {
     let tempdir = tempdir().expect("tempdir should exist");
-    write_workspace(tempdir.path(), true, "planned", "planned", false);
+    write_workspace(tempdir.path(), true, "planned", "planned", false, false);
 
     let output = Command::cargo_bin("syu")
         .expect("binary should build")
@@ -101,7 +110,14 @@ fn validate_accepts_planned_entries_without_traces() {
 // REQ-CORE-001
 fn validate_rejects_implemented_entries_without_traces() {
     let tempdir = tempdir().expect("tempdir should exist");
-    write_workspace(tempdir.path(), true, "implemented", "implemented", false);
+    write_workspace(
+        tempdir.path(),
+        true,
+        "implemented",
+        "implemented",
+        false,
+        false,
+    );
 
     let output = Command::cargo_bin("syu")
         .expect("binary should build")
@@ -119,7 +135,7 @@ fn validate_rejects_implemented_entries_without_traces() {
 // REQ-CORE-001
 fn validate_rejects_planned_entries_with_traces() {
     let tempdir = tempdir().expect("tempdir should exist");
-    write_workspace(tempdir.path(), true, "planned", "planned", true);
+    write_workspace(tempdir.path(), true, "planned", "planned", true, true);
 
     let output = Command::cargo_bin("syu")
         .expect("binary should build")
@@ -140,7 +156,7 @@ fn validate_rejects_planned_entries_with_traces() {
 // REQ-CORE-001
 fn validate_rejects_planned_entries_when_config_disallows_them() {
     let tempdir = tempdir().expect("tempdir should exist");
-    write_workspace(tempdir.path(), false, "planned", "planed", false);
+    write_workspace(tempdir.path(), false, "planned", "planed", false, false);
 
     let output = Command::cargo_bin("syu")
         .expect("binary should build")
@@ -152,4 +168,55 @@ fn validate_rejects_planned_entries_when_config_disallows_them() {
     assert!(!output.status.success(), "planned entries should fail");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("SYU-delivery-planned-001"));
+}
+
+#[test]
+// REQ-CORE-001
+fn validate_warns_when_planned_requirement_links_to_implemented_feature() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    write_workspace(tempdir.path(), true, "planned", "implemented", false, true);
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(tempdir.path())
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        output.status.success(),
+        "warning-only validation should pass\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("SYU-delivery-agreement-001"));
+    assert!(stdout.contains("planned"));
+    assert!(stdout.contains("implemented features"));
+    assert!(stdout.contains("FEAT-001"));
+}
+
+#[test]
+// REQ-CORE-001
+fn validate_warns_when_implemented_feature_links_only_to_planned_requirements() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    write_workspace(tempdir.path(), true, "planned", "implemented", false, true);
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(tempdir.path())
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        output.status.success(),
+        "warning-only validation should pass\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("SYU-delivery-agreement-001"));
+    assert!(stdout.contains("only to planned requirements"));
+    assert!(stdout.contains("REQ-001"));
 }

@@ -167,6 +167,19 @@ description: "Generated reference for docs/syu/features/validation/validation.ya
       on a clean delivery state for every entry. In those cases `syu` still
       warns when no traces are declared so the gap remains visible. The warning
       preserves forward pressure toward explicit, reviewable delivery semantics.
+- **code**: SYU-delivery-agreement-001
+  - **genre**: delivery
+  - **severity**: warning
+  - **title**: Linked requirements and features should tell the same delivery story
+  - **summary**: Adjacent delivery states should not imply contradictory implementation progress.
+  - **description**:
+    - |
+      Requirements and features are two views of the same delivery chain. A
+      planned requirement that already links to implemented features, or an
+      implemented feature that links only to planned requirements, makes the
+      specification harder to trust because the adjacent layers no longer tell a
+      coherent story about what is delivered. This rule keeps delivery-state
+      intent reviewable without escalating immediately to a hard failure.
 - **code**: SYU-trace-language-001
   - **genre**: trace
   - **severity**: error
@@ -551,6 +564,19 @@ rules:
       on a clean delivery state for every entry. In those cases `syu` still
       warns when no traces are declared so the gap remains visible. The warning
       preserves forward pressure toward explicit, reviewable delivery semantics.
+
+  - code: SYU-delivery-agreement-001
+    genre: delivery
+    severity: warning
+    title: Linked requirements and features should tell the same delivery story
+    summary: Adjacent delivery states should not imply contradictory implementation progress.
+    description: |
+      Requirements and features are two views of the same delivery chain. A
+      planned requirement that already links to implemented features, or an
+      implemented feature that links only to planned requirements, makes the
+      specification harder to trust because the adjacent layers no longer tell a
+      coherent story about what is delivered. This rule keeps delivery-state
+      intent reviewable without escalating immediately to a hard failure.
 
   - code: SYU-trace-language-001
     genre: trace
