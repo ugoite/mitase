@@ -18,7 +18,7 @@ change also needs narrative explanation or new examples.
 ## Minimal configuration
 
 ```yaml
-version: 0.0.1-alpha.6
+version: 0.0.1-alpha.7
 spec:
   root: docs/syu
 validate:
