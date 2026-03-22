@@ -97,6 +97,18 @@ description: "Generated reference for docs/syu/features/validation/validation.ya
       constrain behavior, or be justified by higher-level intent. This rule
       exists to keep every layer part of one connected explanation instead of
       allowing decorative or abandoned nodes to accumulate.
+- **code**: SYU-graph-duplicate-001
+  - **genre**: graph
+  - **severity**: error
+  - **title**: Relationship lists must not repeat the same linked ID
+  - **summary**: Repeating the same adjacent-layer reference does not create new traceability.
+  - **description**:
+    - |
+      Link lists explain why one definition relates to another. When the same
+      target ID appears more than once inside one list, the graph becomes
+      noisier without becoming more informative. This rule keeps adjacent-layer
+      relationships crisp and reviewable by requiring each linked ID to appear
+      at most once per list.
 - **code**: SYU-delivery-invalid-001
   - **genre**: delivery
   - **severity**: error
@@ -260,6 +272,18 @@ description: "Generated reference for docs/syu/features/validation/validation.ya
       no longer identifies real evidence and may be drifting behind refactors or
       stale documentation. This rule keeps symbol traces anchored to actual code
       and tests.
+- **code**: SYU-trace-duplicate-001
+  - **genre**: trace
+  - **severity**: error
+  - **title**: Trace lists must not repeat the same mapping
+  - **summary**: Duplicated trace records inflate evidence without adding new repository facts.
+  - **description**:
+    - |
+      A trace list should enumerate distinct pieces of repository evidence.
+      Repeating the exact same file, symbol, and documentation mapping inside
+      one language list makes the specification look more complete than it is
+      and makes review harder. This rule keeps trace evidence explicit by
+      requiring each mapping to appear only once per list.
 - **code**: SYU-trace-inspection-001
   - **genre**: trace
   - **severity**: error
@@ -458,6 +482,18 @@ rules:
       exists to keep every layer part of one connected explanation instead of
       allowing decorative or abandoned nodes to accumulate.
 
+  - code: SYU-graph-duplicate-001
+    genre: graph
+    severity: error
+    title: Relationship lists must not repeat the same linked ID
+    summary: Repeating the same adjacent-layer reference does not create new traceability.
+    description: |
+      Link lists explain why one definition relates to another. When the same
+      target ID appears more than once inside one list, the graph becomes
+      noisier without becoming more informative. This rule keeps adjacent-layer
+      relationships crisp and reviewable by requiring each linked ID to appear
+      at most once per list.
+
   - code: SYU-delivery-invalid-001
     genre: delivery
     severity: error
@@ -620,6 +656,18 @@ rules:
       no longer identifies real evidence and may be drifting behind refactors or
       stale documentation. This rule keeps symbol traces anchored to actual code
       and tests.
+
+  - code: SYU-trace-duplicate-001
+    genre: trace
+    severity: error
+    title: Trace lists must not repeat the same mapping
+    summary: Duplicated trace records inflate evidence without adding new repository facts.
+    description: |
+      A trace list should enumerate distinct pieces of repository evidence.
+      Repeating the exact same file, symbol, and documentation mapping inside
+      one language list makes the specification look more complete than it is
+      and makes review harder. This rule keeps trace evidence explicit by
+      requiring each mapping to appear only once per list.
 
   - code: SYU-trace-inspection-001
     genre: trace
