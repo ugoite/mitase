@@ -19,7 +19,7 @@ description: "Generated reference for docs/syu/features/repository/install.yaml"
 
 - **id**: FEAT-INSTALL-001
   - **title**: Release installer
-  - **summary**: Install the matching packaged binary with one shell command and a release-asset fallback.
+  - **summary**: Install the matching packaged binary from a release-hosted one-line entrypoint that prefers GHCR packages and falls back to GitHub release assets.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-008
@@ -46,7 +46,7 @@ version: 1
 features:
   - id: FEAT-INSTALL-001
     title: Release installer
-    summary: Install the matching packaged binary with one shell command and a release-asset fallback.
+    summary: Install the matching packaged binary from a release-hosted one-line entrypoint that prefers GHCR packages and falls back to GitHub release assets.
     status: implemented
     linked_requirements:
       - REQ-CORE-008

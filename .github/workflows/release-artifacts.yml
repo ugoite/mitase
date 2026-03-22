@@ -106,6 +106,11 @@ jobs:
             "${RELEASE_TAG}__${{ matrix.target }}" \
             "release-artifacts/${archive_name}"
 
+      - name: Include release installer
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        shell: bash
+        run: cp scripts/install-syu.sh release-artifacts/install-syu.sh
+
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
