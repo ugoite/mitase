@@ -719,6 +719,67 @@ fn validate_delivery_status(
     Some(normalized)
 }
 
+fn format_issue_id_list(ids: &[String]) -> String {
+    ids.iter()
+        .map(|id| format!("`{id}`"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn validate_linked_delivery_states(
+    owner_kind: &str,
+    owner_id: &str,
+    owner_status: Option<DeliveryStatus>,
+    linked_kind_plural: &str,
+    linked_statuses: Vec<(&str, Option<DeliveryStatus>)>,
+    issues: &mut Vec<Issue>,
+) {
+    let Some(owner_status) = owner_status else {
+        return;
+    };
+
+    let mut planned_ids = Vec::new();
+    let mut implemented_ids = Vec::new();
+
+    for (linked_id, linked_status) in linked_statuses {
+        match linked_status {
+            Some(DeliveryStatus::Planned) => planned_ids.push(linked_id.to_string()),
+            Some(DeliveryStatus::Implemented) => implemented_ids.push(linked_id.to_string()),
+            None => {}
+        }
+    }
+
+    match owner_status {
+        DeliveryStatus::Planned if !implemented_ids.is_empty() => issues.push(Issue::warning(
+            "SYU-delivery-agreement-001",
+            format!("{owner_kind} {owner_id}"),
+            Some("status".to_string()),
+            format!(
+                "{owner_kind} `{owner_id}` is marked `planned` but links to implemented {linked_kind_plural}: {}.",
+                format_issue_id_list(&implemented_ids),
+            ),
+            Some(format!(
+                "Mark `{owner_id}` implemented if the linked work is already delivered, or revisit the linked item statuses and traces."
+            )),
+        )),
+        DeliveryStatus::Implemented if !planned_ids.is_empty() && implemented_ids.is_empty() => {
+            issues.push(Issue::warning(
+                "SYU-delivery-agreement-001",
+                format!("{owner_kind} {owner_id}"),
+                Some("status".to_string()),
+                format!(
+                    "{owner_kind} `{owner_id}` is marked `implemented` but links to planned {linked_kind_plural} and none are implemented: {}.",
+                    format_issue_id_list(&planned_ids),
+                ),
+                Some(format!(
+                    "Mark at least one linked item implemented, or change `{owner_id}` back to `planned` if delivery is still in progress."
+                )),
+            ));
+        }
+        _ => {}
+    }
+}
+
 fn validate_unique_ids<'a>(
     kind: &str,
     ids: impl Iterator<Item = &'a str>,
@@ -1172,6 +1233,26 @@ fn validate_requirement(
         }
     }
 
+    validate_linked_delivery_states(
+        "requirement",
+        &requirement.id,
+        status,
+        "features",
+        requirement
+            .linked_features
+            .iter()
+            .filter_map(|feature_id| {
+                features_by_id.get(feature_id.as_str()).map(|feature| {
+                    (
+                        feature_id.as_str(),
+                        normalize_delivery_status(&feature.status),
+                    )
+                })
+            })
+            .collect(),
+        issues,
+    );
+
     validate_trace_map(
         root,
         config,
@@ -1256,6 +1337,28 @@ fn validate_feature(
             )),
         }
     }
+
+    validate_linked_delivery_states(
+        "feature",
+        &feature.id,
+        status,
+        "requirements",
+        feature
+            .linked_requirements
+            .iter()
+            .filter_map(|requirement_id| {
+                requirements_by_id
+                    .get(requirement_id.as_str())
+                    .map(|requirement| {
+                        (
+                            requirement_id.as_str(),
+                            normalize_delivery_status(&requirement.status),
+                        )
+                    })
+            })
+            .collect(),
+        issues,
+    );
 
     validate_trace_map(
         root,
@@ -2320,6 +2423,72 @@ mod tests {
     }
 
     #[test]
+    fn validate_requirement_warns_when_planned_links_to_implemented_features() {
+        let mut entry = requirement("REQ-1");
+        entry.status = "planned".to_string();
+        entry.linked_features = vec!["FEAT-1".to_string(), "FEAT-2".to_string()];
+
+        let linked_feature_one = feature("FEAT-1");
+        let mut linked_feature_two = feature("FEAT-2");
+        linked_feature_two.status = "planned".to_string();
+
+        let mut features = HashMap::new();
+        features.insert("FEAT-1", &linked_feature_one);
+        features.insert("FEAT-2", &linked_feature_two);
+
+        let mut issues = Vec::new();
+        let mut trace_count = Default::default();
+        validate_requirement(
+            &entry,
+            &HashMap::new(),
+            &features,
+            &SyuConfig::default(),
+            Path::new("."),
+            &mut issues,
+            &mut trace_count,
+        );
+
+        let agreement = issues
+            .iter()
+            .find(|issue| issue.code == "SYU-delivery-agreement-001")
+            .expect("agreement warning");
+        assert!(agreement.message.contains("implemented features"));
+        assert!(agreement.message.contains("`FEAT-1`"));
+        assert!(!agreement.message.contains("`FEAT-2`"));
+    }
+
+    #[test]
+    fn validate_requirement_ignores_linked_features_with_unknown_delivery_state() {
+        let mut entry = requirement("REQ-1");
+        entry.status = "planned".to_string();
+        entry.linked_features = vec!["FEAT-1".to_string()];
+
+        let mut linked_feature = feature("FEAT-1");
+        linked_feature.status = "proposed".to_string();
+
+        let mut features = HashMap::new();
+        features.insert("FEAT-1", &linked_feature);
+
+        let mut issues = Vec::new();
+        let mut trace_count = Default::default();
+        validate_requirement(
+            &entry,
+            &HashMap::new(),
+            &features,
+            &SyuConfig::default(),
+            Path::new("."),
+            &mut issues,
+            &mut trace_count,
+        );
+
+        assert!(
+            !issues
+                .iter()
+                .any(|issue| issue.code == "SYU-delivery-agreement-001")
+        );
+    }
+
+    #[test]
     fn validate_requirement_with_invalid_status_and_traces_still_checks_references() {
         let mut entry = requirement("REQ-1");
         entry.status = "proposed".to_string();
@@ -2381,6 +2550,105 @@ mod tests {
                 .iter()
                 .any(|issue| issue.code == "SYU-delivery-planned-001")
         );
+    }
+
+    #[test]
+    fn validate_feature_warns_when_implemented_links_only_to_planned_requirements() {
+        let mut entry = feature("FEAT-1");
+        entry.linked_requirements = vec!["REQ-1".to_string(), "REQ-2".to_string()];
+
+        let mut linked_requirement_one = requirement("REQ-1");
+        linked_requirement_one.status = "planned".to_string();
+        let mut linked_requirement_two = requirement("REQ-2");
+        linked_requirement_two.status = "planned".to_string();
+
+        let mut requirements = HashMap::new();
+        requirements.insert("REQ-1", &linked_requirement_one);
+        requirements.insert("REQ-2", &linked_requirement_two);
+
+        let mut issues = Vec::new();
+        let mut trace_count = Default::default();
+        validate_feature(
+            &entry,
+            &requirements,
+            &SyuConfig::default(),
+            Path::new("."),
+            &mut issues,
+            &mut trace_count,
+        );
+
+        let agreement = issues
+            .iter()
+            .find(|issue| issue.code == "SYU-delivery-agreement-001")
+            .expect("agreement warning");
+        assert!(agreement.message.contains("none are implemented"));
+        assert!(agreement.message.contains("`REQ-1`"));
+        assert!(agreement.message.contains("`REQ-2`"));
+    }
+
+    #[test]
+    fn validate_feature_skips_delivery_agreement_warning_when_any_requirement_is_implemented() {
+        let mut entry = feature("FEAT-1");
+        entry.linked_requirements = vec!["REQ-1".to_string(), "REQ-2".to_string()];
+
+        let mut linked_requirement_one = requirement("REQ-1");
+        linked_requirement_one.status = "planned".to_string();
+        let linked_requirement_two = requirement("REQ-2");
+
+        let mut requirements = HashMap::new();
+        requirements.insert("REQ-1", &linked_requirement_one);
+        requirements.insert("REQ-2", &linked_requirement_two);
+
+        let mut issues = Vec::new();
+        let mut trace_count = Default::default();
+        validate_feature(
+            &entry,
+            &requirements,
+            &SyuConfig::default(),
+            Path::new("."),
+            &mut issues,
+            &mut trace_count,
+        );
+
+        assert!(
+            !issues
+                .iter()
+                .any(|issue| issue.code == "SYU-delivery-agreement-001")
+        );
+    }
+
+    #[test]
+    fn validate_feature_warning_mentions_absence_of_implemented_requirements() {
+        let mut entry = feature("FEAT-1");
+        entry.linked_requirements = vec!["REQ-1".to_string(), "REQ-2".to_string()];
+
+        let mut linked_requirement_one = requirement("REQ-1");
+        linked_requirement_one.status = "planned".to_string();
+        let mut linked_requirement_two = requirement("REQ-2");
+        linked_requirement_two.status = "proposed".to_string();
+
+        let mut requirements = HashMap::new();
+        requirements.insert("REQ-1", &linked_requirement_one);
+        requirements.insert("REQ-2", &linked_requirement_two);
+
+        let mut issues = Vec::new();
+        let mut trace_count = Default::default();
+        validate_feature(
+            &entry,
+            &requirements,
+            &SyuConfig::default(),
+            Path::new("."),
+            &mut issues,
+            &mut trace_count,
+        );
+
+        let agreement = issues
+            .iter()
+            .find(|issue| issue.code == "SYU-delivery-agreement-001")
+            .expect("agreement warning");
+        assert!(agreement.message.contains("none are implemented"));
+        assert!(agreement.message.contains("`REQ-1`"));
+        assert!(!agreement.message.contains("`REQ-2`"));
     }
 
     #[test]

@@ -26,9 +26,10 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       references, verify reciprocal links across the adjacent-layer graph,
       reject duplicate adjacent-layer IDs inside a single relationship list,
       report isolated definitions by default, enforce `planned` /
-      `implemented` delivery-state rules for requirements and features, and
-      surface rule codes with human-readable titles and explanations in
-      validation output. It MUST also support optional filtered views by
+      `implemented` delivery-state rules for requirements and features, warn
+      when linked requirements and features drift apart semantically on delivery
+      state, and surface rule codes with human-readable titles and explanations
+      in validation output. It MUST also support optional filtered views by
       severity, rule genre, and exact rule code for both text and JSON output
       without changing the underlying validation result. `check` MAY remain as
       a compatibility alias, but `validate` is the canonical command name.
@@ -184,9 +185,10 @@ requirements:
       references, verify reciprocal links across the adjacent-layer graph,
       reject duplicate adjacent-layer IDs inside a single relationship list,
       report isolated definitions by default, enforce `planned` /
-      `implemented` delivery-state rules for requirements and features, and
-      surface rule codes with human-readable titles and explanations in
-      validation output. It MUST also support optional filtered views by
+      `implemented` delivery-state rules for requirements and features, warn
+      when linked requirements and features drift apart semantically on delivery
+      state, and surface rule codes with human-readable titles and explanations
+      in validation output. It MUST also support optional filtered views by
       severity, rule genre, and exact rule code for both text and JSON output
       without changing the underlying validation result. `check` MAY remain as
       a compatibility alias, but `validate` is the canonical command name.

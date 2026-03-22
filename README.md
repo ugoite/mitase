@@ -211,6 +211,7 @@ and `validate.require_symbol_trace_coverage` in its root `syu.yaml`.
 - requirements and features must use `status: planned` or `status: implemented`
 - `planned` items must not declare tests or implementations yet
 - `implemented` items must declare valid tests or implementations
+- linked requirements and features should not imply contradictory delivery states
 - requirement test mappings must point to existing files and symbols
 - feature implementation mappings must point to existing files and symbols
 - duplicate trace mappings inside one language list are rejected
