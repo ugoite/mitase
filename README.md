@@ -61,7 +61,7 @@ curl -fsSL https://raw.githubusercontent.com/ugoite/syu/main/scripts/install-syu
 Install a specific prerelease:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ugoite/syu/main/scripts/install-syu.sh | env SYU_VERSION=v0.0.1-alpha.6 bash
+curl -fsSL https://raw.githubusercontent.com/ugoite/syu/main/scripts/install-syu.sh | env SYU_VERSION=v0.0.1-alpha.7 bash
 ```
 
 ## Quick start
@@ -169,7 +169,7 @@ It keeps the source UI in `app/`, checks in the generated production bundle in
 `syu` looks for `syu.yaml` in the workspace root:
 
 ```yaml
-version: 0.0.1-alpha.6
+version: 0.0.1-alpha.7
 spec:
   root: docs/syu
 validate:
