@@ -58,6 +58,11 @@ features:
             - FEAT-CONTRIB-002
             - blank_issues_enabled
             - contact_links
+      gitignore:
+        - file: .gitignore
+          symbols:
+            - FEAT-CONTRIB-002
+            - /.worktrees/
 
   - id: FEAT-CONTRIB-003
     title: One-command pre-commit setup

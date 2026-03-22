@@ -72,6 +72,11 @@ description: "Generated reference for docs/syu/features/repository/contributor.y
           - FEAT-CONTRIB-002
           - blank_issues_enabled
           - contact_links
+    - **gitignore**:
+      - **file**: .gitignore
+        - **symbols**:
+          - FEAT-CONTRIB-002
+          - /.worktrees/
 - **id**: FEAT-CONTRIB-003
   - **title**: One-command pre-commit setup
   - **summary**: Install pre-commit and activate local hooks without asking contributors to assemble the commands themselves.
@@ -150,6 +155,11 @@ features:
             - FEAT-CONTRIB-002
             - blank_issues_enabled
             - contact_links
+      gitignore:
+        - file: .gitignore
+          symbols:
+            - FEAT-CONTRIB-002
+            - /.worktrees/
 
   - id: FEAT-CONTRIB-003
     title: One-command pre-commit setup

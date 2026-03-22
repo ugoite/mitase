@@ -1125,10 +1125,10 @@ fn verify_trace_reference(
             subject,
             Some(format_reference_location(language, reference)),
             format!(
-                "Language `{language}` is not supported. Built-in adapters currently cover Rust, Python, TypeScript, Shell, YAML, JSON, and Markdown."
+                "Language `{language}` is not supported. Built-in adapters currently cover Rust, Python, TypeScript, Shell, YAML, JSON, Markdown, and Gitignore."
             ),
             Some(format!(
-                "Use a supported language alias such as `rust`, `python`, `typescript`, `shell`, `yaml`, `json`, or `markdown` for `{owner_id}`."
+                "Use a supported language alias such as `rust`, `python`, `typescript`, `shell`, `yaml`, `json`, `markdown`, or `gitignore` for `{owner_id}`."
             )),
         ));
         return false;
@@ -2127,6 +2127,30 @@ mod tests {
             "FEAT-1",
             TraceRole::FeatureImplementation,
             "shell",
+            &reference,
+            &mut issues,
+        ));
+        assert!(issues.is_empty());
+    }
+
+    #[test]
+    fn verify_trace_reference_accepts_valid_gitignore_files() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let path = tempdir.path().join(".gitignore");
+        fs::write(&path, "# FEAT-CONTRIB-002\n/.worktrees/\n").expect("file should exist");
+
+        let reference = TraceReference {
+            file: PathBuf::from(".gitignore"),
+            symbols: vec!["FEAT-CONTRIB-002".to_string(), "/.worktrees/".to_string()],
+            doc_contains: Vec::new(),
+        };
+        let mut issues = Vec::new();
+        assert!(verify_trace_reference(
+            tempdir.path(),
+            &SyuConfig::default(),
+            "FEAT-CONTRIB-002",
+            TraceRole::FeatureImplementation,
+            "gitignore",
             &reference,
             &mut issues,
         ));

@@ -54,6 +54,9 @@ struct JsonAdapter;
 #[derive(Debug)]
 struct MarkdownAdapter;
 
+#[derive(Debug)]
+struct GitignoreAdapter;
+
 static RUST_ADAPTER: RustAdapter = RustAdapter;
 static PYTHON_ADAPTER: PythonAdapter = PythonAdapter;
 static TYPESCRIPT_ADAPTER: TypeScriptAdapter = TypeScriptAdapter;
@@ -61,6 +64,7 @@ static SHELL_ADAPTER: ShellAdapter = ShellAdapter;
 static YAML_ADAPTER: YamlAdapter = YamlAdapter;
 static JSON_ADAPTER: JsonAdapter = JsonAdapter;
 static MARKDOWN_ADAPTER: MarkdownAdapter = MarkdownAdapter;
+static GITIGNORE_ADAPTER: GitignoreAdapter = GitignoreAdapter;
 
 impl LanguageAdapter for RustAdapter {
     fn canonical_name(&self) -> &'static str {
@@ -222,6 +226,32 @@ impl LanguageAdapter for MarkdownAdapter {
     }
 }
 
+impl LanguageAdapter for GitignoreAdapter {
+    fn canonical_name(&self) -> &'static str {
+        "gitignore"
+    }
+
+    fn aliases(&self) -> &'static [&'static str] {
+        &["gitignore", "ignore"]
+    }
+
+    fn extensions(&self) -> &'static [&'static str] {
+        &["gitignore"]
+    }
+
+    fn patterns(&self, symbol: &str) -> Vec<String> {
+        let escaped = regex::escape(symbol);
+        vec![format!(r"(?m)\b{escaped}\b")]
+    }
+
+    fn supports_path(&self, path: &Path) -> bool {
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .map(|name| name.eq_ignore_ascii_case(".gitignore"))
+            .unwrap_or(false)
+    }
+}
+
 // FEAT-CHECK-001
 pub fn adapter_for_language(language: &str) -> Option<&'static dyn LanguageAdapter> {
     let normalized = language.trim().to_ascii_lowercase().replace('_', "-");
@@ -234,6 +264,7 @@ pub fn adapter_for_language(language: &str) -> Option<&'static dyn LanguageAdapt
         &YAML_ADAPTER as &dyn LanguageAdapter,
         &JSON_ADAPTER as &dyn LanguageAdapter,
         &MARKDOWN_ADAPTER as &dyn LanguageAdapter,
+        &GITIGNORE_ADAPTER as &dyn LanguageAdapter,
     ]
     .into_iter()
     .find(|adapter| adapter.aliases().iter().any(|alias| *alias == normalized))
@@ -282,6 +313,10 @@ mod tests {
             adapter_for_language("md").map(LanguageAdapter::canonical_name),
             Some("markdown")
         );
+        assert_eq!(
+            adapter_for_language("ignore").map(LanguageAdapter::canonical_name),
+            Some("gitignore")
+        );
         assert!(adapter_for_language("unknown").is_none());
     }
 
@@ -292,6 +327,7 @@ mod tests {
         let yaml = adapter_for_language("yaml").expect("yaml adapter should exist");
         let json = adapter_for_language("json").expect("json adapter should exist");
         let markdown = adapter_for_language("markdown").expect("markdown adapter should exist");
+        let gitignore = adapter_for_language("gitignore").expect("gitignore adapter should exist");
 
         assert!(rust.supports_path(Path::new("src/lib.rs")));
         assert!(!rust.supports_path(Path::new("src/lib.py")));
@@ -299,7 +335,11 @@ mod tests {
         assert!(yaml.supports_path(Path::new(".github/workflows/ci.yml")));
         assert!(json.supports_path(Path::new("release-please-config.json")));
         assert!(markdown.supports_path(Path::new("README.md")));
+        assert!(gitignore.supports_path(Path::new(".gitignore")));
+        assert!(gitignore.supports_path(Path::new("app/.gitignore")));
+        assert_eq!(gitignore.extensions(), &["gitignore"]);
         assert!(!yaml.supports_path(Path::new("README.md")));
+        assert!(!gitignore.supports_path(Path::new("README.md")));
     }
 
     #[test]
@@ -312,6 +352,7 @@ mod tests {
         let yaml = adapter_for_language("yaml").expect("yaml adapter should exist");
         let json = adapter_for_language("json").expect("json adapter should exist");
         let markdown = adapter_for_language("markdown").expect("markdown adapter should exist");
+        let gitignore = adapter_for_language("gitignore").expect("gitignore adapter should exist");
 
         assert!(rust.symbol_exists("pub fn hello_world() {}", "hello_world"));
         assert!(python.symbol_exists("def test_trace():\n    return True\n", "test_trace"));
@@ -324,6 +365,9 @@ mod tests {
         assert!(json.symbol_exists("{\"package\":\"syu\"}", "package"));
         assert!(json.symbol_exists("{\"package-name\":\"syu\"}", "package-name"));
         assert!(markdown.symbol_exists("# syu\n\nSee `docs/guide/concepts.md`\n", "concepts"));
+        assert!(gitignore.symbol_exists("# FEAT-CONTRIB-002\n/.worktrees/\n", "FEAT-CONTRIB-002"));
+        assert!(gitignore.symbol_exists("# FEAT-CONTRIB-002\n/.worktrees/\n", "/.worktrees/"));
+        assert!(gitignore.symbol_exists("worktree_helper\n", "worktree_helper"));
     }
 
     #[test]
