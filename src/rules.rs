@@ -38,7 +38,7 @@ pub struct ReferencedRule {
     pub description: String,
 }
 
-static RULE_FILE: &str = include_str!("../docs/syu/features/cli/validation.yaml");
+static RULE_FILE: &str = include_str!("../docs/syu/features/validation/validation.yaml");
 
 static RULES_BY_CODE: LazyLock<BTreeMap<String, ReferencedRule>> = LazyLock::new(load_rules);
 

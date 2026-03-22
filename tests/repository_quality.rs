@@ -176,6 +176,9 @@ fn repository_declares_documentation_guides() {
     let generated_config_spec = read_file("docs/generated/site-spec/config/spec.md");
     let generated_config_validate = read_file("docs/generated/site-spec/config/validate.md");
     let generated_config_runtimes = read_file("docs/generated/site-spec/config/runtimes.md");
+    let generated_site_index = read_file("docs/generated/site-spec/index.md");
+    let generated_validation =
+        read_file("docs/generated/site-spec/features/validation/validation.md");
     let ci_workflow = read_file(".github/workflows/ci.yml");
     let docs_deploy_workflow = read_file(".github/workflows/deploy-pages.yml");
     let docs_build_action = read_file(".github/actions/build-docs-site/action.yml");
@@ -228,6 +231,9 @@ fn repository_declares_documentation_guides() {
     assert!(generated_config_spec.contains("docs/syu/config/spec.yaml"));
     assert!(generated_config_validate.contains("validate.default_fix"));
     assert!(generated_config_runtimes.contains("docs/syu/config/runtimes.yaml"));
+    assert!(generated_site_index.contains("/docs/generated/site-spec/features/validation"));
+    assert!(generated_validation.contains("docs/syu/features/validation/validation.yaml"));
+    assert!(generated_validation.contains("SYU-graph-reference-001"));
     assert!(ci_workflow.contains("./.github/actions/build-docs-site"));
     assert!(docs_build_action.contains("FEAT-DOCS-002"));
     assert!(docs_build_action.contains("actions/setup-node@v6"));
