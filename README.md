@@ -65,15 +65,19 @@ Install a specific prerelease:
 curl -fsSL https://github.com/ugoite/syu/releases/download/v0.0.1-alpha.7/install-syu.sh | env SYU_VERSION=v0.0.1-alpha.7 bash
 ```
 
+If you're contributing to `syu` itself from source, jump to
+[Contributing and local development](#contributing-and-local-development)
+below. The rest of this section assumes you installed the published CLI.
+
 ## Quick start
 
 ```bash
-cargo run -- init .
-cargo run -- browse .
-cargo run -- app .
-cargo run -- validate .
-cargo run -- validate . --fix
-cargo run -- report . --output reports/syu.md
+syu init .
+syu validate .
+syu validate . --fix
+syu browse .
+syu app .
+syu report . --output reports/syu.md
 ```
 
 Running `syu` with no subcommand opens the interactive browser when stdin/stdout
@@ -154,20 +158,16 @@ The self-hosted repository keeps its latest generated report at
 
 ## Browser app
 
-The repository also ships a local browser app rooted at `app/` for richer spec
-exploration.
+The installed CLI can launch a local browser app for richer spec exploration:
 
 ```bash
-cd app
-npm install
-npm run build:wasm
-npm run build
-cd ..
-cargo run -- app .
+syu app .
+syu app . --bind 127.0.0.1 --port 3000
 ```
 
-It keeps the source UI in `app/`, checks in the generated production bundle in
-`app/dist/`, and serves that bundle directly from the `syu app` command.
+The repository keeps the source UI in `app/`, checks in the generated
+production bundle in `app/dist/`, and serves that bundle directly from the
+`syu app` command, so end users do not need a separate frontend build step.
 
 ## Configuration
 
@@ -249,14 +249,16 @@ The repository ships working example projects:
 
 Each one is validated in the automated test suite.
 
-## Contributor environment
+## Contributing and local development
 
-For VS Code / Codespaces-style development, use the devcontainer:
+If you're working on `syu` itself rather than using it in another repository:
 
-- [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json)
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) for the GitHub Flow contribution path
+- use [`.devcontainer/devcontainer.json`](.devcontainer/devcontainer.json) for
+  a ready-to-run VS Code / Codespaces-style environment
+- follow [`CONTRIBUTING.md`](CONTRIBUTING.md) for the GitHub Flow contributor
+  path and repository expectations
 
-## Local quality gates
+### Local quality gates
 
 Run the shared repository checks:
 
@@ -288,10 +290,22 @@ pre-commit run --all-files --hook-stage pre-push
 If you prefer to install `pre-commit` manually, `pipx install pre-commit` or
 `python -m pip install --user pre-commit` also work.
 
+### Browser app development
+
+```bash
+cd app
+npm install
+npm run build:wasm
+npm run build
+cd ..
+cargo run -- app .
+```
+
 ## Documentation site
 
 The repository ships a Docusaurus site rooted at `website/` that renders the
-checked-in `docs/` tree directly.
+checked-in `docs/` tree directly, and the published site is available at
+`https://ugoite.github.io/syu/`.
 
 ```bash
 cd website
@@ -301,7 +315,7 @@ npm run start
 
 The landing page links the core guides, the self-hosted specification reference,
 the latest checked-in validation report, and the published site is deployed
-from `main` to GitHub Pages at `https://ugoite.github.io/syu/` via
+from `main` to GitHub Pages via
 `.github/workflows/deploy-pages.yml`.
 
 ## Agent skill
