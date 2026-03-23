@@ -8,11 +8,12 @@ test("renders top tabs and linked spec content", async ({ page }) => {
 
   const topLevelSections = page.getByRole("navigation", { name: "Top level sections" });
 
-  await expect(page.getByRole("heading", { name: "syu app" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "syu" })).toBeVisible();
   await expect(topLevelSections.getByRole("button", { name: /^philosophy\b/i })).toBeVisible();
   await expect(topLevelSections.getByRole("button", { name: /^policies\b/i })).toBeVisible();
   await expect(topLevelSections.getByRole("button", { name: /^features\b/i })).toBeVisible();
   await expect(topLevelSections.getByRole("button", { name: /^requirements\b/i })).toBeVisible();
+  await expect(page.getByText("What this app is showing")).toHaveCount(0);
 
   await topLevelSections.getByRole("button", { name: /^features\b/i }).click();
   await page.getByRole("button", { name: /check\.yaml/i }).click();

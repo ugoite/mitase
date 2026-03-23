@@ -165,7 +165,7 @@ dependencies = [
 
 [[package]]
 name = "syu-app-wasm"
-version = "0.0.1-alpha.6"
+version = "0.0.1-alpha.7"
 dependencies = [
  "console_error_panic_hook",
  "serde-wasm-bindgen",
@@ -175,7 +175,7 @@ dependencies = [
 
 [[package]]
 name = "syu-core"
-version = "0.0.1-alpha.6"
+version = "0.0.1-alpha.7"
 dependencies = [
  "serde",
  "serde_yaml",
