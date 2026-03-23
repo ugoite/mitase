@@ -157,6 +157,8 @@ syu report . --output docs/generated/syu-report.md
 
 The self-hosted repository keeps its latest generated report at
 `docs/generated/syu-report.md`.
+Set `report.output` in `syu.yaml` when a repository wants that checked-in path
+to become the default, while keeping `--output` available for one-off overrides.
 
 ## Browser app
 
@@ -204,7 +206,9 @@ Key behaviors:
 - `validate.require_non_orphaned_items` turns isolated layered definitions into validation errors
 - `validate.require_reciprocal_links` keeps adjacent-layer backlinks mandatory by default while still allowing phased migration when disabled
 - `validate.require_symbol_trace_coverage` opt-in checks that public Rust symbols belong to features and tests belong to requirements
+- `report.output` sets the default `syu report` destination while `--output` still takes precedence
 - `app.bind` and `app.port` define the default local browser-app address and port unless `--bind` / `--port` override them
+- `report.output` sets the default `syu report` destination while `--output` still takes precedence
 - `runtimes.*.command` can be set to `auto` or an explicit executable name/path
 
 The self-hosted repository keeps a structured reference for supported config
@@ -212,7 +216,8 @@ fields under [`docs/syu/config/`](docs/syu/config).
 
 The `syu` repository itself enables `validate.require_non_orphaned_items`,
 `validate.require_reciprocal_links`, and
-`validate.require_symbol_trace_coverage` in its root `syu.yaml`.
+`validate.require_symbol_trace_coverage` in its root `syu.yaml`, and it sets
+`report.output: docs/generated/syu-report.md`.
 
 ## Traceability rules
 

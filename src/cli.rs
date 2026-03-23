@@ -1,5 +1,6 @@
 // FEAT-APP-001
 // FEAT-BROWSE-001
+// FEAT-REPORT-001
 // REQ-CORE-001
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};

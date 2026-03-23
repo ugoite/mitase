@@ -44,9 +44,11 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(ci_workflow.contains("scripts/ci/installer-smoke.sh"));
 
     assert!(repo_config.contains("FEAT-CHECK-001"));
+    assert!(repo_config.contains("FEAT-REPORT-001"));
     assert!(repo_config.contains("require_non_orphaned_items: true"));
     assert!(repo_config.contains("require_reciprocal_links: true"));
     assert!(repo_config.contains("require_symbol_trace_coverage: true"));
+    assert!(repo_config.contains("output: docs/generated/syu-report.md"));
 }
 
 #[test]
