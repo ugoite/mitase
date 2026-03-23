@@ -10,6 +10,7 @@ sections:
   - spec.yaml
   - validate.yaml
   - app.yaml
+  - report.yaml
   - runtimes.yaml
 items:
   - key: version

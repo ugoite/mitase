@@ -154,9 +154,10 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       The `report` command MUST reuse the same verification engine as `validate`
       and render a Markdown report that summarizes counts, failures, and
       corrective suggestions. It MUST support writing the report to stdout or a
-      file path, and the self-hosted repository SHOULD keep a checked-in report
-      artifact so contributors can inspect the current state without running the
-      command first.
+      file path. `syu.yaml` MUST be able to define a default report output path
+      that `--output` can still override. The self-hosted repository SHOULD keep
+      a checked-in report artifact so contributors can inspect the current state
+      without running the command first.
   - **priority**: medium
   - **status**: implemented
   - **linked_policies**:
@@ -318,9 +319,10 @@ requirements:
       The `report` command MUST reuse the same verification engine as `validate`
       and render a Markdown report that summarizes counts, failures, and
       corrective suggestions. It MUST support writing the report to stdout or a
-      file path, and the self-hosted repository SHOULD keep a checked-in report
-      artifact so contributors can inspect the current state without running the
-      command first.
+      file path. `syu.yaml` MUST be able to define a default report output path
+      that `--output` can still override. The self-hosted repository SHOULD keep
+      a checked-in report artifact so contributors can inspect the current state
+      without running the command first.
     priority: medium
     status: implemented
     linked_policies:

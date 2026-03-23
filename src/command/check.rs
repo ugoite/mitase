@@ -246,7 +246,7 @@ pub fn collect_check_result(workspace_path: &Path) -> CheckResult {
     }
 }
 
-fn collect_check_result_from_workspace(workspace: &Workspace) -> CheckResult {
+pub(crate) fn collect_check_result_from_workspace(workspace: &Workspace) -> CheckResult {
     let definition_counts = DefinitionCounts {
         philosophies: workspace.philosophies.len(),
         policies: workspace.policies.len(),

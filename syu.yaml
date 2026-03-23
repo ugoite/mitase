@@ -1,4 +1,5 @@
 # FEAT-CHECK-001
+# FEAT-REPORT-001
 version: 0.0.1-alpha.7
 spec:
   root: docs/syu
@@ -8,6 +9,8 @@ validate:
   require_non_orphaned_items: true
   require_reciprocal_links: true
   require_symbol_trace_coverage: true
+report:
+  output: docs/generated/syu-report.md
 runtimes:
   python:
     command: auto

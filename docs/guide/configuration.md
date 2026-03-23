@@ -11,6 +11,7 @@ under `docs/syu/config/`:
 - `docs/syu/config/spec.yaml`
 - `docs/syu/config/validate.yaml`
 - `docs/syu/config/app.yaml`
+- `docs/syu/config/report.yaml`
 - `docs/syu/config/runtimes.yaml`
 
 Add new supported config items there first, then update this guide when the
@@ -114,6 +115,21 @@ Controls the default port that `syu app` binds to.
 CLI flags still override the config so temporary port conflicts can be resolved
 without editing the repository.
 
+### `report.output`
+
+Sets the default Markdown destination for `syu report`.
+
+Use a repository-relative path such as:
+
+```yaml
+report:
+  output: docs/generated/syu-report.md
+```
+
+When set in `syu.yaml`, the path is resolved from the workspace root. `--output`
+still overrides the config, and relative config paths must stay inside the
+workspace root so checked-in report destinations cannot escape the repository.
+
 ### `runtimes.python.command`
 
 Controls which Python executable `syu` uses for Python inspection.
@@ -140,6 +156,12 @@ override it.
 `validate.require_non_orphaned_items`,
 `validate.require_reciprocal_links`, and
 `validate.require_symbol_trace_coverage` are also configuration-only.
+
+For report output paths, CLI flags override config:
+
+1. `--output`
+2. `report.output`
+3. stdout
 
 For the browser app, CLI flags override config:
 
@@ -179,7 +201,11 @@ want strict ownership checks without enumerating every public symbol by hand.
   backlinks after stabilizing the forward graph
 - turn on `validate.require_symbol_trace_coverage: true` once the repository
   wants public APIs and tests to remain fully owned by the spec
+- set `report.output` when your repository checks in one stable report artifact
+  path
 - set `app.bind` and `app.port` only when your team really has a stable local
   browser-app convention worth checking in
+- set `report.output` when your repository checks in one stable report artifact
+  path
 - treat runtime overrides as environment-specific, not project-specific, unless
   your team truly needs a pinned executable name

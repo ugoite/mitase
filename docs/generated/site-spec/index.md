@@ -9,6 +9,7 @@ This section is generated from the YAML source under `docs/syu/`.
 
 - [Configuration / App](/docs/generated/site-spec/config/app)
 - [Configuration / Overview](/docs/generated/site-spec/config/overview)
+- [Configuration / Report](/docs/generated/site-spec/config/report)
 - [Configuration / Runtimes](/docs/generated/site-spec/config/runtimes)
 - [Configuration / Spec](/docs/generated/site-spec/config/spec)
 - [Configuration / Validate](/docs/generated/site-spec/config/validate)
