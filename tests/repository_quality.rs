@@ -198,16 +198,19 @@ fn repository_declares_documentation_guides() {
 
     assert!(readme.contains("docs/guide/concepts.md"));
     assert!(readme.contains("syu init"));
+    assert!(readme.contains("syu init ."));
     assert!(readme.contains("syu validate"));
     assert!(readme.contains("syu browse"));
     assert!(readme.contains("syu app"));
     assert!(readme.contains("examples/polyglot"));
     assert!(readme.contains("CONTRIBUTING.md"));
+    assert!(readme.contains("Contributing and local development"));
     assert!(readme.contains("Documentation site"));
     assert!(readme.contains("Browser app"));
     assert!(readme.contains("scripts/install-precommit.sh"));
     assert!(readme.contains("https://ugoite.github.io/syu/"));
     assert!(readme.contains("docs/syu/config/"));
+    assert!(!readme.contains("cargo run -- init ."));
 
     assert!(concepts.contains("philosophy"));
     assert!(concepts.contains("policy"));
