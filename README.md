@@ -76,6 +76,8 @@ syu init .
 syu validate .
 syu validate . --fix
 syu browse .
+syu list requirement
+syu show REQ-CORE-015
 syu app .
 syu report . --output reports/syu.md
 ```
@@ -129,6 +131,24 @@ errors interactively:
 ```bash
 syu
 syu browse .
+```
+
+### `syu list`
+
+List one layer without entering the interactive browser:
+
+```bash
+syu list philosophy
+syu list feature path/to/workspace --format json
+```
+
+### `syu show`
+
+Show one definition by ID:
+
+```bash
+syu show REQ-CORE-015
+syu show FEAT-BROWSE-001 path/to/workspace --format json
 ```
 
 ### `syu app`

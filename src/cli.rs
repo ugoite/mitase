@@ -25,6 +25,10 @@ pub enum Commands {
         about = "Browse philosophies, policies, features, requirements, and validation errors"
     )]
     Browse(BrowseArgs),
+    #[command(about = "List philosophies, policies, requirements, or features")]
+    List(ListArgs),
+    #[command(about = "Show one philosophy, policy, requirement, or feature by ID")]
+    Show(ShowArgs),
     #[command(about = "Start a local browser app for exploring the current workspace")]
     App(AppArgs),
     #[command(
@@ -51,6 +55,58 @@ impl Default for BrowseArgs {
             workspace: PathBuf::from("."),
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum LookupKind {
+    #[value(alias = "philosophies")]
+    Philosophy,
+    #[value(alias = "policies")]
+    Policy,
+    #[value(alias = "requirements")]
+    Requirement,
+    #[value(alias = "features")]
+    Feature,
+}
+
+impl LookupKind {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Philosophy => "philosophy",
+            Self::Policy => "policy",
+            Self::Requirement => "requirement",
+            Self::Feature => "feature",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct ListArgs {
+    #[arg(help = "Layer kind to list")]
+    #[arg(value_enum)]
+    pub kind: LookupKind,
+
+    #[arg(help = "Workspace root containing syu.yaml and the spec tree (default: docs/syu)")]
+    #[arg(default_value = ".")]
+    pub workspace: PathBuf,
+
+    #[arg(help = "Output format for listed items")]
+    #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct ShowArgs {
+    #[arg(help = "Definition ID to show (for example PHIL-001 or REQ-CORE-001)")]
+    pub id: String,
+
+    #[arg(help = "Workspace root containing syu.yaml and the spec tree (default: docs/syu)")]
+    #[arg(default_value = ".")]
+    pub workspace: PathBuf,
+
+    #[arg(help = "Output format for the selected item")]
+    #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
 }
 
 #[derive(Debug, Clone, Args)]
@@ -171,10 +227,14 @@ impl ValidationGenreFilter {
 
 #[cfg(test)]
 mod tests {
-    use super::{ValidationGenreFilter, ValidationSeverityFilter};
+    use super::{LookupKind, ValidationGenreFilter, ValidationSeverityFilter};
 
     #[test]
-    fn validation_filter_enums_expose_expected_labels() {
+    fn cli_enums_expose_expected_labels() {
+        assert_eq!(LookupKind::Philosophy.label(), "philosophy");
+        assert_eq!(LookupKind::Policy.label(), "policy");
+        assert_eq!(LookupKind::Requirement.label(), "requirement");
+        assert_eq!(LookupKind::Feature.label(), "feature");
         assert_eq!(ValidationSeverityFilter::Error.as_str(), "error");
         assert_eq!(ValidationSeverityFilter::Warning.as_str(), "warning");
         assert_eq!(ValidationGenreFilter::Workspace.as_str(), "workspace");

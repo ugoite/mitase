@@ -6,12 +6,14 @@ use std::io::{self, Write};
 use anyhow::Result;
 
 use crate::{
-    cli::BrowseArgs,
+    cli::{BrowseArgs, LookupKind as EntityKind},
     command::check::collect_check_result,
     model::{CheckResult, Feature, Philosophy, Policy, Requirement},
     rules::rule_by_code,
     workspace::{Workspace, load_workspace},
 };
+
+use super::lookup::WorkspaceLookup;
 
 #[derive(Debug, Clone, Copy)]
 enum TopLevelSection {
@@ -29,14 +31,6 @@ enum View {
     Detail(EntityRef),
     Errors,
     ErrorDetail(usize),
-}
-
-#[derive(Debug, Clone, Copy)]
-enum EntityKind {
-    Philosophy,
-    Policy,
-    Feature,
-    Requirement,
 }
 
 #[derive(Debug, Clone)]
@@ -58,6 +52,10 @@ struct BrowseState {
 }
 
 impl BrowseState {
+    fn lookup(&self) -> Option<WorkspaceLookup<'_>> {
+        self.workspace.as_ref().map(WorkspaceLookup::new)
+    }
+
     fn run(&self) -> Result<i32> {
         let mut view = View::Menu;
 
@@ -373,95 +371,31 @@ impl BrowseState {
     }
 
     fn entity_entries(&self, kind: EntityKind) -> Vec<(String, String)> {
-        match kind {
-            EntityKind::Philosophy => self
-                .workspace
-                .as_ref()
-                .map(|workspace| {
-                    workspace
-                        .philosophies
-                        .iter()
-                        .map(|item| (item.id.clone(), item.title.clone()))
-                        .collect()
-                })
-                .unwrap_or_default(),
-            EntityKind::Policy => self
-                .workspace
-                .as_ref()
-                .map(|workspace| {
-                    workspace
-                        .policies
-                        .iter()
-                        .map(|item| (item.id.clone(), item.title.clone()))
-                        .collect()
-                })
-                .unwrap_or_default(),
-            EntityKind::Feature => self
-                .workspace
-                .as_ref()
-                .map(|workspace| {
-                    workspace
-                        .features
-                        .iter()
-                        .map(|item| (item.id.clone(), item.title.clone()))
-                        .collect()
-                })
-                .unwrap_or_default(),
-            EntityKind::Requirement => self
-                .workspace
-                .as_ref()
-                .map(|workspace| {
-                    workspace
-                        .requirements
-                        .iter()
-                        .map(|item| (item.id.clone(), item.title.clone()))
-                        .collect()
-                })
-                .unwrap_or_default(),
-        }
+        self.lookup()
+            .map(|lookup| {
+                lookup
+                    .entries(kind)
+                    .into_iter()
+                    .map(|item| (item.id, item.title))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     fn philosophy(&self, id: &str) -> Option<&Philosophy> {
-        self.workspace
-            .as_ref()?
-            .philosophies
-            .iter()
-            .find(|item| item.id == id)
+        self.lookup()?.philosophy(id)
     }
 
     fn policy(&self, id: &str) -> Option<&Policy> {
-        self.workspace
-            .as_ref()?
-            .policies
-            .iter()
-            .find(|item| item.id == id)
+        self.lookup()?.policy(id)
     }
 
     fn requirement(&self, id: &str) -> Option<&Requirement> {
-        self.workspace
-            .as_ref()?
-            .requirements
-            .iter()
-            .find(|item| item.id == id)
+        self.lookup()?.requirement(id)
     }
 
     fn feature(&self, id: &str) -> Option<&Feature> {
-        self.workspace
-            .as_ref()?
-            .features
-            .iter()
-            .find(|item| item.id == id)
-    }
-}
-
-impl EntityKind {
-    fn label(self) -> &'static str {
-        match self {
-            Self::Philosophy => "philosophy",
-            Self::Policy => "policy",
-            Self::Feature => "feature",
-            Self::Requirement => "requirement",
-        }
+        self.lookup()?.feature(id)
     }
 }
 

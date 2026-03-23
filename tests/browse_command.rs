@@ -38,6 +38,8 @@ fn bare_syu_prints_help_when_not_attached_to_a_terminal() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Usage:"));
     assert!(stdout.contains("browse"));
+    assert!(stdout.contains("list"));
+    assert!(stdout.contains("show"));
     assert!(stdout.contains("validate"));
 }
 

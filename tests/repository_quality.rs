@@ -203,6 +203,8 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("syu init ."));
     assert!(readme.contains("syu validate"));
     assert!(readme.contains("syu browse"));
+    assert!(readme.contains("syu list"));
+    assert!(readme.contains("syu show"));
     assert!(readme.contains("syu app"));
     assert!(readme.contains("examples/polyglot"));
     assert!(readme.contains("CONTRIBUTING.md"));
@@ -224,6 +226,8 @@ fn repository_declares_documentation_guides() {
     assert!(concepts.contains("Specification Reference"));
     assert!(getting_started.contains("syu validate . --fix"));
     assert!(getting_started.contains("syu browse ."));
+    assert!(getting_started.contains("syu list feature"));
+    assert!(getting_started.contains("syu show REQ-CORE-015"));
     assert!(getting_started.contains("syu app ."));
     assert!(getting_started.contains("status: implemented"));
     assert!(getting_started.contains("Keep exploring"));
@@ -244,6 +248,7 @@ fn repository_declares_documentation_guides() {
     assert!(generated_config_spec.contains("docs/syu/config/spec.yaml"));
     assert!(generated_config_validate.contains("validate.default_fix"));
     assert!(generated_config_runtimes.contains("docs/syu/config/runtimes.yaml"));
+    assert!(generated_site_index.contains("/docs/generated/site-spec/features/cli/show-list"));
     assert!(generated_site_index.contains("/docs/generated/site-spec/features/validation"));
     assert!(generated_validation.contains("docs/syu/features/validation/validation.yaml"));
     assert!(generated_validation.contains("SYU-graph-reference-001"));
