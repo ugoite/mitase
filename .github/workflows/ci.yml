@@ -34,7 +34,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
+        uses: taiki-e/cache-cargo-install-action@v3
+        with:
+          tool: cargo-llvm-cov
 
       - name: Set up Python with pip cache
         uses: actions/setup-python@v6
@@ -80,7 +82,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
+        uses: taiki-e/cache-cargo-install-action@v3
+        with:
+          tool: cargo-llvm-cov
 
       - name: Run line coverage
         run: scripts/ci/coverage.sh lcov
@@ -111,7 +115,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-audit
-        uses: taiki-e/install-action@cargo-audit
+        uses: taiki-e/cache-cargo-install-action@v3
+        with:
+          tool: cargo-audit
 
       - name: Run dependency audit
         run: cargo audit
@@ -199,7 +205,7 @@ jobs:
 
       - name: Install browser app dependencies
         working-directory: app
-        run: npm install
+        run: npm ci
 
       - name: Check browser app
         working-directory: app

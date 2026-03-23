@@ -33,8 +33,18 @@ features:
             - coverage
             - actionlint
             - Restore Rust cache
+            - taiki-e/cache-cargo-install-action@v3
+            - "tool: cargo-llvm-cov"
+            - "tool: cargo-audit"
             - Set up Python with pip cache
+            - "cache-dependency-path: app/package-lock.json"
+            - npm ci
             - Review dependency changes
+        - file: .github/actions/build-docs-site/action.yml
+          symbols:
+            - actions/setup-node@v6
+            - "cache-dependency-path: website/package-lock.json"
+            - npm ci
         - file: .github/workflows/codeql.yml
           symbols:
             - merge_group
