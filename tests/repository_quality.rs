@@ -394,9 +394,14 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(dependabot.contains("FEAT-QUALITY-001"));
     assert!(dependabot.contains("package-ecosystem: cargo"));
     assert!(dependabot.contains("package-ecosystem: github-actions"));
+    assert!(dependabot.matches("package-ecosystem: npm").count() >= 2);
     assert!(dependabot.contains("target-branch: main"));
     assert!(dependabot.contains("rust-crates"));
     assert!(dependabot.contains("github-actions"));
+    assert!(dependabot.contains("directory: /website"));
+    assert!(dependabot.contains("directory: /app"));
+    assert!(dependabot.contains("docs-site-npm"));
+    assert!(dependabot.contains("browser-app-npm"));
 }
 
 #[test]
