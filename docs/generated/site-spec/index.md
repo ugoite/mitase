@@ -18,6 +18,7 @@ This section is generated from the YAML source under `docs/syu/`.
 - [Validate Command / Check](/docs/generated/site-spec/features/cli/check)
 - [Init Command / Init](/docs/generated/site-spec/features/cli/init)
 - [Report Command / Report](/docs/generated/site-spec/features/cli/report)
+- [Lookup CLI / Show List](/docs/generated/site-spec/features/cli/show-list)
 - [Documentation / Docs](/docs/generated/site-spec/features/documentation/docs)
 - [Agent Skills / Skills](/docs/generated/site-spec/features/documentation/skills)
 - [Features](/docs/generated/site-spec/features)

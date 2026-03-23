@@ -21,6 +21,8 @@ description: "Generated reference for docs/syu/features/features.yaml"
   - **file**: browser/app.yaml
 - **kind**: browse
   - **file**: cli/browse.yaml
+- **kind**: show-list
+  - **file**: cli/show-list.yaml
 - **kind**: check
   - **file**: cli/check.yaml
 - **kind**: init
@@ -51,6 +53,8 @@ files:
     file: browser/app.yaml
   - kind: browse
     file: cli/browse.yaml
+  - kind: show-list
+    file: cli/show-list.yaml
   - kind: check
     file: cli/check.yaml
   - kind: init

@@ -1,0 +1,27 @@
+category: Lookup CLI
+version: 1
+
+features:
+  - id: FEAT-LIST-001
+    title: Non-interactive definition listing
+    summary: List philosophies, policies, requirements, or features in one command without entering interactive browse mode.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-018
+    implementations:
+      rust:
+        - file: src/command/list.rs
+          symbols:
+            - run_list_command
+
+  - id: FEAT-SHOW-001
+    title: Non-interactive definition detail lookup
+    summary: Show one philosophy, policy, requirement, or feature by ID in one command.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-018
+    implementations:
+      rust:
+        - file: src/command/show.rs
+          symbols:
+            - run_show_command

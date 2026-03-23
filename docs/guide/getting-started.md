@@ -76,6 +76,8 @@ implementations:
 ```bash
 syu validate .
 syu browse .
+syu list feature
+syu show REQ-CORE-015
 syu app .
 ```
 
@@ -84,6 +86,8 @@ Use JSON when integrating with automation:
 ```bash
 syu validate . --format json
 syu validate . --severity error --genre trace
+syu list requirement --format json
+syu show FEAT-BROWSE-001 --format json
 ```
 
 Filters stay view-oriented: they narrow the visible diagnostics while preserving

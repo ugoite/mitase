@@ -92,3 +92,32 @@ requirements:
         - file: app/tests/browser-app.spec.ts
           symbols:
             - '*'
+  - id: REQ-CORE-018
+    title: Provide non-interactive list and show CLI commands
+    description: |
+      The CLI MUST provide one-command lookup flows that let users list
+      philosophies, policies, requirements, or features and show the details
+      for a known item by ID without entering interactive browse mode. These
+      commands SHOULD keep working when validation issues exist so long as the
+      workspace itself can still load, and SHOULD offer JSON output for
+      automation.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-001
+      - POL-002
+      - POL-004
+    linked_features:
+      - FEAT-LIST-001
+      - FEAT-SHOW-001
+    tests:
+      rust:
+        - file: tests/list_command.rs
+          symbols:
+            - '*'
+        - file: tests/show_command.rs
+          symbols:
+            - '*'
+        - file: src/lib.rs
+          symbols:
+            - dispatches_lookup_subcommands_without_rewriting_them

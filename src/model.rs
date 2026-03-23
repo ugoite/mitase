@@ -15,7 +15,7 @@ pub struct PhilosophyDocument {
     pub philosophies: Vec<Philosophy>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Philosophy {
     pub id: String,
@@ -35,7 +35,7 @@ pub struct PolicyDocument {
     pub policies: Vec<Policy>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Policy {
     pub id: String,
@@ -56,7 +56,7 @@ pub struct RequirementDocument {
     pub requirements: Vec<Requirement>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Requirement {
     pub id: String,
@@ -95,7 +95,7 @@ pub struct FeatureDocument {
     pub features: Vec<Feature>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Feature {
     pub id: String,
@@ -108,7 +108,7 @@ pub struct Feature {
     pub implementations: BTreeMap<String, Vec<TraceReference>>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct TraceReference {
     pub file: PathBuf,
