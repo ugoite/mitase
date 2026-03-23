@@ -19,7 +19,7 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
 
 - **id**: FEAT-QUALITY-001
   - **title**: Repository quality automation
-  - **summary**: Keep self-validation, dependency hygiene, code scanning, and merge-queue-safe CI execution fast enough to run on every pull request.
+  - **summary**: Keep self-validation, dependency hygiene across Rust, GitHub Actions, the docs site, and the browser app, code scanning, and merge-queue-safe CI execution fast enough to run on every pull request.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-005
@@ -70,6 +70,8 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
           - FEAT-QUALITY-001
           - package-ecosystem
           - target-branch
+          - directory: /website
+          - directory: /app
 
 ## Source YAML
 
@@ -80,7 +82,7 @@ version: 1
 features:
   - id: FEAT-QUALITY-001
     title: Repository quality automation
-    summary: Keep self-validation, dependency hygiene, code scanning, and merge-queue-safe CI execution fast enough to run on every pull request.
+    summary: Keep self-validation, dependency hygiene across Rust, GitHub Actions, the docs site, and the browser app, code scanning, and merge-queue-safe CI execution fast enough to run on every pull request.
     status: implemented
     linked_requirements:
       - REQ-CORE-005
@@ -131,4 +133,6 @@ features:
             - FEAT-QUALITY-001
             - package-ecosystem
             - target-branch
+            - "directory: /website"
+            - "directory: /app"
 ```

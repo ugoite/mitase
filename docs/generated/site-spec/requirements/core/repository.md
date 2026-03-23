@@ -169,7 +169,8 @@ description: "Generated reference for docs/syu/requirements/core/repository.yaml
     - |
       The repository MUST cache repeatable CI build state, keep GitHub Actions
       runs concise enough for pull-request-first development, and use Dependabot
-      to update Rust and GitHub Actions dependencies against `main`.
+      to update Rust, GitHub Actions, docs-site npm, and browser-app npm
+      dependencies against `main`.
   - **priority**: medium
   - **status**: implemented
   - **linked_policies**:
@@ -333,7 +334,8 @@ requirements:
     description: |
       The repository MUST cache repeatable CI build state, keep GitHub Actions
       runs concise enough for pull-request-first development, and use Dependabot
-      to update Rust and GitHub Actions dependencies against `main`.
+      to update Rust, GitHub Actions, docs-site npm, and browser-app npm
+      dependencies against `main`.
     priority: medium
     status: implemented
     linked_policies:
