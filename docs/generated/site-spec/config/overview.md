@@ -33,6 +33,7 @@ description: "Generated reference for docs/syu/config/overview.yaml"
 
 - spec.yaml
 - validate.yaml
+- app.yaml
 - runtimes.yaml
 
 ### Items
@@ -61,6 +62,7 @@ guidance:
 sections:
   - spec.yaml
   - validate.yaml
+  - app.yaml
   - runtimes.yaml
 items:
   - key: version

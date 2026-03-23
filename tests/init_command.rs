@@ -1,4 +1,5 @@
 use assert_cmd::cargo::CommandCargoExt;
+use serde_yaml::Value;
 use std::{fs, process::Command};
 use tempfile::tempdir;
 
@@ -27,13 +28,19 @@ fn init_command_bootstraps_a_workspace_that_validate_accepts() {
     assert!(workspace.join("docs/syu/features/core/core.yaml").exists());
 
     let config = fs::read_to_string(workspace.join("syu.yaml")).expect("config should exist");
+    let parsed_config: Value = serde_yaml::from_str(&config).expect("config should be valid yaml");
     let requirement = fs::read_to_string(workspace.join("docs/syu/requirements/core/core.yaml"))
         .expect("requirement should exist");
     let feature = fs::read_to_string(workspace.join("docs/syu/features/core/core.yaml"))
         .expect("feature should exist");
 
     assert!(config.contains(env!("CARGO_PKG_VERSION")));
-    assert!(config.contains("require_reciprocal_links: true"));
+    assert_eq!(parsed_config["app"]["bind"].as_str(), Some("127.0.0.1"));
+    assert_eq!(parsed_config["app"]["port"].as_u64(), Some(3000));
+    assert_eq!(
+        parsed_config["validate"]["require_reciprocal_links"].as_bool(),
+        Some(true)
+    );
     assert!(requirement.contains("status: planned"));
     assert!(feature.contains("status: planned"));
 

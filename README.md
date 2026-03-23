@@ -142,6 +142,8 @@ syu app . --bind 127.0.0.1 --port 3000
 
 The browser app serves a VitePlus / React / Tailwind UI and uses Rust plus
 WebAssembly to build the layered browser view from the live workspace data.
+When `syu.yaml` defines `app.bind` or `app.port`, `syu app` uses those defaults
+unless the CLI flags override them.
 
 ### `syu report`
 
@@ -183,6 +185,9 @@ validate:
   require_non_orphaned_items: true
   require_reciprocal_links: true
   require_symbol_trace_coverage: false
+app:
+  bind: 127.0.0.1
+  port: 3000
 runtimes:
   python:
     command: auto
@@ -199,6 +204,7 @@ Key behaviors:
 - `validate.require_non_orphaned_items` turns isolated layered definitions into validation errors
 - `validate.require_reciprocal_links` keeps adjacent-layer backlinks mandatory by default while still allowing phased migration when disabled
 - `validate.require_symbol_trace_coverage` opt-in checks that public Rust symbols belong to features and tests belong to requirements
+- `app.bind` and `app.port` define the default local browser-app address and port unless `--bind` / `--port` override them
 - `runtimes.*.command` can be set to `auto` or an explicit executable name/path
 
 The self-hosted repository keeps a structured reference for supported config

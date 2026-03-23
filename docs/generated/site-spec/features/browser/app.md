@@ -25,15 +25,26 @@ description: "Generated reference for docs/syu/features/browser/app.yaml"
     - REQ-CORE-017
   - **implementations**:
     - **rust**:
+      - **file**: src/cli.rs
+        - **symbols**:
+          - AppArgs
       - **file**: src/command/app.rs
         - **symbols**:
           - *
+      - **file**: src/config.rs
+        - **symbols**:
+          - AppConfig
       - **file**: crates/syu-core/src/lib.rs
         - **symbols**:
           - *
       - **file**: app/wasm/src/lib.rs
         - **symbols**:
           - *
+    - **yaml**:
+      - **file**: docs/syu/config/app.yaml
+        - **symbols**:
+          - app.bind
+          - app.port
     - **typescript**:
       - **file**: app/src/App.tsx
         - **symbols**:
@@ -60,15 +71,26 @@ features:
       - REQ-CORE-017
     implementations:
       rust:
+        - file: src/cli.rs
+          symbols:
+            - AppArgs
         - file: src/command/app.rs
           symbols:
             - "*"
+        - file: src/config.rs
+          symbols:
+            - AppConfig
         - file: crates/syu-core/src/lib.rs
           symbols:
             - "*"
         - file: app/wasm/src/lib.rs
           symbols:
             - "*"
+      yaml:
+        - file: docs/syu/config/app.yaml
+          symbols:
+            - app.bind
+            - app.port
       typescript:
         - file: app/src/App.tsx
           symbols:
