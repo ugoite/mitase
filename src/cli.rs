@@ -1,3 +1,4 @@
+// FEAT-APP-001
 // FEAT-BROWSE-001
 // REQ-CORE-001
 
@@ -57,13 +58,13 @@ pub struct AppArgs {
     #[arg(default_value = ".")]
     pub workspace: PathBuf,
 
-    #[arg(help = "IP address to bind the local app server to")]
-    #[arg(long, default_value = "127.0.0.1")]
-    pub bind: String,
+    #[arg(help = "IP address to bind the local app server to (default: app.bind or 127.0.0.1)")]
+    #[arg(long)]
+    pub bind: Option<String>,
 
-    #[arg(help = "Port to bind the local app server to")]
-    #[arg(short, long, default_value_t = 3000)]
-    pub port: u16,
+    #[arg(help = "Port to bind the local app server to (default: app.port or 3000)")]
+    #[arg(short, long)]
+    pub port: Option<u16>,
 }
 
 #[derive(Debug, Clone, Args)]

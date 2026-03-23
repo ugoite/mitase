@@ -88,8 +88,8 @@ mod tests {
             Cli {
                 command: Some(Commands::App(AppArgs {
                     workspace: PathBuf::from("workspace"),
-                    bind: "127.0.0.1".to_string(),
-                    port: 4173,
+                    bind: Some("127.0.0.1".to_string()),
+                    port: Some(4173),
                 })),
             },
             true,
@@ -99,7 +99,7 @@ mod tests {
         assert!(matches!(
             action,
             super::Dispatch::App(crate::cli::AppArgs { workspace, port, .. })
-                if workspace == Path::new("workspace") && port == 4173
+                if workspace == Path::new("workspace") && port == Some(4173)
         ));
     }
 }

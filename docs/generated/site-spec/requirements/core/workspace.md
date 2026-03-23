@@ -82,7 +82,9 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       folder-oriented subnavigation for each layer; show linked items and
       current validation issues even when the workspace is imperfect; and reuse
       browser-safe Rust logic through WebAssembly instead of reimplementing the
-      layered model only in JavaScript.
+      layered model only in JavaScript. When `syu.yaml` defines app defaults,
+      `syu app` MUST use `app.bind` and `app.port` unless CLI flags override
+      them.
   - **priority**: medium
   - **status**: implemented
   - **linked_policies**:
@@ -178,7 +180,9 @@ requirements:
       folder-oriented subnavigation for each layer; show linked items and
       current validation issues even when the workspace is imperfect; and reuse
       browser-safe Rust logic through WebAssembly instead of reimplementing the
-      layered model only in JavaScript.
+      layered model only in JavaScript. When `syu.yaml` defines app defaults,
+      `syu app` MUST use `app.bind` and `app.port` unless CLI flags override
+      them.
     priority: medium
     status: implemented
     linked_policies:

@@ -1,3 +1,4 @@
+// FEAT-APP-001
 // FEAT-CHECK-001
 // REQ-CORE-009
 
@@ -27,6 +28,8 @@ pub struct SyuConfig {
     #[serde(default)]
     pub validate: ValidateConfig,
     #[serde(default)]
+    pub app: AppConfig,
+    #[serde(default)]
     pub runtimes: RuntimeConfigSet,
 }
 
@@ -36,6 +39,7 @@ impl Default for SyuConfig {
             version: default_version(),
             spec: SpecConfig::default(),
             validate: ValidateConfig::default(),
+            app: AppConfig::default(),
             runtimes: RuntimeConfigSet::default(),
         }
     }
@@ -79,6 +83,24 @@ impl Default for ValidateConfig {
             require_non_orphaned_items: default_require_non_orphaned_items(),
             require_reciprocal_links: default_require_reciprocal_links(),
             require_symbol_trace_coverage: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct AppConfig {
+    #[serde(default = "default_app_bind")]
+    pub bind: String,
+    #[serde(default = "default_app_port")]
+    pub port: u16,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            bind: default_app_bind(),
+            port: default_app_port(),
         }
     }
 }
@@ -157,6 +179,14 @@ fn default_spec_root() -> PathBuf {
     PathBuf::from("docs/syu")
 }
 
+fn default_app_bind() -> String {
+    "127.0.0.1".to_string()
+}
+
+fn default_app_port() -> u16 {
+    3000
+}
+
 fn default_runtime_command() -> String {
     "auto".to_string()
 }
@@ -232,6 +262,8 @@ mod tests {
         assert!(loaded.config.validate.require_non_orphaned_items);
         assert!(loaded.config.validate.require_reciprocal_links);
         assert!(!loaded.config.validate.require_symbol_trace_coverage);
+        assert_eq!(loaded.config.app.bind, "127.0.0.1");
+        assert_eq!(loaded.config.app.port, 3000);
     }
 
     #[test]
@@ -240,7 +272,7 @@ mod tests {
         fs::write(
             tempdir.path().join(CONFIG_FILE_NAME),
             format!(
-                "version: {version}\nspec:\n  root: spec/contracts\nvalidate:\n  default_fix: true\n  allow_planned: false\n  require_non_orphaned_items: false\n  require_reciprocal_links: false\n  require_symbol_trace_coverage: true\nruntimes:\n  python:\n    command: python3\n  node:\n    command: node\n",
+                "version: {version}\nspec:\n  root: spec/contracts\nvalidate:\n  default_fix: true\n  allow_planned: false\n  require_non_orphaned_items: false\n  require_reciprocal_links: false\n  require_symbol_trace_coverage: true\napp:\n  bind: 0.0.0.0\n  port: 4321\nruntimes:\n  python:\n    command: python3\n  node:\n    command: node\n",
                 version = current_cli_version()
             ),
         )
@@ -257,6 +289,8 @@ mod tests {
         assert!(!loaded.config.validate.require_non_orphaned_items);
         assert!(!loaded.config.validate.require_reciprocal_links);
         assert!(loaded.config.validate.require_symbol_trace_coverage);
+        assert_eq!(loaded.config.app.bind, "0.0.0.0");
+        assert_eq!(loaded.config.app.port, 4321);
         assert_eq!(loaded.config.runtimes.python.command, "python3");
     }
 
@@ -269,6 +303,8 @@ mod tests {
         assert!(rendered.contains("require_non_orphaned_items: true"));
         assert!(rendered.contains("require_reciprocal_links: true"));
         assert!(rendered.contains("require_symbol_trace_coverage: false"));
+        assert!(rendered.contains("bind: 127.0.0.1"));
+        assert!(rendered.contains("port: 3000"));
         assert!(rendered.contains("command: auto"));
     }
 

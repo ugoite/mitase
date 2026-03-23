@@ -7,6 +7,7 @@ This section is generated from the YAML source under `docs/syu/`.
 
 ## Available documents
 
+- [Configuration / App](/docs/generated/site-spec/config/app)
 - [Configuration / Overview](/docs/generated/site-spec/config/overview)
 - [Configuration / Runtimes](/docs/generated/site-spec/config/runtimes)
 - [Configuration / Spec](/docs/generated/site-spec/config/spec)

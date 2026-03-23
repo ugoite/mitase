@@ -10,6 +10,7 @@ under `docs/syu/config/`:
 - `docs/syu/config/overview.yaml`
 - `docs/syu/config/spec.yaml`
 - `docs/syu/config/validate.yaml`
+- `docs/syu/config/app.yaml`
 - `docs/syu/config/runtimes.yaml`
 
 Add new supported config items there first, then update this guide when the
@@ -27,6 +28,9 @@ validate:
   require_non_orphaned_items: true
   require_reciprocal_links: true
   require_symbol_trace_coverage: false
+app:
+  bind: 127.0.0.1
+  port: 3000
 runtimes:
   python:
     command: auto
@@ -96,6 +100,20 @@ symbol belongs to some feature and every test belongs to some requirement.
 This is useful once the repository wants maintenance work to stay fully owned by
 the specification.
 
+### `app.bind`
+
+Controls the default address that `syu app` binds to.
+
+Use `127.0.0.1` for a localhost-only browser app or `0.0.0.0` when a demo or
+container workflow needs the server to be reachable from outside the process.
+
+### `app.port`
+
+Controls the default port that `syu app` binds to.
+
+CLI flags still override the config so temporary port conflicts can be resolved
+without editing the repository.
+
 ### `runtimes.python.command`
 
 Controls which Python executable `syu` uses for Python inspection.
@@ -122,6 +140,16 @@ override it.
 `validate.require_non_orphaned_items`,
 `validate.require_reciprocal_links`, and
 `validate.require_symbol_trace_coverage` are also configuration-only.
+
+For the browser app, CLI flags override config:
+
+1. `--bind`
+2. `app.bind`
+3. `127.0.0.1`
+
+1. `--port`
+2. `app.port`
+3. `3000`
 
 ## Wildcard file ownership
 
@@ -151,5 +179,7 @@ want strict ownership checks without enumerating every public symbol by hand.
   backlinks after stabilizing the forward graph
 - turn on `validate.require_symbol_trace_coverage: true` once the repository
   wants public APIs and tests to remain fully owned by the spec
+- set `app.bind` and `app.port` only when your team really has a stable local
+  browser-app convention worth checking in
 - treat runtime overrides as environment-specific, not project-specific, unless
   your team truly needs a pinned executable name

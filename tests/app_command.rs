@@ -1,16 +1,48 @@
 use assert_cmd::cargo::CommandCargoExt;
 use std::{
+    fs,
     io::{Read, Write},
     net::{TcpListener, TcpStream},
+    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     thread,
     time::Duration,
 };
+use tempfile::tempdir;
 
-fn fixture_path(name: &str) -> std::path::PathBuf {
-    std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+fn fixture_path(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/workspaces")
         .join(name)
+}
+
+fn copy_dir_recursive(source: &Path, destination: &Path) {
+    fs::create_dir_all(destination).expect("destination dir");
+    for entry in fs::read_dir(source).expect("source dir") {
+        let entry = entry.expect("dir entry");
+        let entry_type = entry.file_type().expect("entry type");
+        let destination_path = destination.join(entry.file_name());
+        if entry_type.is_dir() {
+            copy_dir_recursive(&entry.path(), &destination_path);
+        } else {
+            fs::copy(entry.path(), destination_path).expect("file copy");
+        }
+    }
+}
+
+fn configured_workspace(bind: &str, port: u16) -> (tempfile::TempDir, PathBuf) {
+    let tempdir = tempdir().expect("tempdir should exist");
+    let workspace = tempdir.path().join("workspace");
+    copy_dir_recursive(&fixture_path("passing"), &workspace);
+    fs::write(
+        workspace.join("syu.yaml"),
+        format!(
+            "version: {version}\nspec:\n  root: docs/syu\nvalidate:\n  default_fix: false\n  allow_planned: true\n  require_non_orphaned_items: true\n  require_symbol_trace_coverage: false\napp:\n  bind: {bind}\n  port: {port}\nruntimes:\n  python:\n    command: auto\n  node:\n    command: auto\n",
+            version = env!("CARGO_PKG_VERSION"),
+        ),
+    )
+    .expect("config");
+    (tempdir, workspace)
 }
 
 fn reserve_port() -> u16 {
@@ -97,6 +129,28 @@ fn app_command_serves_browser_ui_and_payload() {
 }
 
 #[test]
+fn app_command_uses_configured_bind_and_port_defaults() {
+    let port = reserve_port();
+    let (_tempdir, workspace) = configured_workspace("127.0.0.1", port);
+
+    let mut child = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("app")
+        .arg(&workspace)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("app command should start");
+
+    wait_for_server(port);
+    let health = http_get(port, "/healthz").expect("healthz should load");
+    assert!(health.contains("200 OK"));
+
+    shutdown_child(&mut child);
+}
+
+#[test]
 fn app_command_rejects_invalid_bind_addresses() {
     let output = Command::cargo_bin("syu")
         .expect("binary should build")
@@ -109,4 +163,45 @@ fn app_command_rejects_invalid_bind_addresses() {
 
     assert_eq!(output.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&output.stderr).contains("invalid bind address"));
+}
+
+#[test]
+fn app_command_rejects_invalid_bind_addresses_from_config() {
+    let (_tempdir, workspace) = configured_workspace("definitely-not-an-ip", 3000);
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("app")
+        .arg(&workspace)
+        .output()
+        .expect("command should run");
+
+    assert!(!output.status.success(), "invalid config bind should fail");
+    assert!(String::from_utf8_lossy(&output.stderr).contains("invalid bind address"));
+}
+
+#[test]
+fn app_command_cli_flags_override_configured_bind_and_port() {
+    let override_port = reserve_port();
+    let (_tempdir, workspace) = configured_workspace("definitely-not-an-ip", 39999);
+
+    let mut child = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("app")
+        .arg(&workspace)
+        .arg("--bind")
+        .arg("127.0.0.1")
+        .arg("--port")
+        .arg(override_port.to_string())
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("app command should start");
+
+    wait_for_server(override_port);
+    let health = http_get(override_port, "/healthz").expect("healthz should load");
+    assert!(health.contains("200 OK"));
+
+    shutdown_child(&mut child);
 }
