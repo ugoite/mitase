@@ -389,9 +389,9 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(codeql_workflow.contains("Analyze (rust)"));
     assert!(codeql_workflow.contains("dtolnay/rust-toolchain@stable"));
     assert!(codeql_workflow.contains("Swatinem/rust-cache@v2"));
-    assert!(codeql_workflow.contains("github/codeql-action/init@v3"));
-    assert!(codeql_workflow.contains("github/codeql-action/autobuild@v3"));
-    assert!(codeql_workflow.contains("github/codeql-action/analyze@v3"));
+    assert!(codeql_workflow.contains("github/codeql-action/init@v4"));
+    assert!(codeql_workflow.contains("github/codeql-action/autobuild@v4"));
+    assert!(codeql_workflow.contains("github/codeql-action/analyze@v4"));
 
     assert!(release_artifacts.contains("Restore Rust cache"));
     assert!(release_artifacts.contains("Swatinem/rust-cache@v2"));

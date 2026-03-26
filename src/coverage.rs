@@ -10,6 +10,7 @@ use std::{
 use syn::{Attribute, ImplItem, Item, Visibility};
 
 use crate::{
+    inspect::inspect_typescript_file,
     model::{Feature, Issue, Requirement, TraceReference},
     workspace::Workspace,
 };
@@ -38,13 +39,21 @@ pub fn validate_symbol_trace_coverage(workspace: &Workspace, issues: &mut Vec<Is
         return;
     }
 
-    let targets = match discover_rust_targets(&workspace.root) {
+    let mut targets = match discover_rust_targets(&workspace.root) {
         Ok(targets) => targets,
         Err(issue) => {
             issues.push(*issue);
             return;
         }
     };
+
+    match discover_typescript_targets(&workspace.root) {
+        Ok(ts_targets) => targets.extend(ts_targets),
+        Err(issue) => {
+            issues.push(*issue);
+            return;
+        }
+    }
 
     let feature_coverage = collect_feature_coverage(&workspace.features);
     let requirement_coverage = collect_requirement_coverage(&workspace.requirements);
@@ -325,6 +334,133 @@ fn rust_files_under(root: &Path) -> Result<Vec<PathBuf>, Box<Issue>> {
         ))
     })?;
     Ok(files)
+}
+
+fn discover_typescript_targets(root: &Path) -> Result<Vec<CoverageTarget>, Box<Issue>> {
+    const TS_EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx"];
+
+    let src_dir = root.join("src");
+    let tests_dir = root.join("tests");
+
+    let mut src_files: Vec<PathBuf> = Vec::new();
+    let mut test_files: Vec<PathBuf> = Vec::new();
+
+    for ext in TS_EXTENSIONS {
+        src_files.extend(typescript_files_under(&src_dir, ext)?);
+        test_files.extend(typescript_files_under(&tests_dir, ext)?);
+    }
+
+    if src_files.is_empty() && test_files.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut targets = Vec::new();
+
+    for path in &src_files {
+        let contents = match fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let symbols = match inspect_typescript_file(path, &contents) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        let relative = path
+            .strip_prefix(root)
+            .expect("scanned file should remain under the workspace root")
+            .to_path_buf();
+        for symbol in symbols {
+            if symbol.is_exported {
+                targets.push(CoverageTarget {
+                    file: relative.clone(),
+                    symbol: symbol.name,
+                    kind: CoverageTargetKind::PublicSymbol,
+                });
+            }
+        }
+    }
+
+    for path in &test_files {
+        let contents = match fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+        let symbols = match inspect_typescript_file(path, &contents) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+        let relative = path
+            .strip_prefix(root)
+            .expect("scanned file should remain under the workspace root")
+            .to_path_buf();
+        for symbol in symbols {
+            if symbol.name.starts_with("test") || symbol.name.starts_with("Test") {
+                targets.push(CoverageTarget {
+                    file: relative.clone(),
+                    symbol: symbol.name,
+                    kind: CoverageTargetKind::TestSymbol,
+                });
+            }
+        }
+    }
+
+    targets.sort_by(|left, right| {
+        (
+            left.file.as_os_str(),
+            left.symbol.as_str(),
+            match left.kind {
+                CoverageTargetKind::PublicSymbol => 0,
+                CoverageTargetKind::TestSymbol => 1,
+            },
+        )
+            .cmp(&(
+                right.file.as_os_str(),
+                right.symbol.as_str(),
+                match right.kind {
+                    CoverageTargetKind::PublicSymbol => 0,
+                    CoverageTargetKind::TestSymbol => 1,
+                },
+            ))
+    });
+    targets.dedup();
+
+    Ok(targets)
+}
+
+fn typescript_files_under(root: &Path, extension: &str) -> Result<Vec<PathBuf>, Box<Issue>> {
+    if !root.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut files = Vec::new();
+    collect_typescript_files_recursive(root, extension, &mut files).map_err(|error| {
+        Box::new(Issue::error(
+            "SYU-coverage-walk-001",
+            "trace coverage inventory",
+            Some(root.display().to_string()),
+            format!("Failed to walk `{}` while building trace coverage inventory: {error}", root.display()),
+            Some("Fix the directory layout or disable `validate.require_symbol_trace_coverage` until the workspace can be scanned.".to_string()),
+        ))
+    })?;
+    Ok(files)
+}
+
+fn collect_typescript_files_recursive(
+    directory: &Path,
+    extension: &str,
+    files: &mut Vec<PathBuf>,
+) -> std::io::Result<()> {
+    for entry in fs::read_dir(directory)? {
+        let path = entry?.path();
+        if path.is_dir() {
+            collect_typescript_files_recursive(&path, extension, files)?;
+            continue;
+        }
+        if path.extension().and_then(|ext| ext.to_str()) == Some(extension) {
+            files.push(path);
+        }
+    }
+    Ok(())
 }
 
 fn collect_rust_files_recursive(directory: &Path, files: &mut Vec<PathBuf>) -> std::io::Result<()> {

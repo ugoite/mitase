@@ -71,8 +71,11 @@ requirements:
       any `doc_contains` snippets are present in the symbol documentation.
       Validation MUST also reject duplicate trace mappings inside a single
       language list, support wildcard file ownership, and provide an optional
-      mode that requires every public Rust symbol to belong to some feature and
-      every Rust test to belong to some requirement.
+      mode that requires every public symbol and every test symbol in repository
+      source and test roots to belong to some feature or requirement respectively,
+      across Rust (`pub` symbols and `#[test]` functions), Python (non-underscore-
+      prefixed symbols and `test_*` functions), and TypeScript/JavaScript (exported
+      symbols and `test*`-prefixed functions).
     priority: high
     status: implemented
     linked_policies:
