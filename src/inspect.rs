@@ -79,14 +79,14 @@ pub struct SymbolInspection {
 }
 
 #[derive(Debug, Clone)]
-struct PythonSymbolInspection {
-    name: String,
-    docs: String,
-    line: usize,
-    body_line: usize,
-    body_indent: String,
-    doc_start_line: Option<usize>,
-    doc_end_line: Option<usize>,
+pub(crate) struct PythonSymbolInspection {
+    pub(crate) name: String,
+    pub(crate) docs: String,
+    pub(crate) line: usize,
+    pub(crate) body_line: usize,
+    pub(crate) body_indent: String,
+    pub(crate) doc_start_line: Option<usize>,
+    pub(crate) doc_end_line: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -238,7 +238,10 @@ fn inspect_python_symbol(
     Ok(symbols.into_iter().find(|item| item.name == symbol))
 }
 
-fn inspect_python_file(config: &SyuConfig, path: &Path) -> Result<Vec<PythonSymbolInspection>> {
+pub(crate) fn inspect_python_file(
+    config: &SyuConfig,
+    path: &Path,
+) -> Result<Vec<PythonSymbolInspection>> {
     inspect_python_file_with_runtime(
         resolve_runtime_command(config, RuntimeKind::Python).as_deref(),
         path,
