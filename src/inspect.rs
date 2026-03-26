@@ -90,10 +90,11 @@ pub(crate) struct PythonSymbolInspection {
 }
 
 #[derive(Debug, Clone)]
-struct TypeScriptSymbolInspection {
-    name: String,
-    docs: String,
-    line: usize,
+pub(crate) struct TypeScriptSymbolInspection {
+    pub(crate) name: String,
+    pub(crate) docs: String,
+    pub(crate) line: usize,
+    pub(crate) is_exported: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -297,7 +298,10 @@ fn inspect_typescript_symbol(
     Ok(symbols.into_iter().find(|item| item.name == symbol))
 }
 
-fn inspect_typescript_file(path: &Path, contents: &str) -> Result<Vec<TypeScriptSymbolInspection>> {
+pub(crate) fn inspect_typescript_file(
+    path: &Path,
+    contents: &str,
+) -> Result<Vec<TypeScriptSymbolInspection>> {
     let mut parser = Parser::new();
     let language = match path.extension().and_then(|ext| ext.to_str()) {
         Some("tsx" | "jsx") => tree_sitter_typescript::LANGUAGE_TSX,
@@ -312,15 +316,18 @@ fn inspect_typescript_file(path: &Path, contents: &str) -> Result<Vec<TypeScript
         .ok_or_else(|| anyhow::anyhow!("failed to parse TypeScript source"))?;
 
     let mut symbols = Vec::new();
-    collect_typescript_symbols(tree.root_node(), contents, &mut symbols);
+    collect_typescript_symbols(tree.root_node(), contents, false, &mut symbols);
     Ok(symbols)
 }
 
 fn collect_typescript_symbols(
     node: tree_sitter::Node<'_>,
     contents: &str,
+    parent_is_export: bool,
     symbols: &mut Vec<TypeScriptSymbolInspection>,
 ) {
+    let is_export = parent_is_export || node.kind() == "export_statement";
+
     match node.kind() {
         "function_declaration"
         | "class_declaration"
@@ -335,6 +342,7 @@ fn collect_typescript_symbols(
                     .map(|block| block.text)
                     .unwrap_or_default(),
                 line: node.start_position().row + 1,
+                is_exported: is_export,
             });
         }
         "variable_declarator" => {
@@ -345,6 +353,7 @@ fn collect_typescript_symbols(
                     .map(|block| block.text)
                     .unwrap_or_default(),
                 line: node.start_position().row + 1,
+                is_exported: is_export,
             });
         }
         _ => {}
@@ -353,7 +362,7 @@ fn collect_typescript_symbols(
     let mut cursor = node.walk();
     for child in node.children(&mut cursor) {
         if child.is_named() {
-            collect_typescript_symbols(child, contents, symbols);
+            collect_typescript_symbols(child, contents, is_export, symbols);
         }
     }
 }
