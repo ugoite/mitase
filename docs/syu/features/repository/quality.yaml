@@ -49,7 +49,7 @@ features:
           symbols:
             - merge_group
             - Analyze (rust)
-            - github/codeql-action/init@v3
+            - github/codeql-action/init@v4
         - file: .github/dependabot.yml
           symbols:
             - FEAT-QUALITY-001
