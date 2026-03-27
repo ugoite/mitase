@@ -356,6 +356,7 @@ fn repository_declares_contribution_workflow_assets() {
 // REQ-CORE-014
 fn repository_declares_dependency_hygiene_and_ci_caching() {
     let ci_workflow = read_file(".github/workflows/ci.yml");
+    let setup_rust_action = read_file(".github/actions/setup-rust/action.yml");
     let codeql_workflow = read_file(".github/workflows/codeql.yml");
     let docs_build_action = read_file(".github/actions/build-docs-site/action.yml");
     let docs_lock = read_file("website/package-lock.json");
@@ -365,8 +366,9 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(ci_workflow.contains("concurrency:"));
     assert!(ci_workflow.contains("cancel-in-progress: true"));
     assert!(ci_workflow.contains("permissions:"));
-    assert!(ci_workflow.contains("Restore Rust cache"));
-    assert!(ci_workflow.contains("Swatinem/rust-cache@v2"));
+    assert!(ci_workflow.contains("./.github/actions/setup-rust"));
+    assert!(setup_rust_action.contains("Restore Rust cache"));
+    assert!(setup_rust_action.contains("Swatinem/rust-cache@v2"));
     assert!(ci_workflow.contains("taiki-e/cache-cargo-install-action@v3"));
     assert!(ci_workflow.contains("tool: cargo-llvm-cov"));
     assert!(ci_workflow.contains("tool: cargo-audit"));

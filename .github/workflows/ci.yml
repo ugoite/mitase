@@ -25,13 +25,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
         with:
-          components: rustfmt, clippy
-
-      - name: Restore Rust cache
-        uses: Swatinem/rust-cache@v2
+          components: rustfmt,clippy
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/cache-cargo-install-action@v3
@@ -59,13 +56,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
         with:
-          components: rustfmt, clippy
-
-      - name: Restore Rust cache
-        uses: Swatinem/rust-cache@v2
+          components: rustfmt,clippy
 
       - name: Run quality gates
         run: scripts/ci/quality-gates.sh
@@ -75,11 +69,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Restore Rust cache
-        uses: Swatinem/rust-cache@v2
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/cache-cargo-install-action@v3
@@ -108,11 +99,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Restore Rust cache
-        uses: Swatinem/rust-cache@v2
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
 
       - name: Install cargo-audit
         uses: taiki-e/cache-cargo-install-action@v3
@@ -192,13 +180,10 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
         with:
           targets: wasm32-unknown-unknown
-
-      - name: Restore Rust cache
-        uses: Swatinem/rust-cache@v2
 
       - name: Install wasm-pack
         uses: taiki-e/cache-cargo-install-action@v3
