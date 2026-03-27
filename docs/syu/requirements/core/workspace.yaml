@@ -16,6 +16,7 @@ requirements:
       - POL-004
     linked_features:
       - FEAT-INIT-001
+      - FEAT-INIT-002
     tests:
       rust:
         - file: tests/init_command.rs
