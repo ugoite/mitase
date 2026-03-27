@@ -201,7 +201,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Install wasm-pack
-        run: cargo install wasm-pack --locked
+        uses: taiki-e/cache-cargo-install-action@v3
+        with:
+          tool: wasm-pack
 
       - name: Install browser app dependencies
         working-directory: app
