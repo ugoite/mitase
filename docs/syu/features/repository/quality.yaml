@@ -32,7 +32,7 @@ features:
             - quality
             - coverage
             - actionlint
-            - Restore Rust cache
+            - "./.github/actions/setup-rust"
             - taiki-e/cache-cargo-install-action@v3
             - "tool: cargo-llvm-cov"
             - "tool: cargo-audit"
@@ -40,6 +40,10 @@ features:
             - "cache-dependency-path: app/package-lock.json"
             - npm ci
             - Review dependency changes
+        - file: .github/actions/setup-rust/action.yml
+          symbols:
+            - Restore Rust cache
+            - Swatinem/rust-cache@v2
         - file: .github/actions/build-docs-site/action.yml
           symbols:
             - actions/setup-node@v6
