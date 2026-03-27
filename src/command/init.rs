@@ -1,4 +1,5 @@
 // REQ-CORE-009
+// FEAT-INIT-002
 
 use anyhow::{Result, bail};
 use std::{
@@ -7,7 +8,7 @@ use std::{
 };
 
 use crate::{
-    cli::InitArgs,
+    cli::{InitArgs, OutputFormat},
     config::{SyuConfig, render_config},
 };
 
@@ -36,8 +37,8 @@ pub fn run_init_command(args: &InitArgs) -> Result<i32> {
         args.force,
     )?;
 
-    for (relative_path, contents) in files {
-        let full_path = workspace.join(&relative_path);
+    for (relative_path, contents) in &files {
+        let full_path = workspace.join(relative_path);
         let parent = full_path
             .parent()
             .expect("generated scaffold paths should always have a parent");
@@ -45,7 +46,38 @@ pub fn run_init_command(args: &InitArgs) -> Result<i32> {
         fs::write(full_path, contents)?;
     }
 
-    println!("initialized syu workspace at {}", workspace.display());
+    let created_paths: Vec<&str> = files.iter().map(|(path, _)| path.as_str()).collect();
+
+    match args.format {
+        OutputFormat::Json => {
+            println!(
+                "{}",
+                serde_json::json!({
+                    "workspace": workspace.display().to_string(),
+                    "created_files": created_paths,
+                })
+            );
+        }
+        OutputFormat::Text => {
+            println!("initialized syu workspace at {}", workspace.display());
+            println!();
+            println!("Created files:");
+            for path in &created_paths {
+                println!("  {path}");
+            }
+            println!();
+            println!("What to do next:");
+            println!("  1. Edit the spec files in docs/syu/ to describe your project");
+            println!("     - docs/syu/philosophy/foundation.yaml  (core principles)");
+            println!("     - docs/syu/policies/policies.yaml       (governance rules)");
+            println!("     - docs/syu/requirements/core/core.yaml  (concrete requirements)");
+            println!("     - docs/syu/features/core/core.yaml      (feature definitions)");
+            println!("  2. Run `syu validate .` to check your spec for consistency");
+            println!("  3. Run `syu app .` to explore the spec in the browser UI");
+            println!("  4. Commit the generated files to version control");
+        }
+    }
+
     Ok(0)
 }
 
@@ -211,6 +243,7 @@ mod tests {
             workspace: workspace.clone(),
             name: Some("demo".to_string()),
             force: false,
+            format: crate::cli::OutputFormat::Text,
         };
 
         let code = run_init_command(&args).expect("init should succeed");
@@ -234,6 +267,7 @@ mod tests {
             workspace: tempdir.path().to_path_buf(),
             name: Some("forced".to_string()),
             force: true,
+            format: crate::cli::OutputFormat::Text,
         };
 
         run_init_command(&args).expect("force init should succeed");
@@ -270,6 +304,7 @@ mod tests {
             workspace: file_path.clone(),
             name: None,
             force: false,
+            format: crate::cli::OutputFormat::Text,
         })
         .expect_err("file workspace should be rejected");
 
@@ -290,6 +325,7 @@ mod tests {
             workspace,
             name: Some("demo".to_string()),
             force: false,
+            format: crate::cli::OutputFormat::Text,
         })
         .expect_err("directory creation should fail");
 
@@ -307,9 +343,32 @@ mod tests {
             workspace,
             name: Some("demo".to_string()),
             force: true,
+            format: crate::cli::OutputFormat::Text,
         })
         .expect_err("file write should fail");
 
         assert!(!error.to_string().is_empty());
+    }
+
+    #[test]
+    fn init_command_json_format_includes_created_files() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = tempdir.path().join("demo");
+        let args = InitArgs {
+            workspace: workspace.clone(),
+            name: Some("demo".to_string()),
+            force: false,
+            format: crate::cli::OutputFormat::Json,
+        };
+
+        let code = run_init_command(&args).expect("init should succeed");
+        assert_eq!(code, 0);
+
+        for path in GENERATED_PATHS {
+            assert!(
+                workspace.join(path).exists(),
+                "missing generated file: {path}"
+            );
+        }
     }
 }

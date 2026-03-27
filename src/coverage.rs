@@ -36,11 +36,27 @@ struct CoverageMap {
 }
 
 pub fn validate_symbol_trace_coverage(workspace: &Workspace, issues: &mut Vec<Issue>) {
+    validate_symbol_trace_coverage_with(
+        workspace,
+        issues,
+        discover_rust_targets,
+        discover_python_targets,
+        discover_typescript_targets,
+    );
+}
+
+fn validate_symbol_trace_coverage_with(
+    workspace: &Workspace,
+    issues: &mut Vec<Issue>,
+    rust_discovery: impl Fn(&Path) -> Result<Vec<CoverageTarget>, Box<Issue>>,
+    python_discovery: impl Fn(&SyuConfig, &Path) -> Result<Vec<CoverageTarget>, Box<Issue>>,
+    ts_discovery: impl Fn(&Path) -> Result<Vec<CoverageTarget>, Box<Issue>>,
+) {
     if !workspace.config.validate.require_symbol_trace_coverage {
         return;
     }
 
-    let mut targets = match discover_rust_targets(&workspace.root) {
+    let mut targets = match rust_discovery(&workspace.root) {
         Ok(targets) => targets,
         Err(issue) => {
             issues.push(*issue);
@@ -48,7 +64,7 @@ pub fn validate_symbol_trace_coverage(workspace: &Workspace, issues: &mut Vec<Is
         }
     };
 
-    match discover_python_targets(&workspace.config, &workspace.root) {
+    match python_discovery(&workspace.config, &workspace.root) {
         Ok(python_targets) => targets.extend(python_targets),
         Err(issue) => {
             issues.push(*issue);
@@ -56,7 +72,7 @@ pub fn validate_symbol_trace_coverage(workspace: &Workspace, issues: &mut Vec<Is
         }
     }
 
-    match discover_typescript_targets(&workspace.root) {
+    match ts_discovery(&workspace.root) {
         Ok(ts_targets) => targets.extend(ts_targets),
         Err(issue) => {
             issues.push(*issue);
@@ -471,10 +487,7 @@ fn discover_typescript_targets(root: &Path) -> Result<Vec<CoverageTarget>, Box<I
             Ok(c) => c,
             Err(_) => continue,
         };
-        let symbols = match inspect_typescript_file(path, &contents) {
-            Ok(s) => s,
-            Err(_) => continue,
-        };
+        let symbols = inspect_typescript_file(path, &contents).unwrap_or_default();
         let relative = path
             .strip_prefix(root)
             .expect("scanned file should remain under the workspace root")
@@ -495,10 +508,7 @@ fn discover_typescript_targets(root: &Path) -> Result<Vec<CoverageTarget>, Box<I
             Ok(c) => c,
             Err(_) => continue,
         };
-        let symbols = match inspect_typescript_file(path, &contents) {
-            Ok(s) => s,
-            Err(_) => continue,
-        };
+        let symbols = inspect_typescript_file(path, &contents).unwrap_or_default();
         let relative = path
             .strip_prefix(root)
             .expect("scanned file should remain under the workspace root")
@@ -646,8 +656,9 @@ mod tests {
 
     use super::{
         CoverageTargetKind, collect_feature_coverage, collect_requirement_coverage,
-        discover_rust_targets, normalize_relative_path, rust_files_under,
-        validate_symbol_trace_coverage,
+        discover_python_targets, discover_rust_targets, discover_typescript_targets,
+        normalize_relative_path, python_files_under, rust_files_under, typescript_files_under,
+        validate_symbol_trace_coverage, validate_symbol_trace_coverage_with,
     };
     use crate::{
         config::SyuConfig,
@@ -899,5 +910,260 @@ mod tests {
             normalize_relative_path(Path::new("../spec/trace.rs")),
             PathBuf::from("../spec/trace.rs")
         );
+    }
+
+    #[test]
+    fn python_files_under_returns_empty_for_nonexistent_dir() {
+        let tempdir = tempdir().expect("tempdir");
+        let missing = tempdir.path().join("nonexistent");
+        let result = python_files_under(&missing).expect("should return empty ok");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn python_files_under_collects_py_files() {
+        let tempdir = tempdir().expect("tempdir");
+        fs::write(tempdir.path().join("a.py"), "def func(): pass\n").expect("write");
+        let result = python_files_under(tempdir.path()).expect("should succeed");
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn typescript_files_under_returns_empty_for_nonexistent_dir() {
+        let tempdir = tempdir().expect("tempdir");
+        let missing = tempdir.path().join("nonexistent");
+        let result = typescript_files_under(&missing, "ts").expect("should return empty ok");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn discover_python_targets_returns_empty_without_py_files() {
+        let tempdir = tempdir().expect("tempdir");
+        fs::create_dir_all(tempdir.path().join("src")).expect("src");
+        let config = SyuConfig::default();
+        let result = discover_python_targets(&config, tempdir.path()).expect("should succeed");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn validate_symbol_trace_coverage_reports_python_scan_failure() {
+        let tempdir = tempdir().expect("tempdir");
+        // Write a FILE at the src path so collect_files_recursive_by_extension fails
+        fs::write(tempdir.path().join("src"), "not a directory").expect("blocking file");
+
+        let mut config = SyuConfig::default();
+        config.validate.require_symbol_trace_coverage = true;
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("docs/syu"),
+            config,
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+
+        let mut issues = Vec::new();
+        validate_symbol_trace_coverage(&workspace, &mut issues);
+        assert!(!issues.is_empty());
+    }
+
+    #[test]
+    fn discover_typescript_targets_returns_empty_without_ts_files() {
+        let tempdir = tempdir().expect("tempdir");
+        fs::create_dir_all(tempdir.path().join("src")).expect("src");
+        let result = discover_typescript_targets(tempdir.path()).expect("should succeed");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn python_files_under_errors_on_file_path() {
+        let tempdir = tempdir().expect("tempdir");
+        let src = tempdir.path().join("src");
+        // Write a regular FILE where a directory is expected
+        fs::write(&src, "not a directory").expect("write blocking file");
+        let result = python_files_under(&src);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn typescript_files_under_errors_on_file_path() {
+        let tempdir = tempdir().expect("tempdir");
+        let src = tempdir.path().join("src");
+        fs::write(&src, "not a directory").expect("write blocking file");
+        let result = typescript_files_under(&src, "ts");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn discover_python_targets_skips_unreadable_py_files() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tempdir = tempdir().expect("tempdir");
+        let src_dir = tempdir.path().join("src");
+        fs::create_dir_all(&src_dir).expect("src dir");
+        let py_file = src_dir.join("mod.py");
+        fs::write(&py_file, "def public_fn(): pass\n").expect("py file");
+
+        // Make the .py file unreadable so inspect_python_file fails
+        let mut perm = fs::metadata(&py_file).expect("meta").permissions();
+        let mode = perm.mode();
+        perm.set_mode(0o000);
+        fs::set_permissions(&py_file, perm).expect("set unreadable");
+
+        let config = SyuConfig::default();
+        let result = discover_python_targets(&config, tempdir.path()).expect("should succeed");
+
+        let mut restore = fs::metadata(&py_file).expect("meta").permissions();
+        restore.set_mode(mode);
+        fs::set_permissions(&py_file, restore).expect("restore");
+
+        // Unreadable file is silently skipped
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn discover_python_targets_skips_unreadable_test_py_files() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tempdir = tempdir().expect("tempdir");
+        let tests_dir = tempdir.path().join("tests");
+        fs::create_dir_all(&tests_dir).expect("tests dir");
+        let py_file = tests_dir.join("test_mod.py");
+        fs::write(&py_file, "def test_something(): pass\n").expect("py file");
+
+        let mut perm = fs::metadata(&py_file).expect("meta").permissions();
+        let mode = perm.mode();
+        perm.set_mode(0o000);
+        fs::set_permissions(&py_file, perm).expect("set unreadable");
+
+        let config = SyuConfig::default();
+        let result = discover_python_targets(&config, tempdir.path()).expect("should succeed");
+
+        let mut restore = fs::metadata(&py_file).expect("meta").permissions();
+        restore.set_mode(mode);
+        fs::set_permissions(&py_file, restore).expect("restore");
+
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn discover_typescript_targets_skips_unreadable_ts_files() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tempdir = tempdir().expect("tempdir");
+        let src_dir = tempdir.path().join("src");
+        fs::create_dir_all(&src_dir).expect("src dir");
+        let ts_file = src_dir.join("app.ts");
+        fs::write(&ts_file, "export function hello() {}\n").expect("ts file");
+
+        let mut perm = fs::metadata(&ts_file).expect("meta").permissions();
+        let mode = perm.mode();
+        perm.set_mode(0o000);
+        fs::set_permissions(&ts_file, perm).expect("set unreadable");
+
+        let result = discover_typescript_targets(tempdir.path()).expect("should succeed");
+
+        let mut restore = fs::metadata(&ts_file).expect("meta").permissions();
+        restore.set_mode(mode);
+        fs::set_permissions(&ts_file, restore).expect("restore");
+
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn discover_typescript_targets_skips_unreadable_test_ts_files() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tempdir = tempdir().expect("tempdir");
+        let tests_dir = tempdir.path().join("tests");
+        fs::create_dir_all(&tests_dir).expect("tests dir");
+        let ts_file = tests_dir.join("app.test.ts");
+        fs::write(&ts_file, "export function testSomething() {}\n").expect("ts file");
+
+        let mut perm = fs::metadata(&ts_file).expect("meta").permissions();
+        let mode = perm.mode();
+        perm.set_mode(0o000);
+        fs::set_permissions(&ts_file, perm).expect("set unreadable");
+
+        let result = discover_typescript_targets(tempdir.path()).expect("should succeed");
+
+        let mut restore = fs::metadata(&ts_file).expect("meta").permissions();
+        restore.set_mode(mode);
+        fs::set_permissions(&ts_file, restore).expect("restore");
+
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn validate_with_python_discovery_error_records_issue_and_returns() {
+        let tempdir = tempdir().expect("tempdir");
+        let mut config = SyuConfig::default();
+        config.validate.require_symbol_trace_coverage = true;
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("docs/syu"),
+            config,
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+
+        let mut issues = Vec::new();
+        validate_symbol_trace_coverage_with(
+            &workspace,
+            &mut issues,
+            |_root| Ok(Vec::new()),
+            |_config, _root| {
+                Err(Box::new(crate::model::Issue::error(
+                    "SYU-coverage-walk-001",
+                    "trace coverage inventory",
+                    None,
+                    "injected python discovery error".to_string(),
+                    None,
+                )))
+            },
+            discover_typescript_targets,
+        );
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].code, "SYU-coverage-walk-001");
+    }
+
+    #[test]
+    fn validate_with_typescript_discovery_error_records_issue_and_returns() {
+        let tempdir = tempdir().expect("tempdir");
+        let mut config = SyuConfig::default();
+        config.validate.require_symbol_trace_coverage = true;
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("docs/syu"),
+            config,
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+
+        let mut issues = Vec::new();
+        validate_symbol_trace_coverage_with(
+            &workspace,
+            &mut issues,
+            |_root| Ok(Vec::new()),
+            |_config, _root| Ok(Vec::new()),
+            |_root| {
+                Err(Box::new(crate::model::Issue::error(
+                    "SYU-coverage-walk-001",
+                    "trace coverage inventory",
+                    None,
+                    "injected typescript discovery error".to_string(),
+                    None,
+                )))
+            },
+        );
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].code, "SYU-coverage-walk-001");
     }
 }

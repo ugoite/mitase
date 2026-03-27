@@ -1,6 +1,7 @@
 // FEAT-APP-001
 // FEAT-BROWSE-001
 // FEAT-REPORT-001
+// FEAT-INIT-002
 // REQ-CORE-001
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
@@ -181,6 +182,10 @@ pub struct InitArgs {
     #[arg(help = "Overwrite generated files when they already exist")]
     #[arg(long)]
     pub force: bool,
+
+    #[arg(help = "Output format (text shows next-step guidance; json returns created file paths)")]
+    #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
