@@ -203,6 +203,26 @@ function App() {
     return Math.max(1, ...sectionSummaries.map((summary) => summary.itemCount));
   }, [sectionSummaries]);
 
+  const sectionIssueCount = useMemo(() => {
+    if (!workspace) {
+      return 0;
+    }
+    return workspace.validation.issues.filter((issue) => {
+      const target = workspace.item_index.get(issue.subject);
+      return target?.kind === selectedSection;
+    }).length;
+  }, [workspace, selectedSection]);
+
+  const sectionIssueHasError = useMemo(() => {
+    if (!workspace) {
+      return false;
+    }
+    return workspace.validation.issues.some((issue) => {
+      const target = workspace.item_index.get(issue.subject);
+      return target?.kind === selectedSection && issue.severity === "error";
+    });
+  }, [workspace, selectedSection]);
+
   const requirementTraceRatio = useMemo(() => {
     if (!workspace) {
       return 0;
@@ -378,7 +398,9 @@ function App() {
                 </h2>
               </div>
               <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.2em] text-slate-400">
-                {currentSection?.documents.length ?? 0} docs
+                {(currentSection?.documents.length ?? 0) === 1
+                  ? "1 doc"
+                  : `${currentSection?.documents.length ?? 0} docs`}
               </span>
             </div>
             <p className="mt-3 text-sm leading-6 text-slate-400">{SECTION_COPY[selectedSection]}</p>
@@ -450,8 +472,8 @@ function App() {
                 <SummaryStat label="items" value={`${currentSectionSummary?.itemCount ?? 0}`} />
                 <SummaryStat
                   label="issues"
-                  value={`${workspace.validation.issues.length}`}
-                  tone={workspace.validation.issues.length > 0 ? "rose" : "emerald"}
+                  value={`${sectionIssueCount}`}
+                  tone={sectionIssueCount === 0 ? "emerald" : sectionIssueHasError ? "rose" : "sky"}
                 />
               </div>
             </div>
@@ -667,7 +689,7 @@ function LayerNavigationCard({
           <p className="mt-1 text-sm leading-6 text-slate-400">{SECTION_COPY[summary.kind]}</p>
         </div>
         <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.2em] text-slate-400">
-          {summary.documentCount} docs
+          {summary.documentCount === 1 ? "1 doc" : `${summary.documentCount} docs`}
         </span>
       </div>
       <div className="mt-4 flex items-center justify-between text-[11px] uppercase tracking-[0.2em] text-slate-500">
