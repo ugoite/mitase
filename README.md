@@ -65,6 +65,21 @@ Install a specific prerelease:
 curl -fsSL https://github.com/ugoite/syu/releases/download/v0.0.1-alpha.7/install-syu.sh | env SYU_VERSION=v0.0.1-alpha.7 bash
 ```
 
+### Verify the installer checksum
+
+Each release publishes a `checksums.sha256` file alongside the installer.
+Verify the installer before running it:
+
+```bash
+RELEASE=v0.0.1-alpha.7
+curl -fsSL "https://github.com/ugoite/syu/releases/download/${RELEASE}/install-syu.sh" -o install-syu.sh
+curl -fsSL "https://github.com/ugoite/syu/releases/download/${RELEASE}/checksums.sha256" -o checksums.sha256
+sha256sum --ignore-missing -c checksums.sha256
+bash install-syu.sh
+```
+
+On macOS, replace `sha256sum` with `shasum -a 256`.
+
 If you're contributing to `syu` itself from source, jump to
 [Contributing and local development](#contributing-and-local-development)
 below. The rest of this section assumes you installed the published CLI.
