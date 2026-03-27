@@ -203,25 +203,38 @@ function App() {
     return Math.max(1, ...sectionSummaries.map((summary) => summary.itemCount));
   }, [sectionSummaries]);
 
-  const sectionIssueCount = useMemo(() => {
-    if (!workspace) {
-      return 0;
+  const sectionIssueSummaries = useMemo(() => {
+    const result = new Map<SectionKind, { count: number; hasError: boolean }>();
+    for (const kind of SECTION_ORDER) {
+      result.set(kind, { count: 0, hasError: false });
     }
-    return workspace.validation.issues.filter((issue) => {
+    if (!workspace) {
+      return result;
+    }
+    for (const issue of workspace.validation.issues) {
       const target = workspace.item_index.get(issue.subject);
-      return target?.kind === selectedSection;
-    }).length;
-  }, [workspace, selectedSection]);
+      if (!target) {
+        continue;
+      }
+      const entry = result.get(target.kind);
+      if (!entry) {
+        continue;
+      }
+      entry.count += 1;
+      if (issue.severity === "error") {
+        entry.hasError = true;
+      }
+    }
+    return result;
+  }, [workspace]);
+
+  const sectionIssueCount = useMemo(() => {
+    return sectionIssueSummaries.get(selectedSection)?.count ?? 0;
+  }, [sectionIssueSummaries, selectedSection]);
 
   const sectionIssueHasError = useMemo(() => {
-    if (!workspace) {
-      return false;
-    }
-    return workspace.validation.issues.some((issue) => {
-      const target = workspace.item_index.get(issue.subject);
-      return target?.kind === selectedSection && issue.severity === "error";
-    });
-  }, [workspace, selectedSection]);
+    return sectionIssueSummaries.get(selectedSection)?.hasError ?? false;
+  }, [sectionIssueSummaries, selectedSection]);
 
   const requirementTraceRatio = useMemo(() => {
     if (!workspace) {
@@ -310,18 +323,33 @@ function App() {
           <nav aria-label="Top level sections" className="flex flex-wrap gap-2">
             {SECTION_ORDER.map((section) => {
               const isActive = section === selectedSection;
+              const issueSummary = sectionIssueSummaries.get(section);
+              const issueCount = issueSummary?.count ?? 0;
+              const issueHasError = issueSummary?.hasError ?? false;
               return (
                 <button
                   key={section}
                   type="button"
                   onClick={() => selectSection(section)}
-                  className={`rounded-full border px-4 py-2 text-sm font-medium capitalize transition ${
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium capitalize transition ${
                     isActive
                       ? "border-sky-400 bg-sky-400/20 text-sky-50"
                       : "border-white/10 bg-white/5 text-slate-300 hover:border-sky-400/40 hover:text-white"
                   }`}
                 >
                   {section}
+                  {issueCount > 0 && (
+                    <span
+                      className={`rounded-full px-1.5 py-0.5 text-xs font-semibold leading-none ${
+                        issueHasError
+                          ? "bg-rose-500/80 text-rose-50"
+                          : "bg-amber-500/80 text-amber-50"
+                      }`}
+                      aria-label={`${issueCount} ${issueHasError ? "error" : "warning"}${issueCount === 1 ? "" : "s"}`}
+                    >
+                      {issueCount}
+                    </span>
+                  )}
                 </button>
               );
             })}
