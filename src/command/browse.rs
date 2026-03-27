@@ -1,4 +1,5 @@
 // FEAT-BROWSE-001
+// FEAT-BROWSE-002
 // REQ-CORE-015
 
 use std::io::{self, Write};
@@ -43,6 +44,12 @@ pub fn run_browse_command(args: &BrowseArgs) -> Result<i32> {
     let result = collect_check_result(&args.workspace);
     let workspace = load_workspace(&args.workspace).ok();
     let state = BrowseState { workspace, result };
+
+    if args.non_interactive {
+        state.print_non_interactive();
+        return Ok(0);
+    }
+
     state.run()
 }
 
@@ -341,6 +348,32 @@ impl BrowseState {
             self.result.issues.len()
         );
         println!();
+    }
+
+    fn print_non_interactive(&self) {
+        self.print_summary("syu spec tree");
+
+        for (heading, kind) in [
+            ("philosophy", EntityKind::Philosophy),
+            ("policy", EntityKind::Policy),
+            ("requirement", EntityKind::Requirement),
+            ("feature", EntityKind::Feature),
+        ] {
+            let entries = self.entity_entries(kind);
+            println!("=== {} ({}) ===", heading, entries.len());
+            for (id, title) in &entries {
+                println!("  {id}\t{title}");
+            }
+            println!();
+        }
+
+        if !self.result.issues.is_empty() {
+            println!("=== errors ({}) ===", self.result.issues.len());
+            for issue in &self.result.issues {
+                println!("  [{}] {}", issue.code, issue.subject);
+            }
+            println!();
+        }
     }
 
     fn print_links<F>(

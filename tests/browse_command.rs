@@ -142,3 +142,67 @@ fn browse_command_handles_empty_workspaces_and_prompt_retries() {
     assert!(stdout.contains("Please enter a number between 0 and 5."));
     assert!(stdout.contains("No philosophy entries are currently available."));
 }
+
+#[test]
+// REQ-CORE-015
+fn browse_command_non_interactive_prints_spec_tree_and_exits() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("browse")
+        .arg(fixture_path("passing"))
+        .arg("--non-interactive")
+        .output()
+        .expect("browse command should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("=== syu spec tree ==="),
+        "should show spec tree header"
+    );
+    assert!(
+        stdout.contains("=== philosophy"),
+        "should show philosophy section"
+    );
+    assert!(
+        stdout.contains("=== requirement"),
+        "should show requirement section"
+    );
+    assert!(
+        stdout.contains("PHIL-TRACE-001"),
+        "should list philosophy IDs"
+    );
+}
+
+#[test]
+// REQ-CORE-015
+fn browse_command_non_interactive_shows_errors_when_workspace_is_failing() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("browse")
+        .arg(fixture_path("failing"))
+        .arg("--non-interactive")
+        .output()
+        .expect("browse command should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("=== errors ("),
+        "should show errors section: {stdout}"
+    );
+    assert!(
+        stdout.contains("SYU-graph-reference-001"),
+        "should list error codes: {stdout}"
+    );
+}
