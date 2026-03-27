@@ -74,7 +74,7 @@ pub fn run() -> Result<i32> {
 mod tests {
     use std::path::{Path, PathBuf};
 
-    use crate::cli::{AppArgs, Cli, Commands, ListArgs, LookupKind, OutputFormat, ShowArgs};
+    use crate::cli::{AppArgs, Cli, Commands, ListArgs, OutputFormat, ShowArgs};
 
     // REQ-CORE-015
     #[test]
@@ -82,7 +82,7 @@ mod tests {
         let action = super::dispatch(Cli { command: None }, true, true);
         assert!(matches!(
             action,
-            super::Dispatch::Browse(crate::cli::BrowseArgs { workspace })
+            super::Dispatch::Browse(crate::cli::BrowseArgs { workspace, .. })
                 if workspace == Path::new(".")
         ));
     }
@@ -115,8 +115,7 @@ mod tests {
         let list = super::dispatch(
             Cli {
                 command: Some(Commands::List(ListArgs {
-                    kind: LookupKind::Requirement,
-                    workspace: PathBuf::from("workspace"),
+                    positional: vec!["requirement".to_string(), "workspace".to_string()],
                     format: OutputFormat::Json,
                 })),
             },
@@ -125,9 +124,8 @@ mod tests {
         );
         assert!(matches!(
             list,
-            super::Dispatch::List(crate::cli::ListArgs { kind, workspace, format })
-                if kind == LookupKind::Requirement
-                    && workspace == Path::new("workspace")
+            super::Dispatch::List(crate::cli::ListArgs { ref positional, format })
+                if positional == &["requirement", "workspace"]
                     && format == OutputFormat::Json
         ));
 

@@ -44,6 +44,7 @@ requirements:
       - POL-004
     linked_features:
       - FEAT-BROWSE-001
+      - FEAT-BROWSE-002
     tests:
       rust:
         - file: tests/browse_command.rs
@@ -110,6 +111,7 @@ requirements:
       - POL-004
     linked_features:
       - FEAT-LIST-001
+      - FEAT-LIST-002
       - FEAT-SHOW-001
     tests:
       rust:
@@ -122,3 +124,6 @@ requirements:
         - file: src/lib.rs
           symbols:
             - dispatches_lookup_subcommands_without_rewriting_them
+        - file: src/command/list.rs
+          symbols:
+            - '*'

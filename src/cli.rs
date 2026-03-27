@@ -1,5 +1,7 @@
 // FEAT-APP-001
 // FEAT-BROWSE-001
+// FEAT-BROWSE-002
+// FEAT-LIST-002
 // FEAT-REPORT-001
 // FEAT-INIT-002
 // REQ-CORE-001
@@ -48,12 +50,18 @@ pub struct BrowseArgs {
     #[arg(help = "Workspace root containing syu.yaml and the spec tree (default: docs/syu)")]
     #[arg(default_value = ".")]
     pub workspace: PathBuf,
+
+    /// Print the spec tree to stdout and exit without entering interactive mode.
+    /// Useful in CI pipelines and scripts.
+    #[arg(long, action = ArgAction::SetTrue)]
+    pub non_interactive: bool,
 }
 
 impl Default for BrowseArgs {
     fn default() -> Self {
         Self {
             workspace: PathBuf::from("."),
+            non_interactive: false,
         }
     }
 }
@@ -83,13 +91,16 @@ impl LookupKind {
 
 #[derive(Debug, Clone, Args)]
 pub struct ListArgs {
-    #[arg(help = "Layer kind to list")]
-    #[arg(value_enum)]
-    pub kind: LookupKind,
-
-    #[arg(help = "Workspace root containing syu.yaml and the spec tree (default: docs/syu)")]
-    #[arg(default_value = ".")]
-    pub workspace: PathBuf,
+    /// Layer kind to list, or a workspace path to list all kinds.
+    /// Usage: syu list [KIND] [WORKSPACE]
+    ///        syu list [WORKSPACE]     (lists all kinds)
+    ///        syu list                 (lists all kinds in the current directory)
+    #[arg(
+        num_args = 0..=2,
+        value_name = "KIND_OR_WORKSPACE",
+        help = "Optional kind (philosophy|policy|requirement|feature) and/or workspace path"
+    )]
+    pub positional: Vec<String>,
 
     #[arg(help = "Output format for listed items")]
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
