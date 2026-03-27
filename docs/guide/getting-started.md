@@ -171,6 +171,7 @@ The repository includes complete examples:
 
 ## Keep exploring
 
+- Follow the [end-to-end tutorial](./tutorial.md) to build a complete four-layer spec from scratch
 - Read [syu concepts](./concepts.md) for the reasoning behind the four layers
 - Review [configuration](./configuration.md) before tightening validation in a real repository
 - Start `syu app .` when you want a browser view of the same workspace
