@@ -2,6 +2,34 @@
 
 <!-- FEAT-DOCS-001 -->
 
+## Before you begin
+
+Make sure `syu` is installed and available on your `PATH`.
+
+**Option A — Install from a release (recommended)**
+
+```bash
+curl -fsSL https://github.com/ugoite/syu/releases/latest/download/install.sh | bash
+```
+
+This places `syu` in `~/.local/bin`. Add that directory to your `PATH` if it is not already there.
+
+**Option B — Build from source**
+
+Building from source requires [Rust and Cargo](https://rustup.rs). This option is only needed when contributing to `syu` itself, not for using it in your own project.
+
+```bash
+git clone https://github.com/ugoite/syu.git
+cd syu
+cargo install --path .
+```
+
+Verify the installation:
+
+```bash
+syu --version
+```
+
 ## 1. Create a workspace
 
 Bootstrap a new project:
@@ -92,6 +120,29 @@ syu show FEAT-BROWSE-001 --format json
 
 Filters stay view-oriented: they narrow the visible diagnostics while preserving
 the full validation result and exit code.
+
+### Understanding validation output
+
+Validation errors follow the pattern `SYU-[genre]-[content]-[NNN]`:
+
+| Segment | Meaning | Examples |
+|---------|---------|---------|
+| `genre` | Which layer of the spec the rule checks | `workspace`, `graph`, `trace`, `delivery`, `coverage` |
+| `content` | The specific concern within that genre | `orphaned`, `reciprocal`, `symbol`, `file` |
+| `NNN` | Numeric index within the genre+content group | `001`, `002`, … |
+
+**Common errors and their fixes**
+
+| Code | What it means | How to fix it |
+|------|--------------|---------------|
+| `SYU-graph-orphaned-001` | A spec item has no links to adjacent layers | Add `philosophies`, `policies`, `requirements`, or `features` links |
+| `SYU-graph-reciprocal-001` | A link exists in only one direction | Make the link mutual (e.g. if REQ links to FEAT, FEAT must also link back to REQ) |
+| `SYU-graph-reference-001` | A link points to an ID that does not exist | Fix the typo in the ID, or add the missing definition |
+| `SYU-trace-file-001` | A declared trace file does not exist on disk | Create the file or correct the path |
+| `SYU-trace-symbol-001` | A declared symbol is not found in the file | Add the symbol or correct its name |
+| `SYU-delivery-planned-001` | A `planned` item declares traces before it is implemented | Remove traces or change status to `implemented` |
+
+The full rule catalog is in [`docs/syu/features/validation/validation.yaml`](../syu/features/validation/validation.yaml). Use `syu validate . --genre graph` to focus on a single genre.
 
 ## 5. Apply safe autofixes
 
