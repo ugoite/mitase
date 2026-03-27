@@ -40,6 +40,7 @@ function App() {
   const [selectedDocumentPath, setSelectedDocumentPath] = useState("");
   const [selectedItemId, setSelectedItemId] = useState("");
   const [selectedIssueCode, setSelectedIssueCode] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -203,6 +204,29 @@ function App() {
     return Math.max(1, ...sectionSummaries.map((summary) => summary.itemCount));
   }, [sectionSummaries]);
 
+  const searchResults = useMemo(() => {
+    const trimmed = searchQuery.trim().toLowerCase();
+    if (!workspace || trimmed.length === 0) {
+      return [];
+    }
+    const results: Array<{ id: string; title: string; kind: SectionKind }> = [];
+    for (const section of workspace.sections) {
+      for (const document of section.documents) {
+        for (const item of document.items) {
+          if (
+            item.id.toLowerCase().includes(trimmed) ||
+            item.title.toLowerCase().includes(trimmed) ||
+            (item.summary?.toLowerCase().includes(trimmed) ?? false) ||
+            (item.description?.toLowerCase().includes(trimmed) ?? false)
+          ) {
+            results.push({ id: item.id, title: item.title, kind: item.kind });
+          }
+        }
+      }
+    }
+    return results.slice(0, 20);
+  }, [workspace, searchQuery]);
+
   const sectionIssueSummaries = useMemo(() => {
     const result = new Map<SectionKind, { count: number; hasError: boolean }>();
     for (const kind of SECTION_ORDER) {
@@ -287,6 +311,11 @@ function App() {
     setSelectedSection(target.kind);
     setSelectedDocumentPath(target.document_path);
     setSelectedItemId(id);
+  };
+
+  const handleSearchSelect = (id: string) => {
+    setSearchQuery("");
+    jumpToItem(id);
   };
 
   if (loading) {
@@ -388,6 +417,67 @@ function App() {
                 ratio={featureTraceRatio}
               />
             </div>
+          </section>
+
+          <section className="app-glass rounded-3xl border border-white/10 p-4 shadow-2xl shadow-sky-950/15">
+            <label htmlFor="spec-search" className="sr-only">
+              Search spec items
+            </label>
+            <div className="relative">
+              <svg
+                aria-hidden="true"
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"
+                />
+              </svg>
+              <input
+                id="spec-search"
+                type="search"
+                placeholder="Search items by ID or keyword…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-2xl border border-white/10 bg-slate-900/60 py-2 pl-9 pr-4 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-400/60 focus:outline-none focus:ring-1 focus:ring-sky-400/40"
+              />
+            </div>
+            {searchQuery.trim().length > 0 && (
+              <div className="mt-3 space-y-1">
+                {searchResults.length === 0 ? (
+                  <p className="px-2 py-2 text-xs text-slate-500">No items match.</p>
+                ) : (
+                  searchResults.map((result) => (
+                    <button
+                      key={result.id}
+                      type="button"
+                      onClick={() => handleSearchSelect(result.id)}
+                      className="flex w-full items-start gap-2 rounded-xl border border-white/5 bg-white/5 px-3 py-2 text-left transition hover:border-sky-400/40 hover:bg-sky-400/10"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-xs font-semibold text-sky-300">
+                          {result.id}
+                        </span>
+                        <span className="block truncate text-xs text-slate-400">{result.title}</span>
+                      </span>
+                      <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] capitalize text-slate-500">
+                        {result.kind}
+                      </span>
+                    </button>
+                  ))
+                )}
+                {searchResults.length === 20 && (
+                  <p className="px-2 py-1 text-[11px] text-slate-500">
+                    Showing first 20 results — refine your query for fewer matches.
+                  </p>
+                )}
+              </div>
+            )}
           </section>
 
           <section className="app-glass rounded-3xl border border-white/10 p-5 shadow-2xl shadow-sky-950/15">
