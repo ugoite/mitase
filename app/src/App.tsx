@@ -463,7 +463,9 @@ function App() {
                         <span className="block truncate text-xs font-semibold text-sky-300">
                           {result.id}
                         </span>
-                        <span className="block truncate text-xs text-slate-400">{result.title}</span>
+                        <span className="block truncate text-xs text-slate-400">
+                          {result.title}
+                        </span>
                       </span>
                       <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] capitalize text-slate-500">
                         {result.kind}
