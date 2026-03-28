@@ -259,7 +259,9 @@ fn show_command_errors_when_the_id_is_missing() {
         .expect("command should run");
 
     assert_eq!(output.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&output.stderr).contains("was not found"));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("was not found"));
+    assert!(stderr.contains("syu list"), "hint should suggest syu list: {stderr}");
 }
 
 #[test]
@@ -275,4 +277,26 @@ fn show_command_errors_for_ids_without_supported_prefixes() {
 
     assert_eq!(output.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&output.stderr).contains("was not found"));
+}
+
+#[test]
+// REQ-CORE-018
+fn show_command_missing_id_in_json_mode_omits_hint() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("show")
+        .arg("REQ-MISSING-999")
+        .arg(fixture_path("passing"))
+        .arg("--format")
+        .arg("json")
+        .output()
+        .expect("command should run");
+
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("was not found"));
+    assert!(
+        !stderr.contains("syu list"),
+        "json mode should not show hint: {stderr}"
+    );
 }
