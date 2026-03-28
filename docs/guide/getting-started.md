@@ -199,5 +199,6 @@ The repository includes complete examples:
 - Follow the [end-to-end tutorial](./tutorial.md) to build a complete four-layer spec from scratch
 - Review [configuration](./configuration.md) before tightening validation in a real repository
 - Read the [syu app browser guide](./app.md) to learn how to navigate the browser UI
+- Check the [troubleshooting guide](./troubleshooting.md) when `syu validate` returns an unfamiliar error code
 - Browse the [Specification Reference](../generated/site-spec/index.md) to see how `syu` self-hosts its own contract
 - Open the [latest validation report](../generated/syu-report.md) to inspect the checked-in repository status
