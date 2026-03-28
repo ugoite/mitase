@@ -69,6 +69,8 @@ pub fn run_app_command(args: &AppArgs) -> Result<i32> {
             .local_addr()
             .context("failed to inspect bind address")?;
         println!("syu app listening on http://{local_addr}");
+        println!("Open http://{local_addr} in your browser.");
+        println!("Press Ctrl-C to stop.");
         std::io::stdout()
             .flush()
             .context("failed to flush stdout")?;

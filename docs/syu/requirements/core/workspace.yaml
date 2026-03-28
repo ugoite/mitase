@@ -67,7 +67,8 @@ requirements:
       browser-safe Rust logic through WebAssembly instead of reimplementing the
       layered model only in JavaScript. When `syu.yaml` defines app defaults,
       `syu app` MUST use `app.bind` and `app.port` unless CLI flags override
-      them.
+      them. The startup output MUST also tell users which local URL to open in a
+      browser and how to stop the server cleanly.
     priority: medium
     status: implemented
     linked_policies:
