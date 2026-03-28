@@ -2,6 +2,20 @@
 
 <!-- FEAT-DOCS-001 -->
 
+:::tip New to syu?
+New to `syu`? Read [syu concepts](./concepts.md) first to understand the four
+layers before you start editing YAML.
+:::
+
+Start here once `syu` is installed:
+
+```bash
+syu init .          # 1. Create spec scaffold
+# edit docs/syu/... # 2. Add your spec items
+syu validate .      # 3. Check everything is linked
+syu app .           # 4. Browse in the browser
+```
+
 ## Before you begin
 
 Make sure `syu` is installed and available on your `PATH`.
@@ -196,7 +210,6 @@ The repository includes complete examples:
 
 - Follow the [end-to-end tutorial](./tutorial.md) to build a complete four-layer spec from scratch
 - Read [syu concepts](./concepts.md) for the reasoning behind the four layers
-- Follow the [end-to-end tutorial](./tutorial.md) to build a complete four-layer spec from scratch
 - Review [configuration](./configuration.md) before tightening validation in a real repository
 - Read the [syu app browser guide](./app.md) to learn how to navigate the browser UI
 - Check the [troubleshooting guide](./troubleshooting.md) when `syu validate` returns an unfamiliar error code

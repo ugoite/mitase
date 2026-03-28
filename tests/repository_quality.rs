@@ -199,6 +199,8 @@ fn repository_declares_documentation_guides() {
     let docs_sidebars = read_file("website/sidebars.js");
 
     assert!(readme.contains("docs/guide/concepts.md"));
+    assert!(readme.contains("Step 0: required"));
+    assert!(readme.contains("# 2. Add your spec items"));
     assert!(readme.contains("syu init"));
     assert!(readme.contains("syu init ."));
     assert!(readme.contains("syu validate"));
@@ -224,6 +226,8 @@ fn repository_declares_documentation_guides() {
     assert!(concepts.contains("implemented"));
     assert!(concepts.contains("Continue with these pages"));
     assert!(concepts.contains("Specification Reference"));
+    assert!(getting_started.contains("New to `syu`?"));
+    assert!(getting_started.contains("Start here once `syu` is installed:"));
     assert!(getting_started.contains("syu validate . --fix"));
     assert!(getting_started.contains("syu browse ."));
     assert!(getting_started.contains("syu list feature"));
@@ -231,6 +235,12 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("syu app ."));
     assert!(getting_started.contains("status: implemented"));
     assert!(getting_started.contains("Keep exploring"));
+    assert_eq!(
+        getting_started
+            .matches("Follow the [end-to-end tutorial](./tutorial.md)")
+            .count(),
+        1
+    );
     assert!(getting_started.contains("latest validation report"));
     assert!(configuration.contains("validate.default_fix"));
     assert!(configuration.contains("validate.allow_planned"));

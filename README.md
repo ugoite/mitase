@@ -86,6 +86,15 @@ below. The rest of this section assumes you installed the published CLI.
 
 ## Quick start
 
+Step 0: required — run `syu init .` before any of the other commands in a new repository.
+
+```bash
+syu init .          # 1. Create spec scaffold
+# edit docs/syu/... # 2. Add your spec items
+syu validate .      # 3. Check everything is linked
+syu app .           # 4. Browse in the browser
+```
+
 ```bash
 syu init .
 syu validate .
