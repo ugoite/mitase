@@ -44,6 +44,15 @@ If you use the hooks, install them once:
 scripts/install-precommit.sh
 ```
 
+## Dependency security
+
+Dependency advisories are checked automatically on a weekly schedule (every Monday
+at 06:00 UTC) via the CI workflow. The scheduled run only executes the
+`dependency-audit` job (`cargo audit`) and the `npm-audit` job (`npm audit`
+against both `app/` and `website/`), so the rest of CI is not rerun weekly.
+Contributors do **not** need to run manual audits — failed scheduled runs are
+reported via the default GitHub Actions failure notification for maintainers.
+
 ## Expectations for changes
 
 - update the self-hosted specification in `docs/syu/` when behavior changes
