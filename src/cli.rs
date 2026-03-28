@@ -16,6 +16,10 @@ New here?
   2. syu validate .  check the layered spec and traceability
   3. syu app .       open the browser UI to explore the workspace";
 
+const APP_AFTER_HELP: &str = "\
+After startup, open the printed URL in your browser.
+Press Ctrl-C to stop the local app server.";
+
 #[derive(Debug, Parser)]
 #[command(
     name = "syu",
@@ -40,7 +44,10 @@ pub enum Commands {
     List(ListArgs),
     #[command(about = "Show one philosophy, policy, requirement, or feature by ID")]
     Show(ShowArgs),
-    #[command(about = "Start a local browser app for exploring the current workspace")]
+    #[command(
+        about = "Start a local browser app server and print the URL to open in your browser",
+        after_help = APP_AFTER_HELP
+    )]
     App(AppArgs),
     #[command(
         visible_alias = "check",

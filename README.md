@@ -178,6 +178,9 @@ syu app .
 syu app . --bind 127.0.0.1 --port 3000
 ```
 
+After startup, `syu app` prints the local URL to open in your browser and a
+`Ctrl-C` reminder for stopping the server.
+
 The browser app serves a VitePlus / React / Tailwind UI and uses Rust plus
 WebAssembly to build the layered browser view from the live workspace data.
 When `syu.yaml` defines `app.bind` or `app.port`, `syu app` uses those defaults

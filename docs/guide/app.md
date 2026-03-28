@@ -6,10 +6,13 @@
 
 ```bash
 syu app .
-# → Serving on http://127.0.0.1:3000  (Ctrl-C to stop)
+# → syu app listening on http://127.0.0.1:3000
+# → Open http://127.0.0.1:3000 in your browser.
+# → Press Ctrl-C to stop.
 ```
 
-Open the printed URL in any browser.
+Open the printed URL in any browser, then press `Ctrl-C` in the terminal when
+you are done.
 
 ---
 

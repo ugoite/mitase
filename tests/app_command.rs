@@ -4,7 +4,7 @@ use std::{
     io::{Read, Write},
     net::{TcpListener, TcpStream},
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
+    process::{Child, Command, Output, Stdio},
     thread,
     time::Duration,
 };
@@ -94,6 +94,20 @@ fn shutdown_child(child: &mut Child) {
     assert!(status.success(), "app command should exit cleanly");
 }
 
+fn shutdown_child_with_output(child: Child) -> Output {
+    #[cfg(unix)]
+    unsafe {
+        libc::kill(child.id() as i32, libc::SIGINT);
+    }
+
+    #[cfg(not(unix))]
+    child.kill().expect("child should terminate");
+
+    let output = child.wait_with_output().expect("child should exit");
+    assert!(output.status.success(), "app command should exit cleanly");
+    output
+}
+
 // REQ-CORE-017
 #[test]
 fn app_command_serves_browser_ui_and_payload() {
@@ -126,6 +140,48 @@ fn app_command_serves_browser_ui_and_payload() {
     assert!(payload.contains("foundation.yaml"));
 
     shutdown_child(&mut child);
+}
+
+#[test]
+fn app_command_startup_message_explains_browser_and_stop_flow() {
+    let port = reserve_port();
+    let child = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("app")
+        .arg(fixture_path("passing"))
+        .arg("--bind")
+        .arg("127.0.0.1")
+        .arg("--port")
+        .arg(port.to_string())
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("app command should start");
+
+    wait_for_server(port);
+
+    let output = shutdown_child_with_output(child);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains(&format!("syu app listening on http://127.0.0.1:{port}")));
+    assert!(stdout.contains(&format!("Open http://127.0.0.1:{port} in your browser.")));
+    assert!(stdout.contains("Press Ctrl-C to stop."));
+}
+
+#[test]
+fn app_command_help_mentions_browser_and_stop_instructions() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("app")
+        .arg("--help")
+        .output()
+        .expect("help should render");
+
+    assert!(output.status.success(), "help should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("print the URL to open in your browser"));
+    assert!(stdout.contains("After startup, open the printed URL in your browser."));
+    assert!(stdout.contains("Press Ctrl-C to stop the local app server."));
 }
 
 #[test]
