@@ -742,7 +742,14 @@ function App() {
                     </button>
                   ))}
                 </div>
-                {activeIssue ? <IssueDetail issue={activeIssue} rule={activeRule} /> : null}
+                {activeIssue ? (
+                  <IssueDetail
+                    issue={activeIssue}
+                    rule={activeRule}
+                    workspace={workspace}
+                    jumpToItem={jumpToItem}
+                  />
+                ) : null}
               </div>
             )}
           </section>
@@ -1004,7 +1011,19 @@ function TracePanel({ label, groups }: { label: string; groups: BrowserTraceGrou
   );
 }
 
-function IssueDetail({ issue, rule }: { issue: ValidationIssue; rule: ReferencedRule | null }) {
+function IssueDetail({
+  issue,
+  rule,
+  workspace,
+  jumpToItem,
+}: {
+  issue: ValidationIssue;
+  rule: ReferencedRule | null;
+  workspace: BrowserWorkspace | null;
+  jumpToItem: (id: string) => void;
+}) {
+  const subjectInIndex = workspace?.item_index.get(issue.subject) != null;
+
   return (
     <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
       <p className="text-xs uppercase tracking-[0.25em] text-slate-500">selected issue</p>
@@ -1015,6 +1034,18 @@ function IssueDetail({ issue, rule }: { issue: ValidationIssue; rule: Referenced
           location:{" "}
           <span className="normal-case tracking-normal text-slate-300">{issue.location}</span>
         </p>
+      ) : null}
+      {subjectInIndex ? (
+        <button
+          type="button"
+          onClick={() => jumpToItem(issue.subject)}
+          className="mt-4 flex items-center gap-1.5 rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1.5 text-sm text-sky-300 transition hover:border-sky-400/60 hover:bg-sky-400/20"
+        >
+          <span>→</span>
+          <span>
+            View <span className="font-mono">{issue.subject}</span>
+          </span>
+        </button>
       ) : null}
       {issue.suggestion ? (
         <div className="mt-4 rounded-2xl border border-sky-400/20 bg-sky-400/10 px-4 py-3 text-sm leading-7 text-sky-50">
