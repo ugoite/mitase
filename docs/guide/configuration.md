@@ -17,6 +17,39 @@ under `docs/syu/config/`:
 Add new supported config items there first, then update this guide when the
 change also needs narrative explanation or new examples.
 
+## Key concepts
+
+Before reading the field reference below, it helps to know what the validation
+flags are actually controlling:
+
+**Orphaned item**
+A spec item (philosophy, policy, requirement, or feature) that has no links to
+any adjacent layer. For example, a philosophy with no linked policies, or a
+feature with no linked requirements. Orphans usually mean the specification has
+drifted — you defined something but never connected it to the rest of the graph.
+`require_non_orphaned_items` enforces that every item is reachable.
+
+**Reciprocal link**
+syu's spec graph is bidirectional: if a requirement links to a feature, the
+feature must also list that requirement in its `linked_requirements`. A
+reciprocal link is this two-way confirmation. `require_reciprocal_links`
+enforces both directions so the graph stays consistent even when files are
+edited independently.
+
+**Symbol trace**
+A *symbol* is a named function, method, or class in your source code.
+A symbol trace is a declaration in a requirement or feature YAML that names the
+specific symbols (and optionally a required doc-comment string) that implement
+or test that spec item. Symbol traces let `syu` verify that the code actually
+exists at the claimed location.
+
+**Symbol trace coverage**
+When `require_symbol_trace_coverage: true`, syu additionally checks that every
+*public* symbol in the relevant source files is claimed by at least one spec
+item, and that every test function is claimed by at least one requirement. 100%
+coverage means no public API or test is left undeclared. This is an optional
+stricter mode for mature repositories.
+
 ## Minimal configuration
 
 ```yaml
