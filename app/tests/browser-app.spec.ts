@@ -27,6 +27,7 @@ test("renders top tabs and linked spec content", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: /FEAT-CHECK-001 .* Unified validation command/i }),
   ).toBeVisible();
+  await expect(page).toHaveURL(/#features\/FEAT-CHECK-001$/);
   await expect(page.getByText("SYU-workspace-load-001").first()).toBeVisible();
 
   await page.getByRole("button", { name: "REQ-CORE-001" }).click();
@@ -35,9 +36,43 @@ test("renders top tabs and linked spec content", async ({ page }) => {
       name: /REQ-CORE-001 .* Validate the linked specification graph with rule-backed diagnostics/i,
     }),
   ).toBeVisible();
+  await expect(page).toHaveURL(/#requirements\/REQ-CORE-001$/);
   await expect(page.getByRole("button", { name: "← Back" })).toBeVisible();
 
   await page.getByRole("button", { name: "← Back" }).click();
+  await expect(
+    page.getByRole("heading", { name: /FEAT-CHECK-001 .* Unified validation command/i }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/#features\/FEAT-CHECK-001$/);
+});
+
+test("loads deep links and supports keyboard search navigation", async ({ page }) => {
+  await page.goto("/#/requirements/REQ-CORE-001");
+
+  await expect(
+    page.getByRole("heading", {
+      name: /REQ-CORE-001 .* Validate the linked specification graph with rule-backed diagnostics/i,
+    }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/#requirements\/REQ-CORE-001$/);
+
+  const searchInput = page.getByRole("searchbox", { name: "Search spec items" });
+  await searchInput.fill("FEAT-CHECK-001");
+  await searchInput.press("ArrowDown");
+  await searchInput.press("ArrowUp");
+  await searchInput.press("ArrowDown");
+  await searchInput.press("Enter");
+
+  await expect(
+    page.getByRole("heading", { name: /FEAT-CHECK-001 .* Unified validation command/i }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/#features\/FEAT-CHECK-001$/);
+
+  await searchInput.fill("no-such-result");
+  await searchInput.press("ArrowUp");
+  await searchInput.press("Enter");
+
+  await expect(page.getByText("No items match.")).toBeVisible();
   await expect(
     page.getByRole("heading", { name: /FEAT-CHECK-001 .* Unified validation command/i }),
   ).toBeVisible();
