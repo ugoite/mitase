@@ -32,6 +32,8 @@ const SECTION_COPY: Record<SectionKind, string> = {
   requirements: "Specific obligations with traceable ownership.",
 };
 
+const ONBOARDING_STORAGE_KEY = "syu-onboarding-dismissed";
+
 function App() {
   const [workspace, setWorkspace] = useState<BrowserWorkspace | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +43,8 @@ function App() {
   const [selectedItemId, setSelectedItemId] = useState("");
   const [selectedIssueCode, setSelectedIssueCode] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showOnboarding, setShowOnboarding] = useState(() => shouldShowOnboarding());
+  const [navigationHistory, setNavigationHistory] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -308,9 +312,33 @@ function App() {
       return;
     }
 
+    if (selectedItemId && selectedItemId !== id) {
+      setNavigationHistory((prev) => [...prev.slice(-4), selectedItemId]);
+    }
+
     setSelectedSection(target.kind);
     setSelectedDocumentPath(target.document_path);
     setSelectedItemId(id);
+  };
+
+  const dismissOnboarding = () => {
+    setShowOnboarding(false);
+    persistOnboardingDismissal();
+  };
+
+  const goBack = () => {
+    const prevId = navigationHistory[navigationHistory.length - 1];
+    if (!prevId || !workspace) {
+      return;
+    }
+    const target = workspace.item_index.get(prevId);
+    if (!target) {
+      return;
+    }
+    setNavigationHistory((h) => h.slice(0, -1));
+    setSelectedSection(target.kind);
+    setSelectedDocumentPath(target.document_path);
+    setSelectedItemId(prevId);
   };
 
   const handleSearchSelect = (id: string) => {
@@ -387,6 +415,24 @@ function App() {
       </header>
 
       <main className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[20rem_minmax(0,1fr)] lg:px-8">
+        {showOnboarding && (
+          <div className="lg:col-span-2 flex items-start justify-between gap-4 rounded-3xl border border-sky-400/30 bg-sky-400/10 px-5 py-4 text-sm leading-7 text-sky-100 shadow-2xl shadow-sky-950/15">
+            <p>
+              <span className="font-semibold">Welcome to syu.</span> Browse your specification
+              across four layers:{" "}
+              <span className="text-sky-300">Philosophy → Policies → Requirements → Features</span>.
+              Click any item to explore its traces and validation status.
+            </p>
+            <button
+              type="button"
+              onClick={dismissOnboarding}
+              aria-label="Dismiss welcome banner"
+              className="shrink-0 rounded-full border border-sky-400/30 bg-sky-400/10 px-2 py-1 text-sky-300 transition hover:bg-sky-400/20"
+            >
+              ×
+            </button>
+          </div>
+        )}
         <aside className="space-y-5">
           <section className="app-glass rounded-3xl border border-white/10 p-5 shadow-2xl shadow-sky-950/15">
             <p className="text-xs uppercase tracking-[0.3em] text-slate-500">workspace</p>
@@ -603,6 +649,15 @@ function App() {
             <div className="flex flex-col gap-4 border-b border-white/10 pb-5 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-slate-500">detail</p>
+                {navigationHistory.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={goBack}
+                    className="mt-2 inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300 transition hover:border-sky-400/40 hover:text-sky-200"
+                  >
+                    ← Back
+                  </button>
+                )}
                 <h2 className="mt-2 text-2xl font-semibold text-white">
                   {currentItem
                     ? `${currentItem.id} — ${currentItem.title}`
@@ -788,6 +843,58 @@ function ratio(validated: number, declared: number): number {
     return 0;
   }
   return Math.max(0, Math.min(1, validated / declared));
+}
+
+function shouldShowOnboarding(): boolean {
+  if (typeof window === "undefined") {
+    return true;
+  }
+
+  try {
+    return window.sessionStorage.getItem(ONBOARDING_STORAGE_KEY) !== "true";
+  } catch (error) {
+    console.warn("syu app could not read onboarding dismissal state from sessionStorage.", error);
+    return true;
+  }
+}
+
+function persistOnboardingDismissal() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
+  } catch (error) {
+    console.warn("syu app could not persist onboarding dismissal in sessionStorage.", error);
+  }
+}
+
+function formatTraceSymbols(symbols: string[]): string {
+  const normalized = symbols.map((symbol) => symbol.trim()).filter((symbol) => symbol.length > 0);
+
+  if (normalized.length === 0) {
+    return "none listed";
+  }
+
+  if (normalized.some((symbol) => symbol === "*")) {
+    return "any symbol (wildcard)";
+  }
+
+  return normalized.join(", ");
+}
+
+function InfoHint({ label, description }: { label: string; description: string }) {
+  return (
+    <button
+      type="button"
+      aria-label={`${label}: ${description}`}
+      title={description}
+      className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/10 bg-white/5 align-middle text-[10px] normal-case leading-none tracking-normal text-slate-400 transition hover:border-sky-400/40 hover:text-sky-200 focus:outline-none focus-visible:border-sky-400/60 focus-visible:ring-2 focus-visible:ring-sky-400/30"
+    >
+      ⓘ
+    </button>
+  );
 }
 
 function LayerNavigationCard({
@@ -991,15 +1098,27 @@ function TracePanel({ label, groups }: { label: string; groups: BrowserTraceGrou
                   className="rounded-2xl border border-white/10 bg-slate-950/70 p-3"
                 >
                   <p className="text-sm font-medium text-slate-100">{reference.file}</p>
-                  <p className="mt-2 text-xs uppercase tracking-[0.2em] text-slate-500">symbols</p>
+                  <p className="mt-2 text-xs uppercase tracking-[0.2em] text-slate-500">
+                    symbols{" "}
+                    <InfoHint
+                      label="Symbols"
+                      description="The function, struct, method, or constant names that this trace points to. Use * to match the whole file."
+                    />
+                  </p>
                   <p className="mt-1 text-sm text-slate-300">
-                    {reference.symbols.length > 0 ? reference.symbols.join(", ") : "—"}
+                    {formatTraceSymbols(reference.symbols)}
                   </p>
                   <p className="mt-3 text-xs uppercase tracking-[0.2em] text-slate-500">
-                    doc contains
+                    doc contains{" "}
+                    <InfoHint
+                      label="Doc contains"
+                      description="A string that must appear in the symbol's documentation comment. 'not declared' means no assertion is declared."
+                    />
                   </p>
                   <p className="mt-1 text-sm text-slate-300">
-                    {reference.doc_contains.length > 0 ? reference.doc_contains.join(", ") : "—"}
+                    {reference.doc_contains.length > 0
+                      ? reference.doc_contains.join(", ")
+                      : "not declared"}
                   </p>
                 </div>
               ))}
