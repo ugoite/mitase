@@ -28,6 +28,16 @@ scripts/ci/coverage.sh summary
 cargo run -- validate .
 ```
 
+### Rust version
+
+The minimum supported Rust version (MSRV) is **1.88**. CI verifies this with a
+dedicated `check-msrv` job. You can test locally against the MSRV by running:
+
+```bash
+rustup toolchain install 1.88
+cargo +1.88 check --all-targets
+```
+
 If you use the hooks, install them once:
 
 ```bash

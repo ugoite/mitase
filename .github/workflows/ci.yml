@@ -240,3 +240,20 @@ jobs:
         run: npm run test:e2e
         env:
           CI: "true"
+
+  check-msrv:
+    name: MSRV check (1.88)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install MSRV toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.88"
+
+      - name: Restore Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check all targets on MSRV
+        run: cargo check --all-targets
