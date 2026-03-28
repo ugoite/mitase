@@ -73,6 +73,29 @@ Make sure links are reciprocal:
 When a requirement or feature becomes real, change its status to
 `implemented` and add the corresponding traces.
 
+Traces tell `syu` where each spec item is tested or implemented in your
+codebase. Each trace entry has two key fields:
+
+- **`symbols`** — The names of the functions, methods, or classes in the
+  referenced file that implement or test this spec item (e.g., a test
+  function called `test_store_upload`).
+- **`doc_contains`** — One or more strings that must appear verbatim in the
+  documentation comment of each listed symbol. This proves the linkage is
+  intentional: the developer explicitly wrote the spec ID in the comment.
+
+For example, a Rust test function that satisfies
+`doc_contains: ["FEAT-STORE-001"]` looks like this:
+
+```rust
+/// Verifies file upload round-trip — covers FEAT-STORE-001.
+#[test]
+fn test_store_upload() { /* … */ }
+```
+
+`syu validate` reads the doc comment and checks that `"FEAT-STORE-001"`
+appears in it. If the string is missing, the rule `SYU-trace-doc-001`
+fires with a suggestion to add the snippet (or run `syu validate --fix`).
+
 Requirements should declare tests:
 
 ```yaml
@@ -81,9 +104,9 @@ tests:
   rust:
     - file: src/trace.rs
       symbols:
-        - requirement_test
+        - requirement_test   # name of the test function
       doc_contains:
-        - requirement doc line
+        - REQ-CORE-001       # this string must appear in the function's doc comment
 ```
 
 Features should declare implementations:
@@ -94,9 +117,9 @@ implementations:
   python:
     - file: python/app.py
       symbols:
-        - feature_impl
+        - feature_impl       # name of the implementing function or class
       doc_contains:
-        - feature doc line
+        - FEAT-STORE-001     # this string must appear in the function's doc comment
 ```
 
 ## 4. Validate the workspace
