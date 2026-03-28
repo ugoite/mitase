@@ -297,6 +297,17 @@ function App() {
     setSelectedItemId(section?.documents[0]?.items[0]?.id ?? "");
   };
 
+  const resetNavigation = () => {
+    if (!workspace) {
+      return;
+    }
+
+    setSearchQuery("");
+    setNavigationHistory([]);
+    const nextSection = firstPopulatedSection(workspace) ?? "philosophy";
+    selectSection(nextSection);
+  };
+
   const selectDocument = (document: BrowserDocument) => {
     setSelectedDocumentPath(document.path);
     setSelectedItemId(document.items[0]?.id ?? "");
@@ -375,9 +386,21 @@ function App() {
   return (
     <div className="app-shell text-slate-100">
       <header className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/90 backdrop-blur-2xl">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <h1 className="text-2xl font-semibold tracking-tight text-white">syu</h1>
-          <nav aria-label="Top level sections" className="flex flex-wrap gap-2">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 md:flex-row md:items-center md:justify-between md:px-8">
+          <h1 className="text-2xl font-semibold tracking-tight text-white">
+            <button
+              type="button"
+              onClick={resetNavigation}
+              className="transition hover:text-sky-300"
+              aria-label="syu — go to first item"
+            >
+              syu
+            </button>
+          </h1>
+          <nav
+            aria-label="Top level sections"
+            className="flex gap-2 overflow-x-auto whitespace-nowrap pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
             {SECTION_ORDER.map((section) => {
               const isActive = section === selectedSection;
               const issueSummary = sectionIssueSummaries.get(section);
@@ -414,9 +437,9 @@ function App() {
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[20rem_minmax(0,1fr)] lg:px-8">
+      <main className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 md:grid-cols-[18rem_minmax(0,1fr)] md:px-8">
         {showOnboarding && (
-          <div className="lg:col-span-2 flex items-start justify-between gap-4 rounded-3xl border border-sky-400/30 bg-sky-400/10 px-5 py-4 text-sm leading-7 text-sky-100 shadow-2xl shadow-sky-950/15">
+          <div className="md:col-span-2 flex items-start justify-between gap-4 rounded-3xl border border-sky-400/30 bg-sky-400/10 px-5 py-4 text-sm leading-7 text-sky-100 shadow-2xl shadow-sky-950/15">
             <p>
               <span className="font-semibold">Welcome to syu.</span> Browse your specification
               across four layers:{" "}
@@ -436,8 +459,12 @@ function App() {
         <aside className="space-y-5">
           <section className="app-glass rounded-3xl border border-white/10 p-5 shadow-2xl shadow-sky-950/15">
             <p className="text-xs uppercase tracking-[0.3em] text-slate-500">workspace</p>
-            <p className="mt-3 break-all text-sm font-medium text-slate-100">
-              {workspace.workspace_root}
+            <p
+              className="mt-3 truncate text-sm font-medium text-slate-100"
+              title={workspace.workspace_root}
+              aria-label={workspace.workspace_root}
+            >
+              {truncatePath(workspace.workspace_root)}
             </p>
             <p className="mt-2 break-all text-sm text-slate-400">
               spec root: {workspace.spec_root}
@@ -838,6 +865,12 @@ function firstPopulatedSection(workspace: BrowserWorkspace): SectionKind | null 
   return workspace.sections.find((section) => section.documents.length > 0)?.kind ?? null;
 }
 
+function truncatePath(fullPath: string): string {
+  const parts = fullPath.replace(/\\/g, "/").split("/").filter(Boolean);
+  if (parts.length <= 2) return fullPath;
+  return `…/${parts.slice(-2).join("/")}`;
+}
+
 function ratio(validated: number, declared: number): number {
   if (declared === 0) {
     return 0;
@@ -934,7 +967,15 @@ function LayerNavigationCard({
         <span>{summary.itemCount} items</span>
         <span>{summary.documentCount === 1 ? "single document" : "grouped navigation"}</span>
       </div>
-      <div className="mt-3 h-2 rounded-full bg-white/5">
+      <div
+        className="mt-3 h-2 rounded-full bg-white/5"
+        role="progressbar"
+        aria-label={`${summary.label} item count`}
+        aria-valuenow={summary.itemCount}
+        aria-valuemin={0}
+        aria-valuemax={maxItems}
+        aria-valuetext={`${summary.itemCount} of ${maxItems} items`}
+      >
         <div
           className={`h-full rounded-full ${active ? "bg-sky-300" : "bg-slate-400/70"}`}
           style={{ width: `${barWidth}%` }}
