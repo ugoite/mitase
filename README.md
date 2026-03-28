@@ -428,4 +428,8 @@ releases compare against the previous stable tag.
 Release binaries are packaged with `scripts/ci/package-release.sh`, published to
 GitHub Packages / GHCR, and uploaded as GitHub release assets.
 
+When upgrading between alpha releases, consult the
+[migration guide](docs/guide/migration.md) for breaking config changes, renamed
+CLI flags, and new default-on validation rules.
+
 See `docs/syu/` for `syu`'s own self-hosted specification.

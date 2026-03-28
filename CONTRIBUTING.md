@@ -81,3 +81,17 @@ Commit messages that appear in the changelog follow the
 
 Write the subject line in the imperative mood (e.g. `feat: add syu list command`)
 so the generated changelog reads naturally.
+
+### Migration notes
+
+Every PR that introduces a **breaking change** must add a corresponding entry to
+`docs/guide/migration.md` before the PR is merged. A breaking change is any of:
+
+- A `syu.yaml` field added, removed, or with a changed default
+- A spec YAML schema change that requires user edits to existing `docs/syu/` files
+- A new default-on validation rule (one that was previously off or did not exist)
+- A CLI flag that is renamed, removed, or has a changed default
+
+The migration entry must include the target version, a table of old → new
+values, and the exact steps needed to upgrade an existing repository without
+breakage. See `docs/guide/migration.md` for the expected format.
