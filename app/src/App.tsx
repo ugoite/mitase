@@ -681,9 +681,13 @@ function App() {
 
                 {currentItem.tests.length > 0 ? (
                   <TracePanel label="Tests" groups={currentItem.tests} />
+                ) : currentItem.status === "planned" && currentItem.kind === "requirement" ? (
+                  <PlannedTracePlaceholder kind="tests" />
                 ) : null}
                 {currentItem.implementations.length > 0 ? (
                   <TracePanel label="Implementations" groups={currentItem.implementations} />
+                ) : currentItem.status === "planned" && currentItem.kind === "feature" ? (
+                  <PlannedTracePlaceholder kind="implementations" />
                 ) : null}
               </article>
             ) : currentDocument ? (
@@ -920,6 +924,41 @@ function RelationshipPanel({
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function PlannedTracePlaceholder({ kind }: { kind: "tests" | "implementations" }) {
+  const label = kind === "tests" ? "Tests" : "Implementations";
+  const field = kind === "tests" ? "tests" : "implementations";
+  const exampleId = kind === "tests" ? "REQ-MY-001" : "FEAT-MY-001";
+  const exampleSymbol = kind === "tests" ? "my_test_function" : "my_impl_function";
+  const yamlExample = `${field}:\n  rust:\n    - file: src/my_file.rs\n      symbols:\n        - ${exampleSymbol}\n      doc_contains:\n        - ${exampleId}`;
+
+  return (
+    <div className="rounded-2xl border border-dashed border-sky-400/20 bg-sky-950/20 p-4">
+      <div className="flex items-center gap-2">
+        <p className="text-xs uppercase tracking-[0.25em] text-sky-400/60">{label}</p>
+        <span className="rounded-full border border-sky-400/20 bg-sky-400/10 px-2 py-0.5 text-[10px] text-sky-300/70">
+          not yet declared
+        </span>
+      </div>
+      <p className="mt-3 text-sm text-slate-400">
+        This item is <span className="text-sky-300">planned</span>. Add a{" "}
+        <code className="rounded bg-white/5 px-1 py-0.5 font-mono text-xs text-slate-200">
+          {field}:
+        </code>{" "}
+        block when you implement it:
+      </p>
+      <pre className="mt-3 overflow-x-auto rounded-xl border border-white/5 bg-slate-950/70 p-3 text-xs leading-6 text-slate-300">
+        {yamlExample}
+      </pre>
+      <p className="mt-3 text-xs text-slate-500">
+        Then change <code className="rounded bg-white/5 px-1 font-mono text-slate-400">status</code>{" "}
+        to <code className="rounded bg-white/5 px-1 font-mono text-slate-400">implemented</code> and
+        run <code className="rounded bg-white/5 px-1 font-mono text-slate-400">syu validate .</code>{" "}
+        to verify the traces.
+      </p>
     </div>
   );
 }
