@@ -261,7 +261,10 @@ fn show_command_errors_when_the_id_is_missing() {
     assert_eq!(output.status.code(), Some(2));
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("was not found"));
-    assert!(stderr.contains("syu list"), "hint should suggest syu list: {stderr}");
+    assert!(
+        stderr.contains("syu list"),
+        "hint should suggest syu list: {stderr}"
+    );
 }
 
 #[test]
