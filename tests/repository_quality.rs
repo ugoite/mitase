@@ -110,7 +110,7 @@ fn repository_declares_release_automation() {
 
     assert!(release_config.contains("\"release-type\": \"rust\""));
     assert!(release_config.contains("\"package-name\": \"syu\""));
-    assert!(release_config.contains("\"skip-changelog\": true"));
+    assert!(!release_config.contains("\"skip-changelog\": true"));
     assert!(release_config.contains("\"changelog-type\": \"github\""));
     assert!(!release_config.contains("\"initial-version\""));
     assert!(manifest.contains("\".\": \"0.0.0\""));
