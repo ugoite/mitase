@@ -50,3 +50,25 @@ story validation pass.
 
 GitHub release notes are generated per release track so alpha, beta, and stable
 releases each compare against the previous tag in the same track.
+
+### Changelog
+
+`CHANGELOG.md` is generated automatically by release-please from conventional
+commit messages. The changelog is updated on every release PR; do not edit it
+by hand.
+
+Commit messages that appear in the changelog follow the
+[Conventional Commits](https://www.conventionalcommits.org/) format:
+
+| Prefix | Section in changelog |
+|--------|---------------------|
+| `feat:` | Features |
+| `fix:` | Bug Fixes |
+| `docs:` | Documentation |
+| `ci:` | CI/CD |
+| `chore:` | Miscellaneous |
+| `BREAKING CHANGE:` footer | Breaking Changes |
+
+Write the subject line in the imperative mood (e.g. `feat: add syu list command`)
+so the generated changelog reads naturally.
+
