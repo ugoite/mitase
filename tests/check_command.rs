@@ -116,6 +116,24 @@ fn check_command_reports_missing_definition_links() {
 }
 
 #[test]
+fn check_command_suggests_init_for_uninitialized_workspaces() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(tempdir.path())
+        .output()
+        .expect("command should run");
+
+    assert!(!output.status.success(), "empty workspace should fail");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("SYU-workspace-load-001"));
+    assert!(stdout.contains("suggestion:"));
+    assert!(stdout.contains("syu init ."));
+}
+
+#[test]
 // REQ-CORE-002
 fn check_command_verifies_requirement_test_traceability_in_all_supported_languages() {
     let output = Command::cargo_bin("syu")

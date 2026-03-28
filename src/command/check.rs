@@ -622,6 +622,10 @@ fn render_text_report(
                 )
                 .expect("writing to String must succeed");
             }
+            if let Some(suggestion) = &issue.suggestion {
+                writeln!(&mut output, "  suggestion: {suggestion}")
+                    .expect("writing to String must succeed");
+            }
         }
     } else if let Some(filtered_view) = filtered_view
         && filtered_view.total_issue_count > 0

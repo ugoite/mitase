@@ -159,7 +159,7 @@ impl CheckResult {
                 None,
                 message.into(),
                 Some(
-                    "Create a valid spec tree (default: `docs/syu`) and feature registry before running `syu validate`."
+                    "New workspace? Run `syu init .` in the repository root. Otherwise make sure `syu.yaml` and `docs/syu/` exist under the selected workspace."
                         .to_string(),
                 ),
             )],

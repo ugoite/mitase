@@ -1,3 +1,4 @@
+// FEAT-DOCS-001
 // FEAT-APP-001
 // FEAT-BROWSE-001
 // FEAT-BROWSE-002
@@ -9,11 +10,18 @@
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
+const ROOT_AFTER_HELP: &str = "\
+New here?
+  1. syu init .      scaffold a workspace in the current directory
+  2. syu validate .  check the layered spec and traceability
+  3. syu app .       open the browser UI to explore the workspace";
+
 #[derive(Debug, Parser)]
 #[command(
     name = "syu",
     version,
     about = "Specification-driven development for real repositories",
+    after_help = ROOT_AFTER_HELP,
     subcommand_required = false,
     arg_required_else_help = false
 )]
