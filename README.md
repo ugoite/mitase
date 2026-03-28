@@ -138,6 +138,9 @@ syu validate . --no-fix
 Use `--severity`, `--genre`, and `--rule` to narrow the rendered issue list
 without changing the underlying validation result or exit code.
 
+For a plain-English guide to common validation errors, see the
+[troubleshooting guide](docs/guide/troubleshooting.md).
+
 ### `syu browse`
 
 Browse philosophies, policies, features, requirements, and current validation
