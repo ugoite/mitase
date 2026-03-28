@@ -86,6 +86,11 @@ fn check_command_accepts_passing_workspace() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("syu validate passed"));
     assert!(stdout.contains("traceability: requirements=3/3 features=3/3"));
+    assert!(
+        stdout.contains("What to do next:"),
+        "success output should include next-step guidance: {stdout}"
+    );
+    assert!(stdout.contains("syu app ."), "next-step block should mention syu app: {stdout}");
 }
 
 #[test]
