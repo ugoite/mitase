@@ -81,4 +81,3 @@ Commit messages that appear in the changelog follow the
 
 Write the subject line in the imperative mood (e.g. `feat: add syu list command`)
 so the generated changelog reads naturally.
-
