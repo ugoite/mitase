@@ -662,14 +662,26 @@ fn render_text_report(
     if overall_success && result.issues.is_empty() {
         writeln!(&mut output).expect("writing to String must succeed");
         writeln!(&mut output, "What to do next:").expect("writing to String must succeed");
-        writeln!(&mut output, "  syu app .        open the browser UI to explore your workspace")
-            .expect("writing to String must succeed");
-        writeln!(&mut output, "  syu browse .     browse interactively in the terminal")
-            .expect("writing to String must succeed");
-        writeln!(&mut output, "  syu report .     generate a markdown validation report")
-            .expect("writing to String must succeed");
-        writeln!(&mut output, "  syu show <ID>    inspect a single spec item in detail")
-            .expect("writing to String must succeed");
+        writeln!(
+            &mut output,
+            "  syu app .        open the browser UI to explore your workspace"
+        )
+        .expect("writing to String must succeed");
+        writeln!(
+            &mut output,
+            "  syu browse .     browse interactively in the terminal"
+        )
+        .expect("writing to String must succeed");
+        writeln!(
+            &mut output,
+            "  syu report .     generate a markdown validation report"
+        )
+        .expect("writing to String must succeed");
+        writeln!(
+            &mut output,
+            "  syu show <ID>    inspect a single spec item in detail"
+        )
+        .expect("writing to String must succeed");
     }
 
     output

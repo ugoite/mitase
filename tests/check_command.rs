@@ -90,7 +90,10 @@ fn check_command_accepts_passing_workspace() {
         stdout.contains("What to do next:"),
         "success output should include next-step guidance: {stdout}"
     );
-    assert!(stdout.contains("syu app ."), "next-step block should mention syu app: {stdout}");
+    assert!(
+        stdout.contains("syu app ."),
+        "next-step block should mention syu app: {stdout}"
+    );
 }
 
 #[test]
