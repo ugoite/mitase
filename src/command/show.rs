@@ -24,11 +24,18 @@ pub fn run_show_command(args: &ShowArgs) -> Result<i32> {
     let workspace = load_workspace(&args.workspace)?;
     let lookup = WorkspaceLookup::new(&workspace);
     let Some(entity) = lookup.find(&args.id) else {
-        bail!(
-            "definition `{}` was not found in `{}`",
-            args.id,
-            workspace.root.display()
-        );
+        match args.format {
+            OutputFormat::Json => bail!(
+                "definition `{}` was not found in `{}`",
+                args.id,
+                workspace.root.display()
+            ),
+            OutputFormat::Text => bail!(
+                "definition `{}` was not found in `{}`\n\nhint: Run `syu list` to see all available IDs, or `syu list requirement` to narrow by layer.",
+                args.id,
+                workspace.root.display()
+            ),
+        }
     };
 
     match args.format {
