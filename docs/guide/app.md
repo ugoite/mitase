@@ -7,6 +7,7 @@
 ```bash
 syu app .
 # → syu app listening on http://127.0.0.1:3000
+# → syu app ready: http://127.0.0.1:3000
 # → Open http://127.0.0.1:3000 in your browser.
 # → Press Ctrl-C to stop.
 ```
@@ -134,6 +135,25 @@ app:
 ```
 
 CLI flags always override the config values. See the [configuration guide](./configuration.md#appbind) for the full reference.
+
+---
+
+## Health checks and readiness
+
+Once the app has loaded the workspace successfully, `GET /health` returns:
+
+```json
+{"status":"ok","version":"0.0.1-alpha.7"}
+```
+
+The startup log also prints a distinct ready line:
+
+```text
+syu app ready: http://127.0.0.1:3000
+```
+
+Use that line or the `/health` endpoint in CI scripts, container probes, or
+process supervisors instead of a fixed `sleep`.
 
 ---
 

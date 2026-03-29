@@ -57,8 +57,9 @@ fn reserve_port() -> u16 {
 
 fn wait_for_server(port: u16) {
     for _ in 0..80 {
-        if let Ok(response) = http_get(port, "/healthz")
-            && response.contains("\r\n\r\nok")
+        if let Ok(response) = http_get(port, "/health")
+            && response.contains("200 OK")
+            && response.contains("\"status\":\"ok\"")
         {
             return;
         }
@@ -139,6 +140,11 @@ fn app_command_serves_browser_ui_and_payload() {
     assert!(payload.contains("FEAT-TRACE-001"));
     assert!(payload.contains("foundation.yaml"));
 
+    let health = http_get(port, "/health").expect("health should load");
+    assert!(health.contains("200 OK"));
+    assert!(health.contains("\"status\":\"ok\""));
+    assert!(health.contains(&format!("\"version\":\"{}\"", env!("CARGO_PKG_VERSION"))));
+
     shutdown_child(&mut child);
 }
 
@@ -164,6 +170,7 @@ fn app_command_startup_message_explains_browser_and_stop_flow() {
     let output = shutdown_child_with_output(child);
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains(&format!("syu app listening on http://127.0.0.1:{port}")));
+    assert!(stdout.contains(&format!("syu app ready: http://127.0.0.1:{port}")));
     assert!(stdout.contains(&format!("Open http://127.0.0.1:{port} in your browser.")));
     assert!(stdout.contains("Press Ctrl-C to stop."));
 }
@@ -180,6 +187,7 @@ fn app_command_help_mentions_browser_and_stop_instructions() {
     assert!(output.status.success(), "help should succeed");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("print the URL to open in your browser"));
+    assert!(stdout.contains("Use GET /health for readiness checks once the app is serving."));
     assert!(stdout.contains("After startup, open the printed URL in your browser."));
     assert!(stdout.contains("Press Ctrl-C to stop the local app server."));
 }
@@ -200,6 +208,8 @@ fn app_command_uses_configured_bind_and_port_defaults() {
         .expect("app command should start");
 
     wait_for_server(port);
+    let health = http_get(port, "/health").expect("health should load");
+    assert!(health.contains("\"status\":\"ok\""));
     let health = http_get(port, "/healthz").expect("healthz should load");
     assert!(health.contains("200 OK"));
 
@@ -256,6 +266,8 @@ fn app_command_cli_flags_override_configured_bind_and_port() {
         .expect("app command should start");
 
     wait_for_server(override_port);
+    let health = http_get(override_port, "/health").expect("health should load");
+    assert!(health.contains("\"status\":\"ok\""));
     let health = http_get(override_port, "/healthz").expect("healthz should load");
     assert!(health.contains("200 OK"));
 
