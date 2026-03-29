@@ -245,6 +245,13 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("syu list feature"));
     assert!(getting_started.contains("syu show REQ-CORE-015"));
     assert!(getting_started.contains("syu app ."));
+    assert!(getting_started.contains("Requirements are discovered"));
+    assert!(getting_started.contains("implementation claims should stay deliberate"));
+    assert!(getting_started.contains(&format!("version: {current_version}")));
+    assert!(getting_started.contains("kind: core"));
+    assert!(getting_started.contains("freshly initialized project will not have them yet"));
+    assert!(getting_started.contains("https://ugoite.github.io/syu/docs/generated/site-spec"));
+    assert!(getting_started.contains("https://ugoite.github.io/syu/docs/generated/syu-report"));
     assert!(getting_started.contains("status: implemented"));
     assert!(getting_started.contains("Keep exploring"));
     assert_eq!(
@@ -253,7 +260,8 @@ fn repository_declares_documentation_guides() {
             .count(),
         1
     );
-    assert!(getting_started.contains("latest validation report"));
+    assert!(getting_started.contains("live [validation report]"));
+    assert!(readme.contains("Understand the model first?"));
     assert!(configuration.contains("validate.default_fix"));
     assert!(configuration.contains("validate.allow_planned"));
     assert!(configuration.contains(&format!("version: {current_version}")));

@@ -88,6 +88,9 @@ below. The rest of this section assumes you installed the published CLI.
 
 Step 0: required — run `syu init .` before any of the other commands in a new repository.
 
+Understand the model first? Start with [`docs/guide/concepts.md`](docs/guide/concepts.md)
+before you begin editing YAML.
+
 ```bash
 syu init .          # 1. Create spec scaffold
 # edit docs/syu/... # 2. Add your spec items
