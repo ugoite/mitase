@@ -62,5 +62,7 @@ fn polyglot_example_validates() {
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("traceability: requirements=3/3 features=3/3"));
+    assert!(stdout.contains(
+        "traceability: requirements=3/3 traces validated; features=3/3 traces validated"
+    ));
 }

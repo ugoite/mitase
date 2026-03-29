@@ -180,6 +180,10 @@ pub struct ValidateArgs {
     #[arg(help = "Disable autofix even when syu.yaml enables it by default")]
     #[arg(long, action = ArgAction::SetTrue)]
     pub no_fix: bool,
+
+    #[arg(help = "Suppress next-step guidance in successful text output")]
+    #[arg(short, long, action = ArgAction::SetTrue)]
+    pub quiet: bool,
 }
 
 pub type CheckArgs = ValidateArgs;
