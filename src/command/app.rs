@@ -92,9 +92,7 @@ pub fn run_app_command(args: &AppArgs) -> Result<i32> {
             .flush()
             .context("failed to flush stdout")?;
 
-        server
-            .await
-            .context("local app server task panicked")?
+        server.await.context("local app server task panicked")?
     })?;
 
     Ok(0)

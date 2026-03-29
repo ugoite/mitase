@@ -99,6 +99,9 @@ syu validate .      # 3. Check everything is linked
 syu app .           # 4. Browse in the browser
 ```
 
+Use `syu browse .` when you want terminal-first exploration, or `syu app .`
+when you want the local browser UI.
+
 ```bash
 syu init .
 syu validate .
