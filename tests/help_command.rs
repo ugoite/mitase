@@ -16,5 +16,10 @@ fn root_help_includes_start_here_guidance() {
     assert!(stdout.contains("New here?"));
     assert!(stdout.contains("syu init ."));
     assert!(stdout.contains("syu validate ."));
+    assert!(stdout.contains("syu browse ."));
     assert!(stdout.contains("syu app ."));
+    assert!(stdout.contains(
+        "Browse the specification in your terminal (interactive prompts or text output)"
+    ));
+    assert!(stdout.contains("Start a local HTTP server and browser UI for workspace exploration"));
 }

@@ -14,7 +14,8 @@ const ROOT_AFTER_HELP: &str = "\
 New here?
   1. syu init .      scaffold a workspace in the current directory
   2. syu validate .  check the layered spec and traceability
-  3. syu app .       open the browser UI to explore the workspace";
+  3. syu browse .    explore the spec in your terminal
+  4. syu app .       start the local browser UI server";
 
 const APP_AFTER_HELP: &str = concat!(
     "After startup, open the printed URL in your browser.\n",
@@ -39,7 +40,7 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Commands {
     #[command(
-        about = "Browse philosophies, policies, features, requirements, and validation errors"
+        about = "Browse the specification in your terminal (interactive prompts or text output)"
     )]
     Browse(BrowseArgs),
     #[command(about = "List philosophies, policies, requirements, or features")]
@@ -47,7 +48,7 @@ pub enum Commands {
     #[command(about = "Show one philosophy, policy, requirement, or feature by ID")]
     Show(ShowArgs),
     #[command(
-        about = "Start a local browser app server and print the URL to open in your browser",
+        about = "Start a local HTTP server and browser UI for workspace exploration, then print the URL to open in your browser",
         after_help = APP_AFTER_HELP
     )]
     App(AppArgs),
