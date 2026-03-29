@@ -217,6 +217,8 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("syu browse"));
     assert!(readme.contains("syu list"));
     assert!(readme.contains("syu show"));
+    assert!(readme.contains("syu show REQ-001"));
+    assert!(!readme.contains("syu show REQ-CORE-015"));
     assert!(readme.contains("syu app"));
     assert!(readme.contains("examples/polyglot"));
     assert!(readme.contains("CONTRIBUTING.md"));
