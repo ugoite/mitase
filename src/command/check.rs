@@ -13,6 +13,7 @@ use serde::Serialize;
 
 use crate::{
     cli::{CheckArgs, OutputFormat, ValidationGenreFilter, ValidationSeverityFilter},
+    command::shell_quote_path,
     config::SyuConfig,
     coverage::{normalize_relative_path, validate_symbol_trace_coverage},
     inspect::{apply_symbol_doc_fix, inspect_symbol, supports_rich_inspection},
@@ -817,26 +818,27 @@ fn render_text_report(
     }
 
     if overall_success && result.issues.is_empty() && !quiet {
+        let workspace_arg = shell_quote_path(&result.workspace_root);
         writeln!(&mut output).expect("writing to String must succeed");
         writeln!(&mut output, "What to do next:").expect("writing to String must succeed");
         writeln!(
             &mut output,
-            "  syu app .        open the browser UI to explore your workspace"
+            "  syu app {workspace_arg}        open the browser UI to explore your workspace"
         )
         .expect("writing to String must succeed");
         writeln!(
             &mut output,
-            "  syu browse .     browse interactively in the terminal"
+            "  syu browse {workspace_arg}     browse interactively in the terminal"
         )
         .expect("writing to String must succeed");
         writeln!(
             &mut output,
-            "  syu report .     generate a markdown validation report"
+            "  syu report {workspace_arg}     generate a markdown validation report"
         )
         .expect("writing to String must succeed");
         writeln!(
             &mut output,
-            "  syu show <ID>    inspect a single spec item in detail"
+            "  syu show <ID> {workspace_arg}    inspect a single spec item in detail"
         )
         .expect("writing to String must succeed");
     }

@@ -97,9 +97,34 @@ fn check_command_accepts_passing_workspace() {
         "success output should include next-step guidance: {stdout}"
     );
     assert!(
-        stdout.contains("syu app ."),
+        stdout.contains("syu app "),
         "next-step block should mention syu app: {stdout}"
     );
+}
+
+#[test]
+// REQ-CORE-001
+fn check_command_prints_workspace_aware_next_steps_for_explicit_paths() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(fixture_path("passing"))
+        .output()
+        .expect("command should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let workspace_arg = fixture_path("passing").display().to_string();
+    assert!(stdout.contains(&format!("syu app {workspace_arg}")));
+    assert!(stdout.contains(&format!("syu browse {workspace_arg}")));
+    assert!(stdout.contains(&format!("syu report {workspace_arg}")));
+    assert!(stdout.contains(&format!("syu show <ID> {workspace_arg}")));
 }
 
 #[test]
