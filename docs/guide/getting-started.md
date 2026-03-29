@@ -76,6 +76,17 @@ As the workspace grows, you can group requirement and feature files into nested
 folders. Keep feature discovery explicit by updating `docs/syu/features/features.yaml`
 whenever you add or move a feature document.
 
+Requirements are discovered by walking the `requirements/` tree, but features use
+an explicit registry because implementation claims should stay deliberate and
+reviewable. That registry is a short YAML list of feature documents:
+
+```yaml
+version: 0.0.1-alpha.7
+files:
+  - kind: core
+    file: core/core.yaml
+```
+
 Make sure links are reciprocal:
 
 - philosophy ↔ policy
@@ -216,5 +227,10 @@ The repository includes complete examples:
 - Review [configuration](./configuration.md) before tightening validation in a real repository
 - Read the [syu app browser guide](./app.md) to learn how to navigate the browser UI
 - Check the [troubleshooting guide](./troubleshooting.md) when `syu validate` returns an unfamiliar error code
-- Browse the [Specification Reference](../generated/site-spec/index.md) to see how `syu` self-hosts its own contract
-- Open the [latest validation report](../generated/syu-report.md) to inspect the checked-in repository status
+- If you run `syu report`, your own project can generate a local Markdown report.
+  The checked-in `docs/generated/` links below exist in the `syu` repository itself,
+  so a freshly initialized project will not have them yet.
+- Browse the live [Specification Reference](https://ugoite.github.io/syu/docs/generated/site-spec)
+  to see how `syu` self-hosts its own contract
+- Open the live [validation report](https://ugoite.github.io/syu/docs/generated/syu-report)
+  to inspect the checked-in repository status
