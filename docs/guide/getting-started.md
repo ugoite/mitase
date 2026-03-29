@@ -158,6 +158,9 @@ syu show FEAT-BROWSE-001 --format json
 Filters stay view-oriented: they narrow the visible diagnostics while preserving
 the full validation result and exit code.
 
+For CI or shell scripts that still want text output, add `--quiet` to suppress
+the next-step guidance block while keeping the validation summary and exit code.
+
 ### Understanding validation output
 
 Validation errors follow the pattern `SYU-[genre]-[content]-[NNN]`:
