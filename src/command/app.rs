@@ -3,13 +3,14 @@
 
 use std::{
     fs,
-    io::Write,
-    net::IpAddr,
+    io::{Read, Write},
+    net::{IpAddr, SocketAddr},
     path::{Path, PathBuf},
     sync::Arc,
+    time::Duration,
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use axum::{
     Json, Router,
     body::Body,
@@ -36,6 +37,12 @@ static APP_DIST: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/app/dist");
 #[derive(Clone)]
 struct AppState {
     payload: Arc<AppPayload>,
+}
+
+#[derive(serde::Serialize)]
+struct HealthStatus {
+    status: &'static str,
+    version: &'static str,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,17 +75,26 @@ pub fn run_app_command(args: &AppArgs) -> Result<i32> {
         let local_addr = listener
             .local_addr()
             .context("failed to inspect bind address")?;
+        let server = tokio::spawn(async move {
+            axum::serve(listener, router)
+                .with_graceful_shutdown(shutdown_signal())
+                .await
+                .context("local app server exited unexpectedly")
+        });
         println!("syu app listening on http://{local_addr}");
+        tokio::task::spawn_blocking(move || wait_for_ready(local_addr))
+            .await
+            .context("local app readiness probe panicked")??;
+        println!("syu app ready: http://{local_addr}");
         println!("Open http://{local_addr} in your browser.");
         println!("Press Ctrl-C to stop.");
         std::io::stdout()
             .flush()
             .context("failed to flush stdout")?;
 
-        axum::serve(listener, router)
-            .with_graceful_shutdown(shutdown_signal())
+        server
             .await
-            .context("local app server exited unexpectedly")
+            .context("local app server task panicked")?
     })?;
 
     Ok(0)
@@ -103,6 +119,7 @@ fn canonical_workspace_root(workspace_root: &Path) -> Result<PathBuf> {
 fn app_router(state: AppState) -> Router {
     Router::new()
         .route("/api/app-data.json", get(app_data))
+        .route("/health", get(health))
         .route("/healthz", get(healthz))
         .fallback(get(serve_static))
         .with_state(state)
@@ -110,6 +127,13 @@ fn app_router(state: AppState) -> Router {
 
 async fn app_data(State(state): State<AppState>) -> Json<AppPayload> {
     Json((*state.payload).clone())
+}
+
+async fn health() -> Json<HealthStatus> {
+    Json(HealthStatus {
+        status: "ok",
+        version: env!("CARGO_PKG_VERSION"),
+    })
 }
 
 async fn healthz() -> &'static str {
@@ -180,6 +204,39 @@ fn content_type_for_path(path: &str) -> &'static str {
     } else {
         "application/octet-stream"
     }
+}
+
+fn wait_for_ready(local_addr: SocketAddr) -> Result<()> {
+    for _ in 0..50 {
+        match std::net::TcpStream::connect_timeout(&local_addr.into(), Duration::from_millis(100)) {
+            Ok(mut stream) => {
+                stream
+                    .set_read_timeout(Some(Duration::from_millis(100)))
+                    .context("failed to configure readiness probe read timeout")?;
+                stream
+                    .set_write_timeout(Some(Duration::from_millis(100)))
+                    .context("failed to configure readiness probe write timeout")?;
+                write!(
+                    stream,
+                    "GET /health HTTP/1.1\r\nHost: {local_addr}\r\nConnection: close\r\n\r\n"
+                )
+                .context("failed to send readiness probe request")?;
+                stream
+                    .flush()
+                    .context("failed to flush readiness probe request")?;
+
+                let mut response = String::new();
+                if stream.read_to_string(&mut response).is_ok() && response.contains("200 OK") {
+                    return Ok(());
+                }
+            }
+            Err(_) => {}
+        }
+
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    bail!("local app server did not become ready at http://{local_addr}")
 }
 
 async fn shutdown_signal() {
