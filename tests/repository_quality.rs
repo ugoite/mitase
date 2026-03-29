@@ -36,12 +36,14 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(ci_workflow.contains("dependency-audit:"));
     assert!(ci_workflow.contains("dependency-review:"));
     assert!(ci_workflow.contains("installer-smoke:"));
+    assert!(ci_workflow.contains("installed-binary-smoke:"));
     assert!(ci_workflow.contains("--hook-stage pre-commit"));
     assert!(ci_workflow.contains("--hook-stage pre-push"));
     assert!(ci_workflow.contains("scripts/ci/quality-gates.sh"));
     assert!(ci_workflow.contains("cargo audit"));
     assert!(ci_workflow.contains("Review dependency changes"));
     assert!(ci_workflow.contains("scripts/ci/installer-smoke.sh"));
+    assert!(ci_workflow.contains("scripts/ci/installed-binary-smoke.sh"));
 
     assert!(repo_config.contains("FEAT-CHECK-001"));
     assert!(repo_config.contains("FEAT-REPORT-001"));
@@ -139,6 +141,7 @@ fn repository_declares_installer_contract() {
     let current_version = env!("CARGO_PKG_VERSION");
     let installer = read_file("scripts/install-syu.sh");
     let installer_smoke = read_file("scripts/ci/installer-smoke.sh");
+    let installed_binary_smoke = read_file("scripts/ci/installed-binary-smoke.sh");
     let mock_registry = read_file("scripts/ci/mock_package_registry.py");
     let readme = read_file("README.md");
 
@@ -156,6 +159,13 @@ fn repository_declares_installer_contract() {
     assert!(installer.contains("ghcr.io"));
     assert!(installer_smoke.contains("FEAT-INSTALL-001"));
     assert!(installer_smoke.contains("run_install_case"));
+    assert!(installed_binary_smoke.contains("FEAT-QUALITY-001"));
+    assert!(installed_binary_smoke.contains("cargo install --path"));
+    assert!(installed_binary_smoke.contains("--locked"));
+    assert!(installed_binary_smoke.contains("wait_for_app_url"));
+    assert!(installed_binary_smoke.contains("wait_for_app_payload"));
+    assert!(installed_binary_smoke.contains("print_app_diagnostics"));
+    assert!(installed_binary_smoke.contains("api/app-data.json"));
     assert!(mock_registry.contains("FEAT-INSTALL-001"));
     assert!(mock_registry.contains("build_artifacts"));
 
