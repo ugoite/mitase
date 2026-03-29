@@ -101,7 +101,7 @@ syu validate .
 syu validate . --fix
 syu browse .
 syu list requirement
-syu show REQ-CORE-015
+syu show REQ-001
 syu app .
 syu report . --output reports/syu.md
 ```
@@ -174,7 +174,7 @@ syu list feature path/to/workspace --format json
 Show one definition by ID:
 
 ```bash
-syu show REQ-CORE-015
+syu show REQ-001
 syu show FEAT-BROWSE-001 path/to/workspace --format json
 ```
 
