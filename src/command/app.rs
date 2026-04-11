@@ -723,8 +723,9 @@ mod tests {
         browser_root_labels, build_app_payload, collect_feature_sources,
         collect_yaml_sources_recursive, content_type_for_path, is_asset_like,
         normalized_asset_path, readiness_probe_request_sent, readiness_probe_succeeds,
-        redacted_root_label, refresh_current_once, relative_display, resolve_app_server_settings,
-        spec_snapshot, validation_snapshot, wait_for_ready_with_retry,
+        redacted_relative_label, redacted_root_label, refresh_current_once, relative_display,
+        resolve_app_server_settings, spec_snapshot, trailing_path_components_label,
+        validation_snapshot, wait_for_ready_with_retry,
     };
 
     fn fixture_root(name: &str) -> PathBuf {
@@ -927,6 +928,32 @@ mod tests {
         assert_eq!(
             redacted_root_label(&workspace_root),
             "~/src/example/spec-workspace"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn redacted_root_label_falls_back_to_trailing_components() {
+        assert_eq!(
+            redacted_root_label(Path::new("/var/tmp/spec-workspace")),
+            "tmp/spec-workspace"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn redacted_root_label_uses_workspace_for_root_paths() {
+        assert_eq!(redacted_root_label(Path::new("/")), "workspace");
+        assert!(trailing_path_components_label(Path::new("/"), 2).is_empty());
+    }
+
+    #[test]
+    fn redacted_relative_label_returns_prefix_for_matching_roots() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        assert_eq!(
+            redacted_relative_label(Some(tempdir.path().to_path_buf()), tempdir.path(), ".")
+                .as_deref(),
+            Some(".")
         );
     }
 

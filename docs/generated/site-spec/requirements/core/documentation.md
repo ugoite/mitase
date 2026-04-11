@@ -40,6 +40,7 @@ description: "Generated reference for docs/syu/requirements/core/documentation.y
       - **file**: tests/help_command.rs
         - **symbols**:
           - root_help_includes_start_here_guidance
+          - workspace_help_uses_current_directory_default_consistently
       - **file**: tests/repository_quality.rs
         - **symbols**:
           - repository_declares_documentation_guides
@@ -97,6 +98,7 @@ requirements:
         - file: tests/help_command.rs
           symbols:
             - root_help_includes_start_here_guidance
+            - workspace_help_uses_current_directory_default_consistently
         - file: tests/repository_quality.rs
           symbols:
             - repository_declares_documentation_guides

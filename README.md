@@ -223,6 +223,8 @@ The self-hosted repository keeps its latest generated report at
 `docs/generated/syu-report.md`.
 Set `report.output` in `syu.yaml` when a repository wants that checked-in path
 to become the default, while keeping `--output` available for one-off overrides.
+Contributors can refresh that report and the checked-in site-spec pages together
+with `scripts/ci/check-generated-docs-freshness.sh`.
 
 ## Browser app
 
