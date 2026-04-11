@@ -19,8 +19,8 @@ use crate::{
     inspect::{apply_symbol_doc_fix, inspect_symbol, supports_rich_inspection},
     language::adapter_for_language,
     model::{
-        CheckResult, DefinitionCounts, Feature, Issue, Philosophy, Policy, Requirement, Severity,
-        TraceCount, TraceReference, TraceSummary,
+        CheckResult, DefinitionCounts, Feature, FeatureRegistryDocument, Issue, Philosophy, Policy,
+        Requirement, Severity, TraceCount, TraceReference, TraceSummary,
     },
     rules::{all_rules, attach_referenced_rules, referenced_rules, rule_by_code, rule_genre},
     workspace::{Workspace, load_workspace},
@@ -423,6 +423,7 @@ pub(crate) fn collect_check_result_from_workspace(workspace: &Workspace) -> Chec
         workspace.features.iter().map(|item| item.id.as_str()),
         &mut issues,
     );
+    validate_feature_registry_entries(workspace, &mut issues);
 
     let philosophies_by_id: HashMap<_, _> = workspace
         .philosophies
@@ -1012,6 +1013,164 @@ fn validate_unique_ids<'a>(
             ));
         }
     }
+}
+
+fn validate_feature_registry_entries(workspace: &Workspace, issues: &mut Vec<Issue>) {
+    let feature_root = workspace.spec_root.join("features");
+    let registry_path = feature_root.join("features.yaml");
+    let registry_display = workspace_display_path(workspace, &registry_path);
+
+    match validate_feature_registry_entries_inner(workspace, &feature_root, &registry_path, issues) {
+        Ok(()) => {}
+        Err(error) => issues.push(Issue::error(
+            "SYU-workspace-registry-001",
+            "workspace",
+            Some(registry_display.clone()),
+            format!(
+                "Failed to compare feature files against `{registry_display}`: {error}."
+            ),
+            Some(format!(
+                "Fix `{registry_display}` and the feature document tree so `syu` can verify the explicit feature registry."
+            )),
+        )),
+    }
+}
+
+fn validate_feature_registry_entries_inner(
+    workspace: &Workspace,
+    feature_root: &Path,
+    registry_path: &Path,
+    issues: &mut Vec<Issue>,
+) -> Result<()> {
+    let raw = fs::read_to_string(registry_path)
+        .map_err(anyhow::Error::from)
+        .map_err(|error| {
+            anyhow::anyhow!(
+                "failed to read feature registry `{}`: {error}",
+                registry_path.display()
+            )
+        })?;
+    let registry: FeatureRegistryDocument = serde_yaml::from_str(&raw).map_err(|error| {
+        anyhow::anyhow!(
+            "failed to parse feature registry `{}`: {error}",
+            registry_path.display()
+        )
+    })?;
+    let registered_paths: HashSet<_> = registry
+        .files
+        .into_iter()
+        .map(|entry| feature_root.join(entry.file))
+        .collect();
+
+    let mut discovered_paths = Vec::new();
+    collect_feature_yaml_paths(feature_root, &mut discovered_paths)?;
+    discovered_paths.sort();
+
+    for path in discovered_paths {
+        if path == registry_path || registered_paths.contains(&path) {
+            continue;
+        }
+
+        let looks_like_feature = match looks_like_feature_document(&path) {
+            Ok(result) => result,
+            Err(error) => {
+                let candidate_display = workspace_display_path(workspace, &path);
+                let registry_display = workspace_display_path(workspace, registry_path);
+                issues.push(Issue::error(
+                    "SYU-workspace-registry-001",
+                    "workspace",
+                    Some(candidate_display.clone()),
+                    format!(
+                        "Failed to inspect feature document candidate `{candidate_display}` while comparing it against `{registry_display}`: {error}."
+                    ),
+                    Some(format!(
+                        "Fix `{candidate_display}` or remove it from the feature tree so `syu` can verify `{registry_display}`."
+                    )),
+                ));
+                continue;
+            }
+        };
+        if !looks_like_feature {
+            continue;
+        }
+
+        let missing_display = workspace_display_path(workspace, &path);
+        let entry_path = path
+            .strip_prefix(feature_root)
+            .unwrap_or(path.as_path())
+            .display()
+            .to_string();
+        let registry_display = workspace_display_path(workspace, registry_path);
+        issues.push(Issue::error(
+            "SYU-workspace-registry-001",
+            "workspace",
+            Some(registry_display.clone()),
+            format!(
+                "Feature document `{missing_display}` exists on disk but is not listed in `{registry_display}`."
+            ),
+            Some(format!(
+                "Add a `files` entry for `{entry_path}` to `{registry_display}` so `syu list`, `syu browse`, and validation include that feature document."
+            )),
+        ));
+    }
+
+    Ok(())
+}
+
+fn collect_feature_yaml_paths(directory: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
+    let entries = fs::read_dir(directory)
+        .map_err(anyhow::Error::from)
+        .map_err(|error| {
+            anyhow::anyhow!(
+                "failed to read directory `{}`: {error}",
+                directory.display()
+            )
+        })?;
+
+    for entry in entries {
+        let path = entry
+            .map_err(anyhow::Error::from)
+            .map_err(|error| anyhow::anyhow!("failed to read directory entry: {error}"))?
+            .path();
+        if path.is_dir() {
+            collect_feature_yaml_paths(&path, files)?;
+        } else if matches!(
+            path.extension().and_then(|ext| ext.to_str()),
+            Some("yaml" | "yml")
+        ) {
+            files.push(path);
+        }
+    }
+
+    Ok(())
+}
+
+fn looks_like_feature_document(path: &Path) -> Result<bool> {
+    let raw = fs::read_to_string(path)
+        .map_err(anyhow::Error::from)
+        .map_err(|error| {
+            anyhow::anyhow!(
+                "failed to read feature candidate `{}`: {error}",
+                path.display()
+            )
+        })?;
+    let value: serde_yaml::Value = serde_yaml::from_str(&raw).map_err(|error| {
+        anyhow::anyhow!(
+            "failed to parse feature candidate `{}` while checking the registry: {error}",
+            path.display()
+        )
+    })?;
+
+    Ok(value.as_mapping().is_some_and(|mapping| {
+        mapping.contains_key(serde_yaml::Value::String("features".to_string()))
+    }))
+}
+
+fn workspace_display_path(workspace: &Workspace, path: &Path) -> String {
+    path.strip_prefix(&workspace.root)
+        .unwrap_or(path)
+        .display()
+        .to_string()
 }
 
 fn validate_duplicate_links(
@@ -2117,11 +2276,12 @@ mod tests {
     use super::{
         FilteredIssueView, IssueFilters, ORPHAN_RULE_CODES, RECIPROCAL_RULE_CODES,
         TextReportSummary, TraceRole, apply_autofix, apply_autofix_for_reference,
-        collect_check_result, describe_trace_reference, filter_check_result,
-        format_reference_location, preferred_trace_file_path, render_text_report,
-        run_check_command, validate_duplicate_links, validate_duplicate_trace_references,
-        validate_feature, validate_non_empty_field, validate_philosophy, validate_policy,
-        validate_requirement, validate_unique_ids, verify_trace_reference,
+        collect_check_result, collect_feature_yaml_paths, describe_trace_reference,
+        filter_check_result, format_reference_location, looks_like_feature_document,
+        preferred_trace_file_path, render_text_report, run_check_command, validate_duplicate_links,
+        validate_duplicate_trace_references, validate_feature, validate_feature_registry_entries,
+        validate_non_empty_field, validate_philosophy, validate_policy, validate_requirement,
+        validate_unique_ids, verify_trace_reference,
     };
 
     fn philosophy(id: &str) -> Philosophy {
@@ -2447,6 +2607,162 @@ mod tests {
         validate_unique_ids("feature", ["FEAT-1", "FEAT-1"].into_iter(), &mut issues);
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].code, "SYU-workspace-duplicate-001");
+    }
+
+    fn test_workspace(root: &Path) -> Workspace {
+        Workspace {
+            root: root.to_path_buf(),
+            spec_root: root.join("docs/syu"),
+            config: SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn validate_feature_registry_entries_reports_registry_read_failures() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = test_workspace(tempdir.path());
+        fs::create_dir_all(workspace.spec_root.join("features"))
+            .expect("features dir should exist");
+
+        let mut issues = Vec::new();
+        validate_feature_registry_entries(&workspace, &mut issues);
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].code, "SYU-workspace-registry-001");
+        assert_eq!(
+            issues[0].location.as_deref(),
+            Some("docs/syu/features/features.yaml")
+        );
+        assert!(
+            issues[0]
+                .message
+                .contains("Failed to compare feature files")
+        );
+        assert!(
+            issues[0]
+                .message
+                .contains("failed to read feature registry")
+        );
+        assert!(
+            issues[0]
+                .suggestion
+                .as_deref()
+                .expect("suggestion should exist")
+                .contains("explicit feature registry")
+        );
+    }
+
+    #[test]
+    fn validate_feature_registry_entries_reports_registry_parse_failures() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = test_workspace(tempdir.path());
+        let feature_root = workspace.spec_root.join("features");
+        fs::create_dir_all(&feature_root).expect("features dir should exist");
+        fs::write(feature_root.join("features.yaml"), "version: [").expect("registry should exist");
+
+        let mut issues = Vec::new();
+        validate_feature_registry_entries(&workspace, &mut issues);
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].code, "SYU-workspace-registry-001");
+        assert!(
+            issues[0]
+                .message
+                .contains("failed to parse feature registry")
+        );
+    }
+
+    #[test]
+    fn collect_feature_yaml_paths_reports_directory_read_failures() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let mut files = Vec::new();
+        let error = collect_feature_yaml_paths(&tempdir.path().join("missing"), &mut files)
+            .expect_err("missing directories should fail");
+
+        assert!(error.to_string().contains("failed to read directory"));
+    }
+
+    #[test]
+    fn looks_like_feature_document_reports_read_and_parse_failures() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let missing_error = looks_like_feature_document(&tempdir.path().join("missing.yaml"))
+            .expect_err("missing feature candidates should fail");
+        assert!(
+            missing_error
+                .to_string()
+                .contains("failed to read feature candidate")
+        );
+
+        let invalid = tempdir.path().join("invalid.yaml");
+        fs::write(&invalid, "features: [").expect("invalid yaml should exist");
+        let parse_error =
+            looks_like_feature_document(&invalid).expect_err("invalid yaml should fail");
+        assert!(
+            parse_error
+                .to_string()
+                .contains("failed to parse feature candidate")
+        );
+    }
+
+    #[test]
+    fn validate_feature_registry_entries_reports_candidate_parse_failures_on_candidate_path() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = test_workspace(tempdir.path());
+        let feature_root = workspace.spec_root.join("features");
+        fs::create_dir_all(feature_root.join("extra")).expect("features dir should exist");
+        fs::write(
+            feature_root.join("features.yaml"),
+            format!("version: \"{}\"\nfiles: []\n", env!("CARGO_PKG_VERSION")),
+        )
+        .expect("feature registry should exist");
+        fs::write(feature_root.join("extra/stray.yaml"), "features: [")
+            .expect("invalid feature candidate should exist");
+
+        let mut issues = Vec::new();
+        validate_feature_registry_entries(&workspace, &mut issues);
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].code, "SYU-workspace-registry-001");
+        assert_eq!(
+            issues[0].location.as_deref(),
+            Some("docs/syu/features/extra/stray.yaml")
+        );
+        assert!(
+            issues[0]
+                .message
+                .contains("failed to parse feature candidate")
+        );
+        assert!(
+            issues[0]
+                .suggestion
+                .as_deref()
+                .expect("suggestion should exist")
+                .contains("Fix `docs/syu/features/extra/stray.yaml`")
+        );
+    }
+
+    #[test]
+    fn validate_feature_registry_entries_ignores_non_feature_yaml_candidates() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = test_workspace(tempdir.path());
+        let feature_root = workspace.spec_root.join("features");
+        fs::create_dir_all(feature_root.join("extra")).expect("features dir should exist");
+        fs::write(
+            feature_root.join("features.yaml"),
+            format!("version: \"{}\"\nfiles: []\n", env!("CARGO_PKG_VERSION")),
+        )
+        .expect("feature registry should exist");
+        fs::write(feature_root.join("extra/catalog.yaml"), "rules: []\n")
+            .expect("non-feature yaml should exist");
+
+        let mut issues = Vec::new();
+        validate_feature_registry_entries(&workspace, &mut issues);
+
+        assert!(issues.is_empty(), "non-feature yaml should be ignored");
     }
 
     #[test]

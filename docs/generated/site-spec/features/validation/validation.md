@@ -50,6 +50,20 @@ description: "Generated reference for docs/syu/features/validation/validation.ya
       meaningful and automated validation can no longer tell which item a trace
       or relationship intended to reference. This rule preserves the repository
       as a navigable graph instead of a collection of ambiguous labels.
+- **code**: SYU-workspace-registry-001
+  - **genre**: workspace
+  - **severity**: error
+  - **title**: Feature registry entries must match checked-in feature documents
+  - **summary**: Feature YAML files should not exist on disk without an explicit registry entry.
+  - **description**:
+    - |
+      Features are intentionally discovered through `docs/syu/features/features.yaml`
+      so contributors can review which implementation-facing documents belong to
+      the committed specification. When a feature file exists on disk but is not
+      registered there, `syu list`, `syu browse`, and other discovery flows
+      silently miss a document that looks authoritative in the repository. This
+      rule keeps feature discovery explicit without allowing the checked-in file
+      tree and the registry to drift apart.
 - **code**: SYU-graph-reference-001
   - **genre**: graph
   - **severity**: error
@@ -459,6 +473,20 @@ rules:
       meaningful and automated validation can no longer tell which item a trace
       or relationship intended to reference. This rule preserves the repository
       as a navigable graph instead of a collection of ambiguous labels.
+
+  - code: SYU-workspace-registry-001
+    genre: workspace
+    severity: error
+    title: Feature registry entries must match checked-in feature documents
+    summary: Feature YAML files should not exist on disk without an explicit registry entry.
+    description: |
+      Features are intentionally discovered through `docs/syu/features/features.yaml`
+      so contributors can review which implementation-facing documents belong to
+      the committed specification. When a feature file exists on disk but is not
+      registered there, `syu list`, `syu browse`, and other discovery flows
+      silently miss a document that looks authoritative in the repository. This
+      rule keeps feature discovery explicit without allowing the checked-in file
+      tree and the registry to drift apart.
 
   - code: SYU-graph-reference-001
     genre: graph
