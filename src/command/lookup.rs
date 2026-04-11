@@ -1,17 +1,26 @@
 // REQ-CORE-018
 
+use std::path::Path;
+
+use anyhow::{Result, bail};
+
 use serde::Serialize;
 
 use crate::{
     cli::LookupKind,
     model::{Feature, Philosophy, Policy, Requirement},
-    workspace::Workspace,
+    workspace::{
+        Workspace, load_feature_documents_with_paths, load_philosophy_documents_with_paths,
+        load_policy_documents_with_paths, load_requirement_documents_with_paths,
+    },
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct EntitySummary {
     pub id: String,
     pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub document_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -41,6 +50,7 @@ impl<'a> WorkspaceLookup<'a> {
                 .map(|item| EntitySummary {
                     id: item.id.clone(),
                     title: item.title.clone(),
+                    document_path: None,
                 })
                 .collect(),
             LookupKind::Policy => self
@@ -50,6 +60,7 @@ impl<'a> WorkspaceLookup<'a> {
                 .map(|item| EntitySummary {
                     id: item.id.clone(),
                     title: item.title.clone(),
+                    document_path: None,
                 })
                 .collect(),
             LookupKind::Requirement => self
@@ -59,6 +70,7 @@ impl<'a> WorkspaceLookup<'a> {
                 .map(|item| EntitySummary {
                     id: item.id.clone(),
                     title: item.title.clone(),
+                    document_path: None,
                 })
                 .collect(),
             LookupKind::Feature => self
@@ -68,9 +80,34 @@ impl<'a> WorkspaceLookup<'a> {
                 .map(|item| EntitySummary {
                     id: item.id.clone(),
                     title: item.title.clone(),
+                    document_path: None,
                 })
                 .collect(),
         }
+    }
+
+    pub(crate) fn entries_with_document_paths(
+        self,
+        kind: LookupKind,
+    ) -> Result<Vec<EntitySummary>> {
+        let document_paths = self.document_paths(kind)?;
+        let items = self.entries(kind);
+
+        if items.len() != document_paths.len() {
+            bail!(
+                "workspace {} entries changed while collecting document paths",
+                kind.label()
+            );
+        }
+
+        Ok(items
+            .into_iter()
+            .zip(document_paths)
+            .map(|(mut item, document_path)| {
+                item.document_path = Some(document_path);
+                item
+            })
+            .collect())
     }
 
     pub(crate) fn title_for(self, kind: LookupKind, id: &str) -> Option<&'a str> {
@@ -119,5 +156,324 @@ impl<'a> WorkspaceLookup<'a> {
         }
 
         None
+    }
+
+    fn document_paths(self, kind: LookupKind) -> Result<Vec<String>> {
+        match kind {
+            LookupKind::Philosophy => Ok(load_philosophy_documents_with_paths(
+                &self.workspace.spec_root.join("philosophy"),
+            )?
+            .into_iter()
+            .flat_map(|loaded| {
+                let path = workspace_relative_display(self.workspace, &loaded.path);
+                loaded
+                    .document
+                    .philosophies
+                    .into_iter()
+                    .map(move |_| path.clone())
+            })
+            .collect()),
+            LookupKind::Policy => Ok(load_policy_documents_with_paths(
+                &self.workspace.spec_root.join("policies"),
+            )?
+            .into_iter()
+            .flat_map(|loaded| {
+                let path = workspace_relative_display(self.workspace, &loaded.path);
+                loaded
+                    .document
+                    .policies
+                    .into_iter()
+                    .map(move |_| path.clone())
+            })
+            .collect()),
+            LookupKind::Requirement => Ok(load_requirement_documents_with_paths(
+                &self.workspace.spec_root.join("requirements"),
+            )?
+            .into_iter()
+            .flat_map(|loaded| {
+                let path = workspace_relative_display(self.workspace, &loaded.path);
+                loaded
+                    .document
+                    .requirements
+                    .into_iter()
+                    .map(move |_| path.clone())
+            })
+            .collect()),
+            LookupKind::Feature => Ok(load_feature_documents_with_paths(
+                &self.workspace.spec_root.join("features"),
+            )?
+            .into_iter()
+            .flat_map(|loaded| {
+                let path = workspace_relative_display(self.workspace, &loaded.path);
+                loaded
+                    .document
+                    .features
+                    .into_iter()
+                    .map(move |_| path.clone())
+            })
+            .collect()),
+        }
+    }
+}
+
+fn workspace_relative_display(workspace: &Workspace, path: &Path) -> String {
+    path.strip_prefix(&workspace.root)
+        .unwrap_or(path)
+        .display()
+        .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use tempfile::tempdir;
+
+    use crate::{
+        cli::LookupKind,
+        config::SyuConfig,
+        model::{Feature, Policy, Requirement},
+        workspace::Workspace,
+    };
+
+    use super::WorkspaceLookup;
+
+    #[test]
+    fn entries_with_document_paths_reports_missing_philosophy_directory() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("external-spec"),
+            config: SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+
+        let error = WorkspaceLookup::new(&workspace)
+            .entries_with_document_paths(LookupKind::Philosophy)
+            .expect_err("missing philosophy directory should surface an error");
+        assert!(error.to_string().contains("missing philosophy directory"));
+    }
+
+    #[test]
+    fn entries_with_document_paths_reports_missing_requirement_directory() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("external-spec"),
+            config: SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+
+        let error = WorkspaceLookup::new(&workspace)
+            .entries_with_document_paths(LookupKind::Requirement)
+            .expect_err("missing requirement directory should surface an error");
+        assert!(error.to_string().contains("missing requirement directory"));
+    }
+
+    #[test]
+    fn entries_with_document_paths_reports_missing_policy_directory() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("external-spec"),
+            config: SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+
+        let error = WorkspaceLookup::new(&workspace)
+            .entries_with_document_paths(LookupKind::Policy)
+            .expect_err("missing policy directory should surface an error");
+        assert!(error.to_string().contains("missing policy directory"));
+    }
+
+    #[test]
+    fn entries_with_document_paths_reports_missing_feature_directory() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("external-spec"),
+            config: SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+
+        let error = WorkspaceLookup::new(&workspace)
+            .entries_with_document_paths(LookupKind::Feature)
+            .expect_err("missing feature directory should surface an error");
+        assert!(error.to_string().contains("feature registry"));
+    }
+
+    #[test]
+    fn entries_with_document_paths_keep_duplicate_requirement_ids_on_their_own_files() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace_root = tempdir.path().join("workspace");
+        let spec_root = workspace_root.join("docs/syu");
+        std::fs::create_dir_all(spec_root.join("requirements/core")).expect("requirements dir");
+        std::fs::write(
+            spec_root.join("requirements/core/alpha.yaml"),
+            "category: Core Requirements\nprefix: REQ-DUP\n\nrequirements:\n  - id: REQ-DUP-001\n    title: Alpha copy\n    description: First duplicate.\n    priority: high\n    status: planned\n    linked_policies: []\n    linked_features: []\n    tests: {}\n",
+        )
+        .expect("alpha requirement should write");
+        std::fs::write(
+            spec_root.join("requirements/core/beta.yaml"),
+            "category: Core Requirements\nprefix: REQ-DUP\n\nrequirements:\n  - id: REQ-DUP-001\n    title: Beta copy\n    description: Second duplicate.\n    priority: high\n    status: planned\n    linked_policies: []\n    linked_features: []\n    tests: {}\n",
+        )
+        .expect("beta requirement should write");
+
+        let workspace = Workspace {
+            root: workspace_root,
+            spec_root,
+            config: SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: vec![
+                Requirement {
+                    id: "REQ-DUP-001".to_string(),
+                    title: "Alpha copy".to_string(),
+                    description: "First duplicate.".to_string(),
+                    priority: "high".to_string(),
+                    status: "planned".to_string(),
+                    linked_policies: Vec::new(),
+                    linked_features: Vec::new(),
+                    tests: BTreeMap::new(),
+                },
+                Requirement {
+                    id: "REQ-DUP-001".to_string(),
+                    title: "Beta copy".to_string(),
+                    description: "Second duplicate.".to_string(),
+                    priority: "high".to_string(),
+                    status: "planned".to_string(),
+                    linked_policies: Vec::new(),
+                    linked_features: Vec::new(),
+                    tests: BTreeMap::new(),
+                },
+            ],
+            features: Vec::new(),
+        };
+
+        let entries = WorkspaceLookup::new(&workspace)
+            .entries_with_document_paths(LookupKind::Requirement)
+            .expect("duplicate IDs should still keep per-document paths");
+
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].id, "REQ-DUP-001");
+        assert_eq!(entries[0].title, "Alpha copy");
+        assert_eq!(
+            entries[0].document_path.as_deref(),
+            Some("docs/syu/requirements/core/alpha.yaml")
+        );
+        assert_eq!(entries[1].id, "REQ-DUP-001");
+        assert_eq!(entries[1].title, "Beta copy");
+        assert_eq!(
+            entries[1].document_path.as_deref(),
+            Some("docs/syu/requirements/core/beta.yaml")
+        );
+    }
+
+    #[test]
+    fn entries_with_document_paths_attach_policy_and_feature_paths() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace_root = tempdir.path().join("workspace");
+        let spec_root = workspace_root.join("docs/syu");
+        std::fs::create_dir_all(spec_root.join("policies")).expect("policies dir");
+        std::fs::create_dir_all(spec_root.join("features/core")).expect("features dir");
+        std::fs::write(
+            spec_root.join("policies/policies.yaml"),
+            "category: Policies\nversion: 1\nlanguage: en\n\npolicies:\n  - id: POL-TEST-001\n    title: Policy path\n    summary: Policy stays discoverable.\n    description: Keep the source file visible in list output.\n    linked_philosophies: []\n    linked_requirements: []\n",
+        )
+        .expect("policy should write");
+        std::fs::write(
+            spec_root.join("features/features.yaml"),
+            "version: '0.0.1-alpha.7'\nupdated: 'generated by test'\n\nfiles:\n  - kind: core\n    file: core/core.yaml\n",
+        )
+        .expect("feature registry should write");
+        std::fs::write(
+            spec_root.join("features/core/core.yaml"),
+            "category: Core Features\nversion: 1\n\nfeatures:\n  - id: FEAT-TEST-001\n    title: Feature path\n    summary: Feature stays discoverable.\n    status: planned\n    linked_requirements: []\n    implementations: {}\n",
+        )
+        .expect("feature should write");
+
+        let workspace = Workspace {
+            root: workspace_root,
+            spec_root,
+            config: SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: vec![Policy {
+                id: "POL-TEST-001".to_string(),
+                title: "Policy path".to_string(),
+                summary: "Policy stays discoverable.".to_string(),
+                description: "Keep the source file visible in list output.".to_string(),
+                linked_philosophies: Vec::new(),
+                linked_requirements: Vec::new(),
+            }],
+            requirements: Vec::new(),
+            features: vec![Feature {
+                id: "FEAT-TEST-001".to_string(),
+                title: "Feature path".to_string(),
+                summary: "Feature stays discoverable.".to_string(),
+                status: "planned".to_string(),
+                linked_requirements: Vec::new(),
+                implementations: BTreeMap::new(),
+            }],
+        };
+
+        let policy_entries = WorkspaceLookup::new(&workspace)
+            .entries_with_document_paths(LookupKind::Policy)
+            .expect("policy paths should load");
+        assert_eq!(
+            policy_entries[0].document_path.as_deref(),
+            Some("docs/syu/policies/policies.yaml")
+        );
+
+        let feature_entries = WorkspaceLookup::new(&workspace)
+            .entries_with_document_paths(LookupKind::Feature)
+            .expect("feature paths should load");
+        assert_eq!(
+            feature_entries[0].document_path.as_deref(),
+            Some("docs/syu/features/core/core.yaml")
+        );
+    }
+
+    #[test]
+    fn entries_with_document_paths_error_when_workspace_items_do_not_match_loaded_documents() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace_root = tempdir.path().join("workspace");
+        let spec_root = workspace_root.join("docs/syu");
+        std::fs::create_dir_all(spec_root.join("requirements/core")).expect("requirements dir");
+        std::fs::write(
+            spec_root.join("requirements/core/core.yaml"),
+            "category: Core Requirements\nprefix: REQ-SYNC\n\nrequirements:\n  - id: REQ-SYNC-001\n    title: On disk only\n    description: Exercises mismatch handling.\n    priority: high\n    status: planned\n    linked_policies: []\n    linked_features: []\n    tests: {}\n",
+        )
+        .expect("requirement should write");
+
+        let workspace = Workspace {
+            root: workspace_root,
+            spec_root,
+            config: SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+
+        let error = WorkspaceLookup::new(&workspace)
+            .entries_with_document_paths(LookupKind::Requirement)
+            .expect_err("mismatched workspace items should error");
+        assert!(
+            error
+                .to_string()
+                .contains("workspace requirement entries changed while collecting document paths")
+        );
     }
 }

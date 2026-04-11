@@ -134,3 +134,6 @@ requirements:
         - file: src/command/list.rs
           symbols:
             - '*'
+        - file: src/command/lookup.rs
+          symbols:
+            - '*'
