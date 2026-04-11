@@ -36,7 +36,11 @@ pub fn run_list_command(args: &ListArgs) -> Result<i32> {
 
     match kind {
         Some(k) => {
-            let items = lookup.entries(k);
+            let items = if args.with_path {
+                lookup.entries_with_document_paths(k)?
+            } else {
+                lookup.entries(k)
+            };
             match args.format {
                 OutputFormat::Text => print_text_list(&items),
                 OutputFormat::Json => println!(
@@ -50,10 +54,26 @@ pub fn run_list_command(args: &ListArgs) -> Result<i32> {
             }
         }
         None => {
-            let philosophies = lookup.entries(LookupKind::Philosophy);
-            let policies = lookup.entries(LookupKind::Policy);
-            let requirements = lookup.entries(LookupKind::Requirement);
-            let features = lookup.entries(LookupKind::Feature);
+            let philosophies = if args.with_path {
+                lookup.entries_with_document_paths(LookupKind::Philosophy)?
+            } else {
+                lookup.entries(LookupKind::Philosophy)
+            };
+            let policies = if args.with_path {
+                lookup.entries_with_document_paths(LookupKind::Policy)?
+            } else {
+                lookup.entries(LookupKind::Policy)
+            };
+            let requirements = if args.with_path {
+                lookup.entries_with_document_paths(LookupKind::Requirement)?
+            } else {
+                lookup.entries(LookupKind::Requirement)
+            };
+            let features = if args.with_path {
+                lookup.entries_with_document_paths(LookupKind::Feature)?
+            } else {
+                lookup.entries(LookupKind::Feature)
+            };
 
             match args.format {
                 OutputFormat::Text => {
@@ -190,15 +210,17 @@ fn levenshtein_distance(left: &str, right: &str) -> usize {
 
 fn print_text_list(items: &[EntitySummary]) {
     for item in items {
-        println!("{}\t{}", item.id, item.title);
+        if let Some(path) = &item.document_path {
+            println!("{}\t{}\t{}", item.id, item.title, path);
+        } else {
+            println!("{}\t{}", item.id, item.title);
+        }
     }
 }
 
 fn print_section_list(heading: &str, items: &[EntitySummary]) {
     println!("=== {} ({}) ===", heading, items.len());
-    for item in items {
-        println!("{}\t{}", item.id, item.title);
-    }
+    print_text_list(items);
     println!();
 }
 

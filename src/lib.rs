@@ -117,6 +117,7 @@ mod tests {
                 command: Some(Commands::List(ListArgs {
                     positional: vec!["requirement".to_string(), "workspace".to_string()],
                     format: OutputFormat::Json,
+                    with_path: true,
                 })),
             },
             true,
@@ -124,9 +125,10 @@ mod tests {
         );
         assert!(matches!(
             list,
-            super::Dispatch::List(crate::cli::ListArgs { ref positional, format })
+            super::Dispatch::List(crate::cli::ListArgs { ref positional, format, with_path })
                 if positional == &["requirement", "workspace"]
                     && format == OutputFormat::Json
+                    && with_path
         ));
 
         let show = super::dispatch(

@@ -135,6 +135,10 @@ pub struct ListArgs {
     #[arg(help = "Output format for listed items")]
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
     pub format: OutputFormat,
+
+    #[arg(help = "Include each item's checked-in YAML document path")]
+    #[arg(long, action = ArgAction::SetTrue)]
+    pub with_path: bool,
 }
 
 #[derive(Debug, Clone, Args)]
