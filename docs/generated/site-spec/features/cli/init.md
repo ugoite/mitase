@@ -33,6 +33,20 @@ description: "Generated reference for docs/syu/features/cli/init.yaml"
         - **symbols**:
           - render_config
           - current_cli_version
+- **id**: FEAT-INIT-002
+  - **title**: Post-init next-step guidance
+  - **summary**: After successful init, print created file list and actionable next steps; support --format json to emit created_files for CI integrations.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-009
+  - **implementations**:
+    - **rust**:
+      - **file**: src/command/init.rs
+        - **symbols**:
+          - run_init_command
+      - **file**: src/cli.rs
+        - **symbols**:
+          - InitArgs
 
 ## Source YAML
 
@@ -57,4 +71,18 @@ features:
           symbols:
             - render_config
             - current_cli_version
+  - id: FEAT-INIT-002
+    title: Post-init next-step guidance
+    summary: After successful init, print created file list and actionable next steps; support --format json to emit created_files for CI integrations.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-009
+    implementations:
+      rust:
+        - file: src/command/init.rs
+          symbols:
+            - run_init_command
+        - file: src/cli.rs
+          symbols:
+            - InitArgs
 ```

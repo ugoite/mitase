@@ -37,6 +37,21 @@ description: "Generated reference for docs/syu/features/cli/browse.yaml"
       - **file**: src/command/browse.rs
         - **symbols**:
           - *
+- **id**: FEAT-BROWSE-002
+  - **title**: Non-interactive spec tree output
+  - **summary**: Add a --non-interactive flag to `syu browse` that prints the spec tree (all kinds grouped with counts and IDs) to stdout and exits, suitable for CI and scripting.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-015
+  - **implementations**:
+    - **rust**:
+      - **file**: src/command/browse.rs
+        - **symbols**:
+          - run_browse_command
+          - print_non_interactive
+      - **file**: src/cli.rs
+        - **symbols**:
+          - BrowseArgs
 
 ## Source YAML
 
@@ -65,4 +80,20 @@ features:
         - file: src/command/browse.rs
           symbols:
             - "*"
+
+  - id: FEAT-BROWSE-002
+    title: Non-interactive spec tree output
+    summary: Add a --non-interactive flag to `syu browse` that prints the spec tree (all kinds grouped with counts and IDs) to stdout and exits, suitable for CI and scripting.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-015
+    implementations:
+      rust:
+        - file: src/command/browse.rs
+          symbols:
+            - run_browse_command
+            - print_non_interactive
+        - file: src/cli.rs
+          symbols:
+            - BrowseArgs
 ```

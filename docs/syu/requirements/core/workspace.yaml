@@ -25,6 +25,9 @@ requirements:
         - file: src/command/init.rs
           symbols:
             - '*'
+        - file: src/command/mod.rs
+          symbols:
+            - shell_quote_path_wraps_empty_paths
         - file: src/config.rs
           symbols:
             - '*'

@@ -33,6 +33,7 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
     - POL-004
   - **linked_features**:
     - FEAT-INIT-001
+    - FEAT-INIT-002
   - **tests**:
     - **rust**:
       - **file**: tests/init_command.rs
@@ -41,6 +42,9 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       - **file**: src/command/init.rs
         - **symbols**:
           - *
+      - **file**: src/command/mod.rs
+        - **symbols**:
+          - shell_quote_path_wraps_empty_paths
       - **file**: src/config.rs
         - **symbols**:
           - *
@@ -61,6 +65,7 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
     - POL-004
   - **linked_features**:
     - FEAT-BROWSE-001
+    - FEAT-BROWSE-002
   - **tests**:
     - **rust**:
       - **file**: tests/browse_command.rs
@@ -84,7 +89,8 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       browser-safe Rust logic through WebAssembly instead of reimplementing the
       layered model only in JavaScript. When `syu.yaml` defines app defaults,
       `syu app` MUST use `app.bind` and `app.port` unless CLI flags override
-      them.
+      them. The startup output MUST also tell users which local URL to open in a
+      browser and how to stop the server cleanly.
   - **priority**: medium
   - **status**: implemented
   - **linked_policies**:
@@ -129,6 +135,7 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
     - POL-004
   - **linked_features**:
     - FEAT-LIST-001
+    - FEAT-LIST-002
     - FEAT-SHOW-001
   - **tests**:
     - **rust**:
@@ -141,6 +148,9 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       - **file**: src/lib.rs
         - **symbols**:
           - dispatches_lookup_subcommands_without_rewriting_them
+      - **file**: src/command/list.rs
+        - **symbols**:
+          - *
 
 ## Source YAML
 
@@ -163,6 +173,7 @@ requirements:
       - POL-004
     linked_features:
       - FEAT-INIT-001
+      - FEAT-INIT-002
     tests:
       rust:
         - file: tests/init_command.rs
@@ -171,6 +182,9 @@ requirements:
         - file: src/command/init.rs
           symbols:
             - '*'
+        - file: src/command/mod.rs
+          symbols:
+            - shell_quote_path_wraps_empty_paths
         - file: src/config.rs
           symbols:
             - '*'
@@ -190,6 +204,7 @@ requirements:
       - POL-004
     linked_features:
       - FEAT-BROWSE-001
+      - FEAT-BROWSE-002
     tests:
       rust:
         - file: tests/browse_command.rs
@@ -212,7 +227,8 @@ requirements:
       browser-safe Rust logic through WebAssembly instead of reimplementing the
       layered model only in JavaScript. When `syu.yaml` defines app defaults,
       `syu app` MUST use `app.bind` and `app.port` unless CLI flags override
-      them.
+      them. The startup output MUST also tell users which local URL to open in a
+      browser and how to stop the server cleanly.
     priority: medium
     status: implemented
     linked_policies:
@@ -256,6 +272,7 @@ requirements:
       - POL-004
     linked_features:
       - FEAT-LIST-001
+      - FEAT-LIST-002
       - FEAT-SHOW-001
     tests:
       rust:
@@ -268,4 +285,7 @@ requirements:
         - file: src/lib.rs
           symbols:
             - dispatches_lookup_subcommands_without_rewriting_them
+        - file: src/command/list.rs
+          symbols:
+            - '*'
 ```
