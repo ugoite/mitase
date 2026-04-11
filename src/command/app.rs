@@ -2,15 +2,17 @@
 // REQ-CORE-017
 
 use std::{
+    collections::hash_map::DefaultHasher,
     fs,
+    hash::{Hash, Hasher},
     io::{Read, Write},
     net::{IpAddr, SocketAddr},
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, RwLock},
     time::Duration,
 };
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use axum::{
     Json, Router,
     body::Body,
@@ -36,13 +38,75 @@ static APP_DIST: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/app/dist");
 
 #[derive(Clone)]
 struct AppState {
-    payload: Arc<AppPayload>,
+    workspace_root: PathBuf,
+    config: SyuConfig,
+    current: Arc<RwLock<CurrentAppState>>,
+}
+
+#[derive(Debug, Clone)]
+struct CurrentAppData {
+    snapshot: String,
+    payload: AppPayload,
+}
+
+#[derive(Debug, Clone)]
+enum CurrentAppState {
+    Ready(CurrentAppData),
+    Error(String),
+}
+
+impl AppState {
+    fn new(workspace_root: PathBuf, config: SyuConfig) -> Self {
+        Self {
+            workspace_root,
+            config,
+            current: Arc::new(RwLock::new(CurrentAppState::Error(
+                "app data refresh failed".to_string(),
+            ))),
+        }
+    }
+
+    fn current_data(&self) -> Result<CurrentAppData> {
+        match self
+            .current
+            .read()
+            .map_err(|_| anyhow!("app refresh state lock poisoned"))?
+            .clone()
+        {
+            CurrentAppState::Ready(data) => Ok(data),
+            CurrentAppState::Error(message) => Err(anyhow!(message)),
+        }
+    }
+
+    fn refresh_current(&self) -> Result<()> {
+        let next = match load_snapshot_payload(&self.workspace_root, &self.config) {
+            Ok((snapshot, payload)) => CurrentAppState::Ready(CurrentAppData { snapshot, payload }),
+            Err(error) => CurrentAppState::Error(format!("{error:#}")),
+        };
+
+        let result = match &next {
+            CurrentAppState::Ready(_) => Ok(()),
+            CurrentAppState::Error(message) => Err(anyhow!(message.clone())),
+        };
+
+        *self
+            .current
+            .write()
+            .map_err(|_| anyhow!("app refresh state lock poisoned"))? = next;
+
+        result
+    }
 }
 
 #[derive(serde::Serialize)]
 struct HealthStatus {
     status: &'static str,
     version: &'static str,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct AppVersion {
+    snapshot: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,16 +123,17 @@ pub fn run_app_command(args: &AppArgs) -> Result<i32> {
         .bind
         .parse::<IpAddr>()
         .with_context(|| format!("invalid bind address `{}`", settings.bind))?;
-    let payload = build_app_payload_from_config(&workspace_root, &loaded.config)?;
+    build_app_payload_from_config(&workspace_root, &loaded.config)?;
+    let state = AppState::new(workspace_root, loaded.config);
+    let _ = state.refresh_current();
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .context("failed to create runtime for `syu app`")?;
 
     runtime.block_on(async move {
-        let router = app_router(AppState {
-            payload: Arc::new(payload),
-        });
+        let router = app_router(state.clone());
+        let refresher = tokio::spawn(refresh_current_until_shutdown(state.clone()));
         let listener = tokio::net::TcpListener::bind((bind, settings.port))
             .await
             .with_context(|| format!("failed to bind `{bind}:{}`", settings.port))?;
@@ -92,7 +157,9 @@ pub fn run_app_command(args: &AppArgs) -> Result<i32> {
             .flush()
             .context("failed to flush stdout")?;
 
-        server.await.context("local app server task panicked")?
+        let result = server.await.context("local app server task panicked")?;
+        refresher.abort();
+        result
     })?;
 
     Ok(0)
@@ -117,14 +184,30 @@ fn canonical_workspace_root(workspace_root: &Path) -> Result<PathBuf> {
 fn app_router(state: AppState) -> Router {
     Router::new()
         .route("/api/app-data.json", get(app_data))
+        .route("/api/version", get(app_version))
         .route("/health", get(health))
         .route("/healthz", get(healthz))
         .fallback(get(serve_static))
         .with_state(state)
 }
 
-async fn app_data(State(state): State<AppState>) -> Json<AppPayload> {
-    Json((*state.payload).clone())
+async fn app_data(State(state): State<AppState>) -> std::result::Result<Response, AppError> {
+    let current = state.current_data()?;
+    let mut response = Json(current.payload).into_response();
+    response.headers_mut().insert(
+        "x-syu-snapshot",
+        HeaderValue::from_str(&current.snapshot).context("invalid snapshot header value")?,
+    );
+    Ok(response)
+}
+
+async fn app_version(
+    State(state): State<AppState>,
+) -> std::result::Result<Json<AppVersion>, AppError> {
+    let current = state.current_data()?;
+    Ok(Json(AppVersion {
+        snapshot: current.snapshot,
+    }))
 }
 
 async fn health() -> Json<HealthStatus> {
@@ -136,6 +219,82 @@ async fn health() -> Json<HealthStatus> {
 
 async fn healthz() -> &'static str {
     "ok"
+}
+
+async fn refresh_current_until_shutdown(state: AppState) {
+    let mut interval = tokio::time::interval(Duration::from_secs(1));
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
+    loop {
+        interval.tick().await;
+        refresh_current_once(&state);
+    }
+}
+
+fn refresh_current_once(state: &AppState) {
+    if let Err(error) = state.refresh_current() {
+        eprintln!("syu app refresh failed: {error:#}");
+    }
+}
+
+fn load_current_payload(workspace_root: &Path, config: &SyuConfig) -> Result<AppPayload> {
+    build_app_payload_from_config(workspace_root, config)
+}
+
+fn load_snapshot_payload(
+    workspace_root: &Path,
+    config: &SyuConfig,
+) -> Result<(String, AppPayload)> {
+    let snapshot = load_current_snapshot(workspace_root, config)?;
+    let payload = load_current_payload(workspace_root, config)?;
+    Ok((snapshot, payload))
+}
+
+fn load_current_snapshot(workspace_root: &Path, config: &SyuConfig) -> Result<String> {
+    let spec_root = resolve_spec_root(workspace_root, config);
+    spec_snapshot(&spec_root)
+}
+
+fn spec_snapshot(spec_root: &Path) -> Result<String> {
+    if !spec_root.is_dir() {
+        bail!(
+            "failed to read spec root `{}` because it is not a directory",
+            spec_root.display()
+        );
+    }
+
+    let mut sources = Vec::new();
+    let philosophy = section_sources(spec_root, "philosophy", SectionKind::Philosophy)?;
+    let policies = section_sources(spec_root, "policies", SectionKind::Policies)?;
+    let requirements = section_sources(spec_root, "requirements", SectionKind::Requirements)?;
+    sources.extend(philosophy);
+    sources.extend(policies);
+    sources.extend(requirements);
+    sources.extend(feature_sources(spec_root)?);
+    sources.sort_by(|left, right| {
+        (left.section.label(), left.path.as_str())
+            .cmp(&(right.section.label(), right.path.as_str()))
+    });
+
+    let mut hasher = DefaultHasher::new();
+    for source in sources {
+        source.section.label().hash(&mut hasher);
+        source.path.hash(&mut hasher);
+        source.content.hash(&mut hasher);
+    }
+    Ok(format!("{:016x}", hasher.finish()))
+}
+
+fn section_sources(
+    spec_root: &Path,
+    directory: &str,
+    section: SectionKind,
+) -> Result<Vec<SourceDocument>> {
+    collect_yaml_sources_recursive(&spec_root.join(directory), section)
+}
+
+fn feature_sources(spec_root: &Path) -> Result<Vec<SourceDocument>> {
+    collect_feature_sources(&spec_root.join("features"))
 }
 
 async fn serve_static(uri: Uri) -> Response {
@@ -227,19 +386,7 @@ fn wait_for_ready_with_retry(
             stream
                 .set_write_timeout(Some(connect_timeout))
                 .context("failed to configure readiness probe write timeout")?;
-            if write!(
-                stream,
-                "GET /health HTTP/1.1\r\nHost: {local_addr}\r\nConnection: close\r\n\r\n"
-            )
-            .is_err()
-                || stream.flush().is_err()
-            {
-                std::thread::sleep(retry_delay);
-                continue;
-            }
-
-            let mut response = String::new();
-            if stream.read_to_string(&mut response).is_ok() && response.contains("200 OK") {
+            if readiness_probe_succeeds(&mut stream, local_addr) {
                 return Ok(());
             }
         }
@@ -248,6 +395,29 @@ fn wait_for_ready_with_retry(
     }
 
     bail!("local app server did not become ready at http://{local_addr}")
+}
+
+fn readiness_probe_succeeds(stream: &mut (impl Read + Write), local_addr: SocketAddr) -> bool {
+    if !readiness_probe_request_sent(stream, local_addr) {
+        return false;
+    }
+
+    let mut response = String::new();
+    stream.read_to_string(&mut response).is_ok() && response.contains("200 OK")
+}
+
+fn readiness_probe_request_sent(stream: &mut impl Write, local_addr: SocketAddr) -> bool {
+    if write!(
+        stream,
+        "GET /health HTTP/1.1\r\nHost: {local_addr}\r\nConnection: close\r\n\r\n"
+    )
+    .is_err()
+        || stream.flush().is_err()
+    {
+        return false;
+    }
+
+    true
 }
 
 async fn shutdown_signal() {
@@ -441,16 +611,30 @@ fn validation_snapshot(result: CheckResult) -> ValidationSnapshot {
     }
 }
 
+struct AppError(anyhow::Error);
+
+impl From<anyhow::Error> for AppError {
+    fn from(value: anyhow::Error) -> Self {
+        Self(value)
+    }
+}
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        eprintln!("syu app request failed: {:#}", self.0);
+        (StatusCode::INTERNAL_SERVER_ERROR, "app data refresh failed").into_response()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
         fs,
-        io::{ErrorKind, Read, Write as _},
+        io::{Error, ErrorKind, Read, Write as _},
         net::TcpListener,
         path::{Path, PathBuf},
-        sync::Arc,
         thread,
-        time::{Duration, Instant},
+        time::Duration,
     };
 
     #[cfg(unix)]
@@ -469,10 +653,11 @@ mod tests {
     };
 
     use super::{
-        AppPayload, AppServerSettings, AppState, SectionKind, Severity, app_router,
+        AppServerSettings, AppState, AppVersion, SectionKind, Severity, app_router,
         build_app_payload, collect_feature_sources, collect_yaml_sources_recursive,
-        content_type_for_path, is_asset_like, normalized_asset_path, relative_display,
-        resolve_app_server_settings, validation_snapshot, wait_for_ready_with_retry,
+        content_type_for_path, is_asset_like, normalized_asset_path, readiness_probe_request_sent,
+        readiness_probe_succeeds, refresh_current_once, relative_display,
+        resolve_app_server_settings, spec_snapshot, validation_snapshot, wait_for_ready_with_retry,
     };
 
     fn fixture_root(name: &str) -> PathBuf {
@@ -499,6 +684,13 @@ mod tests {
             ),
         )
         .expect("config");
+    }
+
+    fn app_state(root: &Path) -> AppState {
+        let config = load_config(root).expect("config should load").config;
+        let state = AppState::new(root.to_path_buf(), config);
+        let _ = state.refresh_current();
+        state
     }
 
     #[cfg(unix)]
@@ -863,34 +1055,17 @@ mod tests {
     #[test]
     fn wait_for_ready_reports_non_ready_servers() {
         let listener = TcpListener::bind(("127.0.0.1", 0)).expect("listener should bind");
-        listener
-            .set_nonblocking(true)
-            .expect("listener should switch to nonblocking mode");
         let addr = listener.local_addr().expect("addr");
 
         let server = thread::spawn(move || {
-            let deadline = Instant::now() + Duration::from_millis(250);
             for _ in 0..3 {
-                loop {
-                    match listener.accept() {
-                        Ok((mut stream, _)) => {
-                            let mut buffer = [0_u8; 1024];
-                            let _ = stream.read(&mut buffer);
-                            let _ = stream.write_all(
-                                b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 2\r\nConnection: close\r\n\r\nno",
-                            );
-                            let _ = stream.flush();
-                            break;
-                        }
-                        Err(error) if error.kind() == ErrorKind::WouldBlock => {
-                            if Instant::now() >= deadline {
-                                return;
-                            }
-                            thread::sleep(Duration::from_millis(5));
-                        }
-                        Err(_) => return,
-                    }
-                }
+                let (mut stream, _) = listener.accept().expect("request should connect");
+                let mut buffer = [0_u8; 1024];
+                let _ = stream.read(&mut buffer);
+                let _ = stream.write_all(
+                    b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 2\r\nConnection: close\r\n\r\nno",
+                );
+                let _ = stream.flush();
             }
         });
 
@@ -901,6 +1076,9 @@ mod tests {
             !error.to_string().is_empty(),
             "errors should remain observable"
         );
+        for _ in 0..3 {
+            let _ = std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(20));
+        }
         server.join().expect("server thread");
     }
 
@@ -969,18 +1147,55 @@ mod tests {
             wait_for_ready_with_retry(addr, 2, Duration::from_millis(20), Duration::from_millis(1))
                 .expect_err("immediate disconnects should fail");
         assert!(error.to_string().contains("did not become ready"));
+        for _ in 0..2 {
+            let _ = std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(20));
+        }
         server.join().expect("server thread");
     }
+
+    #[test]
+    fn readiness_probe_returns_false_when_write_fails() {
+        let mut stream = SyntheticProbeStream::new(ProbeFailure::Write);
+        assert!(!readiness_probe_succeeds(
+            &mut stream,
+            "127.0.0.1:3000".parse().expect("socket address")
+        ));
+    }
+
+    #[test]
+    fn synthetic_probe_stream_allows_flush_when_write_fails_first() {
+        let mut stream = SyntheticProbeStream::new(ProbeFailure::Write);
+        stream
+            .flush()
+            .expect("write-failure mode should not fail on flush");
+    }
+
+    #[test]
+    fn readiness_probe_returns_false_when_flush_fails() {
+        let mut writer = SyntheticProbeStream::new(ProbeFailure::Flush);
+        assert!(!readiness_probe_request_sent(
+            &mut writer,
+            "127.0.0.1:3000".parse().expect("socket address")
+        ));
+        assert!(
+            writer.wrote,
+            "probe should write the request before flush fails"
+        );
+    }
+
+    #[test]
+    fn readiness_probe_returns_true_for_ok_responses() {
+        let mut stream = SyntheticProbeStream::ok();
+        assert!(readiness_probe_succeeds(
+            &mut stream,
+            "127.0.0.1:3000".parse().expect("socket address")
+        ));
+        assert!(stream.wrote, "probe should send the readiness request");
+    }
+
     #[tokio::test]
     async fn api_route_returns_payload_json() {
-        let router = app_router(AppState {
-            payload: Arc::new(AppPayload {
-                workspace_root: "/repo".to_string(),
-                spec_root: "/repo/docs/syu".to_string(),
-                source_documents: Vec::new(),
-                validation: Default::default(),
-            }),
-        });
+        let router = app_router(app_state(&fixture_root("passing")));
 
         let response = router
             .oneshot(
@@ -993,18 +1208,212 @@ mod tests {
             .expect("response");
 
         assert_eq!(response.status(), StatusCode::OK);
+        assert!(
+            response.headers().contains_key("x-syu-snapshot"),
+            "payload responses should expose the snapshot header"
+        );
         let body = to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("body");
         let json = String::from_utf8(body.to_vec()).expect("utf8");
-        assert!(json.contains("\"workspace_root\":\"/repo\""));
+        assert!(json.contains("\"workspace_root\""));
+        assert!(json.contains("\"source_documents\""));
+    }
+
+    #[tokio::test]
+    async fn api_version_changes_when_workspace_files_change() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let root = tempdir.path();
+        create_workspace_skeleton(root);
+        write_config(root, "127.0.0.1", 3000);
+        fs::write(
+            root.join("docs/syu/philosophy/foundation.yaml"),
+            "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: PHIL-001\n    title: Original title\n    product_design_principle: Keep it small.\n    coding_guideline: Keep it explicit.\n    linked_policies: []\n",
+        )
+        .expect("philosophy");
+
+        let state = app_state(root);
+        let router = app_router(state.clone());
+
+        let first = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/version")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(first.status(), StatusCode::OK);
+        let first_body = to_bytes(first.into_body(), usize::MAX).await.expect("body");
+        let first_version: AppVersion = serde_json::from_slice(&first_body).expect("json");
+
+        fs::write(
+            root.join("docs/syu/philosophy/foundation.yaml"),
+            "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: PHIL-001\n    title: Updated title\n    product_design_principle: Keep it small.\n    coding_guideline: Keep it explicit.\n    linked_policies: []\n",
+        )
+        .expect("updated philosophy");
+        state.refresh_current().expect("refresh should succeed");
+
+        let second = router
+            .oneshot(
+                Request::builder()
+                    .uri("/api/version")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        let second_body = to_bytes(second.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let second_version: AppVersion = serde_json::from_slice(&second_body).expect("json");
+
+        assert_ne!(first_version.snapshot, second_version.snapshot);
+    }
+
+    #[test]
+    fn spec_snapshot_changes_when_yaml_content_changes() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let spec_root = create_workspace_skeleton(tempdir.path());
+        let philosophy = spec_root.join("philosophy/foundation.yaml");
+        fs::write(
+            &philosophy,
+            "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: PHIL-001\n    title: Alpha title\n    product_design_principle: Keep it small.\n    coding_guideline: Keep it explicit.\n    linked_policies: []\n",
+        )
+        .expect("philosophy");
+
+        let first = spec_snapshot(&spec_root).expect("snapshot");
+
+        fs::write(
+            &philosophy,
+            "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: PHIL-001\n    title: Beta title\n    product_design_principle: Keep it small.\n    coding_guideline: Keep it explicit.\n    linked_policies: []\n",
+        )
+        .expect("updated philosophy");
+
+        let second = spec_snapshot(&spec_root).expect("snapshot");
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn spec_snapshot_tracks_policy_and_requirement_documents() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let spec_root = create_workspace_skeleton(tempdir.path());
+        fs::write(
+            spec_root.join("policies/policies.yaml"),
+            "category: Policies\nversion: 1\npolicies:\n  - id: POL-001\n    title: Keep links reciprocal.\n    rationale: Enforce consistency.\n    requirement: Every requirement links back.\n    linked_philosophies: []\n    linked_requirements: []\n",
+        )
+        .expect("policy");
+        fs::write(
+            spec_root.join("requirements/core.yaml"),
+            "category: Core\nversion: 1\nrequirements:\n  - id: REQ-001\n    title: Requirement title\n    statement: Requirement statement.\n    status: planned\n    linked_policies: []\n    linked_features: []\n",
+        )
+        .expect("requirement");
+
+        let first = spec_snapshot(&spec_root).expect("snapshot");
+
+        fs::write(
+            spec_root.join("requirements/core.yaml"),
+            "category: Core\nversion: 1\nrequirements:\n  - id: REQ-001\n    title: Updated requirement title\n    statement: Requirement statement.\n    status: planned\n    linked_policies: []\n    linked_features: []\n",
+        )
+        .expect("updated requirement");
+
+        let second = spec_snapshot(&spec_root).expect("snapshot");
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn refresh_current_once_keeps_refresh_failures_non_fatal() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        write_config(tempdir.path(), "127.0.0.1", 3000);
+        let state = app_state(tempdir.path());
+
+        refresh_current_once(&state);
+    }
+
+    #[tokio::test]
+    async fn api_errors_hide_internal_details_from_clients() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        write_config(tempdir.path(), "127.0.0.1", 3000);
+        let router = app_router(app_state(tempdir.path()));
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/api/version")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        assert_eq!(
+            String::from_utf8(body.to_vec()).expect("utf8"),
+            "app data refresh failed"
+        );
+    }
+
+    #[tokio::test]
+    async fn api_payload_refreshes_when_workspace_files_change() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let root = tempdir.path();
+        create_workspace_skeleton(root);
+        write_config(root, "127.0.0.1", 3000);
+        fs::write(
+            root.join("docs/syu/philosophy/foundation.yaml"),
+            "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: PHIL-001\n    title: Original title\n    product_design_principle: Keep it small.\n    coding_guideline: Keep it explicit.\n    linked_policies: []\n",
+        )
+        .expect("philosophy");
+
+        let state = app_state(root);
+        let router = app_router(state.clone());
+
+        let first = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/app-data.json")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        let first_body = to_bytes(first.into_body(), usize::MAX).await.expect("body");
+        let first_json = String::from_utf8(first_body.to_vec()).expect("utf8");
+
+        fs::write(
+            root.join("docs/syu/philosophy/foundation.yaml"),
+            "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: PHIL-001\n    title: Updated title\n    product_design_principle: Keep it small.\n    coding_guideline: Keep it explicit.\n    linked_policies: []\n",
+        )
+        .expect("updated philosophy");
+        state.refresh_current().expect("refresh should succeed");
+
+        let second = router
+            .oneshot(
+                Request::builder()
+                    .uri("/api/app-data.json")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        let second_body = to_bytes(second.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let second_json = String::from_utf8(second_body.to_vec()).expect("utf8");
+
+        assert_ne!(first_json, second_json);
+        assert!(second_json.contains("Updated title"));
     }
 
     #[tokio::test]
     async fn api_like_paths_return_not_found() {
-        let router = app_router(AppState {
-            payload: Arc::new(AppPayload::default()),
-        });
+        let router = app_router(app_state(&fixture_root("passing")));
 
         let response = router
             .oneshot(
@@ -1021,9 +1430,7 @@ mod tests {
 
     #[tokio::test]
     async fn static_routes_serve_embedded_app() {
-        let router = app_router(AppState {
-            payload: Arc::new(AppPayload::default()),
-        });
+        let router = app_router(app_state(&fixture_root("passing")));
 
         let root = router
             .clone()
@@ -1055,9 +1462,7 @@ mod tests {
 
     #[tokio::test]
     async fn unknown_assets_return_not_found() {
-        let router = app_router(AppState {
-            payload: Arc::new(AppPayload::default()),
-        });
+        let router = app_router(app_state(&fixture_root("passing")));
 
         let response = router
             .oneshot(
@@ -1070,5 +1475,70 @@ mod tests {
             .expect("response");
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    enum ProbeFailure {
+        Write,
+        Flush,
+    }
+
+    struct SyntheticProbeStream {
+        fail_on: Option<ProbeFailure>,
+        response: &'static [u8],
+        wrote: bool,
+    }
+
+    impl SyntheticProbeStream {
+        fn new(fail_on: ProbeFailure) -> Self {
+            Self {
+                fail_on: Some(fail_on),
+                response: b"",
+                wrote: false,
+            }
+        }
+
+        fn ok() -> Self {
+            Self {
+                fail_on: None,
+                response: b"HTTP/1.1 200 OK\r\nContent-Length: 15\r\nConnection: close\r\n\r\n{\"status\":\"ok\"}",
+                wrote: false,
+            }
+        }
+    }
+
+    impl Read for SyntheticProbeStream {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if self.response.is_empty() {
+                return Ok(0);
+            }
+
+            let len = self.response.len().min(buf.len());
+            buf[..len].copy_from_slice(&self.response[..len]);
+            self.response = &self.response[len..];
+            Ok(len)
+        }
+    }
+
+    impl std::io::Write for SyntheticProbeStream {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            match self.fail_on {
+                Some(ProbeFailure::Write) => {
+                    Err(Error::new(ErrorKind::BrokenPipe, "synthetic write failure"))
+                }
+                Some(ProbeFailure::Flush) | None => {
+                    self.wrote = true;
+                    Ok(buf.len())
+                }
+            }
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            match self.fail_on {
+                Some(ProbeFailure::Flush) => {
+                    Err(Error::new(ErrorKind::BrokenPipe, "synthetic flush failure"))
+                }
+                Some(ProbeFailure::Write) | None => Ok(()),
+            }
+        }
     }
 }
