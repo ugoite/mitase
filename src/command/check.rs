@@ -56,6 +56,7 @@ struct IssueFilters {
     severities: BTreeSet<ValidationSeverityFilter>,
     genres: BTreeSet<ValidationGenreFilter>,
     rules: BTreeSet<String>,
+    ids: BTreeSet<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -66,6 +67,8 @@ struct FilteredIssueView {
     genres: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     rules: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    ids: Vec<String>,
     displayed_issue_count: usize,
     total_issue_count: usize,
     hidden_issue_count: usize,
@@ -145,11 +148,21 @@ impl IssueFilters {
                 .filter(|rule| !rule.is_empty())
                 .map(ToOwned::to_owned)
                 .collect(),
+            ids: args
+                .id
+                .iter()
+                .map(|id| id.trim())
+                .filter(|id| !id.is_empty())
+                .map(ToOwned::to_owned)
+                .collect(),
         }
     }
 
     fn is_active(&self) -> bool {
-        !self.severities.is_empty() || !self.genres.is_empty() || !self.rules.is_empty()
+        !self.severities.is_empty()
+            || !self.genres.is_empty()
+            || !self.rules.is_empty()
+            || !self.ids.is_empty()
     }
 
     fn matches(&self, issue: &Issue) -> bool {
@@ -164,6 +177,15 @@ impl IssueFilters {
                     self.genres
                         .iter()
                         .any(|candidate| candidate.as_str() == genre)
+                }))
+            && (self.ids.is_empty()
+                || self.ids.iter().any(|id| {
+                    issue.subject.ends_with(id)
+                        || issue.message.contains(id)
+                        || issue
+                            .suggestion
+                            .as_deref()
+                            .is_some_and(|suggestion| suggestion.contains(id))
                 }))
     }
 }
@@ -186,6 +208,7 @@ impl FilteredIssueView {
                 .map(|genre| genre.as_str().to_string())
                 .collect(),
             rules: filters.rules.iter().cloned().collect(),
+            ids: filters.ids.iter().cloned().collect(),
             displayed_issue_count,
             total_issue_count,
             hidden_issue_count: total_issue_count.saturating_sub(displayed_issue_count),
@@ -203,6 +226,9 @@ impl FilteredIssueView {
         }
         if !self.rules.is_empty() {
             parts.push(format!("rule={}", self.rules.join(",")));
+        }
+        if !self.ids.is_empty() {
+            parts.push(format!("id={}", self.ids.join(",")));
         }
 
         parts.join(" ")
@@ -2158,6 +2184,7 @@ mod tests {
             severity: Vec::new(),
             genre: Vec::new(),
             rule: Vec::new(),
+            id: Vec::new(),
             fix: false,
             no_fix: false,
             quiet: false,
@@ -2219,6 +2246,7 @@ mod tests {
             severity: Vec::new(),
             genre: Vec::new(),
             rule: Vec::new(),
+            id: Vec::new(),
             fix: true,
             no_fix: false,
             quiet: false,
@@ -2334,6 +2362,7 @@ mod tests {
             severities: [ValidationSeverityFilter::Warning].into_iter().collect(),
             genres: [ValidationGenreFilter::Graph].into_iter().collect(),
             rules: BTreeSet::new(),
+            ids: BTreeSet::new(),
         };
 
         let (filtered, filtered_view) = filter_check_result(result, &filters);
@@ -2361,6 +2390,7 @@ mod tests {
             severities: vec!["warning".to_string()],
             genres: Vec::new(),
             rules: Vec::new(),
+            ids: Vec::new(),
             displayed_issue_count: 0,
             total_issue_count: 2,
             hidden_issue_count: 2,
@@ -2387,12 +2417,28 @@ mod tests {
             severities: Vec::new(),
             genres: vec!["trace".to_string()],
             rules: Vec::new(),
+            ids: Vec::new(),
             displayed_issue_count: 1,
             total_issue_count: 1,
             hidden_issue_count: 0,
         };
 
         assert_eq!(filtered_view.describe_filters(), "genre=trace");
+    }
+
+    #[test]
+    fn filtered_issue_view_describes_id_filters() {
+        let filtered_view = FilteredIssueView {
+            severities: Vec::new(),
+            genres: Vec::new(),
+            rules: Vec::new(),
+            ids: vec!["REQ-001".to_string()],
+            displayed_issue_count: 1,
+            total_issue_count: 3,
+            hidden_issue_count: 2,
+        };
+
+        assert_eq!(filtered_view.describe_filters(), "id=REQ-001");
     }
 
     #[test]

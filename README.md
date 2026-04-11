@@ -81,6 +81,12 @@ bash install-syu.sh
 
 On macOS, replace `sha256sum` with `shasum -a 256`.
 
+Published release archives also carry GitHub artifact attestations. Verify one with:
+
+```bash
+gh attestation verify syu-x86_64-unknown-linux-gnu.tar.gz --repo ugoite/syu
+```
+
 If you're contributing to `syu` itself from source, jump to
 [Contributing and local development](#contributing-and-local-development)
 below. The rest of this section assumes you installed the published CLI.
@@ -146,12 +152,13 @@ syu validate .
 syu validate . --format json
 syu validate . --severity error --genre trace
 syu validate . --rule SYU-trace-file-002
+syu validate . --id REQ-001
 syu validate . --fix
 syu validate . --no-fix
 ```
 
 `check` remains available as a compatibility alias for `validate`.
-Use `--severity`, `--genre`, and `--rule` to narrow the rendered issue list
+Use `--severity`, `--genre`, `--rule`, and `--id` to narrow the rendered issue list
 without changing the underlying validation result or exit code.
 
 For a plain-English guide to common validation errors, see the
@@ -229,6 +236,9 @@ syu app . --bind 127.0.0.1 --port 3000
 The repository keeps the source UI in `app/`, checks in the generated
 production bundle in `app/dist/`, and serves that bundle directly from the
 `syu app` command, so end users do not need a separate frontend build step.
+
+Want the visual tour first? See the [browser UI guide with annotated
+screenshots](docs/guide/app.md).
 
 ## Configuration
 

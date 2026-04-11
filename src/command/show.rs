@@ -1,7 +1,7 @@
 // FEAT-SHOW-001
 // REQ-CORE-018
 
-use std::{collections::BTreeMap, fmt::Write};
+use std::{collections::BTreeMap, fmt::Write, path::Path};
 
 use anyhow::{Result, bail};
 use serde::Serialize;
@@ -30,11 +30,14 @@ pub fn run_show_command(args: &ShowArgs) -> Result<i32> {
                 args.id,
                 workspace.root.display()
             ),
-            OutputFormat::Text => bail!(
-                "definition `{}` was not found in `{}`\n\nhint: Run `syu list` to see all available IDs, or `syu list requirement` to narrow by layer.",
-                args.id,
-                workspace.root.display()
-            ),
+            OutputFormat::Text => {
+                let workspace_arg = shell_quote_path(&workspace.root);
+                bail!(
+                    "definition `{}` was not found in `{}`\n\nhint: Run `syu list {workspace_arg}` to see all available IDs, or `syu list requirement {workspace_arg}` to narrow by layer.",
+                    args.id,
+                    workspace.root.display()
+                )
+            }
         }
     };
 
@@ -61,6 +64,22 @@ fn print_json_output<T: Serialize>(kind: &str, item: &T) {
         serde_json::to_string_pretty(&JsonShowOutput { kind, item })
             .expect("serializing show output to JSON should succeed")
     );
+}
+
+fn shell_quote_path(path: &Path) -> String {
+    let rendered = path.display().to_string();
+    if rendered.is_empty() {
+        return "''".to_string();
+    }
+
+    if rendered
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || "/._-".contains(ch))
+    {
+        rendered
+    } else {
+        format!("'{}'", rendered.replace('\'', "'\\''"))
+    }
 }
 
 fn render_entity_text(lookup: WorkspaceLookup<'_>, entity: WorkspaceEntity<'_>) -> String {
@@ -228,4 +247,24 @@ fn write_trace_map(
 
 fn collapse_whitespace(value: &str) -> String {
     value.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::shell_quote_path;
+
+    #[test]
+    fn shell_quote_path_wraps_empty_paths() {
+        assert_eq!(shell_quote_path(Path::new("")), "''");
+    }
+
+    #[test]
+    fn shell_quote_path_escapes_special_characters() {
+        assert_eq!(
+            shell_quote_path(Path::new("workspace with 'quotes'")),
+            "'workspace with '\\''quotes'\\'''"
+        );
+    }
 }

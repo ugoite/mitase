@@ -40,7 +40,6 @@ fn is_shell_safe_path(rendered: &str) -> bool {
             }
     })
 }
-
 #[cfg(test)]
 // REQ-CORE-009
 mod tests {

@@ -176,6 +176,10 @@ pub struct ValidateArgs {
     #[arg(long, value_delimiter = ',')]
     pub rule: Vec<String>,
 
+    #[arg(help = "Filter visible diagnostics to one or more spec item IDs (repeat or use commas)")]
+    #[arg(long, value_delimiter = ',')]
+    pub id: Vec<String>,
+
     #[arg(help = "Apply conservative documentation autofixes")]
     #[arg(long, action = ArgAction::SetTrue)]
     pub fix: bool,

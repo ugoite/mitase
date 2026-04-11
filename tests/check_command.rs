@@ -225,6 +225,34 @@ fn check_command_reports_missing_definition_links() {
 }
 
 #[test]
+// REQ-CORE-001
+fn check_command_filters_visible_issues_by_spec_id() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(fixture_path("failing"))
+        .arg("--id")
+        .arg("REQ-FAIL-001")
+        .output()
+        .expect("command should run");
+
+    assert!(
+        !output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("syu validate failed (filtered view)"));
+    assert!(stdout.contains("filters: id=REQ-FAIL-001"));
+    assert!(stdout.contains("showing 2 of 5 issues after filtering"));
+    assert!(stdout.contains("requirement REQ-FAIL-001"));
+    assert!(!stdout.contains("feature FEAT-FAIL-001"));
+    assert!(!stdout.contains("policy POL-FAIL-001"));
+}
+
+#[test]
 fn check_command_suggests_init_for_uninitialized_workspaces() {
     let tempdir = tempdir().expect("tempdir should exist");
     let output = Command::cargo_bin("syu")

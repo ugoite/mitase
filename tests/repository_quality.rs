@@ -14,6 +14,7 @@ fn repository_declares_precommit_and_quality_gates() {
     let precommit = read_file(".pre-commit-config.yaml");
     let quality_script = read_file("scripts/ci/quality-gates.sh");
     let ci_workflow = read_file(".github/workflows/ci.yml");
+    let contributing = read_file("CONTRIBUTING.md");
     let repo_config = read_file("syu.yaml");
 
     assert!(precommit.contains("FEAT-QUALITY-001"));
@@ -41,9 +42,18 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(ci_workflow.contains("--hook-stage pre-push"));
     assert!(ci_workflow.contains("scripts/ci/quality-gates.sh"));
     assert!(ci_workflow.contains("cargo audit"));
+    assert!(ci_workflow.contains("schedule:"));
+    assert!(ci_workflow.contains("0 6 * * 1"));
+    assert!(ci_workflow.contains("github.event_name != 'schedule'"));
     assert!(ci_workflow.contains("Review dependency changes"));
     assert!(ci_workflow.contains("scripts/ci/installer-smoke.sh"));
     assert!(ci_workflow.contains("scripts/ci/installed-binary-smoke.sh"));
+
+    assert!(contributing.contains("weekly schedule"));
+    assert!(contributing.contains("06:00 UTC"));
+    assert!(contributing.contains("cargo audit"));
+    assert!(contributing.contains("npm audit"));
+    assert!(contributing.contains("Contributors do **not** need to run manual audits"));
 
     assert!(repo_config.contains("FEAT-CHECK-001"));
     assert!(repo_config.contains("FEAT-REPORT-001"));
@@ -80,6 +90,7 @@ fn repository_declares_release_automation() {
     let release_notes_script = read_file("scripts/ci/release-track-notes.sh");
     let release_config = read_file("release-please-config.json");
     let manifest = read_file(".release-please-manifest.json");
+    let readme = read_file("README.md");
 
     assert!(release_please.contains("FEAT-RELEASE-001"));
     assert!(release_please.contains("googleapis/release-please-action@v4.4.0"));
@@ -99,6 +110,10 @@ fn repository_declares_release_automation() {
     assert!(release_artifacts.contains("install-syu.sh"));
     assert!(release_artifacts.contains("release-notes:"));
     assert!(release_artifacts.contains("release-track-notes.sh"));
+    assert!(release_artifacts.contains("attestations: write"));
+    assert!(release_artifacts.contains("id-token: write"));
+    assert!(release_artifacts.contains("actions/attest-build-provenance@v2"));
+    assert!(release_artifacts.contains("subject-path: release-artifacts/*"));
 
     assert!(package_script.contains("FEAT-RELEASE-001"));
     assert!(package_script.contains("package_release_artifact"));
@@ -116,6 +131,8 @@ fn repository_declares_release_automation() {
     assert!(release_config.contains("\"changelog-type\": \"github\""));
     assert!(!release_config.contains("\"initial-version\""));
     assert!(manifest.contains("\".\": \"0.0.0\""));
+    assert!(readme.contains("gh attestation verify"));
+    assert!(readme.contains("--repo ugoite/syu"));
     assert!(
         !repo_root()
             .join("release-please-config.alpha.json")
@@ -301,9 +318,9 @@ fn repository_declares_documentation_guides() {
     assert!(docs_package.contains("\"build\": \"docusaurus build\""));
     assert!(docs_deploy_workflow.contains("permissions:"));
     assert!(docs_deploy_workflow.contains("./.github/actions/build-docs-site"));
-    assert!(docs_deploy_workflow.contains("actions/configure-pages@v5"));
+    assert!(docs_deploy_workflow.contains("actions/configure-pages@v6"));
     assert!(docs_deploy_workflow.contains("actions/upload-pages-artifact@v4"));
-    assert!(docs_deploy_workflow.contains("actions/deploy-pages@v4"));
+    assert!(docs_deploy_workflow.contains("actions/deploy-pages@v5"));
     assert!(docs_deploy_workflow.contains("github-pages"));
     assert!(docs_config.contains("FEAT-DOCS-002"));
     assert!(docs_config.contains("routeBasePath: 'docs'"));
