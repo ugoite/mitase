@@ -13,7 +13,7 @@ description: "Generated reference for docs/syu/features/features.yaml"
 
 ### Updated
 
-- 2026-03
+- 2026-04
 
 ### Files
 
@@ -27,6 +27,8 @@ description: "Generated reference for docs/syu/features/features.yaml"
   - **file**: cli/check.yaml
 - **kind**: init
   - **file**: cli/init.yaml
+- **kind**: add
+  - **file**: cli/add.yaml
 - **kind**: report
   - **file**: cli/report.yaml
 - **kind**: docs
@@ -46,7 +48,7 @@ description: "Generated reference for docs/syu/features/features.yaml"
 
 ```yaml
 version: "0.0.1-alpha.7"
-updated: "2026-03"
+updated: "2026-04"
 
 files:
   - kind: app
@@ -59,6 +61,8 @@ files:
     file: cli/check.yaml
   - kind: init
     file: cli/init.yaml
+  - kind: add
+    file: cli/add.yaml
   - kind: report
     file: cli/report.yaml
   - kind: docs

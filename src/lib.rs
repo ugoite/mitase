@@ -1,3 +1,4 @@
+// FEAT-ADD-001
 // FEAT-BROWSE-001
 
 pub mod cli;
@@ -25,6 +26,7 @@ enum Dispatch {
     Validate(cli::ValidateArgs),
     Report(cli::ReportArgs),
     Init(cli::InitArgs),
+    Add(cli::AddArgs),
 }
 
 fn dispatch(cli: cli::Cli, stdin_is_terminal: bool, stdout_is_terminal: bool) -> Dispatch {
@@ -40,6 +42,7 @@ fn dispatch(cli: cli::Cli, stdin_is_terminal: bool, stdout_is_terminal: bool) ->
         Some(cli::Commands::Validate(args)) => Dispatch::Validate(args),
         Some(cli::Commands::Report(args)) => Dispatch::Report(args),
         Some(cli::Commands::Init(args)) => Dispatch::Init(args),
+        Some(cli::Commands::Add(args)) => Dispatch::Add(args),
     }
 }
 
@@ -58,6 +61,7 @@ fn run_dispatch(dispatch: Dispatch) -> Result<i32> {
         Dispatch::Validate(args) => command::check::run_check_command(&args),
         Dispatch::Report(args) => command::report::run_report_command(&args),
         Dispatch::Init(args) => command::init::run_init_command(&args),
+        Dispatch::Add(args) => command::add::run_add_command(&args),
     }
 }
 
@@ -74,7 +78,9 @@ pub fn run() -> Result<i32> {
 mod tests {
     use std::path::{Path, PathBuf};
 
-    use crate::cli::{AppArgs, Cli, Commands, ListArgs, OutputFormat, ShowArgs};
+    use crate::cli::{
+        AddArgs, AppArgs, Cli, Commands, ListArgs, LookupKind, OutputFormat, ShowArgs,
+    };
 
     // REQ-CORE-015
     #[test]
@@ -148,6 +154,34 @@ mod tests {
                 if id == "REQ-CORE-018"
                     && workspace == Path::new("workspace")
                     && format == OutputFormat::Text
+        ));
+    }
+
+    #[test]
+    // REQ-CORE-020
+    fn dispatches_add_subcommands_without_rewriting_them() {
+        let add = super::dispatch(
+            Cli {
+                command: Some(Commands::Add(AddArgs {
+                    layer: LookupKind::Feature,
+                    id: "FEAT-AUTH-001".to_string(),
+                    workspace: PathBuf::from("workspace"),
+                    file: Some(PathBuf::from("docs/syu/features/auth/login.yaml")),
+                    kind: Some("auth".to_string()),
+                })),
+            },
+            true,
+            true,
+        );
+
+        assert!(matches!(
+            add,
+            super::Dispatch::Add(crate::cli::AddArgs { layer, id, workspace, file, kind })
+                if layer == LookupKind::Feature
+                    && id == "FEAT-AUTH-001"
+                    && workspace == Path::new("workspace")
+                    && file == Some(PathBuf::from("docs/syu/features/auth/login.yaml"))
+                    && kind.as_deref() == Some("auth")
         ));
     }
 }

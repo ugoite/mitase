@@ -14,6 +14,7 @@ This section is generated from the YAML source under `docs/syu/`.
 - [Configuration / Spec](/docs/generated/site-spec/config/spec)
 - [Configuration / Validate](/docs/generated/site-spec/config/validate)
 - [Browser App / App](/docs/generated/site-spec/features/browser/app)
+- [Authoring Add CLI / Add](/docs/generated/site-spec/features/cli/add)
 - [Interactive CLI / Browse](/docs/generated/site-spec/features/cli/browse)
 - [Validate Command / Check](/docs/generated/site-spec/features/cli/check)
 - [Init Command / Init](/docs/generated/site-spec/features/cli/init)

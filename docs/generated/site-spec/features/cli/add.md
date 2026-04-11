@@ -1,0 +1,56 @@
+---
+title: "Authoring Add CLI / Add"
+description: "Generated reference for docs/syu/features/cli/add.yaml"
+---
+
+> Generated from `docs/syu/features/cli/add.yaml`.
+
+## Parsed content
+
+### Category
+
+- Authoring Add CLI
+
+### Version
+
+- 1
+
+### Features
+
+- **id**: FEAT-ADD-001
+  - **title**: Follow-up spec authoring scaffold
+  - **summary**: Scaffold new philosophy, policy, requirement, and feature YAML stubs after init while keeping feature registry maintenance explicit.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-020
+  - **implementations**:
+    - **rust**:
+      - **file**: src/command/add.rs
+        - **symbols**:
+          - run_add_command
+      - **file**: src/cli.rs
+        - **symbols**:
+          - AddArgs
+
+## Source YAML
+
+```yaml
+category: Authoring Add CLI
+version: 1
+
+features:
+  - id: FEAT-ADD-001
+    title: Follow-up spec authoring scaffold
+    summary: Scaffold new philosophy, policy, requirement, and feature YAML stubs after init while keeping feature registry maintenance explicit.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-020
+    implementations:
+      rust:
+        - file: src/command/add.rs
+          symbols:
+            - run_add_command
+        - file: src/cli.rs
+          symbols:
+            - AddArgs
+```

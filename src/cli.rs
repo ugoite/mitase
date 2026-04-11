@@ -1,5 +1,6 @@
 // FEAT-DOCS-001
 // FEAT-APP-001
+// FEAT-ADD-001
 // FEAT-BROWSE-001
 // FEAT-BROWSE-002
 // FEAT-INIT-005
@@ -33,6 +34,14 @@ Examples:
   syu init . --template rust-only
   syu init . --spec-root docs/spec
   syu init path/to/workspace --name my-project --spec-root spec/contracts --template polyglot --id-prefix store";
+
+const ADD_AFTER_HELP: &str = "\
+Examples:
+  syu add philosophy PHIL-002
+  syu add policy POL-002 --file docs/syu/policies/policies.yaml
+  syu add requirement REQ-AUTH-001
+  syu add feature FEAT-AUTH-LOGIN-001 --kind auth
+  syu add feature FEAT-AUTH-001 --kind auth --file docs/syu/features/auth/login.yaml";
 
 const WORKSPACE_HELP: &str = "Workspace root containing syu.yaml and the configured spec tree";
 
@@ -88,6 +97,11 @@ pub enum Commands {
         after_help = INIT_AFTER_HELP
     )]
     Init(InitArgs),
+    #[command(
+        about = "Scaffold a new philosophy, policy, requirement, or feature stub",
+        after_help = ADD_AFTER_HELP
+    )]
+    Add(AddArgs),
 }
 
 #[derive(Debug, Clone, Args)]
@@ -335,6 +349,35 @@ pub struct InitArgs {
     pub format: OutputFormat,
 }
 
+#[derive(Debug, Clone, Args)]
+pub struct AddArgs {
+    #[arg(help = "Layer kind to scaffold (philosophy, policy, requirement, or feature)")]
+    pub layer: LookupKind,
+
+    #[arg(
+        help = "New definition ID to scaffold (for example REQ-AUTH-001 or FEAT-AUTH-LOGIN-001)"
+    )]
+    pub id: String,
+
+    #[arg(help = WORKSPACE_HELP)]
+    #[arg(default_value = ".")]
+    pub workspace: PathBuf,
+
+    #[arg(
+        long,
+        value_name = "PATH",
+        help = "Optional YAML document path, relative to the workspace root or spec.root"
+    )]
+    pub file: Option<PathBuf>,
+
+    #[arg(
+        long,
+        value_name = "NAME",
+        help = "Feature registry kind and default folder name (feature scaffolding only)"
+    )]
+    pub kind: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Default)]
 pub enum StarterTemplate {
     #[default]
@@ -488,5 +531,29 @@ mod tests {
         assert!(rendered.contains("policy_prefix: Some(\"POL-STORE\")"));
         assert!(rendered.contains("requirement_prefix: Some(\"REQ-STORE\")"));
         assert!(rendered.contains("feature_prefix: Some(\"FEAT-STORE\")"));
+    }
+
+    #[test]
+    fn add_args_accept_explicit_files_and_feature_kinds() {
+        let cli = Cli::try_parse_from([
+            "syu",
+            "add",
+            "feature",
+            "FEAT-AUTH-001",
+            ".",
+            "--kind",
+            "auth",
+            "--file",
+            "docs/syu/features/auth/login.yaml",
+        ])
+        .expect("add args should parse");
+
+        let rendered = format!("{cli:?}");
+        assert!(rendered.contains("command: Some(Add("));
+        assert!(rendered.contains("layer: Feature"));
+        assert!(rendered.contains("id: \"FEAT-AUTH-001\""));
+        assert!(rendered.contains("workspace: \".\""));
+        assert!(rendered.contains("file: Some(\"docs/syu/features/auth/login.yaml\")"));
+        assert!(rendered.contains("kind: Some(\"auth\")"));
     }
 }
