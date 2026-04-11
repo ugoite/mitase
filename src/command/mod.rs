@@ -26,3 +26,15 @@ pub(crate) fn shell_quote_path(path: &Path) -> String {
         format!("'{}'", rendered.replace('\'', "'\\''"))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::shell_quote_path;
+
+    #[test]
+    fn shell_quote_path_wraps_empty_paths() {
+        assert_eq!(shell_quote_path(Path::new("")), "''");
+    }
+}
