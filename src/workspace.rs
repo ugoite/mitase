@@ -26,6 +26,12 @@ pub struct Workspace {
     pub features: Vec<Feature>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct LoadedDocument<T> {
+    pub path: PathBuf,
+    pub document: T,
+}
+
 // FEAT-CHECK-001
 pub fn load_workspace(root: &Path) -> Result<Workspace> {
     let root = root
@@ -33,31 +39,32 @@ pub fn load_workspace(root: &Path) -> Result<Workspace> {
         .with_context(|| format!("failed to resolve workspace root `{}`", root.display()))?;
     let loaded_config = load_config(&root)?;
     let spec_root = resolve_spec_root(&root, &loaded_config.config);
-    let philosophy_docs = load_philosophy_documents(&spec_root.join("philosophy"))?;
-    let policy_docs = load_policy_documents(&spec_root.join("policies"))?;
-    let requirement_docs = load_requirement_documents(&spec_root.join("requirements"))?;
+    let philosophy_docs = load_philosophy_documents_with_paths(&spec_root.join("philosophy"))?;
+    let policy_docs = load_policy_documents_with_paths(&spec_root.join("policies"))?;
+    let requirement_docs = load_requirement_documents_with_paths(&spec_root.join("requirements"))?;
+    let feature_docs = load_feature_documents_with_paths(&spec_root.join("features"))?;
 
-    let feature_root = spec_root.join("features");
-    let registry_path = feature_root.join("features.yaml");
-    let registry = load_feature_registry(&registry_path)?;
-    if registry.files.is_empty() {
-        bail!(
-            "feature registry `{}` does not declare any feature files",
-            registry_path.display()
-        );
-    }
-
-    let mut features = Vec::new();
-    for file in registry.files {
-        let path = resolve_feature_document_path(&feature_root, &file.file)?;
-        let document = load_feature_document(&path, &file.kind)?;
-        features.extend(document.features);
-    }
+    let philosophies = philosophy_docs
+        .into_iter()
+        .flat_map(|loaded| loaded.document.philosophies)
+        .collect();
+    let policies = policy_docs
+        .into_iter()
+        .flat_map(|loaded| loaded.document.policies)
+        .collect();
+    let requirements = requirement_docs
+        .into_iter()
+        .flat_map(|loaded| loaded.document.requirements)
+        .collect();
+    let features = feature_docs
+        .into_iter()
+        .flat_map(|loaded| loaded.document.features)
+        .collect::<Vec<_>>();
 
     if features.is_empty() {
         bail!(
             "no feature definitions were found under `{}`",
-            feature_root.display()
+            spec_root.join("features").display()
         );
     }
 
@@ -65,23 +72,16 @@ pub fn load_workspace(root: &Path) -> Result<Workspace> {
         root,
         spec_root,
         config: loaded_config.config,
-        philosophies: philosophy_docs
-            .into_iter()
-            .flat_map(|document| document.philosophies)
-            .collect(),
-        policies: policy_docs
-            .into_iter()
-            .flat_map(|document| document.policies)
-            .collect(),
-        requirements: requirement_docs
-            .into_iter()
-            .flat_map(|document| document.requirements)
-            .collect(),
+        philosophies,
+        policies,
+        requirements,
         features,
     })
 }
 
-fn load_philosophy_documents(directory: &Path) -> Result<Vec<PhilosophyDocument>> {
+pub(crate) fn load_philosophy_documents_with_paths(
+    directory: &Path,
+) -> Result<Vec<LoadedDocument<PhilosophyDocument>>> {
     let files = ensure_yaml_directory(directory, "philosophy")?;
     let mut documents = Vec::new();
     for path in files {
@@ -89,12 +89,14 @@ fn load_philosophy_documents(directory: &Path) -> Result<Vec<PhilosophyDocument>
         let raw = read_yaml_text(&path, &label)?;
         let document: PhilosophyDocument = serde_yaml::from_str(&raw)
             .with_context(|| format!("failed to parse {label} from `{}`", path.display()))?;
-        documents.push(document);
+        documents.push(LoadedDocument { path, document });
     }
     Ok(documents)
 }
 
-fn load_policy_documents(directory: &Path) -> Result<Vec<PolicyDocument>> {
+pub(crate) fn load_policy_documents_with_paths(
+    directory: &Path,
+) -> Result<Vec<LoadedDocument<PolicyDocument>>> {
     let files = ensure_yaml_directory(directory, "policy")?;
     let mut documents = Vec::new();
     for path in files {
@@ -102,12 +104,14 @@ fn load_policy_documents(directory: &Path) -> Result<Vec<PolicyDocument>> {
         let raw = read_yaml_text(&path, &label)?;
         let document: PolicyDocument = serde_yaml::from_str(&raw)
             .with_context(|| format!("failed to parse {label} from `{}`", path.display()))?;
-        documents.push(document);
+        documents.push(LoadedDocument { path, document });
     }
     Ok(documents)
 }
 
-fn load_requirement_documents(directory: &Path) -> Result<Vec<RequirementDocument>> {
+pub(crate) fn load_requirement_documents_with_paths(
+    directory: &Path,
+) -> Result<Vec<LoadedDocument<RequirementDocument>>> {
     let files = ensure_yaml_directory_recursive(directory, "requirement")?;
     let mut documents = Vec::new();
     for path in files {
@@ -115,7 +119,7 @@ fn load_requirement_documents(directory: &Path) -> Result<Vec<RequirementDocumen
         let raw = read_yaml_text(&path, &label)?;
         let document: RequirementDocument = serde_yaml::from_str(&raw)
             .with_context(|| format!("failed to parse {label} from `{}`", path.display()))?;
-        documents.push(document);
+        documents.push(LoadedDocument { path, document });
     }
     Ok(documents)
 }
@@ -125,6 +129,27 @@ fn load_feature_registry(path: &Path) -> Result<FeatureRegistryDocument> {
     let raw = read_yaml_text(path, label)?;
     serde_yaml::from_str(&raw)
         .with_context(|| format!("failed to parse {label} from `{}`", path.display()))
+}
+
+pub(crate) fn load_feature_documents_with_paths(
+    feature_root: &Path,
+) -> Result<Vec<LoadedDocument<FeatureDocument>>> {
+    let registry_path = feature_root.join("features.yaml");
+    let registry = load_feature_registry(&registry_path)?;
+    if registry.files.is_empty() {
+        bail!(
+            "feature registry `{}` does not declare any feature files",
+            registry_path.display()
+        );
+    }
+
+    let mut documents = Vec::new();
+    for file in registry.files {
+        let path = resolve_feature_document_path(feature_root, &file.file)?;
+        let document = load_feature_document(&path, &file.kind)?;
+        documents.push(LoadedDocument { path, document });
+    }
+    Ok(documents)
 }
 
 fn load_feature_document(path: &Path, kind: &str) -> Result<FeatureDocument> {
@@ -254,9 +279,9 @@ mod tests {
 
     use super::{
         ensure_yaml_directory, ensure_yaml_directory_recursive, load_feature_document,
-        load_feature_registry, load_philosophy_documents, load_policy_documents,
-        load_requirement_documents, load_workspace, read_yaml_text, resolve_feature_document_path,
-        yaml_file_paths, yaml_file_paths_recursive,
+        load_feature_registry, load_philosophy_documents_with_paths,
+        load_policy_documents_with_paths, load_requirement_documents_with_paths, load_workspace,
+        read_yaml_text, resolve_feature_document_path, yaml_file_paths, yaml_file_paths_recursive,
     };
 
     fn fixture_root(name: &str) -> PathBuf {
@@ -513,13 +538,13 @@ mod tests {
         fs::write(policy_dir.join("broken.yaml"), "category: [\n").expect("write");
         fs::write(requirement_dir.join("broken.yaml"), "category: [\n").expect("write");
 
-        assert!(load_philosophy_documents(&missing_dir).is_err());
-        assert!(load_policy_documents(&missing_dir).is_err());
-        assert!(load_requirement_documents(&missing_dir).is_err());
+        assert!(load_philosophy_documents_with_paths(&missing_dir).is_err());
+        assert!(load_policy_documents_with_paths(&missing_dir).is_err());
+        assert!(load_requirement_documents_with_paths(&missing_dir).is_err());
 
-        assert!(load_philosophy_documents(&philosophy_dir).is_err());
-        assert!(load_policy_documents(&policy_dir).is_err());
-        assert!(load_requirement_documents(&requirement_dir).is_err());
+        assert!(load_philosophy_documents_with_paths(&philosophy_dir).is_err());
+        assert!(load_policy_documents_with_paths(&policy_dir).is_err());
+        assert!(load_requirement_documents_with_paths(&requirement_dir).is_err());
     }
 
     #[test]

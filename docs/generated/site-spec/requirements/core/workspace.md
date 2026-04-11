@@ -154,6 +154,9 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       - **file**: src/command/list.rs
         - **symbols**:
           - *
+      - **file**: src/command/lookup.rs
+        - **symbols**:
+          - *
 
 ## Source YAML
 
@@ -292,6 +295,9 @@ requirements:
           symbols:
             - dispatches_lookup_subcommands_without_rewriting_them
         - file: src/command/list.rs
+          symbols:
+            - '*'
+        - file: src/command/lookup.rs
           symbols:
             - '*'
 ```
