@@ -396,6 +396,8 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(contributing.contains("scripts/ci/quality-gates.sh"));
     assert!(contributing.contains("scripts/ci/check-generated-docs-freshness.sh"));
     assert!(contributing.contains("docs/generated/"));
+    assert!(contributing.contains("scripts/ci/check-app-dist-freshness.sh"));
+    assert!(contributing.contains("app/dist"));
     assert!(contributing.contains("scripts/install-precommit.sh"));
     assert!(contributing.contains("GitHub Pages"));
     assert!(contributing.contains("release track"));
@@ -488,11 +490,13 @@ fn repository_ships_browser_app() {
     let app_vite = read_file("app/vite.config.ts");
     let app_playwright = read_file("app/tests/browser-app.spec.ts");
     let app_wasm = read_file("app/wasm/src/lib.rs");
+    let bundle_freshness = read_file("scripts/ci/check-app-dist-freshness.sh");
+    let readme = read_file("README.md");
     let shared_core = read_file("crates/syu-core/src/lib.rs");
 
     assert!(ci_workflow.contains("browser-app:"));
-    assert!(ci_workflow.contains("npm run build:wasm"));
-    assert!(ci_workflow.contains("npm run build"));
+    assert!(ci_workflow.contains("Verify checked-in browser bundle"));
+    assert!(ci_workflow.contains("scripts/ci/check-app-dist-freshness.sh"));
     assert!(app_package.contains("\"vite-plus\""));
     assert!(app_package.contains("\"@playwright/test\""));
     assert!(app_source.contains("FEAT-APP-001"));
@@ -502,6 +506,18 @@ fn repository_ships_browser_app() {
     assert!(app_playwright.contains("REQ-CORE-017"));
     assert!(app_playwright.contains("FEAT-CHECK-001"));
     assert!(app_wasm.contains("FEAT-APP-001"));
+    assert!(bundle_freshness.contains("FEAT-QUALITY-001"));
+    assert!(bundle_freshness.contains("ensure_app_dependencies"));
+    assert!(bundle_freshness.contains("npm ci"));
+    assert!(bundle_freshness.contains("snapshot_dist"));
+    assert!(bundle_freshness.contains("check_app_dist_freshness"));
+    assert!(bundle_freshness.contains("npm run build:wasm"));
+    assert!(bundle_freshness.contains("npm run build"));
+    assert!(bundle_freshness.contains("cmp -s"));
+    assert!(bundle_freshness.contains("git --no-pager diff --stat -- app/dist"));
+    assert!(!bundle_freshness.contains("[[ -d node_modules ]]"));
+    assert!(readme.contains("check-app-dist-freshness.sh"));
+    assert!(readme.contains("app/dist"));
     assert!(shared_core.contains("FEAT-APP-001"));
 }
 
