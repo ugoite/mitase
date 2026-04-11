@@ -76,7 +76,8 @@ Start by editing:
 
 As the workspace grows, you can group requirement and feature files into nested
 folders. Keep feature discovery explicit by updating `docs/syu/features/features.yaml`
-whenever you add or move a feature document.
+whenever you add or move a feature document. `syu validate` reports feature YAML
+files on disk that are missing from that registry.
 
 Requirements are discovered by walking the `requirements/` tree, but features use
 an explicit registry because implementation claims should stay deliberate and

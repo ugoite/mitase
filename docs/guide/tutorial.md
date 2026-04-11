@@ -154,6 +154,10 @@ documents:
   - path: core/core.yaml
 ```
 
+If you add another feature document later, keep `docs/syu/features/features.yaml`
+in sync. `syu validate` reports feature YAML files on disk that are missing from
+that registry.
+
 ---
 
 ## 6. Validate — first run
