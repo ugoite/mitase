@@ -23,6 +23,8 @@ const APP_AFTER_HELP: &str = concat!(
     "Press Ctrl-C to stop the local app server."
 );
 
+const WORKSPACE_HELP: &str = "Workspace root containing syu.yaml and the configured spec tree";
+
 #[derive(Debug, Parser)]
 #[command(
     name = "syu",
@@ -65,7 +67,7 @@ pub enum Commands {
 
 #[derive(Debug, Clone, Args)]
 pub struct BrowseArgs {
-    #[arg(help = "Workspace root containing syu.yaml and the spec tree (default: docs/syu)")]
+    #[arg(help = WORKSPACE_HELP)]
     #[arg(default_value = ".")]
     pub workspace: PathBuf,
 
@@ -130,7 +132,7 @@ pub struct ShowArgs {
     #[arg(help = "Definition ID to show (for example PHIL-001 or REQ-CORE-001)")]
     pub id: String,
 
-    #[arg(help = "Workspace root containing syu.yaml and the spec tree (default: docs/syu)")]
+    #[arg(help = WORKSPACE_HELP)]
     #[arg(default_value = ".")]
     pub workspace: PathBuf,
 
@@ -141,7 +143,7 @@ pub struct ShowArgs {
 
 #[derive(Debug, Clone, Args)]
 pub struct AppArgs {
-    #[arg(help = "Workspace root containing syu.yaml and the spec tree (default: docs/syu)")]
+    #[arg(help = WORKSPACE_HELP)]
     #[arg(default_value = ".")]
     pub workspace: PathBuf,
 
@@ -156,7 +158,7 @@ pub struct AppArgs {
 
 #[derive(Debug, Clone, Args)]
 pub struct ValidateArgs {
-    #[arg(help = "Workspace root containing syu.yaml and the spec tree (default: docs/syu)")]
+    #[arg(help = WORKSPACE_HELP)]
     #[arg(default_value = ".")]
     pub workspace: PathBuf,
 
@@ -197,7 +199,7 @@ pub type CheckArgs = ValidateArgs;
 
 #[derive(Debug, Clone, Args)]
 pub struct ReportArgs {
-    #[arg(help = "Workspace root containing syu.yaml and the spec tree (default: docs/syu)")]
+    #[arg(help = WORKSPACE_HELP)]
     #[arg(default_value = ".")]
     pub workspace: PathBuf,
 
