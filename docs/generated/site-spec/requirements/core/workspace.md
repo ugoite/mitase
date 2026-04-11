@@ -42,6 +42,9 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       - **file**: src/command/init.rs
         - **symbols**:
           - *
+      - **file**: src/command/mod.rs
+        - **symbols**:
+          - shell_quote_path_wraps_empty_paths
       - **file**: src/config.rs
         - **symbols**:
           - *
@@ -179,6 +182,9 @@ requirements:
         - file: src/command/init.rs
           symbols:
             - '*'
+        - file: src/command/mod.rs
+          symbols:
+            - shell_quote_path_wraps_empty_paths
         - file: src/config.rs
           symbols:
             - '*'
