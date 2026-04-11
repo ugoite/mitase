@@ -62,6 +62,63 @@ fn init_command_bootstraps_a_workspace_that_validate_accepts() {
 
 #[test]
 // REQ-CORE-009
+fn init_command_bootstraps_a_custom_spec_root_that_validate_accepts() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    let workspace = tempdir.path().join("demo");
+
+    let init = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("init")
+        .arg(&workspace)
+        .arg("--name")
+        .arg("demo")
+        .arg("--spec-root")
+        .arg("spec/contracts")
+        .output()
+        .expect("init should run");
+
+    assert!(
+        init.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&init.stdout),
+        String::from_utf8_lossy(&init.stderr)
+    );
+    assert!(workspace.join("syu.yaml").exists());
+    assert!(
+        workspace
+            .join("spec/contracts/features/core/core.yaml")
+            .exists()
+    );
+
+    let config = fs::read_to_string(workspace.join("syu.yaml")).expect("config should exist");
+    let parsed_config: Value = serde_yaml::from_str(&config).expect("config should be valid yaml");
+    assert_eq!(
+        parsed_config["spec"]["root"].as_str(),
+        Some("spec/contracts")
+    );
+
+    let stdout = String::from_utf8_lossy(&init.stdout);
+    assert!(stdout.contains(&format!("{}/", workspace.join("spec/contracts").display())));
+    assert!(stdout.contains("spec/contracts/philosophy/foundation.yaml"));
+
+    let validate = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(&workspace)
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        validate.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&validate.stdout),
+        String::from_utf8_lossy(&validate.stderr)
+    );
+    assert!(String::from_utf8_lossy(&validate.stdout).contains("syu validate passed"));
+}
+
+#[test]
+// REQ-CORE-009
 fn init_command_requires_force_when_generated_files_exist() {
     let tempdir = tempdir().expect("tempdir should exist");
     fs::write(
@@ -107,4 +164,26 @@ fn init_command_prints_workspace_aware_next_steps_for_explicit_paths() {
     assert!(stdout.contains(&format!("Run `syu browse {workspace_arg}`")));
     assert!(stdout.contains(&format!("`syu app {workspace_arg}`")));
     assert!(stdout.contains(&format!("{}/", workspace.join("docs/syu").display())));
+}
+
+#[test]
+// REQ-CORE-009
+fn init_command_rejects_spec_roots_outside_the_workspace() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    let workspace = tempdir.path().join("demo");
+
+    let init = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("init")
+        .arg(&workspace)
+        .arg("--spec-root")
+        .arg("../spec")
+        .output()
+        .expect("init should run");
+
+    assert!(
+        !init.status.success(),
+        "init should reject invalid spec roots"
+    );
+    assert!(String::from_utf8_lossy(&init.stderr).contains("--spec-root"));
 }

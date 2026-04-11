@@ -159,7 +159,7 @@ impl CheckResult {
                 None,
                 message.into(),
                 Some(
-                    "New workspace? Run `syu init .` in the repository root. Otherwise make sure `syu.yaml` and `docs/syu/` exist under the selected workspace."
+                    "New workspace? Run `syu init .` in the repository root. Otherwise make sure `syu.yaml` exists and `spec.root` points at a scaffolded tree under the selected workspace."
                         .to_string(),
                 ),
             )],

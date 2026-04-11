@@ -94,6 +94,10 @@ spec:
 New workspaces default to `docs/syu`. Existing repositories can keep another
 layout, including `docs/spec`, by setting `spec.root` explicitly.
 
+When you are starting a brand-new workspace, `syu init --spec-root docs/spec`
+scaffolds the starter files into that repository-relative path immediately and
+writes the matching `spec.root` value for you.
+
 ### `validate.default_fix`
 
 When `true`, `syu validate` behaves as if `--fix` was passed unless the user
