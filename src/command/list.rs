@@ -85,23 +85,81 @@ fn parse_list_positionals(positional: &[String]) -> Result<(Option<LookupKind>, 
         [first] => {
             if let Ok(kind) = LookupKind::from_str(first, true) {
                 Ok((Some(kind), PathBuf::from(".")))
+            } else if PathBuf::from(first).exists() {
+                Ok((None, PathBuf::from(first)))
+            } else if let Some(suggestion) = suggested_lookup_kind(first) {
+                Err(invalid_kind_error(first, None, Some(suggestion)))
             } else {
                 Ok((None, PathBuf::from(first)))
             }
         }
         [kind_str, workspace_str, ..] => {
             let kind = LookupKind::from_str(kind_str, true).map_err(|_| {
-                anyhow!(
-                    "invalid value '{}' for KIND\n  \
-                     possible values: philosophy, policy, requirement, feature\n  \
-                     Hint: to list all kinds in a workspace, run `syu list {}`",
+                invalid_kind_error(
                     kind_str,
-                    workspace_str
+                    Some(workspace_str),
+                    suggested_lookup_kind(kind_str),
                 )
             })?;
             Ok((Some(kind), PathBuf::from(workspace_str)))
         }
     }
+}
+
+fn invalid_kind_error(
+    value: &str,
+    workspace_hint: Option<&str>,
+    suggestion: Option<&'static str>,
+) -> anyhow::Error {
+    let mut message = format!(
+        "invalid value '{}' for KIND\n  possible values: philosophy, policy, requirement, feature",
+        value
+    );
+    if let Some(suggestion) = suggestion {
+        message.push_str(&format!("\n  did you mean `{suggestion}`?"));
+    }
+    if let Some(workspace_hint) = workspace_hint {
+        message.push_str(&format!(
+            "\n  Hint: to list all kinds in a workspace, run `syu list {workspace_hint}`"
+        ));
+    } else {
+        message.push_str(
+            "\n  Hint: use one of the layer kinds above, pass a workspace path, or run `syu list --help`.",
+        );
+    }
+    anyhow!(message)
+}
+
+fn suggested_lookup_kind(value: &str) -> Option<&'static str> {
+    const KINDS: [&str; 4] = ["philosophy", "policy", "requirement", "feature"];
+
+    let normalized = value.to_ascii_lowercase();
+    KINDS
+        .into_iter()
+        .map(|candidate| (candidate, levenshtein_distance(&normalized, candidate)))
+        .filter(|(_, distance)| *distance <= 2)
+        .min_by_key(|(_, distance)| *distance)
+        .map(|(candidate, _)| candidate)
+}
+
+fn levenshtein_distance(left: &str, right: &str) -> usize {
+    let left: Vec<_> = left.chars().collect();
+    let right: Vec<_> = right.chars().collect();
+    let mut previous: Vec<usize> = (0..=right.len()).collect();
+    let mut current = vec![0; right.len() + 1];
+
+    for (left_index, left_char) in left.iter().enumerate() {
+        current[0] = left_index + 1;
+        for (right_index, right_char) in right.iter().enumerate() {
+            let cost = usize::from(left_char != right_char);
+            current[right_index + 1] = (current[right_index] + 1)
+                .min(previous[right_index + 1] + 1)
+                .min(previous[right_index] + cost);
+        }
+        previous.clone_from(&current);
+    }
+
+    previous[right.len()]
 }
 
 fn print_text_list(items: &[EntitySummary]) {
@@ -185,6 +243,26 @@ mod tests {
         assert!(result.is_err());
         let msg = result.unwrap_err().to_string();
         assert!(msg.contains("invalid value"), "error: {msg}");
+        assert!(msg.contains("syu list ."), "hint missing: {msg}");
+    }
+
+    #[test]
+    // FEAT-LIST-001
+    fn parse_list_positionals_single_arg_kind_typo_returns_error() {
+        let result = parse_list_positionals(&["philsophy".to_string()]);
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("did you mean `philosophy`"), "error: {msg}");
+        assert!(msg.contains("syu list --help"), "hint missing: {msg}");
+    }
+
+    #[test]
+    // FEAT-LIST-001
+    fn parse_list_positionals_two_arg_kind_typo_returns_suggestion() {
+        let result = parse_list_positionals(&["philsophy".to_string(), ".".to_string()]);
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("did you mean `philosophy`"), "error: {msg}");
         assert!(msg.contains("syu list ."), "hint missing: {msg}");
     }
 }
