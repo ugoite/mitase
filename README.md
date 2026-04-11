@@ -81,6 +81,12 @@ bash install-syu.sh
 
 On macOS, replace `sha256sum` with `shasum -a 256`.
 
+Published release archives also carry GitHub artifact attestations. Verify one with:
+
+```bash
+gh attestation verify syu-x86_64-unknown-linux-gnu.tar.gz --repo ugoite/syu
+```
+
 If you're contributing to `syu` itself from source, jump to
 [Contributing and local development](#contributing-and-local-development)
 below. The rest of this section assumes you installed the published CLI.
