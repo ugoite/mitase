@@ -106,11 +106,17 @@ Controls whether `planned` requirements and features are allowed.
 - `true`: `planned` items are valid, but they must not declare traces yet
 - `false`: any `planned` or legacy `planed` status is rejected
 
+Use `syu validate . --allow-planned` or `syu validate . --allow-planned=false`
+when you want to trial a looser or stricter run without editing `syu.yaml`.
+
 ### `validate.require_non_orphaned_items`
 
 When `true`, philosophy, policy, requirement, and feature entries must each
 connect to at least one adjacent layer. This is on by default because isolated
 definitions usually mean the specification has drifted away from the repository.
+
+Use `syu validate . --require-non-orphaned-items=false` for a one-off migration
+run when you do not want to commit a config change.
 
 ### `validate.require_reciprocal_links`
 
@@ -122,6 +128,8 @@ When `true`, adjacent-layer relationships must be confirmed from both sides.
 Keep this enabled for steady-state self-hosting. Turning it off is mainly useful
 when a repository is migrating an existing spec graph and wants to phase in
 backlinks after the forward links are already trustworthy.
+For one-off runs, use `syu validate . --require-reciprocal-links=false` instead
+of editing `syu.yaml`.
 
 ### `validate.require_symbol_trace_coverage`
 
@@ -133,6 +141,7 @@ symbol belongs to some feature and every test belongs to some requirement.
 
 This is useful once the repository wants maintenance work to stay fully owned by
 the specification.
+For an experimental strict run, use `syu validate . --require-symbol-trace-coverage`.
 
 ### `app.bind`
 
@@ -183,12 +192,23 @@ For autofix behavior, CLI flags override config:
 2. `--no-fix`
 3. `validate.default_fix`
 
-`validate.allow_planned` is configuration-only. There is no CLI flag to
-override it.
+For delivery and validation strictness, CLI flags override config for a single
+invocation:
 
-`validate.require_non_orphaned_items`,
-`validate.require_reciprocal_links`, and
-`validate.require_symbol_trace_coverage` are also configuration-only.
+1. `--allow-planned[=true|false]`
+2. `validate.allow_planned`
+
+1. `--require-non-orphaned-items[=true|false]`
+2. `validate.require_non_orphaned_items`
+
+1. `--require-reciprocal-links[=true|false]`
+2. `validate.require_reciprocal_links`
+
+1. `--require-symbol-trace-coverage[=true|false]`
+2. `validate.require_symbol_trace_coverage`
+
+Passing the flag with no value means `true`. Use `=false` when you want a
+temporary relaxed run without changing the checked-in config.
 
 For report output paths, CLI flags override config:
 
