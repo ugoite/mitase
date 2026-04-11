@@ -2,6 +2,7 @@
 // FEAT-APP-001
 // FEAT-BROWSE-001
 // FEAT-BROWSE-002
+// FEAT-INIT-005
 // FEAT-INIT-004
 // FEAT-INIT-003
 // FEAT-LIST-002
@@ -28,9 +29,10 @@ const APP_AFTER_HELP: &str = concat!(
 const INIT_AFTER_HELP: &str = "\
 Examples:
   syu init .
+  syu init . --id-prefix store
   syu init . --template rust-only
   syu init . --spec-root docs/spec
-  syu init path/to/workspace --name my-project --spec-root spec/contracts --template polyglot";
+  syu init path/to/workspace --name my-project --spec-root spec/contracts --template polyglot --id-prefix store";
 
 const WORKSPACE_HELP: &str = "Workspace root containing syu.yaml and the configured spec tree";
 
@@ -302,6 +304,28 @@ pub struct InitArgs {
     #[arg(long, value_enum, default_value_t = StarterTemplate::Generic)]
     pub template: StarterTemplate,
 
+    #[arg(
+        help = "Shared ID stem to render as PHIL-<stem>, POL-<stem>, REQ-<stem>, and FEAT-<stem>"
+    )]
+    #[arg(long, value_name = "STEM")]
+    pub id_prefix: Option<String>,
+
+    #[arg(help = "Override the philosophy ID prefix (for example PHIL-STORE)")]
+    #[arg(long, value_name = "PREFIX")]
+    pub philosophy_prefix: Option<String>,
+
+    #[arg(help = "Override the policy ID prefix (for example POL-STORE)")]
+    #[arg(long, value_name = "PREFIX")]
+    pub policy_prefix: Option<String>,
+
+    #[arg(help = "Override the requirement ID prefix (for example REQ-STORE)")]
+    #[arg(long, value_name = "PREFIX")]
+    pub requirement_prefix: Option<String>,
+
+    #[arg(help = "Override the feature ID prefix (for example FEAT-STORE)")]
+    #[arg(long, value_name = "PREFIX")]
+    pub feature_prefix: Option<String>,
+
     #[arg(help = "Overwrite generated files when they already exist")]
     #[arg(long)]
     pub force: bool,
@@ -430,5 +454,39 @@ mod tests {
         let rendered = format!("{cli:?}");
         assert!(rendered.contains("command: Some(Init("));
         assert!(rendered.contains("spec_root: Some(\"docs/spec\")"));
+    }
+
+    #[test]
+    fn init_args_accept_shared_id_prefix_stems() {
+        let cli = Cli::try_parse_from(["syu", "init", ".", "--id-prefix", "store"])
+            .expect("init args should parse");
+
+        let rendered = format!("{cli:?}");
+        assert!(rendered.contains("command: Some(Init("));
+        assert!(rendered.contains("id_prefix: Some(\"store\")"));
+    }
+
+    #[test]
+    fn init_args_accept_individual_id_prefix_overrides() {
+        let cli = Cli::try_parse_from([
+            "syu",
+            "init",
+            ".",
+            "--philosophy-prefix",
+            "PHIL-STORE",
+            "--policy-prefix",
+            "POL-STORE",
+            "--requirement-prefix",
+            "REQ-STORE",
+            "--feature-prefix",
+            "FEAT-STORE",
+        ])
+        .expect("init args should parse");
+
+        let rendered = format!("{cli:?}");
+        assert!(rendered.contains("philosophy_prefix: Some(\"PHIL-STORE\")"));
+        assert!(rendered.contains("policy_prefix: Some(\"POL-STORE\")"));
+        assert!(rendered.contains("requirement_prefix: Some(\"REQ-STORE\")"));
+        assert!(rendered.contains("feature_prefix: Some(\"FEAT-STORE\")"));
     }
 }

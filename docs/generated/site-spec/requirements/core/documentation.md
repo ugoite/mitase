@@ -43,6 +43,7 @@ description: "Generated reference for docs/syu/requirements/core/documentation.y
           - workspace_help_uses_current_directory_default_consistently
           - init_help_lists_starter_templates
           - init_help_mentions_custom_spec_roots
+          - init_help_mentions_id_prefix_options
           - validate_help_lists_temporary_config_overrides
       - **file**: tests/repository_quality.rs
         - **symbols**:
@@ -104,6 +105,7 @@ requirements:
             - workspace_help_uses_current_directory_default_consistently
             - init_help_lists_starter_templates
             - init_help_mentions_custom_spec_roots
+            - init_help_mentions_id_prefix_options
             - validate_help_lists_temporary_config_overrides
         - file: tests/repository_quality.rs
           symbols:

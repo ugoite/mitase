@@ -85,6 +85,23 @@ fn init_help_mentions_custom_spec_roots() {
 }
 
 #[test]
+fn init_help_mentions_id_prefix_options() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args(["init", "--help"])
+        .output()
+        .expect("help should render");
+
+    assert!(output.status.success(), "init help should succeed");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--id-prefix"));
+    assert!(stdout.contains("--requirement-prefix"));
+    assert!(stdout.contains("PHIL-<stem>"));
+    assert!(stdout.contains("REQ-<stem>"));
+}
+
+#[test]
 fn validate_help_lists_temporary_config_overrides() {
     let output = Command::cargo_bin("syu")
         .expect("binary should build")

@@ -234,6 +234,7 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("# 2. Add your spec items"));
     assert!(readme.contains("syu init"));
     assert!(readme.contains("syu init ."));
+    assert!(readme.contains("--id-prefix"));
     assert!(readme.contains("--template rust-only"));
     assert!(readme.contains("syu validate"));
     assert!(readme.contains("syu browse"));
@@ -269,6 +270,7 @@ fn repository_declares_documentation_guides() {
         "https://github.com/ugoite/syu/releases/download/v{current_version}/install-syu.sh"
     )));
     assert!(getting_started.contains("--template rust-only"));
+    assert!(getting_started.contains("--id-prefix"));
     assert!(getting_started.contains("syu validate . --fix"));
     assert!(getting_started.contains("syu browse ."));
     assert!(getting_started.contains("syu list feature"));

@@ -265,6 +265,143 @@ fn init_command_combines_custom_spec_roots_with_language_templates() {
 
 #[test]
 // REQ-CORE-009
+fn init_command_bootstraps_project_specific_id_prefixes_that_validate_accept() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    let workspace = tempdir.path().join("demo");
+
+    let init = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("init")
+        .arg(&workspace)
+        .arg("--id-prefix")
+        .arg("store")
+        .output()
+        .expect("init should run");
+
+    assert!(
+        init.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&init.stdout),
+        String::from_utf8_lossy(&init.stderr)
+    );
+
+    let philosophy = fs::read_to_string(workspace.join("docs/syu/philosophy/foundation.yaml"))
+        .expect("philosophy should exist");
+    let policy = fs::read_to_string(workspace.join("docs/syu/policies/policies.yaml"))
+        .expect("policy should exist");
+    let requirement = fs::read_to_string(workspace.join("docs/syu/requirements/core/core.yaml"))
+        .expect("requirement should exist");
+    let feature = fs::read_to_string(workspace.join("docs/syu/features/core/core.yaml"))
+        .expect("feature should exist");
+
+    assert!(philosophy.contains("id: PHIL-STORE-001"));
+    assert!(policy.contains("id: POL-STORE-001"));
+    assert!(requirement.contains("prefix: REQ-STORE"));
+    assert!(requirement.contains("id: REQ-STORE-001"));
+    assert!(feature.contains("id: FEAT-STORE-001"));
+
+    let validate = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(&workspace)
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        validate.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&validate.stdout),
+        String::from_utf8_lossy(&validate.stderr)
+    );
+}
+
+#[test]
+// REQ-CORE-009
+fn init_command_allows_layer_specific_id_prefix_overrides() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    let workspace = tempdir.path().join("demo");
+
+    let init = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("init")
+        .arg(&workspace)
+        .arg("--template")
+        .arg("rust-only")
+        .arg("--id-prefix")
+        .arg("store")
+        .arg("--philosophy-prefix")
+        .arg("phil-guiding")
+        .arg("--policy-prefix")
+        .arg("pol-governance")
+        .arg("--requirement-prefix")
+        .arg("req-auth")
+        .arg("--feature-prefix")
+        .arg("feat-auth")
+        .output()
+        .expect("init should run");
+
+    assert!(
+        init.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&init.stdout),
+        String::from_utf8_lossy(&init.stderr)
+    );
+
+    let philosophy = fs::read_to_string(workspace.join("docs/syu/philosophy/foundation.yaml"))
+        .expect("philosophy should exist");
+    let policy = fs::read_to_string(workspace.join("docs/syu/policies/policies.yaml"))
+        .expect("policy should exist");
+    let requirement = fs::read_to_string(workspace.join("docs/syu/requirements/core/rust.yaml"))
+        .expect("requirement should exist");
+    let feature = fs::read_to_string(workspace.join("docs/syu/features/languages/rust.yaml"))
+        .expect("feature should exist");
+
+    assert!(philosophy.contains("id: PHIL-GUIDING-001"));
+    assert!(philosophy.contains("linked_policies:\n      - POL-GOVERNANCE-001"));
+    assert!(policy.contains("id: POL-GOVERNANCE-001"));
+    assert!(requirement.contains("prefix: REQ-AUTH"));
+    assert!(requirement.contains("id: REQ-AUTH-001"));
+    assert!(feature.contains("id: FEAT-AUTH-001"));
+
+    let validate = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(&workspace)
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        validate.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&validate.stdout),
+        String::from_utf8_lossy(&validate.stderr)
+    );
+}
+
+#[test]
+// REQ-CORE-009
+fn init_command_rejects_full_prefixes_as_shared_stems() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    let workspace = tempdir.path().join("demo");
+
+    let init = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("init")
+        .arg(&workspace)
+        .arg("--id-prefix")
+        .arg("REQ-STORE")
+        .output()
+        .expect("init should run");
+
+    assert!(
+        !init.status.success(),
+        "init should reject full typed stems"
+    );
+    assert!(String::from_utf8_lossy(&init.stderr).contains("--id-prefix"));
+}
+
+#[test]
+// REQ-CORE-009
 fn init_command_requires_force_when_generated_files_exist() {
     let tempdir = tempdir().expect("tempdir should exist");
     fs::write(
