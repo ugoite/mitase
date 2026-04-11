@@ -139,6 +139,19 @@ fn app_command_serves_browser_ui_and_payload() {
     assert!(payload.contains("REQ-TRACE-001"));
     assert!(payload.contains("FEAT-TRACE-001"));
     assert!(payload.contains("foundation.yaml"));
+    assert!(
+        !payload.contains(&fixture_path("passing").display().to_string()),
+        "browser payload should not expose the absolute workspace path",
+    );
+    assert!(
+        !payload.contains(
+            &fixture_path("passing")
+                .join("docs/syu")
+                .display()
+                .to_string()
+        ),
+        "browser payload should not expose the absolute spec path",
+    );
 
     let health = http_get(port, "/health").expect("health should load");
     assert!(health.contains("200 OK"));
