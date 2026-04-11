@@ -80,3 +80,31 @@ fn init_command_requires_force_when_generated_files_exist() {
     assert!(!init.status.success(), "init should refuse overwrite");
     assert!(String::from_utf8_lossy(&init.stderr).contains("refusing to overwrite"));
 }
+
+#[test]
+// REQ-CORE-009
+fn init_command_prints_workspace_aware_next_steps_for_explicit_paths() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    let workspace = tempdir.path().join("demo workspace");
+
+    let init = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("init")
+        .arg(&workspace)
+        .output()
+        .expect("init should run");
+
+    assert!(
+        init.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&init.stdout),
+        String::from_utf8_lossy(&init.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&init.stdout);
+    let workspace_arg = format!("'{}'", workspace.display());
+    assert!(stdout.contains(&format!("Run `syu validate {workspace_arg}`")));
+    assert!(stdout.contains(&format!("Run `syu browse {workspace_arg}`")));
+    assert!(stdout.contains(&format!("`syu app {workspace_arg}`")));
+    assert!(stdout.contains(&format!("{}/", workspace.join("docs/syu").display())));
+}

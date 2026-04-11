@@ -9,6 +9,7 @@ use std::{
 
 use crate::{
     cli::{InitArgs, OutputFormat},
+    command::shell_quote_path,
     config::{SyuConfig, render_config},
 };
 
@@ -59,6 +60,8 @@ pub fn run_init_command(args: &InitArgs) -> Result<i32> {
             );
         }
         OutputFormat::Text => {
+            let workspace_arg = shell_quote_path(&workspace);
+            let spec_root = workspace.join("docs/syu");
             println!("initialized syu workspace at {}", workspace.display());
             println!();
             println!("Created files:");
@@ -67,13 +70,18 @@ pub fn run_init_command(args: &InitArgs) -> Result<i32> {
             }
             println!();
             println!("What to do next:");
-            println!("  1. Edit the spec files in docs/syu/ to describe your project");
+            println!(
+                "  1. Edit the spec files in {}/ to describe your project",
+                spec_root.display()
+            );
             println!("     - docs/syu/philosophy/foundation.yaml  (core principles)");
             println!("     - docs/syu/policies/policies.yaml       (governance rules)");
             println!("     - docs/syu/requirements/core/core.yaml  (concrete requirements)");
             println!("     - docs/syu/features/core/core.yaml      (feature definitions)");
-            println!("  2. Run `syu validate .` to check your spec for consistency");
-            println!("  3. Run `syu app .` to explore the spec in the browser UI");
+            println!("  2. Run `syu validate {workspace_arg}` to check your spec for consistency");
+            println!(
+                "  3. Run `syu browse {workspace_arg}` for terminal exploration, or `syu app {workspace_arg}` for the browser UI"
+            );
             println!("  4. Commit the generated files to version control");
         }
     }
