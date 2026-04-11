@@ -2,6 +2,7 @@
 // FEAT-APP-001
 // FEAT-BROWSE-001
 // FEAT-BROWSE-002
+// FEAT-INIT-004
 // FEAT-INIT-003
 // FEAT-LIST-002
 // FEAT-REPORT-001
@@ -23,6 +24,13 @@ const APP_AFTER_HELP: &str = concat!(
     "Use GET /health for readiness checks once the app is serving.\n",
     "Press Ctrl-C to stop the local app server."
 );
+
+const INIT_AFTER_HELP: &str = "\
+Examples:
+  syu init .
+  syu init . --template rust-only
+  syu init . --spec-root docs/spec
+  syu init path/to/workspace --name my-project --spec-root spec/contracts --template polyglot";
 
 const WORKSPACE_HELP: &str = "Workspace root containing syu.yaml and the configured spec tree";
 
@@ -73,7 +81,10 @@ pub enum Commands {
     Validate(ValidateArgs),
     #[command(about = "Render a Markdown report from the same validation engine")]
     Report(ReportArgs),
-    #[command(about = "Scaffold a version-matched syu workspace")]
+    #[command(
+        about = "Scaffold a version-matched syu workspace",
+        after_help = INIT_AFTER_HELP
+    )]
     Init(InitArgs),
 }
 
@@ -287,6 +298,10 @@ pub struct InitArgs {
     #[arg(long)]
     pub spec_root: Option<PathBuf>,
 
+    #[arg(help = "Starter layout to scaffold (generic, rust-only, python-only, or polyglot)")]
+    #[arg(long, value_enum, default_value_t = StarterTemplate::Generic)]
+    pub template: StarterTemplate,
+
     #[arg(help = "Overwrite generated files when they already exist")]
     #[arg(long)]
     pub force: bool,
@@ -294,6 +309,15 @@ pub struct InitArgs {
     #[arg(help = "Output format (text shows next-step guidance; json returns created file paths)")]
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
     pub format: OutputFormat,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Default)]
+pub enum StarterTemplate {
+    #[default]
+    Generic,
+    RustOnly,
+    PythonOnly,
+    Polyglot,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -386,6 +410,16 @@ mod tests {
 
         let message = error.to_string();
         assert!(message.contains("--allow-planned"));
+    }
+
+    #[test]
+    fn init_args_accept_template_values() {
+        let cli = Cli::try_parse_from(["syu", "init", ".", "--template", "rust-only"])
+            .expect("init args should parse");
+
+        let rendered = format!("{cli:?}");
+        assert!(rendered.contains("command: Some(Init("));
+        assert!(rendered.contains("template: RustOnly"));
     }
 
     #[test]

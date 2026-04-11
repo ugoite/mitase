@@ -25,10 +25,13 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       the running CLI and a valid starter specification tree whose starter
       requirements and features begin as `planned` so users can begin from a
       working structure instead of manually creating directories and
-      placeholder YAML files. By default the tree lives under `docs/syu/`, and
-      `syu init --spec-root` MUST also support scaffolding the same layout into
+      placeholder YAML files. By default the tree lives under `docs/syu/`.
+      `syu init --spec-root` MUST support scaffolding the same layout into
       another repository-relative specification root while writing the matching
-      `spec.root` value into `syu.yaml`.
+      `spec.root` value into `syu.yaml`, and `syu init --template` MUST support
+      small `rust-only`, `python-only`, and `polyglot` starter layouts so
+      adopters can begin closer to their repository style without copying
+      example files by hand.
   - **priority**: high
   - **status**: implemented
   - **linked_policies**:
@@ -38,6 +41,7 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
     - FEAT-INIT-001
     - FEAT-INIT-002
     - FEAT-INIT-003
+    - FEAT-INIT-004
   - **tests**:
     - **rust**:
       - **file**: tests/init_command.rs
@@ -175,10 +179,13 @@ requirements:
       the running CLI and a valid starter specification tree whose starter
       requirements and features begin as `planned` so users can begin from a
       working structure instead of manually creating directories and
-      placeholder YAML files. By default the tree lives under `docs/syu/`, and
-      `syu init --spec-root` MUST also support scaffolding the same layout into
+      placeholder YAML files. By default the tree lives under `docs/syu/`.
+      `syu init --spec-root` MUST support scaffolding the same layout into
       another repository-relative specification root while writing the matching
-      `spec.root` value into `syu.yaml`.
+      `spec.root` value into `syu.yaml`, and `syu init --template` MUST support
+      small `rust-only`, `python-only`, and `polyglot` starter layouts so
+      adopters can begin closer to their repository style without copying
+      example files by hand.
     priority: high
     status: implemented
     linked_policies:
@@ -188,6 +195,7 @@ requirements:
       - FEAT-INIT-001
       - FEAT-INIT-002
       - FEAT-INIT-003
+      - FEAT-INIT-004
     tests:
       rust:
         - file: tests/init_command.rs
