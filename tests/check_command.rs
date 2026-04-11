@@ -8,6 +8,33 @@ fn fixture_path(name: &str) -> PathBuf {
         .join(name)
 }
 
+fn expected_workspace_arg(path: &Path) -> String {
+    let rendered = path.display().to_string();
+    if rendered.is_empty() {
+        return if cfg!(windows) {
+            "\"\"".to_string()
+        } else {
+            "''".to_string()
+        };
+    }
+
+    let is_shell_safe = rendered.chars().all(|ch| {
+        ch.is_ascii_alphanumeric()
+            || if cfg!(windows) {
+                "/\\\\:._-".contains(ch)
+            } else {
+                "/._-".contains(ch)
+            }
+    });
+    if is_shell_safe {
+        rendered
+    } else if cfg!(windows) {
+        format!("\"{rendered}\"")
+    } else {
+        format!("'{}'", rendered.replace('\'', "'\\''"))
+    }
+}
+
 fn write_trace_path_workspace(root: &Path, trace_path: &str) {
     fs::create_dir_all(root.join("docs/syu/philosophy")).expect("philosophy dir");
     fs::create_dir_all(root.join("docs/syu/policies")).expect("policies dir");
@@ -97,9 +124,58 @@ fn check_command_accepts_passing_workspace() {
         "success output should include next-step guidance: {stdout}"
     );
     assert!(
-        stdout.contains("syu app ."),
+        stdout.contains("syu app "),
         "next-step block should mention syu app: {stdout}"
     );
+}
+
+#[test]
+// REQ-CORE-001
+fn check_command_preserves_default_workspace_dot_in_next_steps() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .current_dir(fixture_path("passing"))
+        .arg("validate")
+        .output()
+        .expect("command should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("syu app ."));
+    assert!(stdout.contains("syu browse ."));
+    assert!(stdout.contains("syu report ."));
+    assert!(stdout.contains("syu show <ID> ."));
+}
+
+#[test]
+// REQ-CORE-001
+fn check_command_prints_workspace_aware_next_steps_for_explicit_paths() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(fixture_path("passing"))
+        .output()
+        .expect("command should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let workspace_arg = expected_workspace_arg(&fixture_path("passing"));
+    assert!(stdout.contains(&format!("syu app {workspace_arg}")));
+    assert!(stdout.contains(&format!("syu browse {workspace_arg}")));
+    assert!(stdout.contains(&format!("syu report {workspace_arg}")));
+    assert!(stdout.contains(&format!("syu show <ID> {workspace_arg}")));
 }
 
 #[test]
