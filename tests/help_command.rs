@@ -52,6 +52,23 @@ fn workspace_help_uses_current_directory_default_consistently() {
 }
 
 #[test]
+fn init_help_lists_starter_templates() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args(["init", "--help"])
+        .output()
+        .expect("help should render");
+
+    assert!(output.status.success(), "init help should succeed");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--template"));
+    assert!(stdout.contains("rust-only"));
+    assert!(stdout.contains("python-only"));
+    assert!(stdout.contains("polyglot"));
+}
+
+#[test]
 fn init_help_mentions_custom_spec_roots() {
     let output = Command::cargo_bin("syu")
         .expect("binary should build")
@@ -64,6 +81,7 @@ fn init_help_mentions_custom_spec_roots() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("--spec-root"));
     assert!(stdout.contains("docs/spec"));
+    assert!(stdout.contains("spec/contracts"));
 }
 
 #[test]

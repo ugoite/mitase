@@ -234,6 +234,7 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("# 2. Add your spec items"));
     assert!(readme.contains("syu init"));
     assert!(readme.contains("syu init ."));
+    assert!(readme.contains("--template rust-only"));
     assert!(readme.contains("syu validate"));
     assert!(readme.contains("syu browse"));
     assert!(readme.contains("syu list"));
@@ -267,6 +268,7 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains(&format!(
         "https://github.com/ugoite/syu/releases/download/v{current_version}/install-syu.sh"
     )));
+    assert!(getting_started.contains("--template rust-only"));
     assert!(getting_started.contains("syu validate . --fix"));
     assert!(getting_started.contains("syu browse ."));
     assert!(getting_started.contains("syu list feature"));
@@ -287,6 +289,9 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("https://ugoite.github.io/syu/docs/generated/syu-report"));
     assert!(getting_started.contains("status: implemented"));
     assert!(getting_started.contains("Keep exploring"));
+    assert!(getting_started.contains("examples/rust-only"));
+    assert!(getting_started.contains("examples/python-only"));
+    assert!(getting_started.contains("examples/polyglot"));
     assert_eq!(
         getting_started
             .matches("Follow the [end-to-end tutorial](./tutorial.md)")
