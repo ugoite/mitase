@@ -14,6 +14,7 @@ fn repository_declares_precommit_and_quality_gates() {
     let precommit = read_file(".pre-commit-config.yaml");
     let quality_script = read_file("scripts/ci/quality-gates.sh");
     let ci_workflow = read_file(".github/workflows/ci.yml");
+    let contributing = read_file("CONTRIBUTING.md");
     let repo_config = read_file("syu.yaml");
 
     assert!(precommit.contains("FEAT-QUALITY-001"));
@@ -41,9 +42,18 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(ci_workflow.contains("--hook-stage pre-push"));
     assert!(ci_workflow.contains("scripts/ci/quality-gates.sh"));
     assert!(ci_workflow.contains("cargo audit"));
+    assert!(ci_workflow.contains("schedule:"));
+    assert!(ci_workflow.contains("0 6 * * 1"));
+    assert!(ci_workflow.contains("github.event_name != 'schedule'"));
     assert!(ci_workflow.contains("Review dependency changes"));
     assert!(ci_workflow.contains("scripts/ci/installer-smoke.sh"));
     assert!(ci_workflow.contains("scripts/ci/installed-binary-smoke.sh"));
+
+    assert!(contributing.contains("weekly schedule"));
+    assert!(contributing.contains("06:00 UTC"));
+    assert!(contributing.contains("cargo audit"));
+    assert!(contributing.contains("npm audit"));
+    assert!(contributing.contains("Contributors do **not** need to run manual audits"));
 
     assert!(repo_config.contains("FEAT-CHECK-001"));
     assert!(repo_config.contains("FEAT-REPORT-001"));
