@@ -23,3 +23,30 @@ fn root_help_includes_start_here_guidance() {
     ));
     assert!(stdout.contains("Start a local HTTP server and browser UI for workspace exploration"));
 }
+
+#[test]
+fn workspace_help_uses_current_directory_default_consistently() {
+    for command in ["browse", "show", "app", "validate", "check", "report"] {
+        let output = Command::cargo_bin("syu")
+            .expect("binary should build")
+            .args([command, "--help"])
+            .output()
+            .expect("help should render");
+
+        assert!(output.status.success(), "{command} help should succeed");
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains("Workspace root containing syu.yaml and the configured spec tree"),
+            "{command} help should describe the workspace root consistently",
+        );
+        assert!(
+            stdout.contains("[default: .]"),
+            "{command} help should keep the current-directory default",
+        );
+        assert!(
+            !stdout.contains("default: docs/syu"),
+            "{command} help should not claim docs/syu is the workspace default",
+        );
+    }
+}
