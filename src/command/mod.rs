@@ -28,14 +28,22 @@ pub(crate) fn shell_quote_path(path: &Path) -> String {
 }
 
 #[cfg(test)]
+// REQ-CORE-009
 mod tests {
     use std::path::Path;
 
     use super::shell_quote_path;
 
     #[test]
-    // REQ-CORE-009
     fn shell_quote_path_wraps_empty_paths() {
         assert_eq!(shell_quote_path(Path::new("")), "''");
+    }
+
+    #[test]
+    fn shell_quote_path_escapes_special_characters() {
+        assert_eq!(
+            shell_quote_path(Path::new("workspace with 'quotes'")),
+            "'workspace with '\\''quotes'\\'''"
+        );
     }
 }

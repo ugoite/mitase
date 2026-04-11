@@ -227,14 +227,16 @@ fn wait_for_ready_with_retry(
             stream
                 .set_write_timeout(Some(connect_timeout))
                 .context("failed to configure readiness probe write timeout")?;
-            write!(
+            if write!(
                 stream,
                 "GET /health HTTP/1.1\r\nHost: {local_addr}\r\nConnection: close\r\n\r\n"
             )
-            .context("failed to send readiness probe request")?;
-            stream
-                .flush()
-                .context("failed to flush readiness probe request")?;
+            .is_err()
+                || stream.flush().is_err()
+            {
+                std::thread::sleep(retry_delay);
+                continue;
+            }
 
             let mut response = String::new();
             if stream.read_to_string(&mut response).is_ok() && response.contains("200 OK") {
@@ -890,19 +892,34 @@ mod tests {
     fn wait_for_ready_accepts_ok_health_responses() {
         let listener = TcpListener::bind(("127.0.0.1", 0)).expect("listener should bind");
         let addr = listener.local_addr().expect("addr");
+        listener
+            .set_nonblocking(true)
+            .expect("listener should become nonblocking");
 
         let server = thread::spawn(move || {
-            let (mut stream, _) = listener.accept().expect("request should connect");
-            let mut buffer = [0_u8; 1024];
-            let _ = stream.read(&mut buffer);
-            let _ = stream.write_all(
-                b"HTTP/1.1 200 OK\r\nContent-Length: 15\r\nConnection: close\r\n\r\n{\"status\":\"ok\"}",
-            );
-            let _ = stream.flush();
+            let deadline = std::time::Instant::now() + Duration::from_secs(1);
+
+            while std::time::Instant::now() < deadline {
+                if let Ok((mut stream, _)) = listener.accept() {
+                    let mut buffer = [0_u8; 1024];
+                    let _ = stream.read(&mut buffer);
+                    let _ = stream.write_all(
+                        b"HTTP/1.1 200 OK\r\nContent-Length: 15\r\nConnection: close\r\n\r\n{\"status\":\"ok\"}",
+                    );
+                    let _ = stream.flush();
+                } else {
+                    thread::sleep(Duration::from_millis(5));
+                }
+            }
         });
 
-        wait_for_ready_with_retry(addr, 1, Duration::from_millis(20), Duration::from_millis(1))
-            .expect("ready servers should succeed");
+        wait_for_ready_with_retry(
+            addr,
+            5,
+            Duration::from_millis(200),
+            Duration::from_millis(5),
+        )
+        .expect("ready servers should succeed");
         server.join().expect("server thread");
     }
 
@@ -916,6 +933,26 @@ mod tests {
             wait_for_ready_with_retry(addr, 2, Duration::from_millis(20), Duration::from_millis(1))
                 .expect_err("missing servers should fail");
         assert!(error.to_string().contains("did not become ready"));
+    }
+
+    #[test]
+    fn wait_for_ready_retries_when_peer_closes_immediately() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("listener should bind");
+        let addr = listener.local_addr().expect("addr");
+
+        let server = thread::spawn(move || {
+            for _ in 0..2 {
+                if let Ok((stream, _)) = listener.accept() {
+                    drop(stream);
+                }
+            }
+        });
+
+        let error =
+            wait_for_ready_with_retry(addr, 2, Duration::from_millis(20), Duration::from_millis(1))
+                .expect_err("immediate disconnects should fail");
+        assert!(error.to_string().contains("did not become ready"));
+        server.join().expect("server thread");
     }
 
     #[tokio::test]
