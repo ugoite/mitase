@@ -184,6 +184,11 @@ syu app . --port 8080
 syu app . --bind 0.0.0.0 --port 8080
 ```
 
+Keep a loopback bind such as `127.0.0.1` or `::1` for normal local use.
+Binding to `0.0.0.0`, `::`, or any other non-loopback address makes the app
+reachable from other machines on the network, so only do that deliberately
+when remote access is part of your setup.
+
 ### Persistent config
 
 Set defaults in `syu.yaml` so you do not have to pass flags every time:
