@@ -60,14 +60,24 @@ Or scaffold another directory:
 syu init path/to/workspace --name my-project
 ```
 
-This creates `syu.yaml` and a starter `docs/syu/` tree.
+Need another repository layout from the first command? Scaffold a custom spec
+root directly:
+
+```bash
+syu init . --spec-root docs/spec
+```
+
+This creates `syu.yaml` and a starter spec tree. By default the tree lives under
+`docs/syu/`; `--spec-root` writes the same scaffold into another
+repository-relative path and records that location in `syu.yaml`.
 
 Starter requirements and features begin as `status: planned`. Keep them planned
 until you are ready to declare real tests and implementation traces.
 
 ## 2. Fill in the starter spec
 
-Start by editing:
+Start by editing the generated files under your configured `spec.root`
+(default: `docs/syu`):
 
 - `docs/syu/philosophy/foundation.yaml`
 - `docs/syu/policies/policies.yaml`

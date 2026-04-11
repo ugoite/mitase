@@ -30,6 +30,9 @@ description: "Generated reference for docs/syu/config/spec.yaml"
       Relative paths are resolved from the workspace root. Absolute paths are
       also supported so generated docs or external specification trees can live
       outside the repository when needed. New workspaces default to `docs/syu`.
+      Use `syu init --spec-root ...` when you want the initial scaffold to start
+      in another repository-relative location such as `docs/spec` or
+      `spec/contracts`.
   - **accepts**:
     - relative paths from the workspace root
     - absolute paths outside the repository
@@ -49,6 +52,9 @@ items:
       Relative paths are resolved from the workspace root. Absolute paths are
       also supported so generated docs or external specification trees can live
       outside the repository when needed. New workspaces default to `docs/syu`.
+      Use `syu init --spec-root ...` when you want the initial scaffold to start
+      in another repository-relative location such as `docs/spec` or
+      `spec/contracts`.
     accepts:
       - relative paths from the workspace root
       - absolute paths outside the repository

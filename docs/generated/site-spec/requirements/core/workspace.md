@@ -22,10 +22,13 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
   - **description**:
     - |
       The `init` command MUST create a starter `syu.yaml` whose version matches
-      the running CLI and a valid `docs/syu/` tree whose starter requirements
-      and features begin as `planned` so users can begin from a working
-      structure instead of manually creating directories and placeholder YAML
-      files.
+      the running CLI and a valid starter specification tree whose starter
+      requirements and features begin as `planned` so users can begin from a
+      working structure instead of manually creating directories and
+      placeholder YAML files. By default the tree lives under `docs/syu/`, and
+      `syu init --spec-root` MUST also support scaffolding the same layout into
+      another repository-relative specification root while writing the matching
+      `spec.root` value into `syu.yaml`.
   - **priority**: high
   - **status**: implemented
   - **linked_policies**:
@@ -34,6 +37,7 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
   - **linked_features**:
     - FEAT-INIT-001
     - FEAT-INIT-002
+    - FEAT-INIT-003
   - **tests**:
     - **rust**:
       - **file**: tests/init_command.rs
@@ -168,10 +172,13 @@ requirements:
     title: Bootstrap a workspace with syu init and syu.yaml
     description: |
       The `init` command MUST create a starter `syu.yaml` whose version matches
-      the running CLI and a valid `docs/syu/` tree whose starter requirements
-      and features begin as `planned` so users can begin from a working
-      structure instead of manually creating directories and placeholder YAML
-      files.
+      the running CLI and a valid starter specification tree whose starter
+      requirements and features begin as `planned` so users can begin from a
+      working structure instead of manually creating directories and
+      placeholder YAML files. By default the tree lives under `docs/syu/`, and
+      `syu init --spec-root` MUST also support scaffolding the same layout into
+      another repository-relative specification root while writing the matching
+      `spec.root` value into `syu.yaml`.
     priority: high
     status: implemented
     linked_policies:
@@ -180,6 +187,7 @@ requirements:
     linked_features:
       - FEAT-INIT-001
       - FEAT-INIT-002
+      - FEAT-INIT-003
     tests:
       rust:
         - file: tests/init_command.rs
