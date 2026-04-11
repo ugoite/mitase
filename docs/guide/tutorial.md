@@ -22,6 +22,13 @@ instead:
 syu init . --spec-root docs/spec
 ```
 
+If you already know the stable project stem you want to keep long-term, seed it
+into the starter IDs immediately:
+
+```bash
+syu init . --id-prefix store
+```
+
 For a repository that is already clearly Rust-first, Python-first, or
 polyglot, you can start from a closer scaffold instead:
 
@@ -57,6 +64,11 @@ spec:
 so you do not need to move the scaffold by hand after bootstrap. `--template`
 keeps the same four layers but may swap the starter IDs and the initial
 requirement/feature file names to better match the repository style.
+`--id-prefix` replaces the generic starter IDs with project-specific IDs such
+as `PHIL-STORE-001`, `POL-STORE-001`, `REQ-STORE-001`, and `FEAT-STORE-001`.
+If only one layer needs a different prefix, use the corresponding
+`--philosophy-prefix`, `--policy-prefix`, `--requirement-prefix`, or
+`--feature-prefix` flag instead.
 
 ---
 

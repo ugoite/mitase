@@ -82,6 +82,22 @@ description: "Generated reference for docs/syu/features/cli/init.yaml"
         - **symbols**:
           - InitArgs
           - StarterTemplate
+- **id**: FEAT-INIT-005
+  - **title**: Project-specific starter ID prefixes
+  - **summary**: Allow `syu init --id-prefix` to seed stable starter IDs across all four layers and support per-layer prefix overrides when one shared stem is not enough.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-009
+  - **implementations**:
+    - **rust**:
+      - **file**: src/command/init.rs
+        - **symbols**:
+          - run_init_command
+          - resolve_init_id_prefixes
+          - scaffold_files
+      - **file**: src/cli.rs
+        - **symbols**:
+          - InitArgs
 
 ## Source YAML
 
@@ -155,4 +171,20 @@ features:
           symbols:
             - InitArgs
             - StarterTemplate
+  - id: FEAT-INIT-005
+    title: Project-specific starter ID prefixes
+    summary: Allow `syu init --id-prefix` to seed stable starter IDs across all four layers and support per-layer prefix overrides when one shared stem is not enough.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-009
+    implementations:
+      rust:
+        - file: src/command/init.rs
+          symbols:
+            - run_init_command
+            - resolve_init_id_prefixes
+            - scaffold_files
+        - file: src/cli.rs
+          symbols:
+            - InitArgs
 ```

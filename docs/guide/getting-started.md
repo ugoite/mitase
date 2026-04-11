@@ -67,6 +67,12 @@ root directly:
 syu init . --spec-root docs/spec
 ```
 
+Need stable project-specific starter IDs from the first command?
+
+```bash
+syu init . --id-prefix store
+```
+
 Need a closer starting point for a repository that is already Rust-first,
 Python-first, or polyglot?
 
@@ -85,7 +91,11 @@ under `docs/syu/`; `--spec-root` writes the same scaffold into another
 repository-relative path and records that location in `syu.yaml`. `--template`
 keeps the same four layers but swaps the starter IDs, requirement/feature file
 names, and copy so the first edit looks more like the repository style you
-already expect.
+already expect. `--id-prefix` seeds a shared stem into all four starter IDs so
+the scaffold begins with `PHIL-STORE-001`, `POL-STORE-001`, `REQ-STORE-001`,
+and `FEAT-STORE-001` instead of the generic defaults. When one layer needs a
+different prefix, use `--philosophy-prefix`, `--policy-prefix`,
+`--requirement-prefix`, or `--feature-prefix`.
 
 Starter requirements and features begin as `status: planned`. Keep them planned
 until you are ready to declare real tests and implementation traces.

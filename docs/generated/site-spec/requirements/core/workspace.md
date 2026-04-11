@@ -31,7 +31,11 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       `spec.root` value into `syu.yaml`, and `syu init --template` MUST support
       small `rust-only`, `python-only`, and `polyglot` starter layouts so
       adopters can begin closer to their repository style without copying
-      example files by hand.
+      example files by hand. `syu init --id-prefix` MUST support seeding a
+      shared project-specific stem into the starter philosophy, policy,
+      requirement, and feature IDs, and the per-layer `--philosophy-prefix`,
+      `--policy-prefix`, `--requirement-prefix`, and `--feature-prefix` flags
+      MUST allow narrower overrides when one shared stem is not enough.
   - **priority**: high
   - **status**: implemented
   - **linked_policies**:
@@ -42,6 +46,7 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
     - FEAT-INIT-002
     - FEAT-INIT-003
     - FEAT-INIT-004
+    - FEAT-INIT-005
   - **tests**:
     - **rust**:
       - **file**: tests/init_command.rs
@@ -185,7 +190,11 @@ requirements:
       `spec.root` value into `syu.yaml`, and `syu init --template` MUST support
       small `rust-only`, `python-only`, and `polyglot` starter layouts so
       adopters can begin closer to their repository style without copying
-      example files by hand.
+      example files by hand. `syu init --id-prefix` MUST support seeding a
+      shared project-specific stem into the starter philosophy, policy,
+      requirement, and feature IDs, and the per-layer `--philosophy-prefix`,
+      `--policy-prefix`, `--requirement-prefix`, and `--feature-prefix` flags
+      MUST allow narrower overrides when one shared stem is not enough.
     priority: high
     status: implemented
     linked_policies:
@@ -196,6 +205,7 @@ requirements:
       - FEAT-INIT-002
       - FEAT-INIT-003
       - FEAT-INIT-004
+      - FEAT-INIT-005
     tests:
       rust:
         - file: tests/init_command.rs

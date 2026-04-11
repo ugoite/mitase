@@ -1,4 +1,5 @@
 // REQ-CORE-009
+// FEAT-INIT-005
 // FEAT-INIT-004
 // FEAT-INIT-003
 // FEAT-INIT-002
@@ -28,6 +29,32 @@ const GENERATED_PATHS: &[&str] = &[
     "docs/syu/features/core/core.yaml",
 ];
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct StarterIdPrefixes {
+    philosophy: String,
+    policy: String,
+    requirement: String,
+    feature: String,
+}
+
+impl StarterIdPrefixes {
+    fn philosophy_id(&self) -> String {
+        format!("{}-001", self.philosophy)
+    }
+
+    fn policy_id(&self) -> String {
+        format!("{}-001", self.policy)
+    }
+
+    fn requirement_id(&self) -> String {
+        format!("{}-001", self.requirement)
+    }
+
+    fn feature_id(&self) -> String {
+        format!("{}-001", self.feature)
+    }
+}
+
 // FEAT-INIT-001
 pub fn run_init_command(args: &InitArgs) -> Result<i32> {
     let workspace = prepare_workspace_root(&args.workspace)?;
@@ -36,8 +63,9 @@ pub fn run_init_command(args: &InitArgs) -> Result<i32> {
         .clone()
         .unwrap_or_else(|| infer_project_name(&workspace));
     let spec_root = resolve_init_spec_root(args.spec_root.as_deref())?;
+    let id_prefixes = resolve_init_id_prefixes(args)?;
 
-    let files = scaffold_files(&project_name, &spec_root, args.template);
+    let files = scaffold_files(&project_name, &spec_root, args.template, &id_prefixes);
     ensure_writable_targets(
         &workspace,
         files.iter().map(|(path, _)| PathBuf::from(path)),
@@ -168,10 +196,111 @@ fn ensure_writable_targets(
     bail!("refusing to overwrite existing files without --force: {paths}");
 }
 
+fn resolve_init_id_prefixes(args: &InitArgs) -> Result<StarterIdPrefixes> {
+    let mut prefixes = if let Some(stem) = args.id_prefix.as_deref() {
+        let stem = normalize_shared_id_stem(stem)?;
+        StarterIdPrefixes {
+            philosophy: format!("PHIL-{stem}"),
+            policy: format!("POL-{stem}"),
+            requirement: format!("REQ-{stem}"),
+            feature: format!("FEAT-{stem}"),
+        }
+    } else {
+        default_id_prefixes(args.template)
+    };
+
+    if let Some(prefix) = args.philosophy_prefix.as_deref() {
+        prefixes.philosophy = normalize_typed_prefix(prefix, "PHIL", "--philosophy-prefix")?;
+    }
+    if let Some(prefix) = args.policy_prefix.as_deref() {
+        prefixes.policy = normalize_typed_prefix(prefix, "POL", "--policy-prefix")?;
+    }
+    if let Some(prefix) = args.requirement_prefix.as_deref() {
+        prefixes.requirement = normalize_typed_prefix(prefix, "REQ", "--requirement-prefix")?;
+    }
+    if let Some(prefix) = args.feature_prefix.as_deref() {
+        prefixes.feature = normalize_typed_prefix(prefix, "FEAT", "--feature-prefix")?;
+    }
+
+    Ok(prefixes)
+}
+
+fn default_id_prefixes(template: StarterTemplate) -> StarterIdPrefixes {
+    match template {
+        StarterTemplate::Generic => StarterIdPrefixes {
+            philosophy: "PHIL".to_string(),
+            policy: "POL".to_string(),
+            requirement: "REQ".to_string(),
+            feature: "FEAT".to_string(),
+        },
+        StarterTemplate::RustOnly => StarterIdPrefixes {
+            philosophy: "PHIL-RUST".to_string(),
+            policy: "POL-RUST".to_string(),
+            requirement: "REQ-RUST".to_string(),
+            feature: "FEAT-RUST".to_string(),
+        },
+        StarterTemplate::PythonOnly => StarterIdPrefixes {
+            philosophy: "PHIL-PY".to_string(),
+            policy: "POL-PY".to_string(),
+            requirement: "REQ-PY".to_string(),
+            feature: "FEAT-PY".to_string(),
+        },
+        StarterTemplate::Polyglot => StarterIdPrefixes {
+            philosophy: "PHIL-MIX".to_string(),
+            policy: "POL-MIX".to_string(),
+            requirement: "REQ-MIX".to_string(),
+            feature: "FEAT-MIX".to_string(),
+        },
+    }
+}
+
+fn normalize_shared_id_stem(raw: &str) -> Result<String> {
+    let normalized = normalize_id_token(raw, "--id-prefix")?;
+    if ["PHIL", "POL", "REQ", "FEAT"].contains(&normalized.as_str())
+        || ["PHIL-", "POL-", "REQ-", "FEAT-"]
+            .into_iter()
+            .any(|prefix| normalized.starts_with(prefix))
+    {
+        bail!(
+            "`--id-prefix` expects a shared stem like `STORE`, not a full typed prefix like `{}`",
+            raw.trim()
+        );
+    }
+    Ok(normalized)
+}
+
+fn normalize_typed_prefix(raw: &str, expected: &str, flag: &str) -> Result<String> {
+    let normalized = normalize_id_token(raw, flag)?;
+    if normalized == expected || normalized.starts_with(&format!("{expected}-")) {
+        return Ok(normalized);
+    }
+    bail!(
+        "{flag} must be `{expected}` or start with `{expected}-`: `{}`",
+        raw.trim()
+    );
+}
+
+fn normalize_id_token(raw: &str, flag: &str) -> Result<String> {
+    let normalized = raw.trim().to_ascii_uppercase();
+    if normalized.is_empty()
+        || normalized.split('-').any(|segment| segment.is_empty())
+        || !normalized
+            .chars()
+            .all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit() || ch == '-')
+    {
+        bail!(
+            "{flag} must contain only ASCII letters, numbers, and single hyphens: `{}`",
+            raw.trim()
+        );
+    }
+    Ok(normalized)
+}
+
 fn scaffold_files(
     project_name: &str,
     spec_root: &Path,
     template: StarterTemplate,
+    id_prefixes: &StarterIdPrefixes,
 ) -> Vec<(String, String)> {
     vec![
         (
@@ -180,15 +309,15 @@ fn scaffold_files(
         ),
         (
             path_label(&spec_root.join("philosophy/foundation.yaml")),
-            philosophy_template(project_name, template),
+            philosophy_template(project_name, template, id_prefixes),
         ),
         (
             path_label(&spec_root.join("policies/policies.yaml")),
-            policy_template(project_name, template),
+            policy_template(project_name, template, id_prefixes),
         ),
         (
             path_label(&spec_root.join(requirement_document_path(template))),
-            requirement_template(project_name, template),
+            requirement_template(project_name, template, id_prefixes),
         ),
         (
             path_label(&spec_root.join("features/features.yaml")),
@@ -196,7 +325,7 @@ fn scaffold_files(
         ),
         (
             path_label(&spec_root.join(feature_document_path(template))),
-            feature_template(project_name, template),
+            feature_template(project_name, template, id_prefixes),
         ),
     ]
 }
@@ -207,53 +336,77 @@ fn render_default_config(spec_root: &Path) -> Result<String> {
     render_config(&config)
 }
 
-fn philosophy_template(project_name: &str, template: StarterTemplate) -> String {
+fn philosophy_template(
+    project_name: &str,
+    template: StarterTemplate,
+    id_prefixes: &StarterIdPrefixes,
+) -> String {
+    let philosophy_id = id_prefixes.philosophy_id();
+    let policy_id = id_prefixes.policy_id();
     match template {
         StarterTemplate::Generic => format!(
-            "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: PHIL-001\n    title: {project_name} should turn intent into executable agreements\n    product_design_principle: |\n      The project should keep philosophy, policy, requirements, and features\n      explicit enough that contributors can validate changes mechanically.\n    coding_guideline: |\n      Prefer stable IDs, typed data, and explicit traceability over conventions\n      that live only in contributor memory.\n    linked_policies:\n      - POL-001\n"
+            "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: {philosophy_id}\n    title: {project_name} should turn intent into executable agreements\n    product_design_principle: |\n      The project should keep philosophy, policy, requirements, and features\n      explicit enough that contributors can validate changes mechanically.\n    coding_guideline: |\n      Prefer stable IDs, typed data, and explicit traceability over conventions\n      that live only in contributor memory.\n    linked_policies:\n      - {policy_id}\n"
         ),
         StarterTemplate::RustOnly => format!(
-            "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: PHIL-RUST-001\n    title: {project_name} should keep Rust traces explicit\n    product_design_principle: |\n      The project should keep Rust-first traceability small, reviewable, and\n      obvious to contributors reading the code.\n    coding_guideline: |\n      Prefer stable IDs and Rust doc comments on traced symbols from the first\n      requirement onward.\n    linked_policies:\n      - POL-RUST-001\n"
+            "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: {philosophy_id}\n    title: {project_name} should keep Rust traces explicit\n    product_design_principle: |\n      The project should keep Rust-first traceability small, reviewable, and\n      obvious to contributors reading the code.\n    coding_guideline: |\n      Prefer stable IDs and Rust doc comments on traced symbols from the first\n      requirement onward.\n    linked_policies:\n      - {policy_id}\n"
         ),
         StarterTemplate::PythonOnly => format!(
-            "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: PHIL-PY-001\n    title: {project_name} should keep Python traces explicit\n    product_design_principle: |\n      The project should keep Python traceability small, reviewable, and easy\n      to understand from docstrings alone.\n    coding_guideline: |\n      Prefer stable IDs and clear docstrings on traced Python symbols from the\n      first requirement onward.\n    linked_policies:\n      - POL-PY-001\n"
+            "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: {philosophy_id}\n    title: {project_name} should keep Python traces explicit\n    product_design_principle: |\n      The project should keep Python traceability small, reviewable, and easy\n      to understand from docstrings alone.\n    coding_guideline: |\n      Prefer stable IDs and clear docstrings on traced Python symbols from the\n      first requirement onward.\n    linked_policies:\n      - {policy_id}\n"
         ),
         StarterTemplate::Polyglot => format!(
-            "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: PHIL-MIX-001\n    title: {project_name} should keep polyglot traces coherent\n    product_design_principle: |\n      The project should prove that one specification can stay understandable\n      even when implementation and tests span multiple languages.\n    coding_guideline: |\n      Prefer stable IDs and short language-native docs on every traced symbol.\n    linked_policies:\n      - POL-MIX-001\n"
+            "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: {philosophy_id}\n    title: {project_name} should keep polyglot traces coherent\n    product_design_principle: |\n      The project should prove that one specification can stay understandable\n      even when implementation and tests span multiple languages.\n    coding_guideline: |\n      Prefer stable IDs and short language-native docs on every traced symbol.\n    linked_policies:\n      - {policy_id}\n"
         ),
     }
 }
 
-fn policy_template(project_name: &str, template: StarterTemplate) -> String {
+fn policy_template(
+    project_name: &str,
+    template: StarterTemplate,
+    id_prefixes: &StarterIdPrefixes,
+) -> String {
+    let philosophy_id = id_prefixes.philosophy_id();
+    let policy_id = id_prefixes.policy_id();
+    let requirement_id = id_prefixes.requirement_id();
     match template {
         StarterTemplate::Generic => format!(
-            "category: Policies\nversion: 1\nlanguage: en\n\npolicies:\n  - id: POL-001\n    title: Every change in {project_name} should remain traceable\n    summary: Define rules that turn philosophy into a verifiable workflow.\n    description: |\n      A specification entry is only useful when contributors can trace it to\n      concrete requirements, features, code, and tests inside the repository.\n    linked_philosophies:\n      - PHIL-001\n    linked_requirements:\n      - REQ-001\n"
+            "category: Policies\nversion: 1\nlanguage: en\n\npolicies:\n  - id: {policy_id}\n    title: Every change in {project_name} should remain traceable\n    summary: Define rules that turn philosophy into a verifiable workflow.\n    description: |\n      A specification entry is only useful when contributors can trace it to\n      concrete requirements, features, code, and tests inside the repository.\n    linked_philosophies:\n      - {philosophy_id}\n    linked_requirements:\n      - {requirement_id}\n"
         ),
         StarterTemplate::RustOnly => format!(
-            "category: Policies\nversion: 1\nlanguage: en\n\npolicies:\n  - id: POL-RUST-001\n    title: Rust requirement and feature traces must stay documented in {project_name}\n    summary: Start with a Rust-first workflow that stays explicit in code review.\n    description: |\n      Rust requirement and feature traces should point to symbols whose doc\n      comments carry both the stable ID and a short explanation.\n    linked_philosophies:\n      - PHIL-RUST-001\n    linked_requirements:\n      - REQ-RUST-001\n"
+            "category: Policies\nversion: 1\nlanguage: en\n\npolicies:\n  - id: {policy_id}\n    title: Rust requirement and feature traces must stay documented in {project_name}\n    summary: Start with a Rust-first workflow that stays explicit in code review.\n    description: |\n      Rust requirement and feature traces should point to symbols whose doc\n      comments carry both the stable ID and a short explanation.\n    linked_philosophies:\n      - {philosophy_id}\n    linked_requirements:\n      - {requirement_id}\n"
         ),
         StarterTemplate::PythonOnly => format!(
-            "category: Policies\nversion: 1\nlanguage: en\n\npolicies:\n  - id: POL-PY-001\n    title: Python requirement and feature traces must stay documented in {project_name}\n    summary: Start with a Python-first workflow that stays explicit in docstrings.\n    description: |\n      Python requirement and feature traces should point to symbols whose\n      docstrings carry both the stable ID and a short explanation.\n    linked_philosophies:\n      - PHIL-PY-001\n    linked_requirements:\n      - REQ-PY-001\n"
+            "category: Policies\nversion: 1\nlanguage: en\n\npolicies:\n  - id: {policy_id}\n    title: Python requirement and feature traces must stay documented in {project_name}\n    summary: Start with a Python-first workflow that stays explicit in docstrings.\n    description: |\n      Python requirement and feature traces should point to symbols whose\n      docstrings carry both the stable ID and a short explanation.\n    linked_philosophies:\n      - {philosophy_id}\n    linked_requirements:\n      - {requirement_id}\n"
         ),
         StarterTemplate::Polyglot => format!(
-            "category: Policies\nversion: 1\nlanguage: en\n\npolicies:\n  - id: POL-MIX-001\n    title: Polyglot requirement and feature traces must stay verifiable in {project_name}\n    summary: Start with one specification flow that can grow across languages.\n    description: |\n      The starter workspace should make it obvious how one requirement and one\n      feature can stay linked even when implementation later spans Rust,\n      Python, and TypeScript.\n    linked_philosophies:\n      - PHIL-MIX-001\n    linked_requirements:\n      - REQ-MIX-001\n"
+            "category: Policies\nversion: 1\nlanguage: en\n\npolicies:\n  - id: {policy_id}\n    title: Polyglot requirement and feature traces must stay verifiable in {project_name}\n    summary: Start with one specification flow that can grow across languages.\n    description: |\n      The starter workspace should make it obvious how one requirement and one\n      feature can stay linked even when implementation later spans Rust,\n      Python, and TypeScript.\n    linked_philosophies:\n      - {philosophy_id}\n    linked_requirements:\n      - {requirement_id}\n"
         ),
     }
 }
 
-fn requirement_template(project_name: &str, template: StarterTemplate) -> String {
+fn requirement_template(
+    project_name: &str,
+    template: StarterTemplate,
+    id_prefixes: &StarterIdPrefixes,
+) -> String {
+    let requirement_id = id_prefixes.requirement_id();
+    let policy_id = id_prefixes.policy_id();
+    let feature_id = id_prefixes.feature_id();
     match template {
         StarterTemplate::Generic => format!(
-            "category: Core Requirements\nprefix: REQ\n\nrequirements:\n  - id: REQ-001\n    title: Bootstrap {project_name} with a four-layer specification\n    description: |\n      The project should keep philosophy, policy, requirements, and features in\n      YAML so contributors can evolve behavior deliberately.\n    priority: high\n    status: planned\n    linked_policies:\n      - POL-001\n    linked_features:\n      - FEAT-001\n    tests: {{}}\n"
+            "category: Core Requirements\nprefix: {}\n\nrequirements:\n  - id: {requirement_id}\n    title: Bootstrap {project_name} with a four-layer specification\n    description: |\n      The project should keep philosophy, policy, requirements, and features in\n      YAML so contributors can evolve behavior deliberately.\n    priority: high\n    status: planned\n    linked_policies:\n      - {policy_id}\n    linked_features:\n      - {feature_id}\n    tests: {{}}\n",
+            id_prefixes.requirement
         ),
         StarterTemplate::RustOnly => format!(
-            "category: Rust Requirements\nprefix: REQ-RUST\n\nrequirements:\n  - id: REQ-RUST-001\n    title: Bootstrap {project_name} with Rust-first trace conventions\n    description: |\n      The project should start with a Rust-oriented requirement that can later\n      claim documented Rust test symbols without restructuring the workspace.\n    priority: high\n    status: planned\n    linked_policies:\n      - POL-RUST-001\n    linked_features:\n      - FEAT-RUST-001\n    tests: {{}}\n"
+            "category: Rust Requirements\nprefix: {}\n\nrequirements:\n  - id: {requirement_id}\n    title: Bootstrap {project_name} with Rust-first trace conventions\n    description: |\n      The project should start with a Rust-oriented requirement that can later\n      claim documented Rust test symbols without restructuring the workspace.\n    priority: high\n    status: planned\n    linked_policies:\n      - {policy_id}\n    linked_features:\n      - {feature_id}\n    tests: {{}}\n",
+            id_prefixes.requirement
         ),
         StarterTemplate::PythonOnly => format!(
-            "category: Python Requirements\nprefix: REQ-PY\n\nrequirements:\n  - id: REQ-PY-001\n    title: Bootstrap {project_name} with Python-first trace conventions\n    description: |\n      The project should start with a Python-oriented requirement that can later\n      claim documented Python test symbols without restructuring the workspace.\n    priority: high\n    status: planned\n    linked_policies:\n      - POL-PY-001\n    linked_features:\n      - FEAT-PY-001\n    tests: {{}}\n"
+            "category: Python Requirements\nprefix: {}\n\nrequirements:\n  - id: {requirement_id}\n    title: Bootstrap {project_name} with Python-first trace conventions\n    description: |\n      The project should start with a Python-oriented requirement that can later\n      claim documented Python test symbols without restructuring the workspace.\n    priority: high\n    status: planned\n    linked_policies:\n      - {policy_id}\n    linked_features:\n      - {feature_id}\n    tests: {{}}\n",
+            id_prefixes.requirement
         ),
         StarterTemplate::Polyglot => format!(
-            "category: Polyglot Requirements\nprefix: REQ-MIX\n\nrequirements:\n  - id: REQ-MIX-001\n    title: Bootstrap {project_name} with polyglot trace conventions\n    description: |\n      The project should start with one requirement that can later trace into\n      Rust, Python, and TypeScript without changing the layered layout.\n    priority: high\n    status: planned\n    linked_policies:\n      - POL-MIX-001\n    linked_features:\n      - FEAT-MIX-001\n    tests: {{}}\n"
+            "category: Polyglot Requirements\nprefix: {}\n\nrequirements:\n  - id: {requirement_id}\n    title: Bootstrap {project_name} with polyglot trace conventions\n    description: |\n      The project should start with one requirement that can later trace into\n      Rust, Python, and TypeScript without changing the layered layout.\n    priority: high\n    status: planned\n    linked_policies:\n      - {policy_id}\n    linked_features:\n      - {feature_id}\n    tests: {{}}\n",
+            id_prefixes.requirement
         ),
     }
 }
@@ -270,19 +423,25 @@ fn feature_registry_template(template: StarterTemplate) -> String {
     )
 }
 
-fn feature_template(project_name: &str, template: StarterTemplate) -> String {
+fn feature_template(
+    project_name: &str,
+    template: StarterTemplate,
+    id_prefixes: &StarterIdPrefixes,
+) -> String {
+    let feature_id = id_prefixes.feature_id();
+    let requirement_id = id_prefixes.requirement_id();
     match template {
         StarterTemplate::Generic => format!(
-            "category: Core Features\nversion: 1\n\nfeatures:\n  - id: FEAT-001\n    title: Bootstrap the {project_name} spec workspace\n    summary: Provide a starter structure that contributors can extend.\n    status: planned\n    linked_requirements:\n      - REQ-001\n    implementations: {{}}\n"
+            "category: Core Features\nversion: 1\n\nfeatures:\n  - id: {feature_id}\n    title: Bootstrap the {project_name} spec workspace\n    summary: Provide a starter structure that contributors can extend.\n    status: planned\n    linked_requirements:\n      - {requirement_id}\n    implementations: {{}}\n"
         ),
         StarterTemplate::RustOnly => format!(
-            "category: Rust Features\nversion: 1\n\nfeatures:\n  - id: FEAT-RUST-001\n    title: Bootstrap the {project_name} Rust spec workspace\n    summary: Provide a Rust-oriented starter structure that contributors can extend.\n    status: planned\n    linked_requirements:\n      - REQ-RUST-001\n    implementations: {{}}\n"
+            "category: Rust Features\nversion: 1\n\nfeatures:\n  - id: {feature_id}\n    title: Bootstrap the {project_name} Rust spec workspace\n    summary: Provide a Rust-oriented starter structure that contributors can extend.\n    status: planned\n    linked_requirements:\n      - {requirement_id}\n    implementations: {{}}\n"
         ),
         StarterTemplate::PythonOnly => format!(
-            "category: Python Features\nversion: 1\n\nfeatures:\n  - id: FEAT-PY-001\n    title: Bootstrap the {project_name} Python spec workspace\n    summary: Provide a Python-oriented starter structure that contributors can extend.\n    status: planned\n    linked_requirements:\n      - REQ-PY-001\n    implementations: {{}}\n"
+            "category: Python Features\nversion: 1\n\nfeatures:\n  - id: {feature_id}\n    title: Bootstrap the {project_name} Python spec workspace\n    summary: Provide a Python-oriented starter structure that contributors can extend.\n    status: planned\n    linked_requirements:\n      - {requirement_id}\n    implementations: {{}}\n"
         ),
         StarterTemplate::Polyglot => format!(
-            "category: Polyglot Features\nversion: 1\n\nfeatures:\n  - id: FEAT-MIX-001\n    title: Bootstrap the {project_name} polyglot spec workspace\n    summary: Provide a starter structure that can grow across Rust, Python, and TypeScript.\n    status: planned\n    linked_requirements:\n      - REQ-MIX-001\n    implementations: {{}}\n"
+            "category: Polyglot Features\nversion: 1\n\nfeatures:\n  - id: {feature_id}\n    title: Bootstrap the {project_name} polyglot spec workspace\n    summary: Provide a starter structure that can grow across Rust, Python, and TypeScript.\n    status: planned\n    linked_requirements:\n      - {requirement_id}\n    implementations: {{}}\n"
         ),
     }
 }
@@ -327,9 +486,10 @@ mod tests {
     use crate::cli::{InitArgs, StarterTemplate};
 
     use super::{
-        DEFAULT_SPEC_ROOT, GENERATED_PATHS, ensure_writable_targets, feature_document_path,
-        feature_kind, infer_project_name, path_label, requirement_document_path,
-        resolve_init_spec_root, run_init_command, scaffold_files,
+        DEFAULT_SPEC_ROOT, GENERATED_PATHS, default_id_prefixes, ensure_writable_targets,
+        feature_document_path, feature_kind, infer_project_name, path_label,
+        requirement_document_path, resolve_init_id_prefixes, resolve_init_spec_root,
+        run_init_command, scaffold_files,
     };
 
     #[test]
@@ -346,12 +506,102 @@ mod tests {
             "demo",
             std::path::Path::new(DEFAULT_SPEC_ROOT),
             StarterTemplate::Generic,
+            &default_id_prefixes(StarterTemplate::Generic),
         );
         let paths: Vec<_> = files.into_iter().map(|(path, _)| path).collect();
         assert_eq!(paths.len(), GENERATED_PATHS.len());
         for expected in GENERATED_PATHS {
             assert!(paths.iter().any(|path| path == expected));
         }
+    }
+
+    #[test]
+    fn resolve_init_id_prefixes_accepts_shared_stems_and_overrides() {
+        let args = InitArgs {
+            workspace: std::path::PathBuf::from("."),
+            name: None,
+            spec_root: None,
+            template: StarterTemplate::RustOnly,
+            id_prefix: Some("store".to_string()),
+            philosophy_prefix: Some("phil-guiding".to_string()),
+            policy_prefix: Some("pol-governance".to_string()),
+            requirement_prefix: Some("req-auth".to_string()),
+            feature_prefix: Some("feat-auth".to_string()),
+            force: false,
+            format: crate::cli::OutputFormat::Text,
+        };
+
+        let prefixes = resolve_init_id_prefixes(&args).expect("prefixes should resolve");
+        assert_eq!(prefixes.philosophy, "PHIL-GUIDING");
+        assert_eq!(prefixes.policy, "POL-GOVERNANCE");
+        assert_eq!(prefixes.requirement, "REQ-AUTH");
+        assert_eq!(prefixes.feature, "FEAT-AUTH");
+    }
+
+    #[test]
+    fn resolve_init_id_prefixes_rejects_full_prefixes_as_shared_stems() {
+        let args = InitArgs {
+            workspace: std::path::PathBuf::from("."),
+            name: None,
+            spec_root: None,
+            template: StarterTemplate::Generic,
+            id_prefix: Some("REQ-STORE".to_string()),
+            philosophy_prefix: None,
+            policy_prefix: None,
+            requirement_prefix: None,
+            feature_prefix: None,
+            force: false,
+            format: crate::cli::OutputFormat::Text,
+        };
+
+        let error = resolve_init_id_prefixes(&args).expect_err("typed stems should be rejected");
+        assert!(error.to_string().contains("--id-prefix"));
+    }
+
+    #[test]
+    fn resolve_init_id_prefixes_rejects_typed_overrides_without_expected_prefix() {
+        let args = InitArgs {
+            workspace: std::path::PathBuf::from("."),
+            name: None,
+            spec_root: None,
+            template: StarterTemplate::Generic,
+            id_prefix: None,
+            philosophy_prefix: Some("store".to_string()),
+            policy_prefix: None,
+            requirement_prefix: None,
+            feature_prefix: None,
+            force: false,
+            format: crate::cli::OutputFormat::Text,
+        };
+
+        let error =
+            resolve_init_id_prefixes(&args).expect_err("typed overrides should require a prefix");
+        let message = error.to_string();
+        assert!(message.contains("--philosophy-prefix"));
+        assert!(message.contains("PHIL"));
+    }
+
+    #[test]
+    fn resolve_init_id_prefixes_rejects_invalid_override_tokens() {
+        let args = InitArgs {
+            workspace: std::path::PathBuf::from("."),
+            name: None,
+            spec_root: None,
+            template: StarterTemplate::Generic,
+            id_prefix: None,
+            philosophy_prefix: None,
+            policy_prefix: None,
+            requirement_prefix: None,
+            feature_prefix: Some("feat_store".to_string()),
+            force: false,
+            format: crate::cli::OutputFormat::Text,
+        };
+
+        let error = resolve_init_id_prefixes(&args)
+            .expect_err("invalid override tokens should be rejected");
+        let message = error.to_string();
+        assert!(message.contains("--feature-prefix"));
+        assert!(message.contains("single hyphens"));
     }
 
     #[test]
@@ -378,6 +628,11 @@ mod tests {
             name: Some("demo".to_string()),
             spec_root: None,
             template: StarterTemplate::Generic,
+            id_prefix: None,
+            philosophy_prefix: None,
+            policy_prefix: None,
+            requirement_prefix: None,
+            feature_prefix: None,
             force: false,
             format: crate::cli::OutputFormat::Text,
         };
@@ -404,6 +659,11 @@ mod tests {
             name: Some("forced".to_string()),
             spec_root: None,
             template: StarterTemplate::Generic,
+            id_prefix: None,
+            philosophy_prefix: None,
+            policy_prefix: None,
+            requirement_prefix: None,
+            feature_prefix: None,
             force: true,
             format: crate::cli::OutputFormat::Text,
         };
@@ -422,6 +682,7 @@ mod tests {
             "demo",
             std::path::Path::new(DEFAULT_SPEC_ROOT),
             StarterTemplate::Generic,
+            &default_id_prefixes(StarterTemplate::Generic),
         );
         let requirement = files
             .iter()
@@ -447,6 +708,11 @@ mod tests {
             name: None,
             spec_root: None,
             template: StarterTemplate::Generic,
+            id_prefix: None,
+            philosophy_prefix: None,
+            policy_prefix: None,
+            requirement_prefix: None,
+            feature_prefix: None,
             force: false,
             format: crate::cli::OutputFormat::Text,
         })
@@ -470,6 +736,11 @@ mod tests {
             name: Some("demo".to_string()),
             spec_root: None,
             template: StarterTemplate::Generic,
+            id_prefix: None,
+            philosophy_prefix: None,
+            policy_prefix: None,
+            requirement_prefix: None,
+            feature_prefix: None,
             force: false,
             format: crate::cli::OutputFormat::Text,
         })
@@ -490,6 +761,11 @@ mod tests {
             name: Some("demo".to_string()),
             spec_root: None,
             template: StarterTemplate::Generic,
+            id_prefix: None,
+            philosophy_prefix: None,
+            policy_prefix: None,
+            requirement_prefix: None,
+            feature_prefix: None,
             force: true,
             format: crate::cli::OutputFormat::Text,
         })
@@ -507,6 +783,11 @@ mod tests {
             name: Some("demo".to_string()),
             spec_root: None,
             template: StarterTemplate::Generic,
+            id_prefix: None,
+            philosophy_prefix: None,
+            policy_prefix: None,
+            requirement_prefix: None,
+            feature_prefix: None,
             force: false,
             format: crate::cli::OutputFormat::Json,
         };
@@ -530,7 +811,7 @@ mod tests {
             StarterTemplate::PythonOnly,
             StarterTemplate::Polyglot,
         ] {
-            let files = scaffold_files("demo", spec_root, template);
+            let files = scaffold_files("demo", spec_root, template, &default_id_prefixes(template));
             let paths: Vec<_> = files.iter().map(|(path, _)| path.as_str()).collect();
             assert!(paths.contains(&"syu.yaml"));
             assert!(paths.contains(&"docs/syu/philosophy/foundation.yaml"));
@@ -551,7 +832,12 @@ mod tests {
     #[test]
     fn scaffold_files_support_language_templates_in_custom_spec_roots() {
         let spec_root = std::path::Path::new("spec/contracts");
-        let files = scaffold_files("demo", spec_root, StarterTemplate::RustOnly);
+        let files = scaffold_files(
+            "demo",
+            spec_root,
+            StarterTemplate::RustOnly,
+            &default_id_prefixes(StarterTemplate::RustOnly),
+        );
         let paths: Vec<_> = files.iter().map(|(path, _)| path.as_str()).collect();
 
         assert!(paths.contains(&"spec/contracts/philosophy/foundation.yaml"));
