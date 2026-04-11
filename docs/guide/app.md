@@ -21,6 +21,11 @@ you are done.
 
 The UI is divided into three areas:
 
+![Annotated overview of the syu app layout](/img/app-guide-overview.png)
+
+The screenshot above highlights the top tabs, the left sidebar, the main item
+detail panel, and the validation summary that stays visible while you browse.
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Header — section tabs (Philosophy | Policies | …)          │
@@ -62,6 +67,11 @@ The top card shows the workspace root path, the spec root path, and three metric
 - **requirement traces** — `validated / declared` (how many declared test traces were confirmed on disk)
 - **feature traces** — `validated / declared` (same for implementation traces)
 
+When validation passes cleanly, the sidebar gives you a quick confidence check
+before you start exploring relationships and trace details:
+
+![Annotated clean workspace state in the syu app](/img/app-guide-passing.png)
+
 ### Sections panel
 
 The four layers are shown as cards with bar charts indicating relative item counts. Click any card to jump to that section.
@@ -84,9 +94,15 @@ Selecting an item shows:
 - **Links panel** — the upstream and downstream relationships (e.g. which requirements a feature satisfies; which policies a requirement enforces)
 - **Traces panel** — the declared test and implementation traces, with file path and symbol name
 
+![Annotated feature detail view with linked requirements and implementation traces](/img/app-guide-detail.png)
+
 ### Clicking links
 
 Every linked ID in the Links panel is a button. Clicking it jumps directly to that item, even if it is in a different section or document.
+
+For planned requirements and planned features, the detail panel also shows
+placeholder guidance instead of an empty traces section so contributors know what
+evidence still needs to be added before the item becomes implemented.
 
 ---
 
@@ -103,13 +119,51 @@ Each row shows:
 | **Subject** | The spec item ID the issue refers to (if any) |
 | **Message** | A short human-readable description |
 
-### Filtering issues
+![Annotated validation workflow in the syu app](/img/app-guide-validation.png)
 
-The panel header includes a severity filter. Select **errors only** to hide warnings, or **all** to see everything.
+Click any issue row to load the selected issue detail on the right. When the
+subject maps to a known item in the workspace, the detail panel shows a
+`View <ID>` button that jumps directly to the affected philosophy, policy,
+requirement, or feature.
 
 ### Jumping to the affected item
 
-Click the subject ID in any validation issue row to jump directly to that spec item in the main content area.
+Use the validation flow in this order:
+
+1. Click the issue row that best matches what you are investigating.
+2. Read the selected issue message, location, suggestion, and rule reference.
+3. Click `View <ID>` to open the affected spec item in the main content area.
+
+---
+
+## Common workflows
+
+### I want to see which requirements still need tests
+
+1. Open the **Requirements** tab.
+2. Pick the requirement document you are working on from the sidebar.
+3. Open a requirement with `status: planned`.
+4. In the detail pane, look for the planned placeholder under **Tests**.
+5. Add the missing trace entries in YAML, run `syu validate .`, then refresh the
+   app snapshot by restarting `syu app .`.
+
+### I got a validation error - how do I find the affected item?
+
+1. Scroll to **Current issues**.
+2. Click the issue row you want to inspect.
+3. Read the selected issue's suggestion and rule reference.
+4. Click `View <ID>` when it appears to jump to the affected item.
+5. Use the source panel below to compare the checked-in YAML with the issue you
+   are fixing.
+
+### I want to see what a feature implements
+
+1. Open the **Features** tab.
+2. Choose the relevant feature document from the sidebar.
+3. Open the feature item you want to inspect.
+4. Read **Linked requirements** to see what the feature promises to satisfy.
+5. Read **Implementations** to see the traced files, symbols, and optional
+   `doc_contains` evidence that anchor the feature to real repository content.
 
 ---
 
