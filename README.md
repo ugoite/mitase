@@ -100,7 +100,7 @@ before you begin editing YAML.
 
 ```bash
 syu init .          # 1. Create spec scaffold
-# edit docs/syu/... # 2. Add your spec items
+syu add requirement REQ-AUTH-001  # 2. Add spec items with generated YAML stubs
 syu validate .      # 3. Check everything is linked
 syu app .           # 4. Browse in the browser
 ```
@@ -113,6 +113,7 @@ syu init .
 syu validate .
 syu validate . --fix
 syu browse .
+syu add feature FEAT-AUTH-LOGIN-001 --kind auth
 syu list requirement
 syu show REQ-001
 syu app .
@@ -183,6 +184,23 @@ style you already expect. Use `--id-prefix` when you want stable project-wide
 starter IDs from the first command, and the per-layer `--*-prefix` flags when a
 single shared stem is not enough. Use `--spec-root` to scaffold into a
 repository-relative spec tree without moving the generated files by hand later.
+
+### `syu add`
+
+Scaffold a new YAML stub after the initial workspace exists:
+
+```bash
+syu add philosophy PHIL-002
+syu add requirement REQ-AUTH-001
+syu add feature FEAT-AUTH-LOGIN-001 --kind auth
+syu add feature FEAT-AUTH-001 --kind auth --file docs/syu/features/auth/login.yaml
+```
+
+`syu add` keeps the command intentionally small. It derives a default title and
+document path from the ID, uses the configured `spec.root`, and updates
+`features/features.yaml` automatically when you scaffold a new feature document.
+Edit the generated stub fields and reciprocal links before you expect
+`syu validate` to pass cleanly.
 
 ### `syu validate`
 

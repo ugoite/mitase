@@ -150,3 +150,34 @@ requirements:
         - file: src/command/lookup.rs
           symbols:
             - '*'
+  - id: REQ-CORE-020
+    title: Provide a follow-up authoring scaffold command after syu init
+    description: |
+      The CLI MUST provide an `add` command that scaffolds a new philosophy,
+      policy, requirement, or feature stub after a workspace already exists.
+      The command SHOULD infer a sensible default title and document path from
+      the requested ID, MUST honor the configured `spec.root`, and MUST update
+      the explicit feature registry when creating a new feature document. Output
+      SHOULD stay concise enough for normal code review and hand-edited follow-up
+      work.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-001
+      - POL-004
+    linked_features:
+      - FEAT-ADD-001
+    tests:
+      rust:
+        - file: tests/add_command.rs
+          symbols:
+            - '*'
+        - file: tests/help_command.rs
+          symbols:
+            - add_help_mentions_explicit_file_and_feature_kind
+        - file: src/lib.rs
+          symbols:
+            - dispatches_add_subcommands_without_rewriting_them
+        - file: src/command/add.rs
+          symbols:
+            - '*'

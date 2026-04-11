@@ -231,9 +231,10 @@ fn repository_declares_documentation_guides() {
 
     assert!(readme.contains("docs/guide/concepts.md"));
     assert!(readme.contains("Step 0: required"));
-    assert!(readme.contains("# 2. Add your spec items"));
+    assert!(readme.contains("Add spec items with generated YAML stubs"));
     assert!(readme.contains("syu init"));
     assert!(readme.contains("syu init ."));
+    assert!(readme.contains("syu add"));
     assert!(readme.contains("--id-prefix"));
     assert!(readme.contains("--template rust-only"));
     assert!(readme.contains("syu validate"));

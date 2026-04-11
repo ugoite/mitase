@@ -11,7 +11,7 @@ Start here once `syu` is installed:
 
 ```bash
 syu init .          # 1. Create spec scaffold
-# edit docs/syu/... # 2. Add your spec items
+syu add requirement REQ-AUTH-001  # 2. Add your next spec item
 syu validate .      # 3. Check everything is linked
 syu app .           # 4. Browse in the browser
 ```
@@ -100,10 +100,28 @@ different prefix, use `--philosophy-prefix`, `--policy-prefix`,
 Starter requirements and features begin as `status: planned`. Keep them planned
 until you are ready to declare real tests and implementation traces.
 
-## 2. Fill in the starter spec
+## 2. Add and refine spec items
 
-Start by editing the generated files under your configured `spec.root`
-(default: `docs/syu`):
+Start with the generated files under your configured `spec.root`
+(default: `docs/syu`), then scaffold new items as the workspace grows:
+
+```bash
+syu add philosophy PHIL-002
+syu add policy POL-002
+syu add requirement REQ-AUTH-001
+syu add feature FEAT-AUTH-LOGIN-001 --kind auth
+```
+
+These commands generate correctly shaped YAML stubs, infer a default document
+path from the ID, and keep feature discovery explicit by updating the feature
+registry automatically when a new feature document is created. You can override
+the target file when you want a more specific layout:
+
+```bash
+syu add feature FEAT-AUTH-001 --kind auth --file docs/syu/features/auth/login.yaml
+```
+
+Direct YAML editing is still supported. The default scaffolded files are:
 
 - `<spec.root>/philosophy/foundation.yaml`
 - `<spec.root>/policies/policies.yaml`
@@ -115,11 +133,12 @@ Start by editing the generated files under your configured `spec.root`
   `features/languages/polyglot.yaml`)
 
 As the workspace grows, you can group requirement and feature files into nested
-folders. Keep feature discovery explicit by updating
-`<spec.root>/features/features.yaml` (default:
-`docs/syu/features/features.yaml`) whenever you add or move a feature document.
-`syu validate` reports feature YAML files on disk that are missing from that
-registry.
+folders. `syu add` chooses a default folder from the ID or feature `--kind`,
+but you can still move documents later if another layout reads better in your
+repository. When you move a feature document by hand, keep feature discovery
+explicit by updating `<spec.root>/features/features.yaml` (default:
+`docs/syu/features/features.yaml`). `syu validate` reports feature YAML files on
+disk that are missing from that registry.
 
 Requirements are discovered by walking the `requirements/` tree, but features use
 an explicit registry because implementation claims should stay deliberate and
