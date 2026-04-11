@@ -47,7 +47,8 @@ Current installer entrypoint:
 curl -fsSL https://github.com/ugoite/syu/releases/download/v0.0.1-alpha.7/install-syu.sh | bash
 ```
 
-Pin a specific release track:
+During the alpha phase, prefer the `alpha` track selector so the same installer
+entrypoint always resolves to the latest published alpha:
 
 ```bash
 curl -fsSL https://github.com/ugoite/syu/releases/download/v0.0.1-alpha.7/install-syu.sh | env SYU_VERSION=alpha bash
@@ -97,6 +98,9 @@ syu init .          # 1. Create spec scaffold
 syu validate .      # 3. Check everything is linked
 syu app .           # 4. Browse in the browser
 ```
+
+Use `syu browse .` when you want terminal-first exploration, or `syu app .`
+when you want the local browser UI.
 
 ```bash
 syu init .

@@ -186,6 +186,7 @@ fn app_command_help_mentions_browser_and_stop_instructions() {
 
     assert!(output.status.success(), "help should succeed");
     let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Start a local HTTP server and browser UI for workspace exploration"));
     assert!(stdout.contains("print the URL to open in your browser"));
     assert!(stdout.contains("Use GET /health for readiness checks once the app is serving."));
     assert!(stdout.contains("After startup, open the printed URL in your browser."));

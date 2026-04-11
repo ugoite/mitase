@@ -23,10 +23,12 @@ Make sure `syu` is installed and available on your `PATH`.
 **Option A — Install from a release (recommended)**
 
 ```bash
-curl -fsSL https://github.com/ugoite/syu/releases/latest/download/install.sh | bash
+curl -fsSL https://github.com/ugoite/syu/releases/download/v0.0.1-alpha.7/install-syu.sh | env SYU_VERSION=alpha bash
 ```
 
-This places `syu` in `~/.local/bin`. Add that directory to your `PATH` if it is not already there.
+This uses the current installer entrypoint plus `SYU_VERSION=alpha` so you stay
+on the latest alpha during the prerelease phase. It places `syu` in
+`~/.local/bin`. Add that directory to your `PATH` if it is not already there.
 
 **Option B — Build from source**
 
@@ -153,7 +155,7 @@ implementations:
 syu validate .
 syu browse .
 syu list feature
-syu show REQ-CORE-015
+syu show REQ-001
 syu app .
 ```
 
