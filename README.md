@@ -223,6 +223,8 @@ The self-hosted repository keeps its latest generated report at
 `docs/generated/syu-report.md`.
 Set `report.output` in `syu.yaml` when a repository wants that checked-in path
 to become the default, while keeping `--output` available for one-off overrides.
+Contributors can refresh that report and the checked-in site-spec pages together
+with `scripts/ci/check-generated-docs-freshness.sh`.
 
 ## Browser app
 
@@ -236,6 +238,10 @@ syu app . --bind 127.0.0.1 --port 3000
 The repository keeps the source UI in `app/`, checks in the generated
 production bundle in `app/dist/`, and serves that bundle directly from the
 `syu app` command, so end users do not need a separate frontend build step.
+
+When contributors change browser app sources or build inputs, they should run
+`scripts/ci/check-app-dist-freshness.sh`. CI rebuilds the browser app the same
+way and fails if the checked-in `app/dist` bundle is stale.
 
 Want the visual tour first? See the [browser UI guide with annotated
 screenshots](docs/guide/app.md).

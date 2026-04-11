@@ -28,6 +28,23 @@ scripts/ci/coverage.sh summary
 cargo run -- validate .
 ```
 
+`scripts/ci/quality-gates.sh` also checks that the committed `docs/generated/`
+artifacts are fresh. To refresh those files directly, run:
+
+```bash
+scripts/ci/check-generated-docs-freshness.sh
+```
+
+If a change touches `app/src`, `app/wasm`, or the browser build configuration,
+also run:
+
+```bash
+scripts/ci/check-app-dist-freshness.sh
+```
+
+That rebuilds the browser app and fails when the checked-in `app/dist` bundle is
+stale, leaving the regenerated files in your worktree so you can review and
+commit them.
 ### Rust version
 
 The minimum supported Rust version (MSRV) is **1.88**. CI verifies this with a

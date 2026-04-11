@@ -3,11 +3,11 @@
 
 use std::{
     collections::hash_map::DefaultHasher,
-    fs,
+    env, fs,
     hash::{Hash, Hasher},
     io::{Read, Write},
     net::{IpAddr, SocketAddr},
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -115,6 +115,12 @@ struct AppServerSettings {
     port: u16,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum StartupLine {
+    Stdout(String),
+    Stderr(String),
+}
+
 pub fn run_app_command(args: &AppArgs) -> Result<i32> {
     let workspace_root = canonical_workspace_root(&args.workspace)?;
     let loaded = load_config(&workspace_root)?;
@@ -150,10 +156,12 @@ pub fn run_app_command(args: &AppArgs) -> Result<i32> {
         tokio::task::spawn_blocking(move || wait_for_ready(local_addr))
             .await
             .context("local app readiness probe panicked")??;
-        println!("syu app ready: http://{local_addr}");
-        maybe_warn_on_non_loopback_bind(local_addr.ip());
-        println!("Open http://{local_addr} in your browser.");
-        println!("Press Ctrl-C to stop.");
+        for line in startup_lines(local_addr) {
+            match line {
+                StartupLine::Stdout(message) => println!("{message}"),
+                StartupLine::Stderr(message) => eprintln!("{message}"),
+            }
+        }
         std::io::stderr()
             .flush()
             .context("failed to flush stderr")?;
@@ -169,15 +177,33 @@ pub fn run_app_command(args: &AppArgs) -> Result<i32> {
     Ok(0)
 }
 
-fn maybe_warn_on_non_loopback_bind(bind: IpAddr) {
+fn startup_lines(local_addr: SocketAddr) -> Vec<StartupLine> {
+    let mut lines = Vec::new();
+    lines.extend(non_loopback_warning_lines(local_addr.ip()));
+    lines.push(StartupLine::Stdout(format!(
+        "syu app ready: http://{local_addr}"
+    )));
+    lines.push(StartupLine::Stdout(format!(
+        "Open http://{local_addr} in your browser."
+    )));
+    lines.push(StartupLine::Stdout("Press Ctrl-C to stop.".to_string()));
+    lines
+}
+
+fn non_loopback_warning_lines(bind: IpAddr) -> Vec<StartupLine> {
     if bind.is_loopback() {
-        return;
+        return Vec::new();
     }
 
-    eprintln!(
-        "warning: syu app is bound to {bind}, so workspace data and source documents may be reachable from other machines on your network."
-    );
-    eprintln!("warning: use --bind 127.0.0.1 to keep the browser UI local to this machine.");
+    vec![
+        StartupLine::Stderr(format!(
+            "warning: syu app is bound to {bind}, so workspace data and source documents may be reachable from other machines on your network."
+        )),
+        StartupLine::Stderr(
+            "warning: use --bind 127.0.0.1 to keep the browser UI local to this machine."
+                .to_string(),
+        ),
+    ]
 }
 
 fn resolve_app_server_settings(args: &AppArgs, config: &SyuConfig) -> AppServerSettings {
@@ -448,6 +474,7 @@ fn build_app_payload(workspace_root: &Path) -> Result<AppPayload> {
 
 fn build_app_payload_from_config(workspace_root: &Path, config: &SyuConfig) -> Result<AppPayload> {
     let spec_root = resolve_spec_root(workspace_root, config);
+    let (workspace_label, spec_label) = browser_root_labels(workspace_root, &spec_root);
 
     let mut source_documents = Vec::new();
     source_documents.extend(collect_yaml_sources_recursive(
@@ -469,11 +496,76 @@ fn build_app_payload_from_config(workspace_root: &Path, config: &SyuConfig) -> R
     });
 
     Ok(AppPayload {
-        workspace_root: workspace_root.display().to_string(),
-        spec_root: spec_root.display().to_string(),
+        workspace_root: workspace_label,
+        spec_root: spec_label,
         source_documents,
         validation: validation_snapshot(collect_check_result(workspace_root)),
     })
+}
+
+fn browser_root_labels(workspace_root: &Path, spec_root: &Path) -> (String, String) {
+    let workspace_label = redacted_root_label(workspace_root);
+    let spec_label = match relative_display(workspace_root, spec_root) {
+        Ok(relative) if relative.is_empty() => ".".to_string(),
+        Ok(relative) => relative,
+        Err(_) => "external spec root".to_string(),
+    };
+    (workspace_label, spec_label)
+}
+
+fn redacted_root_label(path: &Path) -> String {
+    if let Some(label) = redacted_relative_label(env::current_dir().ok(), path, ".") {
+        return label;
+    }
+
+    let home = env::var_os("HOME")
+        .or_else(|| env::var_os("USERPROFILE"))
+        .map(PathBuf::from);
+    if let Some(label) = redacted_relative_label(home, path, "~") {
+        return label;
+    }
+
+    let fallback = trailing_path_components_label(path, 2);
+    if !fallback.is_empty() {
+        return fallback;
+    }
+
+    "workspace".to_string()
+}
+
+fn redacted_relative_label(root: Option<PathBuf>, path: &Path, prefix: &str) -> Option<String> {
+    let root = root?;
+    let root = root.canonicalize().unwrap_or(root);
+    let relative = path.strip_prefix(&root).ok()?;
+    let relative = path_label(relative);
+    if relative.is_empty() {
+        Some(prefix.to_string())
+    } else {
+        Some(format!("{prefix}/{relative}"))
+    }
+}
+
+fn trailing_path_components_label(path: &Path, count: usize) -> String {
+    let segments: Vec<_> = path
+        .components()
+        .filter_map(|component| match component {
+            Component::Normal(segment) => Some(segment.to_os_string()),
+            _ => None,
+        })
+        .collect();
+    if segments.is_empty() {
+        return String::new();
+    }
+
+    let mut label = PathBuf::new();
+    for segment in segments.iter().skip(segments.len().saturating_sub(count)) {
+        label.push(segment);
+    }
+    path_label(&label)
+}
+
+fn path_label(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
 }
 
 fn collect_feature_sources(feature_root: &Path) -> Result<Vec<SourceDocument>> {
@@ -668,11 +760,14 @@ mod tests {
     };
 
     use super::{
-        AppServerSettings, AppState, AppVersion, SectionKind, Severity, app_router,
-        build_app_payload, collect_feature_sources, collect_yaml_sources_recursive,
-        content_type_for_path, is_asset_like, normalized_asset_path, readiness_probe_request_sent,
-        readiness_probe_succeeds, refresh_current_once, relative_display,
-        resolve_app_server_settings, spec_snapshot, validation_snapshot, wait_for_ready_with_retry,
+        AppServerSettings, AppState, AppVersion, SectionKind, Severity, StartupLine, app_router,
+        browser_root_labels, build_app_payload, collect_feature_sources,
+        collect_yaml_sources_recursive, content_type_for_path, is_asset_like,
+        non_loopback_warning_lines, normalized_asset_path, readiness_probe_request_sent,
+        readiness_probe_succeeds, redacted_relative_label, redacted_root_label,
+        refresh_current_once, relative_display, resolve_app_server_settings, spec_snapshot,
+        startup_lines, trailing_path_components_label, validation_snapshot,
+        wait_for_ready_with_retry,
     };
 
     fn fixture_root(name: &str) -> PathBuf {
@@ -834,10 +929,41 @@ mod tests {
     }
 
     #[test]
+    fn non_loopback_warning_lines_skip_loopback_addresses() {
+        assert!(non_loopback_warning_lines("127.0.0.1".parse().expect("valid ip")).is_empty());
+        assert!(non_loopback_warning_lines("::1".parse().expect("valid ip")).is_empty());
+    }
+
+    #[test]
+    fn startup_lines_warn_before_ready_for_non_loopback_addresses() {
+        let lines = startup_lines("0.0.0.0:4123".parse().expect("valid socket"));
+        assert_eq!(
+            lines,
+            vec![
+                StartupLine::Stderr(
+                    "warning: syu app is bound to 0.0.0.0, so workspace data and source documents may be reachable from other machines on your network.".to_string()
+                ),
+                StartupLine::Stderr(
+                    "warning: use --bind 127.0.0.1 to keep the browser UI local to this machine."
+                        .to_string()
+                ),
+                StartupLine::Stdout("syu app ready: http://0.0.0.0:4123".to_string()),
+                StartupLine::Stdout(
+                    "Open http://0.0.0.0:4123 in your browser.".to_string()
+                ),
+                StartupLine::Stdout("Press Ctrl-C to stop.".to_string()),
+            ]
+        );
+    }
+
+    #[test]
     fn build_app_payload_collects_current_workspace_sources() {
         let payload = build_app_payload(&fixture_root("passing")).expect("payload should build");
-        assert!(payload.workspace_root.contains("passing"));
-        assert!(payload.spec_root.contains("docs/syu"));
+        assert_eq!(
+            payload.workspace_root,
+            "./tests/fixtures/workspaces/passing"
+        );
+        assert_eq!(payload.spec_root, "docs/syu");
         assert!(
             payload
                 .source_documents
@@ -851,6 +977,54 @@ mod tests {
                 .any(|source| source.section == SectionKind::Features)
         );
         assert_eq!(payload.validation.definition_counts.features, 3);
+    }
+
+    #[test]
+    fn browser_root_labels_redact_external_spec_roots() {
+        let workspace_root = Path::new("/tmp/workspace");
+        let spec_root = Path::new("/tmp/shared-spec/docs/syu");
+        let (workspace_label, spec_label) = browser_root_labels(workspace_root, spec_root);
+        assert_eq!(workspace_label, "tmp/workspace");
+        assert_eq!(spec_label, "external spec root");
+    }
+
+    #[test]
+    fn redacted_root_label_uses_home_relative_paths() {
+        let home = std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(PathBuf::from)
+            .expect("a home directory environment variable should exist for tests");
+        let workspace_root = home.join("src/example/spec-workspace");
+        assert_eq!(
+            redacted_root_label(&workspace_root),
+            "~/src/example/spec-workspace"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn redacted_root_label_falls_back_to_trailing_components() {
+        assert_eq!(
+            redacted_root_label(Path::new("/var/tmp/spec-workspace")),
+            "tmp/spec-workspace"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn redacted_root_label_uses_workspace_for_root_paths() {
+        assert_eq!(redacted_root_label(Path::new("/")), "workspace");
+        assert!(trailing_path_components_label(Path::new("/"), 2).is_empty());
+    }
+
+    #[test]
+    fn redacted_relative_label_returns_prefix_for_matching_roots() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        assert_eq!(
+            redacted_relative_label(Some(tempdir.path().to_path_buf()), tempdir.path(), ".")
+                .as_deref(),
+            Some(".")
+        );
     }
 
     #[test]

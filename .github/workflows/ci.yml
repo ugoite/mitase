@@ -261,12 +261,8 @@ jobs:
         working-directory: app
         run: npm ci
 
-      - name: Check browser app
-        working-directory: app
-        run: |
-          npm run build:wasm
-          npm run check
-          npm run build
+      - name: Verify checked-in browser bundle
+        run: scripts/ci/check-app-dist-freshness.sh
 
       - name: Install Playwright browsers
         working-directory: app

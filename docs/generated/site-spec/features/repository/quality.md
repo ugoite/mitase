@@ -34,6 +34,12 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
         - **symbols**:
           - configure_llvm_tools
           - run_coverage
+      - **file**: scripts/ci/check-generated-docs-freshness.sh
+        - **symbols**:
+          - check_generated_docs_freshness
+      - **file**: scripts/ci/check-app-dist-freshness.sh
+        - **symbols**:
+          - check_app_dist_freshness
     - **yaml**:
       - **file**: .pre-commit-config.yaml
         - **symbols**:
@@ -54,6 +60,7 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
           - Set up Python with pip cache
           - cache-dependency-path: app/package-lock.json
           - npm ci
+          - Verify checked-in browser bundle
           - Review dependency changes
       - **file**: .github/actions/setup-rust/action.yml
         - **symbols**:
@@ -101,6 +108,12 @@ features:
           symbols:
             - configure_llvm_tools
             - run_coverage
+        - file: scripts/ci/check-generated-docs-freshness.sh
+          symbols:
+            - check_generated_docs_freshness
+        - file: scripts/ci/check-app-dist-freshness.sh
+          symbols:
+            - check_app_dist_freshness
       yaml:
         - file: .pre-commit-config.yaml
           symbols:
@@ -121,6 +134,7 @@ features:
             - Set up Python with pip cache
             - "cache-dependency-path: app/package-lock.json"
             - npm ci
+            - Verify checked-in browser bundle
             - Review dependency changes
         - file: .github/actions/setup-rust/action.yml
           symbols:

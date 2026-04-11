@@ -109,6 +109,20 @@ fn shutdown_child_with_output(child: Child) -> Output {
     output
 }
 
+fn wait_for_output_fragment(path: &Path, fragment: &str) {
+    for _ in 0..80 {
+        if fs::read_to_string(path)
+            .map(|contents| contents.contains(fragment))
+            .unwrap_or(false)
+        {
+            return;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+
+    panic!("process output did not contain {fragment:?}");
+}
+
 // REQ-CORE-017
 #[test]
 fn app_command_serves_browser_ui_and_payload() {
@@ -139,6 +153,19 @@ fn app_command_serves_browser_ui_and_payload() {
     assert!(payload.contains("REQ-TRACE-001"));
     assert!(payload.contains("FEAT-TRACE-001"));
     assert!(payload.contains("foundation.yaml"));
+    assert!(
+        !payload.contains(&fixture_path("passing").display().to_string()),
+        "browser payload should not expose the absolute workspace path",
+    );
+    assert!(
+        !payload.contains(
+            &fixture_path("passing")
+                .join("docs/syu")
+                .display()
+                .to_string()
+        ),
+        "browser payload should not expose the absolute spec path",
+    );
 
     let health = http_get(port, "/health").expect("health should load");
     assert!(health.contains("200 OK"));
@@ -151,7 +178,12 @@ fn app_command_serves_browser_ui_and_payload() {
 #[test]
 fn app_command_startup_message_explains_browser_and_stop_flow() {
     let port = reserve_port();
-    let child = Command::cargo_bin("syu")
+    let tempdir = tempdir().expect("tempdir should exist");
+    let stdout_path = tempdir.path().join("stdout.log");
+    let stderr_path = tempdir.path().join("stderr.log");
+    let stdout = fs::File::create(&stdout_path).expect("stdout log should open");
+    let stderr = fs::File::create(&stderr_path).expect("stderr log should open");
+    let mut child = Command::cargo_bin("syu")
         .expect("binary should build")
         .arg("app")
         .arg(fixture_path("passing"))
@@ -160,16 +192,18 @@ fn app_command_startup_message_explains_browser_and_stop_flow() {
         .arg("--port")
         .arg(port.to_string())
         .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdout(Stdio::from(stdout))
+        .stderr(Stdio::from(stderr))
         .spawn()
         .expect("app command should start");
 
     wait_for_server(port);
+    wait_for_output_fragment(&stdout_path, "Press Ctrl-C to stop.");
 
-    let output = shutdown_child_with_output(child);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    shutdown_child(&mut child);
+
+    let stdout = fs::read_to_string(&stdout_path).expect("stdout should be readable");
+    let stderr = fs::read_to_string(&stderr_path).expect("stderr should be readable");
     assert!(stdout.contains(&format!("syu app listening on http://127.0.0.1:{port}")));
     assert!(stdout.contains(&format!("syu app ready: http://127.0.0.1:{port}")));
     assert!(stdout.contains(&format!("Open http://127.0.0.1:{port} in your browser.")));
