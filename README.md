@@ -239,6 +239,10 @@ The repository keeps the source UI in `app/`, checks in the generated
 production bundle in `app/dist/`, and serves that bundle directly from the
 `syu app` command, so end users do not need a separate frontend build step.
 
+When contributors change browser app sources or build inputs, they should run
+`scripts/ci/check-app-dist-freshness.sh`. CI rebuilds the browser app the same
+way and fails if the checked-in `app/dist` bundle is stale.
+
 Want the visual tour first? See the [browser UI guide with annotated
 screenshots](docs/guide/app.md).
 
