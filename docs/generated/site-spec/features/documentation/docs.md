@@ -92,9 +92,9 @@ description: "Generated reference for docs/syu/features/documentation/docs.yaml"
       - **file**: .github/workflows/deploy-pages.yml
         - **symbols**:
           - deploy-pages
-          - actions/configure-pages@v6
+          - actions/configure-pages@v5
           - actions/upload-pages-artifact@v4
-          - actions/deploy-pages@v5
+          - actions/deploy-pages@v4
 
 ## Source YAML
 
@@ -179,7 +179,7 @@ features:
         - file: .github/workflows/deploy-pages.yml
           symbols:
             - deploy-pages
-            - actions/configure-pages@v6
+            - actions/configure-pages@v5
             - actions/upload-pages-artifact@v4
-            - actions/deploy-pages@v5
+            - actions/deploy-pages@v4
 ```
