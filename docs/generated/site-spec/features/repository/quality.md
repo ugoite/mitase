@@ -47,7 +47,7 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
           - quality
           - coverage
           - actionlint
-          - Restore Rust cache
+          - ./.github/actions/setup-rust
           - taiki-e/cache-cargo-install-action@v3
           - tool: cargo-llvm-cov
           - tool: cargo-audit
@@ -55,6 +55,10 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
           - cache-dependency-path: app/package-lock.json
           - npm ci
           - Review dependency changes
+      - **file**: .github/actions/setup-rust/action.yml
+        - **symbols**:
+          - Restore Rust cache
+          - Swatinem/rust-cache@v2
       - **file**: .github/actions/build-docs-site/action.yml
         - **symbols**:
           - actions/setup-node@v6
@@ -64,7 +68,7 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
         - **symbols**:
           - merge_group
           - Analyze (rust)
-          - github/codeql-action/init@v3
+          - github/codeql-action/init@v4
       - **file**: .github/dependabot.yml
         - **symbols**:
           - FEAT-QUALITY-001
@@ -110,7 +114,7 @@ features:
             - quality
             - coverage
             - actionlint
-            - Restore Rust cache
+            - "./.github/actions/setup-rust"
             - taiki-e/cache-cargo-install-action@v3
             - "tool: cargo-llvm-cov"
             - "tool: cargo-audit"
@@ -118,6 +122,10 @@ features:
             - "cache-dependency-path: app/package-lock.json"
             - npm ci
             - Review dependency changes
+        - file: .github/actions/setup-rust/action.yml
+          symbols:
+            - Restore Rust cache
+            - Swatinem/rust-cache@v2
         - file: .github/actions/build-docs-site/action.yml
           symbols:
             - actions/setup-node@v6
@@ -127,7 +135,7 @@ features:
           symbols:
             - merge_group
             - Analyze (rust)
-            - github/codeql-action/init@v3
+            - github/codeql-action/init@v4
         - file: .github/dependabot.yml
           symbols:
             - FEAT-QUALITY-001
