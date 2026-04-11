@@ -77,6 +77,96 @@ fn list_command_accepts_plural_lookup_aliases() {
 
 #[test]
 // REQ-CORE-018
+fn list_command_accepts_workspace_before_kind() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("list")
+        .arg(fixture_path("passing"))
+        .arg("requirements")
+        .output()
+        .expect("command should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("REQ-TRACE-003"));
+}
+
+#[test]
+// REQ-CORE-018
+fn list_command_workspace_first_invalid_kind_preserves_workspace_hint() {
+    let workspace = fixture_path("passing");
+    let workspace_display = workspace.display().to_string();
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("list")
+        .arg(&workspace)
+        .arg("requirment")
+        .output()
+        .expect("command should run");
+
+    assert!(!output.status.success(), "invalid kind should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("invalid value 'requirment'"),
+        "stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains(&format!("syu list {workspace_display}")),
+        "stderr should preserve the workspace path in the recovery hint:\n{stderr}",
+    );
+}
+
+#[test]
+// REQ-CORE-018
+fn list_command_help_documents_both_argument_orders() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("list")
+        .arg("--help")
+        .output()
+        .expect("command should run");
+
+    assert!(output.status.success(), "help should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("syu list requirement docs/syu"),
+        "help should show the kind-first example:\n{stdout}",
+    );
+    assert!(
+        stdout.contains("syu list docs/syu requirement"),
+        "help should show the workspace-first example:\n{stdout}",
+    );
+}
+
+#[test]
+// REQ-CORE-018
+fn list_command_rejects_two_kind_positionals() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("list")
+        .arg("requirement")
+        .arg("feature")
+        .output()
+        .expect("command should run");
+
+    assert!(!output.status.success(), "two kinds should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("received two layer kinds"),
+        "stderr should explain the positional ambiguity:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("syu list requirement ."),
+        "stderr should show a direct usage example:\n{stderr}",
+    );
+}
+
+#[test]
+// REQ-CORE-018
 fn list_command_without_kind_lists_all_kinds() {
     let output = Command::cargo_bin("syu")
         .expect("binary should build")
