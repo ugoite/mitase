@@ -34,6 +34,7 @@ mod tests {
     use super::shell_quote_path;
 
     #[test]
+    // REQ-CORE-009
     fn shell_quote_path_wraps_empty_paths() {
         assert_eq!(shell_quote_path(Path::new("")), "''");
     }
