@@ -28,11 +28,12 @@ docs/syu/
     core/core.yaml
 ```
 
-`syu.yaml` points the validator at that tree:
+The relevant part of `syu.yaml` points the validator at that tree:
 
 ```yaml
 # syu.yaml
-workspace: docs/syu
+spec:
+  root: docs/syu
 ```
 
 ---
@@ -146,12 +147,13 @@ features:
       - REQ-STORE-001
 ```
 
-Register this document in `docs/syu/features/features.yaml`:
+In `docs/syu/features/features.yaml`, keep the generated metadata header from
+`syu init` and add the new file entry under `files`:
 
 ```yaml
-version: 1
-documents:
-  - path: core/core.yaml
+files:
+  - kind: core
+    file: core/core.yaml
 ```
 
 If you add another feature document later, keep `docs/syu/features/features.yaml`
@@ -166,17 +168,17 @@ that registry.
 syu validate .
 ```
 
-Expected output when everything links correctly:
+The exact rule-count and next-step lines may change slightly across releases, but
+a successful run should look like this:
 
 ```
-✓ workspace loaded
-✓ no blank fields
-✓ no duplicate IDs
-✓ all references resolve
-✓ all links are reciprocal
-✓ no orphaned items
-✓ delivery status is consistent
-syu validate: 0 errors, 0 warnings
+syu validate passed
+workspace: /absolute/path/to/filestore
+definitions: philosophies=1 policies=1 requirements=1 features=1
+...
+What to do next:
+  syu app /absolute/path/to/filestore
+  syu browse /absolute/path/to/filestore
 ```
 
 If you see `SYU-graph-reciprocal-001` it means a link is one-directional. Add
