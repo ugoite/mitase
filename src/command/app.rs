@@ -206,29 +206,28 @@ fn content_type_for_path(path: &str) -> &'static str {
 
 fn wait_for_ready(local_addr: SocketAddr) -> Result<()> {
     for _ in 0..50 {
-        match std::net::TcpStream::connect_timeout(&local_addr.into(), Duration::from_millis(100)) {
-            Ok(mut stream) => {
-                stream
-                    .set_read_timeout(Some(Duration::from_millis(100)))
-                    .context("failed to configure readiness probe read timeout")?;
-                stream
-                    .set_write_timeout(Some(Duration::from_millis(100)))
-                    .context("failed to configure readiness probe write timeout")?;
-                write!(
-                    stream,
-                    "GET /health HTTP/1.1\r\nHost: {local_addr}\r\nConnection: close\r\n\r\n"
-                )
-                .context("failed to send readiness probe request")?;
-                stream
-                    .flush()
-                    .context("failed to flush readiness probe request")?;
+        if let Ok(mut stream) =
+            std::net::TcpStream::connect_timeout(&local_addr, Duration::from_millis(100))
+        {
+            stream
+                .set_read_timeout(Some(Duration::from_millis(100)))
+                .context("failed to configure readiness probe read timeout")?;
+            stream
+                .set_write_timeout(Some(Duration::from_millis(100)))
+                .context("failed to configure readiness probe write timeout")?;
+            write!(
+                stream,
+                "GET /health HTTP/1.1\r\nHost: {local_addr}\r\nConnection: close\r\n\r\n"
+            )
+            .context("failed to send readiness probe request")?;
+            stream
+                .flush()
+                .context("failed to flush readiness probe request")?;
 
-                let mut response = String::new();
-                if stream.read_to_string(&mut response).is_ok() && response.contains("200 OK") {
-                    return Ok(());
-                }
+            let mut response = String::new();
+            if stream.read_to_string(&mut response).is_ok() && response.contains("200 OK") {
+                return Ok(());
             }
-            Err(_) => {}
         }
 
         std::thread::sleep(Duration::from_millis(50));
@@ -432,8 +431,11 @@ fn validation_snapshot(result: CheckResult) -> ValidationSnapshot {
 mod tests {
     use std::{
         fs,
+        io::Write as _,
+        net::TcpListener,
         path::{Path, PathBuf},
         sync::Arc,
+        thread,
     };
 
     #[cfg(unix)]
@@ -455,7 +457,7 @@ mod tests {
         AppPayload, AppServerSettings, AppState, SectionKind, Severity, app_router,
         build_app_payload, collect_feature_sources, collect_yaml_sources_recursive,
         content_type_for_path, is_asset_like, normalized_asset_path, relative_display,
-        resolve_app_server_settings, validation_snapshot,
+        resolve_app_server_settings, validation_snapshot, wait_for_ready,
     };
 
     fn fixture_root(name: &str) -> PathBuf {
@@ -841,6 +843,27 @@ mod tests {
         let sources = collect_feature_sources(&feature_root).expect("fallback should work");
         assert_eq!(sources.len(), 1);
         assert_eq!(sources[0].path, "browser.yaml");
+    }
+
+    #[test]
+    fn wait_for_ready_reports_non_ready_servers() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("listener should bind");
+        let addr = listener.local_addr().expect("addr");
+
+        let server = thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let _ = stream
+                    .write_all(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 2\r\n\r\nno");
+                let _ = stream.flush();
+            }
+        });
+
+        let error = wait_for_ready(addr).expect_err("non-ready servers should fail");
+        assert!(
+            !error.to_string().is_empty(),
+            "errors should remain observable"
+        );
+        server.join().expect("server thread");
     }
 
     #[tokio::test]
