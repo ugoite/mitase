@@ -445,12 +445,12 @@ fn validation_snapshot(result: CheckResult) -> ValidationSnapshot {
 mod tests {
     use std::{
         fs,
-        io::{Read, Write as _},
+        io::{ErrorKind, Read, Write as _},
         net::TcpListener,
         path::{Path, PathBuf},
         sync::Arc,
         thread,
-        time::Duration,
+        time::{Duration, Instant},
     };
 
     #[cfg(unix)]
@@ -863,17 +863,33 @@ mod tests {
     #[test]
     fn wait_for_ready_reports_non_ready_servers() {
         let listener = TcpListener::bind(("127.0.0.1", 0)).expect("listener should bind");
+        listener
+            .set_nonblocking(true)
+            .expect("listener should switch to nonblocking mode");
         let addr = listener.local_addr().expect("addr");
 
         let server = thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_millis(250);
             for _ in 0..3 {
-                if let Ok((mut stream, _)) = listener.accept() {
-                    let mut buffer = [0_u8; 1024];
-                    let _ = stream.read(&mut buffer);
-                    let _ = stream.write_all(
-                        b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 2\r\nConnection: close\r\n\r\nno",
-                    );
-                    let _ = stream.flush();
+                loop {
+                    match listener.accept() {
+                        Ok((mut stream, _)) => {
+                            let mut buffer = [0_u8; 1024];
+                            let _ = stream.read(&mut buffer);
+                            let _ = stream.write_all(
+                                b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 2\r\nConnection: close\r\n\r\nno",
+                            );
+                            let _ = stream.flush();
+                            break;
+                        }
+                        Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                            if Instant::now() >= deadline {
+                                return;
+                            }
+                            thread::sleep(Duration::from_millis(5));
+                        }
+                        Err(_) => return,
+                    }
                 }
             }
         });
@@ -892,6 +908,7 @@ mod tests {
     fn wait_for_ready_accepts_ok_health_responses() {
         let listener = TcpListener::bind(("127.0.0.1", 0)).expect("listener should bind");
         let addr = listener.local_addr().expect("addr");
+
         listener
             .set_nonblocking(true)
             .expect("listener should become nonblocking");
@@ -954,7 +971,6 @@ mod tests {
         assert!(error.to_string().contains("did not become ready"));
         server.join().expect("server thread");
     }
-
     #[tokio::test]
     async fn api_route_returns_payload_json() {
         let router = app_router(AppState {
