@@ -164,6 +164,7 @@ Use JSON when integrating with automation:
 ```bash
 syu validate . --format json
 syu validate . --severity error --genre trace
+syu validate . --id REQ-001
 syu list requirement --format json
 syu show FEAT-BROWSE-001 --format json
 ```

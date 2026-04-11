@@ -344,6 +344,7 @@ Watch out for these false-confidence patterns:
 - Full rule catalog: [`docs/syu/features/validation/validation.yaml`](../syu/features/validation/validation.yaml)
 - Filter by genre: `syu validate . --genre graph`
 - Filter by severity: `syu validate . --severity error`
+- Filter by spec item: `syu validate . --id REQ-001`
 - Machine-readable output: `syu validate . --format json`
 - [Getting started guide](./getting-started.md) — walks through setting up a
   working four-layer spec from scratch
