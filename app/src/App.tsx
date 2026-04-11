@@ -1,6 +1,6 @@
 // FEAT-APP-001
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   AppPayload,
   BrowserDocument,
@@ -14,6 +14,10 @@ import type {
 type WasmModule = {
   default: () => Promise<void>;
   build_browser_workspace_from_js: (payload: AppPayload) => BrowserWorkspace;
+};
+
+type VersionPayload = {
+  snapshot: string;
 };
 
 type SectionSummary = {
@@ -46,77 +50,130 @@ function App() {
   const [focusedResultIndex, setFocusedResultIndex] = useState(-1);
   const [showOnboarding, setShowOnboarding] = useState(() => shouldShowOnboarding());
   const [navigationHistory, setNavigationHistory] = useState<string[]>([]);
+  const [snapshotVersion, setSnapshotVersion] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
+  const applyWorkspace = useCallback((browserWorkspace: BrowserWorkspace) => {
+    setWorkspace(browserWorkspace);
 
-    const loadWorkspace = async () => {
+    const hash = window.location.hash.replace(/^#\/?/, "");
+    const hashParts = hash.split("/");
+    const hashSection = hashParts[0] ?? "";
+    const hashItemId = hashParts[1] ?? "";
+    const hashTarget =
+      hashItemId && isSectionKind(hashSection) ? browserWorkspace.item_index.get(hashItemId) : null;
+
+    if (hashTarget && hashItemId) {
+      setSelectedSection(hashTarget.kind);
+      setSelectedDocumentPath(hashTarget.document_path);
+      setSelectedItemId(hashItemId);
+    } else if (isSectionKind(hashSection)) {
+      const section = browserWorkspace.sections.find((s) => s.kind === hashSection);
+      setSelectedSection(hashSection);
+      setSelectedDocumentPath(section?.documents[0]?.path ?? "");
+      setSelectedItemId(section?.documents[0]?.items[0]?.id ?? "");
+    } else {
+      const nextSection = firstPopulatedSection(browserWorkspace) ?? "philosophy";
+      setSelectedSection(nextSection);
+      const firstDocument = browserWorkspace.sections.find(
+        (section) => section.kind === nextSection,
+      )?.documents[0];
+      setSelectedDocumentPath(firstDocument?.path ?? "");
+      setSelectedItemId(firstDocument?.items[0]?.id ?? "");
+    }
+
+    setSelectedIssueCode((current) => {
+      if (current && browserWorkspace.validation.issues.some((issue) => issue.code === current)) {
+        return current;
+      }
+      return browserWorkspace.validation.issues[0]?.code ?? null;
+    });
+  }, []);
+
+  const loadWorkspace = useCallback(
+    async (mode: "initial" | "refresh" = "initial") => {
+      const refreshing = mode === "refresh";
+      if (refreshing) {
+        setIsRefreshing(true);
+      }
+
       try {
-        const [wasmModule, response] = await Promise.all([
+        const [wasmModule, dataResponse] = await Promise.all([
           import("./wasm/syu_app_wasm.js") as Promise<WasmModule>,
-          fetch("/api/app-data.json"),
+          fetch("/api/app-data.json", { cache: "no-store" }),
         ]);
 
-        if (!response.ok) {
-          throw new Error(`Failed to load app data: ${response.status} ${response.statusText}`);
+        if (!dataResponse.ok) {
+          throw new Error(
+            `Failed to load app data: ${dataResponse.status} ${dataResponse.statusText}`,
+          );
+        }
+        const snapshot = dataResponse.headers.get("x-syu-snapshot");
+        if (!snapshot) {
+          throw new Error("Failed to load app snapshot header");
         }
 
-        const payload = (await response.json()) as AppPayload;
+        const payload = (await dataResponse.json()) as AppPayload;
         await wasmModule.default();
         const browserWorkspace = wasmModule.build_browser_workspace_from_js(payload);
 
-        if (cancelled) {
-          return;
-        }
-
-        setWorkspace(browserWorkspace);
-
-        const hash = window.location.hash.replace(/^#\/?/, "");
-        const hashParts = hash.split("/");
-        const hashSection = hashParts[0] ?? "";
-        const hashItemId = hashParts[1] ?? "";
-        const hashTarget =
-          hashItemId && isSectionKind(hashSection)
-            ? browserWorkspace.item_index.get(hashItemId)
-            : null;
-
-        if (hashTarget && hashItemId) {
-          setSelectedSection(hashTarget.kind);
-          setSelectedDocumentPath(hashTarget.document_path);
-          setSelectedItemId(hashItemId);
-        } else if (isSectionKind(hashSection)) {
-          const section = browserWorkspace.sections.find((s) => s.kind === hashSection);
-          setSelectedSection(hashSection);
-          setSelectedDocumentPath(section?.documents[0]?.path ?? "");
-          setSelectedItemId(section?.documents[0]?.items[0]?.id ?? "");
-        } else {
-          const nextSection = firstPopulatedSection(browserWorkspace) ?? "philosophy";
-          setSelectedSection(nextSection);
-          const firstDocument = browserWorkspace.sections.find(
-            (section) => section.kind === nextSection,
-          )?.documents[0];
-          setSelectedDocumentPath(firstDocument?.path ?? "");
-          setSelectedItemId(firstDocument?.items[0]?.id ?? "");
-        }
-
-        setSelectedIssueCode(browserWorkspace.validation.issues[0]?.code ?? null);
+        setError(null);
+        setSnapshotVersion(snapshot);
+        applyWorkspace(browserWorkspace);
       } catch (loadError) {
-        if (!cancelled) {
+        if (refreshing) {
+          // eslint-disable-next-line no-console
+          console.error("Failed to refresh syu app workspace", loadError);
+        } else {
           setError(loadError instanceof Error ? loadError.message : "Failed to load syu app");
         }
       } finally {
-        if (!cancelled) {
-          setLoading(false);
+        setLoading(false);
+        if (refreshing) {
+          setIsRefreshing(false);
         }
       }
-    };
+    },
+    [applyWorkspace],
+  );
 
+  useEffect(() => {
     void loadWorkspace();
+  }, [loadWorkspace]);
+
+  useEffect(() => {
+    if (snapshotVersion == null) {
+      return;
+    }
+
+    let cancelled = false;
+    const intervalId = window.setInterval(async () => {
+      if (document.hidden || isRefreshing) {
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/version", { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`Failed to poll app version: ${response.status} ${response.statusText}`);
+        }
+        const nextVersion = (await response.json()) as VersionPayload;
+        if (!cancelled && nextVersion.snapshot !== snapshotVersion) {
+          await loadWorkspace("refresh");
+        }
+      } catch (pollError) {
+        if (!cancelled) {
+          // eslint-disable-next-line no-console
+          console.error("Failed to poll app version for refresh", pollError);
+        }
+      }
+    }, 2000);
 
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
     };
-  }, []);
+  }, [isRefreshing, loadWorkspace, snapshotVersion]);
 
   useEffect(() => {
     setFocusedResultIndex(-1);
@@ -478,6 +535,11 @@ function App() {
       </header>
 
       <main className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 md:grid-cols-[18rem_minmax(0,1fr)] md:px-8">
+        {isRefreshing && (
+          <div className="md:col-span-2 rounded-3xl border border-amber-400/30 bg-amber-400/10 px-5 py-4 text-sm text-amber-100 shadow-2xl shadow-amber-950/10">
+            Refreshing workspace data...
+          </div>
+        )}
         {showOnboarding && (
           <div className="md:col-span-2 flex items-start justify-between gap-4 rounded-3xl border border-sky-400/30 bg-sky-400/10 px-5 py-4 text-sm leading-7 text-sky-100 shadow-2xl shadow-sky-950/15">
             <p>
