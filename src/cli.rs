@@ -25,6 +25,14 @@ const APP_AFTER_HELP: &str = concat!(
 
 const WORKSPACE_HELP: &str = "Workspace root containing syu.yaml and the configured spec tree";
 
+const LIST_AFTER_HELP: &str = "\
+Examples:
+  syu list
+  syu list docs/syu
+  syu list requirement
+  syu list requirement docs/syu
+  syu list docs/syu requirement";
+
 #[derive(Debug, Parser)]
 #[command(
     name = "syu",
@@ -45,7 +53,10 @@ pub enum Commands {
         about = "Browse the specification in your terminal (interactive prompts or text output)"
     )]
     Browse(BrowseArgs),
-    #[command(about = "List philosophies, policies, requirements, or features")]
+    #[command(
+        about = "List philosophies, policies, requirements, or features",
+        after_help = LIST_AFTER_HELP
+    )]
     List(ListArgs),
     #[command(about = "Show one philosophy, policy, requirement, or feature by ID")]
     Show(ShowArgs),
@@ -111,10 +122,9 @@ impl LookupKind {
 
 #[derive(Debug, Clone, Args)]
 pub struct ListArgs {
-    /// Layer kind to list, or a workspace path to list all kinds.
-    /// Usage: syu list [KIND] [WORKSPACE]
-    ///        syu list [WORKSPACE]     (lists all kinds)
-    ///        syu list                 (lists all kinds in the current directory)
+    /// Optional layer kind and workspace path.
+    /// Accepted as either `syu list [KIND] [WORKSPACE]` or `syu list [WORKSPACE] [KIND]`.
+    /// With one positional argument, syu treats known kinds as layer filters and everything else as a workspace path.
     #[arg(
         num_args = 0..=2,
         value_name = "KIND_OR_WORKSPACE",
