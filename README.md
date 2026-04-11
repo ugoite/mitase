@@ -237,6 +237,9 @@ The repository keeps the source UI in `app/`, checks in the generated
 production bundle in `app/dist/`, and serves that bundle directly from the
 `syu app` command, so end users do not need a separate frontend build step.
 
+Want the visual tour first? See the [browser UI guide with annotated
+screenshots](docs/guide/app.md).
+
 ## Configuration
 
 `syu` looks for `syu.yaml` in the workspace root:
