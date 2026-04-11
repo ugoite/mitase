@@ -134,6 +134,18 @@ Prefer another repository layout such as `docs/spec` or `spec/contracts`?
 Use `syu init . --spec-root docs/spec` to scaffold the same starter tree there
 and write the matching `spec.root` value into `syu.yaml`.
 
+Want stable project-specific starter IDs from the first commit? Seed a shared
+stem directly into the scaffold:
+
+```bash
+syu init . --id-prefix store
+```
+
+That renders `PHIL-STORE-001`, `POL-STORE-001`, `REQ-STORE-001`, and
+`FEAT-STORE-001`. If one layer should keep a different prefix, override it with
+`--philosophy-prefix`, `--policy-prefix`, `--requirement-prefix`, or
+`--feature-prefix`.
+
 Want a closer starting point for a repository that is already clearly
 Rust-first, Python-first, or polyglot? Start with a lightweight template:
 
@@ -159,13 +171,17 @@ Bootstrap a new workspace:
 ```bash
 syu init .
 syu init path/to/workspace --name my-project
+syu init . --id-prefix store
 syu init . --template rust-only
 syu init . --spec-root docs/spec
+syu init . --requirement-prefix REQ-STORE --feature-prefix FEAT-STORE
 ```
 
 Use `--force` to overwrite generated files. Use `--template` when you want the
 starter IDs, file layout, and scaffold copy to start closer to the repository
-style you already expect. Use `--spec-root` to scaffold into a
+style you already expect. Use `--id-prefix` when you want stable project-wide
+starter IDs from the first command, and the per-layer `--*-prefix` flags when a
+single shared stem is not enough. Use `--spec-root` to scaffold into a
 repository-relative spec tree without moving the generated files by hand later.
 
 ### `syu validate`
