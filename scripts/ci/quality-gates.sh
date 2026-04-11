@@ -13,6 +13,7 @@ run_quality_gates() {
   cargo clippy --all-targets --all-features -- -D warnings
   cargo test
   cargo run -- validate .
+  bash scripts/ci/check-generated-docs-freshness.sh
 
   mkdir -p target/quality
   cargo run -- report . --output target/quality/syu-report.md >/dev/null

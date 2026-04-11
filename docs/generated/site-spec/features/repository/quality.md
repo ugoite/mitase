@@ -34,6 +34,9 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
         - **symbols**:
           - configure_llvm_tools
           - run_coverage
+      - **file**: scripts/ci/check-generated-docs-freshness.sh
+        - **symbols**:
+          - check_generated_docs_freshness
     - **yaml**:
       - **file**: .pre-commit-config.yaml
         - **symbols**:
@@ -101,6 +104,9 @@ features:
           symbols:
             - configure_llvm_tools
             - run_coverage
+        - file: scripts/ci/check-generated-docs-freshness.sh
+          symbols:
+            - check_generated_docs_freshness
       yaml:
         - file: .pre-commit-config.yaml
           symbols:
