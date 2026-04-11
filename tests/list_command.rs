@@ -171,3 +171,56 @@ fn list_command_all_kinds_supports_json_output() {
     assert!(json["feature"].is_array(), "JSON should have feature array");
     assert_eq!(json["philosophy"][0]["id"], "PHIL-TRACE-001");
 }
+
+#[test]
+// REQ-CORE-018
+fn list_command_rejects_kind_typos_before_treating_them_as_paths() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("list")
+        .arg("philsophy")
+        .output()
+        .expect("command should run");
+
+    assert!(!output.status.success(), "typoed kinds should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("did you mean `philosophy`"),
+        "stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("syu list --help"),
+        "stderr should point users back to the list help:\n{stderr}",
+    );
+    assert!(
+        !stderr.contains("failed to resolve workspace root"),
+        "typoed kinds should not be reported as workspace path failures:\n{stderr}",
+    );
+}
+
+#[test]
+// REQ-CORE-018
+fn list_command_keeps_kind_typos_helpful_when_workspace_is_explicit() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("list")
+        .arg("philsophy")
+        .arg(".")
+        .output()
+        .expect("command should run");
+
+    assert!(!output.status.success(), "typoed kinds should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("did you mean `philosophy`"),
+        "stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("syu list ."),
+        "stderr should keep the workspace-specific recovery hint:\n{stderr}",
+    );
+    assert!(
+        !stderr.contains("failed to resolve workspace root"),
+        "typoed kinds should not be reported as workspace path failures:\n{stderr}",
+    );
+}
