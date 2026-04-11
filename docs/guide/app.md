@@ -108,7 +108,11 @@ evidence still needs to be added before the item becomes implemented.
 
 ## Validation panel
 
-The validation panel appears at the bottom of the page and lists all issues found during the last `syu validate` run that was used to generate the app data.
+The validation panel appears at the bottom of the page and lists the current
+issues from the workspace snapshot that `syu app` loaded itself. You do not
+need to run `syu validate` first: the app computes the same validation snapshot
+when it starts, refreshes it while the tab stays visible, and catches up again
+when you return to the tab after spec changes.
 
 Each row shows:
 
@@ -144,8 +148,10 @@ Use the validation flow in this order:
 2. Pick the requirement document you are working on from the sidebar.
 3. Open a requirement with `status: planned`.
 4. In the detail pane, look for the planned placeholder under **Tests**.
-5. Add the missing trace entries in YAML, run `syu validate .`, then refresh the
-   app snapshot by restarting `syu app .`.
+5. Add the missing trace entries in YAML, then keep the app tab visible or
+   switch back to it so the browser refresh flow loads the updated snapshot.
+   Run `syu validate .` separately only if you also want the same validation
+   details in a terminal.
 
 ### I got a validation error - how do I find the affected item?
 
@@ -224,7 +230,9 @@ Two caveats still matter:
 
 1. The browser keeps your current deep link when possible, but if the selected
    item disappears you may land on the first available item in that section.
-2. Changes outside the spec snapshot flow, such as app server flags or
+2. The polling loop pauses while the tab is hidden, so a background tab may stay
+   stale until you focus it again or reload the page.
+3. Changes outside the spec snapshot flow, such as app server flags or
    configuration in `syu.yaml`, still require restarting `syu app`.
 
 ---
