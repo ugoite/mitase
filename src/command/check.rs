@@ -13,6 +13,7 @@ use serde::Serialize;
 
 use crate::{
     cli::{CheckArgs, OutputFormat, ValidationGenreFilter, ValidationSeverityFilter},
+    command::shell_quote_path,
     config::SyuConfig,
     coverage::{normalize_relative_path, validate_symbol_trace_coverage},
     inspect::{apply_symbol_doc_fix, inspect_symbol, supports_rich_inspection},
@@ -357,6 +358,7 @@ pub fn run_check_command(args: &CheckArgs) -> Result<i32> {
                 render_text_report(
                     overall_success,
                     &result,
+                    args.workspace.as_path(),
                     filtered_view.as_ref(),
                     text_summary.as_ref(),
                     args.quiet,
@@ -690,6 +692,7 @@ fn apply_autofix_for_reference(
 fn render_text_report(
     overall_success: bool,
     result: &CheckResult,
+    workspace_arg: &Path,
     filtered_view: Option<&FilteredIssueView>,
     text_summary: Option<&TextReportSummary>,
     quiet: bool,
@@ -843,26 +846,27 @@ fn render_text_report(
     }
 
     if overall_success && result.issues.is_empty() && !quiet {
+        let workspace_arg = shell_quote_path(workspace_arg);
         writeln!(&mut output).expect("writing to String must succeed");
         writeln!(&mut output, "What to do next:").expect("writing to String must succeed");
         writeln!(
             &mut output,
-            "  syu app .        open the browser UI to explore your workspace"
+            "  syu app {workspace_arg}        open the browser UI to explore your workspace"
         )
         .expect("writing to String must succeed");
         writeln!(
             &mut output,
-            "  syu browse .     browse interactively in the terminal"
+            "  syu browse {workspace_arg}     browse interactively in the terminal"
         )
         .expect("writing to String must succeed");
         writeln!(
             &mut output,
-            "  syu report .     generate a markdown validation report"
+            "  syu report {workspace_arg}     generate a markdown validation report"
         )
         .expect("writing to String must succeed");
         writeln!(
             &mut output,
-            "  syu show <ID>    inspect a single spec item in detail"
+            "  syu show <ID> {workspace_arg}    inspect a single spec item in detail"
         )
         .expect("writing to String must succeed");
     }
@@ -2262,7 +2266,7 @@ mod tests {
             referenced_rules: Vec::new(),
         };
 
-        let report = render_text_report(true, &result, None, None, false);
+        let report = render_text_report(true, &result, Path::new("."), None, None, false);
         assert!(report.contains("syu validate passed"));
         assert!(report.contains("issues:"));
         assert!(report.contains("[Warning] warn subject: message"));
@@ -2336,7 +2340,7 @@ mod tests {
             referenced_rules: Vec::new(),
         };
 
-        let report = render_text_report(true, &result, None, Some(&summary), false);
+        let report = render_text_report(true, &result, Path::new("."), None, Some(&summary), false);
 
         assert!(report.contains("note: 1 built-in rule is disabled by current config"));
     }
@@ -2392,7 +2396,14 @@ mod tests {
             hidden_issue_count: 2,
         };
 
-        let report = render_text_report(false, &result, Some(&filtered_view), None, false);
+        let report = render_text_report(
+            false,
+            &result,
+            Path::new("."),
+            Some(&filtered_view),
+            None,
+            false,
+        );
 
         assert!(report.contains("syu validate failed (filtered view)"));
         assert!(report.contains("filters: severity=warning"));
