@@ -19,11 +19,15 @@ description: "Generated reference for docs/syu/features/documentation/docs.yaml"
 
 - **id**: FEAT-DOCS-001
   - **title**: English concepts and workflow documentation
-  - **summary**: Explain the four-layer model, delivery states, configuration, and command workflow in English.
+  - **summary**: Explain the four-layer model, delivery states, configuration, command workflow, and first-run CLI guidance in English.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-010
   - **implementations**:
+    - **rust**:
+      - **file**: src/cli.rs
+        - **symbols**:
+          - ROOT_AFTER_HELP
     - **markdown**:
       - **file**: README.md
         - **symbols**:
@@ -88,9 +92,9 @@ description: "Generated reference for docs/syu/features/documentation/docs.yaml"
       - **file**: .github/workflows/deploy-pages.yml
         - **symbols**:
           - deploy-pages
-          - actions/configure-pages@v5
+          - actions/configure-pages@v6
           - actions/upload-pages-artifact@v4
-          - actions/deploy-pages@v4
+          - actions/deploy-pages@v5
 
 ## Source YAML
 
@@ -101,11 +105,15 @@ version: 1
 features:
   - id: FEAT-DOCS-001
     title: English concepts and workflow documentation
-    summary: Explain the four-layer model, delivery states, configuration, and command workflow in English.
+    summary: Explain the four-layer model, delivery states, configuration, command workflow, and first-run CLI guidance in English.
     status: implemented
     linked_requirements:
       - REQ-CORE-010
     implementations:
+      rust:
+        - file: src/cli.rs
+          symbols:
+            - ROOT_AFTER_HELP
       markdown:
         - file: README.md
           symbols:
@@ -171,7 +179,7 @@ features:
         - file: .github/workflows/deploy-pages.yml
           symbols:
             - deploy-pages
-            - actions/configure-pages@v5
+            - actions/configure-pages@v6
             - actions/upload-pages-artifact@v4
-            - actions/deploy-pages@v4
+            - actions/deploy-pages@v5
 ```

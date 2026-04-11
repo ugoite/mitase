@@ -205,15 +205,27 @@ fn content_type_for_path(path: &str) -> &'static str {
 }
 
 fn wait_for_ready(local_addr: SocketAddr) -> Result<()> {
-    for _ in 0..50 {
-        if let Ok(mut stream) =
-            std::net::TcpStream::connect_timeout(&local_addr, Duration::from_millis(100))
-        {
+    wait_for_ready_with_retry(
+        local_addr,
+        50,
+        Duration::from_millis(100),
+        Duration::from_millis(50),
+    )
+}
+
+fn wait_for_ready_with_retry(
+    local_addr: SocketAddr,
+    attempts: usize,
+    connect_timeout: Duration,
+    retry_delay: Duration,
+) -> Result<()> {
+    for _ in 0..attempts {
+        if let Ok(mut stream) = std::net::TcpStream::connect_timeout(&local_addr, connect_timeout) {
             stream
-                .set_read_timeout(Some(Duration::from_millis(100)))
+                .set_read_timeout(Some(connect_timeout))
                 .context("failed to configure readiness probe read timeout")?;
             stream
-                .set_write_timeout(Some(Duration::from_millis(100)))
+                .set_write_timeout(Some(connect_timeout))
                 .context("failed to configure readiness probe write timeout")?;
             write!(
                 stream,
@@ -230,7 +242,7 @@ fn wait_for_ready(local_addr: SocketAddr) -> Result<()> {
             }
         }
 
-        std::thread::sleep(Duration::from_millis(50));
+        std::thread::sleep(retry_delay);
     }
 
     bail!("local app server did not become ready at http://{local_addr}")
@@ -431,11 +443,12 @@ fn validation_snapshot(result: CheckResult) -> ValidationSnapshot {
 mod tests {
     use std::{
         fs,
-        io::Write as _,
+        io::{Read, Write as _},
         net::TcpListener,
         path::{Path, PathBuf},
         sync::Arc,
         thread,
+        time::Duration,
     };
 
     #[cfg(unix)]
@@ -457,7 +470,7 @@ mod tests {
         AppPayload, AppServerSettings, AppState, SectionKind, Severity, app_router,
         build_app_payload, collect_feature_sources, collect_yaml_sources_recursive,
         content_type_for_path, is_asset_like, normalized_asset_path, relative_display,
-        resolve_app_server_settings, validation_snapshot, wait_for_ready,
+        resolve_app_server_settings, validation_snapshot, wait_for_ready_with_retry,
     };
 
     fn fixture_root(name: &str) -> PathBuf {
@@ -851,19 +864,58 @@ mod tests {
         let addr = listener.local_addr().expect("addr");
 
         let server = thread::spawn(move || {
-            if let Ok((mut stream, _)) = listener.accept() {
-                let _ = stream
-                    .write_all(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 2\r\n\r\nno");
-                let _ = stream.flush();
+            for _ in 0..3 {
+                if let Ok((mut stream, _)) = listener.accept() {
+                    let mut buffer = [0_u8; 1024];
+                    let _ = stream.read(&mut buffer);
+                    let _ = stream.write_all(
+                        b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 2\r\nConnection: close\r\n\r\nno",
+                    );
+                    let _ = stream.flush();
+                }
             }
         });
 
-        let error = wait_for_ready(addr).expect_err("non-ready servers should fail");
+        let error =
+            wait_for_ready_with_retry(addr, 3, Duration::from_millis(20), Duration::from_millis(1))
+                .expect_err("non-ready servers should fail");
         assert!(
             !error.to_string().is_empty(),
             "errors should remain observable"
         );
         server.join().expect("server thread");
+    }
+
+    #[test]
+    fn wait_for_ready_accepts_ok_health_responses() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("listener should bind");
+        let addr = listener.local_addr().expect("addr");
+
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("request should connect");
+            let mut buffer = [0_u8; 1024];
+            let _ = stream.read(&mut buffer);
+            let _ = stream.write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Length: 15\r\nConnection: close\r\n\r\n{\"status\":\"ok\"}",
+            );
+            let _ = stream.flush();
+        });
+
+        wait_for_ready_with_retry(addr, 1, Duration::from_millis(20), Duration::from_millis(1))
+            .expect("ready servers should succeed");
+        server.join().expect("server thread");
+    }
+
+    #[test]
+    fn wait_for_ready_reports_unreachable_servers() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("listener should bind");
+        let addr = listener.local_addr().expect("addr");
+        drop(listener);
+
+        let error =
+            wait_for_ready_with_retry(addr, 2, Duration::from_millis(20), Duration::from_millis(1))
+                .expect_err("missing servers should fail");
+        assert!(error.to_string().contains("did not become ready"));
     }
 
     #[tokio::test]
