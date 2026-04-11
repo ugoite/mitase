@@ -45,7 +45,7 @@ function App() {
   const [selectedSection, setSelectedSection] = useState<SectionKind>("philosophy");
   const [selectedDocumentPath, setSelectedDocumentPath] = useState("");
   const [selectedItemId, setSelectedItemId] = useState("");
-  const [selectedIssueCode, setSelectedIssueCode] = useState<string | null>(null);
+  const [selectedIssueKey, setSelectedIssueKey] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [focusedResultIndex, setFocusedResultIndex] = useState(-1);
   const [showOnboarding, setShowOnboarding] = useState(() => shouldShowOnboarding());
@@ -82,11 +82,18 @@ function App() {
       setSelectedItemId(firstDocument?.items[0]?.id ?? "");
     }
 
-    setSelectedIssueCode((current) => {
-      if (current && browserWorkspace.validation.issues.some((issue) => issue.code === current)) {
+    setSelectedIssueKey((current) => {
+      if (
+        current &&
+        browserWorkspace.validation.issues.some(
+          (issue) => validationIssueSelectionKey(issue) === current,
+        )
+      ) {
         return current;
       }
-      return browserWorkspace.validation.issues[0]?.code ?? null;
+
+      const firstIssue = browserWorkspace.validation.issues[0];
+      return firstIssue ? validationIssueSelectionKey(firstIssue) : null;
     });
   }, []);
 
@@ -244,13 +251,29 @@ function App() {
     return [...grouped.entries()];
   }, [currentSection]);
 
+  const activeIssueIndex = useMemo(() => {
+    if (!workspace || workspace.validation.issues.length === 0) {
+      return null;
+    }
+
+    if (selectedIssueKey) {
+      const selectedIndex = workspace.validation.issues.findIndex(
+        (issue) => validationIssueSelectionKey(issue) === selectedIssueKey,
+      );
+      if (selectedIndex >= 0) {
+        return selectedIndex;
+      }
+    }
+
+    return 0;
+  }, [selectedIssueKey, workspace]);
+
   const activeIssue = useMemo(() => {
-    return (
-      workspace?.validation.issues.find((issue) => issue.code === selectedIssueCode) ??
-      workspace?.validation.issues[0] ??
-      null
-    );
-  }, [selectedIssueCode, workspace]);
+    if (!workspace || activeIssueIndex == null) {
+      return null;
+    }
+    return workspace.validation.issues[activeIssueIndex] ?? null;
+  }, [activeIssueIndex, workspace]);
 
   const activeRule = useMemo(() => {
     if (!workspace || !activeIssue) {
@@ -942,28 +965,32 @@ function App() {
             ) : (
               <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,20rem)]">
                 <div className="space-y-3">
-                  {workspace.validation.issues.map((issue) => (
-                    <button
-                      key={`${issue.code}-${issue.subject}-${issue.location ?? ""}`}
-                      type="button"
-                      onClick={() => setSelectedIssueCode(issue.code)}
-                      className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
-                        activeIssue?.code === issue.code
-                          ? issue.severity === "error"
-                            ? "border-rose-400/60 bg-rose-400/10 text-rose-50"
-                            : "border-amber-400/60 bg-amber-400/10 text-amber-50"
-                          : "border-white/10 bg-slate-950/60 text-slate-300 hover:border-sky-400/40 hover:text-white"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="font-medium">{issue.code}</span>
-                        <span className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                          {issue.severity}
-                        </span>
-                      </div>
-                      <p className="mt-2 text-sm leading-6">{issue.message}</p>
-                    </button>
-                  ))}
+                  {workspace.validation.issues.map((issue, index) => {
+                    const issueKey = validationIssueSelectionKey(issue);
+
+                    return (
+                      <button
+                        key={`${issueKey}-${index}`}
+                        type="button"
+                        onClick={() => setSelectedIssueKey(issueKey)}
+                        className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
+                          activeIssueIndex === index
+                            ? issue.severity === "error"
+                              ? "border-rose-400/60 bg-rose-400/10 text-rose-50"
+                              : "border-amber-400/60 bg-amber-400/10 text-amber-50"
+                            : "border-white/10 bg-slate-950/60 text-slate-300 hover:border-sky-400/40 hover:text-white"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="font-medium">{issue.code}</span>
+                          <span className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                            {issue.severity}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-sm leading-6">{issue.message}</p>
+                      </button>
+                    );
+                  })}
                 </div>
                 {activeIssue ? (
                   <IssueDetail
@@ -1008,6 +1035,17 @@ function firstPopulatedSection(workspace: BrowserWorkspace): SectionKind | null 
 
 function isSectionKind(value: string): value is SectionKind {
   return SECTION_ORDER.some((section) => section === value);
+}
+
+function validationIssueSelectionKey(issue: ValidationIssue): string {
+  return [
+    issue.code,
+    issue.severity,
+    issue.subject,
+    issue.location ?? "",
+    issue.message,
+    issue.suggestion ?? "",
+  ].join("\u0000");
 }
 
 function truncatePath(fullPath: string): string {
