@@ -265,6 +265,9 @@ fn show_command_errors_when_the_id_is_missing() {
         stderr.contains("syu list"),
         "hint should suggest syu list: {stderr}"
     );
+    let workspace_arg = fixture_path("passing").display().to_string();
+    assert!(stderr.contains(&format!("syu list {workspace_arg}")));
+    assert!(stderr.contains(&format!("syu list requirement {workspace_arg}")));
 }
 
 #[test]
