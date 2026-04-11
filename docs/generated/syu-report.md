@@ -3,19 +3,19 @@
 ## Status
 
 - Result: **PASS**
-- Workspace: `/Volumes/myssd/work/syu`
+- Workspace: `.`
 
 ## Definitions
 
 - Philosophies: 3
 - Policies: 7
-- Requirements: 16
-- Features: 13
+- Requirements: 18
+- Features: 19
 
 ## Traceability
 
-- Requirement-to-test traceability: 37/37
-- Feature-to-implementation traceability: 50/50
+- Requirement-to-test traceability: 56/56
+- Feature-to-implementation traceability: 76/76
 
 ## Issues
 

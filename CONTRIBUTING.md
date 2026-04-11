@@ -28,6 +28,13 @@ scripts/ci/coverage.sh summary
 cargo run -- validate .
 ```
 
+`scripts/ci/quality-gates.sh` also checks that the committed `docs/generated/`
+artifacts are fresh. To refresh those files directly, run:
+
+```bash
+scripts/ci/check-generated-docs-freshness.sh
+```
+
 ### Rust version
 
 The minimum supported Rust version (MSRV) is **1.88**. CI verifies this with a

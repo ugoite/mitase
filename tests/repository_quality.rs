@@ -29,6 +29,7 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(quality_script.contains("cargo clippy --all-targets --all-features -- -D warnings"));
     assert!(quality_script.contains("cargo test"));
     assert!(quality_script.contains("cargo run -- validate ."));
+    assert!(quality_script.contains("check-generated-docs-freshness.sh"));
 
     assert!(ci_workflow.contains("FEAT-QUALITY-001"));
     assert!(ci_workflow.contains("precommit:"));
@@ -54,6 +55,8 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(contributing.contains("cargo audit"));
     assert!(contributing.contains("npm audit"));
     assert!(contributing.contains("Contributors do **not** need to run manual audits"));
+    assert!(contributing.contains("check-generated-docs-freshness.sh"));
+    assert!(contributing.contains("docs/generated/"));
 
     assert!(repo_config.contains("FEAT-CHECK-001"));
     assert!(repo_config.contains("FEAT-REPORT-001"));
@@ -215,6 +218,7 @@ fn repository_declares_documentation_guides() {
     let generated_site_index = read_file("docs/generated/site-spec/index.md");
     let generated_validation =
         read_file("docs/generated/site-spec/features/validation/validation.md");
+    let generated_docs_freshness = read_file("scripts/ci/check-generated-docs-freshness.sh");
     let ci_workflow = read_file(".github/workflows/ci.yml");
     let docs_deploy_workflow = read_file(".github/workflows/deploy-pages.yml");
     let docs_build_action = read_file(".github/actions/build-docs-site/action.yml");
@@ -274,6 +278,9 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains(&format!("version: {current_version}")));
     assert!(getting_started.contains("kind: core"));
     assert!(getting_started.contains("freshly initialized project will not have them yet"));
+    assert!(generated_docs_freshness.contains("write_sha256"));
+    assert!(generated_docs_freshness.contains("sha256sum or shasum is required"));
+    assert!(generated_docs_freshness.contains("shasum -a 256"));
     assert!(getting_started.contains("https://ugoite.github.io/syu/docs/generated/site-spec"));
     assert!(getting_started.contains("https://ugoite.github.io/syu/docs/generated/syu-report"));
     assert!(getting_started.contains("status: implemented"));
@@ -306,6 +313,11 @@ fn repository_declares_documentation_guides() {
     assert!(generated_site_index.contains("/docs/generated/site-spec/features/validation"));
     assert!(generated_validation.contains("docs/syu/features/validation/validation.yaml"));
     assert!(generated_validation.contains("SYU-graph-reference-001"));
+    assert!(generated_docs_freshness.contains("FEAT-QUALITY-001"));
+    assert!(generated_docs_freshness.contains("check_generated_docs_freshness"));
+    assert!(generated_docs_freshness.contains("python3 scripts/generate-site-docs.py"));
+    assert!(generated_docs_freshness.contains("docs/generated/syu-report.md"));
+    assert!(generated_docs_freshness.contains("git --no-pager diff --stat -- docs/generated"));
     assert!(ci_workflow.contains("./.github/actions/build-docs-site"));
     assert!(docs_build_action.contains("FEAT-DOCS-002"));
     assert!(docs_build_action.contains("actions/setup-node@v6"));
@@ -382,6 +394,8 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(contributing.contains("main"));
     assert!(contributing.contains(".worktrees/"));
     assert!(contributing.contains("scripts/ci/quality-gates.sh"));
+    assert!(contributing.contains("scripts/ci/check-generated-docs-freshness.sh"));
+    assert!(contributing.contains("docs/generated/"));
     assert!(contributing.contains("scripts/install-precommit.sh"));
     assert!(contributing.contains("GitHub Pages"));
     assert!(contributing.contains("release track"));

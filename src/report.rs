@@ -1,6 +1,6 @@
 // REQ-CORE-004
 
-use std::{collections::BTreeSet, fmt::Write};
+use std::{collections::BTreeSet, env, fmt::Write, path::Path};
 
 use crate::model::{CheckResult, Issue, Severity};
 
@@ -17,7 +17,7 @@ pub fn render_markdown_report(result: &CheckResult) -> String {
     writeln!(
         &mut output,
         "- Workspace: `{}`",
-        result.workspace_root.display()
+        display_workspace_root(&result.workspace_root)
     )
     .expect("writing to String must succeed");
     writeln!(&mut output).expect("writing to String must succeed");
@@ -147,6 +147,21 @@ fn collect_suggestions(issues: &[Issue]) -> BTreeSet<String> {
         .collect()
 }
 
+fn display_workspace_root(workspace_root: &Path) -> String {
+    let Ok(current_dir) = env::current_dir() else {
+        return workspace_root.display().to_string();
+    };
+    let Ok(relative) = workspace_root.strip_prefix(&current_dir) else {
+        return workspace_root.display().to_string();
+    };
+
+    if relative.as_os_str().is_empty() {
+        ".".to_string()
+    } else {
+        relative.display().to_string()
+    }
+}
+
 fn severity_label(severity: &Severity) -> &'static str {
     match severity {
         Severity::Error => "error",
@@ -164,11 +179,13 @@ fn collapse_whitespace(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::{env, fs, path::PathBuf};
+
+    use tempfile::tempdir;
 
     use crate::model::{CheckResult, DefinitionCounts, Issue, Severity, TraceCount, TraceSummary};
 
-    use super::render_markdown_report;
+    use super::{display_workspace_root, render_markdown_report};
 
     #[test]
     fn report_renders_successful_result() {
@@ -251,5 +268,37 @@ mod tests {
         assert!(report.contains("message\\|with pipe"));
         assert!(report.contains("## Referenced rules"));
         assert_eq!(report.matches("- fix it").count(), 1);
+    }
+
+    #[test]
+    fn display_workspace_root_prefers_current_directory_relative_paths() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let previous = env::current_dir().expect("cwd should be readable");
+        env::set_current_dir(tempdir.path()).expect("should chdir into tempdir");
+
+        assert_eq!(display_workspace_root(tempdir.path()), ".");
+        assert_eq!(
+            display_workspace_root(&tempdir.path().join("nested/workspace")),
+            "nested/workspace"
+        );
+
+        env::set_current_dir(previous).expect("should restore cwd");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn display_workspace_root_falls_back_when_current_directory_is_unavailable() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let removed_root = tempdir.path().to_path_buf();
+        let previous = env::current_dir().expect("cwd should be readable");
+        env::set_current_dir(&removed_root).expect("should chdir into tempdir");
+        fs::remove_dir_all(&removed_root).expect("tempdir should be removable");
+
+        assert_eq!(
+            display_workspace_root(PathBuf::from("/tmp/workspace").as_path()),
+            "/tmp/workspace"
+        );
+
+        env::set_current_dir(previous).expect("should restore cwd");
     }
 }
