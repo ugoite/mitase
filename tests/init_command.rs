@@ -62,6 +62,87 @@ fn init_command_bootstraps_a_workspace_that_validate_accepts() {
 
 #[test]
 // REQ-CORE-009
+fn init_command_bootstraps_language_templates_that_validate_accept() {
+    for (template, requirement_path, feature_path, requirement_id, feature_id) in [
+        (
+            "rust-only",
+            "docs/syu/requirements/core/rust.yaml",
+            "docs/syu/features/languages/rust.yaml",
+            "REQ-RUST-001",
+            "FEAT-RUST-001",
+        ),
+        (
+            "python-only",
+            "docs/syu/requirements/core/python.yaml",
+            "docs/syu/features/languages/python.yaml",
+            "REQ-PY-001",
+            "FEAT-PY-001",
+        ),
+        (
+            "polyglot",
+            "docs/syu/requirements/core/polyglot.yaml",
+            "docs/syu/features/languages/polyglot.yaml",
+            "REQ-MIX-001",
+            "FEAT-MIX-001",
+        ),
+    ] {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = tempdir.path().join(template);
+
+        let init = Command::cargo_bin("syu")
+            .expect("binary should build")
+            .arg("init")
+            .arg(&workspace)
+            .arg("--template")
+            .arg(template)
+            .output()
+            .expect("init should run");
+
+        assert!(
+            init.status.success(),
+            "template={template}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&init.stdout),
+            String::from_utf8_lossy(&init.stderr)
+        );
+        assert!(
+            workspace.join(requirement_path).exists(),
+            "missing {requirement_path}"
+        );
+        assert!(
+            workspace.join(feature_path).exists(),
+            "missing {feature_path}"
+        );
+
+        let requirement =
+            fs::read_to_string(workspace.join(requirement_path)).expect("requirement should exist");
+        let feature =
+            fs::read_to_string(workspace.join(feature_path)).expect("feature should exist");
+        assert!(
+            requirement.contains(requirement_id),
+            "missing {requirement_id}"
+        );
+        assert!(feature.contains(feature_id), "missing {feature_id}");
+        assert!(requirement.contains("status: planned"));
+        assert!(feature.contains("status: planned"));
+
+        let validate = Command::cargo_bin("syu")
+            .expect("binary should build")
+            .arg("validate")
+            .arg(&workspace)
+            .output()
+            .expect("validate should run");
+
+        assert!(
+            validate.status.success(),
+            "template={template}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&validate.stdout),
+            String::from_utf8_lossy(&validate.stderr)
+        );
+    }
+}
+
+#[test]
+// REQ-CORE-009
 fn init_command_bootstraps_a_custom_spec_root_that_validate_accepts() {
     let tempdir = tempdir().expect("tempdir should exist");
     let workspace = tempdir.path().join("demo");
@@ -115,6 +196,71 @@ fn init_command_bootstraps_a_custom_spec_root_that_validate_accepts() {
         String::from_utf8_lossy(&validate.stderr)
     );
     assert!(String::from_utf8_lossy(&validate.stdout).contains("syu validate passed"));
+}
+
+#[test]
+// REQ-CORE-009
+fn init_command_combines_custom_spec_roots_with_language_templates() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    let workspace = tempdir.path().join("demo");
+
+    let init = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("init")
+        .arg(&workspace)
+        .arg("--template")
+        .arg("rust-only")
+        .arg("--spec-root")
+        .arg("spec/contracts")
+        .output()
+        .expect("init should run");
+
+    assert!(
+        init.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&init.stdout),
+        String::from_utf8_lossy(&init.stderr)
+    );
+    assert!(
+        workspace
+            .join("spec/contracts/requirements/core/rust.yaml")
+            .exists()
+    );
+    assert!(
+        workspace
+            .join("spec/contracts/features/languages/rust.yaml")
+            .exists()
+    );
+
+    let config = fs::read_to_string(workspace.join("syu.yaml")).expect("config should exist");
+    let parsed_config: Value = serde_yaml::from_str(&config).expect("config should be valid yaml");
+    assert_eq!(
+        parsed_config["spec"]["root"].as_str(),
+        Some("spec/contracts")
+    );
+
+    let registry = fs::read_to_string(workspace.join("spec/contracts/features/features.yaml"))
+        .expect("feature registry should exist");
+    assert!(registry.contains("kind: rust"));
+    assert!(registry.contains("file: languages/rust.yaml"));
+
+    let stdout = String::from_utf8_lossy(&init.stdout);
+    assert!(stdout.contains("spec/contracts/requirements/core/rust.yaml"));
+    assert!(stdout.contains("spec/contracts/features/languages/rust.yaml"));
+
+    let validate = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(&workspace)
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        validate.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&validate.stdout),
+        String::from_utf8_lossy(&validate.stderr)
+    );
 }
 
 #[test]

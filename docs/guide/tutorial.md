@@ -22,6 +22,16 @@ instead:
 syu init . --spec-root docs/spec
 ```
 
+For a repository that is already clearly Rust-first, Python-first, or
+polyglot, you can start from a closer scaffold instead:
+
+```bash
+syu init . --template rust-only
+```
+
+You can combine both flags, but the walkthrough below assumes the default
+generic starter under `docs/syu` so the file names match verbatim.
+
 `syu init` creates:
 
 ```
@@ -43,8 +53,10 @@ spec:
   root: docs/syu
 ```
 
-`--spec-root` changes both the generated directory and this `spec.root` value, so
-you do not need to move the scaffold by hand after bootstrap.
+`--spec-root` changes both the generated directory and this `spec.root` value,
+so you do not need to move the scaffold by hand after bootstrap. `--template`
+keeps the same four layers but may swap the starter IDs and the initial
+requirement/feature file names to better match the repository style.
 
 ---
 
