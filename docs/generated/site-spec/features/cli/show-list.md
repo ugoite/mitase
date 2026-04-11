@@ -28,6 +28,19 @@ description: "Generated reference for docs/syu/features/cli/show-list.yaml"
       - **file**: src/command/list.rs
         - **symbols**:
           - run_list_command
+- **id**: FEAT-LIST-002
+  - **title**: Optional-kind listing with all-kinds default
+  - **summary**: Allow `syu list` without a kind argument to list all spec layers grouped by type, and accept a bare workspace path to list all kinds in that workspace.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-018
+  - **implementations**:
+    - **rust**:
+      - **file**: src/command/list.rs
+        - **symbols**:
+          - run_list_command
+          - parse_list_positionals
+          - print_section_list
 - **id**: FEAT-SHOW-001
   - **title**: Non-interactive definition detail lookup
   - **summary**: Show one philosophy, policy, requirement, or feature by ID in one command.
@@ -58,6 +71,20 @@ features:
         - file: src/command/list.rs
           symbols:
             - run_list_command
+
+  - id: FEAT-LIST-002
+    title: Optional-kind listing with all-kinds default
+    summary: Allow `syu list` without a kind argument to list all spec layers grouped by type, and accept a bare workspace path to list all kinds in that workspace.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-018
+    implementations:
+      rust:
+        - file: src/command/list.rs
+          symbols:
+            - run_list_command
+            - parse_list_positionals
+            - print_section_list
 
   - id: FEAT-SHOW-001
     title: Non-interactive definition detail lookup

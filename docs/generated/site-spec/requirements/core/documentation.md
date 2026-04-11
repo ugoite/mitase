@@ -24,8 +24,9 @@ description: "Generated reference for docs/syu/requirements/core/documentation.y
       The repository MUST explain philosophy, policy, requirements, and
       features in English, describe why each layer exists, document how to
       define them, explain `planned` / `implemented` delivery states, show how
-      to use `init`, `browse`, `validate`, `report`, config, and autofix, and
-      publish the checked-in `docs/` tree through a Docusaurus site.
+      to use `init`, `browse`, `validate`, `report`, config, and autofix, orient
+      first-time users with actionable root CLI help, and publish the checked-in
+      `docs/` tree through a Docusaurus site.
   - **priority**: medium
   - **status**: implemented
   - **linked_policies**:
@@ -36,6 +37,9 @@ description: "Generated reference for docs/syu/requirements/core/documentation.y
     - FEAT-DOCS-002
   - **tests**:
     - **rust**:
+      - **file**: tests/help_command.rs
+        - **symbols**:
+          - root_help_includes_start_here_guidance
       - **file**: tests/repository_quality.rs
         - **symbols**:
           - repository_declares_documentation_guides
@@ -77,8 +81,9 @@ requirements:
       The repository MUST explain philosophy, policy, requirements, and
       features in English, describe why each layer exists, document how to
       define them, explain `planned` / `implemented` delivery states, show how
-      to use `init`, `browse`, `validate`, `report`, config, and autofix, and
-      publish the checked-in `docs/` tree through a Docusaurus site.
+      to use `init`, `browse`, `validate`, `report`, config, and autofix, orient
+      first-time users with actionable root CLI help, and publish the checked-in
+      `docs/` tree through a Docusaurus site.
     priority: medium
     status: implemented
     linked_policies:
@@ -89,6 +94,9 @@ requirements:
       - FEAT-DOCS-002
     tests:
       rust:
+        - file: tests/help_command.rs
+          symbols:
+            - root_help_includes_start_here_guidance
         - file: tests/repository_quality.rs
           symbols:
             - repository_declares_documentation_guides

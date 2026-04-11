@@ -301,9 +301,9 @@ fn repository_declares_documentation_guides() {
     assert!(docs_package.contains("\"build\": \"docusaurus build\""));
     assert!(docs_deploy_workflow.contains("permissions:"));
     assert!(docs_deploy_workflow.contains("./.github/actions/build-docs-site"));
-    assert!(docs_deploy_workflow.contains("actions/configure-pages@v5"));
+    assert!(docs_deploy_workflow.contains("actions/configure-pages@v6"));
     assert!(docs_deploy_workflow.contains("actions/upload-pages-artifact@v4"));
-    assert!(docs_deploy_workflow.contains("actions/deploy-pages@v4"));
+    assert!(docs_deploy_workflow.contains("actions/deploy-pages@v5"));
     assert!(docs_deploy_workflow.contains("github-pages"));
     assert!(docs_config.contains("FEAT-DOCS-002"));
     assert!(docs_config.contains("routeBasePath: 'docs'"));
