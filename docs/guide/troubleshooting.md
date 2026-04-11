@@ -112,9 +112,10 @@ in that feature.
     - REQ-AUTH-001
 ```
 
-> **Config escape hatch:** If isolated nodes are intentional (e.g. early
-> planning), set `validate.require_non_orphaned_items: false` in `syu.yaml`
-> to disable this check.
+> **Escape hatch:** For a one-off run, use
+> `syu validate . --require-non-orphaned-items=false`. If the repository should
+> stay relaxed by default, set `validate.require_non_orphaned_items: false` in
+> `syu.yaml`.
 
 ---
 
@@ -134,8 +135,10 @@ linked_requirements: []   # ← missing back-reference
 
 **Fix:** Add the reverse reference to the other layer's YAML file.
 
-> **Config escape hatch:** If you intentionally want one-way references, set
-> `validate.require_reciprocal_links: false` in `syu.yaml`.
+> **Escape hatch:** For a one-off run, use
+> `syu validate . --require-reciprocal-links=false`. If the repository should
+> stay relaxed by default, set `validate.require_reciprocal_links: false` in
+> `syu.yaml`.
 
 ---
 
@@ -294,6 +297,9 @@ symbol non-public if it is not part of the intended API.
   private).
 - **Python:** remove it from `__all__` or rename it to start with `_`.
 - **TypeScript:** stop exporting it from the module.
+
+> **Strictness toggle:** Use `syu validate . --require-symbol-trace-coverage`
+> when you want to trial this stricter rule without committing a config change.
 
 ---
 

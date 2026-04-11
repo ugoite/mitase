@@ -155,11 +155,16 @@ syu validate . --rule SYU-trace-file-002
 syu validate . --id REQ-001
 syu validate . --fix
 syu validate . --no-fix
+syu validate . --allow-planned=false
+syu validate . --require-reciprocal-links=false
+syu validate . --require-symbol-trace-coverage
 ```
 
 `check` remains available as a compatibility alias for `validate`.
 Use `--severity`, `--genre`, `--rule`, and `--id` to narrow the rendered issue list
 without changing the underlying validation result or exit code.
+Use the validate override flags for one-off stricter or looser runs without
+editing `syu.yaml`.
 
 For a plain-English guide to common validation errors, see the
 [troubleshooting guide](docs/guide/troubleshooting.md).

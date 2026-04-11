@@ -62,6 +62,13 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       - **file**: tests/reciprocal_validation.rs
         - **symbols**:
           - *
+      - **file**: tests/validate_override_command.rs
+        - **symbols**:
+          - validate_cli_override_can_allow_planned_items
+          - validate_cli_override_can_forbid_planned_items
+          - validate_cli_override_for_planned_items_mentions_cli_source
+          - validate_cli_override_can_disable_orphan_checks
+          - validate_cli_override_can_disable_reciprocal_checks
       - **file**: src/command/check.rs
         - **symbols**:
           - *
@@ -112,6 +119,9 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       - **file**: tests/trace_coverage_validation.rs
         - **symbols**:
           - *
+      - **file**: tests/validate_override_command.rs
+        - **symbols**:
+          - validate_cli_override_can_enable_symbol_trace_coverage
       - **file**: tests/duplicate_validation.rs
         - **symbols**:
           - validate_reports_duplicate_trace_entries
@@ -241,6 +251,13 @@ requirements:
         - file: tests/reciprocal_validation.rs
           symbols:
             - '*'
+        - file: tests/validate_override_command.rs
+          symbols:
+            - validate_cli_override_can_allow_planned_items
+            - validate_cli_override_can_forbid_planned_items
+            - validate_cli_override_for_planned_items_mentions_cli_source
+            - validate_cli_override_can_disable_orphan_checks
+            - validate_cli_override_can_disable_reciprocal_checks
         - file: src/command/check.rs
           symbols:
             - '*'
@@ -290,6 +307,9 @@ requirements:
         - file: tests/trace_coverage_validation.rs
           symbols:
             - '*'
+        - file: tests/validate_override_command.rs
+          symbols:
+            - validate_cli_override_can_enable_symbol_trace_coverage
         - file: tests/duplicate_validation.rs
           symbols:
             - validate_reports_duplicate_trace_entries

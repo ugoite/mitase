@@ -50,3 +50,20 @@ fn workspace_help_uses_current_directory_default_consistently() {
         );
     }
 }
+
+#[test]
+fn validate_help_lists_temporary_config_overrides() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args(["validate", "--help"])
+        .output()
+        .expect("help should render");
+
+    assert!(output.status.success(), "validate help should succeed");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--allow-planned"));
+    assert!(stdout.contains("--require-non-orphaned-items"));
+    assert!(stdout.contains("--require-reciprocal-links"));
+    assert!(stdout.contains("--require-symbol-trace-coverage"));
+}
