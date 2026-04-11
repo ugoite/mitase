@@ -44,7 +44,7 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
           - *
       - **file**: src/command/mod.rs
         - **symbols**:
-          - shell_quote_path_wraps_empty_paths
+          - *
       - **file**: src/config.rs
         - **symbols**:
           - *
@@ -145,6 +145,9 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       - **file**: tests/show_command.rs
         - **symbols**:
           - *
+      - **file**: src/command/show.rs
+        - **symbols**:
+          - *
       - **file**: src/lib.rs
         - **symbols**:
           - dispatches_lookup_subcommands_without_rewriting_them
@@ -184,7 +187,7 @@ requirements:
             - '*'
         - file: src/command/mod.rs
           symbols:
-            - shell_quote_path_wraps_empty_paths
+            - '*'
         - file: src/config.rs
           symbols:
             - '*'
@@ -280,6 +283,9 @@ requirements:
           symbols:
             - '*'
         - file: tests/show_command.rs
+          symbols:
+            - '*'
+        - file: src/command/show.rs
           symbols:
             - '*'
         - file: src/lib.rs
