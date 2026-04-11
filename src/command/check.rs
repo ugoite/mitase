@@ -323,11 +323,13 @@ pub fn run_check_command(args: &CheckArgs) -> Result<i32> {
             } else {
                 None
             };
-            let result = if should_fix {
-                collect_check_result(&args.workspace)
+            let workspace = if should_fix {
+                with_validate_overrides(load_workspace(&args.workspace)?, args)
             } else {
-                collect_check_result_from_workspace(&workspace)
+                with_validate_overrides(workspace, args)
             };
+            let mut result = collect_check_result_from_workspace(&workspace);
+            apply_cli_override_issue_guidance(&mut result, args);
             let text_summary =
                 TextReportSummary::from_config(&workspace.config, &result.definition_counts);
             (result, fix_summary, Some(text_summary))
@@ -564,6 +566,46 @@ fn effective_fix(args: &CheckArgs, config: &SyuConfig) -> bool {
         false
     } else {
         config.validate.default_fix
+    }
+}
+
+fn with_validate_overrides(mut workspace: Workspace, args: &CheckArgs) -> Workspace {
+    if let Some(value) = args.allow_planned {
+        workspace.config.validate.allow_planned = value;
+    }
+    if let Some(value) = args.require_non_orphaned_items {
+        workspace.config.validate.require_non_orphaned_items = value;
+    }
+    if let Some(value) = args.require_reciprocal_links {
+        workspace.config.validate.require_reciprocal_links = value;
+    }
+    if let Some(value) = args.require_symbol_trace_coverage {
+        workspace.config.validate.require_symbol_trace_coverage = value;
+    }
+    workspace
+}
+
+fn apply_cli_override_issue_guidance(result: &mut CheckResult, args: &CheckArgs) {
+    if args.allow_planned != Some(false) {
+        return;
+    }
+
+    for issue in result
+        .issues
+        .iter_mut()
+        .filter(|issue| issue.code == "SYU-delivery-planned-001")
+    {
+        let (kind, id) = issue
+            .subject
+            .split_once(' ')
+            .expect("planned-item diagnostics should include kind and id");
+
+        issue.message = format!(
+            "{kind} `{id}` is marked `planned`, but `--allow-planned=false` forbids planned items for this run."
+        );
+        issue.suggestion = Some(format!(
+            "Change `{id}` to `implemented` or rerun without `--allow-planned=false`."
+        ));
     }
 }
 
@@ -2329,6 +2371,50 @@ mod tests {
         }
     }
 
+    fn write_valid_planned_workspace(root: &Path) {
+        fs::create_dir_all(root.join("docs/syu/philosophy")).expect("philosophy dir");
+        fs::create_dir_all(root.join("docs/syu/policies")).expect("policies dir");
+        fs::create_dir_all(root.join("docs/syu/requirements")).expect("requirements dir");
+        fs::create_dir_all(root.join("docs/syu/features")).expect("features dir");
+
+        fs::write(
+            root.join("syu.yaml"),
+            format!(
+                "version: {version}\nspec:\n  root: docs/syu\nvalidate:\n  default_fix: false\n  allow_planned: true\n  require_non_orphaned_items: true\n  require_reciprocal_links: true\n  require_symbol_trace_coverage: false\nruntimes:\n  python:\n    command: auto\n  node:\n    command: auto\n",
+                version = env!("CARGO_PKG_VERSION")
+            ),
+        )
+        .expect("config should exist");
+        fs::write(
+            root.join("docs/syu/philosophy/foundation.yaml"),
+            "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: PHIL-001\n    title: Keep planning explicit\n    product_design_principle: Planned work should stay visible until delivery starts.\n    coding_guideline: Prefer explicit status values over implied intent.\n    linked_policies:\n      - POL-001\n",
+        )
+        .expect("philosophy should exist");
+        fs::write(
+            root.join("docs/syu/policies/policies.yaml"),
+            "category: Policies\nversion: 1\nlanguage: en\n\npolicies:\n  - id: POL-001\n    title: Planned work should remain reviewable\n    summary: Delivery states should support gradual adoption.\n    description: This fixture covers the validate --fix reload path.\n    linked_philosophies:\n      - PHIL-001\n    linked_requirements:\n      - REQ-001\n",
+        )
+        .expect("policy should exist");
+        fs::write(
+            root.join("docs/syu/requirements/core.yaml"),
+            "category: Core Requirements\nprefix: REQ\n\nrequirements:\n  - id: REQ-001\n    title: Planned requirements can exist before delivery starts\n    description: Planned items should stay trace-free until implementation begins.\n    priority: high\n    status: planned\n    linked_policies:\n      - POL-001\n    linked_features:\n      - FEAT-001\n    tests: {}\n",
+        )
+        .expect("requirement should exist");
+        fs::write(
+            root.join("docs/syu/features/features.yaml"),
+            format!(
+                "version: \"{}\"\nfiles:\n  - kind: core\n    file: core.yaml\n",
+                env!("CARGO_PKG_VERSION")
+            ),
+        )
+        .expect("feature registry should exist");
+        fs::write(
+            root.join("docs/syu/features/core.yaml"),
+            "category: Core Features\nversion: 1\n\nfeatures:\n  - id: FEAT-001\n    title: Planned features can stay undocumented by traces\n    summary: Delivery claims should not appear before the work ships.\n    status: planned\n    linked_requirements:\n      - REQ-001\n    implementations: {}\n",
+        )
+        .expect("feature should exist");
+    }
+
     #[test]
     fn collect_check_result_reports_load_errors() {
         let result = collect_check_result(Path::new("/definitely/missing-syu-workspace"));
@@ -2347,6 +2433,10 @@ mod tests {
             id: Vec::new(),
             fix: false,
             no_fix: false,
+            allow_planned: None,
+            require_non_orphaned_items: None,
+            require_reciprocal_links: None,
+            require_symbol_trace_coverage: None,
             quiet: false,
         })
         .expect("command should render load errors");
@@ -2409,11 +2499,40 @@ mod tests {
             id: Vec::new(),
             fix: true,
             no_fix: false,
+            allow_planned: None,
+            require_non_orphaned_items: None,
+            require_reciprocal_links: None,
+            require_symbol_trace_coverage: None,
             quiet: false,
         })
         .expect_err("autofix failures should bubble up");
 
         assert!(error.to_string().contains("Python inspector failed"));
+    }
+
+    #[test]
+    fn run_check_command_with_fix_reloads_workspace_before_cli_overrides() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        write_valid_planned_workspace(tempdir.path());
+
+        let code = run_check_command(&crate::cli::CheckArgs {
+            workspace: tempdir.path().to_path_buf(),
+            format: crate::cli::OutputFormat::Json,
+            severity: Vec::new(),
+            genre: Vec::new(),
+            rule: Vec::new(),
+            id: Vec::new(),
+            fix: true,
+            no_fix: false,
+            allow_planned: Some(false),
+            require_non_orphaned_items: None,
+            require_reciprocal_links: None,
+            require_symbol_trace_coverage: None,
+            quiet: false,
+        })
+        .expect("command should complete");
+
+        assert_eq!(code, 1);
     }
 
     #[test]

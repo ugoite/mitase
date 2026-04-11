@@ -25,6 +25,18 @@ description: "Generated reference for docs/syu/config/validate.yaml"
   - --fix
   - --no-fix
   - validate.default_fix
+- **allow_planned**:
+  - --allow-planned[=true|false]
+  - validate.allow_planned
+- **require_non_orphaned_items**:
+  - --require-non-orphaned-items[=true|false]
+  - validate.require_non_orphaned_items
+- **require_reciprocal_links**:
+  - --require-reciprocal-links[=true|false]
+  - validate.require_reciprocal_links
+- **require_symbol_trace_coverage**:
+  - --require-symbol-trace-coverage[=true|false]
+  - validate.require_symbol_trace_coverage
 
 ### Items
 
@@ -44,7 +56,8 @@ description: "Generated reference for docs/syu/config/validate.yaml"
     - |
       `planned` items remain valid only while they avoid declaring real traces.
       Setting this to `false` tightens a workspace so backlog-style entries are
-      rejected entirely.
+      rejected entirely. The validate command can also override this value for a
+      single run with `--allow-planned` or `--allow-planned=false`.
 - **key**: validate.require_non_orphaned_items
   - **type**: boolean
   - **default**: True
@@ -52,7 +65,9 @@ description: "Generated reference for docs/syu/config/validate.yaml"
   - **description**:
     - |
       This keeps the adjacent-layer graph deliberate by requiring every item to
-      stay connected to at least one neighboring layer.
+      stay connected to at least one neighboring layer. Use
+      `--require-non-orphaned-items=false` when a migration needs a temporary
+      exception without changing the checked-in config.
 - **key**: validate.require_reciprocal_links
   - **type**: boolean
   - **default**: True
@@ -62,7 +77,9 @@ description: "Generated reference for docs/syu/config/validate.yaml"
       This keeps navigation explainable by making philosophy, policy,
       requirement, and feature relationships agree in both directions.
       Repositories doing a gradual migration can temporarily set it to `false`
-      while still keeping broken-reference validation enabled.
+      while still keeping broken-reference validation enabled. For one-off runs,
+      `syu validate . --require-reciprocal-links=false` provides the same
+      temporary relaxation without editing `syu.yaml`.
 - **key**: validate.require_symbol_trace_coverage
   - **type**: boolean
   - **default**: False
@@ -71,7 +88,9 @@ description: "Generated reference for docs/syu/config/validate.yaml"
     - |
       When enabled, `syu` requires every public Rust symbol to belong to some
       feature and every Rust test to belong to some requirement, in addition to
-      verifying declared traces.
+      verifying declared traces. The validate command can enable or disable this
+      for one run with `--require-symbol-trace-coverage` or
+      `--require-symbol-trace-coverage=false`.
 
 ## Source YAML
 
@@ -84,6 +103,18 @@ precedence:
     - --fix
     - --no-fix
     - validate.default_fix
+  allow_planned:
+    - --allow-planned[=true|false]
+    - validate.allow_planned
+  require_non_orphaned_items:
+    - --require-non-orphaned-items[=true|false]
+    - validate.require_non_orphaned_items
+  require_reciprocal_links:
+    - --require-reciprocal-links[=true|false]
+    - validate.require_reciprocal_links
+  require_symbol_trace_coverage:
+    - --require-symbol-trace-coverage[=true|false]
+    - validate.require_symbol_trace_coverage
 items:
   - key: validate.default_fix
     type: boolean
@@ -99,14 +130,17 @@ items:
     description: |
       `planned` items remain valid only while they avoid declaring real traces.
       Setting this to `false` tightens a workspace so backlog-style entries are
-      rejected entirely.
+      rejected entirely. The validate command can also override this value for a
+      single run with `--allow-planned` or `--allow-planned=false`.
   - key: validate.require_non_orphaned_items
     type: boolean
     default: true
     summary: Rejects isolated philosophy, policy, requirement, and feature nodes.
     description: |
       This keeps the adjacent-layer graph deliberate by requiring every item to
-      stay connected to at least one neighboring layer.
+      stay connected to at least one neighboring layer. Use
+      `--require-non-orphaned-items=false` when a migration needs a temporary
+      exception without changing the checked-in config.
   - key: validate.require_reciprocal_links
     type: boolean
     default: true
@@ -115,7 +149,9 @@ items:
       This keeps navigation explainable by making philosophy, policy,
       requirement, and feature relationships agree in both directions.
       Repositories doing a gradual migration can temporarily set it to `false`
-      while still keeping broken-reference validation enabled.
+      while still keeping broken-reference validation enabled. For one-off runs,
+      `syu validate . --require-reciprocal-links=false` provides the same
+      temporary relaxation without editing `syu.yaml`.
   - key: validate.require_symbol_trace_coverage
     type: boolean
     default: false
@@ -123,5 +159,7 @@ items:
     description: |
       When enabled, `syu` requires every public Rust symbol to belong to some
       feature and every Rust test to belong to some requirement, in addition to
-      verifying declared traces.
+      verifying declared traces. The validate command can enable or disable this
+      for one run with `--require-symbol-trace-coverage` or
+      `--require-symbol-trace-coverage=false`.
 ```

@@ -19,7 +19,7 @@ description: "Generated reference for docs/syu/features/cli/check.yaml"
 
 - **id**: FEAT-CHECK-001
   - **title**: Unified validation command
-  - **summary**: Validate graph links, rule-backed diagnostics, trace ownership, optional strict coverage, and safe autofix with one command.
+  - **summary**: Validate graph links, rule-backed diagnostics, trace ownership, temporary strictness overrides, optional strict coverage, and safe autofix with one command.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-001
@@ -59,6 +59,7 @@ description: "Generated reference for docs/syu/features/cli/check.yaml"
       - **file**: syu.yaml
         - **symbols**:
           - FEAT-CHECK-001
+          - allow_planned
           - require_non_orphaned_items
           - require_reciprocal_links
           - require_symbol_trace_coverage
@@ -77,7 +78,7 @@ version: 1
 features:
   - id: FEAT-CHECK-001
     title: Unified validation command
-    summary: Validate graph links, rule-backed diagnostics, trace ownership, optional strict coverage, and safe autofix with one command.
+    summary: Validate graph links, rule-backed diagnostics, trace ownership, temporary strictness overrides, optional strict coverage, and safe autofix with one command.
     status: implemented
     linked_requirements:
       - REQ-CORE-001
@@ -117,6 +118,7 @@ features:
         - file: syu.yaml
           symbols:
             - FEAT-CHECK-001
+            - allow_planned
             - require_non_orphaned_items
             - require_reciprocal_links
             - require_symbol_trace_coverage

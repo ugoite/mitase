@@ -7,7 +7,7 @@
 // FEAT-INIT-002
 // REQ-CORE-001
 
-use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
+use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, builder::BoolishValueParser};
 use std::path::PathBuf;
 
 const ROOT_AFTER_HELP: &str = "\
@@ -204,6 +204,54 @@ pub struct ValidateArgs {
     #[arg(long, action = ArgAction::SetTrue)]
     pub no_fix: bool,
 
+    #[arg(
+        long,
+        value_name = "BOOL",
+        action = ArgAction::Set,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        value_parser = BoolishValueParser::new(),
+        help = "Temporarily override validate.allow_planned for this run"
+    )]
+    pub allow_planned: Option<bool>,
+
+    #[arg(
+        long,
+        value_name = "BOOL",
+        action = ArgAction::Set,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        value_parser = BoolishValueParser::new(),
+        help = "Temporarily override validate.require_non_orphaned_items for this run"
+    )]
+    pub require_non_orphaned_items: Option<bool>,
+
+    #[arg(
+        long,
+        value_name = "BOOL",
+        action = ArgAction::Set,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        value_parser = BoolishValueParser::new(),
+        help = "Temporarily override validate.require_reciprocal_links for this run"
+    )]
+    pub require_reciprocal_links: Option<bool>,
+
+    #[arg(
+        long,
+        value_name = "BOOL",
+        action = ArgAction::Set,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        value_parser = BoolishValueParser::new(),
+        help = "Temporarily override validate.require_symbol_trace_coverage for this run"
+    )]
+    pub require_symbol_trace_coverage: Option<bool>,
+
     #[arg(help = "Suppress next-step guidance in successful text output")]
     #[arg(short, long, action = ArgAction::SetTrue)]
     pub quiet: bool,
@@ -285,7 +333,9 @@ impl ValidationGenreFilter {
 
 #[cfg(test)]
 mod tests {
-    use super::{LookupKind, ValidationGenreFilter, ValidationSeverityFilter};
+    use clap::Parser;
+
+    use super::{Cli, LookupKind, ValidationGenreFilter, ValidationSeverityFilter};
 
     #[test]
     fn cli_enums_expose_expected_labels() {
@@ -300,5 +350,35 @@ mod tests {
         assert_eq!(ValidationGenreFilter::Delivery.as_str(), "delivery");
         assert_eq!(ValidationGenreFilter::Trace.as_str(), "trace");
         assert_eq!(ValidationGenreFilter::Coverage.as_str(), "coverage");
+    }
+
+    #[test]
+    fn validate_args_accept_temporary_boolean_overrides() {
+        let cli = Cli::try_parse_from([
+            "syu",
+            "validate",
+            ".",
+            "--allow-planned=false",
+            "--require-non-orphaned-items=false",
+            "--require-reciprocal-links",
+            "--require-symbol-trace-coverage",
+        ])
+        .expect("validate args should parse");
+
+        let rendered = format!("{cli:?}");
+        assert!(rendered.contains("command: Some(Validate("));
+        assert!(rendered.contains("allow_planned: Some(false)"));
+        assert!(rendered.contains("require_non_orphaned_items: Some(false)"));
+        assert!(rendered.contains("require_reciprocal_links: Some(true)"));
+        assert!(rendered.contains("require_symbol_trace_coverage: Some(true)"));
+    }
+
+    #[test]
+    fn validate_args_reject_non_boolean_override_values() {
+        let error = Cli::try_parse_from(["syu", "validate", ".", "--allow-planned=maybe"])
+            .expect_err("non-boolean overrides should fail");
+
+        let message = error.to_string();
+        assert!(message.contains("--allow-planned"));
     }
 }
