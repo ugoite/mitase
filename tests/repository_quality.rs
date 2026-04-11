@@ -90,6 +90,7 @@ fn repository_declares_release_automation() {
     let release_notes_script = read_file("scripts/ci/release-track-notes.sh");
     let release_config = read_file("release-please-config.json");
     let manifest = read_file(".release-please-manifest.json");
+    let readme = read_file("README.md");
 
     assert!(release_please.contains("FEAT-RELEASE-001"));
     assert!(release_please.contains("googleapis/release-please-action@v4.4.0"));
@@ -109,6 +110,10 @@ fn repository_declares_release_automation() {
     assert!(release_artifacts.contains("install-syu.sh"));
     assert!(release_artifacts.contains("release-notes:"));
     assert!(release_artifacts.contains("release-track-notes.sh"));
+    assert!(release_artifacts.contains("attestations: write"));
+    assert!(release_artifacts.contains("id-token: write"));
+    assert!(release_artifacts.contains("actions/attest-build-provenance@v2"));
+    assert!(release_artifacts.contains("subject-path: release-artifacts/*"));
 
     assert!(package_script.contains("FEAT-RELEASE-001"));
     assert!(package_script.contains("package_release_artifact"));
@@ -126,6 +131,8 @@ fn repository_declares_release_automation() {
     assert!(release_config.contains("\"changelog-type\": \"github\""));
     assert!(!release_config.contains("\"initial-version\""));
     assert!(manifest.contains("\".\": \"0.0.0\""));
+    assert!(readme.contains("gh attestation verify"));
+    assert!(readme.contains("--repo ugoite/syu"));
     assert!(
         !repo_root()
             .join("release-please-config.alpha.json")
