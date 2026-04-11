@@ -22,7 +22,18 @@ for (const candidate of candidates) {
 
   const result = spawnSync(
     candidate,
-    ["build", "wasm", "--target", "web", "--out-dir", "../src/wasm", "--out-name", "syu_app_wasm"],
+    [
+      "build",
+      "wasm",
+      "--target",
+      "web",
+      "--out-dir",
+      "../src/wasm",
+      "--out-name",
+      "syu_app_wasm",
+      // Keep the checked-in app bundle reproducible across local and CI environments.
+      "--no-opt",
+    ],
     {
       cwd: process.cwd(),
       env: {
