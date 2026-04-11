@@ -2,7 +2,7 @@
 // FEAT-LIST-002
 // REQ-CORE-018
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow};
 use clap::ValueEnum as _;
@@ -93,17 +93,43 @@ fn parse_list_positionals(positional: &[String]) -> Result<(Option<LookupKind>, 
                 Ok((None, PathBuf::from(first)))
             }
         }
-        [kind_str, workspace_str, ..] => {
-            let kind = LookupKind::from_str(kind_str, true).map_err(|_| {
-                invalid_kind_error(
-                    kind_str,
-                    Some(workspace_str),
-                    suggested_lookup_kind(kind_str),
-                )
-            })?;
-            Ok((Some(kind), PathBuf::from(workspace_str)))
-        }
+        [first, second, ..] => parse_list_two_positionals(first, second),
     }
+}
+
+fn parse_list_two_positionals(first: &str, second: &str) -> Result<(Option<LookupKind>, PathBuf)> {
+    match (
+        LookupKind::from_str(first, true),
+        LookupKind::from_str(second, true),
+    ) {
+        (Ok(_), Ok(_)) => Err(ambiguous_kind_error(first, second)),
+        (Ok(kind), Err(_)) => Ok((Some(kind), PathBuf::from(second))),
+        (Err(_), Ok(kind)) => Ok((Some(kind), PathBuf::from(first))),
+        (Err(_), Err(_)) if looks_like_workspace_path(first) => Err(invalid_kind_error(
+            second,
+            Some(first),
+            suggested_lookup_kind(second),
+        )),
+        (Err(_), Err(_)) => Err(invalid_kind_error(
+            first,
+            Some(second),
+            suggested_lookup_kind(first),
+        )),
+    }
+}
+
+fn looks_like_workspace_path(value: &str) -> bool {
+    let path = Path::new(value);
+    path.exists() || value == "." || value == ".." || path.components().count() > 1
+}
+
+fn ambiguous_kind_error(first: &str, second: &str) -> anyhow::Error {
+    anyhow!(
+        "received two layer kinds: '{first}' and '{second}'\n  \
+         pass only one kind plus an optional workspace path\n  \
+         Examples: `syu list {first} .` or `syu list . {first}`\n  \
+         Hint: run `syu list` to list every kind in the current workspace"
+    )
 }
 
 fn invalid_kind_error(
@@ -113,7 +139,7 @@ fn invalid_kind_error(
 ) -> anyhow::Error {
     let mut message = format!(
         "invalid value '{}' for KIND\n  possible values: philosophy, policy, requirement, feature",
-        value
+        value,
     );
     if let Some(suggestion) = suggestion {
         message.push_str(&format!("\n  did you mean `{suggestion}`?"));
@@ -230,6 +256,16 @@ mod tests {
 
     #[test]
     // FEAT-LIST-001
+    fn parse_list_positionals_workspace_and_kind_returns_both() {
+        let (kind, workspace) =
+            parse_list_positionals(&["/tmp/ws".to_string(), "feature".to_string()])
+                .expect("should succeed");
+        assert_eq!(kind, Some(LookupKind::Feature));
+        assert_eq!(workspace, PathBuf::from("/tmp/ws"));
+    }
+
+    #[test]
+    // FEAT-LIST-001
     fn parse_list_positionals_kind_plural_alias_works() {
         let (kind, _workspace) =
             parse_list_positionals(&["requirements".to_string()]).expect("should succeed");
@@ -244,6 +280,29 @@ mod tests {
         let msg = result.unwrap_err().to_string();
         assert!(msg.contains("invalid value"), "error: {msg}");
         assert!(msg.contains("syu list ."), "hint missing: {msg}");
+    }
+
+    #[test]
+    // FEAT-LIST-001
+    fn parse_list_positionals_workspace_then_invalid_kind_preserves_workspace_hint() {
+        let result = parse_list_positionals(&["/tmp/ws".to_string(), "notakind".to_string()]);
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("invalid value 'notakind'"), "error: {msg}");
+        assert!(msg.contains("syu list /tmp/ws"), "hint missing: {msg}");
+    }
+
+    #[test]
+    // FEAT-LIST-001
+    fn parse_list_positionals_two_kinds_returns_usage_error() {
+        let result = parse_list_positionals(&["requirement".to_string(), "feature".to_string()]);
+        assert!(result.is_err());
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("received two layer kinds"), "error: {msg}");
+        assert!(
+            msg.contains("syu list requirement ."),
+            "hint missing: {msg}"
+        );
     }
 
     #[test]
