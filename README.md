@@ -125,10 +125,14 @@ are attached to a terminal.
 `syu init` creates:
 
 - `syu.yaml`
-- `docs/syu/philosophy/`
-- `docs/syu/policies/`
-- `docs/syu/requirements/`
-- `docs/syu/features/`
+- `docs/syu/philosophy/` by default
+- `docs/syu/policies/` by default
+- `docs/syu/requirements/` by default
+- `docs/syu/features/` by default
+
+Prefer another repository layout such as `docs/spec` or `spec/contracts`?
+Use `syu init . --spec-root docs/spec` to scaffold the same starter tree there
+and write the matching `spec.root` value into `syu.yaml`.
 
 ## Commands
 
@@ -139,9 +143,11 @@ Bootstrap a new workspace:
 ```bash
 syu init .
 syu init path/to/workspace --name my-project
+syu init . --spec-root docs/spec
 ```
 
-Use `--force` to overwrite generated files.
+Use `--force` to overwrite generated files. Use `--spec-root` to scaffold into a
+repository-relative spec tree without moving the generated files by hand later.
 
 ### `syu validate`
 

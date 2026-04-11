@@ -15,6 +15,13 @@ mkdir filestore && cd filestore
 syu init .
 ```
 
+If the repository already uses another documentation layout, initialize there
+instead:
+
+```bash
+syu init . --spec-root docs/spec
+```
+
 `syu init` creates:
 
 ```
@@ -35,6 +42,9 @@ The relevant part of `syu.yaml` points the validator at that tree:
 spec:
   root: docs/syu
 ```
+
+`--spec-root` changes both the generated directory and this `spec.root` value, so
+you do not need to move the scaffold by hand after bootstrap.
 
 ---
 

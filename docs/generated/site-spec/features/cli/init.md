@@ -47,6 +47,22 @@ description: "Generated reference for docs/syu/features/cli/init.yaml"
       - **file**: src/cli.rs
         - **symbols**:
           - InitArgs
+- **id**: FEAT-INIT-003
+  - **title**: Custom spec.root bootstrap
+  - **summary**: Allow `syu init --spec-root` to scaffold the starter workspace into another repository-relative specification tree and emit the matching `spec.root` in `syu.yaml`.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-009
+  - **implementations**:
+    - **rust**:
+      - **file**: src/command/init.rs
+        - **symbols**:
+          - run_init_command
+          - resolve_init_spec_root
+          - scaffold_files
+      - **file**: src/cli.rs
+        - **symbols**:
+          - InitArgs
 
 ## Source YAML
 
@@ -82,6 +98,22 @@ features:
         - file: src/command/init.rs
           symbols:
             - run_init_command
+        - file: src/cli.rs
+          symbols:
+            - InitArgs
+  - id: FEAT-INIT-003
+    title: Custom spec.root bootstrap
+    summary: Allow `syu init --spec-root` to scaffold the starter workspace into another repository-relative specification tree and emit the matching `spec.root` in `syu.yaml`.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-009
+    implementations:
+      rust:
+        - file: src/command/init.rs
+          symbols:
+            - run_init_command
+            - resolve_init_spec_root
+            - scaffold_files
         - file: src/cli.rs
           symbols:
             - InitArgs
