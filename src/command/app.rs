@@ -151,8 +151,12 @@ pub fn run_app_command(args: &AppArgs) -> Result<i32> {
             .await
             .context("local app readiness probe panicked")??;
         println!("syu app ready: http://{local_addr}");
+        maybe_warn_on_non_loopback_bind(local_addr.ip());
         println!("Open http://{local_addr} in your browser.");
         println!("Press Ctrl-C to stop.");
+        std::io::stderr()
+            .flush()
+            .context("failed to flush stderr")?;
         std::io::stdout()
             .flush()
             .context("failed to flush stdout")?;
@@ -163,6 +167,17 @@ pub fn run_app_command(args: &AppArgs) -> Result<i32> {
     })?;
 
     Ok(0)
+}
+
+fn maybe_warn_on_non_loopback_bind(bind: IpAddr) {
+    if bind.is_loopback() {
+        return;
+    }
+
+    eprintln!(
+        "warning: syu app is bound to {bind}, so workspace data and source documents may be reachable from other machines on your network."
+    );
+    eprintln!("warning: use --bind 127.0.0.1 to keep the browser UI local to this machine.");
 }
 
 fn resolve_app_server_settings(args: &AppArgs, config: &SyuConfig) -> AppServerSettings {

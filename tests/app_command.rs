@@ -169,10 +169,15 @@ fn app_command_startup_message_explains_browser_and_stop_flow() {
 
     let output = shutdown_child_with_output(child);
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stdout.contains(&format!("syu app listening on http://127.0.0.1:{port}")));
     assert!(stdout.contains(&format!("syu app ready: http://127.0.0.1:{port}")));
     assert!(stdout.contains(&format!("Open http://127.0.0.1:{port} in your browser.")));
     assert!(stdout.contains("Press Ctrl-C to stop."));
+    assert!(
+        !stderr.contains("warning: syu app is bound"),
+        "loopback binds should not print a public exposure warning",
+    );
 }
 
 #[test]
@@ -191,6 +196,32 @@ fn app_command_help_mentions_browser_and_stop_instructions() {
     assert!(stdout.contains("Use GET /health for readiness checks once the app is serving."));
     assert!(stdout.contains("After startup, open the printed URL in your browser."));
     assert!(stdout.contains("Press Ctrl-C to stop the local app server."));
+}
+
+#[test]
+fn app_command_warns_on_non_loopback_binds() {
+    let port = reserve_port();
+    let child = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("app")
+        .arg(fixture_path("passing"))
+        .arg("--bind")
+        .arg("0.0.0.0")
+        .arg("--port")
+        .arg(port.to_string())
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("app command should start");
+
+    wait_for_server(port);
+
+    let output = shutdown_child_with_output(child);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("warning: syu app is bound to 0.0.0.0"));
+    assert!(stderr.contains("workspace data and source documents may be reachable"));
+    assert!(stderr.contains("use --bind 127.0.0.1 to keep the browser UI local"));
 }
 
 #[test]
