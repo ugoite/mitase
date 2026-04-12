@@ -12,6 +12,7 @@ fn read_file(path: &str) -> String {
 // REQ-CORE-005
 fn repository_declares_precommit_and_quality_gates() {
     let precommit = read_file(".pre-commit-config.yaml");
+    let install_precommit = read_file("scripts/install-precommit.sh");
     let quality_script = read_file("scripts/ci/quality-gates.sh");
     let ci_workflow = read_file(".github/workflows/ci.yml");
     let contributing = read_file("CONTRIBUTING.md");
@@ -30,6 +31,8 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(quality_script.contains("cargo test"));
     assert!(quality_script.contains("cargo run -- validate ."));
     assert!(quality_script.contains("check-generated-docs-freshness.sh"));
+    assert!(install_precommit.contains("site --user-base"));
+    assert!(install_precommit.contains("pre_commit install"));
 
     assert!(ci_workflow.contains("FEAT-QUALITY-001"));
     assert!(ci_workflow.contains("precommit:"));
@@ -389,6 +392,7 @@ fn repository_declares_devcontainer_configuration() {
     let devcontainer = read_file(".devcontainer/devcontainer.json");
     assert!(devcontainer.contains("FEAT-CONTRIB-001"));
     assert!(devcontainer.contains("cargo install cargo-llvm-cov --locked"));
+    assert!(devcontainer.contains("scripts/install-precommit.sh"));
     assert!(devcontainer.contains("ghcr.io/devcontainers/features/python:1"));
 }
 
@@ -434,6 +438,7 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(contributing.contains("scripts/ci/check-app-dist-freshness.sh"));
     assert!(contributing.contains("app/dist"));
     assert!(contributing.contains("scripts/install-precommit.sh"));
+    assert!(contributing.contains("devcontainer/Codespaces post-create step"));
     assert!(contributing.contains("GitHub Pages"));
     assert!(contributing.contains("release track"));
 
