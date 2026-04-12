@@ -44,6 +44,33 @@ fn bare_syu_prints_help_when_not_attached_to_a_terminal() {
 }
 
 #[test]
+fn browse_command_help_explains_when_to_use_non_interactive_mode() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("browse")
+        .arg("--help")
+        .output()
+        .expect("command should run");
+
+    assert!(output.status.success(), "help should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("syu browse . --non-interactive"),
+        "help should show the non-interactive example:\n{stdout}",
+    );
+    assert!(
+        stdout.contains(
+            "workspace metadata, per-layer counts, grouped items, and the current validation errors"
+        ),
+        "help should explain the browse snapshot shape:\n{stdout}",
+    );
+    assert!(
+        stdout.contains("emitted as JSON for automation"),
+        "help should point to syu list for automation-oriented output:\n{stdout}",
+    );
+}
+
+#[test]
 fn browse_command_can_follow_linked_entries() {
     let output = Command::cargo_bin("syu")
         .expect("binary should build")

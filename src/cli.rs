@@ -49,11 +49,13 @@ Examples:
 const WORKSPACE_HELP: &str = "Workspace root containing syu.yaml and the configured spec tree";
 
 const LIST_AFTER_HELP: &str = "\
-Use `syu list` when you want a filtered layer view. Use `syu browse --non-interactive` when you want the full spec tree in text form.
+Choose `syu list` when you want list-shaped output that can be narrowed to one layer or emitted as JSON for automation.
+Choose `syu browse --non-interactive` when you want the browse snapshot instead: workspace metadata, per-layer counts, and the current validation errors in plain text.
 
 Examples:
   syu list
   syu list requirement
+  syu list requirement --format json
   syu list path/to/workspace
   syu list requirement path/to/workspace
   syu list path/to/workspace requirement
@@ -62,7 +64,12 @@ Note:
   Pass the workspace root that contains syu.yaml.
   The configured spec.root lives inside that workspace; do not pass it directly.";
 const BROWSE_AFTER_HELP: &str = "\
-Use `syu browse --non-interactive` when you want the full spec tree in text form. Use `syu list` when you want a filtered layer view for one layer in the current workspace.
+Choose `syu browse --non-interactive` when you want the browse snapshot in plain text: workspace metadata, per-layer counts, grouped items, and the current validation errors.
+Choose `syu list` when you want list-shaped output that can be narrowed to one layer or emitted as JSON for automation.
+
+Examples:
+  syu browse .
+  syu browse . --non-interactive
 ";
 
 const SEARCH_AFTER_HELP: &str = "\

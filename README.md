@@ -255,13 +255,17 @@ errors interactively:
 ```bash
 syu
 syu browse .
+syu browse . --non-interactive
 ```
 
 ### `syu list`
 
-List one layer without entering the interactive browser:
+Render list-shaped output without entering the interactive browser:
 
-Use `syu list` when you want a filtered layer view. Use `syu browse --non-interactive` when you want the full spec tree in plain text.
+Use `syu list` when you want list-shaped output that can be narrowed to one
+layer or emitted as JSON for automation. Use `syu browse --non-interactive`
+when you want the browse snapshot instead: workspace metadata, per-layer
+counts, and the current validation errors in plain text.
 
 ```bash
 syu list philosophy

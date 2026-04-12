@@ -242,6 +242,14 @@ fn list_command_help_documents_both_argument_orders() {
         ),
         "help should explain why the spec.root itself is not the workspace path:\n{stdout}",
     );
+    assert!(
+        stdout.contains("emitted as JSON for automation"),
+        "help should explain the automation-oriented list output:\n{stdout}",
+    );
+    assert!(
+        stdout.contains("workspace metadata, per-layer counts, and the current validation errors"),
+        "help should distinguish list output from the browse snapshot:\n{stdout}",
+    );
 }
 
 #[test]
