@@ -3,6 +3,7 @@
 
 use std::{
     fs,
+    io::{self, IsTerminal, Write},
     path::{Component, Path, PathBuf},
 };
 
@@ -20,48 +21,43 @@ use crate::{
 
 use super::{lookup::WorkspaceLookup, shell_quote_path};
 
-pub fn run_add_command(args: &AddArgs) -> Result<i32> {
-    let workspace = load_workspace(&args.workspace)?;
-    let parsed_id = ParsedId::parse(args.layer, &args.id)?;
+const ADD_MISSING_ID_NON_TTY_MESSAGE: &str = "`syu add` needs a definition ID when stdin/stdout are not terminals; pass the ID explicitly or rerun in a terminal to be prompted";
+const ADD_INTERACTIVE_KIND_NON_TTY_MESSAGE: &str =
+    "`syu add --interactive` requires a terminal to prompt for a feature kind";
+const ADD_INTERACTIVE_FILE_NON_TTY_MESSAGE: &str =
+    "`syu add --interactive` requires a terminal to prompt for a file path";
 
+pub fn run_add_command(args: &AddArgs) -> Result<i32> {
     if args.layer != LookupKind::Feature && args.kind.is_some() {
         bail!("`--kind` is only supported when scaffolding features");
     }
+    let resolved = resolve_add_invocation(args)?;
+    let workspace = load_workspace(&resolved.workspace)?;
     if WorkspaceLookup::new(&workspace)
-        .find(&parsed_id.normalized)
+        .find(&resolved.parsed_id.normalized)
         .is_some()
     {
         bail!(
             "{} `{}` already exists in `{}`",
             args.layer.label(),
-            parsed_id.normalized,
+            resolved.parsed_id.normalized,
             workspace.root.display()
         );
     }
-
-    let feature_kind = match args.layer {
-        LookupKind::Feature => {
-            let kind = args
-                .kind
-                .as_deref()
-                .unwrap_or(parsed_id.folder_slug.as_str());
-            Some(normalize_feature_kind(kind)?)
-        }
-        _ => None,
-    };
     let target = resolve_target_path(
         &workspace,
         args.layer,
-        args.file.as_deref(),
-        &parsed_id,
-        feature_kind.as_deref(),
+        resolved.file.as_deref(),
+        &resolved.parsed_id,
+        resolved.feature_kind.as_deref(),
     )?;
     let created_target_file = !target.absolute.exists();
     let feature_registry_update = if args.layer == LookupKind::Feature {
         Some(prepare_feature_registry_update(
             &workspace,
             &target.absolute,
-            feature_kind
+            resolved
+                .feature_kind
                 .as_deref()
                 .expect("features require a registry kind"),
         )?)
@@ -69,7 +65,8 @@ pub fn run_add_command(args: &AddArgs) -> Result<i32> {
         None
     };
 
-    write_stub_document(args.layer, &parsed_id, feature_kind.as_deref(), &target)?;
+    let feature_kind = resolved.feature_kind.as_deref();
+    write_stub_document(args.layer, &resolved.parsed_id, feature_kind, &target)?;
 
     let registry_updated = if let Some(update) = feature_registry_update {
         write_feature_registry_update(update)?
@@ -80,12 +77,20 @@ pub fn run_add_command(args: &AddArgs) -> Result<i32> {
     print_add_summary(
         &workspace,
         args.layer,
-        &parsed_id.normalized,
+        &resolved.parsed_id.normalized,
         &target.absolute,
         created_target_file,
         registry_updated,
     );
     Ok(0)
+}
+
+#[derive(Debug, Clone)]
+struct ResolvedAddInvocation {
+    workspace: PathBuf,
+    parsed_id: ParsedId,
+    feature_kind: Option<String>,
+    file: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone)]
@@ -139,6 +144,182 @@ struct TargetPath {
 struct FeatureRegistryUpdate {
     path: PathBuf,
     updated_contents: Option<String>,
+}
+
+trait AddPromptIo {
+    fn is_terminal(&self) -> bool;
+    fn prompt_line(&mut self, label: &str, default: Option<&str>) -> Result<String>;
+}
+
+struct StdioPromptIo;
+
+impl AddPromptIo for StdioPromptIo {
+    fn is_terminal(&self) -> bool {
+        io::stdin().is_terminal() && io::stdout().is_terminal()
+    }
+
+    fn prompt_line(&mut self, label: &str, default: Option<&str>) -> Result<String> {
+        match default {
+            Some(value) => print!("{label} [{value}]: "),
+            None => print!("{label}: "),
+        }
+        io::stdout()
+            .flush()
+            .context("failed to flush interactive `syu add` prompt")?;
+
+        let mut input = String::new();
+        io::stdin()
+            .read_line(&mut input)
+            .context("failed to read interactive `syu add` input")?;
+        Ok(input.trim().to_string())
+    }
+}
+
+fn resolve_add_invocation(args: &AddArgs) -> Result<ResolvedAddInvocation> {
+    let mut prompt_io = StdioPromptIo;
+    resolve_add_invocation_with_prompt_io(args, &mut prompt_io)
+}
+
+fn resolve_add_invocation_with_prompt_io(
+    args: &AddArgs,
+    prompt_io: &mut impl AddPromptIo,
+) -> Result<ResolvedAddInvocation> {
+    let (raw_id, workspace) = resolve_workspace_and_id(args)?;
+    let parsed_id = match raw_id {
+        Some(id) => ParsedId::parse(args.layer, &id)?,
+        None => prompt_for_parsed_id(args.layer, prompt_io)?,
+    };
+    let feature_kind = match args.layer {
+        LookupKind::Feature => Some(resolve_feature_kind(args, &parsed_id, prompt_io)?),
+        _ => None,
+    };
+    let file =
+        resolve_interactive_file_prompt(args, &parsed_id, feature_kind.as_deref(), prompt_io)?;
+
+    Ok(ResolvedAddInvocation {
+        workspace,
+        parsed_id,
+        feature_kind,
+        file,
+    })
+}
+
+fn resolve_workspace_and_id(args: &AddArgs) -> Result<(Option<String>, PathBuf)> {
+    let mut id = args.id.clone();
+    let mut workspace = args.workspace.clone();
+
+    if args.interactive
+        && workspace == Path::new(".")
+        && id.as_deref().is_some_and(|candidate| {
+            ParsedId::parse(args.layer, candidate).is_err() && Path::new(candidate).exists()
+        })
+    {
+        workspace = PathBuf::from(
+            id.take()
+                .expect("interactive workspace override should still be present"),
+        );
+    }
+
+    Ok((id, workspace))
+}
+
+fn resolve_feature_kind(
+    args: &AddArgs,
+    parsed_id: &ParsedId,
+    prompt_io: &mut impl AddPromptIo,
+) -> Result<String> {
+    if let Some(kind) = args.kind.as_deref() {
+        return normalize_feature_kind(kind);
+    }
+    if args.interactive {
+        ensure_prompt_terminal(prompt_io, ADD_INTERACTIVE_KIND_NON_TTY_MESSAGE)?;
+        loop {
+            let raw =
+                prompt_with_default(prompt_io, "Feature kind", parsed_id.folder_slug.as_str())?;
+            match normalize_feature_kind(&raw) {
+                Ok(kind) => return Ok(kind),
+                Err(error) => eprintln!("{error:#}"),
+            }
+        }
+    }
+
+    normalize_feature_kind(parsed_id.folder_slug.as_str())
+}
+
+fn resolve_interactive_file_prompt(
+    args: &AddArgs,
+    parsed_id: &ParsedId,
+    feature_kind: Option<&str>,
+    prompt_io: &mut impl AddPromptIo,
+) -> Result<Option<PathBuf>> {
+    if let Some(file) = &args.file {
+        return Ok(Some(file.clone()));
+    }
+    if !args.interactive {
+        return Ok(None);
+    }
+
+    ensure_prompt_terminal(prompt_io, ADD_INTERACTIVE_FILE_NON_TTY_MESSAGE)?;
+    let default_relative = default_document_path(args.layer, parsed_id, feature_kind);
+    let default_relative_display = default_relative.display().to_string();
+    let prompted_path = prompt_optional_path(prompt_io, "YAML file", &default_relative_display)?;
+    Ok(prompted_path.map(PathBuf::from))
+}
+
+fn prompt_for_parsed_id(layer: LookupKind, prompt_io: &mut impl AddPromptIo) -> Result<ParsedId> {
+    ensure_prompt_terminal(prompt_io, ADD_MISSING_ID_NON_TTY_MESSAGE)?;
+
+    loop {
+        let raw = prompt_required(prompt_io, "Definition ID")?;
+        match ParsedId::parse(layer, &raw) {
+            Ok(parsed) => return Ok(parsed),
+            Err(error) => eprintln!("{error:#}"),
+        }
+    }
+}
+
+fn ensure_prompt_terminal(prompt_io: &impl AddPromptIo, message: &str) -> Result<()> {
+    if prompt_io.is_terminal() {
+        return Ok(());
+    }
+
+    bail!("{message}");
+}
+
+fn prompt_required(prompt_io: &mut impl AddPromptIo, label: &str) -> Result<String> {
+    loop {
+        let raw = prompt_io.prompt_line(label, None)?;
+        if !raw.is_empty() {
+            return Ok(raw);
+        }
+        eprintln!("{label} is required.");
+    }
+}
+
+fn prompt_with_default(
+    prompt_io: &mut impl AddPromptIo,
+    label: &str,
+    default: &str,
+) -> Result<String> {
+    let raw = prompt_io.prompt_line(label, Some(default))?;
+    if raw.is_empty() {
+        Ok(default.to_string())
+    } else {
+        Ok(raw)
+    }
+}
+
+fn prompt_optional_path(
+    prompt_io: &mut impl AddPromptIo,
+    label: &str,
+    default: &str,
+) -> Result<Option<String>> {
+    let raw = prompt_io.prompt_line(label, Some(default))?;
+    if raw.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(raw))
+    }
 }
 
 fn normalize_definition_id(raw: &str, layer: LookupKind) -> Result<String> {
@@ -602,22 +783,51 @@ fn title_case_slug(slug: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use anyhow::Result;
     use std::{
+        collections::VecDeque,
         fs,
         path::{Path, PathBuf},
     };
 
     use tempfile::{TempDir, tempdir};
 
-    use crate::{cli::LookupKind, config::SyuConfig, workspace::Workspace};
+    use crate::{
+        cli::{AddArgs, InitArgs, LookupKind, OutputFormat, StarterTemplate},
+        config::SyuConfig,
+        workspace::Workspace,
+    };
 
     use super::{
-        FeatureRegistryUpdate, ParsedId, TargetPath, default_document_path, default_folder_slug,
-        default_title, ensure_target_within_spec_root, normalize_definition_id,
-        normalize_feature_kind, prepare_feature_registry_update, render_item_block,
-        render_new_document, resolve_explicit_file, title_case_slug, validate_existing_document,
-        write_feature_registry_update, write_stub_document,
+        AddPromptIo, FeatureRegistryUpdate, ParsedId, TargetPath, default_document_path,
+        default_folder_slug, default_title, ensure_target_within_spec_root,
+        normalize_definition_id, normalize_feature_kind, prepare_feature_registry_update,
+        prompt_for_parsed_id, render_item_block, render_new_document,
+        resolve_add_invocation_with_prompt_io, resolve_explicit_file, resolve_feature_kind,
+        resolve_interactive_file_prompt, run_add_command, title_case_slug,
+        validate_existing_document, write_feature_registry_update, write_stub_document,
     };
+
+    #[derive(Default)]
+    struct FakePromptIo {
+        terminal: bool,
+        lines: VecDeque<String>,
+        prompts: Vec<(String, Option<String>)>,
+    }
+
+    impl AddPromptIo for FakePromptIo {
+        fn is_terminal(&self) -> bool {
+            self.terminal
+        }
+
+        fn prompt_line(&mut self, label: &str, default: Option<&str>) -> Result<String> {
+            self.prompts.push((
+                label.to_string(),
+                default.map(std::string::ToString::to_string),
+            ));
+            Ok(self.lines.pop_front().unwrap_or_default())
+        }
+    }
 
     fn test_workspace() -> (TempDir, Workspace) {
         let tempdir = tempdir().expect("tempdir should exist");
@@ -948,5 +1158,160 @@ mod tests {
         };
 
         assert!(write_feature_registry_update(update).is_err());
+    }
+
+    #[test]
+    fn run_add_command_scaffolds_requirement_stubs_in_initialized_workspaces() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = tempdir.path().join("workspace");
+        crate::command::init::run_init_command(&InitArgs {
+            workspace: workspace.clone(),
+            name: Some("workspace".to_string()),
+            spec_root: None,
+            template: StarterTemplate::Generic,
+            id_prefix: None,
+            philosophy_prefix: None,
+            policy_prefix: None,
+            requirement_prefix: None,
+            feature_prefix: None,
+            force: false,
+            format: OutputFormat::Text,
+        })
+        .expect("workspace init should succeed");
+
+        let code = run_add_command(&AddArgs {
+            layer: LookupKind::Requirement,
+            id: Some("REQ-AUTH-001".to_string()),
+            workspace: workspace.clone(),
+            interactive: false,
+            file: None,
+            kind: None,
+        })
+        .expect("add command should succeed");
+        assert_eq!(code, 0);
+        assert!(
+            workspace
+                .join("docs/syu/requirements/auth/auth.yaml")
+                .exists()
+        );
+    }
+
+    #[test]
+    fn resolve_add_invocation_reports_missing_id_on_non_terminal_streams() {
+        let mut prompt_io = FakePromptIo {
+            terminal: false,
+            ..Default::default()
+        };
+        let error = resolve_add_invocation_with_prompt_io(
+            &AddArgs {
+                layer: LookupKind::Requirement,
+                id: None,
+                workspace: PathBuf::from("."),
+                interactive: false,
+                file: None,
+                kind: None,
+            },
+            &mut prompt_io,
+        )
+        .expect_err("non-terminal add runs should require an explicit ID");
+
+        assert!(
+            error
+                .to_string()
+                .contains("needs a definition ID when stdin/stdout are not terminals")
+        );
+        assert!(prompt_io.prompts.is_empty());
+    }
+
+    #[test]
+    fn prompt_for_parsed_id_retries_blank_and_invalid_values() {
+        let mut prompt_io = FakePromptIo {
+            terminal: true,
+            lines: VecDeque::from([
+                String::new(),
+                "not-an-id".to_string(),
+                "REQ-AUTH-001".to_string(),
+            ]),
+            ..Default::default()
+        };
+
+        let parsed =
+            prompt_for_parsed_id(LookupKind::Requirement, &mut prompt_io).expect("prompt succeeds");
+
+        assert_eq!(parsed.normalized, "REQ-AUTH-001");
+        assert_eq!(prompt_io.prompts.len(), 3);
+        assert!(
+            prompt_io
+                .prompts
+                .iter()
+                .all(|(label, default)| label == "Definition ID" && default.is_none())
+        );
+    }
+
+    #[test]
+    fn resolve_feature_kind_interactive_retries_invalid_values_and_accepts_defaults() {
+        let parsed = ParsedId::parse(LookupKind::Feature, "FEAT-AUTH-LOGIN-001").expect("id");
+        let mut prompt_io = FakePromptIo {
+            terminal: true,
+            lines: VecDeque::from(["Auth".to_string(), String::new()]),
+            ..Default::default()
+        };
+
+        let kind = resolve_feature_kind(
+            &AddArgs {
+                layer: LookupKind::Feature,
+                id: Some(parsed.normalized.clone()),
+                workspace: PathBuf::from("."),
+                interactive: true,
+                file: None,
+                kind: None,
+            },
+            &parsed,
+            &mut prompt_io,
+        )
+        .expect("feature kind prompts should recover");
+
+        assert_eq!(kind, "auth");
+        assert_eq!(
+            prompt_io.prompts,
+            vec![
+                ("Feature kind".to_string(), Some("auth".to_string())),
+                ("Feature kind".to_string(), Some("auth".to_string())),
+            ]
+        );
+    }
+
+    #[test]
+    fn resolve_interactive_file_prompt_returns_none_for_blank_overrides() {
+        let parsed = ParsedId::parse(LookupKind::Feature, "FEAT-AUTH-LOGIN-001").expect("id");
+        let mut prompt_io = FakePromptIo {
+            terminal: true,
+            lines: VecDeque::from([String::new()]),
+            ..Default::default()
+        };
+
+        let file = resolve_interactive_file_prompt(
+            &AddArgs {
+                layer: LookupKind::Feature,
+                id: Some(parsed.normalized.clone()),
+                workspace: PathBuf::from("."),
+                interactive: true,
+                file: None,
+                kind: None,
+            },
+            &parsed,
+            Some("auth"),
+            &mut prompt_io,
+        )
+        .expect("file prompts should succeed");
+
+        assert_eq!(file, None);
+        assert_eq!(
+            prompt_io.prompts,
+            vec![(
+                "YAML file".to_string(),
+                Some("features/auth/login.yaml".to_string())
+            )]
+        );
     }
 }

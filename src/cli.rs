@@ -41,7 +41,9 @@ Examples:
   syu add philosophy PHIL-002
   syu add policy POL-002 --file docs/syu/policies/policies.yaml
   syu add requirement REQ-AUTH-001
+  syu add requirement --interactive
   syu add feature FEAT-AUTH-LOGIN-001 --kind auth
+  syu add feature path/to/workspace --interactive
   syu add feature FEAT-AUTH-001 --kind auth --file docs/syu/features/auth/login.yaml";
 
 const WORKSPACE_HELP: &str = "Workspace root containing syu.yaml and the configured spec tree";
@@ -387,13 +389,19 @@ pub struct AddArgs {
     pub layer: LookupKind,
 
     #[arg(
-        help = "New definition ID to scaffold (for example REQ-AUTH-001 or FEAT-AUTH-LOGIN-001)"
+        help = "New definition ID to scaffold (for example REQ-AUTH-001 or FEAT-AUTH-LOGIN-001). Omit in a terminal to be prompted."
     )]
-    pub id: String,
+    pub id: Option<String>,
 
     #[arg(help = WORKSPACE_HELP)]
     #[arg(default_value = ".")]
     pub workspace: PathBuf,
+
+    #[arg(
+        help = "Prompt for missing values in a terminal; when the ID is omitted, syu also prompts for it"
+    )]
+    #[arg(long, action = ArgAction::SetTrue)]
+    pub interactive: bool,
 
     #[arg(
         long,
@@ -605,9 +613,23 @@ mod tests {
         let rendered = format!("{cli:?}");
         assert!(rendered.contains("command: Some(Add("));
         assert!(rendered.contains("layer: Feature"));
-        assert!(rendered.contains("id: \"FEAT-AUTH-001\""));
+        assert!(rendered.contains("id: Some(\"FEAT-AUTH-001\")"));
         assert!(rendered.contains("workspace: \".\""));
+        assert!(rendered.contains("interactive: false"));
         assert!(rendered.contains("file: Some(\"docs/syu/features/auth/login.yaml\")"));
         assert!(rendered.contains("kind: Some(\"auth\")"));
+    }
+
+    #[test]
+    fn add_args_support_interactive_mode_without_an_id() {
+        let cli = Cli::try_parse_from(["syu", "add", "requirement", "--interactive"])
+            .expect("interactive add args should parse");
+
+        let rendered = format!("{cli:?}");
+        assert!(rendered.contains("command: Some(Add("));
+        assert!(rendered.contains("layer: Requirement"));
+        assert!(rendered.contains("id: None"));
+        assert!(rendered.contains("workspace: \".\""));
+        assert!(rendered.contains("interactive: true"));
     }
 }

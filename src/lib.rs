@@ -194,8 +194,9 @@ mod tests {
             Cli {
                 command: Some(Commands::Add(AddArgs {
                     layer: LookupKind::Feature,
-                    id: "FEAT-AUTH-001".to_string(),
+                    id: Some("FEAT-AUTH-001".to_string()),
                     workspace: PathBuf::from("workspace"),
+                    interactive: false,
                     file: Some(PathBuf::from("docs/syu/features/auth/login.yaml")),
                     kind: Some("auth".to_string()),
                 })),
@@ -206,10 +207,18 @@ mod tests {
 
         assert!(matches!(
             add,
-            super::Dispatch::Add(crate::cli::AddArgs { layer, id, workspace, file, kind })
+            super::Dispatch::Add(crate::cli::AddArgs {
+                layer,
+                id,
+                workspace,
+                interactive,
+                file,
+                kind
+            })
                 if layer == LookupKind::Feature
-                    && id == "FEAT-AUTH-001"
+                    && id.as_deref() == Some("FEAT-AUTH-001")
                     && workspace == Path::new("workspace")
+                    && !interactive
                     && file == Some(PathBuf::from("docs/syu/features/auth/login.yaml"))
                     && kind.as_deref() == Some("auth")
         ));
