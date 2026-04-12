@@ -208,6 +208,16 @@ fn repository_declares_installer_contract() {
     assert!(readme.contains("security-sensitive environments"));
     assert!(readme.contains("checksums.sha256"));
     assert!(readme.contains("gh attestation verify"));
+    assert!(readme.contains("PowerShell"));
+    assert!(readme.contains("Git Bash"));
+    assert!(readme.contains("checksums = 'checksums.sha256'"));
+    assert!(readme.contains("Select-String -SimpleMatch $asset"));
+    assert!(readme.contains("syu-x86_64-pc-windows-msvc.zip"));
+    assert!(readme.contains("Get-FileHash"));
+    assert!(readme.contains("LOCALAPPDATA"));
+    assert!(readme.contains("If you are inside WSL"));
+    assert!(!readme.contains("$asset.sha256"));
+    assert!(readme.contains("syu.exe"));
     assert!(readme.contains("verifies the installer script itself"));
     assert!(readme.contains("the platform archive that the installer downloads"));
     assert!(
@@ -307,6 +317,16 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("security-sensitive environments"));
     assert!(getting_started.contains("shasum -a 256 --ignore-missing -c checksums.sha256"));
     assert!(getting_started.contains("SYU_VERSION=alpha"));
+    assert!(getting_started.contains("PowerShell"));
+    assert!(getting_started.contains("Git Bash"));
+    assert!(getting_started.contains("checksums = 'checksums.sha256'"));
+    assert!(getting_started.contains("Select-String -SimpleMatch $asset"));
+    assert!(getting_started.contains("syu-x86_64-pc-windows-msvc.zip"));
+    assert!(getting_started.contains("Get-FileHash"));
+    assert!(getting_started.contains("LOCALAPPDATA"));
+    assert!(getting_started.contains("If you are inside WSL"));
+    assert!(!getting_started.contains("$asset.sha256"));
+    assert!(getting_started.contains("syu.exe"));
     assert!(getting_started.contains(&format!(
         "https://github.com/ugoite/syu/releases/download/v{current_version}/install-syu.sh"
     )));
