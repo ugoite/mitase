@@ -61,6 +61,9 @@ If you use the hooks, install them once:
 scripts/install-precommit.sh
 ```
 
+The devcontainer/Codespaces post-create step runs this script automatically so
+the hooks are active as soon as the environment finishes provisioning.
+
 ## Dependency security
 
 Dependency advisories are checked automatically on a weekly schedule (every Monday
