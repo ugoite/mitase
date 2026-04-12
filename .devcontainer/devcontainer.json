@@ -10,7 +10,7 @@
     },
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
-  "postCreateCommand": "cargo install cargo-llvm-cov --locked && python3 -m pip install --upgrade pip pre-commit",
+  "postCreateCommand": "cargo install cargo-llvm-cov --locked && bash scripts/install-precommit.sh",
   "customizations": {
     "vscode": {
       "extensions": [
