@@ -102,6 +102,41 @@ struct ParsedId {
     file_slug: String,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct ReciprocalLinkField {
+    yaml_key: &'static str,
+    linked_kind_label: &'static str,
+}
+
+const PHILOSOPHY_RECIPROCAL_LINK_FIELDS: &[ReciprocalLinkField] = &[ReciprocalLinkField {
+    yaml_key: "linked_policies",
+    linked_kind_label: "policy",
+}];
+const POLICY_RECIPROCAL_LINK_FIELDS: &[ReciprocalLinkField] = &[
+    ReciprocalLinkField {
+        yaml_key: "linked_philosophies",
+        linked_kind_label: "philosophy",
+    },
+    ReciprocalLinkField {
+        yaml_key: "linked_requirements",
+        linked_kind_label: "requirement",
+    },
+];
+const REQUIREMENT_RECIPROCAL_LINK_FIELDS: &[ReciprocalLinkField] = &[
+    ReciprocalLinkField {
+        yaml_key: "linked_policies",
+        linked_kind_label: "policy",
+    },
+    ReciprocalLinkField {
+        yaml_key: "linked_features",
+        linked_kind_label: "feature",
+    },
+];
+const FEATURE_RECIPROCAL_LINK_FIELDS: &[ReciprocalLinkField] = &[ReciprocalLinkField {
+    yaml_key: "linked_requirements",
+    linked_kind_label: "requirement",
+}];
+
 impl ParsedId {
     fn parse(layer: LookupKind, raw: &str) -> Result<Self> {
         let normalized = normalize_definition_id(raw, layer)?;
@@ -606,23 +641,96 @@ fn render_new_document(
     }
 }
 
+fn reciprocal_link_fields(layer: LookupKind) -> &'static [ReciprocalLinkField] {
+    match layer {
+        LookupKind::Philosophy => PHILOSOPHY_RECIPROCAL_LINK_FIELDS,
+        LookupKind::Policy => POLICY_RECIPROCAL_LINK_FIELDS,
+        LookupKind::Requirement => REQUIREMENT_RECIPROCAL_LINK_FIELDS,
+        LookupKind::Feature => FEATURE_RECIPROCAL_LINK_FIELDS,
+    }
+}
+
+fn render_reciprocal_link_stub(layer: LookupKind) -> String {
+    reciprocal_link_fields(layer)
+        .iter()
+        .map(|field| format!("    {}: []", field.yaml_key))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn format_instruction_list(items: &[String]) -> String {
+    let (last, head) = items
+        .split_last()
+        .expect("instruction lists should contain at least one item");
+    if head.is_empty() {
+        last.clone()
+    } else {
+        format!("{} and {last}", head.join(", "))
+    }
+}
+
+fn reciprocal_link_entry_instruction(layer: LookupKind, id: &str) -> String {
+    let fields = reciprocal_link_fields(layer)
+        .iter()
+        .map(|field| format!("`{}:`", field.yaml_key))
+        .collect::<Vec<_>>();
+    let (first, rest) = fields
+        .split_first()
+        .expect("each layer should define at least one reciprocal link field");
+
+    if rest.is_empty() {
+        format!("Add at least one {first} entry in `{id}`.")
+    } else {
+        let remaining = rest
+            .iter()
+            .map(|field| format!("one {field} entry"))
+            .collect::<Vec<_>>();
+        format!(
+            "Add at least one {first} entry and {} in `{id}`.",
+            format_instruction_list(&remaining)
+        )
+    }
+}
+
+fn reciprocal_link_back_instruction(layer: LookupKind, id: &str) -> String {
+    let linked_kinds = reciprocal_link_fields(layer)
+        .iter()
+        .map(|field| field.linked_kind_label.to_string())
+        .collect::<Vec<_>>();
+    let verb = if linked_kinds.len() == 1 {
+        "it links"
+    } else {
+        "they link"
+    };
+
+    format!(
+        "Update each linked {} so {verb} back to `{id}`.",
+        format_instruction_list(&linked_kinds)
+    )
+}
+
 fn render_item_block(layer: LookupKind, parsed_id: &ParsedId) -> String {
+    let reciprocal_links = render_reciprocal_link_stub(layer);
     match layer {
         LookupKind::Philosophy => format!(
-            "  - id: {}\n    title: {}\n    product_design_principle: |\n      Describe the durable product design principle for {}.\n    coding_guideline: |\n      Describe the coding guideline that keeps {} actionable in day-to-day work.\n    linked_policies: []",
-            parsed_id.normalized, parsed_id.title, parsed_id.normalized, parsed_id.normalized
+            "  - id: {}\n    title: {}\n    product_design_principle: |\n      Describe the durable product design principle for {}.\n    coding_guideline: |\n      Describe the coding guideline that keeps {} actionable in day-to-day work.\n{}",
+            parsed_id.normalized,
+            parsed_id.title,
+            parsed_id.normalized,
+            parsed_id.normalized,
+            reciprocal_links
         ),
         LookupKind::Policy => format!(
-            "  - id: {}\n    title: {}\n    summary: Document the rule enforced by {}.\n    description: |\n      Describe how this policy turns philosophy into a concrete contributor rule.\n    linked_philosophies: []\n    linked_requirements: []",
-            parsed_id.normalized, parsed_id.title, parsed_id.normalized
+            "  - id: {}\n    title: {}\n    summary: Document the rule enforced by {}.\n    description: |\n      Describe how this policy turns philosophy into a concrete contributor rule.\n{}",
+            parsed_id.normalized, parsed_id.title, parsed_id.normalized, reciprocal_links
         ),
         LookupKind::Requirement => format!(
-            "  - id: {}\n    title: {}\n    description: |\n      Describe the concrete requirement that {} adds to the repository.\n    priority: high\n    status: planned\n    linked_policies: []\n    linked_features: []\n    tests: {{}}",
-            parsed_id.normalized, parsed_id.title, parsed_id.normalized
+            "  - id: {}\n    title: {}\n    description: |\n      Describe the concrete requirement that {} adds to the repository.\n    priority: high\n    status: planned\n{}\n    tests: {{}}",
+            parsed_id.normalized, parsed_id.title, parsed_id.normalized, reciprocal_links
         ),
         LookupKind::Feature => format!(
-            "  - id: {}\n    title: {}\n    summary: Describe the shipped capability that {} represents.\n    status: planned\n    linked_requirements: []\n    implementations: {{}}",
-            parsed_id.normalized, parsed_id.title, parsed_id.normalized
+            "  - id: {}\n    title: {}\n    summary: Describe the shipped capability that {} represents.\n    status: planned\n{}\n    implementations: {{}}",
+            parsed_id.normalized, parsed_id.title, parsed_id.normalized, reciprocal_links
         ),
     }
 }
@@ -726,11 +834,32 @@ fn print_add_summary(
     }
     println!();
     println!("Next steps:");
-    println!("  1. Edit the generated stub fields and reciprocal links");
-    println!(
-        "  2. Run `syu validate {}` once the new item is linked",
+    for (index, step) in add_follow_up_steps(workspace, layer, id, target)
+        .into_iter()
+        .enumerate()
+    {
+        println!("  {}. {step}", index + 1);
+    }
+}
+
+fn add_follow_up_steps(
+    workspace: &Workspace,
+    layer: LookupKind,
+    id: &str,
+    target: &Path,
+) -> Vec<String> {
+    let target_label = display_workspace_path(workspace, target);
+    let mut steps = vec![format!(
+        "Edit {target_label} and fill the stub fields for `{id}`."
+    )];
+    steps.push(reciprocal_link_entry_instruction(layer, id));
+    steps.push(reciprocal_link_back_instruction(layer, id));
+
+    steps.push(format!(
+        "Run `syu validate {}` once the reciprocal links are in place.",
         shell_quote_path(&workspace.root)
-    );
+    ));
+    steps
 }
 
 fn display_workspace_path(workspace: &Workspace, path: &Path) -> String {
@@ -799,8 +928,8 @@ mod tests {
     };
 
     use super::{
-        AddPromptIo, FeatureRegistryUpdate, ParsedId, TargetPath, default_document_path,
-        default_folder_slug, default_title, ensure_target_within_spec_root,
+        AddPromptIo, FeatureRegistryUpdate, ParsedId, TargetPath, add_follow_up_steps,
+        default_document_path, default_folder_slug, default_title, ensure_target_within_spec_root,
         normalize_definition_id, normalize_feature_kind, prepare_feature_registry_update,
         prompt_for_parsed_id, render_item_block, render_new_document,
         resolve_add_invocation_with_prompt_io, resolve_explicit_file, resolve_feature_kind,
@@ -907,6 +1036,51 @@ mod tests {
         assert_eq!(default_title(LookupKind::Policy), "New policy");
         assert_eq!(default_title(LookupKind::Feature), "New feature");
         assert_eq!(default_folder_slug(LookupKind::Policy), "policies");
+    }
+
+    #[test]
+    fn add_follow_up_steps_explain_reciprocal_links_for_each_layer() {
+        let (_tempdir, workspace) = test_workspace();
+        let philosophy_target = workspace.spec_root.join("philosophy/foundation.yaml");
+        let policy_target = workspace.spec_root.join("policies/policies.yaml");
+        let requirement_target = workspace.spec_root.join("requirements/auth/auth.yaml");
+        let feature_target = workspace.spec_root.join("features/auth/login.yaml");
+
+        let philosophy_steps = add_follow_up_steps(
+            &workspace,
+            LookupKind::Philosophy,
+            "PHIL-001",
+            &philosophy_target,
+        );
+        let policy_steps =
+            add_follow_up_steps(&workspace, LookupKind::Policy, "POL-001", &policy_target);
+        let requirement_steps = add_follow_up_steps(
+            &workspace,
+            LookupKind::Requirement,
+            "REQ-AUTH-001",
+            &requirement_target,
+        );
+        let feature_steps = add_follow_up_steps(
+            &workspace,
+            LookupKind::Feature,
+            "FEAT-AUTH-LOGIN-001",
+            &feature_target,
+        );
+
+        assert!(philosophy_steps[1].contains("linked_policies"));
+        assert!(philosophy_steps[2].contains("linked policy"));
+        assert!(policy_steps[1].contains("linked_philosophies"));
+        assert!(policy_steps[1].contains("linked_requirements"));
+        assert!(requirement_steps[1].contains("linked_policies"));
+        assert!(requirement_steps[1].contains("linked_features"));
+        assert!(feature_steps[1].contains("linked_requirements"));
+        assert!(feature_steps[2].contains("linked requirement"));
+        assert!(
+            feature_steps
+                .last()
+                .expect("feature guidance should include validation")
+                .contains("syu validate")
+        );
     }
 
     #[test]

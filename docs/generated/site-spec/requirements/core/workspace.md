@@ -217,9 +217,11 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       the requested ID, MUST honor the configured `spec.root`, and MUST update
       the explicit feature registry when creating a new feature document. Output
       SHOULD stay concise enough for normal code review and hand-edited follow-up
-      work. When contributors omit the ID in a terminal, `syu add` SHOULD prompt
-      for it, and `syu add --interactive` SHOULD let them confirm or override the
-      default feature kind and target YAML path before writing the stub.
+      work while explicitly guiding contributors toward the reciprocal links they
+      still need before the next validation run. When contributors omit the ID in
+      a terminal, `syu add` SHOULD prompt for it, and `syu add --interactive`
+      SHOULD let them confirm or override the default feature kind and target
+      YAML path before writing the stub.
   - **priority**: medium
   - **status**: implemented
   - **linked_policies**:
@@ -442,9 +444,11 @@ requirements:
       the requested ID, MUST honor the configured `spec.root`, and MUST update
       the explicit feature registry when creating a new feature document. Output
       SHOULD stay concise enough for normal code review and hand-edited follow-up
-      work. When contributors omit the ID in a terminal, `syu add` SHOULD prompt
-      for it, and `syu add --interactive` SHOULD let them confirm or override the
-      default feature kind and target YAML path before writing the stub.
+      work while explicitly guiding contributors toward the reciprocal links they
+      still need before the next validation run. When contributors omit the ID in
+      a terminal, `syu add` SHOULD prompt for it, and `syu add --interactive`
+      SHOULD let them confirm or override the default feature kind and target
+      YAML path before writing the stub.
     priority: medium
     status: implemented
     linked_policies:
