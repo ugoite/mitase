@@ -190,8 +190,10 @@ features:
       - REQ-STORE-001
 ```
 
-In `docs/syu/features/features.yaml`, keep the generated metadata header from
-`syu init` and add the new file entry under `files`:
+Because this walkthrough keeps using the generated
+`docs/syu/features/core/core.yaml`, the starter registry entry in
+`docs/syu/features/features.yaml` already points at the right file. For this
+tutorial step, just make sure the `files` section still looks like this:
 
 ```yaml
 files:
@@ -199,9 +201,9 @@ files:
     file: core/core.yaml
 ```
 
-If you add another feature document later, keep `docs/syu/features/features.yaml`
-in sync. `syu validate` reports feature YAML files on disk that are missing from
-that registry.
+Only add another `files` entry when you introduce a second feature document
+later. Keep `docs/syu/features/features.yaml` in sync then; `syu validate`
+reports feature YAML files on disk that are missing from that registry.
 
 ---
 
