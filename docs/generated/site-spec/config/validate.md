@@ -83,11 +83,12 @@ description: "Generated reference for docs/syu/config/validate.yaml"
 - **key**: validate.require_symbol_trace_coverage
   - **type**: boolean
   - **default**: False
-  - **summary**: Enforces ownership for public Rust symbols and Rust tests.
+  - **summary**: Enforces ownership for public Rust, Python, and TypeScript/JavaScript symbols and tests.
   - **description**:
     - |
-      When enabled, `syu` requires every public Rust symbol to belong to some
-      feature and every Rust test to belong to some requirement, in addition to
+      When enabled, `syu` requires every public Rust, Python, and
+      TypeScript/JavaScript symbol to belong to some feature and every test in
+      those supported languages to belong to some requirement, in addition to
       verifying declared traces. The validate command can enable or disable this
       for one run with `--require-symbol-trace-coverage` or
       `--require-symbol-trace-coverage=false`.
@@ -155,10 +156,11 @@ items:
   - key: validate.require_symbol_trace_coverage
     type: boolean
     default: false
-    summary: Enforces ownership for public Rust symbols and Rust tests.
+    summary: Enforces ownership for public Rust, Python, and TypeScript/JavaScript symbols and tests.
     description: |
-      When enabled, `syu` requires every public Rust symbol to belong to some
-      feature and every Rust test to belong to some requirement, in addition to
+      When enabled, `syu` requires every public Rust, Python, and
+      TypeScript/JavaScript symbol to belong to some feature and every test in
+      those supported languages to belong to some requirement, in addition to
       verifying declared traces. The validate command can enable or disable this
       for one run with `--require-symbol-trace-coverage` or
       `--require-symbol-trace-coverage=false`.
