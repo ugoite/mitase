@@ -37,17 +37,41 @@ syu app .                            # 4. Browse in the browser
 
 Make sure `syu` is installed and available on your `PATH`.
 
-**Option A — Install from a release (recommended)**
+**Option A — Verify the release installer before running it (recommended)**
+
+For security-sensitive environments, download the installer and checksum file
+first, verify the checksum locally, then run the checked file:
+
+```bash
+RELEASE=v0.0.1-alpha.7
+curl -fsSL "https://github.com/ugoite/syu/releases/download/${RELEASE}/install-syu.sh" -o install-syu.sh
+curl -fsSL "https://github.com/ugoite/syu/releases/download/${RELEASE}/checksums.sha256" -o checksums.sha256
+sha256sum --ignore-missing -c checksums.sha256
+bash install-syu.sh
+```
+
+On macOS, run the checksum check with the matching command instead:
+
+```bash
+shasum -a 256 --ignore-missing -c checksums.sha256
+```
+
+The getting-started path above verifies the installer script itself. If you need
+additional archive-level provenance checks, download the platform archive
+separately and verify it before installation.
+
+**Option B — Run the installer directly**
 
 ```bash
 curl -fsSL https://github.com/ugoite/syu/releases/download/v0.0.1-alpha.7/install-syu.sh | env SYU_VERSION=alpha bash
 ```
 
 This uses the current installer entrypoint plus `SYU_VERSION=alpha` so you stay
-on the latest alpha during the prerelease phase. It places `syu` in
+on the latest alpha during the prerelease phase. Use this shortcut when you
+already trust the release source and want the shortest path. It places `syu` in
 `~/.local/bin`. Add that directory to your `PATH` if it is not already there.
 
-**Option B — Build from source**
+**Option C — Build from source**
 
 Building from source requires [Rust and Cargo](https://rustup.rs). This option is only needed when contributing to `syu` itself, not for using it in your own project.
 
