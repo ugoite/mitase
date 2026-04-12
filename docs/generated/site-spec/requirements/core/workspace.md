@@ -170,6 +170,43 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       - **file**: src/command/lookup.rs
         - **symbols**:
           - *
+- **id**: REQ-CORE-019
+  - **title**: Provide a terminal-first search CLI command
+  - **description**:
+    - |
+      The CLI MUST provide a lightweight `search` command that matches
+      philosophies, policies, requirements, and features by ID, title, summary,
+      or description without requiring the browser app. The command SHOULD
+      support optional kind scoping, SHOULD offer JSON output for automation,
+      and SHOULD continue working when validation issues exist so long as the
+      workspace itself still loads.
+  - **priority**: medium
+  - **status**: implemented
+  - **linked_policies**:
+    - POL-001
+    - POL-002
+    - POL-004
+  - **linked_features**:
+    - FEAT-SEARCH-001
+  - **tests**:
+    - **rust**:
+      - **file**: tests/search_command.rs
+        - **symbols**:
+          - *
+      - **file**: tests/help_command.rs
+        - **symbols**:
+          - search_help_mentions_kind_scoping_and_json_output
+      - **file**: src/lib.rs
+        - **symbols**:
+          - dispatches_search_subcommands_without_rewriting_them
+      - **file**: src/command/search.rs
+        - **symbols**:
+          - *
+      - **file**: src/command/lookup.rs
+        - **symbols**:
+          - search
+          - extend_search_results
+          - field_matches_query
 - **id**: REQ-CORE-020
   - **title**: Provide a follow-up authoring scaffold command after syu init
   - **description**:
@@ -358,6 +395,42 @@ requirements:
         - file: src/command/lookup.rs
           symbols:
             - '*'
+  - id: REQ-CORE-019
+    title: Provide a terminal-first search CLI command
+    description: |
+      The CLI MUST provide a lightweight `search` command that matches
+      philosophies, policies, requirements, and features by ID, title, summary,
+      or description without requiring the browser app. The command SHOULD
+      support optional kind scoping, SHOULD offer JSON output for automation,
+      and SHOULD continue working when validation issues exist so long as the
+      workspace itself still loads.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-001
+      - POL-002
+      - POL-004
+    linked_features:
+      - FEAT-SEARCH-001
+    tests:
+      rust:
+        - file: tests/search_command.rs
+          symbols:
+            - '*'
+        - file: tests/help_command.rs
+          symbols:
+            - search_help_mentions_kind_scoping_and_json_output
+        - file: src/lib.rs
+          symbols:
+            - dispatches_search_subcommands_without_rewriting_them
+        - file: src/command/search.rs
+          symbols:
+            - '*'
+        - file: src/command/lookup.rs
+          symbols:
+            - search
+            - extend_search_results
+            - field_matches_query
   - id: REQ-CORE-020
     title: Provide a follow-up authoring scaffold command after syu init
     description: |

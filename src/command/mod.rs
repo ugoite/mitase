@@ -10,6 +10,7 @@ pub mod init;
 pub mod list;
 mod lookup;
 pub mod report;
+pub mod search;
 pub mod show;
 
 pub(crate) fn shell_quote_path(path: &Path) -> String {
