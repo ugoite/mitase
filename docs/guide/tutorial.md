@@ -4,6 +4,15 @@
 
 This tutorial walks through building a small, realistic workspace from scratch. By the end you will have a four-layer spec (philosophy → policy → requirement → feature), a passing `syu validate .`, and a browsable `syu app .`.
 
+Want a different entry point?
+
+- Use [getting started](./getting-started.md) when you only want the shortest
+  first-run path.
+- Stay on this tutorial when you want the full repository story and the edits
+  behind each command.
+- Jump to [troubleshooting](./troubleshooting.md) if you are already blocked on
+  validation or traceability errors in an existing workspace.
+
 The example project is **Filestore** — a minimal file-storage library.
 
 ---
@@ -309,9 +318,13 @@ to each section, and lets you click through linked items.
 
 - Add more layers: create additional requirement and feature documents, organise
   them in sub-folders, and update `features.yaml`.
+- Revisit [getting started](./getting-started.md) when you want the shorter
+  command-focused reference after finishing the full walkthrough.
 - Read [syu concepts](./concepts.md) to understand the design decisions behind
   the four-layer model.
 - Review [configuration](./configuration.md) to tighten validation thresholds
   for your team.
 - Browse the built-in [validation rule catalog](../syu/features/validation/validation.yaml)
   to understand every check `syu validate` performs.
+- Keep [troubleshooting](./troubleshooting.md) nearby for the most common
+  validation and traceability failure patterns.
