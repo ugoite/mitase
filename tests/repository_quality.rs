@@ -12,6 +12,7 @@ fn read_file(path: &str) -> String {
 // REQ-CORE-005
 fn repository_declares_precommit_and_quality_gates() {
     let precommit = read_file(".pre-commit-config.yaml");
+    let install_precommit = read_file("scripts/install-precommit.sh");
     let quality_script = read_file("scripts/ci/quality-gates.sh");
     let ci_workflow = read_file(".github/workflows/ci.yml");
     let contributing = read_file("CONTRIBUTING.md");
@@ -30,6 +31,8 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(quality_script.contains("cargo test"));
     assert!(quality_script.contains("cargo run -- validate ."));
     assert!(quality_script.contains("check-generated-docs-freshness.sh"));
+    assert!(install_precommit.contains("site --user-base"));
+    assert!(install_precommit.contains("pre_commit install"));
 
     assert!(ci_workflow.contains("FEAT-QUALITY-001"));
     assert!(ci_workflow.contains("precommit:"));
@@ -164,6 +167,12 @@ fn repository_declares_installer_contract() {
     let installed_binary_smoke = read_file("scripts/ci/installed-binary-smoke.sh");
     let mock_registry = read_file("scripts/ci/mock_package_registry.py");
     let readme = read_file("README.md");
+    let verify_idx = readme
+        .find("Recommended: verify before running")
+        .expect("README should document the verify-first installer flow");
+    let shortcut_idx = readme
+        .find("Shortcut: run the installer directly")
+        .expect("README should still document the one-line shortcut");
 
     assert!(installer.contains("FEAT-INSTALL-001"));
     assert!(installer.contains("resolve_repository"));
@@ -196,6 +205,15 @@ fn repository_declares_installer_contract() {
         "https://github.com/ugoite/syu/releases/download/v{current_version}/install-syu.sh"
     )));
     assert!(readme.contains("GitHub Packages"));
+    assert!(readme.contains("security-sensitive environments"));
+    assert!(readme.contains("checksums.sha256"));
+    assert!(readme.contains("gh attestation verify"));
+    assert!(readme.contains("verifies the installer script itself"));
+    assert!(readme.contains("the platform archive that the installer downloads"));
+    assert!(
+        verify_idx < shortcut_idx,
+        "README should present the verify-first flow before the one-line shortcut"
+    );
     assert!(!readme.contains("raw.githubusercontent.com/ugoite/syu/main/scripts/install-syu.sh"));
 }
 
@@ -205,6 +223,7 @@ fn repository_declares_documentation_guides() {
     let current_version = env!("CARGO_PKG_VERSION");
     let readme = read_file("README.md");
     let concepts = read_file("docs/guide/concepts.md");
+    let app_guide = read_file("docs/guide/app.md");
     let getting_started = read_file("docs/guide/getting-started.md");
     let configuration = read_file("docs/guide/configuration.md");
     let config_overview = read_file("docs/syu/config/overview.yaml");
@@ -231,7 +250,9 @@ fn repository_declares_documentation_guides() {
 
     assert!(readme.contains("docs/guide/concepts.md"));
     assert!(readme.contains("Step 0: required"));
-    assert!(readme.contains("Add spec items with generated YAML stubs"));
+    assert!(readme.contains("Generate a requirement stub"));
+    assert!(readme.contains("add at least one `linked_policies:` entry"));
+    assert!(readme.contains("update those policy and feature documents so"));
     assert!(readme.contains("syu init"));
     assert!(readme.contains("syu init ."));
     assert!(readme.contains("syu add"));
@@ -263,8 +284,14 @@ fn repository_declares_documentation_guides() {
     assert!(concepts.contains("implemented"));
     assert!(concepts.contains("Continue with these pages"));
     assert!(concepts.contains("Specification Reference"));
+    assert!(app_guide.contains("Status badge"));
+    assert!(app_guide.contains("the item's YAML `status:` field"));
+    assert!(!app_guide.contains("`planned`, `implemented`, or `deprecated`"));
     assert!(getting_started.contains("New to `syu`?"));
     assert!(getting_started.contains("Start here once `syu` is installed:"));
+    assert!(getting_started.contains("Generate a requirement stub"));
+    assert!(getting_started.contains("add at least one `linked_policies:` entry"));
+    assert!(getting_started.contains("update those policy and feature documents so"));
     assert!(getting_started.contains("install-syu.sh"));
     assert!(getting_started.contains("SYU_VERSION=alpha"));
     assert!(getting_started.contains(&format!(
@@ -365,6 +392,7 @@ fn repository_declares_devcontainer_configuration() {
     let devcontainer = read_file(".devcontainer/devcontainer.json");
     assert!(devcontainer.contains("FEAT-CONTRIB-001"));
     assert!(devcontainer.contains("cargo install cargo-llvm-cov --locked"));
+    assert!(devcontainer.contains("scripts/install-precommit.sh"));
     assert!(devcontainer.contains("ghcr.io/devcontainers/features/python:1"));
 }
 
@@ -410,6 +438,7 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(contributing.contains("scripts/ci/check-app-dist-freshness.sh"));
     assert!(contributing.contains("app/dist"));
     assert!(contributing.contains("scripts/install-precommit.sh"));
+    assert!(contributing.contains("devcontainer/Codespaces post-create step"));
     assert!(contributing.contains("GitHub Pages"));
     assert!(contributing.contains("release track"));
 
@@ -419,6 +448,9 @@ fn repository_declares_contribution_workflow_assets() {
 
     assert!(bug_report.contains("FEAT-CONTRIB-002"));
     assert!(bug_report.contains("What happened?"));
+    assert!(bug_report.contains("What area is affected?"));
+    assert!(bug_report.contains("CLI or runtime behavior"));
+    assert!(bug_report.contains("Required for CLI or runtime bugs"));
     assert!(bug_report.contains("Steps to reproduce"));
 
     assert!(feature_request.contains("FEAT-CONTRIB-002"));
