@@ -45,6 +45,54 @@ scripts/ci/check-app-dist-freshness.sh
 That rebuilds the browser app and fails when the checked-in `app/dist` bundle is
 stale, leaving the regenerated files in your worktree so you can review and
 commit them.
+
+### Browser app workflow
+
+For changes under `app/`, install the browser app dependencies first:
+
+```bash
+npm --prefix app ci
+```
+
+When the change affects the built bundle, run the same freshness flow CI uses:
+
+```bash
+scripts/ci/check-app-dist-freshness.sh
+```
+
+That script runs `npm run build:wasm`, `npm run check`, and `npm run build`,
+then compares the regenerated output against the checked-in `app/dist` bundle.
+
+When the change affects browser behavior, routing, or Playwright coverage, also
+install the local browser once and run the end-to-end suite:
+
+```bash
+npx --prefix app playwright install --with-deps chromium
+npm --prefix app run test:e2e
+```
+
+`npm run test:e2e` uses `app/playwright.config.ts` to launch
+`cargo run -- app .` automatically, so run it after the shared Rust gates pass.
+
+### Documentation site workflow
+
+For `website/` changes, install the docs-site dependencies and use the local dev
+server while iterating:
+
+```bash
+npm --prefix website ci
+npm --prefix website run start
+```
+
+Before opening a pull request, run the same docs-site build CI uses:
+
+```bash
+npm --prefix website run build
+```
+
+`npm run build` regenerates the checked-in site docs first, matching
+`.github/actions/build-docs-site`.
+
 ### Rust version
 
 The minimum supported Rust version (MSRV) is **1.88**. CI verifies this with a
