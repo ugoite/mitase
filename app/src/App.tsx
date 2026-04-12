@@ -37,6 +37,8 @@ const SECTION_COPY: Record<SectionKind, string> = {
 };
 
 const ONBOARDING_STORAGE_KEY = "syu-onboarding-dismissed";
+const SEARCH_SHORTCUT_KEY_CLASS_NAME =
+  "inline-flex items-center rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-slate-300";
 
 function App() {
   const [workspace, setWorkspace] = useState<BrowserWorkspace | null>(null);
@@ -659,6 +661,7 @@ function App() {
               <input
                 id="spec-search"
                 type="search"
+                aria-describedby="spec-search-shortcuts"
                 placeholder="Search items by ID or keyword…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -694,9 +697,19 @@ function App() {
                 className="w-full rounded-2xl border border-white/10 bg-slate-900/60 py-2 pl-9 pr-4 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-400/60 focus:outline-none focus:ring-1 focus:ring-sky-400/40"
               />
             </div>
-            <p className="mt-2 text-xs text-slate-400">
-              Tip: use ArrowUp and ArrowDown to move through results, Enter to open the highlighted
-              item or the only result when there is one match, and Escape to clear the search.
+            <p
+              id="spec-search-shortcuts"
+              className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-slate-400"
+            >
+              <span className="mr-1">Shortcuts:</span>
+              <kbd className={SEARCH_SHORTCUT_KEY_CLASS_NAME}>ArrowDown</kbd>
+              <span>next result</span>
+              <kbd className={SEARCH_SHORTCUT_KEY_CLASS_NAME}>ArrowUp</kbd>
+              <span>previous result</span>
+              <kbd className={SEARCH_SHORTCUT_KEY_CLASS_NAME}>Enter</kbd>
+              <span>open the highlighted or only match</span>
+              <kbd className={SEARCH_SHORTCUT_KEY_CLASS_NAME}>Escape</kbd>
+              <span>clear the search</span>
             </p>
             {searchQuery.trim().length > 0 && (
               <div id="search-results-list" className="mt-3 space-y-1">

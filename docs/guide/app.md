@@ -60,6 +60,8 @@ Click a tab to switch the content area and the document list in the sidebar.
 ## Search shortcuts
 
 Use the search box in the header to jump straight to an item by ID, title, or keyword.
+The live UI keeps the same shortcut reminder directly under the search field, so
+you do not have to leave the page to discover the keyboard flow.
 
 Keyboard shortcuts:
 

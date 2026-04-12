@@ -19,7 +19,7 @@ description: "Generated reference for docs/syu/features/browser/app.yaml"
 
 - **id**: FEAT-APP-001
   - **title**: Local browser workspace app powered by Rust and WebAssembly
-  - **summary**: Start `syu app` to inspect the current workspace in a browser with clear startup guidance, a minimal header, layered navigation, section-aware drilldown, linked definitions, and the current validation state.
+  - **summary**: Start `syu app` to inspect the current workspace in a browser with clear startup guidance, a minimal header, layered navigation, section-aware drilldown, discoverable keyboard search shortcuts, linked definitions, and the current validation state.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-017
@@ -65,7 +65,7 @@ version: 1
 features:
   - id: FEAT-APP-001
     title: Local browser workspace app powered by Rust and WebAssembly
-    summary: Start `syu app` to inspect the current workspace in a browser with clear startup guidance, a minimal header, layered navigation, section-aware drilldown, linked definitions, and the current validation state.
+    summary: Start `syu app` to inspect the current workspace in a browser with clear startup guidance, a minimal header, layered navigation, section-aware drilldown, discoverable keyboard search shortcuts, linked definitions, and the current validation state.
     status: implemented
     linked_requirements:
       - REQ-CORE-017
