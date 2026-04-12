@@ -263,10 +263,12 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("## Choose your path"));
     assert!(readme.contains("docs/guide/tutorial.md"));
     assert!(readme.contains("docs/guide/troubleshooting.md"));
+    assert!(readme.contains("Before you start: required"));
     assert!(readme.contains("Step 0: required"));
     assert!(readme.contains("Generate a requirement stub"));
     assert!(readme.contains("add at least one `linked_policies:` entry"));
     assert!(readme.contains("update those policy and feature documents so"));
+    assert!(readme.contains("reciprocal links between policies, requirements, and features"));
     assert!(readme.contains("syu init"));
     assert!(readme.contains("syu init ."));
     assert!(readme.contains("syu add"));
@@ -371,7 +373,6 @@ fn repository_declares_documentation_guides() {
     assert!(tutorial.contains("Want a different entry point?"));
     assert!(tutorial.contains("[getting started](./getting-started.md)"));
     assert!(tutorial.contains("[troubleshooting](./troubleshooting.md)"));
-    assert!(readme.contains("Understand the model first?"));
     assert!(configuration.contains("validate.default_fix"));
     assert!(configuration.contains("validate.allow_planned"));
     assert!(configuration.contains("--spec-root"));
