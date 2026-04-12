@@ -694,6 +694,10 @@ function App() {
                 className="w-full rounded-2xl border border-white/10 bg-slate-900/60 py-2 pl-9 pr-4 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-400/60 focus:outline-none focus:ring-1 focus:ring-sky-400/40"
               />
             </div>
+            <p className="mt-2 text-xs text-slate-400">
+              Tip: use ArrowUp and ArrowDown to move through results, Enter to open the highlighted
+              item or the only result when there is one match, and Escape to clear the search.
+            </p>
             {searchQuery.trim().length > 0 && (
               <div id="search-results-list" className="mt-3 space-y-1">
                 {searchResults.length === 0 ? (
