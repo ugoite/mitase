@@ -33,78 +33,91 @@ checkout.
 
 ## Local checks
 
-Run the shared repository gates before opening or updating a pull request:
+Run branch 1 for every change. Then add any later branches below that also
+match your change:
 
-```bash
-scripts/ci/quality-gates.sh
-scripts/ci/coverage.sh summary
-cargo run -- validate .
-```
+1. **Every change**
 
-`scripts/ci/quality-gates.sh` also checks that the committed `docs/generated/`
-artifacts are fresh. To refresh those files directly, run:
+   ```bash
+   scripts/ci/quality-gates.sh
+   cargo run -- validate .
+   ```
 
-```bash
-scripts/ci/check-generated-docs-freshness.sh
-```
+   `scripts/ci/quality-gates.sh` also checks that the committed
+   `docs/generated/` artifacts are fresh. To refresh those files directly, run:
 
-If a change touches `app/src`, `app/wasm`, or the browser build configuration,
-also run:
+   ```bash
+   scripts/ci/check-generated-docs-freshness.sh
+   ```
 
-```bash
-scripts/ci/check-app-dist-freshness.sh
-```
+2. **Rust logic, CLI behavior, or validation rules** (`src/`, `crates/`, tests,
+   CI scripts that affect Rust flows)
 
-That rebuilds the browser app and fails when the checked-in `app/dist` bundle is
-stale, leaving the regenerated files in your worktree so you can review and
-commit them.
+   ```bash
+   scripts/ci/coverage.sh summary
+   ```
 
-### Browser app workflow
+3. **Browser app, WASM, or checked-in `app/dist` bundle** (`app/src`,
+   `app/wasm`, browser build config, or generated browser assets)
 
-For changes under `app/`, install the browser app dependencies first:
+   Install the browser app dependencies first:
 
-```bash
-npm --prefix app ci
-```
+   ```bash
+   npm --prefix app ci
+   ```
 
-When the change affects the built bundle, run the same freshness flow CI uses:
+   Then run the same freshness flow CI uses:
 
-```bash
-scripts/ci/check-app-dist-freshness.sh
-```
+   ```bash
+   scripts/ci/check-app-dist-freshness.sh
+   ```
 
-That script runs `npm run build:wasm`, `npm run check`, and `npm run build`,
-then compares the regenerated output against the checked-in `app/dist` bundle.
+   That script runs `npm run build:wasm`, `npm run check`, and `npm run build`,
+   then compares the regenerated output against the checked-in `app/dist`
+   bundle.
 
-When the change affects browser behavior, routing, or Playwright coverage, also
-install the local browser once and run the end-to-end suite:
+   When the change affects browser behavior, routing, or Playwright coverage,
+   also install the local browser once and run the end-to-end suite:
 
-```bash
-npx --prefix app playwright install --with-deps chromium
-npm --prefix app run test:e2e
-```
+   ```bash
+   npx --prefix app playwright install --with-deps chromium
+   npm --prefix app run test:e2e
+   ```
 
-`npm run test:e2e` uses `app/playwright.config.ts` to launch
-`cargo run -- app .` automatically, so run it after the shared Rust gates pass.
+   `npm run test:e2e` uses `app/playwright.config.ts` to launch
+   `cargo run -- app .` automatically, so run it after the shared Rust gates
+   pass.
 
-### Documentation site workflow
+4. **Documentation site** (`website/`)
 
-For `website/` changes, install the docs-site dependencies and use the local dev
-server while iterating:
+   Install the docs-site dependencies first:
 
-```bash
-npm --prefix website ci
-npm --prefix website run start
-```
+   ```bash
+   npm --prefix website ci
+   ```
 
-Before opening a pull request, run the same docs-site build CI uses:
+   Use the local dev server while iterating:
 
-```bash
-npm --prefix website run build
-```
+   ```bash
+   npm --prefix website run start
+   ```
 
-`npm run build` regenerates the checked-in site docs first, matching
-`.github/actions/build-docs-site`.
+   Before opening a pull request, run the same docs-site build CI uses:
+
+   ```bash
+   npm --prefix website run build
+   ```
+
+   `npm run build` regenerates the checked-in site docs first, matching
+   `.github/actions/build-docs-site`.
+
+5. **Docs-only edits outside `website/`, `app/`, or Rust logic**
+
+   Stop after the shared gates only when your change does not feed the docs
+   site. If you touched `README.md`, files under `docs/guide/` or
+   `docs/generated/site-spec/`, or docs-site build inputs such as
+   `scripts/generate-site-docs.py` or `.github/actions/build-docs-site`, also
+   run branch 4's docs-site build.
 
 ### Rust version
 
