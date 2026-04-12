@@ -261,6 +261,9 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("syu validate"));
     assert!(readme.contains("syu browse"));
     assert!(readme.contains("syu list"));
+    assert!(readme.contains("list-shaped output"));
+    assert!(readme.contains("workspace metadata, per-layer"));
+    assert!(readme.contains("current validation errors in plain text"));
     assert!(readme.contains("syu show"));
     assert!(readme.contains("syu show REQ-001"));
     assert!(!readme.contains("syu show REQ-CORE-015"));
@@ -304,6 +307,9 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("--id-prefix"));
     assert!(getting_started.contains("syu validate . --fix"));
     assert!(getting_started.contains("syu browse ."));
+    assert!(getting_started.contains("emitted as JSON for automation"));
+    assert!(getting_started.contains("workspace metadata, per-layer"));
+    assert!(getting_started.contains("current validation errors in plain text"));
     assert!(getting_started.contains("syu list feature"));
     assert!(getting_started.contains("syu show REQ-001"));
     assert!(getting_started.contains("syu app ."));
