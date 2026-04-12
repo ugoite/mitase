@@ -23,8 +23,8 @@ use super::{
 enum TopLevelSection {
     Philosophy,
     Policy,
-    Feature,
     Requirement,
+    Feature,
     Errors,
 }
 
@@ -61,6 +61,46 @@ struct BrowseState {
     result: CheckResult,
 }
 
+impl TopLevelSection {
+    const MENU_ORDER: [Self; 5] = [
+        Self::Philosophy,
+        Self::Policy,
+        Self::Requirement,
+        Self::Feature,
+        Self::Errors,
+    ];
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Philosophy => "philosophy",
+            Self::Policy => "policy",
+            Self::Requirement => "requirement",
+            Self::Feature => "feature",
+            Self::Errors => "errors",
+        }
+    }
+
+    fn count(self, result: &CheckResult) -> usize {
+        match self {
+            Self::Philosophy => result.definition_counts.philosophies,
+            Self::Policy => result.definition_counts.policies,
+            Self::Requirement => result.definition_counts.requirements,
+            Self::Feature => result.definition_counts.features,
+            Self::Errors => result.issues.len(),
+        }
+    }
+
+    fn into_view(self) -> View {
+        match self {
+            Self::Philosophy => View::List(EntityKind::Philosophy),
+            Self::Policy => View::List(EntityKind::Policy),
+            Self::Requirement => View::List(EntityKind::Requirement),
+            Self::Feature => View::List(EntityKind::Feature),
+            Self::Errors => View::Errors,
+        }
+    }
+}
+
 impl BrowseState {
     fn lookup(&self) -> Option<WorkspaceLookup<'_>> {
         self.workspace.as_ref().map(WorkspaceLookup::new)
@@ -72,13 +112,7 @@ impl BrowseState {
         loop {
             view = match view {
                 View::Menu => match self.show_top_level_menu()? {
-                    Some(section) => match section {
-                        TopLevelSection::Philosophy => View::List(EntityKind::Philosophy),
-                        TopLevelSection::Policy => View::List(EntityKind::Policy),
-                        TopLevelSection::Feature => View::List(EntityKind::Feature),
-                        TopLevelSection::Requirement => View::List(EntityKind::Requirement),
-                        TopLevelSection::Errors => View::Errors,
-                    },
+                    Some(section) => section.into_view(),
                     None => return Ok(0),
                 },
                 View::List(kind) => match self.show_entity_list(kind)? {
@@ -102,32 +136,21 @@ impl BrowseState {
     }
 
     fn show_top_level_menu(&self) -> Result<Option<TopLevelSection>> {
-        const SECTIONS: [TopLevelSection; 5] = [
-            TopLevelSection::Philosophy,
-            TopLevelSection::Policy,
-            TopLevelSection::Feature,
-            TopLevelSection::Requirement,
-            TopLevelSection::Errors,
-        ];
-
         self.print_summary("syu interactive browser");
-        println!(
-            "1. philosophy ({})",
-            self.result.definition_counts.philosophies
-        );
-        println!("2. policy ({})", self.result.definition_counts.policies);
-        println!("3. feature ({})", self.result.definition_counts.features);
-        println!(
-            "4. requirement ({})",
-            self.result.definition_counts.requirements
-        );
-        println!("5. errors ({})", self.result.issues.len());
+        for (index, section) in TopLevelSection::MENU_ORDER.iter().enumerate() {
+            println!(
+                "{}. {} ({})",
+                index + 1,
+                section.label(),
+                section.count(&self.result)
+            );
+        }
         println!("0. exit");
 
         match prompt_number("Select a section", 5)? {
             Some(0) => Ok(None),
             None => Ok(None),
-            Some(choice) => Ok(SECTIONS.get(choice - 1).copied()),
+            Some(choice) => Ok(TopLevelSection::MENU_ORDER.get(choice - 1).copied()),
         }
     }
 
@@ -343,11 +366,11 @@ impl BrowseState {
         println!("=== {heading} ===");
         println!("workspace: {}", self.result.workspace_root.display());
         println!(
-            "philosophy={} policy={} feature={} requirement={} errors={}",
+            "philosophy={} policy={} requirement={} feature={} errors={}",
             self.result.definition_counts.philosophies,
             self.result.definition_counts.policies,
-            self.result.definition_counts.features,
             self.result.definition_counts.requirements,
+            self.result.definition_counts.features,
             self.result.issues.len()
         );
         println!();
