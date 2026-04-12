@@ -669,6 +669,78 @@ fn format_instruction_list(items: &[String]) -> String {
     }
 }
 
+fn suggested_linked_kinds(layer: LookupKind) -> &'static [LookupKind] {
+    match layer {
+        LookupKind::Philosophy => &[LookupKind::Policy],
+        // Policies usually attach to an existing project philosophy; synthesizing a
+        // "matching" philosophy ID from a policy ID is too misleading to suggest.
+        LookupKind::Policy => &[LookupKind::Requirement],
+        LookupKind::Requirement => &[LookupKind::Policy, LookupKind::Feature],
+        LookupKind::Feature => &[LookupKind::Requirement],
+    }
+}
+
+fn suggested_linked_id(id: &str, kind: LookupKind) -> String {
+    let mut segments = id.split('-').collect::<Vec<_>>();
+    segments[0] = match kind {
+        LookupKind::Philosophy => "PHIL",
+        LookupKind::Policy => "POL",
+        LookupKind::Requirement => "REQ",
+        LookupKind::Feature => "FEAT",
+    };
+    segments.join("-")
+}
+
+fn scaffold_missing_link_instruction(
+    workspace: &Workspace,
+    layer: LookupKind,
+    id: &str,
+) -> Option<String> {
+    let lookup = WorkspaceLookup::new(workspace);
+    let workspace_arg = shell_quote_path(&workspace.root);
+    let linked_kinds = suggested_linked_kinds(layer)
+        .iter()
+        .filter_map(|kind| {
+            let suggested_id = suggested_linked_id(id, *kind);
+            (lookup.find(&suggested_id).is_none()).then_some((*kind, suggested_id))
+        })
+        .collect::<Vec<_>>();
+
+    if linked_kinds.is_empty() {
+        return None;
+    }
+
+    let commands = linked_kinds
+        .iter()
+        .map(|(kind, suggested_id)| {
+            format!(
+                "`syu add {} {} {workspace_arg}`",
+                kind.label(),
+                suggested_id
+            )
+        })
+        .collect::<Vec<_>>();
+
+    if linked_kinds.len() == 1 {
+        let (kind, _) = linked_kinds[0];
+        Some(format!(
+            "If the linked {} stub does not exist yet, scaffold it with {}.",
+            kind.label(),
+            commands[0]
+        ))
+    } else {
+        let linked_labels = linked_kinds
+            .iter()
+            .map(|(kind, _)| kind.label().to_string())
+            .collect::<Vec<_>>();
+        Some(format!(
+            "If linked {} stubs are still missing, scaffold them with {}.",
+            format_instruction_list(&linked_labels),
+            format_instruction_list(&commands)
+        ))
+    }
+}
+
 fn reciprocal_link_entry_instruction(layer: LookupKind, id: &str) -> String {
     let fields = reciprocal_link_fields(layer)
         .iter()
@@ -853,6 +925,9 @@ fn add_follow_up_steps(
         "Edit {target_label} and fill the stub fields for `{id}`."
     )];
     steps.push(reciprocal_link_entry_instruction(layer, id));
+    if let Some(scaffold_instruction) = scaffold_missing_link_instruction(workspace, layer, id) {
+        steps.push(scaffold_instruction);
+    }
     steps.push(reciprocal_link_back_instruction(layer, id));
 
     steps.push(format!(
@@ -914,6 +989,7 @@ fn title_case_slug(slug: &str) -> String {
 mod tests {
     use anyhow::Result;
     use std::{
+        collections::BTreeMap,
         collections::VecDeque,
         fs,
         path::{Path, PathBuf},
@@ -924,6 +1000,7 @@ mod tests {
     use crate::{
         cli::{AddArgs, InitArgs, LookupKind, OutputFormat, StarterTemplate},
         config::SyuConfig,
+        model::Requirement,
         workspace::Workspace,
     };
 
@@ -933,7 +1010,7 @@ mod tests {
         normalize_definition_id, normalize_feature_kind, prepare_feature_registry_update,
         prompt_for_parsed_id, render_item_block, render_new_document,
         resolve_add_invocation_with_prompt_io, resolve_explicit_file, resolve_feature_kind,
-        resolve_interactive_file_prompt, run_add_command, title_case_slug,
+        resolve_interactive_file_prompt, run_add_command, suggested_linked_id, title_case_slug,
         validate_existing_document, write_feature_registry_update, write_stub_document,
     };
 
@@ -1068,18 +1145,79 @@ mod tests {
         );
 
         assert!(philosophy_steps[1].contains("linked_policies"));
-        assert!(philosophy_steps[2].contains("linked policy"));
+        assert!(philosophy_steps[2].contains("syu add policy POL-001"));
+        assert!(philosophy_steps[3].contains("linked policy"));
         assert!(policy_steps[1].contains("linked_philosophies"));
         assert!(policy_steps[1].contains("linked_requirements"));
+        assert!(policy_steps[2].contains("syu add requirement REQ-001"));
+        assert!(!policy_steps[2].contains("syu add philosophy"));
         assert!(requirement_steps[1].contains("linked_policies"));
         assert!(requirement_steps[1].contains("linked_features"));
+        assert!(requirement_steps[2].contains("syu add policy POL-AUTH-001"));
+        assert!(requirement_steps[2].contains("syu add feature FEAT-AUTH-001"));
         assert!(feature_steps[1].contains("linked_requirements"));
-        assert!(feature_steps[2].contains("linked requirement"));
+        assert!(feature_steps[2].contains("syu add requirement REQ-AUTH-LOGIN-001"));
+        assert!(feature_steps[3].contains("linked requirement"));
         assert!(
             feature_steps
                 .last()
                 .expect("feature guidance should include validation")
                 .contains("syu validate")
+        );
+    }
+
+    #[test]
+    fn suggested_linked_id_rewrites_prefixes_for_each_layer() {
+        assert_eq!(
+            suggested_linked_id("POL-AUTH-001", LookupKind::Philosophy),
+            "PHIL-AUTH-001"
+        );
+        assert_eq!(
+            suggested_linked_id("REQ-AUTH-001", LookupKind::Policy),
+            "POL-AUTH-001"
+        );
+        assert_eq!(
+            suggested_linked_id("FEAT-AUTH-001", LookupKind::Requirement),
+            "REQ-AUTH-001"
+        );
+        assert_eq!(
+            suggested_linked_id("REQ-AUTH-001", LookupKind::Feature),
+            "FEAT-AUTH-001"
+        );
+    }
+
+    #[test]
+    fn add_follow_up_steps_skip_existing_scaffold_commands() {
+        let (_tempdir, mut workspace) = test_workspace();
+        workspace.requirements.push(Requirement {
+            id: "REQ-AUTH-001".to_string(),
+            title: "Existing requirement".to_string(),
+            description: "Already scaffolded".to_string(),
+            priority: "high".to_string(),
+            status: "planned".to_string(),
+            linked_policies: Vec::new(),
+            linked_features: Vec::new(),
+            tests: BTreeMap::new(),
+        });
+        let policy_target = workspace.spec_root.join("policies/policies.yaml");
+
+        let policy_steps = add_follow_up_steps(
+            &workspace,
+            LookupKind::Policy,
+            "POL-AUTH-001",
+            &policy_target,
+        );
+
+        assert_eq!(policy_steps.len(), 4);
+        assert!(
+            !policy_steps
+                .iter()
+                .any(|step| step.contains("syu add requirement REQ-AUTH-001"))
+        );
+        assert!(
+            !policy_steps
+                .iter()
+                .any(|step| step.contains("syu add philosophy"))
         );
     }
 
