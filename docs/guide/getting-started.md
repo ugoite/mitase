@@ -112,6 +112,17 @@ syu add requirement REQ-AUTH-001
 syu add feature FEAT-AUTH-LOGIN-001 --kind auth
 ```
 
+Prefer a guided terminal flow for the next item?
+
+```bash
+syu add requirement --interactive
+syu add feature path/to/workspace --interactive
+```
+
+When you omit the ID in a terminal, `syu add` prompts for it. With
+`--interactive`, it also lets you confirm the feature kind and override the
+target YAML path before writing the stub.
+
 These commands generate correctly shaped YAML stubs, infer a default document
 path from the ID, and keep feature discovery explicit by updating the feature
 registry automatically when a new feature document is created. You can override
