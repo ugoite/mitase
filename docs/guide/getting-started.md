@@ -240,7 +240,10 @@ syu show REQ-001
 syu app .
 ```
 
-Use `syu browse --non-interactive` when you want the full spec tree in terminal output. Use `syu list` when you want a filtered view for a single layer in the current workspace.
+Use `syu list` when you want list-shaped output that can be narrowed to one
+layer or emitted as JSON for automation. Use `syu browse --non-interactive`
+when you want the browse snapshot instead: workspace metadata, per-layer
+counts, and the current validation errors in plain text.
 
 Use JSON when integrating with automation:
 

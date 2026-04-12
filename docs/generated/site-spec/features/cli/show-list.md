@@ -19,7 +19,7 @@ description: "Generated reference for docs/syu/features/cli/show-list.yaml"
 
 - **id**: FEAT-LIST-001
   - **title**: Non-interactive definition listing
-  - **summary**: List philosophies, policies, requirements, or features in one command without entering interactive browse mode.
+  - **summary**: List philosophies, policies, requirements, or features in list-shaped text or JSON, with optional layer filtering and without the workspace snapshot framing from `syu browse --non-interactive`.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-018
@@ -62,7 +62,7 @@ version: 1
 features:
   - id: FEAT-LIST-001
     title: Non-interactive definition listing
-    summary: List philosophies, policies, requirements, or features in one command without entering interactive browse mode.
+    summary: List philosophies, policies, requirements, or features in list-shaped text or JSON, with optional layer filtering and without the workspace snapshot framing from `syu browse --non-interactive`.
     status: implemented
     linked_requirements:
       - REQ-CORE-018
