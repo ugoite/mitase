@@ -676,7 +676,7 @@ function App() {
             </div>
             <p className="mt-2 text-xs text-slate-400">
               Tip: use ArrowUp and ArrowDown to move through results, Enter to open the highlighted
-              item, and Escape to clear the search.
+              item or the only result when there is one match, and Escape to clear the search.
             </p>
             {searchQuery.trim().length > 0 && (
               <div id="search-results-list" className="mt-3 space-y-1">
