@@ -51,10 +51,14 @@ const WORKSPACE_HELP: &str = "Workspace root containing syu.yaml and the configu
 const LIST_AFTER_HELP: &str = "\
 Examples:
   syu list
-  syu list docs/syu
+  syu list path/to/workspace
   syu list requirement
-  syu list requirement docs/syu
-  syu list docs/syu requirement";
+  syu list requirement path/to/workspace
+  syu list path/to/workspace requirement
+
+Note:
+  Pass the workspace root that contains syu.yaml.
+  The configured spec.root lives inside that workspace; do not pass it directly.";
 
 const SEARCH_AFTER_HELP: &str = "\
 Examples:
