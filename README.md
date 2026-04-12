@@ -173,6 +173,9 @@ syu init .                           # 1. Create spec scaffold
 syu add requirement REQ-AUTH-001     # 2. Generate a requirement stub
 ```
 
+`syu add requirement` prints the generated requirement path plus the reciprocal-link
+follow-up you still need before validation will pass.
+
 Before step 3, open the generated requirement YAML under `docs/syu/requirements/`
 (or your configured `spec.root`), add at least one `linked_policies:` entry and
 one `linked_features:` entry, then update those policy and feature documents so

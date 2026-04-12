@@ -94,11 +94,19 @@ fn add_command_creates_requirement_files_from_the_id_prefix() {
         .expect("command should run");
 
     assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
     let file = workspace.join("docs/syu/requirements/auth/auth.yaml");
     let contents = fs::read_to_string(&file).expect("requirement file should exist");
     assert!(contents.contains("prefix: REQ-AUTH"));
     assert!(contents.contains("id: REQ-AUTH-001"));
     assert!(contents.contains("status: planned"));
+    assert!(stdout.contains("Next steps:"));
+    assert!(stdout.contains("Edit docs/syu/requirements/auth/auth.yaml"));
+    assert!(stdout.contains("linked_policies:` entry and one `linked_features:` entry"));
+    assert!(
+        stdout
+            .contains("Update each linked policy and feature so they link back to `REQ-AUTH-001`.")
+    );
 }
 
 #[test]
@@ -116,12 +124,21 @@ fn add_command_updates_the_feature_registry_for_new_feature_files() {
         .expect("command should run");
 
     assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
     let feature_file = workspace.join("docs/syu/features/auth/login.yaml");
     let registry = fs::read_to_string(workspace.join("docs/syu/features/features.yaml"))
         .expect("feature registry should exist");
     assert!(feature_file.exists(), "feature file should be created");
     assert!(registry.contains("kind: auth"));
     assert!(registry.contains("file: auth/login.yaml"));
+    assert!(stdout.contains("updated docs/syu/features/features.yaml"));
+    assert!(
+        stdout.contains("Add at least one `linked_requirements:` entry in `FEAT-AUTH-LOGIN-001`.")
+    );
+    assert!(
+        stdout
+            .contains("Update each linked requirement so it links back to `FEAT-AUTH-LOGIN-001`.")
+    );
 }
 
 #[test]
