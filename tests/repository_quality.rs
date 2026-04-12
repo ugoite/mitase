@@ -497,6 +497,11 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(contributing.contains("docs/guide/concepts.md"));
     assert!(contributing.contains("philosophy -> policies -> requirements -> features"));
     assert!(contributing.contains("spec edits under"));
+    assert!(contributing.contains("Run branch 1 for every change"));
+    assert!(contributing.contains("Docs-only edits outside"));
+    assert!(contributing.contains("README.md"));
+    assert!(contributing.contains("docs/guide/"));
+    assert!(contributing.contains("docs/generated/site-spec/"));
     assert!(contributing.contains(".worktrees/"));
     assert!(contributing.contains("scripts/ci/quality-gates.sh"));
     assert!(contributing.contains("scripts/ci/check-generated-docs-freshness.sh"));
