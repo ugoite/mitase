@@ -122,29 +122,38 @@ gh attestation verify syu-x86_64-unknown-linux-gnu.tar.gz --repo ugoite/syu
 If you already trust the release source and want the shortest path, use the
 one-line entrypoint:
 
+The download URL stays pinned to the installer shipped with this checked-in
+documentation version. Use `SYU_VERSION=alpha`, `stable`, or an explicit
+version selector when you want that installer to fetch a different published
+package track after it starts.
+
 Current installer entrypoint:
 
 ```bash
-curl -fsSL https://github.com/ugoite/syu/releases/download/v0.0.1-alpha.7/install-syu.sh | bash
+RELEASE=v0.0.1-alpha.7
+curl -fsSL "https://github.com/ugoite/syu/releases/download/${RELEASE}/install-syu.sh" | bash
 ```
 
 During the alpha phase, prefer the `alpha` track selector so the same installer
 entrypoint always resolves to the latest published alpha:
 
 ```bash
-curl -fsSL https://github.com/ugoite/syu/releases/download/v0.0.1-alpha.7/install-syu.sh | env SYU_VERSION=alpha bash
+RELEASE=v0.0.1-alpha.7
+curl -fsSL "https://github.com/ugoite/syu/releases/download/${RELEASE}/install-syu.sh" | env SYU_VERSION=alpha bash
 ```
 
 Install to a custom directory:
 
 ```bash
-curl -fsSL https://github.com/ugoite/syu/releases/download/v0.0.1-alpha.7/install-syu.sh | env SYU_INSTALL_DIR=$HOME/bin bash
+RELEASE=v0.0.1-alpha.7
+curl -fsSL "https://github.com/ugoite/syu/releases/download/${RELEASE}/install-syu.sh" | env SYU_INSTALL_DIR=$HOME/bin bash
 ```
 
 Install a specific prerelease:
 
 ```bash
-curl -fsSL https://github.com/ugoite/syu/releases/download/v0.0.1-alpha.7/install-syu.sh | env SYU_VERSION=v0.0.1-alpha.7 bash
+RELEASE=v0.0.1-alpha.7
+curl -fsSL "https://github.com/ugoite/syu/releases/download/${RELEASE}/install-syu.sh" | env SYU_VERSION="$RELEASE" bash
 ```
 
 If you're contributing to `syu` itself from source, jump to
