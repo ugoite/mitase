@@ -1,3 +1,5 @@
+// FEAT-SEARCH-001
+// REQ-CORE-019
 // REQ-CORE-018
 
 use std::path::Path;
@@ -21,6 +23,13 @@ pub(crate) struct EntitySummary {
     pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub document_path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct SearchResult {
+    pub id: String,
+    pub kind: &'static str,
+    pub title: String,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -158,6 +167,27 @@ impl<'a> WorkspaceLookup<'a> {
         None
     }
 
+    pub(crate) fn search(self, query: &str, kind: Option<LookupKind>) -> Vec<SearchResult> {
+        let query = query.trim().to_lowercase();
+        let mut results = Vec::new();
+
+        match kind {
+            Some(kind) => self.extend_search_results(kind, &query, &mut results),
+            None => {
+                for kind in [
+                    LookupKind::Philosophy,
+                    LookupKind::Policy,
+                    LookupKind::Feature,
+                    LookupKind::Requirement,
+                ] {
+                    self.extend_search_results(kind, &query, &mut results);
+                }
+            }
+        }
+
+        results
+    }
+
     fn document_paths(self, kind: LookupKind) -> Result<Vec<String>> {
         match kind {
             LookupKind::Philosophy => Ok(load_philosophy_documents_with_paths(
@@ -214,6 +244,67 @@ impl<'a> WorkspaceLookup<'a> {
             .collect()),
         }
     }
+
+    fn extend_search_results(self, kind: LookupKind, query: &str, results: &mut Vec<SearchResult>) {
+        match kind {
+            LookupKind::Philosophy => {
+                for item in &self.workspace.philosophies {
+                    if field_matches_query(&item.id, query)
+                        || field_matches_query(&item.title, query)
+                    {
+                        results.push(SearchResult {
+                            id: item.id.clone(),
+                            kind: kind.label(),
+                            title: item.title.clone(),
+                        });
+                    }
+                }
+            }
+            LookupKind::Policy => {
+                for item in &self.workspace.policies {
+                    if field_matches_query(&item.id, query)
+                        || field_matches_query(&item.title, query)
+                        || field_matches_query(&item.summary, query)
+                        || field_matches_query(&item.description, query)
+                    {
+                        results.push(SearchResult {
+                            id: item.id.clone(),
+                            kind: kind.label(),
+                            title: item.title.clone(),
+                        });
+                    }
+                }
+            }
+            LookupKind::Requirement => {
+                for item in &self.workspace.requirements {
+                    if field_matches_query(&item.id, query)
+                        || field_matches_query(&item.title, query)
+                        || field_matches_query(&item.description, query)
+                    {
+                        results.push(SearchResult {
+                            id: item.id.clone(),
+                            kind: kind.label(),
+                            title: item.title.clone(),
+                        });
+                    }
+                }
+            }
+            LookupKind::Feature => {
+                for item in &self.workspace.features {
+                    if field_matches_query(&item.id, query)
+                        || field_matches_query(&item.title, query)
+                        || field_matches_query(&item.summary, query)
+                    {
+                        results.push(SearchResult {
+                            id: item.id.clone(),
+                            kind: kind.label(),
+                            title: item.title.clone(),
+                        });
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn workspace_relative_display(workspace: &Workspace, path: &Path) -> String {
@@ -221,6 +312,10 @@ fn workspace_relative_display(workspace: &Workspace, path: &Path) -> String {
         .unwrap_or(path)
         .display()
         .to_string()
+}
+
+fn field_matches_query(value: &str, query: &str) -> bool {
+    value.to_lowercase().contains(query)
 }
 
 #[cfg(test)]
@@ -475,5 +570,53 @@ mod tests {
                 .to_string()
                 .contains("workspace requirement entries changed while collecting document paths")
         );
+    }
+
+    #[test]
+    fn search_matches_browser_search_fields_only() {
+        let workspace = Workspace {
+            root: std::path::PathBuf::from("."),
+            spec_root: std::path::PathBuf::from("./docs/syu"),
+            config: SyuConfig::default(),
+            philosophies: vec![crate::model::Philosophy {
+                id: "PHIL-001".to_string(),
+                title: "Trace everything".to_string(),
+                product_design_principle: "Long-form principle text".to_string(),
+                coding_guideline: "Long-form coding text".to_string(),
+                linked_policies: Vec::new(),
+            }],
+            policies: vec![Policy {
+                id: "POL-001".to_string(),
+                title: "Policy title".to_string(),
+                summary: "Summary field".to_string(),
+                description: "Description field".to_string(),
+                linked_philosophies: Vec::new(),
+                linked_requirements: Vec::new(),
+            }],
+            requirements: vec![Requirement {
+                id: "REQ-001".to_string(),
+                title: "Requirement title".to_string(),
+                description: "Requirement description".to_string(),
+                priority: "high".to_string(),
+                status: "planned".to_string(),
+                linked_policies: Vec::new(),
+                linked_features: Vec::new(),
+                tests: BTreeMap::new(),
+            }],
+            features: vec![Feature {
+                id: "FEAT-001".to_string(),
+                title: "Feature title".to_string(),
+                summary: "Feature summary".to_string(),
+                status: "planned".to_string(),
+                linked_requirements: Vec::new(),
+                implementations: BTreeMap::new(),
+            }],
+        };
+
+        let lookup = WorkspaceLookup::new(&workspace);
+        assert_eq!(lookup.search("summary", None)[0].id, "POL-001");
+        assert_eq!(lookup.search("description", None)[0].id, "POL-001");
+        assert_eq!(lookup.search("feature summary", None)[0].id, "FEAT-001");
+        assert!(lookup.search("Long-form principle", None).is_empty());
     }
 }
