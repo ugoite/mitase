@@ -89,7 +89,7 @@ Below the sections panel, the documents for the active section are listed. Click
 Selecting an item shows:
 
 - **ID and title** — the stable identifier and human-readable name
-- **Status badge** — `planned`, `implemented`, or `deprecated`
+- **Status badge** — the item's YAML `status:` field (for example `planned` or `implemented`)
 - **Summary / description** — the prose from the YAML
 - **Links panel** — the upstream and downstream relationships (e.g. which requirements a feature satisfies; which policies a requirement enforces)
 - **Traces panel** — the declared test and implementation traces, with file path and symbol name

@@ -205,6 +205,7 @@ fn repository_declares_documentation_guides() {
     let current_version = env!("CARGO_PKG_VERSION");
     let readme = read_file("README.md");
     let concepts = read_file("docs/guide/concepts.md");
+    let app_guide = read_file("docs/guide/app.md");
     let getting_started = read_file("docs/guide/getting-started.md");
     let configuration = read_file("docs/guide/configuration.md");
     let config_overview = read_file("docs/syu/config/overview.yaml");
@@ -265,6 +266,9 @@ fn repository_declares_documentation_guides() {
     assert!(concepts.contains("implemented"));
     assert!(concepts.contains("Continue with these pages"));
     assert!(concepts.contains("Specification Reference"));
+    assert!(app_guide.contains("Status badge"));
+    assert!(app_guide.contains("the item's YAML `status:` field"));
+    assert!(!app_guide.contains("`planned`, `implemented`, or `deprecated`"));
     assert!(getting_started.contains("New to `syu`?"));
     assert!(getting_started.contains("Start here once `syu` is installed:"));
     assert!(getting_started.contains("Generate a requirement stub"));
