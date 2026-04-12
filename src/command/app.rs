@@ -2,7 +2,7 @@
 // REQ-CORE-017
 
 use std::{
-    collections::hash_map::DefaultHasher,
+    collections::{BTreeSet, hash_map::DefaultHasher},
     env, fs,
     hash::{Hash, Hasher},
     io::{Read, Write},
@@ -31,7 +31,9 @@ use crate::{
     cli::AppArgs,
     command::check::collect_check_result,
     config::{SyuConfig, load_config, resolve_spec_root},
-    model::{CheckResult, FeatureRegistryDocument},
+    coverage::normalize_relative_path,
+    model::{CheckResult, FeatureRegistryDocument, TraceReference},
+    workspace::{load_feature_documents_with_paths, load_requirement_documents_with_paths},
 };
 
 static APP_DIST: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/app/dist");
@@ -78,12 +80,18 @@ impl AppState {
         }
     }
 
-    fn refresh_current(&self) -> Result<()> {
-        let next = match load_snapshot_payload(&self.workspace_root, &self.config) {
-            Ok((snapshot, payload)) => CurrentAppState::Ready(CurrentAppData { snapshot, payload }),
-            Err(error) => CurrentAppState::Error(format!("{error:#}")),
-        };
+    fn current_snapshot(&self) -> Result<Option<String>> {
+        match &*self
+            .current
+            .read()
+            .map_err(|_| anyhow!("app refresh state lock poisoned"))?
+        {
+            CurrentAppState::Ready(data) => Ok(Some(data.snapshot.clone())),
+            CurrentAppState::Error(_) => Ok(None),
+        }
+    }
 
+    fn replace_current(&self, next: CurrentAppState) -> Result<()> {
         let result = match &next {
             CurrentAppState::Ready(_) => Ok(()),
             CurrentAppState::Error(message) => Err(anyhow!(message.clone())),
@@ -95,6 +103,40 @@ impl AppState {
             .map_err(|_| anyhow!("app refresh state lock poisoned"))? = next;
 
         result
+    }
+
+    fn refresh_current(&self) -> Result<()> {
+        self.refresh_current_with(
+            || load_current_snapshot(&self.workspace_root, &self.config),
+            || load_current_payload(&self.workspace_root, &self.config),
+        )
+    }
+
+    fn refresh_current_with<LoadSnapshot, LoadPayload>(
+        &self,
+        load_snapshot: LoadSnapshot,
+        load_payload: LoadPayload,
+    ) -> Result<()>
+    where
+        LoadSnapshot: FnOnce() -> Result<String>,
+        LoadPayload: FnOnce() -> Result<AppPayload>,
+    {
+        let current_snapshot = self.current_snapshot()?;
+        let next = match load_snapshot() {
+            Ok(snapshot) => {
+                if current_snapshot.as_deref() == Some(snapshot.as_str()) {
+                    return Ok(());
+                }
+
+                match load_payload() {
+                    Ok(payload) => CurrentAppState::Ready(CurrentAppData { snapshot, payload }),
+                    Err(error) => CurrentAppState::Error(format!("{error:#}")),
+                }
+            }
+            Err(error) => CurrentAppState::Error(format!("{error:#}")),
+        };
+
+        self.replace_current(next)
     }
 }
 
@@ -282,18 +324,20 @@ fn load_current_payload(workspace_root: &Path, config: &SyuConfig) -> Result<App
     build_app_payload_from_config(workspace_root, config)
 }
 
-fn load_snapshot_payload(
-    workspace_root: &Path,
-    config: &SyuConfig,
-) -> Result<(String, AppPayload)> {
-    let snapshot = load_current_snapshot(workspace_root, config)?;
-    let payload = load_current_payload(workspace_root, config)?;
-    Ok((snapshot, payload))
+fn load_current_snapshot(workspace_root: &Path, config: &SyuConfig) -> Result<String> {
+    app_payload_snapshot(workspace_root, config)
 }
 
-fn load_current_snapshot(workspace_root: &Path, config: &SyuConfig) -> Result<String> {
+fn app_payload_snapshot(workspace_root: &Path, config: &SyuConfig) -> Result<String> {
     let spec_root = resolve_spec_root(workspace_root, config);
-    spec_snapshot(&spec_root)
+    let mut hasher = DefaultHasher::new();
+    spec_snapshot(&spec_root)?.hash(&mut hasher);
+
+    for dependency in app_snapshot_dependencies(workspace_root, &spec_root, config) {
+        dependency.hash_state(workspace_root, &mut hasher);
+    }
+
+    Ok(format!("{:016x}", hasher.finish()))
 }
 
 fn spec_snapshot(spec_root: &Path) -> Result<String> {
@@ -324,6 +368,166 @@ fn spec_snapshot(spec_root: &Path) -> Result<String> {
         source.content.hash(&mut hasher);
     }
     Ok(format!("{:016x}", hasher.finish()))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum SnapshotDependency {
+    File(PathBuf),
+    ReadDirError(PathBuf, String),
+}
+
+impl SnapshotDependency {
+    fn hash_state(&self, workspace_root: &Path, hasher: &mut DefaultHasher) {
+        match self {
+            Self::File(path) => {
+                "file".hash(hasher);
+                path.hash(hasher);
+                match fs::read(workspace_root.join(path)) {
+                    Ok(bytes) => {
+                        "readable".hash(hasher);
+                        bytes.hash(hasher);
+                    }
+                    Err(error) => {
+                        "unreadable".hash(hasher);
+                        format!("{:?}", error.kind()).hash(hasher);
+                    }
+                }
+            }
+            Self::ReadDirError(path, kind) => {
+                "read_dir_error".hash(hasher);
+                path.hash(hasher);
+                kind.hash(hasher);
+            }
+        }
+    }
+}
+
+fn app_snapshot_dependencies(
+    workspace_root: &Path,
+    spec_root: &Path,
+    config: &SyuConfig,
+) -> BTreeSet<SnapshotDependency> {
+    let mut dependencies = BTreeSet::new();
+
+    if let Ok(documents) = load_requirement_documents_with_paths(&spec_root.join("requirements")) {
+        for document in documents {
+            for requirement in document.document.requirements {
+                collect_trace_map_snapshot_dependencies(&requirement.tests, &mut dependencies);
+            }
+        }
+    }
+
+    if let Ok(documents) = load_feature_documents_with_paths(&spec_root.join("features")) {
+        for document in documents {
+            for feature in document.document.features {
+                collect_trace_map_snapshot_dependencies(
+                    &feature.implementations,
+                    &mut dependencies,
+                );
+            }
+        }
+    }
+
+    if config.validate.require_symbol_trace_coverage {
+        collect_coverage_snapshot_dependencies(workspace_root, &mut dependencies);
+    }
+
+    dependencies
+}
+
+fn collect_trace_map_snapshot_dependencies(
+    references_by_language: &std::collections::BTreeMap<String, Vec<TraceReference>>,
+    dependencies: &mut BTreeSet<SnapshotDependency>,
+) {
+    for references in references_by_language.values() {
+        for reference in references {
+            if let Some(path) = normalized_trace_snapshot_path(&reference.file) {
+                dependencies.insert(SnapshotDependency::File(path));
+            }
+        }
+    }
+}
+
+fn normalized_trace_snapshot_path(file: &Path) -> Option<PathBuf> {
+    let portable = file.to_string_lossy().replace('\\', "/");
+    let normalized = normalize_relative_path(Path::new(&portable));
+
+    if normalized.as_os_str().is_empty()
+        || normalized.is_absolute()
+        || normalized
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        return None;
+    }
+
+    Some(normalized)
+}
+
+fn collect_coverage_snapshot_dependencies(
+    workspace_root: &Path,
+    dependencies: &mut BTreeSet<SnapshotDependency>,
+) {
+    const COVERAGE_EXTENSIONS: &[&str] = &["rs", "py", "ts", "tsx", "js", "jsx"];
+
+    collect_snapshot_files_with_extensions(
+        workspace_root,
+        &workspace_root.join("src"),
+        COVERAGE_EXTENSIONS,
+        dependencies,
+    );
+    collect_snapshot_files_with_extensions(
+        workspace_root,
+        &workspace_root.join("tests"),
+        COVERAGE_EXTENSIONS,
+        dependencies,
+    );
+}
+
+fn collect_snapshot_files_with_extensions(
+    workspace_root: &Path,
+    directory: &Path,
+    extensions: &[&str],
+    dependencies: &mut BTreeSet<SnapshotDependency>,
+) {
+    if !directory.exists() {
+        return;
+    }
+
+    let entries = match fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(error) => {
+            dependencies.insert(SnapshotDependency::ReadDirError(
+                relative_workspace_path(workspace_root, directory),
+                format!("{:?}", error.kind()),
+            ));
+            return;
+        }
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_snapshot_files_with_extensions(workspace_root, &path, extensions, dependencies);
+            continue;
+        }
+
+        let Some(extension) = path.extension().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        if extensions.contains(&extension) {
+            dependencies.insert(SnapshotDependency::File(relative_workspace_path(
+                workspace_root,
+                &path,
+            )));
+        }
+    }
+}
+
+fn relative_workspace_path(workspace_root: &Path, path: &Path) -> PathBuf {
+    path.strip_prefix(workspace_root)
+        .unwrap_or(path)
+        .to_path_buf()
 }
 
 fn section_sources(
@@ -736,10 +940,13 @@ impl IntoResponse for AppError {
 #[cfg(test)]
 mod tests {
     use std::{
+        collections::{BTreeSet, hash_map::DefaultHasher},
         fs,
+        hash::Hasher,
         io::{Error, ErrorKind, Read, Write as _},
         net::TcpListener,
         path::{Path, PathBuf},
+        sync::atomic::{AtomicUsize, Ordering},
         thread,
         time::Duration,
     };
@@ -760,14 +967,15 @@ mod tests {
     };
 
     use super::{
-        AppServerSettings, AppState, AppVersion, SectionKind, Severity, StartupLine, app_router,
-        browser_root_labels, build_app_payload, collect_feature_sources,
+        AppPayload, AppServerSettings, AppState, AppVersion, SectionKind, Severity,
+        SnapshotDependency, StartupLine, app_router, browser_root_labels, build_app_payload,
+        collect_feature_sources, collect_snapshot_files_with_extensions,
         collect_yaml_sources_recursive, content_type_for_path, is_asset_like,
-        non_loopback_warning_lines, normalized_asset_path, readiness_probe_request_sent,
-        readiness_probe_succeeds, redacted_relative_label, redacted_root_label,
-        refresh_current_once, relative_display, resolve_app_server_settings, spec_snapshot,
-        startup_lines, trailing_path_components_label, validation_snapshot,
-        wait_for_ready_with_retry,
+        load_current_snapshot, non_loopback_warning_lines, normalized_asset_path,
+        normalized_trace_snapshot_path, readiness_probe_request_sent, readiness_probe_succeeds,
+        redacted_relative_label, redacted_root_label, refresh_current_once, relative_display,
+        resolve_app_server_settings, spec_snapshot, startup_lines, trailing_path_components_label,
+        validation_snapshot, wait_for_ready_with_retry,
     };
 
     fn fixture_root(name: &str) -> PathBuf {
@@ -786,10 +994,14 @@ mod tests {
     }
 
     fn write_config(root: &Path, bind: &str, port: u16) {
+        write_config_with(root, bind, port, false);
+    }
+
+    fn write_config_with(root: &Path, bind: &str, port: u16, require_symbol_trace_coverage: bool) {
         fs::write(
             root.join("syu.yaml"),
             format!(
-                "version: {}\nspec:\n  root: docs/syu\nvalidate:\n  default_fix: false\n  allow_planned: true\n  require_non_orphaned_items: true\n  require_symbol_trace_coverage: false\napp:\n  bind: {bind}\n  port: {port}\nruntimes:\n  python:\n    command: auto\n  node:\n    command: auto\n",
+                "version: {}\nspec:\n  root: docs/syu\nvalidate:\n  default_fix: false\n  allow_planned: true\n  require_non_orphaned_items: true\n  require_symbol_trace_coverage: {require_symbol_trace_coverage}\napp:\n  bind: {bind}\n  port: {port}\nruntimes:\n  python:\n    command: auto\n  node:\n    command: auto\n",
                 env!("CARGO_PKG_VERSION"),
             ),
         )
@@ -801,6 +1013,58 @@ mod tests {
         let state = AppState::new(root.to_path_buf(), config);
         let _ = state.refresh_current();
         state
+    }
+
+    fn failing_payload() -> anyhow::Result<AppPayload> {
+        Err(anyhow::anyhow!("payload load failed"))
+    }
+
+    fn write_snapshot_workspace(root: &Path, require_symbol_trace_coverage: bool) {
+        let spec_root = create_workspace_skeleton(root);
+        write_config_with(root, "127.0.0.1", 3000, require_symbol_trace_coverage);
+        fs::create_dir_all(root.join("src")).expect("src dir");
+        fs::create_dir_all(root.join("tests")).expect("tests dir");
+
+        fs::write(
+            spec_root.join("philosophy/foundation.yaml"),
+            "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: PHIL-001\n    title: Keep traces explicit\n    product_design_principle: Keep source, tests, and specs connected.\n    coding_guideline: Prefer explicit file links.\n    linked_policies:\n      - POL-001\n",
+        )
+        .expect("philosophy");
+        fs::write(
+            spec_root.join("policies/policies.yaml"),
+            "category: Policies\nversion: 1\nlanguage: en\n\npolicies:\n  - id: POL-001\n    title: Requirements need evidence\n    summary: Keep links reciprocal.\n    description: Requirement and feature records should point to code and tests.\n    linked_philosophies:\n      - PHIL-001\n    linked_requirements:\n      - REQ-001\n",
+        )
+        .expect("policy");
+        fs::write(
+            spec_root.join("requirements/core.yaml"),
+            "category: Core Requirements\nprefix: REQ\n\nrequirements:\n  - id: REQ-001\n    title: Requirement title\n    description: Requirement description.\n    priority: high\n    status: implemented\n    linked_policies:\n      - POL-001\n    linked_features:\n      - FEAT-001\n    tests:\n      rust:\n        - file: tests/requirement_trace.rs\n          symbols:\n            - requirement_trace\n",
+        )
+        .expect("requirement");
+        fs::write(
+            spec_root.join("features/features.yaml"),
+            "version: \"0.0.1-alpha.7\"\nupdated: \"2026-04\"\n\nfiles:\n  - kind: core\n    file: core.yaml\n",
+        )
+        .expect("feature registry");
+        fs::write(
+            spec_root.join("features/core.yaml"),
+            "category: Core Features\nversion: 1\n\nfeatures:\n  - id: FEAT-001\n    title: Feature title\n    summary: Feature summary.\n    status: implemented\n    linked_requirements:\n      - REQ-001\n    implementations:\n      rust:\n        - file: src/feature_impl.rs\n          symbols:\n            - feature_impl\n",
+        )
+        .expect("feature");
+        fs::write(
+            root.join("src/feature_impl.rs"),
+            "pub fn feature_impl() {}\n",
+        )
+        .expect("feature source");
+        fs::write(
+            root.join("src/untracked.rs"),
+            "pub fn coverage_target() {}\n",
+        )
+        .expect("coverage source");
+        fs::write(
+            root.join("tests/requirement_trace.rs"),
+            "#[test]\nfn requirement_trace() {}\n",
+        )
+        .expect("requirement source");
     }
 
     #[cfg(unix)]
@@ -1513,12 +1777,213 @@ mod tests {
     }
 
     #[test]
+    fn load_current_snapshot_changes_when_traced_file_content_changes() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        write_snapshot_workspace(tempdir.path(), false);
+        let config = load_config(tempdir.path())
+            .expect("config should load")
+            .config;
+
+        let first = load_current_snapshot(tempdir.path(), &config).expect("snapshot");
+
+        fs::write(
+            tempdir.path().join("tests/requirement_trace.rs"),
+            "#[test]\nfn requirement_trace() { assert!(true); }\n",
+        )
+        .expect("updated trace");
+
+        let second = load_current_snapshot(tempdir.path(), &config).expect("snapshot");
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn load_current_snapshot_changes_when_symbol_coverage_inputs_change() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        write_snapshot_workspace(tempdir.path(), true);
+        let config = load_config(tempdir.path())
+            .expect("config should load")
+            .config;
+
+        let first = load_current_snapshot(tempdir.path(), &config).expect("snapshot");
+
+        fs::write(
+            tempdir.path().join("src/untracked.rs"),
+            "pub fn coverage_target() { println!(\"changed\"); }\n",
+        )
+        .expect("updated source");
+
+        let second = load_current_snapshot(tempdir.path(), &config).expect("snapshot");
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn normalized_trace_snapshot_path_rejects_non_relative_inputs() {
+        assert_eq!(normalized_trace_snapshot_path(Path::new("")), None);
+        assert_eq!(
+            normalized_trace_snapshot_path(Path::new("../src/lib.rs")),
+            None
+        );
+        assert_eq!(
+            normalized_trace_snapshot_path(Path::new("/tmp/src/lib.rs")),
+            None
+        );
+        assert_eq!(
+            normalized_trace_snapshot_path(Path::new("src\\lib.rs")),
+            Some(PathBuf::from("src/lib.rs"))
+        );
+    }
+
+    #[test]
+    fn collect_snapshot_files_with_extensions_skips_missing_dirs_and_unsupported_files() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let src_dir = tempdir.path().join("src/nested");
+        fs::create_dir_all(&src_dir).expect("src dir");
+        fs::write(src_dir.join("feature.rs"), "pub fn feature() {}\n").expect("rust source");
+        fs::write(tempdir.path().join("src/README"), "not a tracked source").expect("readme");
+
+        let mut dependencies = BTreeSet::new();
+        collect_snapshot_files_with_extensions(
+            tempdir.path(),
+            &tempdir.path().join("missing"),
+            &["rs"],
+            &mut dependencies,
+        );
+        collect_snapshot_files_with_extensions(
+            tempdir.path(),
+            &tempdir.path().join("src"),
+            &["rs"],
+            &mut dependencies,
+        );
+
+        assert!(
+            dependencies.contains(&SnapshotDependency::File(PathBuf::from(
+                "src/nested/feature.rs",
+            )))
+        );
+        assert!(!dependencies.contains(&SnapshotDependency::File(PathBuf::from("src/README",))));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn collect_snapshot_files_with_extensions_records_unreadable_directories() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let locked_dir = tempdir.path().join("src/locked");
+        fs::create_dir_all(&locked_dir).expect("locked dir");
+        set_mode(&locked_dir, 0o000);
+
+        let mut dependencies = BTreeSet::new();
+        collect_snapshot_files_with_extensions(
+            tempdir.path(),
+            &locked_dir,
+            &["rs"],
+            &mut dependencies,
+        );
+
+        assert!(dependencies.contains(&SnapshotDependency::ReadDirError(
+            PathBuf::from("src/locked"),
+            "PermissionDenied".to_string(),
+        )));
+
+        set_mode(&locked_dir, 0o755);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn snapshot_dependency_hash_state_distinguishes_unreadable_inputs() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let file = tempdir.path().join("locked.rs");
+        fs::write(&file, "pub fn locked() {}\n").expect("locked file");
+        set_mode(&file, 0o000);
+
+        let mut file_hash = DefaultHasher::new();
+        SnapshotDependency::File(PathBuf::from("locked.rs"))
+            .hash_state(tempdir.path(), &mut file_hash);
+
+        let mut dir_error_hash = DefaultHasher::new();
+        SnapshotDependency::ReadDirError(PathBuf::from("src"), "PermissionDenied".to_string())
+            .hash_state(tempdir.path(), &mut dir_error_hash);
+
+        assert_ne!(
+            file_hash.finish(),
+            dir_error_hash.finish(),
+            "different dependency kinds should contribute different snapshot hashes"
+        );
+
+        set_mode(&file, 0o644);
+    }
+
+    #[test]
     fn refresh_current_once_keeps_refresh_failures_non_fatal() {
         let tempdir = tempdir().expect("tempdir should exist");
         write_config(tempdir.path(), "127.0.0.1", 3000);
         let state = app_state(tempdir.path());
 
         refresh_current_once(&state);
+    }
+
+    #[test]
+    fn refresh_current_skips_payload_reload_when_snapshot_is_unchanged() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        write_config(tempdir.path(), "127.0.0.1", 3000);
+        let state = AppState::new(
+            tempdir.path().to_path_buf(),
+            load_config(tempdir.path())
+                .expect("config should load")
+                .config,
+        );
+        let payload_loads = AtomicUsize::new(0);
+
+        state
+            .refresh_current_with(
+                || Ok("same-snapshot".to_string()),
+                || {
+                    payload_loads.fetch_add(1, Ordering::SeqCst);
+                    Ok(AppPayload::default())
+                },
+            )
+            .expect("initial refresh should succeed");
+        state
+            .refresh_current_with(|| Ok("same-snapshot".to_string()), failing_payload)
+            .expect("unchanged snapshots should not rebuild the payload");
+
+        assert_eq!(
+            payload_loads.load(Ordering::SeqCst),
+            1,
+            "payloads should only load once when the snapshot does not change"
+        );
+        assert_eq!(
+            state.current_data().expect("ready state").snapshot,
+            "same-snapshot",
+            "unchanged refreshes should preserve the last ready snapshot"
+        );
+    }
+
+    #[test]
+    fn refresh_current_enters_error_state_when_payload_reload_fails() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        write_config(tempdir.path(), "127.0.0.1", 3000);
+        let state = AppState::new(
+            tempdir.path().to_path_buf(),
+            load_config(tempdir.path())
+                .expect("config should load")
+                .config,
+        );
+
+        let error = state
+            .refresh_current_with(|| Ok("updated-snapshot".to_string()), failing_payload)
+            .expect_err("payload failures should propagate");
+
+        assert!(
+            error.to_string().contains("payload load failed"),
+            "error should preserve the payload loader failure: {error:#}"
+        );
+        assert!(
+            state
+                .current_data()
+                .expect_err("failed payload reloads should leave the app in an error state")
+                .to_string()
+                .contains("payload load failed")
+        );
     }
 
     #[tokio::test]
