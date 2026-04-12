@@ -201,9 +201,7 @@ fn repository_declares_installer_contract() {
     assert!(readme.contains("install-syu.sh"));
     assert!(readme.contains("ugoite/syu"));
     assert!(readme.contains("SYU_VERSION"));
-    assert!(readme.contains(&format!(
-        "https://github.com/ugoite/syu/releases/download/v{current_version}/install-syu.sh"
-    )));
+    assert!(readme.contains(&format!("RELEASE=v{current_version}")));
     assert!(readme.contains("GitHub Packages"));
     assert!(readme.contains("security-sensitive environments"));
     assert!(readme.contains("checksums.sha256"));
@@ -218,6 +216,9 @@ fn repository_declares_installer_contract() {
     assert!(readme.contains("If you are inside WSL"));
     assert!(!readme.contains("$asset.sha256"));
     assert!(readme.contains("syu.exe"));
+    assert!(readme.contains(&format!("RELEASE=v{current_version}")));
+    assert!(readme.contains("checked-in"));
+    assert!(readme.contains("package track"));
     assert!(readme.contains("verifies the installer script itself"));
     assert!(readme.contains("the platform archive that the installer downloads"));
     assert!(
@@ -327,9 +328,9 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("If you are inside WSL"));
     assert!(!getting_started.contains("$asset.sha256"));
     assert!(getting_started.contains("syu.exe"));
-    assert!(getting_started.contains(&format!(
-        "https://github.com/ugoite/syu/releases/download/v{current_version}/install-syu.sh"
-    )));
+    assert!(getting_started.contains(&format!("RELEASE=v{current_version}")));
+    assert!(getting_started.contains("current checked-in release"));
+    assert!(getting_started.contains("latest published alpha"));
     assert!(getting_started.contains("--template rust-only"));
     assert!(getting_started.contains("--id-prefix"));
     assert!(getting_started.contains("syu validate . --fix"));

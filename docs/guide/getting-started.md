@@ -63,13 +63,15 @@ separately and verify it before installation.
 **Option B — Run the installer directly**
 
 ```bash
-curl -fsSL https://github.com/ugoite/syu/releases/download/v0.0.1-alpha.7/install-syu.sh | env SYU_VERSION=alpha bash
+RELEASE=v0.0.1-alpha.7
+curl -fsSL "https://github.com/ugoite/syu/releases/download/${RELEASE}/install-syu.sh" | env SYU_VERSION=alpha bash
 ```
 
-This uses the current installer entrypoint plus `SYU_VERSION=alpha` so you stay
-on the latest alpha during the prerelease phase. Use this shortcut when you
-already trust the release source and want the shortest path. It places `syu` in
-`~/.local/bin`. Add that directory to your `PATH` if it is not already there.
+This keeps the download URL pinned to the current checked-in release while
+`SYU_VERSION=alpha` tells the installer to fetch the latest published alpha
+package once it starts. Use this shortcut when you already trust the release
+source and want the shortest path. It places `syu` in `~/.local/bin`. Add that
+directory to your `PATH` if it is not already there.
 
 **Windows — Use PowerShell for the zip, Git Bash for the installer script**
 
