@@ -39,7 +39,7 @@ description: "Generated reference for docs/syu/features/cli/browse.yaml"
           - *
 - **id**: FEAT-BROWSE-002
   - **title**: Non-interactive spec tree output
-  - **summary**: Add a --non-interactive flag to `syu browse` that prints the browse snapshot (workspace metadata, grouped item counts and IDs, plus current errors) to stdout and exits, suitable for plain-text terminal review or logs.
+  - **summary**: Add a --non-interactive flag to `syu browse` that prints the browse snapshot (workspace metadata, grouped item counts and IDs, plus actionable current errors with rule titles, messages, and suggestions when available) to stdout and exits, suitable for plain-text terminal review or logs.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-015
@@ -83,7 +83,7 @@ features:
 
   - id: FEAT-BROWSE-002
     title: Non-interactive spec tree output
-    summary: Add a --non-interactive flag to `syu browse` that prints the browse snapshot (workspace metadata, grouped item counts and IDs, plus current errors) to stdout and exits, suitable for plain-text terminal review or logs.
+    summary: Add a --non-interactive flag to `syu browse` that prints the browse snapshot (workspace metadata, grouped item counts and IDs, plus actionable current errors with rule titles, messages, and suggestions when available) to stdout and exits, suitable for plain-text terminal review or logs.
     status: implemented
     linked_requirements:
       - REQ-CORE-015
