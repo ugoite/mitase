@@ -285,6 +285,9 @@ fn repository_declares_documentation_guides() {
     assert!(concepts.contains("Continue with these pages"));
     assert!(concepts.contains("Specification Reference"));
     assert!(app_guide.contains("Status badge"));
+    assert!(app_guide.contains("## Search shortcuts"));
+    assert!(app_guide.contains("ArrowDown"));
+    assert!(app_guide.contains("Escape"));
     assert!(app_guide.contains("the item's YAML `status:` field"));
     assert!(!app_guide.contains("`planned`, `implemented`, or `deprecated`"));
     assert!(getting_started.contains("New to `syu`?"));

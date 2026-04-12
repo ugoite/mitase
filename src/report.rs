@@ -179,11 +179,12 @@ fn collapse_whitespace(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::{env, fs, path::PathBuf};
+    use std::{fs, path::PathBuf};
 
     use tempfile::tempdir;
 
     use crate::model::{CheckResult, DefinitionCounts, Issue, Severity, TraceCount, TraceSummary};
+    use crate::test_support::CurrentDirGuard;
 
     use super::{display_workspace_root, render_markdown_report};
 
@@ -273,16 +274,13 @@ mod tests {
     #[test]
     fn display_workspace_root_prefers_current_directory_relative_paths() {
         let tempdir = tempdir().expect("tempdir should exist");
-        let previous = env::current_dir().expect("cwd should be readable");
-        env::set_current_dir(tempdir.path()).expect("should chdir into tempdir");
+        let _current_dir = CurrentDirGuard::chdir(tempdir.path());
 
         assert_eq!(display_workspace_root(tempdir.path()), ".");
         assert_eq!(
             display_workspace_root(&tempdir.path().join("nested/workspace")),
             "nested/workspace"
         );
-
-        env::set_current_dir(previous).expect("should restore cwd");
     }
 
     #[cfg(unix)]
@@ -290,15 +288,12 @@ mod tests {
     fn display_workspace_root_falls_back_when_current_directory_is_unavailable() {
         let tempdir = tempdir().expect("tempdir should exist");
         let removed_root = tempdir.path().to_path_buf();
-        let previous = env::current_dir().expect("cwd should be readable");
-        env::set_current_dir(&removed_root).expect("should chdir into tempdir");
+        let _current_dir = CurrentDirGuard::chdir(&removed_root);
         fs::remove_dir_all(&removed_root).expect("tempdir should be removable");
 
         assert_eq!(
             display_workspace_root(PathBuf::from("/tmp/workspace").as_path()),
             "/tmp/workspace"
         );
-
-        env::set_current_dir(previous).expect("should restore cwd");
     }
 }
