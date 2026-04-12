@@ -303,6 +303,9 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("add at least one `linked_policies:` entry"));
     assert!(getting_started.contains("update those policy and feature documents so"));
     assert!(getting_started.contains("install-syu.sh"));
+    assert!(getting_started.contains("checksums.sha256"));
+    assert!(getting_started.contains("security-sensitive environments"));
+    assert!(getting_started.contains("shasum -a 256 --ignore-missing -c checksums.sha256"));
     assert!(getting_started.contains("SYU_VERSION=alpha"));
     assert!(getting_started.contains(&format!(
         "https://github.com/ugoite/syu/releases/download/v{current_version}/install-syu.sh"
