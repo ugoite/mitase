@@ -112,7 +112,9 @@ The validation panel appears at the bottom of the page and lists the current
 issues from the workspace snapshot that `syu app` loaded itself. You do not
 need to run `syu validate` first: the app computes the same validation snapshot
 when it starts, refreshes it while the tab stays visible, and catches up again
-when you return to the tab after spec changes.
+when you return to the tab after spec changes. If a later refresh fails, the UI
+keeps the last successfully loaded snapshot visible and shows a banner so you
+know the data is stale until refresh recovers.
 
 Each row shows:
 
