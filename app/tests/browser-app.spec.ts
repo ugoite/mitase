@@ -96,11 +96,13 @@ test("loads deep links and supports keyboard search navigation", async ({ page }
   await expect(page).toHaveURL(/#requirements\/REQ-CORE-001$/);
 
   const searchInput = page.getByRole("searchbox", { name: "Search spec items" });
-  await expect(
-    page.getByText(
-      /Tip: use ArrowUp and ArrowDown to move through results, Enter to open the highlighted item or the only result when there is one match, and Escape to clear the search\./,
-    ),
-  ).toBeVisible();
+  await expect(searchInput).toHaveAttribute("aria-describedby", "spec-search-shortcuts");
+  const shortcutHint = page.locator("#spec-search-shortcuts");
+  await expect(shortcutHint).toBeVisible();
+  await expect(shortcutHint).toContainText("ArrowDown");
+  await expect(shortcutHint).toContainText("ArrowUp");
+  await expect(shortcutHint).toContainText("Enter");
+  await expect(shortcutHint).toContainText("Escape");
   await searchInput.fill("FEAT-CHECK-001");
   await searchInput.press("ArrowDown");
   await searchInput.press("ArrowUp");
@@ -117,6 +119,9 @@ test("loads deep links and supports keyboard search navigation", async ({ page }
   await searchInput.press("Enter");
 
   await expect(page.getByText("No items match.")).toBeVisible();
+  await searchInput.press("Escape");
+  await expect(searchInput).toHaveValue("");
+  await expect(page.locator("#search-results-list")).toHaveCount(0);
   await expect(
     page.getByRole("heading", { name: /FEAT-CHECK-001 .* Unified validation command/i }),
   ).toBeVisible();

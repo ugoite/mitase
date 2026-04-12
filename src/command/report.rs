@@ -88,13 +88,14 @@ fn resolve_configured_report_output(workspace_root: &Path, output: &Path) -> Res
 #[cfg(test)]
 mod tests {
     use std::{
-        env, fs,
+        fs,
         path::{Path, PathBuf},
     };
 
     use tempfile::tempdir;
 
     use crate::cli::ReportArgs;
+    use crate::test_support::CurrentDirGuard;
 
     use super::{resolve_report_output, run_report_command};
 
@@ -240,8 +241,7 @@ mod tests {
     #[test]
     fn report_command_writes_to_relative_paths_without_parent_directories() {
         let tempdir = tempdir().expect("tempdir should exist");
-        let previous = env::current_dir().expect("cwd should be readable");
-        env::set_current_dir(tempdir.path()).expect("should chdir into tempdir");
+        let _current_dir = CurrentDirGuard::chdir(tempdir.path());
 
         let args = ReportArgs {
             workspace: fixture_path("passing"),
@@ -251,7 +251,6 @@ mod tests {
         let result = run_report_command(&args).expect("relative report path should work");
         let report = fs::read_to_string(tempdir.path().join("report.md"))
             .expect("relative report should be written");
-        env::set_current_dir(previous).expect("should restore cwd");
 
         assert_eq!(result, 0);
         assert!(report.contains("# syu validation report"));

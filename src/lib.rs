@@ -18,6 +18,42 @@ use anyhow::Result;
 use clap::{CommandFactory, Parser};
 use std::io::IsTerminal;
 
+#[cfg(test)]
+pub(crate) mod test_support {
+    use std::{
+        env,
+        path::{Path, PathBuf},
+        sync::{LazyLock, Mutex, MutexGuard},
+    };
+
+    static CURRENT_DIR_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
+    pub(crate) struct CurrentDirGuard {
+        previous: PathBuf,
+        _lock: MutexGuard<'static, ()>,
+    }
+
+    impl CurrentDirGuard {
+        pub(crate) fn chdir(path: &Path) -> Self {
+            let lock = CURRENT_DIR_LOCK
+                .lock()
+                .expect("cwd test lock should not be poisoned");
+            let previous = env::current_dir().expect("cwd should be readable");
+            env::set_current_dir(path).expect("should chdir into tempdir");
+            Self {
+                previous,
+                _lock: lock,
+            }
+        }
+    }
+
+    impl Drop for CurrentDirGuard {
+        fn drop(&mut self) {
+            env::set_current_dir(&self.previous).expect("should restore cwd");
+        }
+    }
+}
+
 enum Dispatch {
     Browse(cli::BrowseArgs),
     List(cli::ListArgs),
