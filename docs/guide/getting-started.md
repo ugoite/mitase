@@ -7,6 +7,15 @@ New to `syu`? Read [syu concepts](./concepts.md) first to understand the four
 layers before you start editing YAML.
 :::
 
+Need a different level of guidance?
+
+- Stay on this page when you want the shortest path from install to a working
+  `syu validate .`.
+- Follow the [end-to-end tutorial](./tutorial.md) when you want a realistic,
+  worked repository story instead of the shortest setup path.
+- Jump to [troubleshooting](./troubleshooting.md) when validation or linking is
+  already failing and you need to unblock a workspace.
+
 Start here once `syu` is installed:
 
 ```bash

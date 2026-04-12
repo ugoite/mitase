@@ -27,11 +27,25 @@ This separation keeps teams from jumping straight to code without agreeing on
 why the code should exist, what rules govern it, and how success will be
 verified.
 
-See the detailed guides:
+## Choose your path
+
+Pick the newcomer path that matches what you need next:
+
+- **Quick start**: stay in this README when you want the shortest path from install
+  to `syu validate .`.
+- **Tutorial**: follow [`docs/guide/tutorial.md`](docs/guide/tutorial.md) when you
+  want a realistic end-to-end repository story instead of a short scaffold flow.
+- **Troubleshooting**: jump to
+  [`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md) when validation
+  or traceability errors are already blocking you.
+
+Keep the detailed guides close:
 
 - [`docs/guide/concepts.md`](docs/guide/concepts.md)
 - [`docs/guide/getting-started.md`](docs/guide/getting-started.md)
+- [`docs/guide/tutorial.md`](docs/guide/tutorial.md)
 - [`docs/guide/configuration.md`](docs/guide/configuration.md)
+- [`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md)
 - [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ## Install from published releases
