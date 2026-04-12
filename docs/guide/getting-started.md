@@ -71,6 +71,41 @@ on the latest alpha during the prerelease phase. Use this shortcut when you
 already trust the release source and want the shortest path. It places `syu` in
 `~/.local/bin`. Add that directory to your `PATH` if it is not already there.
 
+**Windows — Use PowerShell for the zip, Git Bash for the installer script**
+
+If you are on Windows and want a first-party path that does not depend on Git
+Bash or WSL, download the Windows archive directly from PowerShell:
+
+```powershell
+$release = 'v0.0.1-alpha.7'
+$asset = 'syu-x86_64-pc-windows-msvc.zip'
+$checksums = 'checksums.sha256'
+Invoke-WebRequest "https://github.com/ugoite/syu/releases/download/$release/$asset" -OutFile $asset
+Invoke-WebRequest "https://github.com/ugoite/syu/releases/download/$release/$checksums" -OutFile $checksums
+$expected = (
+  Get-Content $checksums |
+  Select-String -SimpleMatch $asset |
+  ForEach-Object { $_.Line.Split()[0].ToLower() }
+)
+if (-not $expected) { throw "Checksum for $asset not found" }
+$actual = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLower()
+if ($actual -ne $expected) { throw 'Checksum mismatch' }
+$installDir = Join-Path $env:LOCALAPPDATA 'Programs\syu\bin'
+New-Item -ItemType Directory -Path $installDir -Force | Out-Null
+Expand-Archive $asset -DestinationPath $installDir -Force
+& (Join-Path $installDir 'syu.exe') --version
+```
+
+If a fresh shell still cannot find `syu`, add
+`$env:LOCALAPPDATA\Programs\syu\bin` to your user `PATH`.
+
+If you prefer the shell installer on Windows, run `install-syu.sh` from Git
+Bash. It resolves the same `x86_64-pc-windows-msvc` archive and installs to
+`%LOCALAPPDATA%\Programs\syu\bin`.
+
+If you are inside WSL, use the Linux installer path instead. There, the script
+resolves the Linux archive and installs to `~/.local/bin`.
+
 **Option C — Build from source**
 
 Building from source requires [Rust and Cargo](https://rustup.rs). This option is only needed when contributing to `syu` itself, not for using it in your own project.

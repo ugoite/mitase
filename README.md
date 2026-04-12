@@ -73,6 +73,42 @@ bash install-syu.sh
 
 On macOS, replace `sha256sum` with `shasum -a 256`.
 
+### Windows: PowerShell by default, Git Bash on Windows, WSL as Linux
+
+If you are on Windows and want the clearest first-party path, use PowerShell
+and download the Windows archive directly. This avoids requiring Git Bash or
+WSL just to install `syu`.
+
+```powershell
+$release = 'v0.0.1-alpha.7'
+$asset = 'syu-x86_64-pc-windows-msvc.zip'
+$checksums = 'checksums.sha256'
+Invoke-WebRequest "https://github.com/ugoite/syu/releases/download/$release/$asset" -OutFile $asset
+Invoke-WebRequest "https://github.com/ugoite/syu/releases/download/$release/$checksums" -OutFile $checksums
+$expected = (
+  Get-Content $checksums |
+  Select-String -SimpleMatch $asset |
+  ForEach-Object { $_.Line.Split()[0].ToLower() }
+)
+if (-not $expected) { throw "Checksum for $asset not found" }
+$actual = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLower()
+if ($actual -ne $expected) { throw 'Checksum mismatch' }
+$installDir = Join-Path $env:LOCALAPPDATA 'Programs\syu\bin'
+New-Item -ItemType Directory -Path $installDir -Force | Out-Null
+Expand-Archive $asset -DestinationPath $installDir -Force
+& (Join-Path $installDir 'syu.exe') --version
+```
+
+If a new PowerShell session still cannot find `syu`, add
+`$env:LOCALAPPDATA\Programs\syu\bin` to your user `PATH`.
+
+If you prefer the Bash installer on Windows, run `install-syu.sh` from Git Bash.
+In that shell, the installer resolves the same `x86_64-pc-windows-msvc` archive
+and defaults to `%LOCALAPPDATA%\Programs\syu\bin`.
+
+If you are inside WSL, use the Linux installer path instead. There, the script
+resolves the Linux archive and installs to `~/.local/bin`.
+
 The checksum step above verifies the installer script itself. Published release
 archives also carry GitHub artifact attestations, so you can separately verify
 the platform archive that the installer downloads before it unpacks the binary:
