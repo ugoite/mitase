@@ -225,11 +225,11 @@ fn list_command_help_documents_both_argument_orders() {
     assert!(output.status.success(), "help should succeed");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("syu list requirement docs/syu"),
+        stdout.contains("syu list requirement path/to/workspace"),
         "help should show the kind-first example:\n{stdout}",
     );
     assert!(
-        stdout.contains("syu list docs/syu requirement"),
+        stdout.contains("syu list path/to/workspace requirement"),
         "help should show the workspace-first example:\n{stdout}",
     );
 }

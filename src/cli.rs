@@ -54,11 +54,15 @@ Use `syu list` when you want a filtered layer view. Use `syu browse --non-intera
 Examples:
   syu list
   syu list requirement
-  syu list docs/syu/philosophy
-  syu list requirement docs/syu
-";
+  syu list path/to/workspace
+  syu list requirement path/to/workspace
+  syu list path/to/workspace requirement
+
+Note:
+  Pass the workspace root that contains syu.yaml.
+  The configured spec.root lives inside that workspace; do not pass it directly.";
 const BROWSE_AFTER_HELP: &str = "\
-Use `syu browse --non-interactive` when you want the full spec tree in text form. Use `syu list` when you want a filtered layer view for one layer or subtree.
+Use `syu browse --non-interactive` when you want the full spec tree in text form. Use `syu list` when you want a filtered layer view for one layer in the current workspace.
 ";
 
 const SEARCH_AFTER_HELP: &str = "\

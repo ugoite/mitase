@@ -232,7 +232,7 @@ syu show REQ-001
 syu app .
 ```
 
-Use `syu browse --non-interactive` when you want the full spec tree in terminal output. Use `syu list` when you want a filtered view for a single layer or subtree.
+Use `syu browse --non-interactive` when you want the full spec tree in terminal output. Use `syu list` when you want a filtered view for a single layer in the current workspace.
 
 Use JSON when integrating with automation:
 
