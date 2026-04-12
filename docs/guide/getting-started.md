@@ -9,30 +9,21 @@ layers before you start editing YAML.
 
 Need a different level of guidance?
 
-- Stay on this page when you want the shortest path from install to a working
-  `syu validate .`.
+- Jump back to the
+  [README quick start on GitHub](https://github.com/ugoite/syu/blob/main/README.md#quick-start)
+  when you want the shortest install-to-validate path and are happy with a
+  compact command card.
+- Stay on this page when you want the first workspace setup explained step by
+  step, including why the manual YAML edits matter before validation.
 - Follow the [end-to-end tutorial](./tutorial.md) when you want a realistic,
   worked repository story instead of the shortest setup path.
 - Jump to [troubleshooting](./troubleshooting.md) when validation or linking is
   already failing and you need to unblock a workspace.
 
-Start here once `syu` is installed:
-
-```bash
-syu init .                           # 1. Create spec scaffold
-syu add requirement REQ-AUTH-001     # 2. Generate a requirement stub
-```
-
-Before step 3, open the generated requirement YAML under `docs/syu/requirements/`
-(or your configured `spec.root`), add at least one `linked_policies:` entry and
-one `linked_features:` entry, scaffold any still-missing adjacent policy or
-feature document with the suggested commands, then update those policy and
-feature documents so they link back to the new requirement.
-
-```bash
-syu validate .                       # 3. Check everything is linked
-syu app .                            # 4. Browse in the browser
-```
+This guide assumes `syu` is already installed. Unlike the README quick start,
+it slows down at the first manual editing step so you can see where the
+scaffolded files live, how reciprocal links fit together, and what to fix
+before the first `syu validate .` run.
 
 ## Before you begin
 
