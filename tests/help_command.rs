@@ -83,8 +83,10 @@ fn add_help_mentions_explicit_file_and_feature_kind() {
     assert!(output.status.success(), "add help should succeed");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--interactive"));
     assert!(stdout.contains("--file"));
     assert!(stdout.contains("--kind"));
+    assert!(stdout.contains("syu add requirement --interactive"));
     assert!(stdout.contains("FEAT-AUTH-LOGIN-001 --kind auth"));
 }
 
