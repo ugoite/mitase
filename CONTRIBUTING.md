@@ -5,6 +5,19 @@
 `syu` uses GitHub Flow. `main` is the only long-lived branch and it should stay
 releaseable at all times.
 
+## Start with the model
+
+Before you change behavior, specs, contributor guidance, or release workflow,
+read [`docs/guide/concepts.md`](docs/guide/concepts.md). For small typo-only or
+mechanical CI fixes, you can start with the workflow below and come back to the
+guide when you need the fuller model. `syu` is built around the four-layer
+model: philosophy -> policies -> requirements -> features.
+
+The contribution workflow exists to keep those layers connected to real code,
+tests, docs, and maintenance work. In practice that means spec edits under
+`docs/syu/` are part of normal feature and bug-fix work here, not optional
+after-the-fact documentation.
+
 ## Working model
 
 1. Branch from `main`.
