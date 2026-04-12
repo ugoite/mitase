@@ -22,7 +22,7 @@ install_wasm_tooling() {
 }
 
 install_browser_tooling() {
-  log_step "Installing browser-app dependencies for scripts/ci/check-app-dist-freshness.sh."
+  log_step "Installing browser-app dependencies for local app builds, scripts/ci/check-app-dist-freshness.sh, and npm --prefix app run test:e2e."
   npm --prefix app ci
 
   log_step "Installing Playwright Chromium for npm --prefix app run test:e2e."
@@ -40,7 +40,7 @@ main() {
 
   cd "$root"
 
-  log_step "Setting up the contributor toolchain. See CONTRIBUTING.md#local-checks for the workflows each tool unlocks."
+  log_step "Setting up the contributor toolchain. See CONTRIBUTING.md#local-checks for what this bootstrap installs and which workflows still stay opt-in."
   install_coverage_tooling
   install_wasm_tooling
   install_browser_tooling

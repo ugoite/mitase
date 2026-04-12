@@ -459,6 +459,8 @@ fn repository_declares_devcontainer_configuration() {
     assert!(post_create.contains("playwright install --with-deps chromium"));
     assert!(post_create.contains("scripts/install-precommit.sh"));
     assert!(post_create.contains("CONTRIBUTING.md#local-checks"));
+    assert!(post_create.contains("local app builds"));
+    assert!(post_create.contains("stay opt-in"));
 }
 
 #[test]
@@ -517,6 +519,8 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(contributing.contains("cargo-llvm-cov"));
     assert!(contributing.contains("wasm-pack"));
     assert!(contributing.contains("Playwright Chromium"));
+    assert!(contributing.contains("local browser-app work"));
+    assert!(contributing.contains("does **not** install `website/` docs-site dependencies"));
     assert!(contributing.contains("GitHub Pages"));
     assert!(contributing.contains("release track"));
 

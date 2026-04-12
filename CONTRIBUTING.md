@@ -114,13 +114,14 @@ The devcontainer/Codespaces post-create step runs
 it provisions. That script:
 
 - installs `cargo-llvm-cov` for `scripts/ci/coverage.sh summary`
-- installs `wasm-pack` plus the `app/` dependencies for
-  `scripts/ci/check-app-dist-freshness.sh`
+- installs `wasm-pack` plus the `app/` dependencies for local browser-app work,
+  `scripts/ci/check-app-dist-freshness.sh`, and `npm --prefix app run test:e2e`
 - installs Playwright Chromium for `npm --prefix app run test:e2e`
 - runs `scripts/install-precommit.sh` so local hooks match the contributor path
 
 Read the script output or this section when you want to map setup time to the
-checks it unlocks.
+checks it unlocks. It does **not** install `website/` docs-site dependencies,
+so run `npm --prefix website ci` yourself when you are working on the docs site.
 
 ## Dependency security
 
