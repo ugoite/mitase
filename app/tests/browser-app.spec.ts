@@ -96,6 +96,11 @@ test("loads deep links and supports keyboard search navigation", async ({ page }
   await expect(page).toHaveURL(/#requirements\/REQ-CORE-001$/);
 
   const searchInput = page.getByRole("searchbox", { name: "Search spec items" });
+  await expect(
+    page.getByText(
+      /Tip: use ArrowUp and ArrowDown to move through results, Enter to open the highlighted item or the only result when there is one match, and Escape to clear the search\./,
+    ),
+  ).toBeVisible();
   await searchInput.fill("FEAT-CHECK-001");
   await searchInput.press("ArrowDown");
   await searchInput.press("ArrowUp");
