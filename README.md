@@ -41,6 +41,37 @@ GHCR packages under `ghcr.io/ugoite/syu`. Download the installer from the
 current CLI release; the script prefers the matching package artifact and falls
 back to GitHub release assets if anonymous package pulls are not available yet.
 
+For security-sensitive environments, prefer the verified download flow below
+before running the installer script.
+
+### Recommended: verify before running
+
+Each release publishes a `checksums.sha256` file alongside the installer.
+Download both files, verify the checksum, then run the local copy:
+
+```bash
+RELEASE=v0.0.1-alpha.7
+curl -fsSL "https://github.com/ugoite/syu/releases/download/${RELEASE}/install-syu.sh" -o install-syu.sh
+curl -fsSL "https://github.com/ugoite/syu/releases/download/${RELEASE}/checksums.sha256" -o checksums.sha256
+sha256sum --ignore-missing -c checksums.sha256
+bash install-syu.sh
+```
+
+On macOS, replace `sha256sum` with `shasum -a 256`.
+
+The checksum step above verifies the installer script itself. Published release
+archives also carry GitHub artifact attestations, so you can separately verify
+the platform archive that the installer downloads before it unpacks the binary:
+
+```bash
+gh attestation verify syu-x86_64-unknown-linux-gnu.tar.gz --repo ugoite/syu
+```
+
+### Shortcut: run the installer directly
+
+If you already trust the release source and want the shortest path, use the
+one-line entrypoint:
+
 Current installer entrypoint:
 
 ```bash
@@ -64,27 +95,6 @@ Install a specific prerelease:
 
 ```bash
 curl -fsSL https://github.com/ugoite/syu/releases/download/v0.0.1-alpha.7/install-syu.sh | env SYU_VERSION=v0.0.1-alpha.7 bash
-```
-
-### Verify the installer checksum
-
-Each release publishes a `checksums.sha256` file alongside the installer.
-Verify the installer before running it:
-
-```bash
-RELEASE=v0.0.1-alpha.7
-curl -fsSL "https://github.com/ugoite/syu/releases/download/${RELEASE}/install-syu.sh" -o install-syu.sh
-curl -fsSL "https://github.com/ugoite/syu/releases/download/${RELEASE}/checksums.sha256" -o checksums.sha256
-sha256sum --ignore-missing -c checksums.sha256
-bash install-syu.sh
-```
-
-On macOS, replace `sha256sum` with `shasum -a 256`.
-
-Published release archives also carry GitHub artifact attestations. Verify one with:
-
-```bash
-gh attestation verify syu-x86_64-unknown-linux-gnu.tar.gz --repo ugoite/syu
 ```
 
 If you're contributing to `syu` itself from source, jump to

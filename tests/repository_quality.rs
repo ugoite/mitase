@@ -164,6 +164,12 @@ fn repository_declares_installer_contract() {
     let installed_binary_smoke = read_file("scripts/ci/installed-binary-smoke.sh");
     let mock_registry = read_file("scripts/ci/mock_package_registry.py");
     let readme = read_file("README.md");
+    let verify_idx = readme
+        .find("Recommended: verify before running")
+        .expect("README should document the verify-first installer flow");
+    let shortcut_idx = readme
+        .find("Shortcut: run the installer directly")
+        .expect("README should still document the one-line shortcut");
 
     assert!(installer.contains("FEAT-INSTALL-001"));
     assert!(installer.contains("resolve_repository"));
@@ -196,6 +202,15 @@ fn repository_declares_installer_contract() {
         "https://github.com/ugoite/syu/releases/download/v{current_version}/install-syu.sh"
     )));
     assert!(readme.contains("GitHub Packages"));
+    assert!(readme.contains("security-sensitive environments"));
+    assert!(readme.contains("checksums.sha256"));
+    assert!(readme.contains("gh attestation verify"));
+    assert!(readme.contains("verifies the installer script itself"));
+    assert!(readme.contains("the platform archive that the installer downloads"));
+    assert!(
+        verify_idx < shortcut_idx,
+        "README should present the verify-first flow before the one-line shortcut"
+    );
     assert!(!readme.contains("raw.githubusercontent.com/ugoite/syu/main/scripts/install-syu.sh"));
 }
 
