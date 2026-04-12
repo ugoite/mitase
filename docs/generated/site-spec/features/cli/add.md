@@ -19,7 +19,7 @@ description: "Generated reference for docs/syu/features/cli/add.yaml"
 
 - **id**: FEAT-ADD-001
   - **title**: Follow-up spec authoring scaffold
-  - **summary**: Scaffold new philosophy, policy, requirement, and feature YAML stubs after init, with optional terminal prompts for missing IDs or custom paths, while keeping feature registry maintenance explicit and printing layer-aware reciprocal-link follow-up guidance before the next validation run.
+  - **summary**: Scaffold new philosophy, policy, requirement, and feature YAML stubs after init, with optional terminal prompts for missing IDs or custom paths, while keeping feature registry maintenance explicit and printing layer-aware reciprocal-link follow-up guidance plus matching adjacent scaffold suggestions before the next validation run.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-020
@@ -41,7 +41,7 @@ version: 1
 features:
   - id: FEAT-ADD-001
     title: Follow-up spec authoring scaffold
-    summary: Scaffold new philosophy, policy, requirement, and feature YAML stubs after init, with optional terminal prompts for missing IDs or custom paths, while keeping feature registry maintenance explicit and printing layer-aware reciprocal-link follow-up guidance before the next validation run.
+    summary: Scaffold new philosophy, policy, requirement, and feature YAML stubs after init, with optional terminal prompts for missing IDs or custom paths, while keeping feature registry maintenance explicit and printing layer-aware reciprocal-link follow-up guidance plus matching adjacent scaffold suggestions before the next validation run.
     status: implemented
     linked_requirements:
       - REQ-CORE-020

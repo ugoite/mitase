@@ -86,7 +86,9 @@ fn add_help_mentions_explicit_file_and_feature_kind() {
     assert!(stdout.contains("--interactive"));
     assert!(stdout.contains("--file"));
     assert!(stdout.contains("--kind"));
-    assert!(stdout.contains("prints the reciprocal-link follow-up needed"));
+    assert!(
+        stdout.contains("prints the reciprocal-link follow-up and matching scaffold suggestions")
+    );
     assert!(stdout.contains("syu add requirement --interactive"));
     assert!(stdout.contains("FEAT-AUTH-LOGIN-001 --kind auth"));
 }

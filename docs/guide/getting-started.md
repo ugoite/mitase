@@ -25,8 +25,9 @@ syu add requirement REQ-AUTH-001     # 2. Generate a requirement stub
 
 Before step 3, open the generated requirement YAML under `docs/syu/requirements/`
 (or your configured `spec.root`), add at least one `linked_policies:` entry and
-one `linked_features:` entry, then update those policy and feature documents so
-they link back to the new requirement.
+one `linked_features:` entry, scaffold any still-missing adjacent policy or
+feature document with the suggested commands, then update those policy and
+feature documents so they link back to the new requirement.
 
 ```bash
 syu validate .                       # 3. Check everything is linked
