@@ -377,6 +377,8 @@ fn repository_declares_documentation_guides() {
     assert!(tutorial.contains("Want a different entry point?"));
     assert!(tutorial.contains("[getting started](./getting-started.md)"));
     assert!(tutorial.contains("[troubleshooting](./troubleshooting.md)"));
+    assert!(tutorial.contains("starter registry entry"));
+    assert!(tutorial.contains("Only add another `files` entry"));
     assert!(configuration.contains("validate.default_fix"));
     assert!(configuration.contains("validate.allow_planned"));
     assert!(configuration.contains("Rust, Python, and TypeScript/JavaScript"));
