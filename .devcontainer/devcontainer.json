@@ -10,7 +10,7 @@
     },
     "ghcr.io/devcontainers/features/github-cli:1": {}
   },
-  "postCreateCommand": "cargo install cargo-llvm-cov --locked && bash scripts/install-precommit.sh",
+  "postCreateCommand": "cargo install cargo-llvm-cov --locked && cargo install wasm-pack --locked && (cd app && npm ci && npx playwright install --with-deps chromium) && bash scripts/install-precommit.sh",
   "customizations": {
     "vscode": {
       "extensions": [

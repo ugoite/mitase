@@ -109,8 +109,10 @@ If you use the hooks, install them once:
 scripts/install-precommit.sh
 ```
 
-The devcontainer/Codespaces post-create step runs this script automatically so
-the hooks are active as soon as the environment finishes provisioning.
+The devcontainer/Codespaces post-create step runs this script automatically and
+also preinstalls `wasm-pack`, the `app/` dependencies, and Playwright Chromium
+so browser-app validation is ready as soon as the environment finishes
+provisioning.
 
 ## Dependency security
 
