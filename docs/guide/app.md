@@ -57,6 +57,19 @@ Click a tab to switch the content area and the document list in the sidebar.
 
 ---
 
+## Search shortcuts
+
+Use the search box in the header to jump straight to an item by ID, title, or keyword.
+
+Keyboard shortcuts:
+
+- `ArrowDown` moves to the next search result.
+- `ArrowUp` moves to the previous search result.
+- `Enter` opens the highlighted result, or the only result when there is just one match.
+- `Escape` clears the current search.
+
+---
+
 ## Left sidebar
 
 ### Workspace summary panel
