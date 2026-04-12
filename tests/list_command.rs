@@ -225,12 +225,22 @@ fn list_command_help_documents_both_argument_orders() {
     assert!(output.status.success(), "help should succeed");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("syu list requirement docs/syu"),
+        stdout.contains("syu list requirement path/to/workspace"),
         "help should show the kind-first example:\n{stdout}",
     );
     assert!(
-        stdout.contains("syu list docs/syu requirement"),
+        stdout.contains("syu list path/to/workspace requirement"),
         "help should show the workspace-first example:\n{stdout}",
+    );
+    assert!(
+        stdout.contains("Pass the workspace root that contains syu.yaml."),
+        "help should explain the workspace-root expectation:\n{stdout}",
+    );
+    assert!(
+        stdout.contains(
+            "The configured spec.root lives inside that workspace; do not pass it directly."
+        ),
+        "help should explain why the spec.root itself is not the workspace path:\n{stdout}",
     );
 }
 
