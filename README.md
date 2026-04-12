@@ -116,6 +116,7 @@ syu browse .
 syu add feature FEAT-AUTH-LOGIN-001 --kind auth
 syu list requirement
 syu show REQ-001
+syu search traceability --kind requirement
 syu app .
 syu report . --output reports/syu.md
 ```
@@ -254,6 +255,16 @@ Show one definition by ID:
 ```bash
 syu show REQ-001
 syu show FEAT-BROWSE-001 path/to/workspace --format json
+```
+
+### `syu search`
+
+Search definitions by ID, title, summary, or description:
+
+```bash
+syu search audit
+syu search traceability --kind requirement
+syu search FEAT-CHECK-001 --format json
 ```
 
 ### `syu app`

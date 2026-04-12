@@ -19,6 +19,7 @@ policies:
       - REQ-CORE-009
       - REQ-CORE-015
       - REQ-CORE-018
+      - REQ-CORE-019
       - REQ-CORE-020
 
   - id: POL-002
@@ -39,6 +40,7 @@ policies:
       - REQ-CORE-015
       - REQ-CORE-017
       - REQ-CORE-018
+      - REQ-CORE-019
 
   - id: POL-003
     title: Traceability should prove ownership from specification to code and tests
@@ -73,6 +75,7 @@ policies:
       - REQ-CORE-015
       - REQ-CORE-017
       - REQ-CORE-018
+      - REQ-CORE-019
       - REQ-CORE-020
 
   - id: POL-005
