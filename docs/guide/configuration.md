@@ -137,14 +137,15 @@ of editing `syu.yaml`.
 
 ### `validate.require_symbol_trace_coverage`
 
-When `true`, `syu` scans Rust source and test files to confirm that every public
-symbol belongs to some feature and every test belongs to some requirement.
+When `true`, `syu` scans Rust, Python, and TypeScript/JavaScript source and
+test files to confirm that every public symbol belongs to some feature and
+every test belongs to some requirement.
 
 - `false`: only declared traces are verified
 - `true`: undeclared public APIs and tests become validation errors
 
 This is useful once the repository wants maintenance work to stay fully owned by
-the specification.
+the specification across the supported implementation languages.
 For an experimental strict run, use `syu validate . --require-symbol-trace-coverage`.
 
 ### `app.bind`
