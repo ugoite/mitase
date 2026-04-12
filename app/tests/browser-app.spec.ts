@@ -210,3 +210,65 @@ test("keeps the selected validation issue stable across refresh reordering", asy
     ),
   ).toHaveCount(0);
 });
+
+test("shows a visible banner when version polling fails after the initial load", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: /^syu\b/i })).toBeVisible();
+
+  let pollAttempts = 0;
+  await page.route("**/api/version", async (route) => {
+    pollAttempts += 1;
+    await route.fulfill({
+      status: 500,
+      contentType: "text/plain",
+      body: "app data refresh failed",
+    });
+  });
+
+  await expect.poll(() => pollAttempts, { timeout: 10000 }).toBeGreaterThan(0);
+
+  const alert = page.getByRole("alert");
+  await expect(alert).toContainText("Live refresh needs attention.");
+  await expect(alert).toContainText("Showing the last successfully loaded workspace snapshot");
+  await expect(alert).toContainText(
+    "Could not check for workspace updates: Failed to poll app version: 500 Internal Server Error",
+  );
+  await expect(page.getByRole("heading", { name: /^syu\b/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Workspace could not load" })).toHaveCount(0);
+});
+
+test("shows a visible banner when a workspace refresh reload fails after the initial load", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: /^syu\b/i })).toBeVisible();
+
+  let refreshLoads = 0;
+  await page.route("**/api/version", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ snapshot: "playwright-refresh-error" }),
+    });
+  });
+  await page.route("**/api/app-data.json", async (route) => {
+    refreshLoads += 1;
+    await route.fulfill({
+      status: 500,
+      contentType: "text/plain",
+      body: "app data refresh failed",
+    });
+  });
+
+  await expect.poll(() => refreshLoads, { timeout: 10000 }).toBeGreaterThan(0);
+
+  const alert = page.getByRole("alert");
+  await expect(alert).toContainText("Live refresh needs attention.");
+  await expect(alert).toContainText(
+    "Could not reload the workspace snapshot: Failed to load app data: 500 Internal Server Error",
+  );
+  await expect(page.getByRole("heading", { name: /^syu\b/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Workspace could not load" })).toHaveCount(0);
+});
