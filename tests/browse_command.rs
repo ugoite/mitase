@@ -232,4 +232,16 @@ fn browse_command_non_interactive_shows_errors_when_workspace_is_failing() {
         stdout.contains("SYU-graph-reference-001"),
         "should list error codes: {stdout}"
     );
+    assert!(
+        stdout.contains("Linked definitions must exist"),
+        "should include rule titles: {stdout}"
+    );
+    assert!(
+        stdout.contains("Linked requirement `REQ-MISSING-999` does not exist."),
+        "should include issue messages: {stdout}"
+    );
+    assert!(
+        stdout.contains("suggestion: Declare requirement `REQ-MISSING-999`"),
+        "should include actionable suggestions: {stdout}"
+    );
 }

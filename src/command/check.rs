@@ -22,9 +22,11 @@ use crate::{
         CheckResult, DefinitionCounts, Feature, FeatureRegistryDocument, Issue, Philosophy, Policy,
         Requirement, Severity, TraceCount, TraceReference, TraceSummary,
     },
-    rules::{all_rules, attach_referenced_rules, referenced_rules, rule_by_code, rule_genre},
+    rules::{all_rules, attach_referenced_rules, referenced_rules, rule_genre},
     workspace::{Workspace, load_workspace},
 };
+
+use super::issue_text::{TextIssueFormat, format_text_issue};
 
 #[derive(Debug, Clone, Copy)]
 enum TraceRole {
@@ -823,33 +825,8 @@ fn render_text_report(
         writeln!(&mut output).expect("writing to String must succeed");
         writeln!(&mut output, "issues:").expect("writing to String must succeed");
         for issue in &result.issues {
-            let location = issue
-                .location
-                .as_deref()
-                .map(|value| format!(" ({value})"))
-                .unwrap_or_default();
-            writeln!(
-                &mut output,
-                "- [{:?}] {}{} {}{}: {}",
-                issue.severity,
-                issue.code,
-                rule_title_suffix(&issue.code),
-                issue.subject,
-                location,
-                issue.message
-            )
-            .expect("writing to String must succeed");
-            if let Some(rule) = rule_by_code(&issue.code) {
-                writeln!(
-                    &mut output,
-                    "  rule: {} / {} / {}",
-                    rule.genre, rule.code, rule.title
-                )
-                .expect("writing to String must succeed");
-            }
-            if let Some(suggestion) = &issue.suggestion {
-                writeln!(&mut output, "  suggestion: {suggestion}")
-                    .expect("writing to String must succeed");
+            for line in format_text_issue(issue, TextIssueFormat::Validate) {
+                writeln!(&mut output, "{line}").expect("writing to String must succeed");
             }
         }
     } else if let Some(filtered_view) = filtered_view
@@ -915,12 +892,6 @@ fn render_text_report(
     }
 
     output
-}
-
-fn rule_title_suffix(code: &str) -> String {
-    rule_by_code(code)
-        .map(|rule| format!(" ({})", rule.title))
-        .unwrap_or_default()
 }
 
 fn collapse_whitespace(value: &str) -> String {

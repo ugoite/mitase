@@ -7,6 +7,7 @@ pub mod app;
 pub mod browse;
 pub mod check;
 pub mod init;
+mod issue_text;
 pub mod list;
 mod lookup;
 pub mod report;
