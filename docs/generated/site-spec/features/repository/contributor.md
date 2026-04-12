@@ -30,6 +30,15 @@ description: "Generated reference for docs/syu/features/repository/contributor.y
         - **symbols**:
           - FEAT-CONTRIB-001
           - postCreateCommand
+    - **shell**:
+      - **file**: .devcontainer/post-create.sh
+        - **symbols**:
+          - FEAT-CONTRIB-001
+          - install_coverage_tooling
+          - install_wasm_tooling
+          - install_browser_tooling
+          - install_precommit_tooling
+          - main
     - **rust**:
       - **file**: tests/example_workspaces.rs
         - **symbols**:
@@ -112,6 +121,15 @@ features:
           symbols:
             - FEAT-CONTRIB-001
             - postCreateCommand
+      shell:
+        - file: .devcontainer/post-create.sh
+          symbols:
+            - FEAT-CONTRIB-001
+            - install_coverage_tooling
+            - install_wasm_tooling
+            - install_browser_tooling
+            - install_precommit_tooling
+            - main
       rust:
         - file: tests/example_workspaces.rs
           symbols:

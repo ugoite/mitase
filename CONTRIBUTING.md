@@ -109,10 +109,18 @@ If you use the hooks, install them once:
 scripts/install-precommit.sh
 ```
 
-The devcontainer/Codespaces post-create step runs this script automatically and
-also preinstalls `wasm-pack`, the `app/` dependencies, and Playwright Chromium
-so browser-app validation is ready as soon as the environment finishes
-provisioning.
+The devcontainer/Codespaces post-create step runs
+`.devcontainer/post-create.sh` automatically so the setup explains itself while
+it provisions. That script:
+
+- installs `cargo-llvm-cov` for `scripts/ci/coverage.sh summary`
+- installs `wasm-pack` plus the `app/` dependencies for
+  `scripts/ci/check-app-dist-freshness.sh`
+- installs Playwright Chromium for `npm --prefix app run test:e2e`
+- runs `scripts/install-precommit.sh` so local hooks match the contributor path
+
+Read the script output or this section when you want to map setup time to the
+checks it unlocks.
 
 ## Dependency security
 
