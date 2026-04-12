@@ -424,6 +424,9 @@ fn repository_declares_contribution_workflow_assets() {
 
     assert!(bug_report.contains("FEAT-CONTRIB-002"));
     assert!(bug_report.contains("What happened?"));
+    assert!(bug_report.contains("What area is affected?"));
+    assert!(bug_report.contains("CLI or runtime behavior"));
+    assert!(bug_report.contains("Required for CLI or runtime bugs"));
     assert!(bug_report.contains("Steps to reproduce"));
 
     assert!(feature_request.contains("FEAT-CONTRIB-002"));

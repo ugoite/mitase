@@ -9,7 +9,20 @@ body:
     attributes:
       value: |
         Thanks for taking the time to improve `syu`.
-        Please include a minimal reproduction and the exact `syu` version when possible.
+        Please include a minimal reproduction.
+        Pick the affected area below so CLI/runtime bugs can still require an exact `syu` version without forcing docs-only and repository-automation reports into the same input convention.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: What area is affected?
+      description: Choose the surface where you hit the problem.
+      options:
+        - CLI or runtime behavior
+        - Documentation or generated docs
+        - Repository automation or CI
+    validations:
+      required: true
 
   - type: textarea
     id: summary
@@ -30,10 +43,10 @@ body:
     id: version
     attributes:
       label: syu version
-      description: "Example: `0.0.1-alpha.7` or `v0.0.1-alpha.4`"
+      description: "Required for CLI or runtime bugs. Example: `0.0.1-alpha.7`, `v0.0.1-alpha.4`, or `main`"
       placeholder: 0.0.1-alpha.7
     validations:
-      required: true
+      required: false
 
   - type: textarea
     id: environment
