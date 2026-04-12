@@ -52,6 +52,7 @@ function App() {
   const [navigationHistory, setNavigationHistory] = useState<string[]>([]);
   const [snapshotVersion, setSnapshotVersion] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
 
   const applyWorkspace = useCallback((browserWorkspace: BrowserWorkspace) => {
     setWorkspace(browserWorkspace);
@@ -125,14 +126,16 @@ function App() {
         const browserWorkspace = wasmModule.build_browser_workspace_from_js(payload);
 
         setError(null);
+        setRefreshError(null);
         setSnapshotVersion(snapshot);
         applyWorkspace(browserWorkspace);
       } catch (loadError) {
         if (refreshing) {
           // eslint-disable-next-line no-console
           console.error("Failed to refresh syu app workspace", loadError);
+          setRefreshError(formatRefreshFailure("reload the workspace snapshot", loadError));
         } else {
-          setError(loadError instanceof Error ? loadError.message : "Failed to load syu app");
+          setError(errorMessage(loadError, "Failed to load syu app"));
         }
       } finally {
         setLoading(false);
@@ -165,6 +168,9 @@ function App() {
           throw new Error(`Failed to poll app version: ${response.status} ${response.statusText}`);
         }
         const nextVersion = (await response.json()) as VersionPayload;
+        if (!cancelled) {
+          setRefreshError(null);
+        }
         if (!cancelled && nextVersion.snapshot !== snapshotVersion) {
           await loadWorkspace("refresh");
         }
@@ -172,6 +178,7 @@ function App() {
         if (!cancelled) {
           // eslint-disable-next-line no-console
           console.error("Failed to poll app version for refresh", pollError);
+          setRefreshError(formatRefreshFailure("check for workspace updates", pollError));
         }
       }
     }, 2000);
@@ -558,6 +565,19 @@ function App() {
       </header>
 
       <main className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 md:grid-cols-[18rem_minmax(0,1fr)] md:px-8">
+        {refreshError && (
+          <div
+            role="alert"
+            className="md:col-span-2 rounded-3xl border border-rose-400/30 bg-rose-400/10 px-5 py-4 text-sm text-rose-50 shadow-2xl shadow-rose-950/10"
+          >
+            <p className="font-semibold">Live refresh needs attention.</p>
+            <p className="mt-2 leading-7 text-rose-100">
+              Showing the last successfully loaded workspace snapshot while `syu app` recovers. Fix
+              the workspace or keep this tab open until the next refresh succeeds.
+            </p>
+            <p className="mt-2 break-words text-xs text-rose-200/90">{refreshError}</p>
+          </div>
+        )}
         {isRefreshing && (
           <div className="md:col-span-2 rounded-3xl border border-amber-400/30 bg-amber-400/10 px-5 py-4 text-sm text-amber-100 shadow-2xl shadow-amber-950/10">
             Refreshing workspace data...
@@ -1052,6 +1072,14 @@ function truncatePath(fullPath: string): string {
   const parts = fullPath.replace(/\\/g, "/").split("/").filter(Boolean);
   if (parts.length <= 2) return fullPath;
   return `…/${parts.slice(-2).join("/")}`;
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
+}
+
+function formatRefreshFailure(action: string, error: unknown): string {
+  return `Could not ${action}: ${errorMessage(error, "Unexpected refresh failure")}`;
 }
 
 function ratio(validated: number, declared: number): number {
