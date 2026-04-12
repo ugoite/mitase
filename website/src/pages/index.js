@@ -33,6 +33,16 @@ const journeys = [
     to: '/docs/guide/getting-started'
   },
   {
+    title: 'Follow a full tutorial',
+    description: 'Build a realistic four-layer example from scratch when you want the full repository story.',
+    to: '/docs/guide/tutorial'
+  },
+  {
+    title: 'Troubleshoot a broken workspace',
+    description: 'Jump straight to the common validation, traceability, and workflow failure patterns.',
+    to: '/docs/guide/troubleshooting'
+  },
+  {
     title: 'Tune validation',
     description: 'Review config switches for autofix, planned work, orphan checks, and runtime behavior.',
     to: '/docs/guide/configuration'
