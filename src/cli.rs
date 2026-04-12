@@ -49,16 +49,21 @@ Examples:
 const WORKSPACE_HELP: &str = "Workspace root containing syu.yaml and the configured spec tree";
 
 const LIST_AFTER_HELP: &str = "\
+Use `syu list` when you want a filtered layer view. Use `syu browse --non-interactive` when you want the full spec tree in text form.
+
 Examples:
   syu list
-  syu list path/to/workspace
   syu list requirement
+  syu list path/to/workspace
   syu list requirement path/to/workspace
   syu list path/to/workspace requirement
 
 Note:
   Pass the workspace root that contains syu.yaml.
   The configured spec.root lives inside that workspace; do not pass it directly.";
+const BROWSE_AFTER_HELP: &str = "\
+Use `syu browse --non-interactive` when you want the full spec tree in text form. Use `syu list` when you want a filtered layer view for one layer in the current workspace.
+";
 
 const SEARCH_AFTER_HELP: &str = "\
 Examples:
@@ -83,7 +88,8 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Commands {
     #[command(
-        about = "Browse the specification in your terminal (interactive prompts or text output)"
+        about = "Browse the specification in your terminal (interactive prompts or text output)",
+        after_help = BROWSE_AFTER_HELP
     )]
     Browse(BrowseArgs),
     #[command(

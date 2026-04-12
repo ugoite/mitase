@@ -261,6 +261,8 @@ syu browse .
 
 List one layer without entering the interactive browser:
 
+Use `syu list` when you want a filtered layer view. Use `syu browse --non-interactive` when you want the full spec tree in plain text.
+
 ```bash
 syu list philosophy
 syu list feature path/to/workspace --format json
