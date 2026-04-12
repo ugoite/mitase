@@ -375,6 +375,7 @@ fn repository_declares_documentation_guides() {
     assert!(tutorial.contains("[troubleshooting](./troubleshooting.md)"));
     assert!(configuration.contains("validate.default_fix"));
     assert!(configuration.contains("validate.allow_planned"));
+    assert!(configuration.contains("Rust, Python, and TypeScript/JavaScript"));
     assert!(configuration.contains("--spec-root"));
     assert!(configuration.contains(&format!("version: {current_version}")));
     assert!(configuration.contains("docs/syu/config/overview.yaml"));
