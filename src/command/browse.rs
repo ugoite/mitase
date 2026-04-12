@@ -9,12 +9,15 @@ use anyhow::Result;
 use crate::{
     cli::{BrowseArgs, LookupKind as EntityKind},
     command::check::collect_check_result,
-    model::{CheckResult, Feature, Philosophy, Policy, Requirement},
+    model::{CheckResult, Feature, Issue, Philosophy, Policy, Requirement},
     rules::rule_by_code,
     workspace::{Workspace, load_workspace},
 };
 
-use super::lookup::WorkspaceLookup;
+use super::{
+    issue_text::{TextIssueFormat, format_text_issue},
+    lookup::WorkspaceLookup,
+};
 
 #[derive(Debug, Clone, Copy)]
 enum TopLevelSection {
@@ -370,7 +373,9 @@ impl BrowseState {
         if !self.result.issues.is_empty() {
             println!("=== errors ({}) ===", self.result.issues.len());
             for issue in &self.result.issues {
-                println!("  [{}] {}", issue.code, issue.subject);
+                for line in format_non_interactive_issue(issue) {
+                    println!("{line}");
+                }
             }
             println!();
         }
@@ -494,6 +499,10 @@ fn collapse_whitespace(value: &str) -> String {
     value.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+fn format_non_interactive_issue(issue: &Issue) -> Vec<String> {
+    format_text_issue(issue, TextIssueFormat::BrowseNonInteractive)
+}
+
 #[cfg(test)]
 mod tests {
     use std::{collections::BTreeMap, path::PathBuf};
@@ -501,13 +510,16 @@ mod tests {
     use crate::{
         command::check::collect_check_result,
         model::{
-            CheckResult, DefinitionCounts, Feature, Philosophy, Policy, Requirement,
+            CheckResult, DefinitionCounts, Feature, Issue, Philosophy, Policy, Requirement,
             TraceReference, TraceSummary,
         },
         workspace::{Workspace, load_workspace},
     };
 
-    use super::{BrowseState, EntityKind, collapse_whitespace, print_trace_summary};
+    use super::{
+        BrowseState, EntityKind, collapse_whitespace, format_non_interactive_issue,
+        print_trace_summary,
+    };
 
     fn fixture_path(name: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -662,6 +674,47 @@ mod tests {
         assert_eq!(
             collapse_whitespace("browse\n  keeps   context"),
             "browse keeps context"
+        );
+    }
+
+    #[test]
+    fn non_interactive_issue_format_includes_message_and_suggestion() {
+        let lines = format_non_interactive_issue(&Issue::error(
+            "SYU-trace-symbol-003",
+            "feature FEAT-FAIL-001",
+            Some("typescript:frontend/broken-feature.ts".to_string()),
+            "Declared symbol `missingTsSymbol` was not found in `frontend/broken-feature.ts`.",
+            Some(
+                "Add symbol `missingTsSymbol` to `frontend/broken-feature.ts` or update the YAML mapping for `FEAT-FAIL-001`."
+                    .to_string(),
+            ),
+        ));
+
+        assert_eq!(
+            lines[0],
+            "  [SYU-trace-symbol-003] feature FEAT-FAIL-001 (typescript:frontend/broken-feature.ts) — Declared trace symbols must exist in the traced file: Declared symbol `missingTsSymbol` was not found in `frontend/broken-feature.ts`."
+        );
+        assert_eq!(
+            lines[1],
+            "    suggestion: Add symbol `missingTsSymbol` to `frontend/broken-feature.ts` or update the YAML mapping for `FEAT-FAIL-001`."
+        );
+    }
+
+    #[test]
+    fn non_interactive_issue_format_falls_back_when_rule_metadata_is_missing() {
+        let lines = format_non_interactive_issue(&Issue::warning(
+            "SYU-custom-unknown-001",
+            "workspace .",
+            None,
+            "Custom validation output should still stay readable.",
+            None,
+        ));
+
+        assert_eq!(
+            lines,
+            vec![
+                "  [SYU-custom-unknown-001] workspace .: Custom validation output should still stay readable."
+            ]
         );
     }
 }
