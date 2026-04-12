@@ -37,7 +37,7 @@ Examples:
   syu init path/to/workspace --name my-project --spec-root spec/contracts --template polyglot --id-prefix store";
 
 const ADD_AFTER_HELP: &str = "\
-After writing a stub, `syu add` prints the reciprocal-link follow-up needed before `syu validate` will pass cleanly.
+After writing a stub, `syu add` prints the reciprocal-link follow-up and matching scaffold suggestions needed before `syu validate` will pass cleanly.
 
 Examples:
   syu add philosophy PHIL-002

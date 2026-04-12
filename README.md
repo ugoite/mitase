@@ -173,13 +173,15 @@ syu init .                           # 1. Create spec scaffold
 syu add requirement REQ-AUTH-001     # 2. Generate a requirement stub
 ```
 
-`syu add requirement` prints the generated requirement path plus the reciprocal-link
-follow-up you still need before validation will pass.
+`syu add requirement` prints the generated requirement path, the reciprocal-link
+follow-up you still need, and matching `syu add ...` suggestions for adjacent
+stubs before validation will pass.
 
 Before step 3, open the generated requirement YAML under `docs/syu/requirements/`
 (or your configured `spec.root`), add at least one `linked_policies:` entry and
-one `linked_features:` entry, then update those policy and feature documents so
-they link back to the new requirement.
+one `linked_features:` entry, scaffold any still-missing adjacent policy or
+feature document with the suggested commands, then update those policy and
+feature documents so they link back to the new requirement.
 
 ```bash
 syu validate .                       # 3. Check everything is linked
@@ -281,8 +283,10 @@ syu add feature FEAT-AUTH-001 --kind auth --file docs/syu/features/auth/login.ya
 `syu add` keeps the command intentionally small. It derives a default title and
 document path from the ID, uses the configured `spec.root`, and updates
 `features/features.yaml` automatically when you scaffold a new feature document.
-Edit the generated stub fields and reciprocal links before you expect
-`syu validate` to pass cleanly.
+It also prints matching scaffold suggestions for adjacent definitions so the
+next reciprocal-link edits are concrete instead of guesswork. Edit the generated
+stub fields and reciprocal links before you expect `syu validate` to pass
+cleanly.
 
 ### `syu validate`
 

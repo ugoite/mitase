@@ -267,7 +267,8 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("Step 0: required"));
     assert!(readme.contains("Generate a requirement stub"));
     assert!(readme.contains("add at least one `linked_policies:` entry"));
-    assert!(readme.contains("update those policy and feature documents so"));
+    assert!(readme.contains("scaffold any still-missing adjacent policy or"));
+    assert!(readme.contains("feature documents so they link back to the new requirement."));
     assert!(readme.contains("reciprocal links between policies, requirements, and features"));
     assert!(readme.contains("syu init"));
     assert!(readme.contains("syu init ."));
@@ -314,7 +315,10 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("Start here once `syu` is installed:"));
     assert!(getting_started.contains("Generate a requirement stub"));
     assert!(getting_started.contains("add at least one `linked_policies:` entry"));
-    assert!(getting_started.contains("update those policy and feature documents so"));
+    assert!(getting_started.contains("scaffold any still-missing adjacent policy or"));
+    assert!(
+        getting_started.contains("feature documents so they link back to the new requirement.")
+    );
     assert!(getting_started.contains("install-syu.sh"));
     assert!(getting_started.contains("checksums.sha256"));
     assert!(getting_started.contains("security-sensitive environments"));
