@@ -118,7 +118,7 @@ fn repository_declares_release_automation() {
     assert!(release_artifacts.contains("release-track-notes.sh"));
     assert!(release_artifacts.contains("attestations: write"));
     assert!(release_artifacts.contains("id-token: write"));
-    assert!(release_artifacts.contains("actions/attest-build-provenance@v2"));
+    assert!(release_artifacts.contains("actions/attest-build-provenance@v4"));
     assert!(release_artifacts.contains("subject-path: release-artifacts/*"));
 
     assert!(package_script.contains("FEAT-RELEASE-001"));
