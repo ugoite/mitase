@@ -148,6 +148,26 @@ This is useful once the repository wants maintenance work to stay fully owned by
 the specification across the supported implementation languages.
 For an experimental strict run, use `syu validate . --require-symbol-trace-coverage`.
 
+For polyglot repositories, treat this as a staged switch instead of an all-or-
+nothing starting point:
+
+1. Keep `require_symbol_trace_coverage: false` while the repository is still
+   mixing supported and unsupported implementation languages or while older
+   areas have not been traced yet.
+2. Keep declaring requirement and feature traces for every area, but use the
+   trace shape the current validator can actually check. For unsupported or
+   partially adopted areas today, that usually means file-level or wildcard
+   ownership instead of symbol-level `doc_contains` promises.
+3. Turn `require_symbol_trace_coverage: true` on once the supported-language
+   parts of the repository are ready to keep every public API and test owned by
+   the spec, and leave unsupported-language areas on explicit file ownership
+   until richer adapters exist.
+
+The important rule is honesty: only promise symbol-level strictness where `syu`
+can verify it today, and use the looser trace forms to keep the rest of a
+polyglot repository connected to the spec without pretending the validator can
+inspect more than it really can.
+
 ### `app.bind`
 
 Controls the default address that `syu app` binds to.
@@ -258,7 +278,11 @@ want strict ownership checks without enumerating every public symbol by hand.
 - leave `validate.require_reciprocal_links: true` unless you are phasing in
   backlinks after stabilizing the forward graph
 - turn on `validate.require_symbol_trace_coverage: true` once the repository
-  wants public APIs and tests to remain fully owned by the spec
+  wants public APIs and tests to remain fully owned by the spec across the
+  currently supported languages
+- for mixed-language repositories, keep `validate.require_symbol_trace_coverage:
+  false` during adoption and use explicit file or wildcard ownership for areas
+  that the current language adapters cannot inspect yet
 - set `report.output` when your repository checks in one stable report artifact
   path
 - set `app.bind` and `app.port` only when your team really has a stable local
