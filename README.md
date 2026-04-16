@@ -32,8 +32,8 @@ verified.
 Pick the newcomer path that matches what you need next:
 
 - **Quick start**: stay in this README when you want the shortest path from install
-  to `syu validate .` and only need a short layer refresher before the first
-  commands.
+  to `syu validate .`. It only assumes the [Why four layers?](#why-four-layers)
+  refresher below, and the deeper concepts guide stays optional.
 - **Tutorial**: follow [`docs/guide/tutorial.md`](docs/guide/tutorial.md) when you
   want a realistic end-to-end repository story instead of a short scaffold flow.
 - **Troubleshooting**: jump to
@@ -163,18 +163,19 @@ below. The rest of this section assumes you installed the published CLI.
 
 ## Quick start
 
-Stay in this README for the shortest install-to-validate path. If you skipped
-[`docs/guide/concepts.md`](docs/guide/concepts.md), use the
-[Why four layers?](#why-four-layers) section above as the refresher on
-`philosophy`, `policy`, `requirements`, and `features`.
+Stay in this README for the shortest install-to-validate path. The only
+prerequisite for the commands below is the [Why four layers?](#why-four-layers)
+refresher above, which gives you the minimal context for `philosophy`,
+`policy`, `requirements`, and `features`.
 
 The first manual edit in this quick start happens in the generated requirement
 YAML: add `linked_policies:` and `linked_features:` there, then update the
 adjacent policy and feature YAML so they add the reciprocal
 `linked_requirements:` entry back to the new requirement.
 
-Read [`docs/guide/concepts.md`](docs/guide/concepts.md) first if you want the
-fuller rationale and authoring guidance before continuing.
+Read [`docs/guide/concepts.md`](docs/guide/concepts.md) before continuing only
+if you want the fuller rationale and authoring guidance instead of the shortest
+README-first path.
 
 Step 0: required — run `syu init .` before any of the other commands in a new repository.
 
