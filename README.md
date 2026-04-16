@@ -54,6 +54,38 @@ Keep the detailed guides close:
 - [`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md)
 - [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
+## Is syu right for this repository?
+
+`syu` is a good fit when the repository needs checked-in, reviewable traceability
+between intent, rules, requirements, implementation, and tests.
+
+Adoption usually pays off when you want to:
+
+- keep repository expectations explicit instead of scattered across ADRs, wikis,
+  or review folklore
+- make requirement-to-code and requirement-to-test links visible in pull requests
+- keep a shared model that still works across Rust-only, Python-only, or
+  polyglot repositories
+- preserve project intent for a long-lived codebase with multiple contributors
+
+`syu` is probably too heavy when the repository is still a short-lived prototype,
+a very small solo project, or a codebase where informal docs and code review are
+already enough because nobody needs machine-readable traceability.
+
+Compared with docs-only workflows, `syu` asks teams to keep structured YAML,
+reciprocal links, and validation in the normal contributor loop. That is extra
+authoring overhead, but in return the repository gets searchable, enforceable,
+repository-native traceability instead of documentation that can drift away from
+tests and implementation.
+
+Repositories that benefit most are the ones where change review needs more than
+good intentions: long-lived products, shared platforms, compliance-sensitive
+systems, and multi-team or multi-language repositories where contributors need a
+clear checked-in record of why behavior exists and how it is proven.
+
+If that sounds like your repository, continue with the install flow below. If
+not, a lighter docs-only workflow may be the better starting point for now.
+
 ## Install from published releases
 
 `syu` publishes a release-hosted installer entrypoint and repository-scoped
