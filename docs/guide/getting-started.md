@@ -186,6 +186,18 @@ and `FEAT-STORE-001` instead of the generic defaults. When one layer needs a
 different prefix, use `--philosophy-prefix`, `--policy-prefix`,
 `--requirement-prefix`, or `--feature-prefix`.
 
+For a genuinely mixed-language repository, keep the first adoption step small:
+
+- start with `validate.require_symbol_trace_coverage: false`
+- keep tracing every area you touch, but use file-level or wildcard ownership
+  in languages that `syu` cannot inspect deeply yet
+- turn stricter symbol coverage on later for the Rust, Python, and
+  TypeScript/JavaScript areas once those traces are stable
+
+That keeps the repository connected to the spec from day one without forcing a
+polyglot team to fake symbol-level coverage before the current adapters are
+ready.
+
 Starter requirements and features begin as `status: planned`. Keep them planned
 until you are ready to declare real tests and implementation traces.
 
