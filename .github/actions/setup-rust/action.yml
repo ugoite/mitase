@@ -21,5 +21,17 @@ runs:
         components: ${{ inputs.components }}
         targets: ${{ inputs.targets }}
 
+    - name: Set up Node.js for browser bundle builds
+      uses: actions/setup-node@v6
+      with:
+        node-version: "25"
+        cache: npm
+        cache-dependency-path: app/package-lock.json
+
+    - name: Install wasm-pack
+      uses: taiki-e/cache-cargo-install-action@v3
+      with:
+        tool: wasm-pack
+
     - name: Restore Rust cache
       uses: Swatinem/rust-cache@v2
