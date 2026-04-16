@@ -8,6 +8,9 @@ Want a different entry point?
 
 - Use [getting started](./getting-started.md) when you only want the shortest
   first-run path.
+- Use [existing repository adoption](./existing-repository.md) when the
+  repository already has code and history and you want an incremental rollout
+  instead of a from-scratch scaffold.
 - Stay on this tutorial when you want the full repository story and the edits
   behind each command.
 - Jump to [troubleshooting](./troubleshooting.md) if you are already blocked on
@@ -18,6 +21,10 @@ The example project is **Filestore** — a minimal file-storage library.
 ---
 
 ## 1. Bootstrap the workspace
+
+This walkthrough is intentionally greenfield. If the repository already exists,
+switch to [existing repository adoption](./existing-repository.md) before you
+reach for `syu init`.
 
 ```bash
 mkdir filestore && cd filestore
