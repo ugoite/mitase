@@ -16,6 +16,11 @@ features:
         - file: src/command/app.rs
           symbols:
             - "*"
+        - file: build.rs
+          symbols:
+            - build_browser_bundle
+            - ensure_app_dependencies
+            - main
         - file: src/config.rs
           symbols:
             - AppConfig

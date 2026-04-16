@@ -17,12 +17,12 @@ install_coverage_tooling() {
 }
 
 install_wasm_tooling() {
-  log_step "Installing wasm-pack for scripts/ci/check-app-dist-freshness.sh."
+  log_step "Installing wasm-pack for scripts/ci/check-browser-app-freshness.sh."
   cargo install wasm-pack --locked
 }
 
 install_browser_tooling() {
-  log_step "Installing browser-app dependencies for local app builds, scripts/ci/check-app-dist-freshness.sh, and npm --prefix app run test:e2e."
+  log_step "Installing browser-app dependencies for local app builds, scripts/ci/check-browser-app-freshness.sh, and npm --prefix app run test:e2e."
   npm --prefix app ci
 
   log_step "Installing Playwright Chromium for npm --prefix app run test:e2e."

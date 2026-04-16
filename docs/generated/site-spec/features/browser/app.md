@@ -31,6 +31,11 @@ description: "Generated reference for docs/syu/features/browser/app.yaml"
       - **file**: src/command/app.rs
         - **symbols**:
           - *
+      - **file**: build.rs
+        - **symbols**:
+          - build_browser_bundle
+          - ensure_app_dependencies
+          - main
       - **file**: src/config.rs
         - **symbols**:
           - AppConfig
@@ -77,6 +82,11 @@ features:
         - file: src/command/app.rs
           symbols:
             - "*"
+        - file: build.rs
+          symbols:
+            - build_browser_bundle
+            - ensure_app_dependencies
+            - main
         - file: src/config.rs
           symbols:
             - AppConfig
