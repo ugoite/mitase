@@ -28,6 +28,18 @@ it slows down at the first manual editing step so you can see where the
 scaffolded files live, how reciprocal links fit together, and what to fix
 before the first `syu validate .` run.
 
+## Is syu right for this repository?
+
+Use the canonical fit check in the
+[README](https://github.com/ugoite/syu/blob/main/README.md#is-syu-right-for-this-repository)
+to decide whether `syu` is the right level of structure for this repository.
+That section stays the source of truth for who benefits most, when `syu` is too
+heavy, and what trade-offs it adds to the contributor loop.
+
+If the README fit check sounds right and you want the first-run setup narrated
+step by step, continue below. If not, stay with a lighter docs-only workflow
+until the repository needs stronger traceability guarantees.
+
 ## Before you begin
 
 Make sure `syu` is installed and available on your `PATH`.
