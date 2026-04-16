@@ -34,6 +34,10 @@ Pick the newcomer path that matches what you need next:
 - **Quick start**: stay in this README when you want the shortest path from install
   to `syu validate .` and only need a short layer refresher before the first
   commands.
+- **Existing repository adoption**: follow
+  [`docs/guide/existing-repository.md`](docs/guide/existing-repository.md) when
+  the repository already has code and history and you want an incremental
+  adoption path instead of starting with `syu init`.
 - **Tutorial**: follow [`docs/guide/tutorial.md`](docs/guide/tutorial.md) when you
   want a realistic end-to-end repository story instead of a short scaffold flow.
 - **Troubleshooting**: jump to
@@ -44,6 +48,7 @@ Keep the detailed guides close:
 
 - [`docs/guide/concepts.md`](docs/guide/concepts.md)
 - [`docs/guide/getting-started.md`](docs/guide/getting-started.md)
+- [`docs/guide/existing-repository.md`](docs/guide/existing-repository.md)
 - [`docs/guide/tutorial.md`](docs/guide/tutorial.md)
 - [`docs/guide/configuration.md`](docs/guide/configuration.md)
 - [`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md)
@@ -176,7 +181,11 @@ adjacent policy and feature YAML so they add the reciprocal
 Read [`docs/guide/concepts.md`](docs/guide/concepts.md) first if you want the
 fuller rationale and authoring guidance before continuing.
 
-Step 0: required — run `syu init .` before any of the other commands in a new repository.
+Step 0: required — run `syu init .` before any of the other commands in a new
+repository. If the repository already exists and you do not want an in-place
+scaffold flow, follow
+[`docs/guide/existing-repository.md`](docs/guide/existing-repository.md)
+instead.
 
 ```bash
 syu init .                           # 1. Create spec scaffold
