@@ -47,8 +47,8 @@ test("renders top tabs and linked spec content", async ({ page }) => {
 
   const topLevelSections = page.getByRole("navigation", { name: "Top level sections" });
 
-  await expect(page.getByRole("heading", { name: /^syu/i })).toBeVisible();
-  await expect(page.getByRole("button", { name: /^syu\b/i })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^syu\b/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: "syu — go to first item" })).toBeVisible();
   await expect(topLevelSections.getByRole("button", { name: /^philosophy\b/i })).toBeVisible();
   await expect(topLevelSections.getByRole("button", { name: /^policies\b/i })).toBeVisible();
   await expect(topLevelSections.getByRole("button", { name: /^features\b/i })).toBeVisible();
@@ -220,7 +220,7 @@ test("shows a visible banner when version polling fails after the initial load",
   page,
 }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /^syu\b/i })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^syu\b/i })).toBeVisible();
 
   let pollAttempts = 0;
   await page.route("**/api/version", async (route) => {
@@ -240,7 +240,7 @@ test("shows a visible banner when version polling fails after the initial load",
   await expect(alert).toContainText(
     "Could not check for workspace updates: Failed to poll app version: 500 Internal Server Error",
   );
-  await expect(page.getByRole("heading", { name: /^syu\b/i })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^syu\b/i })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Workspace could not load" })).toHaveCount(0);
 });
 
@@ -248,7 +248,7 @@ test("shows a visible banner when a workspace refresh reload fails after the ini
   page,
 }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: /^syu\b/i })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^syu\b/i })).toBeVisible();
 
   let refreshLoads = 0;
   await page.route("**/api/version", async (route) => {
@@ -274,6 +274,6 @@ test("shows a visible banner when a workspace refresh reload fails after the ini
   await expect(alert).toContainText(
     "Could not reload the workspace snapshot: Failed to load app data: 500 Internal Server Error",
   );
-  await expect(page.getByRole("heading", { name: /^syu\b/i })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^syu\b/i })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Workspace could not load" })).toHaveCount(0);
 });

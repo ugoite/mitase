@@ -36,7 +36,7 @@ use crate::{
     workspace::{load_feature_documents_with_paths, load_requirement_documents_with_paths},
 };
 
-static APP_DIST: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/app/dist");
+static APP_DIST: Dir<'_> = include_dir!("$OUT_DIR/syu-app-dist");
 
 #[derive(Clone)]
 struct AppState {

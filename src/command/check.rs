@@ -1824,27 +1824,26 @@ fn validate_trace_map(
             }
             return;
         }
-        Some(DeliveryStatus::Implemented) => {
-            if references_by_language.is_empty() {
-                issues.push(Issue::error(
-                    "SYU-delivery-implemented-001",
-                    subject,
-                    Some("status".to_string()),
-                    format!(
-                        "{} `{owner_id}` is marked `implemented` but does not declare any {}.",
-                        target.role.subject_kind(),
-                        target.role.relation_name(),
-                        owner_id = target.owner_id
-                    ),
-                    Some(format!(
-                        "Add at least one {} mapping to `{owner_id}` or mark it `planned`.",
-                        target.role.relation_name(),
-                        owner_id = target.owner_id
-                    )),
-                ));
-                return;
-            }
+        Some(DeliveryStatus::Implemented) if references_by_language.is_empty() => {
+            issues.push(Issue::error(
+                "SYU-delivery-implemented-001",
+                subject,
+                Some("status".to_string()),
+                format!(
+                    "{} `{owner_id}` is marked `implemented` but does not declare any {}.",
+                    target.role.subject_kind(),
+                    target.role.relation_name(),
+                    owner_id = target.owner_id
+                ),
+                Some(format!(
+                    "Add at least one {} mapping to `{owner_id}` or mark it `planned`.",
+                    target.role.relation_name(),
+                    owner_id = target.owner_id
+                )),
+            ));
+            return;
         }
+        Some(DeliveryStatus::Implemented) => {}
         None if references_by_language.is_empty() => {
             issues.push(Issue::warning(
                 "SYU-delivery-missing-001",
