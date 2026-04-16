@@ -32,8 +32,11 @@ verified.
 Pick the newcomer path that matches what you need next:
 
 - **Quick start**: stay in this README when you want the shortest path from install
-  to `syu validate .`. It only assumes the [Why four layers?](#why-four-layers)
-  refresher below, and the deeper concepts guide stays optional.
+  to `syu validate .` and are already comfortable editing the first reciprocal
+  links after the [Why four layers?](#why-four-layers) refresher below.
+- **Getting started**: follow
+  [`docs/guide/getting-started.md`](docs/guide/getting-started.md) when you want
+  the first workspace setup narrated step by step before the manual YAML edits.
 - **Tutorial**: follow [`docs/guide/tutorial.md`](docs/guide/tutorial.md) when you
   want a realistic end-to-end repository story instead of a short scaffold flow.
 - **Troubleshooting**: jump to
