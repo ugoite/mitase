@@ -57,8 +57,8 @@ match your change:
    scripts/ci/coverage.sh summary
    ```
 
-3. **Browser app, WASM, or checked-in `app/dist` bundle** (`app/src`,
-   `app/wasm`, browser build config, or generated browser assets)
+3. **Browser app, WASM, or browser build inputs** (`app/src`, `app/src/wasm`,
+   `app/wasm`, browser build config, or browser build scripts)
 
    Install the browser app dependencies first:
 
@@ -69,12 +69,13 @@ match your change:
    Then run the same freshness flow CI uses:
 
    ```bash
-   scripts/ci/check-app-dist-freshness.sh
+   scripts/ci/check-browser-app-freshness.sh
    ```
 
-   That script runs `npm run build:wasm`, `npm run check`, and `npm run build`,
-   then compares the regenerated output against the checked-in `app/dist`
-   bundle.
+   That script clears any locally generated browser outputs, reruns
+   `npm run build:wasm`, then runs `npm run check` and `npm run build`. It
+   leaves a fresh local `app/src/wasm` bridge plus an `app/dist/` artifact
+   behind for inspection without checking either generated output into git.
 
    When the change affects browser behavior, routing, or Playwright coverage,
    also install the local browser once and run the end-to-end suite:
@@ -141,7 +142,8 @@ it provisions. That script:
 
 - installs `cargo-llvm-cov` for `scripts/ci/coverage.sh summary`
 - installs `wasm-pack` plus the `app/` dependencies for local browser-app work,
-  `scripts/ci/check-app-dist-freshness.sh`, and `npm --prefix app run test:e2e`
+  `scripts/ci/check-browser-app-freshness.sh`, and
+  `npm --prefix app run test:e2e`
 - installs Playwright Chromium for `npm --prefix app run test:e2e`
 - runs `scripts/install-precommit.sh` so local hooks match the contributor path
 
