@@ -7,6 +7,11 @@ const usesFailingWorkspace =
   process.env.SYU_APP_E2E_WORKSPACE?.includes("tests/fixtures/workspaces/failing") ?? false;
 
 type AppDataPayload = {
+  source_documents: Array<{
+    section: "philosophy" | "policies" | "features" | "requirements";
+    path: string;
+    content: string;
+  }>;
   validation: {
     issues: Array<{
       code: string;
@@ -18,6 +23,26 @@ type AppDataPayload = {
     }>;
   };
 };
+
+function injectParseError(payload: AppDataPayload): { payload: AppDataPayload; path: string } {
+  const target = payload.source_documents.find((document) => document.section === "philosophy");
+
+  if (!target) {
+    throw new Error("Expected a philosophy source document in the app payload.");
+  }
+
+  return {
+    path: target.path,
+    payload: {
+      ...payload,
+      source_documents: payload.source_documents.map((document) =>
+        document.path === target.path
+          ? { ...document, content: "category: Philosophy\nphilosophies: [" }
+          : document,
+      ),
+    },
+  };
+}
 
 type ValidationIssue = AppDataPayload["validation"]["issues"][number];
 
@@ -82,6 +107,30 @@ function swapDuplicateIssues(payload: AppDataPayload, code: string): AppDataPayl
     },
   };
 }
+
+test("repeats the YAML path inside parse-error banners", async ({ page }) => {
+  let mutatedPath = "";
+
+  await page.route("**/api/app-data.json", async (route) => {
+    const response = await route.fetch();
+    const payload = (await response.json()) as AppDataPayload;
+    const mutated = injectParseError(payload);
+    mutatedPath = mutated.path;
+    await route.fulfill({
+      response,
+      body: JSON.stringify(mutated.payload),
+    });
+  });
+
+  await page.goto("/");
+
+  const banner = page
+    .getByText("This document could not be parsed into the expected layer model.")
+    .locator("..");
+  await expect(banner).toBeVisible();
+  await expect(banner).toContainText(`File: ${mutatedPath}`);
+  await expect(banner).toContainText("did not find expected node content");
+});
 
 test("renders top tabs and linked spec content", async ({ page }) => {
   await page.goto("/");
