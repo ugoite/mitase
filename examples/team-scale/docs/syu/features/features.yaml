@@ -1,0 +1,10 @@
+version: "0.0.1-alpha.7"
+files:
+  - kind: auth
+    file: auth/login.yaml
+  - kind: auth
+    file: auth/session.yaml
+  - kind: operations
+    file: operations/audit.yaml
+  - kind: operations
+    file: operations/reporting.yaml

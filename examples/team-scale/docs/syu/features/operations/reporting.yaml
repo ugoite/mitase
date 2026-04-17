@@ -1,0 +1,17 @@
+category: Team-scale Operations Features
+version: 1
+
+features:
+  - id: FEAT-TEAM-REPORT-001
+    title: Export contributor review reports after refactors
+    summary: Reporting code can move into clearer folders while staying linked to the spec.
+    status: implemented
+    linked_requirements:
+      - REQ-TEAM-REPORT-001
+    implementations:
+      rust:
+        - file: src/operations/reporting.rs
+          symbols:
+            - export_review_report
+          doc_contains:
+            - review export pipeline

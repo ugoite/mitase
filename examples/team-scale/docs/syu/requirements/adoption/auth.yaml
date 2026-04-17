@@ -1,0 +1,22 @@
+category: Team-scale Adoption Requirements
+prefix: REQ-TEAM
+
+requirements:
+  - id: REQ-TEAM-ADOPT-001
+    title: Bring a legacy auth area under traceability in phases
+    description: Teams should be able to adopt syu around an existing auth area without stopping all feature work first.
+    priority: high
+    status: implemented
+    linked_policies:
+      - POL-TEAM-001
+      - POL-TEAM-002
+    linked_features:
+      - FEAT-TEAM-AUTH-LOGIN-001
+      - FEAT-TEAM-AUTH-SESSION-001
+    tests:
+      rust:
+        - file: tests/auth_login.rs
+          symbols:
+            - login_traceability_test
+          doc_contains:
+            - phased auth adoption test

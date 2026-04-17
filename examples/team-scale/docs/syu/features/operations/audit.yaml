@@ -1,0 +1,17 @@
+category: Team-scale Operations Features
+version: 1
+
+features:
+  - id: FEAT-TEAM-AUDIT-001
+    title: Emit audit events for auth changes
+    summary: Keep reviewable audit evidence close to the login implementation.
+    status: implemented
+    linked_requirements:
+      - REQ-TEAM-AUDIT-001
+    implementations:
+      rust:
+        - file: src/operations/audit.rs
+          symbols:
+            - emit_audit_event
+          doc_contains:
+            - audit event stream
