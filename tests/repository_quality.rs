@@ -734,7 +734,11 @@ fn repository_ships_browser_app() {
     assert!(ci_workflow.contains("Build browser app bundle"));
     assert!(ci_workflow.contains("scripts/ci/check-browser-app-freshness.sh"));
     assert!(ci_workflow.contains("if: success()"));
-    assert!(ci_workflow.contains("name: browser-app-dist"));
+    assert!(
+        ci_workflow.contains(
+            "browser-app-dist-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}"
+        )
+    );
     assert!(build_script.contains("syu-app-dist"));
     assert!(build_script.contains("npm ci"));
     assert!(build_script.contains("build:wasm"));
