@@ -157,12 +157,6 @@ struct AppServerSettings {
     port: u16,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum StartupLine {
-    Stdout(String),
-    Stderr(String),
-}
-
 pub fn run_app_command(args: &AppArgs) -> Result<i32> {
     let workspace_root = canonical_workspace_root(&args.workspace)?;
     let loaded = load_config(&workspace_root)?;
@@ -194,22 +188,11 @@ pub fn run_app_command(args: &AppArgs) -> Result<i32> {
                 .await
                 .context("local app server exited unexpectedly")
         });
-        println!("syu app listening on http://{local_addr}");
+        emit_startup_lines(non_loopback_warning_lines(local_addr.ip()))?;
         tokio::task::spawn_blocking(move || wait_for_ready(local_addr))
             .await
             .context("local app readiness probe panicked")??;
-        for line in startup_lines(local_addr) {
-            match line {
-                StartupLine::Stdout(message) => println!("{message}"),
-                StartupLine::Stderr(message) => eprintln!("{message}"),
-            }
-        }
-        std::io::stderr()
-            .flush()
-            .context("failed to flush stderr")?;
-        std::io::stdout()
-            .flush()
-            .context("failed to flush stdout")?;
+        emit_startup_lines(startup_lines(local_addr))?;
 
         let result = server.await.context("local app server task panicked")?;
         refresher.abort();
@@ -219,33 +202,37 @@ pub fn run_app_command(args: &AppArgs) -> Result<i32> {
     Ok(0)
 }
 
-fn startup_lines(local_addr: SocketAddr) -> Vec<StartupLine> {
-    let mut lines = Vec::new();
-    lines.extend(non_loopback_warning_lines(local_addr.ip()));
-    lines.push(StartupLine::Stdout(format!(
-        "syu app ready: http://{local_addr}"
-    )));
-    lines.push(StartupLine::Stdout(format!(
-        "Open http://{local_addr} in your browser."
-    )));
-    lines.push(StartupLine::Stdout("Press Ctrl-C to stop.".to_string()));
-    lines
+fn startup_lines(local_addr: SocketAddr) -> Vec<String> {
+    vec![
+        format!("syu app listening on http://{local_addr}"),
+        format!("syu app ready: http://{local_addr}"),
+        format!("Open http://{local_addr} in your browser."),
+        "Press Ctrl-C to stop.".to_string(),
+    ]
 }
 
-fn non_loopback_warning_lines(bind: IpAddr) -> Vec<StartupLine> {
+fn non_loopback_warning_lines(bind: IpAddr) -> Vec<String> {
     if bind.is_loopback() {
         return Vec::new();
     }
 
     vec![
-        StartupLine::Stderr(format!(
+        format!(
             "warning: syu app is bound to {bind}, so workspace data and source documents may be reachable from other machines on your network."
-        )),
-        StartupLine::Stderr(
-            "warning: use --bind 127.0.0.1 to keep the browser UI local to this machine."
-                .to_string(),
         ),
+        "warning: use --bind 127.0.0.1 to keep the browser UI local to this machine.".to_string(),
     ]
+}
+
+fn emit_startup_lines(lines: Vec<String>) -> Result<()> {
+    for message in lines {
+        println!("{message}");
+        std::io::stdout()
+            .flush()
+            .context("failed to flush stdout")?;
+    }
+
+    Ok(())
 }
 
 fn resolve_app_server_settings(args: &AppArgs, config: &SyuConfig) -> AppServerSettings {
@@ -968,7 +955,7 @@ mod tests {
 
     use super::{
         AppPayload, AppServerSettings, AppState, AppVersion, SectionKind, Severity,
-        SnapshotDependency, StartupLine, app_router, browser_root_labels, build_app_payload,
+        SnapshotDependency, app_router, browser_root_labels, build_app_payload,
         collect_feature_sources, collect_snapshot_files_with_extensions,
         collect_yaml_sources_recursive, content_type_for_path, is_asset_like,
         load_current_snapshot, non_loopback_warning_lines, normalized_asset_path,
@@ -1199,23 +1186,29 @@ mod tests {
     }
 
     #[test]
-    fn startup_lines_warn_before_ready_for_non_loopback_addresses() {
+    fn startup_lines_keep_ready_messages_on_stdout() {
         let lines = startup_lines("0.0.0.0:4123".parse().expect("valid socket"));
         assert_eq!(
             lines,
             vec![
-                StartupLine::Stderr(
-                    "warning: syu app is bound to 0.0.0.0, so workspace data and source documents may be reachable from other machines on your network.".to_string()
-                ),
-                StartupLine::Stderr(
-                    "warning: use --bind 127.0.0.1 to keep the browser UI local to this machine."
-                        .to_string()
-                ),
-                StartupLine::Stdout("syu app ready: http://0.0.0.0:4123".to_string()),
-                StartupLine::Stdout(
-                    "Open http://0.0.0.0:4123 in your browser.".to_string()
-                ),
-                StartupLine::Stdout("Press Ctrl-C to stop.".to_string()),
+                "syu app listening on http://0.0.0.0:4123".to_string(),
+                "syu app ready: http://0.0.0.0:4123".to_string(),
+                "Open http://0.0.0.0:4123 in your browser.".to_string(),
+                "Press Ctrl-C to stop.".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn non_loopback_warning_lines_emit_stdout_warnings_before_ready_messages() {
+        let lines = non_loopback_warning_lines("0.0.0.0".parse().expect("valid ip"));
+        assert_eq!(
+            lines,
+            vec![
+                "warning: syu app is bound to 0.0.0.0, so workspace data and source documents may be reachable from other machines on your network."
+                    .to_string(),
+                "warning: use --bind 127.0.0.1 to keep the browser UI local to this machine."
+                    .to_string(),
             ]
         );
     }

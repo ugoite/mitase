@@ -8,6 +8,9 @@ Want a different entry point?
 
 - Use [getting started](./getting-started.md) when you only want the shortest
   first-run path.
+- Use [existing repository adoption](./existing-repository.md) when the
+  repository already has code and history and you want an incremental rollout
+  instead of a from-scratch scaffold.
 - Stay on this tutorial when you want the full repository story and the edits
   behind each command.
 - Jump to [troubleshooting](./troubleshooting.md) if you are already blocked on
@@ -18,6 +21,10 @@ The example project is **Filestore** — a minimal file-storage library.
 ---
 
 ## 1. Bootstrap the workspace
+
+This walkthrough is intentionally greenfield. If the repository already exists,
+switch to [existing repository adoption](./existing-repository.md) before you
+reach for `syu init`.
 
 ```bash
 mkdir filestore && cd filestore
@@ -252,7 +259,7 @@ the status and add trace entries in **both** the requirement and the feature:
           symbols:
             - test_write_checksum_mismatch
           doc_contains:
-            - REQ-STORE-001
+            - rejects checksum mismatch
 ```
 
 **`docs/syu/features/core/core.yaml`** — add `implementations`:
@@ -267,17 +274,18 @@ the status and add trace entries in **both** the requirement and the feature:
           symbols:
             - write
           doc_contains:
-            - FEAT-STORE-001
+            - integrity-checked write
 ```
 
-In `src/store.rs` make sure the symbol and doc-comment are present:
+If you choose `doc_contains`, make sure the matching doc-comments are present:
 
 ```rust
-/// FEAT-STORE-001: Integrity-checked write.
+/// Integrity-checked write.
 pub fn write(path: &Path, data: &[u8]) -> Result<()> {
     // ... flush, checksum, return error on mismatch
 }
 
+/// Rejects checksum mismatch.
 #[test]
 fn test_write_checksum_mismatch() {
     // REQ-STORE-001: write() must return an error on checksum mismatch

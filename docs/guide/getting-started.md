@@ -13,6 +13,9 @@ Need a different level of guidance?
   [README quick start on GitHub](https://github.com/ugoite/syu/blob/main/README.md#quick-start)
   when you want the shortest install-to-validate path and are happy with a
   compact command card.
+- Follow [existing repository adoption](./existing-repository.md) when the
+  repository already has code and history and you want to add `syu` without
+  treating it like a blank workspace.
 - Stay on this page when you want the first workspace setup explained step by
   step, including why the manual YAML edits matter before validation.
 - Follow the [end-to-end tutorial](./tutorial.md) when you want a realistic,
@@ -24,6 +27,18 @@ This guide assumes `syu` is already installed. Unlike the README quick start,
 it slows down at the first manual editing step so you can see where the
 scaffolded files live, how reciprocal links fit together, and what to fix
 before the first `syu validate .` run.
+
+## Is syu right for this repository?
+
+Use the canonical fit check in the
+[README](https://github.com/ugoite/syu/blob/main/README.md#is-syu-right-for-this-repository)
+to decide whether `syu` is the right level of structure for this repository.
+That section stays the source of truth for who benefits most, when `syu` is too
+heavy, and what trade-offs it adds to the contributor loop.
+
+If the README fit check sounds right and you want the first-run setup narrated
+step by step, continue below. If not, stay with a lighter docs-only workflow
+until the repository needs stronger traceability guarantees.
 
 ## Before you begin
 
@@ -118,6 +133,10 @@ syu --version
 
 ## 1. Create a workspace
 
+If the repository already exists and you do not want to start with `syu init`,
+use [existing repository adoption](./existing-repository.md) instead. The steps
+below assume a new workspace or a deliberate scaffold flow.
+
 Bootstrap a new project:
 
 ```bash
@@ -167,8 +186,24 @@ and `FEAT-STORE-001` instead of the generic defaults. When one layer needs a
 different prefix, use `--philosophy-prefix`, `--policy-prefix`,
 `--requirement-prefix`, or `--feature-prefix`.
 
+For a genuinely mixed-language repository, keep the first adoption step small:
+
+- start with `validate.require_symbol_trace_coverage: false`
+- keep tracing every area you touch, but use file-level or wildcard ownership
+  in languages that `syu` cannot inspect deeply yet
+- turn stricter symbol coverage on later for the Rust, Python, and
+  TypeScript/JavaScript areas once those traces are stable
+
+That keeps the repository connected to the spec from day one without forcing a
+polyglot team to fake symbol-level coverage before the current adapters are
+ready.
+
 Starter requirements and features begin as `status: planned`. Keep them planned
 until you are ready to declare real tests and implementation traces.
+
+Not sure whether you should scaffold a template or study a working repository
+first? Use the [examples and templates guide](./examples-and-templates.md) to
+choose the shorter path.
 
 ## 2. Add and refine spec items
 
@@ -249,22 +284,26 @@ codebase. Each trace entry has two key fields:
 - **`symbols`** — The names of the functions, methods, or classes in the
   referenced file that implement or test this spec item (e.g., a test
   function called `test_store_upload`).
-- **`doc_contains`** — One or more strings that must appear verbatim in the
-  documentation comment of each listed symbol. This proves the linkage is
-  intentional: the developer explicitly wrote the spec ID in the comment.
+- **`doc_contains`** — Optional strings that must appear verbatim in the
+  documentation comment of each listed symbol. Use this when you want the code
+  itself to carry extra review breadcrumbs beyond the checked-in file/symbol
+  mapping.
 
 For example, a Rust test function that satisfies
-`doc_contains: ["FEAT-STORE-001"]` looks like this:
+`doc_contains: ["integrity-checked write"]` looks like this:
 
 ```rust
-/// Verifies file upload round-trip — covers FEAT-STORE-001.
+/// Verifies the integrity-checked write path.
 #[test]
 fn test_store_upload() { /* … */ }
 ```
 
-`syu validate` reads the doc comment and checks that `"FEAT-STORE-001"`
+`syu validate` reads the doc comment and checks that `"integrity-checked write"`
 appears in it. If the string is missing, the rule `SYU-trace-doc-001`
 fires with a suggestion to add the snippet (or run `syu validate --fix`).
+If checked-in YAML plus the symbol name already gives you enough traceability,
+you can omit `doc_contains` entirely and keep source files free of spec-ID
+bookkeeping.
 
 Requirements should declare tests:
 
@@ -276,7 +315,7 @@ tests:
       symbols:
         - requirement_test   # name of the test function
       doc_contains:
-        - REQ-CORE-001       # this string must appear in the function's doc comment
+        - checksum mismatch is rejected
 ```
 
 Features should declare implementations:
@@ -289,7 +328,7 @@ implementations:
       symbols:
         - feature_impl       # name of the implementing function or class
       doc_contains:
-        - FEAT-STORE-001     # this string must appear in the function's doc comment
+        - integrity-checked write
 ```
 
 ## 4. Validate the workspace
@@ -374,6 +413,10 @@ The repository includes complete examples:
 If one of those examples is already close to your repository, use the matching
 `syu init --template ...` option so the starter scaffold begins nearer to that
 shape.
+
+For a side-by-side decision table that explains which paths are template-backed,
+example-backed, or both, see the
+[examples and templates guide](./examples-and-templates.md).
 
 ## Keep exploring
 
