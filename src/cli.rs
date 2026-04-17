@@ -17,10 +17,11 @@ use std::path::PathBuf;
 
 const ROOT_AFTER_HELP: &str = "\
 New here?
-  1. syu init .      scaffold a workspace in the current directory
-  2. syu validate .  check the layered spec and traceability
-  3. syu browse .    explore the spec in your terminal
-  4. syu app .       start the local browser UI server";
+  1. syu templates   compare starter layouts before you scaffold
+  2. syu init .      scaffold a workspace in the current directory
+  3. syu validate .  check the layered spec and traceability
+  4. syu browse .    explore the spec in your terminal
+  5. syu app .       start the local browser UI server";
 
 const APP_AFTER_HELP: &str = concat!(
     "After startup, open the printed URL in your browser.\n",
@@ -29,7 +30,10 @@ const APP_AFTER_HELP: &str = concat!(
 );
 
 const INIT_AFTER_HELP: &str = "\
+Use `syu templates` first when you want to compare starter layouts before you scaffold.
+
 Examples:
+  syu templates
   syu init .
   syu init . --id-prefix store
   syu init . --template rust-only
