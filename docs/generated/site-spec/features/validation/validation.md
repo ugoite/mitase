@@ -265,18 +265,6 @@ description: "Generated reference for docs/syu/features/validation/validation.ya
       invalid interpretation and reviewers lose confidence in what the trace
       means. This rule keeps the declared language and the referenced artifact in
       sync.
-- **code**: SYU-trace-id-001
-  - **genre**: trace
-  - **severity**: error
-  - **title**: Traced files must mention the owning specification ID
-  - **summary**: A trace should be explicit inside the implementation or test artifact itself.
-  - **description**:
-    - |
-      `syu` is built around repository-native explainability. It is not enough
-      for YAML to say a file belongs to a requirement or feature; the file should
-      also mention that ownership so someone reading the code or test can see the
-      link without consulting another system. This rule keeps traceability visible
-      at the point where work actually happens.
 - **code**: SYU-trace-symbol-001
   - **genre**: trace
   - **severity**: error
@@ -689,18 +677,6 @@ rules:
       invalid interpretation and reviewers lose confidence in what the trace
       means. This rule keeps the declared language and the referenced artifact in
       sync.
-
-  - code: SYU-trace-id-001
-    genre: trace
-    severity: error
-    title: Traced files must mention the owning specification ID
-    summary: A trace should be explicit inside the implementation or test artifact itself.
-    description: |
-      `syu` is built around repository-native explainability. It is not enough
-      for YAML to say a file belongs to a requirement or feature; the file should
-      also mention that ownership so someone reading the code or test can see the
-      link without consulting another system. This rule keeps traceability visible
-      at the point where work actually happens.
 
   - code: SYU-trace-symbol-001
     genre: trace

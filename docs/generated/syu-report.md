@@ -8,7 +8,7 @@
 ## Definitions
 
 - Philosophies: 3
-- Policies: 7
+- Policies: 8
 - Requirements: 20
 - Features: 24
 
