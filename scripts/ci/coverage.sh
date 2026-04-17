@@ -36,6 +36,20 @@ generate_lcov() {
   cargo llvm-cov --lcov --output-path "$output_path"
 }
 
+generate_spec_coverage_summary() {
+  local lcov_path="$1"
+  local output_path="$2"
+
+  python3 scripts/ci/write-spec-coverage-summary.py "$lcov_path" "$output_path"
+
+  if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+    {
+      echo
+      cat "$output_path"
+    } >>"$GITHUB_STEP_SUMMARY"
+  fi
+}
+
 enforce_lcov_threshold() {
   local lcov_path="$1"
 
@@ -85,14 +99,17 @@ run_coverage() {
     summary)
       generate_lcov target/coverage/lcov.info
       enforce_lcov_threshold target/coverage/lcov.info
+      generate_spec_coverage_summary target/coverage/lcov.info target/coverage/spec-coverage-summary.md
       ;;
     lcov)
       generate_lcov target/coverage/lcov.info
       enforce_lcov_threshold target/coverage/lcov.info
+      generate_spec_coverage_summary target/coverage/lcov.info target/coverage/spec-coverage-summary.md
       ;;
     html)
       generate_lcov target/coverage/lcov.info
       enforce_lcov_threshold target/coverage/lcov.info
+      generate_spec_coverage_summary target/coverage/lcov.info target/coverage/spec-coverage-summary.md
       cargo llvm-cov --no-run --html
       ;;
     *)
