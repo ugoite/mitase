@@ -1,0 +1,13 @@
+version: 0.0.1-alpha.7
+spec:
+  root: docs/syu
+validate:
+  default_fix: false
+  # This example models phased adoption, so planned items are intentionally
+  # allowed while the repository grows into a fully strict graph.
+  allow_planned: true
+runtimes:
+  python:
+    command: auto
+  node:
+    command: auto

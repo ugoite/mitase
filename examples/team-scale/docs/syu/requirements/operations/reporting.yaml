@@ -1,0 +1,21 @@
+category: Team-scale Operations Requirements
+prefix: REQ-TEAM
+
+requirements:
+  - id: REQ-TEAM-REPORT-001
+    title: Reporting exports should survive file reorganization
+    description: Teams should be able to move reporting code into clearer folders without losing traceability during the refactor.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-TEAM-001
+      - POL-TEAM-002
+    linked_features:
+      - FEAT-TEAM-REPORT-001
+    tests:
+      rust:
+        - file: tests/report_exports.rs
+          symbols:
+            - report_exports_test
+          doc_contains:
+            - report export regression test
