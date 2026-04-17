@@ -235,6 +235,18 @@ current name.
 
 ---
 
+### `SYU-trace-language-001` — unsupported trace adapter
+
+**What it means:** The `lang:` key does not match any built-in adapter. Today
+`syu` ships Rust, Python, TypeScript / JavaScript, Shell, YAML, JSON, Markdown,
+and Gitignore adapters.
+
+**Fix:** Change the trace to one of those built-in language aliases, or check
+the [trace adapter capability matrix](./trace-adapter-support.md) before you
+commit to `doc_contains` or strict coverage expectations for a new language.
+
+---
+
 ### `SYU-trace-extension-001` — language/file mismatch
 
 **What it means:** The `lang:` field says `rust` but the file ends in `.py`,
@@ -286,6 +298,10 @@ If the mapping uses an unsupported implementation language such as `go`,
 raise `SYU-trace-language-001`. Keep the higher-layer spec link in place and
 wait for adapter support before adding the code-level trace.
 
+The [trace adapter capability matrix](./trace-adapter-support.md) shows which
+built-in adapters stop at symbol validation, which ones can inspect docs, and
+which languages participate in strict inventory coverage.
+
 ---
 
 ## Coverage errors
@@ -306,6 +322,8 @@ symbol non-public if it is not part of the intended API.
 
 > **Strictness toggle:** Use `syu validate . --require-symbol-trace-coverage`
 > when you want to trial this stricter rule without committing a config change.
+> The [trace adapter capability matrix](./trace-adapter-support.md) lists the
+> languages that participate in this inventory in the current checked-in docs.
 
 ---
 
@@ -358,6 +376,9 @@ errors below. Watch out for these false-confidence patterns:
 
 - [Getting started guide](./getting-started.md) — use the shortest newcomer path
   when you want to rebuild a clean mental model before debugging
+- [Trace adapter capability matrix](./trace-adapter-support.md) — check which
+  built-in languages support symbol validation only versus `doc_contains` and
+  strict ownership inventory
 - [End-to-end tutorial](./tutorial.md) — follow a full working example when you
   want to compare your workspace against a realistic repository story
 - [Spec anti-patterns](./spec-antipatterns.md) — use this when validation passes

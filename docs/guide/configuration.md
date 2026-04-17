@@ -147,6 +147,9 @@ every test belongs to some requirement.
 This is useful once the repository wants maintenance work to stay fully owned by
 the specification across the supported implementation languages.
 For an experimental strict run, use `syu validate . --require-symbol-trace-coverage`.
+Before you turn it on in a mixed-language repository, review the [trace adapter
+capability matrix](./trace-adapter-support.md) so you only depend on adapters
+that currently participate in the strict inventory.
 
 For polyglot repositories, treat this as a staged switch instead of an all-or-
 nothing starting point:
