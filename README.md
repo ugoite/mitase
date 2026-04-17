@@ -347,6 +347,13 @@ template name, whether it is starter-only or backed by both a template and a
 checked-in example, the related example path when one exists, and a short
 description of the starter shape.
 
+Working in Go, Java, C#, or another unsupported implementation language? Start
+with the spec layers first and add code-level traces once adapter support
+lands. For supported lightweight adapters such as `shell`, `yaml`, `json`,
+`markdown`, and `gitignore`, keep traces to file or symbol ownership without
+`doc_contains`. The newcomer path and roadmap links live in
+[`docs/guide/getting-started.md`](docs/guide/getting-started.md#unsupported-implementation-languages-can-still-adopt-the-spec-layers-first).
+
 ### `syu add`
 
 Scaffold a new YAML stub after the initial workspace exists:
