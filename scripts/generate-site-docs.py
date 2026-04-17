@@ -34,7 +34,7 @@ def format_scalar(value: object, indent: int) -> list[str]:
     if value in ("", None):
         return [f"{prefix}- (empty)"]
 
-    text = str(value)
+    text = str(value).replace("<", "&lt;").replace(">", "&gt;")
     if "\n" not in text:
         return [f"{prefix}- {text}"]
 

@@ -11,6 +11,15 @@ fn posix_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
 
+fn copy_generator_script(temp_repo: &Path) {
+    fs::create_dir_all(temp_repo.join("scripts")).expect("scripts directory should exist");
+    fs::copy(
+        repo_root().join("scripts/generate-site-docs.py"),
+        temp_repo.join("scripts/generate-site-docs.py"),
+    )
+    .expect("generator script should copy");
+}
+
 #[test]
 /// REQ-CORE-010
 fn site_docs_generator_accepts_absolute_spec_roots_outside_repo() {
@@ -21,19 +30,13 @@ fn site_docs_generator_accepts_absolute_spec_roots_outside_repo() {
     let external_spec_root = external.path().join("syu-spec");
     let external_feature = external_spec_root.join("features").join("features.yaml");
 
-    fs::create_dir_all(temp_repo.join("scripts")).expect("scripts directory should exist");
+    copy_generator_script(temp_repo);
     fs::create_dir_all(
         external_feature
             .parent()
             .expect("feature parent should exist"),
     )
     .expect("external feature directory should exist");
-
-    fs::copy(
-        repo_root().join("scripts/generate-site-docs.py"),
-        temp_repo.join("scripts/generate-site-docs.py"),
-    )
-    .expect("generator script should copy");
 
     fs::write(
         &external_feature,
@@ -74,4 +77,50 @@ fn site_docs_generator_accepts_absolute_spec_roots_outside_repo() {
 
     assert!(generated_feature.contains(&posix_path(&external_feature)));
     assert!(generated_index.contains(&posix_path(&external_spec_root)));
+}
+
+#[test]
+/// REQ-CORE-010
+fn site_docs_generator_escapes_angle_brackets_in_parsed_scalars() {
+    let repo = tempdir().expect("temp repo should exist");
+    let temp_repo = repo.path();
+    let validate_config = temp_repo.join("docs/syu/config/validate.yaml");
+
+    copy_generator_script(temp_repo);
+    fs::create_dir_all(
+        validate_config
+            .parent()
+            .expect("config parent should exist"),
+    )
+    .expect("config directory should exist");
+    fs::write(
+        &validate_config,
+        concat!(
+            "category: Configuration\n",
+            "items:\n",
+            "  - key: validate.symbol_trace_coverage_ignored_paths\n",
+            "    type: array<path>\n",
+            "    summary: Exact paths\n",
+        ),
+    )
+    .expect("config spec should write");
+
+    let output = Command::new("python3")
+        .arg(temp_repo.join("scripts/generate-site-docs.py"))
+        .current_dir(temp_repo)
+        .output()
+        .expect("generator should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let generated_validate =
+        fs::read_to_string(temp_repo.join("docs/generated/site-spec/config/validate.md"))
+            .expect("generated config page should exist");
+
+    assert!(generated_validate.contains("- **type**: array&lt;path&gt;"));
 }

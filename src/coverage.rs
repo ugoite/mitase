@@ -48,15 +48,15 @@ pub fn validate_symbol_trace_coverage(workspace: &Workspace, issues: &mut Vec<Is
 fn validate_symbol_trace_coverage_with(
     workspace: &Workspace,
     issues: &mut Vec<Issue>,
-    rust_discovery: impl Fn(&Path) -> Result<Vec<CoverageTarget>, Box<Issue>>,
+    rust_discovery: impl Fn(&SyuConfig, &Path) -> Result<Vec<CoverageTarget>, Box<Issue>>,
     python_discovery: impl Fn(&SyuConfig, &Path) -> Result<Vec<CoverageTarget>, Box<Issue>>,
-    ts_discovery: impl Fn(&Path) -> Result<Vec<CoverageTarget>, Box<Issue>>,
+    ts_discovery: impl Fn(&SyuConfig, &Path) -> Result<Vec<CoverageTarget>, Box<Issue>>,
 ) {
     if !workspace.config.validate.require_symbol_trace_coverage {
         return;
     }
 
-    let mut targets = match rust_discovery(&workspace.root) {
+    let mut targets = match rust_discovery(&workspace.config, &workspace.root) {
         Ok(targets) => targets,
         Err(issue) => {
             issues.push(*issue);
@@ -72,7 +72,7 @@ fn validate_symbol_trace_coverage_with(
         }
     }
 
-    match ts_discovery(&workspace.root) {
+    match ts_discovery(&workspace.config, &workspace.root) {
         Ok(ts_targets) => targets.extend(ts_targets),
         Err(issue) => {
             issues.push(*issue);
@@ -186,10 +186,26 @@ impl CoverageMap {
     }
 }
 
-fn discover_rust_targets(root: &Path) -> Result<Vec<CoverageTarget>, Box<Issue>> {
+fn normalized_symbol_trace_coverage_ignored_paths(config: &SyuConfig) -> BTreeSet<PathBuf> {
+    config
+        .validate
+        .symbol_trace_coverage_ignored_paths
+        .iter()
+        .filter_map(|path| {
+            let normalized = normalize_relative_path(path);
+            (!normalized.as_os_str().is_empty()).then_some(normalized)
+        })
+        .collect()
+}
+
+fn discover_rust_targets(
+    config: &SyuConfig,
+    root: &Path,
+) -> Result<Vec<CoverageTarget>, Box<Issue>> {
+    let ignored_paths = normalized_symbol_trace_coverage_ignored_paths(config);
     let mut targets = Vec::new();
-    let mut files = rust_files_under(&root.join("src"))?;
-    files.extend(rust_files_under(&root.join("tests"))?);
+    let mut files = rust_files_under(root, &root.join("src"), &ignored_paths)?;
+    files.extend(rust_files_under(root, &root.join("tests"), &ignored_paths)?);
     files.sort();
 
     for path in files {
@@ -343,21 +359,27 @@ fn collect_rust_targets(
     }
 }
 
-fn rust_files_under(root: &Path) -> Result<Vec<PathBuf>, Box<Issue>> {
+fn rust_files_under(
+    workspace_root: &Path,
+    root: &Path,
+    ignored_paths: &BTreeSet<PathBuf>,
+) -> Result<Vec<PathBuf>, Box<Issue>> {
     if !root.exists() {
         return Ok(Vec::new());
     }
 
     let mut files = Vec::new();
-    collect_rust_files_recursive(root, &mut files).map_err(|error| {
-        Box::new(Issue::error(
-            "SYU-coverage-walk-001",
-            "trace coverage inventory",
-            Some(root.display().to_string()),
-            format!("Failed to walk `{}` while building trace coverage inventory: {error}", root.display()),
-            Some("Fix the directory layout or disable `validate.require_symbol_trace_coverage` until the workspace can be scanned.".to_string()),
-        ))
-    })?;
+    collect_rust_files_recursive(workspace_root, root, ignored_paths, &mut files).map_err(
+        |error| {
+            Box::new(Issue::error(
+                "SYU-coverage-walk-001",
+                "trace coverage inventory",
+                Some(root.display().to_string()),
+                format!("Failed to walk `{}` while building trace coverage inventory: {error}", root.display()),
+                Some("Fix the directory layout or disable `validate.require_symbol_trace_coverage` until the workspace can be scanned.".to_string()),
+            ))
+        },
+    )?;
     Ok(files)
 }
 
@@ -367,9 +389,10 @@ fn discover_python_targets(
 ) -> Result<Vec<CoverageTarget>, Box<Issue>> {
     let src_dir = root.join("src");
     let tests_dir = root.join("tests");
+    let ignored_paths = normalized_symbol_trace_coverage_ignored_paths(config);
 
-    let src_files = python_files_under(&src_dir)?;
-    let test_files = python_files_under(&tests_dir)?;
+    let src_files = python_files_under(root, &src_dir, &ignored_paths)?;
+    let test_files = python_files_under(root, &tests_dir, &ignored_paths)?;
 
     if src_files.is_empty() && test_files.is_empty() {
         return Ok(Vec::new());
@@ -440,40 +463,56 @@ fn discover_python_targets(
     Ok(targets)
 }
 
-fn python_files_under(root: &Path) -> Result<Vec<PathBuf>, Box<Issue>> {
+fn python_files_under(
+    workspace_root: &Path,
+    root: &Path,
+    ignored_paths: &BTreeSet<PathBuf>,
+) -> Result<Vec<PathBuf>, Box<Issue>> {
     if !root.exists() {
         return Ok(Vec::new());
     }
 
     let mut files = Vec::new();
-    collect_files_recursive_by_extension(root, "py", &mut files).map_err(|error| {
-        Box::new(Issue::error(
-            "SYU-coverage-walk-001",
-            "trace coverage inventory",
-            Some(root.display().to_string()),
-            format!("Failed to walk `{}` while building trace coverage inventory: {error}", root.display()),
-            Some("Fix the directory layout or disable `validate.require_symbol_trace_coverage` until the workspace can be scanned.".to_string()),
-        ))
-    })?;
+    collect_files_recursive_by_extension(workspace_root, root, "py", ignored_paths, &mut files)
+        .map_err(|error| {
+            Box::new(Issue::error(
+                "SYU-coverage-walk-001",
+                "trace coverage inventory",
+                Some(root.display().to_string()),
+                format!("Failed to walk `{}` while building trace coverage inventory: {error}", root.display()),
+                Some("Fix the directory layout or disable `validate.require_symbol_trace_coverage` until the workspace can be scanned.".to_string()),
+            ))
+        })?;
     Ok(files)
 }
 
-fn collect_rust_files_recursive(directory: &Path, files: &mut Vec<PathBuf>) -> std::io::Result<()> {
-    collect_files_recursive_by_extension(directory, "rs", files)
+fn collect_rust_files_recursive(
+    workspace_root: &Path,
+    directory: &Path,
+    ignored_paths: &BTreeSet<PathBuf>,
+    files: &mut Vec<PathBuf>,
+) -> std::io::Result<()> {
+    collect_files_recursive_by_extension(workspace_root, directory, "rs", ignored_paths, files)
 }
 
-fn discover_typescript_targets(root: &Path) -> Result<Vec<CoverageTarget>, Box<Issue>> {
+fn discover_typescript_targets(
+    config: &SyuConfig,
+    root: &Path,
+) -> Result<Vec<CoverageTarget>, Box<Issue>> {
     const TS_EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx"];
 
     let src_dir = root.join("src");
     let tests_dir = root.join("tests");
+    let ignored_paths = normalized_symbol_trace_coverage_ignored_paths(config);
 
     let mut src_files: Vec<PathBuf> = Vec::new();
     let mut test_files: Vec<PathBuf> = Vec::new();
 
     for ext in TS_EXTENSIONS {
-        src_files.extend(typescript_files_under(&src_dir, ext)?);
-        test_files.extend(typescript_files_under(&tests_dir, ext)?);
+        let src_matches = typescript_files_under(root, &src_dir, ext, &ignored_paths)?;
+        let test_matches = typescript_files_under(root, &tests_dir, ext, &ignored_paths)?;
+        src_files.extend(src_matches);
+        test_files.extend(test_matches);
     }
 
     if src_files.is_empty() && test_files.is_empty() {
@@ -547,13 +586,25 @@ fn discover_typescript_targets(root: &Path) -> Result<Vec<CoverageTarget>, Box<I
     Ok(targets)
 }
 
-fn typescript_files_under(root: &Path, extension: &str) -> Result<Vec<PathBuf>, Box<Issue>> {
+fn typescript_files_under(
+    workspace_root: &Path,
+    root: &Path,
+    extension: &str,
+    ignored_paths: &BTreeSet<PathBuf>,
+) -> Result<Vec<PathBuf>, Box<Issue>> {
     if !root.exists() {
         return Ok(Vec::new());
     }
 
     let mut files = Vec::new();
-    collect_files_recursive_by_extension(root, extension, &mut files).map_err(|error| {
+    collect_files_recursive_by_extension(
+        workspace_root,
+        root,
+        extension,
+        ignored_paths,
+        &mut files,
+    )
+    .map_err(|error| {
         Box::new(Issue::error(
             "SYU-coverage-walk-001",
             "trace coverage inventory",
@@ -569,23 +620,43 @@ fn typescript_files_under(root: &Path, extension: &str) -> Result<Vec<PathBuf>, 
 }
 
 fn collect_files_recursive_by_extension(
+    workspace_root: &Path,
     directory: &Path,
     extension: &str,
+    ignored_paths: &BTreeSet<PathBuf>,
     files: &mut Vec<PathBuf>,
 ) -> std::io::Result<()> {
     for entry in fs::read_dir(directory)? {
         let path = entry?.path();
         if path.is_dir() {
-            collect_files_recursive_by_extension(&path, extension, files)?;
+            if should_skip_generated_directory(workspace_root, &path, ignored_paths) {
+                continue;
+            }
+            let next = path;
+            let recurse = collect_files_recursive_by_extension;
+            recurse(workspace_root, &next, extension, ignored_paths, files)?;
             continue;
         }
 
-        if path.extension().and_then(|ext| ext.to_str()) == Some(extension) {
-            files.push(path);
+        if path.extension().and_then(|ext| ext.to_str()) != Some(extension) {
+            continue;
         }
+
+        files.push(path);
     }
 
     Ok(())
+}
+
+fn should_skip_generated_directory(
+    workspace_root: &Path,
+    path: &Path,
+    ignored_paths: &BTreeSet<PathBuf>,
+) -> bool {
+    path.strip_prefix(workspace_root)
+        .ok()
+        .map(normalize_relative_path)
+        .is_some_and(|relative| ignored_paths.contains(&relative))
 }
 
 pub(crate) fn normalize_relative_path(path: &Path) -> PathBuf {
@@ -647,7 +718,7 @@ fn attrs_have_test(attributes: &[Attribute]) -> bool {
 #[cfg(test)]
 mod tests {
     use std::{
-        collections::BTreeMap,
+        collections::{BTreeMap, BTreeSet},
         fs,
         path::{Path, PathBuf},
     };
@@ -655,10 +726,11 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
-        CoverageTargetKind, collect_feature_coverage, collect_requirement_coverage,
-        discover_python_targets, discover_rust_targets, discover_typescript_targets,
-        normalize_relative_path, python_files_under, rust_files_under, typescript_files_under,
-        validate_symbol_trace_coverage, validate_symbol_trace_coverage_with,
+        CoverageTargetKind, collect_feature_coverage, collect_files_recursive_by_extension,
+        collect_requirement_coverage, discover_python_targets, discover_rust_targets,
+        discover_typescript_targets, normalize_relative_path, python_files_under, rust_files_under,
+        typescript_files_under, validate_symbol_trace_coverage,
+        validate_symbol_trace_coverage_with,
     };
     use crate::{
         config::SyuConfig,
@@ -700,7 +772,8 @@ mod tests {
         )
         .expect("integration");
 
-        let targets = discover_rust_targets(tempdir.path()).expect("targets");
+        let targets =
+            discover_rust_targets(&SyuConfig::default(), tempdir.path()).expect("targets");
         assert!(targets.iter().any(|target| {
             target.file == Path::new("src/lib.rs")
                 && target.symbol == "public_api"
@@ -835,16 +908,64 @@ mod tests {
     #[test]
     fn rust_files_under_handles_missing_and_invalid_roots() {
         let tempdir = tempdir().expect("tempdir");
+        let ignored_paths = BTreeSet::new();
         assert!(
-            rust_files_under(&tempdir.path().join("missing"))
-                .expect("missing directories should be ignored")
-                .is_empty()
+            rust_files_under(
+                tempdir.path(),
+                &tempdir.path().join("missing"),
+                &ignored_paths
+            )
+            .expect("missing directories should be ignored")
+            .is_empty()
         );
 
         let file_root = tempdir.path().join("not-a-dir.rs");
         fs::write(&file_root, "pub fn nope() {}\n").expect("file");
-        let issue = rust_files_under(&file_root).expect_err("file roots should fail");
+        let issue = rust_files_under(tempdir.path(), &file_root, &ignored_paths)
+            .expect_err("file roots should fail");
         assert_eq!(issue.code, "SYU-coverage-walk-001");
+    }
+
+    #[test]
+    fn file_discovery_skips_configured_repository_relative_generated_paths() {
+        let tempdir = tempdir().expect("tempdir");
+        let src_root = tempdir.path().join("src");
+        let app_root = tempdir.path().join("app/dist");
+        let target_root = tempdir.path().join("target");
+        fs::create_dir_all(src_root.join("nested")).expect("nested");
+        fs::create_dir_all(src_root.join("build")).expect("build");
+        fs::create_dir_all(src_root.join("target")).expect("nested target");
+        fs::create_dir_all(&app_root).expect("app dist");
+        fs::create_dir_all(&target_root).expect("root target");
+
+        let keep_root = src_root.join("lib.rs");
+        let keep_nested = src_root.join("nested/mod.rs");
+        let keep_build = src_root.join("build/authored.rs");
+        let keep_target = src_root.join("target/authored.rs");
+        fs::write(&keep_root, "pub fn keep_root() {}\n").expect("keep root");
+        fs::write(&keep_nested, "pub fn keep_nested() {}\n").expect("keep nested");
+        fs::write(&keep_build, "pub fn keep_build() {}\n").expect("keep build");
+        fs::write(&keep_target, "pub fn keep_target() {}\n").expect("keep target");
+        fs::write(app_root.join("generated.rs"), "pub fn ignored_dist() {}\n").expect("dist file");
+        fs::write(
+            target_root.join("generated.rs"),
+            "pub fn ignored_target() {}\n",
+        )
+        .expect("target file");
+
+        let mut files = Vec::new();
+        let ignored_paths = BTreeSet::from([PathBuf::from("app/dist"), PathBuf::from("target")]);
+        collect_files_recursive_by_extension(
+            tempdir.path(),
+            tempdir.path(),
+            "rs",
+            &ignored_paths,
+            &mut files,
+        )
+        .expect("discovery should succeed");
+        files.sort();
+
+        assert_eq!(files, vec![keep_build, keep_root, keep_nested, keep_target]);
     }
 
     #[test]
@@ -853,7 +974,8 @@ mod tests {
         fs::create_dir_all(tempdir.path().join("src")).expect("src");
         fs::write(tempdir.path().join("src/broken.rs"), "pub fn broken( {}\n").expect("broken");
 
-        let issue = discover_rust_targets(tempdir.path()).expect_err("broken rust should fail");
+        let issue = discover_rust_targets(&SyuConfig::default(), tempdir.path())
+            .expect_err("broken rust should fail");
         assert_eq!(issue.code, "SYU-coverage-parse-001");
     }
 
@@ -916,7 +1038,8 @@ mod tests {
     fn python_files_under_returns_empty_for_nonexistent_dir() {
         let tempdir = tempdir().expect("tempdir");
         let missing = tempdir.path().join("nonexistent");
-        let result = python_files_under(&missing).expect("should return empty ok");
+        let result = python_files_under(tempdir.path(), &missing, &BTreeSet::new())
+            .expect("should return empty ok");
         assert!(result.is_empty());
     }
 
@@ -924,7 +1047,8 @@ mod tests {
     fn python_files_under_collects_py_files() {
         let tempdir = tempdir().expect("tempdir");
         fs::write(tempdir.path().join("a.py"), "def func(): pass\n").expect("write");
-        let result = python_files_under(tempdir.path()).expect("should succeed");
+        let result = python_files_under(tempdir.path(), tempdir.path(), &BTreeSet::new())
+            .expect("should succeed");
         assert_eq!(result.len(), 1);
     }
 
@@ -932,7 +1056,8 @@ mod tests {
     fn typescript_files_under_returns_empty_for_nonexistent_dir() {
         let tempdir = tempdir().expect("tempdir");
         let missing = tempdir.path().join("nonexistent");
-        let result = typescript_files_under(&missing, "ts").expect("should return empty ok");
+        let result = typescript_files_under(tempdir.path(), &missing, "ts", &BTreeSet::new())
+            .expect("should return empty ok");
         assert!(result.is_empty());
     }
 
@@ -972,7 +1097,8 @@ mod tests {
     fn discover_typescript_targets_returns_empty_without_ts_files() {
         let tempdir = tempdir().expect("tempdir");
         fs::create_dir_all(tempdir.path().join("src")).expect("src");
-        let result = discover_typescript_targets(tempdir.path()).expect("should succeed");
+        let result = discover_typescript_targets(&SyuConfig::default(), tempdir.path())
+            .expect("should succeed");
         assert!(result.is_empty());
     }
 
@@ -982,7 +1108,7 @@ mod tests {
         let src = tempdir.path().join("src");
         // Write a regular FILE where a directory is expected
         fs::write(&src, "not a directory").expect("write blocking file");
-        let result = python_files_under(&src);
+        let result = python_files_under(tempdir.path(), &src, &BTreeSet::new());
         assert!(result.is_err());
     }
 
@@ -991,7 +1117,7 @@ mod tests {
         let tempdir = tempdir().expect("tempdir");
         let src = tempdir.path().join("src");
         fs::write(&src, "not a directory").expect("write blocking file");
-        let result = typescript_files_under(&src, "ts");
+        let result = typescript_files_under(tempdir.path(), &src, "ts", &BTreeSet::new());
         assert!(result.is_err());
     }
 
@@ -1062,7 +1188,8 @@ mod tests {
         perm.set_mode(0o000);
         fs::set_permissions(&ts_file, perm).expect("set unreadable");
 
-        let result = discover_typescript_targets(tempdir.path()).expect("should succeed");
+        let result = discover_typescript_targets(&SyuConfig::default(), tempdir.path())
+            .expect("should succeed");
 
         let mut restore = fs::metadata(&ts_file).expect("meta").permissions();
         restore.set_mode(mode);
@@ -1086,7 +1213,8 @@ mod tests {
         perm.set_mode(0o000);
         fs::set_permissions(&ts_file, perm).expect("set unreadable");
 
-        let result = discover_typescript_targets(tempdir.path()).expect("should succeed");
+        let result = discover_typescript_targets(&SyuConfig::default(), tempdir.path())
+            .expect("should succeed");
 
         let mut restore = fs::metadata(&ts_file).expect("meta").permissions();
         restore.set_mode(mode);
@@ -1114,7 +1242,7 @@ mod tests {
         validate_symbol_trace_coverage_with(
             &workspace,
             &mut issues,
-            |_root| Ok(Vec::new()),
+            |_config, _root| Ok(Vec::new()),
             |_config, _root| {
                 Err(Box::new(crate::model::Issue::error(
                     "SYU-coverage-walk-001",
@@ -1150,9 +1278,9 @@ mod tests {
         validate_symbol_trace_coverage_with(
             &workspace,
             &mut issues,
-            |_root| Ok(Vec::new()),
             |_config, _root| Ok(Vec::new()),
-            |_root| {
+            |_config, _root| Ok(Vec::new()),
+            |_config, _root| {
                 Err(Box::new(crate::model::Issue::error(
                     "SYU-coverage-walk-001",
                     "trace coverage inventory",

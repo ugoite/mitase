@@ -176,6 +176,31 @@ inspect more than it really can.
 See [getting started](./getting-started.md#unsupported-implementation-languages-can-still-adopt-the-spec-layers-first)
 for the current adoption path and roadmap links.
 
+### `validate.symbol_trace_coverage_ignored_paths`
+
+Controls which repository-relative directories strict symbol coverage skips.
+
+The defaults are exact paths, not basename wildcards:
+
+```yaml
+validate:
+  symbol_trace_coverage_ignored_paths:
+    - build
+    - coverage
+    - dist
+    - target
+    - app/build
+    - app/coverage
+    - app/dist
+    - app/target
+```
+
+That keeps common generated build output out of strict ownership checks without
+hiding authored nested directories such as `src/build/` or `tests/coverage/`.
+Set the list to `[]` if you intentionally want generated artifacts to count
+toward symbol-trace coverage, or replace it with your own exact paths when your
+repository uses a different layout.
+
 ### `app.bind`
 
 Controls the default address that `syu app` binds to.

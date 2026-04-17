@@ -92,6 +92,27 @@ description: "Generated reference for docs/syu/config/validate.yaml"
       verifying declared traces. The validate command can enable or disable this
       for one run with `--require-symbol-trace-coverage` or
       `--require-symbol-trace-coverage=false`.
+- **key**: validate.symbol_trace_coverage_ignored_paths
+  - **type**: array&lt;path&gt;
+  - **default**:
+    - build
+    - coverage
+    - dist
+    - target
+    - app/build
+    - app/coverage
+    - app/dist
+    - app/target
+  - **summary**: Exact repository-relative directories that strict symbol coverage skips.
+  - **description**:
+    - |
+      These paths are matched exactly against repository-relative directories
+      while `syu` inventories public symbols and tests for strict ownership
+      checks. The defaults skip common build outputs such as `app/dist` and
+      repository-root `build/`, `coverage/`, `dist/`, and `target/` without
+      hiding authored nested paths like `src/build/`. Set this list to `[]`
+      when you intentionally want generated artifacts to count toward strict
+      trace coverage too.
 
 ## Source YAML
 
@@ -164,4 +185,24 @@ items:
       verifying declared traces. The validate command can enable or disable this
       for one run with `--require-symbol-trace-coverage` or
       `--require-symbol-trace-coverage=false`.
+  - key: validate.symbol_trace_coverage_ignored_paths
+    type: array<path>
+    default:
+      - build
+      - coverage
+      - dist
+      - target
+      - app/build
+      - app/coverage
+      - app/dist
+      - app/target
+    summary: Exact repository-relative directories that strict symbol coverage skips.
+    description: |
+      These paths are matched exactly against repository-relative directories
+      while `syu` inventories public symbols and tests for strict ownership
+      checks. The defaults skip common build outputs such as `app/dist` and
+      repository-root `build/`, `coverage/`, `dist/`, and `target/` without
+      hiding authored nested paths like `src/build/`. Set this list to `[]`
+      when you intentionally want generated artifacts to count toward strict
+      trace coverage too.
 ```
