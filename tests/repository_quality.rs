@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf};
+use std::{collections::HashSet, fs, path::PathBuf};
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -588,6 +588,7 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     let ci_workflow = read_file(".github/workflows/ci.yml");
     let setup_rust_action = read_file(".github/actions/setup-rust/action.yml");
     let codeql_workflow = read_file(".github/workflows/codeql.yml");
+    let merge_queue_checks = read_file(".github/merge-queue-checks.json");
     let docs_build_action = read_file(".github/actions/build-docs-site/action.yml");
     let docs_lock = read_file("website/package-lock.json");
     let release_artifacts = read_file(".github/workflows/release-artifacts.yml");
@@ -608,6 +609,7 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(ci_workflow.contains("tool: cargo-audit"));
     assert!(ci_workflow.contains("tool: wasm-pack"));
     assert!(ci_workflow.contains("merge_group:"));
+    assert!(ci_workflow.contains("check-msrv:"));
     assert!(ci_workflow.contains("Set up Python with pip cache"));
     assert!(ci_workflow.contains("cache: pip"));
     assert!(ci_workflow.contains("cache-dependency-path: .pre-commit-config.yaml"));
@@ -631,6 +633,47 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(codeql_workflow.contains("github/codeql-action/init@v4"));
     assert!(codeql_workflow.contains("github/codeql-action/autobuild@v4"));
     assert!(codeql_workflow.contains("github/codeql-action/analyze@v4"));
+    let merge_queue_manifest: serde_json::Value = serde_json::from_str(&merge_queue_checks)
+        .expect("merge queue manifest should be valid JSON");
+    let required_checks = merge_queue_manifest["required_checks"]
+        .as_array()
+        .expect("merge queue manifest should declare required checks");
+    let contexts: Vec<&str> = required_checks
+        .iter()
+        .map(|entry| {
+            entry["context"]
+                .as_str()
+                .expect("merge queue context should be a string")
+        })
+        .collect();
+    let unique_contexts: HashSet<&str> = contexts.iter().copied().collect();
+
+    assert_eq!(merge_queue_manifest["version"], 1);
+    assert_eq!(contexts.len(), unique_contexts.len());
+    assert!(
+        required_checks
+            .iter()
+            .any(|entry| entry["workflow"] == "ci")
+    );
+    assert!(
+        required_checks
+            .iter()
+            .any(|entry| entry["workflow"] == "codeql")
+    );
+    assert!(contexts.contains(&"precommit"));
+    assert!(contexts.contains(&"MSRV check (1.88)"));
+    assert!(contexts.contains(&"Analyze (rust)"));
+    assert!(!contexts.contains(&"dependency-review"));
+    assert!(
+        required_checks
+            .iter()
+            .any(|entry| entry["job_id"] == "check-msrv")
+    );
+    assert!(
+        required_checks
+            .iter()
+            .any(|entry| entry["job_id"] == "analyze")
+    );
 
     assert!(release_artifacts.contains("Restore Rust cache"));
     assert!(release_artifacts.contains("Swatinem/rust-cache@v2"));

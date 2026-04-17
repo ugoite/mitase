@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "required_checks": [
+    { "context": "precommit", "workflow": "ci", "job_id": "precommit" },
+    { "context": "quality", "workflow": "ci", "job_id": "quality" },
+    { "context": "coverage", "workflow": "ci", "job_id": "coverage" },
+    { "context": "actionlint", "workflow": "ci", "job_id": "actionlint" },
+    { "context": "dependency-audit", "workflow": "ci", "job_id": "dependency-audit" },
+    { "context": "npm-audit", "workflow": "ci", "job_id": "npm-audit" },
+    { "context": "installer-smoke", "workflow": "ci", "job_id": "installer-smoke" },
+    { "context": "installed-binary-smoke", "workflow": "ci", "job_id": "installed-binary-smoke" },
+    { "context": "docs-site", "workflow": "ci", "job_id": "docs-site" },
+    { "context": "browser-app", "workflow": "ci", "job_id": "browser-app" },
+    { "context": "MSRV check (1.88)", "workflow": "ci", "job_id": "check-msrv" },
+    { "context": "Analyze (rust)", "workflow": "codeql", "job_id": "analyze" }
+  ]
+}
