@@ -13,6 +13,7 @@ mod lookup;
 pub mod report;
 pub mod search;
 pub mod show;
+pub mod templates;
 
 pub(crate) fn shell_quote_path(path: &Path) -> String {
     let rendered = path.display().to_string();

@@ -36,6 +36,15 @@ Examples:
   syu init . --spec-root docs/spec
   syu init path/to/workspace --name my-project --spec-root spec/contracts --template polyglot --id-prefix store";
 
+// FEAT-INIT-006
+const TEMPLATES_AFTER_HELP: &str = "\
+Use `syu templates` when you want a quick catalog of starter layouts before you scaffold.
+Use `syu init --template ...` when you are ready to generate files.
+
+Examples:
+  syu templates
+  syu templates --format json";
+
 const ADD_AFTER_HELP: &str = "\
 After writing a stub, `syu add` prints the reciprocal-link follow-up and matching scaffold suggestions needed before `syu validate` will pass cleanly.
 
@@ -130,6 +139,11 @@ pub enum Commands {
         after_help = INIT_AFTER_HELP
     )]
     Init(InitArgs),
+    #[command(
+        about = "List starter templates and related checked-in examples",
+        after_help = TEMPLATES_AFTER_HELP
+    )]
+    Templates(TemplatesArgs),
     #[command(
         about = "Scaffold a new philosophy, policy, requirement, or feature stub",
         after_help = ADD_AFTER_HELP
@@ -403,6 +417,13 @@ pub struct InitArgs {
 }
 
 #[derive(Debug, Clone, Args)]
+pub struct TemplatesArgs {
+    #[arg(help = "Output format for starter-template discovery")]
+    #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
+}
+
+#[derive(Debug, Clone, Args)]
 pub struct AddArgs {
     #[arg(help = "Layer kind to scaffold (philosophy, policy, requirement, or feature)")]
     pub layer: LookupKind,
@@ -546,6 +567,24 @@ mod tests {
         let rendered = format!("{cli:?}");
         assert!(rendered.contains("command: Some(Init("));
         assert!(rendered.contains("template: RustOnly"));
+    }
+
+    #[test]
+    fn templates_args_accept_json_format() {
+        let cli = Cli::try_parse_from(["syu", "templates", "--format", "json"])
+            .expect("templates args should parse");
+
+        let rendered = format!("{cli:?}");
+        assert!(rendered.contains("command: Some(Templates("));
+        assert!(rendered.contains("format: Json"));
+    }
+
+    #[test]
+    fn templates_args_default_to_text_format() {
+        let cli = Cli::try_parse_from(["syu", "templates"]).expect("templates args should parse");
+        let rendered = format!("{cli:?}");
+        assert!(rendered.contains("command: Some(Templates("));
+        assert!(rendered.contains("format: Text"));
     }
 
     #[test]

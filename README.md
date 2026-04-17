@@ -290,10 +290,14 @@ Want a closer starting point for a repository that is already clearly
 Rust-first, Python-first, or polyglot? Start with a lightweight template:
 
 ```bash
+syu templates
 syu init . --template rust-only
 syu init . --template python-only
 syu init . --template polyglot
 ```
+
+Use `syu templates` first when you want the built-in starter names, short
+descriptions, and related checked-in example paths in one command.
 
 You can combine both flags when you want a custom spec root and a closer
 starter layout:
@@ -327,6 +331,21 @@ style you already expect. Use `--id-prefix` when you want stable project-wide
 starter IDs from the first command, and the per-layer `--*-prefix` flags when a
 single shared stem is not enough. Use `--spec-root` to scaffold into a
 repository-relative spec tree without moving the generated files by hand later.
+
+### `syu templates`
+
+List starter templates and their related checked-in examples before you
+scaffold:
+
+```bash
+syu templates
+syu templates --format json
+```
+
+Use this command when you want a quick discovery view. Each row shows the
+template name, whether it is starter-only or backed by both a template and a
+checked-in example, the related example path when one exists, and a short
+description of the starter shape.
 
 ### `syu add`
 

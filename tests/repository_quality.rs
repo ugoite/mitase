@@ -280,6 +280,8 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("syu add"));
     assert!(readme.contains("--id-prefix"));
     assert!(readme.contains("--template rust-only"));
+    assert!(readme.contains("syu templates"));
+    assert!(readme.contains("starter-only"));
     assert!(readme.contains("syu validate"));
     assert!(readme.contains("syu browse"));
     assert!(readme.contains("syu list"));
@@ -349,6 +351,7 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("current checked-in release"));
     assert!(getting_started.contains("latest published alpha"));
     assert!(getting_started.contains("--template rust-only"));
+    assert!(getting_started.contains("syu templates"));
     assert!(getting_started.contains("--id-prefix"));
     assert!(getting_started.contains("syu validate . --fix"));
     assert!(getting_started.contains("syu browse ."));
