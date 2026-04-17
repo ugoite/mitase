@@ -51,6 +51,7 @@ description: "Generated reference for docs/syu/requirements/core/documentation.y
       - **file**: tests/site_docs_generator.rs
         - **symbols**:
           - site_docs_generator_accepts_absolute_spec_roots_outside_repo
+          - site_docs_generator_escapes_angle_brackets_in_parsed_scalars
 - **id**: REQ-CORE-016
   - **title**: Ship an agent skill for maintaining syu-driven repositories
   - **description**:
@@ -113,6 +114,7 @@ requirements:
         - file: tests/site_docs_generator.rs
           symbols:
             - site_docs_generator_accepts_absolute_spec_roots_outside_repo
+            - site_docs_generator_escapes_angle_brackets_in_parsed_scalars
   - id: REQ-CORE-016
     title: Ship an agent skill for maintaining syu-driven repositories
     description: |

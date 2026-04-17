@@ -103,7 +103,10 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       `pub` for Rust, exported for TypeScript/JavaScript) and every test symbol
       (`test_*` functions for Python, `#[test]` for Rust, `test*`-prefixed
       functions for TypeScript/JavaScript) in repository source and test roots
-      to belong to some feature or requirement respectively.
+      to belong to some feature or requirement respectively. That inventory MUST
+      ignore configured repository-relative generated paths, defaulting to common
+      build outputs such as `app/dist`, `build/`, `coverage/`, `dist/`, and
+      `target/` without hiding authored nested directories like `src/build/`.
   - **priority**: high
   - **status**: implemented
   - **linked_policies**:
@@ -299,7 +302,10 @@ requirements:
       `pub` for Rust, exported for TypeScript/JavaScript) and every test symbol
       (`test_*` functions for Python, `#[test]` for Rust, `test*`-prefixed
       functions for TypeScript/JavaScript) in repository source and test roots
-      to belong to some feature or requirement respectively.
+      to belong to some feature or requirement respectively. That inventory MUST
+      ignore configured repository-relative generated paths, defaulting to common
+      build outputs such as `app/dist`, `build/`, `coverage/`, `dist/`, and
+      `target/` without hiding authored nested directories like `src/build/`.
     priority: high
     status: implemented
     linked_policies:

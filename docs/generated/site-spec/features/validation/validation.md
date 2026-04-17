@@ -362,15 +362,18 @@ description: "Generated reference for docs/syu/features/validation/validation.ya
   - **genre**: coverage
   - **severity**: error
   - **title**: Coverage inventory paths must be walkable
-  - **summary**: Strict trace coverage starts by discovering supported Rust, Python, and TypeScript/JavaScript source and test files under `src/` and `tests/`.
+  - **summary**: Strict trace coverage starts by discovering supported Rust, Python, and TypeScript/JavaScript source and test files under `src/` and `tests/`, while skipping configured repository-relative generated paths.
   - **description**:
     - |
       The strict trace coverage rule only means something when `syu` can walk the
       repository paths that are supposed to contain owned Rust, Python, and
-      TypeScript/JavaScript source and test files. If directory discovery fails,
-      the inventory itself is incomplete and any 100-percent coverage conclusion
-      would be misleading. This rule surfaces repository layout problems before
-      coverage claims become untrustworthy.
+      TypeScript/JavaScript source and test files. `syu` skips configured
+      repository-relative generated paths, defaulting to common build outputs
+      such as `app/dist`, `build/`, `coverage/`, `dist/`, and `target/` without
+      hiding authored nested paths like `src/build/`. If directory discovery
+      fails, the inventory itself is incomplete and any 100-percent coverage
+      conclusion would be misleading. This rule surfaces repository layout
+      problems before coverage claims become untrustworthy.
 - **code**: SYU-coverage-read-001
   - **genre**: coverage
   - **severity**: error
@@ -775,14 +778,17 @@ rules:
     genre: coverage
     severity: error
     title: Coverage inventory paths must be walkable
-    summary: Strict trace coverage starts by discovering supported Rust, Python, and TypeScript/JavaScript source and test files under `src/` and `tests/`.
+    summary: Strict trace coverage starts by discovering supported Rust, Python, and TypeScript/JavaScript source and test files under `src/` and `tests/`, while skipping configured repository-relative generated paths.
     description: |
       The strict trace coverage rule only means something when `syu` can walk the
       repository paths that are supposed to contain owned Rust, Python, and
-      TypeScript/JavaScript source and test files. If directory discovery fails,
-      the inventory itself is incomplete and any 100-percent coverage conclusion
-      would be misleading. This rule surfaces repository layout problems before
-      coverage claims become untrustworthy.
+      TypeScript/JavaScript source and test files. `syu` skips configured
+      repository-relative generated paths, defaulting to common build outputs
+      such as `app/dist`, `build/`, `coverage/`, `dist/`, and `target/` without
+      hiding authored nested paths like `src/build/`. If directory discovery
+      fails, the inventory itself is incomplete and any 100-percent coverage
+      conclusion would be misleading. This rule surfaces repository layout
+      problems before coverage claims become untrustworthy.
 
   - code: SYU-coverage-read-001
     genre: coverage
