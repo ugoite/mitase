@@ -98,6 +98,22 @@ description: "Generated reference for docs/syu/features/cli/init.yaml"
       - **file**: src/cli.rs
         - **symbols**:
           - InitArgs
+- **id**: FEAT-INIT-006
+  - **title**: Starter template discovery command
+  - **summary**: Allow `syu templates` to list starter template names, short descriptions, and any matching checked-in example paths before users scaffold a workspace.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-009
+  - **implementations**:
+    - **rust**:
+      - **file**: src/command/templates.rs
+        - **symbols**:
+          - run_templates_command
+          - starter_template_catalog
+      - **file**: src/cli.rs
+        - **symbols**:
+          - TemplatesArgs
+          - Commands
 
 ## Source YAML
 
@@ -187,4 +203,20 @@ features:
         - file: src/cli.rs
           symbols:
             - InitArgs
+  - id: FEAT-INIT-006
+    title: Starter template discovery command
+    summary: Allow `syu templates` to list starter template names, short descriptions, and any matching checked-in example paths before users scaffold a workspace.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-009
+    implementations:
+      rust:
+        - file: src/command/templates.rs
+          symbols:
+            - run_templates_command
+            - starter_template_catalog
+        - file: src/cli.rs
+          symbols:
+            - TemplatesArgs
+            - Commands
 ```
