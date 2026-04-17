@@ -175,6 +175,21 @@ jobs:
         if: steps.dependency-graph.outputs.enabled == 'true'
         uses: actions/dependency-review-action@v4
 
+  spec-linkage:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Require issue or spec IDs for self-spec changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: scripts/ci/check-pr-spec-links.sh
+
   installer-smoke:
     if: github.event_name != 'schedule'
     strategy:

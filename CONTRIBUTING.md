@@ -27,6 +27,11 @@ after-the-fact documentation.
 5. Merge with squash once CI is green and review conversations are resolved.
 6. Delete the branch after merge.
 
+If the pull request changes `docs/syu/`, fill in the PR template's
+**Linked issue or specification** section with either an issue reference (`#123`)
+or one or more spec IDs such as `REQ-CORE-001` / `FEAT-CHECK-001`. CI checks
+that self-spec changes stay anchored to explicit intent.
+
 Local helper worktrees under `.worktrees/` are treated as contributor-local
 state and ignored by the repository so `git status` stays focused on the main
 checkout.
