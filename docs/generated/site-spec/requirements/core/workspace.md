@@ -33,8 +33,10 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
        adopters can begin closer to their repository style without copying
        example files by hand. The CLI MUST also provide `syu templates` so users
        can discover the available starter layouts, short descriptions, and any
-       matching checked-in examples before they scaffold. `syu init --id-prefix`
-       MUST support seeding a
+       matching checked-in examples before they scaffold, and the root help plus
+       closely related `syu init` guidance MUST surface that discovery command
+       alongside `syu init` without sending newcomers to docs first.
+       `syu init --id-prefix` MUST support seeding a
        shared project-specific stem into the starter philosophy, policy,
        requirement, and feature IDs, and the per-layer `--philosophy-prefix`,
        `--policy-prefix`, `--requirement-prefix`, and `--feature-prefix` flags
@@ -280,8 +282,10 @@ requirements:
        adopters can begin closer to their repository style without copying
        example files by hand. The CLI MUST also provide `syu templates` so users
        can discover the available starter layouts, short descriptions, and any
-       matching checked-in examples before they scaffold. `syu init --id-prefix`
-       MUST support seeding a
+       matching checked-in examples before they scaffold, and the root help plus
+       closely related `syu init` guidance MUST surface that discovery command
+       alongside `syu init` without sending newcomers to docs first.
+       `syu init --id-prefix` MUST support seeding a
        shared project-specific stem into the starter philosophy, policy,
        requirement, and feature IDs, and the per-layer `--philosophy-prefix`,
        `--policy-prefix`, `--requirement-prefix`, and `--feature-prefix` flags

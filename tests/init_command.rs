@@ -446,6 +446,7 @@ fn init_command_prints_workspace_aware_next_steps_for_explicit_paths() {
     assert!(stdout.contains(&format!("Run `syu validate {workspace_arg}`")));
     assert!(stdout.contains(&format!("Run `syu browse {workspace_arg}`")));
     assert!(stdout.contains(&format!("`syu app {workspace_arg}`")));
+    assert!(stdout.contains("Run `syu templates` before another `syu init`"));
     assert!(stdout.contains(&format!("{}/", workspace.join("docs/syu").display())));
 }
 
