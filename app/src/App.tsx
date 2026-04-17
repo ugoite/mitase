@@ -940,6 +940,9 @@ function App() {
                 <p className="font-medium">
                   This document could not be parsed into the expected layer model.
                 </p>
+                <p className="mt-2 break-all font-mono text-xs text-amber-50/90">
+                  File: {currentDocument.path}
+                </p>
                 <p className="mt-2 text-xs leading-6 text-amber-50/80">
                   {currentDocument.parse_error}
                 </p>
