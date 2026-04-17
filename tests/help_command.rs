@@ -144,6 +144,24 @@ fn init_help_mentions_id_prefix_options() {
 }
 
 #[test]
+// REQ-CORE-009
+fn templates_help_mentions_json_and_init_follow_up() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args(["templates", "--help"])
+        .output()
+        .expect("help should render");
+
+    assert!(output.status.success(), "templates help should succeed");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--format"));
+    assert!(stdout.contains("syu templates --format json"));
+    assert!(stdout.contains("syu init --template"));
+    assert!(stdout.contains("related checked-in examples"));
+}
+
+#[test]
 fn validate_help_lists_temporary_config_overrides() {
     let output = Command::cargo_bin("syu")
         .expect("binary should build")
