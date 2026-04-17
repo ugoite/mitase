@@ -81,10 +81,10 @@ fn validate_fix_repairs_missing_trace_docs_for_rust_sources() {
     assert!(stdout.contains("syu validate passed"));
 
     let source = fs::read_to_string(tempdir.path().join("src/trace.rs")).expect("source");
-    assert!(source.contains("/// REQ-001"));
     assert!(source.contains("/// requirement doc line"));
-    assert!(source.contains("/// FEAT-001"));
     assert!(source.contains("/// feature doc line"));
+    assert!(!source.contains("REQ-001"));
+    assert!(!source.contains("FEAT-001"));
 }
 
 #[test]

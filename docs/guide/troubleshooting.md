@@ -244,24 +244,6 @@ or vice versa.
 
 ---
 
-### `SYU-trace-id-001` — trace ID comment missing in source
-
-**What it means:** The traced source file does not contain a comment with the
-owning spec ID (e.g. `# FEAT-AUTH-001`).
-
-**Fix:** Add a brief comment to the function or module:
-
-```rust
-// FEAT-AUTH-001
-pub fn authenticate_user(...) { ... }
-```
-
-> **Autofix available:** `syu validate . --fix` can insert the owning spec ID
-> comment and any missing `doc_contains` snippets using language-appropriate
-> comment or doc-comment syntax when the symbol already exists.
-
----
-
 ### `SYU-trace-doc-001` — required doc snippet missing
 
 **What it means:** A trace with `doc_contains:` asserts that a specific string
@@ -305,7 +287,8 @@ symbol non-public if it is not part of the intended API.
 
 ### `SYU-coverage-test-001` — test has no owning requirement
 
-**What it means:** A test function is not referenced by any requirement trace.
+**What it means:** A test function or method is not referenced by any
+requirement trace.
 
 **Fix:** Add the test to a requirement's trace block, or rename/remove the test
 if it is obsolete.
@@ -318,7 +301,7 @@ if it is obsolete.
 
 | What `--fix` does | Safe? |
 |---|---|
-| Inserts spec ID comments and required `doc_contains` snippets using language-appropriate comment or doc-comment syntax | ✅ Yes |
+| Inserts required `doc_contains` snippets using language-appropriate comment or doc-comment syntax | ✅ Yes |
 | Rewrites or deletes symbols | ❌ No — `--fix` never does this |
 | Adds missing `linked_*` graph links | ❌ No — only you know the correct links |
 | Creates new spec entries | ❌ No |
