@@ -329,6 +329,36 @@ fn app_command_rejects_invalid_bind_addresses_from_config() {
 }
 
 #[test]
+fn app_command_explains_how_to_recover_from_port_binding_failures() {
+    let occupied = TcpListener::bind(("127.0.0.1", 0)).expect("occupied listener should bind");
+    let port = occupied
+        .local_addr()
+        .expect("occupied listener address should resolve")
+        .port();
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("app")
+        .arg(fixture_path("passing"))
+        .arg("--bind")
+        .arg("127.0.0.1")
+        .arg("--port")
+        .arg(port.to_string())
+        .output()
+        .expect("command should run");
+
+    assert!(!output.status.success(), "bind conflict should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains(&format!("failed to bind `127.0.0.1:{port}`")));
+    assert!(stderr.contains("selected port is likely already in use"));
+    assert!(stderr.contains(&format!(
+        "syu app {} --port <free-port>",
+        fixture_path("passing").display()
+    )));
+    assert!(stderr.contains("app.port"));
+}
+
+#[test]
 fn app_command_cli_flags_override_configured_bind_and_port() {
     let override_port = reserve_port();
     let (_tempdir, workspace) = configured_workspace("definitely-not-an-ip", 39999);
