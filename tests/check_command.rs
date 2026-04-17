@@ -86,11 +86,7 @@ fn write_trace_path_workspace(root: &Path, trace_path: &str) {
     )
     .expect("feature");
 
-    fs::write(
-        root.join("src/trace.rs"),
-        "// REQ-001\n// FEAT-001\npub fn trace_symbol() {}\n",
-    )
-    .expect("trace source");
+    fs::write(root.join("src/trace.rs"), "pub fn trace_symbol() {}\n").expect("trace source");
 }
 
 fn write_unregistered_feature_workspace(root: &Path) {
@@ -392,7 +388,7 @@ fn check_command_filters_visible_issues_by_spec_id() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("syu validate failed (filtered view)"));
     assert!(stdout.contains("filters: id=REQ-FAIL-001"));
-    assert!(stdout.contains("showing 2 of 5 issues after filtering"));
+    assert!(stdout.contains("showing 1 of 3 issues after filtering"));
     assert!(stdout.contains("requirement REQ-FAIL-001"));
     assert!(!stdout.contains("feature FEAT-FAIL-001"));
     assert!(!stdout.contains("policy POL-FAIL-001"));
@@ -511,6 +507,27 @@ fn check_command_reports_disabled_validation_toggles_from_config() {
     assert!(stdout.contains("validate.require_non_orphaned_items=false"));
     assert!(stdout.contains("validate.require_reciprocal_links=false"));
     assert!(stdout.contains("validate.require_symbol_trace_coverage=false"));
+}
+
+#[test]
+// REQ-CORE-002
+fn check_command_accepts_trace_workspaces_without_inline_spec_ids() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    write_trace_path_workspace(tempdir.path(), "src/trace.rs");
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(tempdir.path())
+        .output()
+        .expect("command should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 #[test]

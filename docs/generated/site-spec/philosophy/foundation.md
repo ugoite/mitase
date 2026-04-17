@@ -38,6 +38,7 @@ description: "Generated reference for docs/syu/philosophy/foundation.yaml"
     - POL-002
     - POL-003
     - POL-007
+    - POL-008
 - **id**: PHIL-002
   - **title**: The model must fit repositories regardless of primary programming language
   - **product_design_principle**:
@@ -64,9 +65,9 @@ description: "Generated reference for docs/syu/philosophy/foundation.yaml"
       adding ceremonial drag.
   - **coding_guideline**:
     - |
-      Prefer one-command setup, optional stricter checks, clear help text,
-      approachable docs, and failure modes that still explain the current
-      workspace instead of collapsing.
+      Prefer one-command setup, repository-local trace mappings, optional
+      stricter checks, clear help text, approachable docs, and failure modes
+      that still explain the current workspace instead of collapsing.
   - **linked_policies**:
     - POL-001
     - POL-002
@@ -74,6 +75,7 @@ description: "Generated reference for docs/syu/philosophy/foundation.yaml"
     - POL-005
     - POL-006
     - POL-007
+    - POL-008
 
 ## Source YAML
 
@@ -98,6 +100,7 @@ philosophies:
       - POL-002
       - POL-003
       - POL-007
+      - POL-008
 
   - id: PHIL-002
     title: The model must fit repositories regardless of primary programming language
@@ -122,9 +125,9 @@ philosophies:
       workflow, and documentation should help the project move forward without
       adding ceremonial drag.
     coding_guideline: |
-      Prefer one-command setup, optional stricter checks, clear help text,
-      approachable docs, and failure modes that still explain the current
-      workspace instead of collapsing.
+      Prefer one-command setup, repository-local trace mappings, optional
+      stricter checks, clear help text, approachable docs, and failure modes
+      that still explain the current workspace instead of collapsing.
     linked_policies:
       - POL-001
       - POL-002
@@ -132,4 +135,5 @@ philosophies:
       - POL-005
       - POL-006
       - POL-007
+      - POL-008
 ```

@@ -280,22 +280,26 @@ codebase. Each trace entry has two key fields:
 - **`symbols`** — The names of the functions, methods, or classes in the
   referenced file that implement or test this spec item (e.g., a test
   function called `test_store_upload`).
-- **`doc_contains`** — One or more strings that must appear verbatim in the
-  documentation comment of each listed symbol. This proves the linkage is
-  intentional: the developer explicitly wrote the spec ID in the comment.
+- **`doc_contains`** — Optional strings that must appear verbatim in the
+  documentation comment of each listed symbol. Use this when you want the code
+  itself to carry extra review breadcrumbs beyond the checked-in file/symbol
+  mapping.
 
 For example, a Rust test function that satisfies
-`doc_contains: ["FEAT-STORE-001"]` looks like this:
+`doc_contains: ["integrity-checked write"]` looks like this:
 
 ```rust
-/// Verifies file upload round-trip — covers FEAT-STORE-001.
+/// Verifies the integrity-checked write path.
 #[test]
 fn test_store_upload() { /* … */ }
 ```
 
-`syu validate` reads the doc comment and checks that `"FEAT-STORE-001"`
+`syu validate` reads the doc comment and checks that `"integrity-checked write"`
 appears in it. If the string is missing, the rule `SYU-trace-doc-001`
 fires with a suggestion to add the snippet (or run `syu validate --fix`).
+If checked-in YAML plus the symbol name already gives you enough traceability,
+you can omit `doc_contains` entirely and keep source files free of spec-ID
+bookkeeping.
 
 Requirements should declare tests:
 
@@ -307,7 +311,7 @@ tests:
       symbols:
         - requirement_test   # name of the test function
       doc_contains:
-        - REQ-CORE-001       # this string must appear in the function's doc comment
+        - checksum mismatch is rejected
 ```
 
 Features should declare implementations:
@@ -320,7 +324,7 @@ implementations:
       symbols:
         - feature_impl       # name of the implementing function or class
       doc_contains:
-        - FEAT-STORE-001     # this string must appear in the function's doc comment
+        - integrity-checked write
 ```
 
 ## 4. Validate the workspace
