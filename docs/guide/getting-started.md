@@ -23,10 +23,7 @@ Need a different level of guidance?
 - Jump to [troubleshooting](./troubleshooting.md) when validation or linking is
   already failing and you need to unblock a workspace.
 
-This guide assumes `syu` is already installed. Unlike the README quick start,
-it slows down at the first manual editing step so you can see where the
-scaffolded files live, how reciprocal links fit together, and what to fix
-before the first `syu validate .` run.
+If you are still deciding whether to adopt `syu`, start with the [repository-fit guide in the README](https://github.com/ugoite/syu/blob/main/README.md#before-you-install-check-whether-syu-fits-this-repository) before installing anything. This guide assumes you have already made that call and want the slower first-workspace path. It still slows down at the first manual editing step so you can see where the scaffold lands, how reciprocal links fit together, and what to fix before the first `syu validate .` run.
 
 ## Is syu right for this repository?
 
