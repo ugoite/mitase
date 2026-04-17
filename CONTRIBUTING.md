@@ -174,6 +174,10 @@ Stable releases are prepared from `main` with release-please.
 Prereleases are cut from `main` as needed after the same quality gates and user
 story validation pass.
 
+Maintainers triaging stuck merge-queue entries should use the
+[merge queue playbook](docs/guide/merge-queue-playbook.md) to inspect
+`merge_group` runs, queue state, and required workflow coverage.
+
 GitHub release notes are generated per release track so alpha, beta, and stable
 releases each compare against the previous tag in the same track.
 
