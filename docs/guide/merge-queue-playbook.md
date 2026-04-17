@@ -110,6 +110,7 @@ queue incident rather than a contributor error.
 If maintainers intentionally rename required queue jobs or add/remove required
 merge-group workflows, update:
 
+- `.github/merge-queue-checks.json`
 - the affected workflow files
 - repository-quality tests that assert the queue contract
 - this playbook so the troubleshooting commands stay aligned with reality

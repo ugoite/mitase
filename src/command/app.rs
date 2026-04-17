@@ -157,6 +157,23 @@ struct AppServerSettings {
     port: u16,
 }
 
+fn bind_failure_message(
+    workspace_root: &Path,
+    bind: IpAddr,
+    port: u16,
+    error: &std::io::Error,
+) -> String {
+    let likely_cause = if error.kind() == std::io::ErrorKind::AddrInUse {
+        "The selected port is likely already in use."
+    } else {
+        "The selected address or port may be unavailable on this machine."
+    };
+    let workspace = workspace_root.display();
+
+    format!(
+        "failed to bind `{bind}:{port}`. {likely_cause} Try `syu app {workspace} --port <free-port>` to retry with a different port, or set `app.port` in syu.yaml to change the default. {error}"
+    )
+}
 pub fn run_app_command(args: &AppArgs) -> Result<i32> {
     let workspace_root = canonical_workspace_root(&args.workspace)?;
     let loaded = load_config(&workspace_root)?;
@@ -166,7 +183,7 @@ pub fn run_app_command(args: &AppArgs) -> Result<i32> {
         .parse::<IpAddr>()
         .with_context(|| format!("invalid bind address `{}`", settings.bind))?;
     build_app_payload_from_config(&workspace_root, &loaded.config)?;
-    let state = AppState::new(workspace_root, loaded.config);
+    let state = AppState::new(workspace_root.clone(), loaded.config);
     let _ = state.refresh_current();
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -178,7 +195,14 @@ pub fn run_app_command(args: &AppArgs) -> Result<i32> {
         let refresher = tokio::spawn(refresh_current_until_shutdown(state.clone()));
         let listener = tokio::net::TcpListener::bind((bind, settings.port))
             .await
-            .with_context(|| format!("failed to bind `{bind}:{}`", settings.port))?;
+            .map_err(|error| {
+                anyhow!(bind_failure_message(
+                    &workspace_root,
+                    bind,
+                    settings.port,
+                    &error,
+                ))
+            })?;
         let local_addr = listener
             .local_addr()
             .context("failed to inspect bind address")?;
@@ -955,8 +979,8 @@ mod tests {
 
     use super::{
         AppPayload, AppServerSettings, AppState, AppVersion, SectionKind, Severity,
-        SnapshotDependency, app_router, browser_root_labels, build_app_payload,
-        collect_feature_sources, collect_snapshot_files_with_extensions,
+        SnapshotDependency, app_router, bind_failure_message, browser_root_labels,
+        build_app_payload, collect_feature_sources, collect_snapshot_files_with_extensions,
         collect_yaml_sources_recursive, content_type_for_path, is_asset_like,
         load_current_snapshot, non_loopback_warning_lines, normalized_asset_path,
         normalized_trace_snapshot_path, readiness_probe_request_sent, readiness_probe_succeeds,
@@ -1211,6 +1235,33 @@ mod tests {
                     .to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn bind_failure_message_mentions_port_retries_for_addr_in_use() {
+        let message = bind_failure_message(
+            Path::new("tests/fixtures/workspaces/passing"),
+            "127.0.0.1".parse().expect("valid ip"),
+            3000,
+            &Error::from(ErrorKind::AddrInUse),
+        );
+
+        assert!(message.contains("failed to bind `127.0.0.1:3000`"));
+        assert!(message.contains("selected port is likely already in use"));
+        assert!(message.contains("syu app tests/fixtures/workspaces/passing --port <free-port>"));
+        assert!(message.contains("app.port"));
+    }
+
+    #[test]
+    fn bind_failure_message_covers_non_addr_in_use_errors() {
+        let message = bind_failure_message(
+            Path::new("tests/fixtures/workspaces/passing"),
+            "127.0.0.1".parse().expect("valid ip"),
+            3000,
+            &Error::from(ErrorKind::AddrNotAvailable),
+        );
+
+        assert!(message.contains("address or port may be unavailable on this machine"));
     }
 
     #[test]

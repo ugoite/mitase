@@ -64,6 +64,7 @@ enum Dispatch {
     Validate(cli::ValidateArgs),
     Report(cli::ReportArgs),
     Init(cli::InitArgs),
+    Templates(cli::TemplatesArgs),
     Add(cli::AddArgs),
 }
 
@@ -81,6 +82,7 @@ fn dispatch(cli: cli::Cli, stdin_is_terminal: bool, stdout_is_terminal: bool) ->
         Some(cli::Commands::Validate(args)) => Dispatch::Validate(args),
         Some(cli::Commands::Report(args)) => Dispatch::Report(args),
         Some(cli::Commands::Init(args)) => Dispatch::Init(args),
+        Some(cli::Commands::Templates(args)) => Dispatch::Templates(args),
         Some(cli::Commands::Add(args)) => Dispatch::Add(args),
     }
 }
@@ -101,6 +103,7 @@ fn run_dispatch(dispatch: Dispatch) -> Result<i32> {
         Dispatch::Validate(args) => command::check::run_check_command(&args),
         Dispatch::Report(args) => command::report::run_report_command(&args),
         Dispatch::Init(args) => command::init::run_init_command(&args),
+        Dispatch::Templates(args) => command::templates::run_templates_command(&args),
         Dispatch::Add(args) => command::add::run_add_command(&args),
     }
 }
@@ -120,6 +123,7 @@ mod tests {
 
     use crate::cli::{
         AddArgs, AppArgs, Cli, Commands, ListArgs, LookupKind, OutputFormat, SearchArgs, ShowArgs,
+        TemplatesArgs,
     };
 
     // REQ-CORE-015
@@ -131,6 +135,14 @@ mod tests {
             super::Dispatch::Browse(crate::cli::BrowseArgs { workspace, .. })
                 if workspace == Path::new(".")
         ));
+    }
+
+    #[test]
+    // REQ-CORE-015
+    fn print_help_dispatch_renders_successfully() {
+        let code = super::run_dispatch(super::Dispatch::PrintHelp)
+            .expect("print help dispatch should succeed");
+        assert_eq!(code, 0);
     }
 
     #[test]
@@ -194,6 +206,21 @@ mod tests {
                 if id == "REQ-CORE-018"
                     && workspace == Path::new("workspace")
                     && format == OutputFormat::Text
+        ));
+
+        let templates = super::dispatch(
+            Cli {
+                command: Some(Commands::Templates(TemplatesArgs {
+                    format: OutputFormat::Json,
+                })),
+            },
+            true,
+            true,
+        );
+        assert!(matches!(
+            templates,
+            super::Dispatch::Templates(crate::cli::TemplatesArgs { format })
+                if format == OutputFormat::Json
         ));
     }
 

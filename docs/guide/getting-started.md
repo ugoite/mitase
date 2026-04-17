@@ -166,8 +166,12 @@ Need a closer starting point for a repository that is already Rust-first,
 Python-first, or polyglot?
 
 ```bash
+syu templates
 syu init . --template rust-only
 ```
+
+Run `syu templates` first if you want the starter names, one-line descriptions,
+and matching checked-in example paths before choosing a scaffold.
 
 You can also combine both flags:
 
@@ -412,7 +416,9 @@ The repository includes complete examples:
 
 If one of those examples is already close to your repository, use the matching
 `syu init --template ...` option so the starter scaffold begins nearer to that
-shape.
+shape. `syu templates` prints the same mapping directly in the CLI, including
+which starter is template-only (`generic`) versus backed by a checked-in
+example.
 
 For a side-by-side decision table that explains which paths are template-backed,
 example-backed, or both, see the

@@ -138,12 +138,33 @@ test("loads deep links and supports keyboard search navigation", async ({ page }
 
   const searchInput = page.getByRole("searchbox", { name: "Search spec items" });
   await expect(searchInput).toHaveAttribute("aria-describedby", "spec-search-shortcuts");
+  await expect(searchInput).toHaveAttribute(
+    "placeholder",
+    "Search items by ID or keyword (up to 20 matches)…",
+  );
   const shortcutHint = page.locator("#spec-search-shortcuts");
   await expect(shortcutHint).toBeVisible();
   await expect(shortcutHint).toContainText("ArrowDown");
   await expect(shortcutHint).toContainText("ArrowUp");
   await expect(shortcutHint).toContainText("Enter");
   await expect(shortcutHint).toContainText("Escape");
+  await expect(
+    page.getByText(
+      "Search shows up to 20 matches at a time, so refine broad queries for a narrower result list.",
+    ),
+  ).toBeVisible();
+  await searchInput.fill("core");
+  await expect(
+    page.getByText("Showing the first 20 matches — refine your query for fewer results."),
+  ).toHaveCount(0);
+  await searchInput.press("Escape");
+  await expect(searchInput).toHaveValue("");
+  await searchInput.fill("spec");
+  await expect(
+    page.getByText("Showing the first 20 matches — refine your query for fewer results."),
+  ).toBeVisible();
+  await searchInput.press("Escape");
+  await expect(searchInput).toHaveValue("");
   await searchInput.fill("FEAT-CHECK-001");
   await searchInput.press("ArrowDown");
   await searchInput.press("ArrowUp");
@@ -165,6 +186,21 @@ test("loads deep links and supports keyboard search navigation", async ({ page }
   await expect(page.locator("#search-results-list")).toHaveCount(0);
   await expect(
     page.getByRole("heading", { name: /FEAT-CHECK-001 .* Unified validation command/i }),
+  ).toBeVisible();
+});
+
+test("explains requirement and feature trace metrics", async ({ page }) => {
+  await page.goto("/");
+
+  await expect(
+    page.getByRole("button", {
+      name: /Requirement traces: Declared traces are the requirement test references written in the spec\./i,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: /Feature traces: Declared traces are the feature implementation references written in the spec\./i,
+    }),
   ).toBeVisible();
 });
 

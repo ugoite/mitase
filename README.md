@@ -46,6 +46,9 @@ Pick the newcomer path that matches what you need next:
 - **Troubleshooting**: jump to
   [`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md) when validation
   or traceability errors are already blocking you.
+- **Spec anti-patterns**: read
+  [`docs/guide/spec-antipatterns.md`](docs/guide/spec-antipatterns.md) when the
+  workspace validates but the layer boundaries still feel messy.
 
 Keep the detailed guides close:
 
@@ -55,6 +58,7 @@ Keep the detailed guides close:
 - [`docs/guide/tutorial.md`](docs/guide/tutorial.md)
 - [`docs/guide/configuration.md`](docs/guide/configuration.md)
 - [`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md)
+- [`docs/guide/spec-antipatterns.md`](docs/guide/spec-antipatterns.md)
 - [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ## Is syu right for this repository?
@@ -290,10 +294,14 @@ Want a closer starting point for a repository that is already clearly
 Rust-first, Python-first, or polyglot? Start with a lightweight template:
 
 ```bash
+syu templates
 syu init . --template rust-only
 syu init . --template python-only
 syu init . --template polyglot
 ```
+
+Use `syu templates` first when you want the built-in starter names, short
+descriptions, and related checked-in example paths in one command.
 
 You can combine both flags when you want a custom spec root and a closer
 starter layout:
@@ -327,6 +335,21 @@ style you already expect. Use `--id-prefix` when you want stable project-wide
 starter IDs from the first command, and the per-layer `--*-prefix` flags when a
 single shared stem is not enough. Use `--spec-root` to scaffold into a
 repository-relative spec tree without moving the generated files by hand later.
+
+### `syu templates`
+
+List starter templates and their related checked-in examples before you
+scaffold:
+
+```bash
+syu templates
+syu templates --format json
+```
+
+Use this command when you want a quick discovery view. Each row shows the
+template name, whether it is starter-only or backed by both a template and a
+checked-in example, the related example path when one exists, and a short
+description of the starter shape.
 
 ### `syu add`
 
