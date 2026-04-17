@@ -679,7 +679,7 @@ function App() {
               <input
                 id="spec-search"
                 type="search"
-                aria-describedby="spec-search-shortcuts"
+                aria-describedby="spec-search-shortcuts-description"
                 placeholder={`Search items by ID or keyword (up to ${SEARCH_RESULT_LIMIT} matches)…`}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -715,20 +715,32 @@ function App() {
                 className="w-full rounded-2xl border border-white/10 bg-slate-900/60 py-2 pl-9 pr-4 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-400/60 focus:outline-none focus:ring-1 focus:ring-sky-400/40"
               />
             </div>
-            <p
-              id="spec-search-shortcuts"
-              className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-slate-400"
-            >
-              <span className="mr-1">Shortcuts:</span>
-              <kbd className={SEARCH_SHORTCUT_KEY_CLASS_NAME}>ArrowDown</kbd>
-              <span>next result</span>
-              <kbd className={SEARCH_SHORTCUT_KEY_CLASS_NAME}>ArrowUp</kbd>
-              <span>previous result</span>
-              <kbd className={SEARCH_SHORTCUT_KEY_CLASS_NAME}>Enter</kbd>
-              <span>open the highlighted or only match</span>
-              <kbd className={SEARCH_SHORTCUT_KEY_CLASS_NAME}>Escape</kbd>
-              <span>clear the search</span>
+            <p id="spec-search-shortcuts-description" className="sr-only">
+              Keyboard shortcuts: ArrowDown and ArrowUp move through results, Enter opens the
+              highlighted or only match, and Escape clears the search.
             </p>
+            <div
+              id="spec-search-shortcuts-panel"
+              role="note"
+              className="mt-3 rounded-2xl border border-sky-400/20 bg-sky-400/10 px-3 py-3 text-sm text-sky-50"
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-200">
+                Search shortcuts
+              </p>
+              <p className="mt-1 text-sm text-sky-100">
+                Keep focus in the search box and use the keyboard to move through results.
+              </p>
+              <p className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-sky-100">
+                <kbd className={SEARCH_SHORTCUT_KEY_CLASS_NAME}>ArrowDown</kbd>
+                <span>next result</span>
+                <kbd className={SEARCH_SHORTCUT_KEY_CLASS_NAME}>ArrowUp</kbd>
+                <span>previous result</span>
+                <kbd className={SEARCH_SHORTCUT_KEY_CLASS_NAME}>Enter</kbd>
+                <span>open the highlighted or only match</span>
+                <kbd className={SEARCH_SHORTCUT_KEY_CLASS_NAME}>Escape</kbd>
+                <span>clear the search</span>
+              </p>
+            </div>
             <p className="mt-2 text-xs text-slate-400">
               Search shows up to {SEARCH_RESULT_LIMIT} matches at a time, so refine broad queries
               for a narrower result list.
