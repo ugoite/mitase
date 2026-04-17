@@ -628,6 +628,11 @@ function App() {
                 note="validated / declared"
                 tone="sky"
                 ratio={requirementTraceRatio}
+                hint={{
+                  label: "Requirement traces",
+                  description:
+                    "Declared traces are the requirement test references written in the spec. Validated traces are the declared references that syu could confirm in the current workspace. A gap means some declared requirement traces are stale or unresolved.",
+                }}
               />
               <CompactMetric
                 label="feature traces"
@@ -635,6 +640,11 @@ function App() {
                 note="validated / declared"
                 tone="violet"
                 ratio={featureTraceRatio}
+                hint={{
+                  label: "Feature traces",
+                  description:
+                    "Declared traces are the feature implementation references written in the spec. Validated traces are the declared references that syu could confirm in the current workspace. A gap means some declared feature traces are stale or unresolved.",
+                }}
               />
             </div>
           </section>
@@ -1243,12 +1253,17 @@ function CompactMetric({
   note,
   tone = "sky",
   ratio,
+  hint,
 }: {
   label: string;
   value: string;
   note: string;
   tone?: "sky" | "violet";
   ratio?: number;
+  hint?: {
+    label: string;
+    description: string;
+  };
 }) {
   const barClass = tone === "violet" ? "bg-violet-300" : "bg-sky-300";
 
@@ -1256,7 +1271,10 @@ function CompactMetric({
     <div className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3">
       <p className="text-[11px] uppercase tracking-[0.25em] text-slate-500">{label}</p>
       <p className="mt-2 text-lg font-semibold text-white">{value}</p>
-      <p className="mt-1 text-xs text-slate-400">{note}</p>
+      <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-400">
+        <p>{note}</p>
+        {hint ? <InfoHint label={hint.label} description={hint.description} /> : null}
+      </div>
       {typeof ratio === "number" ? (
         <div className="mt-3 h-2 rounded-full bg-white/5">
           <div className={`h-full rounded-full ${barClass}`} style={{ width: `${ratio * 100}%` }} />
