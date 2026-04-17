@@ -457,6 +457,7 @@ fn repository_declares_documentation_guides() {
     assert!(generated_config_spec.contains("docs/syu/config/spec.yaml"));
     assert!(generated_config_validate.contains("validate.default_fix"));
     assert!(generated_config_validate.contains("Rust, Python, and TypeScript/JavaScript"));
+    assert!(generated_config_validate.contains("array&lt;path&gt;"));
     assert!(generated_config_runtimes.contains("docs/syu/config/runtimes.yaml"));
     assert!(generated_site_index.contains("/docs/generated/site-spec/features/cli/show-list"));
     assert!(generated_site_index.contains("/docs/generated/site-spec/features/validation"));

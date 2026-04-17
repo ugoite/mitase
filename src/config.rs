@@ -77,6 +77,8 @@ pub struct ValidateConfig {
     pub require_reciprocal_links: bool,
     #[serde(default)]
     pub require_symbol_trace_coverage: bool,
+    #[serde(default = "default_symbol_trace_coverage_ignored_paths")]
+    pub symbol_trace_coverage_ignored_paths: Vec<PathBuf>,
 }
 
 impl Default for ValidateConfig {
@@ -87,6 +89,7 @@ impl Default for ValidateConfig {
             require_non_orphaned_items: default_require_non_orphaned_items(),
             require_reciprocal_links: default_require_reciprocal_links(),
             require_symbol_trace_coverage: false,
+            symbol_trace_coverage_ignored_paths: default_symbol_trace_coverage_ignored_paths(),
         }
     }
 }
@@ -194,6 +197,22 @@ fn default_require_reciprocal_links() -> bool {
 
 fn default_spec_root() -> PathBuf {
     PathBuf::from("docs/syu")
+}
+
+fn default_symbol_trace_coverage_ignored_paths() -> Vec<PathBuf> {
+    [
+        "build",
+        "coverage",
+        "dist",
+        "target",
+        "app/build",
+        "app/coverage",
+        "app/dist",
+        "app/target",
+    ]
+    .into_iter()
+    .map(PathBuf::from)
+    .collect()
 }
 
 fn default_app_bind() -> String {
@@ -325,6 +344,19 @@ mod tests {
         assert!(loaded.config.validate.require_non_orphaned_items);
         assert!(loaded.config.validate.require_reciprocal_links);
         assert!(!loaded.config.validate.require_symbol_trace_coverage);
+        assert_eq!(
+            loaded.config.validate.symbol_trace_coverage_ignored_paths,
+            vec![
+                std::path::PathBuf::from("build"),
+                std::path::PathBuf::from("coverage"),
+                std::path::PathBuf::from("dist"),
+                std::path::PathBuf::from("target"),
+                std::path::PathBuf::from("app/build"),
+                std::path::PathBuf::from("app/coverage"),
+                std::path::PathBuf::from("app/dist"),
+                std::path::PathBuf::from("app/target"),
+            ]
+        );
         assert_eq!(loaded.config.report.output, None);
         assert_eq!(loaded.config.app.bind, "127.0.0.1");
         assert_eq!(loaded.config.app.port, 3000);
@@ -363,6 +395,28 @@ mod tests {
     }
 
     #[test]
+    fn load_config_allows_empty_symbol_trace_coverage_ignore_paths() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        fs::write(
+            tempdir.path().join(CONFIG_FILE_NAME),
+            format!(
+                "version: {version}\nvalidate:\n  symbol_trace_coverage_ignored_paths: []\n",
+                version = current_cli_version()
+            ),
+        )
+        .expect("config should be written");
+
+        let loaded = load_config(tempdir.path()).expect("config should parse");
+        assert!(
+            loaded
+                .config
+                .validate
+                .symbol_trace_coverage_ignored_paths
+                .is_empty()
+        );
+    }
+
+    #[test]
     fn render_config_serializes_defaults() {
         let rendered = render_config(&SyuConfig::default()).expect("config should serialize");
         assert!(rendered.contains(current_cli_version()));
@@ -371,6 +425,9 @@ mod tests {
         assert!(rendered.contains("require_non_orphaned_items: true"));
         assert!(rendered.contains("require_reciprocal_links: true"));
         assert!(rendered.contains("require_symbol_trace_coverage: false"));
+        assert!(rendered.contains("symbol_trace_coverage_ignored_paths:"));
+        assert!(rendered.contains("- build"));
+        assert!(rendered.contains("- app/dist"));
         assert!(!rendered.contains("report:"));
         assert!(rendered.contains("bind: 127.0.0.1"));
         assert!(rendered.contains("port: 3000"));
