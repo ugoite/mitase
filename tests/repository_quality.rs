@@ -45,6 +45,7 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(ci_workflow.contains("actionlint:"));
     assert!(ci_workflow.contains("dependency-audit:"));
     assert!(ci_workflow.contains("dependency-review:"));
+    assert!(ci_workflow.contains("spec-linkage:"));
     assert!(ci_workflow.contains("installer-smoke:"));
     assert!(ci_workflow.contains("installed-binary-smoke:"));
     assert!(ci_workflow.contains("--hook-stage pre-commit"));
@@ -55,6 +56,8 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(ci_workflow.contains("0 6 * * 1"));
     assert!(ci_workflow.contains("github.event_name != 'schedule'"));
     assert!(ci_workflow.contains("Review dependency changes"));
+    assert!(ci_workflow.contains("Require issue or spec IDs for self-spec changes"));
+    assert!(ci_workflow.contains("scripts/ci/check-pr-spec-links.sh"));
     assert!(ci_workflow.contains("scripts/ci/installer-smoke.sh"));
     assert!(ci_workflow.contains("scripts/ci/installed-binary-smoke.sh"));
 
@@ -555,6 +558,7 @@ fn repository_declares_contribution_workflow_assets() {
     let bug_report = read_file(".github/ISSUE_TEMPLATE/bug_report.yml");
     let feature_request = read_file(".github/ISSUE_TEMPLATE/feature_request.yml");
     let issue_config = read_file(".github/ISSUE_TEMPLATE/config.yml");
+    let pr_link_script = read_file("scripts/ci/check-pr-spec-links.sh");
     let gitignore = read_file(".gitignore");
 
     assert!(contributing.contains("FEAT-CONTRIB-002"));
@@ -574,6 +578,7 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(contributing.contains("docs/generated/"));
     assert!(contributing.contains("scripts/ci/check-browser-app-freshness.sh"));
     assert!(contributing.contains("requirement/feature coverage summary"));
+    assert!(contributing.contains("Linked issue or specification"));
     assert!(contributing.contains("app/dist"));
     assert!(contributing.contains("npm run build:wasm"));
     assert!(contributing.contains("npm run check"));
@@ -599,6 +604,11 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(pr_template.contains("FEAT-CONTRIB-002"));
     assert!(pr_template.contains("scripts/ci/quality-gates.sh"));
     assert!(pr_template.contains("cargo run -- validate ."));
+    assert!(pr_template.contains("Linked issue or specification"));
+
+    assert!(pr_link_script.contains("FEAT-CONTRIB-002"));
+    assert!(pr_link_script.contains("docs/syu/"));
+    assert!(pr_link_script.contains("Linked issue or specification"));
 
     assert!(bug_report.contains("FEAT-CONTRIB-002"));
     assert!(bug_report.contains("What happened?"));
