@@ -137,17 +137,28 @@ test("loads deep links and supports keyboard search navigation", async ({ page }
   await expect(page).toHaveURL(/#requirements\/REQ-CORE-001$/);
 
   const searchInput = page.getByRole("searchbox", { name: "Search spec items" });
-  await expect(searchInput).toHaveAttribute("aria-describedby", "spec-search-shortcuts");
+  await expect(searchInput).toHaveAttribute(
+    "aria-describedby",
+    "spec-search-shortcuts-description",
+  );
   await expect(searchInput).toHaveAttribute(
     "placeholder",
     "Search items by ID or keyword (up to 20 matches)…",
   );
-  const shortcutHint = page.locator("#spec-search-shortcuts");
-  await expect(shortcutHint).toBeVisible();
-  await expect(shortcutHint).toContainText("ArrowDown");
-  await expect(shortcutHint).toContainText("ArrowUp");
-  await expect(shortcutHint).toContainText("Enter");
-  await expect(shortcutHint).toContainText("Escape");
+  const shortcutDescription = page.locator("#spec-search-shortcuts-description");
+  await expect(shortcutDescription).toHaveText(
+    "Keyboard shortcuts: ArrowDown and ArrowUp move through results, Enter opens the highlighted or only match, and Escape clears the search.",
+  );
+  const shortcutPanel = page.locator("#spec-search-shortcuts-panel");
+  await expect(shortcutPanel).toBeVisible();
+  await expect(shortcutPanel).toContainText("Search shortcuts");
+  await expect(shortcutPanel).toContainText(
+    "Keep focus in the search box and use the keyboard to move through results.",
+  );
+  await expect(shortcutPanel).toContainText("ArrowDown");
+  await expect(shortcutPanel).toContainText("ArrowUp");
+  await expect(shortcutPanel).toContainText("Enter");
+  await expect(shortcutPanel).toContainText("Escape");
   await expect(
     page.getByText(
       "Search shows up to 20 matches at a time, so refine broad queries for a narrower result list.",
