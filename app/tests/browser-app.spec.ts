@@ -168,6 +168,21 @@ test("loads deep links and supports keyboard search navigation", async ({ page }
   ).toBeVisible();
 });
 
+test("explains requirement and feature trace metrics", async ({ page }) => {
+  await page.goto("/");
+
+  await expect(
+    page.getByRole("button", {
+      name: /Requirement traces: Declared traces are the requirement test references written in the spec\./i,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: /Feature traces: Declared traces are the feature implementation references written in the spec\./i,
+    }),
+  ).toBeVisible();
+});
+
 test("keeps duplicate validation issues independently selectable", async ({ page, request }) => {
   test.skip(!usesFailingWorkspace, "requires the failing fixture workspace");
 
