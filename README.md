@@ -43,6 +43,9 @@ Pick the newcomer path that matches what you need next:
 - **Troubleshooting**: jump to
   [`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md) when validation
   or traceability errors are already blocking you.
+- **Spec anti-patterns**: read
+  [`docs/guide/spec-antipatterns.md`](docs/guide/spec-antipatterns.md) when the
+  workspace validates but the layer boundaries still feel messy.
 
 Keep the detailed guides close:
 
@@ -52,6 +55,7 @@ Keep the detailed guides close:
 - [`docs/guide/tutorial.md`](docs/guide/tutorial.md)
 - [`docs/guide/configuration.md`](docs/guide/configuration.md)
 - [`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md)
+- [`docs/guide/spec-antipatterns.md`](docs/guide/spec-antipatterns.md)
 - [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ## Is syu right for this repository?

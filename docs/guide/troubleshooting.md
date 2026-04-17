@@ -312,8 +312,10 @@ Run `git diff` after `--fix` to review every change before committing.
 
 ## "Validation passes but traces feel wrong"
 
-Passing `syu validate .` does not mean the spec perfectly reflects intent.
-Watch out for these false-confidence patterns:
+Passing `syu validate .` does not mean the spec perfectly reflects intent. For
+common four-layer design smells that are still technically valid, read the
+[spec anti-patterns guide](./spec-antipatterns.md) after you clear the blocking
+errors below. Watch out for these false-confidence patterns:
 
 - **Over-broad wildcards:** An empty `symbols:` list does not validate
   (`SYU-trace-symbol-001`). If you intentionally mean "this spec item owns the
@@ -334,6 +336,8 @@ Watch out for these false-confidence patterns:
   when you want to rebuild a clean mental model before debugging
 - [End-to-end tutorial](./tutorial.md) — follow a full working example when you
   want to compare your workspace against a realistic repository story
+- [Spec anti-patterns](./spec-antipatterns.md) — use this when validation passes
+  but the four-layer design still feels unstable, repetitive, or too broad
 - Full rule catalog: [`docs/syu/features/validation/validation.yaml`](../syu/features/validation/validation.yaml)
 - Filter by genre: `syu validate . --genre graph`
 - Filter by severity: `syu validate . --severity error`
