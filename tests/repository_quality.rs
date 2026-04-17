@@ -32,6 +32,11 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(quality_script.contains("cargo run -- validate ."));
     assert!(quality_script.contains("check-generated-docs-freshness.sh"));
     assert!(install_precommit.contains("site --user-base"));
+    assert!(install_precommit.contains("pipx environment --value PIPX_BIN_DIR"));
+    assert!(install_precommit.contains("Troubleshooting: compare"));
+    assert!(install_precommit.contains("If you installed pre-commit with pipx"));
+    assert!(install_precommit.contains("Checked Python user-base path:"));
+    assert!(install_precommit.contains("Checked pipx bin path:"));
     assert!(install_precommit.contains("pre_commit install"));
 
     assert!(ci_workflow.contains("FEAT-QUALITY-001"));
@@ -60,6 +65,9 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(contributing.contains("Contributors do **not** need to run manual audits"));
     assert!(contributing.contains("check-generated-docs-freshness.sh"));
     assert!(contributing.contains("docs/generated/"));
+    assert!(contributing.contains("python3 -m site --user-base"));
+    assert!(contributing.contains("If you installed `pre-commit` with"));
+    assert!(contributing.contains("pipx environment --value PIPX_BIN_DIR"));
 
     assert!(repo_config.contains("FEAT-CHECK-001"));
     assert!(repo_config.contains("FEAT-REPORT-001"));
