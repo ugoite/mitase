@@ -298,6 +298,10 @@ starter layout:
 syu init . --spec-root spec/contracts --template rust-only
 ```
 
+Not sure whether you should start from a template or inspect a checked-in
+example first? See the
+[examples and templates guide](docs/guide/examples-and-templates.md).
+
 ## Commands
 
 ### `syu init`
@@ -550,6 +554,9 @@ The repository ships working example projects:
 - [`examples/polyglot`](examples/polyglot)
 
 Each one is validated in the automated test suite.
+
+Need help choosing between a starter template and a full reference workspace?
+See the [examples and templates guide](docs/guide/examples-and-templates.md).
 
 ## Contributing and local development
 
