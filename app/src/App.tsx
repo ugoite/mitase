@@ -37,6 +37,7 @@ const SECTION_COPY: Record<SectionKind, string> = {
 };
 
 const ONBOARDING_STORAGE_KEY = "syu-onboarding-dismissed";
+const SEARCH_RESULT_LIMIT = 20;
 const SEARCH_SHORTCUT_KEY_CLASS_NAME =
   "inline-flex items-center rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-slate-300";
 
@@ -324,10 +325,13 @@ function App() {
     return Math.max(1, ...sectionSummaries.map((summary) => summary.itemCount));
   }, [sectionSummaries]);
 
-  const searchResults = useMemo(() => {
+  const searchState = useMemo(() => {
     const trimmed = searchQuery.trim().toLowerCase();
     if (!workspace || trimmed.length === 0) {
-      return [];
+      return {
+        results: [] as Array<{ id: string; title: string; kind: SectionKind }>,
+        hasMore: false,
+      };
     }
     const results: Array<{ id: string; title: string; kind: SectionKind }> = [];
     for (const section of workspace.sections) {
@@ -344,8 +348,12 @@ function App() {
         }
       }
     }
-    return results.slice(0, 20);
+    return {
+      results: results.slice(0, SEARCH_RESULT_LIMIT),
+      hasMore: results.length > SEARCH_RESULT_LIMIT,
+    };
   }, [workspace, searchQuery]);
+  const searchResults = searchState.results;
 
   useEffect(() => {
     if (loading || !workspace) {
@@ -672,7 +680,7 @@ function App() {
                 id="spec-search"
                 type="search"
                 aria-describedby="spec-search-shortcuts"
-                placeholder="Search items by ID or keyword…"
+                placeholder={`Search items by ID or keyword (up to ${SEARCH_RESULT_LIMIT} matches)…`}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => {
@@ -721,6 +729,10 @@ function App() {
               <kbd className={SEARCH_SHORTCUT_KEY_CLASS_NAME}>Escape</kbd>
               <span>clear the search</span>
             </p>
+            <p className="mt-2 text-xs text-slate-400">
+              Search shows up to {SEARCH_RESULT_LIMIT} matches at a time, so refine broad queries
+              for a narrower result list.
+            </p>
             {searchQuery.trim().length > 0 && (
               <div id="search-results-list" className="mt-3 space-y-1">
                 {searchResults.length === 0 ? (
@@ -751,9 +763,10 @@ function App() {
                     </button>
                   ))
                 )}
-                {searchResults.length === 20 && (
+                {searchState.hasMore && (
                   <p className="px-2 py-1 text-[11px] text-slate-500">
-                    Showing first 20 results — refine your query for fewer matches.
+                    Showing the first {SEARCH_RESULT_LIMIT} matches — refine your query for fewer
+                    results.
                   </p>
                 )}
               </div>
