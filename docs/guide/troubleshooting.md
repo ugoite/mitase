@@ -259,8 +259,32 @@ remove the `doc_contains:` assertion from the trace if it no longer applies.
 **What it means:** `doc_contains:` is only supported for `rust`, `python`, and
 `typescript`. You declared it on a `lang:` that `syu` cannot inspect.
 
-**Fix:** Remove the `doc_contains:` assertion, or switch to a supported
-language.
+**Fix:** Remove the `doc_contains:` assertion from that mapping, or switch to a
+supported language for rich doc inspection.
+
+If the language already has a built-in adapter without rich doc inspection
+(`shell`, `yaml`, `json`, `markdown`, or `gitignore`), you do **not** need to
+remove the whole trace. Those mappings can still point to:
+
+- the traced file
+- explicit `symbols:`
+- wildcard ownership with `symbols: ["*"]`
+
+For example, this is still valid today:
+
+```yaml
+implementations:
+  shell:
+    - file: scripts/install-syu.sh
+      symbols:
+        - install_syu
+```
+
+Use that lighter mapping until the language gains richer inspection support.
+If the mapping uses an unsupported implementation language such as `go`,
+`java`, or `csharp`, removing `doc_contains` is not enough: those entries still
+raise `SYU-trace-language-001`. Keep the higher-layer spec link in place and
+wait for adapter support before adding the code-level trace.
 
 ---
 
