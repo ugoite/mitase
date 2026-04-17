@@ -178,6 +178,10 @@ Maintainers triaging stuck merge-queue entries should use the
 [merge queue playbook](docs/guide/merge-queue-playbook.md) to inspect
 `merge_group` runs, queue state, and required workflow coverage.
 
+When maintainers intentionally rename merge-queue check contexts or add/remove
+`merge_group` workflows, update `.github/merge-queue-checks.json` and the
+repository-quality assertions in the same change.
+
 GitHub release notes are generated per release track so alpha, beta, and stable
 releases each compare against the previous tag in the same track.
 
