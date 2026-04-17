@@ -194,7 +194,9 @@ For a genuinely mixed-language repository, keep the first adoption step small:
 
 - start with `validate.require_symbol_trace_coverage: false`
 - keep tracing every area you touch, but use file-level or wildcard ownership
-  in languages that `syu` cannot inspect deeply yet
+  only in supported lightweight adapters that `syu` cannot inspect deeply yet
+- keep unsupported implementation-language areas connected through the spec
+  layers until adapter support lands
 - turn stricter symbol coverage on later for the Rust, Python, and
   TypeScript/JavaScript areas once those traces are stable
 
@@ -204,6 +206,67 @@ ready.
 
 Starter requirements and features begin as `status: planned`. Keep them planned
 until you are ready to declare real tests and implementation traces.
+
+### Unsupported implementation languages can still adopt the spec layers first
+
+`syu` can validate code-level traces today in Rust, Python, and
+TypeScript/JavaScript, plus lighter file/symbol ownership in `shell`, `yaml`,
+`json`, `markdown`, and `gitignore`. Repositories that are mostly Go, Java,
+C#, or another unsupported implementation language can still adopt `syu` today,
+but they should treat code-level mappings for those files as future work.
+
+Today you can still:
+
+- document philosophy, policy, requirements, and features for
+  unsupported-language areas
+- keep those areas in the same repository while
+  `validate.require_symbol_trace_coverage` stays `false`
+- trace supported lightweight files such as shell scripts or YAML configs with
+  file paths, explicit symbols, or wildcard ownership as long as you omit
+  `doc_contains`
+
+A minimal trace mapping without `doc_contains` looks like this:
+
+```yaml
+implementations:
+  shell:
+    - file: scripts/install-syu.sh
+      symbols:
+        - install_syu
+```
+
+When one feature intentionally owns the whole file, wildcard ownership still
+works too:
+
+```yaml
+implementations:
+  shell:
+    - file: scripts/install-syu.sh
+      symbols:
+        - "*"
+```
+
+What you should avoid for unsupported-language files today is adding
+language-specific `tests:` or `implementations:` entries such as `go:`,
+`java:`, or `csharp:`. Those keys still fail validation before `doc_contains`
+support even becomes relevant. If you need code-level tracing immediately, stay
+with Rust, Python, or TypeScript/JavaScript for now; otherwise, keep the spec
+layers connected and add the source mappings once adapter support lands.
+
+Keep this adoption path in mind for mixed-language repositories too: start with
+declared traces, keep `validate.require_symbol_trace_coverage: false`, then turn
+strict coverage on later for the languages `syu` can already scan deeply.
+
+When `SYU-trace-docsupport-001` fires, read it as “this mapping can stay, but
+without `doc_contains`, only if the language adapter already exists.” That
+works for `shell`, `yaml`, `json`, `markdown`, and `gitignore`; it does not
+bypass `SYU-trace-language-001` for Go, Java, or C#.
+
+Language-support roadmap:
+
+- [Go trace validation and symbol ownership (#280)](https://github.com/ugoite/syu/issues/280)
+- [Java trace validation and symbol ownership (#282)](https://github.com/ugoite/syu/issues/282)
+- [C# trace validation and symbol ownership (#314)](https://github.com/ugoite/syu/issues/314)
 
 Not sure whether you should scaffold a template or study a working repository
 first? Use the [examples and templates guide](./examples-and-templates.md) to

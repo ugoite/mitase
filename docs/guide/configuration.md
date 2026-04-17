@@ -155,18 +155,23 @@ nothing starting point:
    mixing supported and unsupported implementation languages or while older
    areas have not been traced yet.
 2. Keep declaring requirement and feature traces for every area, but use the
-   trace shape the current validator can actually check. For unsupported or
-   partially adopted areas today, that usually means file-level or wildcard
-   ownership instead of symbol-level `doc_contains` promises.
+   trace shape the current validator can actually check. For supported
+   lightweight adapters such as `shell`, `yaml`, `json`, `markdown`, and
+   `gitignore`, that usually means file-level, explicit-symbol, or wildcard
+   ownership without `doc_contains`. For unsupported implementation languages
+   such as Go, Java, or C#, keep the spec layers linked and defer code-level
+   mappings until adapter support lands.
 3. Turn `require_symbol_trace_coverage: true` on once the supported-language
    parts of the repository are ready to keep every public API and test owned by
-   the spec, and leave unsupported-language areas on explicit file ownership
-   until richer adapters exist.
+   the spec, while unsupported-language areas stay at the spec-layer guidance
+   stage or on supported lightweight adapters until richer adapters exist.
 
 The important rule is honesty: only promise symbol-level strictness where `syu`
 can verify it today, and use the looser trace forms to keep the rest of a
 polyglot repository connected to the spec without pretending the validator can
 inspect more than it really can.
+See [getting started](./getting-started.md#unsupported-implementation-languages-can-still-adopt-the-spec-layers-first)
+for the current adoption path and roadmap links.
 
 ### `app.bind`
 
