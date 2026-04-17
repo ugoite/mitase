@@ -127,6 +127,9 @@ pub fn run_init_command(args: &InitArgs) -> Result<i32> {
                 "  3. Run `syu browse {workspace_arg}` for terminal exploration, or `syu app {workspace_arg}` for the browser UI"
             );
             println!("  4. Commit the generated files to version control");
+            println!(
+                "  Need a different starter next time? Run `syu templates` before another `syu init`."
+            );
         }
     }
 

@@ -17,6 +17,7 @@ fn root_help_includes_start_here_guidance() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("New here?"));
+    assert!(stdout.contains("syu templates"));
     assert!(stdout.contains("syu init ."));
     assert!(stdout.contains("syu validate ."));
     assert!(stdout.contains("syu browse ."));
@@ -104,6 +105,7 @@ fn init_help_lists_starter_templates() {
     assert!(output.status.success(), "init help should succeed");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("syu templates"));
     assert!(stdout.contains("--template"));
     assert!(stdout.contains("rust-only"));
     assert!(stdout.contains("python-only"));
