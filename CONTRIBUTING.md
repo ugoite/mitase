@@ -57,8 +57,11 @@ match your change:
    scripts/ci/coverage.sh summary
    ```
 
-3. **Browser app, WASM, or browser build inputs** (`app/src`, `app/src/wasm`,
-   `app/wasm`, browser build config, or browser build scripts)
+   That command also emits a requirement/feature coverage summary so reviewers
+   can inspect the current Rust line coverage in spec terms.
+
+3. **Browser app, WASM, or checked-in `app/dist` bundle** (`app/src`,
+   `app/wasm`, browser build config, or generated browser assets)
 
    Install the browser app dependencies first:
 
