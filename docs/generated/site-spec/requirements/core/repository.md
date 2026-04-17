@@ -163,6 +163,9 @@ description: "Generated reference for docs/syu/requirements/core/repository.yaml
       - **file**: tests/repository_quality.rs
         - **symbols**:
           - repository_declares_contribution_workflow_assets
+      - **file**: tests/install_precommit_script.rs
+        - **symbols**:
+          - install_precommit_reports_lookup_paths_when_hook_bootstrap_fails
 - **id**: REQ-CORE-014
   - **title**: Keep dependency hygiene and CI execution current
   - **description**:
@@ -329,6 +332,9 @@ requirements:
         - file: tests/repository_quality.rs
           symbols:
             - repository_declares_contribution_workflow_assets
+        - file: tests/install_precommit_script.rs
+          symbols:
+            - install_precommit_reports_lookup_paths_when_hook_bootstrap_fails
   - id: REQ-CORE-014
     title: Keep dependency hygiene and CI execution current
     description: |
