@@ -28,10 +28,7 @@ Need a different level of guidance?
 
 If you are still deciding whether to adopt `syu`, start with the
 [repository-fit guide in the README](https://github.com/ugoite/syu/blob/main/README.md#before-you-install-check-whether-syu-fits-this-repository)
-before installing anything. This guide assumes you have already made that call
-and want the slower first-workspace path. It still slows down at the first
-manual editing step so you can see where the scaffold lands, how reciprocal
-links fit together, and what to fix before the first `syu validate .` run.
+before installing anything.
 
 ## Is syu right for this repository?
 
@@ -41,14 +38,12 @@ to decide whether `syu` is the right level of structure for this repository.
 That section stays the source of truth for who benefits most, when `syu` is too
 heavy, and what trade-offs it adds to the contributor loop.
 
-If the README fit check sounds right and you want the first-run setup narrated
-step by step, continue below. If not, stay with a lighter docs-only workflow
-until the repository needs stronger traceability guarantees.
-
-Treat this guide as the canonical first-run walkthrough: unlike the README
-quick start, it slows down at the first manual editing step so you can see
-where the scaffolded files live, how reciprocal links fit together, and what
-to fix before the first `syu validate .` run.
+If the README fit check sounds right and `syu` is already installed, continue
+below. This guide is the canonical narrated first-run path: unlike the README
+quick start, which works best as the compact command card, it slows down at the
+first manual editing step so you can see where the scaffolded files live, how
+reciprocal links fit together, and what to fix before the first
+`syu validate .` run.
 
 ## Before you begin
 

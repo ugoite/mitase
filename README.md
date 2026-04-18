@@ -31,13 +31,13 @@ verified.
 
 Pick the newcomer path that matches what you need next:
 
-- **Quick start**: stay in this README when you want the shortest path from install
-  to `syu validate .`, only need the [Why four layers?](#why-four-layers)
-  refresher below, and are comfortable editing the first reciprocal links
-  yourself.
+- **Quick start**: stay in this README when the in-page four-layer refresher is
+  enough, you want the shortest path from install to `syu validate .`, and you
+  are comfortable editing the first reciprocal links yourself.
 - **Getting started**: follow
   [`docs/guide/getting-started.md`](docs/guide/getting-started.md) when you want
-  the first workspace setup narrated step by step before the manual YAML edits.
+  the same first workspace setup explained step by step before the manual YAML
+  edits and first validation run.
 - **Existing repository adoption**: follow
   [`docs/guide/existing-repository.md`](docs/guide/existing-repository.md) when
   the repository already has code and history and you want an incremental
@@ -213,11 +213,11 @@ below. The rest of this section assumes you installed the published CLI.
 
 ## Quick start
 
-Treat this section as the compact command card. Stay in this README when you
-want the shortest install-to-validate path and are comfortable with a concise
-reference flow. If you want the first-run walkthrough explained step by step,
-switch to [`docs/guide/getting-started.md`](docs/guide/getting-started.md)
-before continuing.
+Treat this section as the compact command card. Stay in this README when the
+in-page four-layer refresher is enough and you want the shortest install-to-validate path.
+If you want the first-run walkthrough explained step by step instead, switch to
+[`docs/guide/getting-started.md`](docs/guide/getting-started.md) before
+continuing.
 
 The only prerequisite for the commands below is the
 [Why four layers?](#why-four-layers) refresher above, which gives you the
