@@ -39,6 +39,7 @@ description: "Generated reference for docs/syu/requirements/core/repository.yaml
       - **file**: tests/repository_quality.rs
         - **symbols**:
           - repository_declares_precommit_and_quality_gates
+          - repository_keeps_node_majors_aligned_across_docs_packages_and_ci
 - **id**: REQ-CORE-006
   - **title**: Enforce 100 percent line coverage in CI
   - **description**:
@@ -214,6 +215,7 @@ requirements:
         - file: tests/repository_quality.rs
           symbols:
             - repository_declares_precommit_and_quality_gates
+            - repository_keeps_node_majors_aligned_across_docs_packages_and_ci
   - id: REQ-CORE-006
     title: Enforce 100 percent line coverage in CI
     description: |

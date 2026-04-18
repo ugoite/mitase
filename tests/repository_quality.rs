@@ -1,11 +1,17 @@
 use std::{collections::HashSet, fs, path::PathBuf};
 
+use serde_json::Value;
+
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
 
 fn read_file(path: &str) -> String {
     fs::read_to_string(repo_root().join(path)).expect("repository file should exist")
+}
+
+fn read_json(path: &str) -> Value {
+    serde_json::from_str(&read_file(path)).expect("repository JSON should parse")
 }
 
 #[test]
@@ -109,6 +115,51 @@ fn repository_declares_coverage_gate_at_one_hundred_percent() {
     assert!(ci_workflow.contains("scripts/ci/coverage.sh lcov"));
     assert!(ci_workflow.contains("cargo-llvm-cov"));
     assert!(ci_workflow.contains("target/coverage/spec-coverage-summary.md"));
+}
+
+#[test]
+// REQ-CORE-005
+fn repository_keeps_node_majors_aligned_across_docs_packages_and_ci() {
+    let contributing = read_file("CONTRIBUTING.md");
+    let ci_workflow = read_file(".github/workflows/ci.yml");
+    let codeql_workflow = read_file(".github/workflows/codeql.yml");
+    let release_artifacts_workflow = read_file(".github/workflows/release-artifacts.yml");
+    let app_nvmrc = read_file("app/.nvmrc");
+    let website_nvmrc = read_file("website/.nvmrc");
+    let app_package = read_json("app/package.json");
+    let website_package = read_json("website/package.json");
+
+    let app_major = app_nvmrc.trim();
+    let website_major = website_nvmrc.trim();
+    let app_next_major = app_major
+        .parse::<u32>()
+        .expect("app Node major should parse")
+        + 1;
+    let website_next_major = website_major
+        .parse::<u32>()
+        .expect("website Node major should parse")
+        + 1;
+    let app_engine = format!(">={app_major} <{app_next_major}");
+    let website_engine = format!(">={website_major} <{website_next_major}");
+
+    assert_eq!(app_major, "25");
+    assert_eq!(website_major, "20");
+    assert_eq!(
+        app_package["engines"]["node"].as_str(),
+        Some(app_engine.as_str())
+    );
+    assert_eq!(
+        website_package["engines"]["node"].as_str(),
+        Some(website_engine.as_str())
+    );
+
+    assert!(contributing.contains("use **Node 25** for `app/`"));
+    assert!(contributing.contains("use **Node 20** for `website/`"));
+
+    assert!(ci_workflow.contains("node-version: \"25\""));
+    assert!(ci_workflow.contains("node-version: \"20\""));
+    assert!(codeql_workflow.contains("node-version: \"25\""));
+    assert!(release_artifacts_workflow.contains("node-version: \"25\""));
 }
 
 #[test]
