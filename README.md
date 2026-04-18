@@ -43,6 +43,10 @@ Pick the newcomer path that matches what you need next:
   [`docs/guide/existing-repository.md`](docs/guide/existing-repository.md) when
   the repository already has code and history and you want an incremental
   adoption path instead of starting with `syu init`.
+- **Upgrade or migration**: start with
+  [`docs/guide/migration.md`](docs/guide/migration.md) when you are updating an
+  existing `syu` workspace between alpha releases and need the release-specific
+  upgrade steps first.
 - **Visual explorer**: open [`docs/guide/app.md`](docs/guide/app.md) or run
   `syu app .` when you want graphical spec navigation before learning the full
   CLI workflow.
@@ -64,6 +68,7 @@ Keep the detailed guides close:
 
 - [`docs/guide/concepts.md`](docs/guide/concepts.md)
 - [`docs/guide/getting-started.md`](docs/guide/getting-started.md)
+- [`docs/guide/migration.md`](docs/guide/migration.md)
 - [`docs/guide/trace-adapter-support.md`](docs/guide/trace-adapter-support.md)
 - [`docs/guide/existing-repository.md`](docs/guide/existing-repository.md)
 - [`docs/guide/tutorial.md`](docs/guide/tutorial.md)
