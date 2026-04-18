@@ -294,12 +294,14 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("docs/guide/trace-adapter-support.md"));
     assert!(readme.contains("Trace adapter matrix"));
     assert!(readme.contains("docs/guide/tutorial.md"));
+    assert!(readme.contains("docs/guide/app.md"));
     assert!(readme.contains("docs/guide/troubleshooting.md"));
     assert!(readme.contains("docs/guide/spec-antipatterns.md"));
     assert!(readme.contains("docs/guide/vscode-extension.md"));
     assert!(readme.contains("shortest install-to-validate path"));
     assert!(readme.contains("the in-page four-layer refresher is"));
     assert!(readme.contains("**Getting started**"));
+    assert!(readme.contains("**Visual explorer**"));
     assert!(readme.contains("using `syu` for the first time"));
     assert!(readme.contains("already have a workspace"));
     assert!(readme.contains("first workspace setup"));
@@ -356,6 +358,7 @@ fn repository_declares_documentation_guides() {
     assert!(anti_patterns.contains("When to merge, split, or rename spec items"));
     assert!(anti_patterns.contains("green-but-messy spec"));
     assert!(app_guide.contains("Status badge"));
+    assert!(app_guide.contains("README chooser on GitHub"));
     assert!(app_guide.contains("## Search shortcuts"));
     assert!(app_guide.contains("ArrowDown"));
     assert!(app_guide.contains("Escape"));
