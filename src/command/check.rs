@@ -892,8 +892,9 @@ fn render_text_report(
         }
     }
 
+    let workspace_arg = shell_quote_path(workspace_arg);
+
     if overall_success && result.issues.is_empty() && !quiet {
-        let workspace_arg = shell_quote_path(workspace_arg);
         writeln!(&mut output).expect("writing to String must succeed");
         writeln!(&mut output, "What to do next:").expect("writing to String must succeed");
         writeln!(
@@ -914,6 +915,29 @@ fn render_text_report(
         writeln!(
             &mut output,
             "  syu show <ID> {workspace_arg}    inspect a single spec item in detail"
+        )
+        .expect("writing to String must succeed");
+    } else if !overall_success {
+        writeln!(&mut output).expect("writing to String must succeed");
+        writeln!(&mut output, "What to inspect next:").expect("writing to String must succeed");
+        writeln!(
+            &mut output,
+            "  syu show <ID> {workspace_arg}           inspect one requirement, feature, policy, or philosophy named above"
+        )
+        .expect("writing to String must succeed");
+        writeln!(
+            &mut output,
+            "  syu validate {workspace_arg} --severity error   rerun with only error-level issues if you need the shortest list first"
+        )
+        .expect("writing to String must succeed");
+        writeln!(
+            &mut output,
+            "  syu validate {workspace_arg} --genre graph      focus on missing links, reciprocal links, or missing definitions"
+        )
+        .expect("writing to String must succeed");
+        writeln!(
+            &mut output,
+            "  syu app {workspace_arg}                 open the browser UI to inspect the same workspace graph visually"
         )
         .expect("writing to String must succeed");
     }
