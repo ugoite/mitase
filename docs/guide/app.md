@@ -4,6 +4,11 @@
 
 `syu app .` serves a local browser UI for exploring your workspace specification interactively.
 
+If you started from the README newcomer chooser, this guide is the visual-first
+path back into the same onboarding flow. Return to the
+[`site landing page`](/) when you want the text-first install, tutorial,
+migration, or troubleshooting entry points instead.
+
 ```bash
 syu app .
 # → syu app listening on http://127.0.0.1:3000
