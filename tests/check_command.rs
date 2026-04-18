@@ -232,7 +232,7 @@ fn check_command_prints_workspace_aware_next_steps_for_explicit_paths() {
 
 #[test]
 // REQ-CORE-001
-fn check_command_quiet_suppresses_next_step_guidance() {
+fn check_command_quiet_suppresses_success_summary_and_next_step_guidance() {
     let output = Command::cargo_bin("syu")
         .expect("binary should build")
         .arg("validate")
@@ -250,7 +250,10 @@ fn check_command_quiet_suppresses_next_step_guidance() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("syu validate passed"));
-    assert!(stdout.contains("checks:"));
+    assert!(!stdout.contains("workspace:"));
+    assert!(!stdout.contains("definitions:"));
+    assert!(!stdout.contains("checks:"));
+    assert!(!stdout.contains("traceability:"));
     assert!(
         !stdout.contains("What to do next:"),
         "quiet mode should suppress next-step guidance: {stdout}"
