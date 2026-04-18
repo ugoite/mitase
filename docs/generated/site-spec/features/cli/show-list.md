@@ -19,7 +19,7 @@ description: "Generated reference for docs/syu/features/cli/show-list.yaml"
 
 - **id**: FEAT-LIST-001
   - **title**: Non-interactive definition listing
-  - **summary**: List philosophies, policies, requirements, or features in list-shaped text or JSON, with optional layer filtering and without the workspace snapshot framing from `syu browse --non-interactive`.
+  - **summary**: List philosophies, policies, requirements, or features in list-shaped text or JSON, with optional layer filtering, workspace discovery from child directories, and without the workspace snapshot framing from `syu browse --non-interactive`.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-018
@@ -30,7 +30,7 @@ description: "Generated reference for docs/syu/features/cli/show-list.yaml"
           - run_list_command
 - **id**: FEAT-LIST-002
   - **title**: Optional-kind listing with all-kinds default
-  - **summary**: Allow `syu list` without a kind argument to list all spec layers grouped by type, and accept a bare workspace path to list all kinds in that workspace.
+  - **summary**: Allow `syu list` without a kind argument to list all spec layers grouped by type, and accept a bare workspace path or child directory to list all kinds in that workspace.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-018
@@ -43,7 +43,7 @@ description: "Generated reference for docs/syu/features/cli/show-list.yaml"
           - print_section_list
 - **id**: FEAT-SHOW-001
   - **title**: Non-interactive definition detail lookup
-  - **summary**: Show one philosophy, policy, requirement, or feature by ID in one command.
+  - **summary**: Show one philosophy, policy, requirement, or feature by ID in one command, resolving the workspace from a root path or child directory.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-018
@@ -62,7 +62,7 @@ version: 1
 features:
   - id: FEAT-LIST-001
     title: Non-interactive definition listing
-    summary: List philosophies, policies, requirements, or features in list-shaped text or JSON, with optional layer filtering and without the workspace snapshot framing from `syu browse --non-interactive`.
+    summary: List philosophies, policies, requirements, or features in list-shaped text or JSON, with optional layer filtering, workspace discovery from child directories, and without the workspace snapshot framing from `syu browse --non-interactive`.
     status: implemented
     linked_requirements:
       - REQ-CORE-018
@@ -74,7 +74,7 @@ features:
 
   - id: FEAT-LIST-002
     title: Optional-kind listing with all-kinds default
-    summary: Allow `syu list` without a kind argument to list all spec layers grouped by type, and accept a bare workspace path to list all kinds in that workspace.
+    summary: Allow `syu list` without a kind argument to list all spec layers grouped by type, and accept a bare workspace path or child directory to list all kinds in that workspace.
     status: implemented
     linked_requirements:
       - REQ-CORE-018
@@ -88,7 +88,7 @@ features:
 
   - id: FEAT-SHOW-001
     title: Non-interactive definition detail lookup
-    summary: Show one philosophy, policy, requirement, or feature by ID in one command.
+    summary: Show one philosophy, policy, requirement, or feature by ID in one command, resolving the workspace from a root path or child directory.
     status: implemented
     linked_requirements:
       - REQ-CORE-018

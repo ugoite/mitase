@@ -33,7 +33,10 @@ use crate::{
     config::{SyuConfig, load_config, resolve_spec_root},
     coverage::normalize_relative_path,
     model::{CheckResult, FeatureRegistryDocument, TraceReference},
-    workspace::{load_feature_documents_with_paths, load_requirement_documents_with_paths},
+    workspace::{
+        load_feature_documents_with_paths, load_requirement_documents_with_paths,
+        resolve_workspace_root,
+    },
 };
 
 static APP_DIST: Dir<'_> = include_dir!("$OUT_DIR/syu-app-dist");
@@ -183,6 +186,7 @@ pub fn run_app_command(args: &AppArgs) -> Result<i32> {
         .parse::<IpAddr>()
         .with_context(|| format!("invalid bind address `{}`", settings.bind))?;
     build_app_payload_from_config(&workspace_root, &loaded.config)?;
+    println!("workspace: {}", workspace_root.display());
     let state = AppState::new(workspace_root.clone(), loaded.config);
     let _ = state.refresh_current();
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -267,12 +271,7 @@ fn resolve_app_server_settings(args: &AppArgs, config: &SyuConfig) -> AppServerS
 }
 
 fn canonical_workspace_root(workspace_root: &Path) -> Result<PathBuf> {
-    workspace_root.canonicalize().with_context(|| {
-        format!(
-            "failed to resolve workspace root `{}`",
-            workspace_root.display()
-        )
-    })
+    resolve_workspace_root(workspace_root)
 }
 
 fn app_router(state: AppState) -> Router {
@@ -980,13 +979,14 @@ mod tests {
     use super::{
         AppPayload, AppServerSettings, AppState, AppVersion, SectionKind, Severity,
         SnapshotDependency, app_router, bind_failure_message, browser_root_labels,
-        build_app_payload, collect_feature_sources, collect_snapshot_files_with_extensions,
-        collect_yaml_sources_recursive, content_type_for_path, is_asset_like,
-        load_current_snapshot, non_loopback_warning_lines, normalized_asset_path,
-        normalized_trace_snapshot_path, readiness_probe_request_sent, readiness_probe_succeeds,
-        redacted_relative_label, redacted_root_label, refresh_current_once, relative_display,
-        resolve_app_server_settings, spec_snapshot, startup_lines, trailing_path_components_label,
-        validation_snapshot, wait_for_ready_with_retry,
+        build_app_payload, canonical_workspace_root, collect_feature_sources,
+        collect_snapshot_files_with_extensions, collect_yaml_sources_recursive,
+        content_type_for_path, is_asset_like, load_current_snapshot, non_loopback_warning_lines,
+        normalized_asset_path, normalized_trace_snapshot_path, readiness_probe_request_sent,
+        readiness_probe_succeeds, redacted_relative_label, redacted_root_label,
+        refresh_current_once, relative_display, resolve_app_server_settings, spec_snapshot,
+        startup_lines, trailing_path_components_label, validation_snapshot,
+        wait_for_ready_with_retry,
     };
 
     fn fixture_root(name: &str) -> PathBuf {
@@ -1200,6 +1200,25 @@ mod tests {
                 bind: "127.0.0.1".to_string(),
                 port: 5123,
             }
+        );
+    }
+
+    #[test]
+    fn canonical_workspace_root_discovers_parent_workspace_config() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        create_workspace_skeleton(tempdir.path());
+        write_config(tempdir.path(), "127.0.0.1", 3000);
+        let nested = tempdir.path().join("frontend/nested");
+        fs::create_dir_all(&nested).expect("nested dir");
+
+        let workspace_root =
+            canonical_workspace_root(&nested).expect("workspace root should resolve");
+        assert_eq!(
+            workspace_root,
+            tempdir
+                .path()
+                .canonicalize()
+                .expect("workspace should canonicalize")
         );
     }
 

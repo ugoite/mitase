@@ -178,6 +178,8 @@ fn app_command_serves_browser_ui_and_payload() {
 #[test]
 fn app_command_startup_message_explains_browser_and_stop_flow() {
     let port = reserve_port();
+    let (_workspace_tempdir, workspace) = configured_workspace("127.0.0.1", port);
+    let nested_workspace = workspace.join("frontend");
     let tempdir = tempdir().expect("tempdir should exist");
     let stdout_path = tempdir.path().join("stdout.log");
     let stderr_path = tempdir.path().join("stderr.log");
@@ -186,7 +188,7 @@ fn app_command_startup_message_explains_browser_and_stop_flow() {
     let mut child = Command::cargo_bin("syu")
         .expect("binary should build")
         .arg("app")
-        .arg(fixture_path("passing"))
+        .arg(&nested_workspace)
         .arg("--bind")
         .arg("127.0.0.1")
         .arg("--port")
@@ -204,6 +206,7 @@ fn app_command_startup_message_explains_browser_and_stop_flow() {
 
     let stdout = fs::read_to_string(&stdout_path).expect("stdout should be readable");
     let stderr = fs::read_to_string(&stderr_path).expect("stderr should be readable");
+    assert!(stdout.contains(&format!("workspace: {}", workspace.display())));
     assert!(stdout.contains(&format!("syu app listening on http://127.0.0.1:{port}")));
     assert!(stdout.contains(&format!("syu app ready: http://127.0.0.1:{port}")));
     assert!(stdout.contains(&format!("Open http://127.0.0.1:{port} in your browser.")));
