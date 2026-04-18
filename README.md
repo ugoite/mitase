@@ -29,16 +29,16 @@ verified.
 
 ## Choose your path
 
-Pick the newcomer path that matches what you need next:
+Pick the newcomer path that matches your familiarity and what you need next:
 
 - **Quick start**: stay in this README when the in-page four-layer refresher is
   enough, you already grasp the four-layer idea, want the shortest roughly
   5-minute path from install to `syu validate .`, and are comfortable making
   the first manual YAML edits after a short refresher.
 - **Getting started**: follow
-  [`docs/guide/getting-started.md`](docs/guide/getting-started.md) when you want
-  the same first workspace setup explained step by step before the manual YAML
-  edits and first validation run.
+  [`docs/guide/getting-started.md`](docs/guide/getting-started.md) when you are
+  using `syu` for the first time and want the same first workspace setup
+  explained step by step before the manual YAML edits and first validation run.
 - **Existing repository adoption**: follow
   [`docs/guide/existing-repository.md`](docs/guide/existing-repository.md) when
   the repository already has code and history and you want an incremental
