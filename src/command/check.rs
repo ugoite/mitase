@@ -14,13 +14,14 @@ use serde::Serialize;
 use crate::{
     cli::{CheckArgs, OutputFormat, ValidationGenreFilter, ValidationSeverityFilter},
     command::shell_quote_path,
-    config::SyuConfig,
+    config::{SyuConfig, TraceOwnershipMode},
     coverage::{normalize_relative_path, validate_symbol_trace_coverage},
     inspect::{apply_symbol_doc_fix, inspect_symbol, supports_rich_inspection},
     language::adapter_for_language,
     model::{
-        CheckResult, DefinitionCounts, Feature, FeatureRegistryDocument, Issue, Philosophy, Policy,
-        Requirement, Severity, TraceCount, TraceReference, TraceSummary,
+        CheckResult, DefinitionCounts, Feature, FeatureRegistryDocument, Issue, OwnershipEntry,
+        OwnershipManifest, Philosophy, Policy, Requirement, Severity, TraceCount, TraceReference,
+        TraceSummary,
     },
     rules::{all_rules, attach_referenced_rules, referenced_rules, rule_genre},
     workspace::{Workspace, load_workspace},
@@ -51,6 +52,18 @@ struct TraceValidationTarget<'a> {
 struct AutofixSummary {
     updated_files: BTreeSet<PathBuf>,
     symbol_updates: usize,
+}
+
+#[derive(Debug, Clone)]
+enum OwnershipDeclaration {
+    Satisfied,
+    Missing {
+        manifest_path: Option<PathBuf>,
+    },
+    Invalid {
+        manifest_path: PathBuf,
+        reason: String,
+    },
 }
 
 #[derive(Debug, Clone, Default)]
@@ -622,6 +635,7 @@ fn apply_autofix(workspace: &Workspace) -> Result<AutofixSummary> {
         if let Err(error) = apply_autofix_for_trace_map(
             &workspace.root,
             &workspace.config,
+            &requirement.id,
             &requirement.tests,
             &mut summary,
         ) {
@@ -636,6 +650,7 @@ fn apply_autofix(workspace: &Workspace) -> Result<AutofixSummary> {
         if let Err(error) = apply_autofix_for_trace_map(
             &workspace.root,
             &workspace.config,
+            &feature.id,
             &feature.implementations,
             &mut summary,
         ) {
@@ -650,13 +665,14 @@ fn apply_autofix(workspace: &Workspace) -> Result<AutofixSummary> {
 fn apply_autofix_for_trace_map(
     root: &Path,
     config: &SyuConfig,
+    owner_id: &str,
     references_by_language: &BTreeMap<String, Vec<TraceReference>>,
     summary: &mut AutofixSummary,
 ) -> Result<()> {
     for (language, references) in references_by_language {
         for reference in references {
             if let Err(error) =
-                apply_autofix_for_reference(root, config, language, reference, summary)
+                apply_autofix_for_reference(root, config, owner_id, language, reference, summary)
             {
                 return Err(error);
             }
@@ -669,6 +685,7 @@ fn apply_autofix_for_trace_map(
 fn apply_autofix_for_reference(
     root: &Path,
     config: &SyuConfig,
+    owner_id: &str,
     language: &str,
     reference: &TraceReference,
     summary: &mut AutofixSummary,
@@ -693,13 +710,22 @@ fn apply_autofix_for_reference(
     let mut changed = false;
     let mut updated_symbols = 0;
 
+    if config.validate.trace_ownership_mode == TraceOwnershipMode::Sidecar {
+        ensure_sidecar_ownership_manifest(root, owner_id, &path, reference, summary)?;
+    }
+
     for symbol in reference
         .symbols
         .iter()
         .map(|symbol| symbol.trim())
         .filter(|symbol| !symbol.is_empty() && *symbol != "*")
     {
-        let required = reference.doc_contains.clone();
+        let mut required = reference.doc_contains.clone();
+        if config.validate.trace_ownership_mode == TraceOwnershipMode::Inline
+            && !contents.contains(owner_id)
+        {
+            required.push(owner_id.to_string());
+        }
         if required.is_empty() {
             continue;
         }
@@ -720,11 +746,19 @@ fn apply_autofix_for_reference(
     }
 
     if changed {
-        summary.updated_files.insert(path);
+        record_updated_file(summary, root, &path);
         summary.symbol_updates += updated_symbols;
     }
 
     Ok(())
+}
+
+fn record_updated_file(summary: &mut AutofixSummary, root: &Path, path: &Path) {
+    summary.updated_files.insert(
+        path.strip_prefix(root)
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|_| path.to_path_buf()),
+    );
 }
 
 fn render_text_report(
@@ -1280,6 +1314,232 @@ fn describe_trace_reference(reference: &TraceReference) -> String {
         "file=`{}` symbols=[{symbols}] doc_contains=[{doc_contains}]",
         reference.file.display()
     )
+}
+
+fn evaluate_trace_ownership(
+    root: &Path,
+    config: &SyuConfig,
+    owner_id: &str,
+    traced_file: &Path,
+    reference: &TraceReference,
+    contents: &str,
+) -> OwnershipDeclaration {
+    match config.validate.trace_ownership_mode {
+        TraceOwnershipMode::Mapping => OwnershipDeclaration::Satisfied,
+        TraceOwnershipMode::Inline => {
+            if contents.contains(owner_id) {
+                OwnershipDeclaration::Satisfied
+            } else {
+                OwnershipDeclaration::Missing {
+                    manifest_path: None,
+                }
+            }
+        }
+        TraceOwnershipMode::Sidecar => {
+            let manifest_path = ownership_manifest_path(traced_file);
+            if !manifest_path.is_file() {
+                return OwnershipDeclaration::Missing {
+                    manifest_path: Some(manifest_path),
+                };
+            }
+
+            match load_ownership_manifest(&manifest_path) {
+                Ok(manifest) => {
+                    if manifest_declares_owner(&manifest, owner_id, reference) {
+                        OwnershipDeclaration::Satisfied
+                    } else {
+                        OwnershipDeclaration::Missing {
+                            manifest_path: Some(manifest_path),
+                        }
+                    }
+                }
+                Err(reason) => OwnershipDeclaration::Invalid {
+                    manifest_path: manifest_path
+                        .strip_prefix(root)
+                        .map(Path::to_path_buf)
+                        .unwrap_or(manifest_path),
+                    reason,
+                },
+            }
+        }
+    }
+}
+
+fn ownership_manifest_path(traced_file: &Path) -> PathBuf {
+    let file_name = traced_file
+        .file_name()
+        .map(|file_name| file_name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "trace".to_string());
+    traced_file.with_file_name(format!("{file_name}.syu-ownership.yaml"))
+}
+
+fn load_ownership_manifest(path: &Path) -> std::result::Result<OwnershipManifest, String> {
+    let raw = fs::read_to_string(path)
+        .map_err(|error| format!("failed to read ownership manifest: {error}"))?;
+    let manifest: OwnershipManifest = serde_yaml::from_str(&raw)
+        .map_err(|error| format!("failed to parse ownership manifest YAML: {error}"))?;
+    if manifest.version != 1 {
+        return Err(format!(
+            "unsupported ownership manifest version `{}` (expected `1`)",
+            manifest.version
+        ));
+    }
+    validate_ownership_manifest(&manifest)?;
+    Ok(manifest)
+}
+
+fn validate_ownership_manifest(manifest: &OwnershipManifest) -> std::result::Result<(), String> {
+    let mut owner_ids = BTreeSet::new();
+    for entry in &manifest.owners {
+        if !owner_ids.insert(entry.id.clone()) {
+            return Err(format!(
+                "duplicate ownership entry `{}` in `owners`",
+                entry.id
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn manifest_declares_owner(
+    manifest: &OwnershipManifest,
+    owner_id: &str,
+    reference: &TraceReference,
+) -> bool {
+    let required_symbols = required_ownership_symbols(reference);
+    manifest
+        .owners
+        .iter()
+        .filter(|entry| entry.id == owner_id)
+        .any(|entry| entry_covers_symbols(entry, &required_symbols))
+}
+
+fn entry_covers_symbols(entry: &OwnershipEntry, required_symbols: &[String]) -> bool {
+    let declared_symbols = entry
+        .symbols
+        .iter()
+        .map(|symbol| symbol.trim())
+        .filter(|symbol| !symbol.is_empty())
+        .collect::<BTreeSet<_>>();
+    if declared_symbols.contains("*") {
+        return true;
+    }
+    required_symbols
+        .iter()
+        .all(|symbol| declared_symbols.contains(symbol.as_str()))
+}
+
+fn required_ownership_symbols(reference: &TraceReference) -> Vec<String> {
+    let symbols = reference
+        .symbols
+        .iter()
+        .map(|symbol| symbol.trim())
+        .filter(|symbol| !symbol.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<BTreeSet<_>>();
+    if symbols.contains("*") {
+        return vec!["*".to_string()];
+    }
+    symbols.into_iter().collect()
+}
+
+fn ownership_symbols_hint(reference: &TraceReference) -> String {
+    let symbols = required_ownership_symbols(reference);
+    if symbols.is_empty() {
+        return "the traced symbols".to_string();
+    }
+    format!(
+        "symbols [{}]",
+        symbols
+            .iter()
+            .map(|symbol| format!("`{symbol}`"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+}
+
+fn ensure_sidecar_ownership_manifest(
+    root: &Path,
+    owner_id: &str,
+    traced_file: &Path,
+    reference: &TraceReference,
+    summary: &mut AutofixSummary,
+) -> Result<()> {
+    let manifest_path = ownership_manifest_path(traced_file);
+    let mut manifest = if manifest_path.is_file() {
+        load_ownership_manifest(&manifest_path).map_err(|error| {
+            anyhow::anyhow!("failed to load `{}`: {error}", manifest_path.display())
+        })?
+    } else {
+        OwnershipManifest {
+            version: 1,
+            owners: Vec::new(),
+        }
+    };
+
+    if !merge_ownership_entry(&mut manifest, owner_id, reference) {
+        return Ok(());
+    }
+
+    let raw = serde_yaml::to_string(&manifest)?;
+    fs::write(&manifest_path, raw)?;
+    record_updated_file(summary, root, &manifest_path);
+    summary.symbol_updates += 1;
+    Ok(())
+}
+
+fn merge_ownership_entry(
+    manifest: &mut OwnershipManifest,
+    owner_id: &str,
+    reference: &TraceReference,
+) -> bool {
+    let required_symbols = required_ownership_symbols(reference);
+    if required_symbols.is_empty() {
+        return false;
+    }
+
+    let wildcard_required = required_symbols.len() == 1 && required_symbols[0] == "*";
+    let mut changed = false;
+
+    if let Some(entry) = manifest
+        .owners
+        .iter_mut()
+        .find(|entry| entry.id == owner_id)
+    {
+        if wildcard_required {
+            if !entry.symbols.iter().any(|symbol| symbol.trim() == "*") {
+                entry.symbols = vec!["*".to_string()];
+                changed = true;
+            }
+        } else if !entry.symbols.iter().any(|symbol| symbol.trim() == "*") {
+            let mut combined = entry
+                .symbols
+                .iter()
+                .map(|symbol| symbol.trim())
+                .filter(|symbol| !symbol.is_empty())
+                .map(ToOwned::to_owned)
+                .collect::<BTreeSet<_>>();
+            let original_len = combined.len();
+            combined.extend(required_symbols);
+            if combined.len() != original_len {
+                entry.symbols = combined.into_iter().collect();
+                changed = true;
+            }
+        }
+    } else {
+        manifest.owners.push(OwnershipEntry {
+            id: owner_id.to_string(),
+            symbols: required_symbols,
+        });
+        changed = true;
+    }
+
+    if changed {
+        manifest
+            .owners
+            .sort_by(|left, right| left.id.cmp(&right.id));
+    }
+    changed
 }
 
 fn validate_philosophy(
@@ -2071,6 +2331,76 @@ fn verify_trace_reference(
         }
     };
 
+    match evaluate_trace_ownership(root, config, owner_id, &path, reference, &contents) {
+        OwnershipDeclaration::Satisfied => {}
+        OwnershipDeclaration::Missing { manifest_path } => {
+            let (message, suggestion) = match manifest_path {
+                Some(manifest_path) => {
+                    let manifest_display = manifest_path
+                        .strip_prefix(root)
+                        .unwrap_or(manifest_path.as_path());
+                    (
+                        format!(
+                            "Declared {} file `{}` does not declare ownership for `{owner_id}` in sidecar manifest `{}`.",
+                            role.label(),
+                            display_path.display(),
+                            manifest_display.display()
+                        ),
+                        format!(
+                            "Add `{owner_id}` with {} to `{}` so the {} remains explicitly traceable.",
+                            ownership_symbols_hint(reference),
+                            manifest_display.display(),
+                            role.label()
+                        ),
+                    )
+                }
+                None => (
+                    format!(
+                        "Declared {} file `{}` does not mention `{owner_id}`.",
+                        role.label(),
+                        display_path.display()
+                    ),
+                    format!(
+                        "Add `{owner_id}` to `{}` so the {} remains explicitly traceable.",
+                        display_path.display(),
+                        role.label()
+                    ),
+                ),
+            };
+            issues.push(Issue::error(
+                "SYU-trace-id-001",
+                subject.clone(),
+                Some(format_reference_location(language, reference)),
+                message,
+                Some(suggestion),
+            ));
+            success = false;
+        }
+        OwnershipDeclaration::Invalid {
+            manifest_path,
+            reason,
+        } => {
+            let manifest_display = manifest_path
+                .strip_prefix(root)
+                .unwrap_or(manifest_path.as_path());
+            issues.push(Issue::error(
+                "SYU-trace-id-001",
+                subject.clone(),
+                Some(format_reference_location(language, reference)),
+                format!(
+                    "Sidecar ownership manifest `{}` for declared {} file `{}` is invalid: {reason}",
+                    manifest_display.display(),
+                    role.label(),
+                    display_path.display()
+                ),
+                Some(format!(
+                    "Fix `{}` or switch `validate.trace_ownership_mode` to `mapping` or `inline`.",
+                    manifest_display.display()
+                )),
+            ));
+            success = false;
+        }
+    }
     if reference.symbols.is_empty() {
         issues.push(Issue::error(
             "SYU-trace-symbol-001",
@@ -2251,9 +2581,10 @@ mod tests {
 
     use crate::{
         cli::{ValidationGenreFilter, ValidationSeverityFilter},
-        config::SyuConfig,
+        config::{SyuConfig, TraceOwnershipMode},
         model::{
-            DefinitionCounts, Feature, Issue, Philosophy, Policy, Requirement, TraceReference,
+            DefinitionCounts, Feature, Issue, OwnershipEntry, OwnershipManifest, Philosophy,
+            Policy, Requirement, TraceReference,
         },
         rules::{all_rules, referenced_rules},
         workspace::Workspace,
@@ -2263,11 +2594,13 @@ mod tests {
         FilteredIssueView, IssueFilters, ORPHAN_RULE_CODES, RECIPROCAL_RULE_CODES,
         TextReportSummary, TraceRole, apply_autofix, apply_autofix_for_reference,
         collect_check_result, collect_feature_yaml_paths, describe_trace_reference,
-        filter_check_result, format_reference_location, looks_like_feature_document,
-        preferred_trace_file_path, render_text_report, run_check_command, validate_duplicate_links,
-        validate_duplicate_trace_references, validate_feature, validate_feature_registry_entries,
-        validate_non_empty_field, validate_philosophy, validate_policy, validate_requirement,
-        validate_unique_ids, verify_trace_reference,
+        entry_covers_symbols, filter_check_result, format_reference_location,
+        looks_like_feature_document, merge_ownership_entry, ownership_symbols_hint,
+        preferred_trace_file_path, render_text_report, required_ownership_symbols,
+        run_check_command, validate_duplicate_links, validate_duplicate_trace_references,
+        validate_feature, validate_feature_registry_entries, validate_non_empty_field,
+        validate_philosophy, validate_policy, validate_requirement, validate_unique_ids,
+        verify_trace_reference,
     };
 
     fn philosophy(id: &str) -> Philosophy {
@@ -3642,6 +3975,66 @@ mod tests {
     }
 
     #[test]
+    fn verify_trace_reference_reports_missing_owner_id_in_inline_mode() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let path = tempdir.path().join("trace.rs");
+        fs::write(&path, "fn expected_symbol() {}\n").expect("file should exist");
+
+        let reference = TraceReference {
+            file: PathBuf::from("trace.rs"),
+            symbols: vec!["expected_symbol".to_string()],
+            doc_contains: Vec::new(),
+        };
+        let mut config = SyuConfig::default();
+        config.validate.trace_ownership_mode = TraceOwnershipMode::Inline;
+        let mut issues = Vec::new();
+        assert!(!verify_trace_reference(
+            tempdir.path(),
+            &config,
+            "REQ-1",
+            TraceRole::RequirementTest,
+            "rust",
+            &reference,
+            &mut issues,
+        ));
+        let issue = issues
+            .iter()
+            .find(|issue| issue.code == "SYU-trace-id-001")
+            .expect("inline ownership issue");
+        assert!(issue.message.contains("does not mention `REQ-1`"));
+        assert_eq!(
+            issue.suggestion.as_deref(),
+            Some("Add `REQ-1` to `trace.rs` so the test remains explicitly traceable.")
+        );
+    }
+
+    #[test]
+    fn verify_trace_reference_accepts_owner_id_in_inline_mode() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let path = tempdir.path().join("trace.rs");
+        fs::write(&path, "// REQ-1\nfn expected_symbol() {}\n").expect("file should exist");
+
+        let reference = TraceReference {
+            file: PathBuf::from("trace.rs"),
+            symbols: vec!["expected_symbol".to_string()],
+            doc_contains: Vec::new(),
+        };
+        let mut config = SyuConfig::default();
+        config.validate.trace_ownership_mode = TraceOwnershipMode::Inline;
+        let mut issues = Vec::new();
+        assert!(verify_trace_reference(
+            tempdir.path(),
+            &config,
+            "REQ-1",
+            TraceRole::RequirementTest,
+            "rust",
+            &reference,
+            &mut issues,
+        ));
+        assert!(issues.is_empty(), "issues: {issues:#?}");
+    }
+
+    #[test]
     fn verify_trace_reference_reports_missing_symbol() {
         let tempdir = tempdir().expect("tempdir should exist");
         let path = tempdir.path().join("trace.rs");
@@ -3743,6 +4136,349 @@ mod tests {
             &mut issues,
         ));
         assert!(issues.is_empty());
+    }
+
+    #[test]
+    fn verify_trace_reference_accepts_sidecar_ownership_manifests() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let path = tempdir.path().join("trace.rs");
+        fs::write(&path, "pub fn expected() {}\n").expect("file should exist");
+        fs::write(
+            tempdir.path().join("trace.rs.syu-ownership.yaml"),
+            "version: 1\nowners:\n  - id: REQ-1\n    symbols:\n      - expected\n",
+        )
+        .expect("ownership manifest should exist");
+
+        let reference = TraceReference {
+            file: PathBuf::from("trace.rs"),
+            symbols: vec!["expected".to_string()],
+            doc_contains: Vec::new(),
+        };
+        let mut config = SyuConfig::default();
+        config.validate.trace_ownership_mode = TraceOwnershipMode::Sidecar;
+        let mut issues = Vec::new();
+
+        assert!(verify_trace_reference(
+            tempdir.path(),
+            &config,
+            "REQ-1",
+            TraceRole::RequirementTest,
+            "rust",
+            &reference,
+            &mut issues,
+        ));
+        assert!(issues.is_empty());
+    }
+
+    #[test]
+    fn sidecar_ownership_helpers_cover_empty_and_wildcard_symbols() {
+        let wildcard_entry = OwnershipEntry {
+            id: "REQ-1".to_string(),
+            symbols: vec!["*".to_string()],
+        };
+        assert!(entry_covers_symbols(
+            &wildcard_entry,
+            &["expected".to_string()]
+        ));
+
+        let wildcard_reference = TraceReference {
+            file: PathBuf::from("trace.rs"),
+            symbols: vec!["*".to_string()],
+            doc_contains: Vec::new(),
+        };
+        assert_eq!(required_ownership_symbols(&wildcard_reference), vec!["*"]);
+
+        let empty_reference = TraceReference {
+            file: PathBuf::from("trace.rs"),
+            symbols: Vec::new(),
+            doc_contains: Vec::new(),
+        };
+        assert_eq!(
+            ownership_symbols_hint(&empty_reference),
+            "the traced symbols"
+        );
+
+        let mut manifest = OwnershipManifest {
+            version: 1,
+            owners: vec![wildcard_entry],
+        };
+        assert!(!merge_ownership_entry(
+            &mut manifest,
+            "REQ-1",
+            &empty_reference
+        ));
+        assert!(!merge_ownership_entry(
+            &mut manifest,
+            "REQ-1",
+            &TraceReference {
+                file: PathBuf::from("trace.rs"),
+                symbols: vec!["expected".to_string()],
+                doc_contains: Vec::new(),
+            }
+        ));
+    }
+
+    #[test]
+    fn merge_ownership_entry_updates_existing_sidecar_entries() {
+        let mut manifest = OwnershipManifest {
+            version: 1,
+            owners: vec![
+                OwnershipEntry {
+                    id: "REQ-2".to_string(),
+                    symbols: vec!["covered".to_string()],
+                },
+                OwnershipEntry {
+                    id: "REQ-1".to_string(),
+                    symbols: vec!["covered".to_string()],
+                },
+            ],
+        };
+
+        assert!(merge_ownership_entry(
+            &mut manifest,
+            "REQ-1",
+            &TraceReference {
+                file: PathBuf::from("trace.rs"),
+                symbols: vec!["added".to_string()],
+                doc_contains: Vec::new(),
+            },
+        ));
+        assert_eq!(manifest.owners[0].id, "REQ-1");
+        assert_eq!(
+            manifest.owners[0].symbols,
+            vec!["added".to_string(), "covered".to_string()]
+        );
+
+        assert!(merge_ownership_entry(
+            &mut manifest,
+            "REQ-2",
+            &TraceReference {
+                file: PathBuf::from("trace.rs"),
+                symbols: vec!["*".to_string()],
+                doc_contains: Vec::new(),
+            },
+        ));
+        assert_eq!(manifest.owners[1].symbols, vec!["*".to_string()]);
+    }
+
+    #[test]
+    fn verify_trace_reference_reports_missing_owner_in_sidecar_manifest() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let path = tempdir.path().join("trace.rs");
+        fs::write(&path, "pub fn expected() {}\n").expect("file should exist");
+        fs::write(
+            tempdir.path().join("trace.rs.syu-ownership.yaml"),
+            "version: 1\nowners:\n  - id: REQ-OTHER\n    symbols:\n      - expected\n",
+        )
+        .expect("ownership manifest should exist");
+
+        let mut config = SyuConfig::default();
+        config.validate.trace_ownership_mode = TraceOwnershipMode::Sidecar;
+        let mut issues = Vec::new();
+
+        assert!(!verify_trace_reference(
+            tempdir.path(),
+            &config,
+            "REQ-1",
+            TraceRole::RequirementTest,
+            "rust",
+            &TraceReference {
+                file: PathBuf::from("trace.rs"),
+                symbols: vec!["expected".to_string()],
+                doc_contains: Vec::new(),
+            },
+            &mut issues,
+        ));
+        let issue = issues
+            .iter()
+            .find(|issue| issue.code == "SYU-trace-id-001")
+            .expect("sidecar ownership issue");
+        assert!(issue.message.contains("does not declare ownership"));
+        assert!(issue.message.contains("trace.rs.syu-ownership.yaml"));
+    }
+
+    #[test]
+    fn verify_trace_reference_reports_invalid_sidecar_manifests() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let path = tempdir.path().join("trace.rs");
+        fs::write(&path, "pub fn expected() {}\n").expect("file should exist");
+        fs::write(
+            tempdir.path().join("trace.rs.syu-ownership.yaml"),
+            "version: 2\nowners: []\n",
+        )
+        .expect("ownership manifest should exist");
+
+        let mut config = SyuConfig::default();
+        config.validate.trace_ownership_mode = TraceOwnershipMode::Sidecar;
+        let mut issues = Vec::new();
+
+        assert!(!verify_trace_reference(
+            tempdir.path(),
+            &config,
+            "REQ-1",
+            TraceRole::RequirementTest,
+            "rust",
+            &TraceReference {
+                file: PathBuf::from("trace.rs"),
+                symbols: vec!["expected".to_string()],
+                doc_contains: Vec::new(),
+            },
+            &mut issues,
+        ));
+        let issue = issues
+            .iter()
+            .find(|issue| issue.code == "SYU-trace-id-001")
+            .expect("invalid sidecar issue");
+        assert!(issue.message.contains("is invalid"));
+        assert!(
+            issue
+                .message
+                .contains("unsupported ownership manifest version `2`")
+        );
+        assert_eq!(
+            issue.suggestion.as_deref(),
+            Some(
+                "Fix `trace.rs.syu-ownership.yaml` or switch `validate.trace_ownership_mode` to `mapping` or `inline`."
+            )
+        );
+    }
+
+    #[test]
+    fn verify_trace_reference_reports_duplicate_owner_entries_in_sidecar_manifests() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let path = tempdir.path().join("trace.rs");
+        fs::write(&path, "pub fn expected() {}\n").expect("file should exist");
+        fs::write(
+            tempdir.path().join("trace.rs.syu-ownership.yaml"),
+            "version: 1\nowners:\n  - id: REQ-1\n    symbols:\n      - expected\n  - id: REQ-1\n    symbols:\n      - other\n",
+        )
+        .expect("ownership manifest should exist");
+
+        let mut config = SyuConfig::default();
+        config.validate.trace_ownership_mode = TraceOwnershipMode::Sidecar;
+        let mut issues = Vec::new();
+
+        assert!(!verify_trace_reference(
+            tempdir.path(),
+            &config,
+            "REQ-1",
+            TraceRole::RequirementTest,
+            "rust",
+            &TraceReference {
+                file: PathBuf::from("trace.rs"),
+                symbols: vec!["expected".to_string()],
+                doc_contains: Vec::new(),
+            },
+            &mut issues,
+        ));
+        let issue = issues
+            .iter()
+            .find(|issue| issue.code == "SYU-trace-id-001")
+            .expect("duplicate sidecar issue");
+        assert!(issue.message.contains("is invalid"));
+        assert!(issue.message.contains("duplicate ownership entry `REQ-1`"));
+    }
+
+    #[test]
+    fn apply_autofix_for_reference_leaves_existing_sidecar_entries_unchanged() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let root = tempdir.path();
+        fs::write(root.join("trace.rs"), "pub fn expected() {}\n")
+            .expect("trace file should exist");
+        fs::write(
+            root.join("trace.rs.syu-ownership.yaml"),
+            "version: 1\nowners:\n  - id: REQ-1\n    symbols:\n      - expected\n",
+        )
+        .expect("ownership manifest should exist");
+
+        let mut config = SyuConfig::default();
+        config.validate.trace_ownership_mode = TraceOwnershipMode::Sidecar;
+
+        let mut summary = super::AutofixSummary::default();
+        apply_autofix_for_reference(
+            root,
+            &config,
+            "REQ-1",
+            "rust",
+            &TraceReference {
+                file: PathBuf::from("trace.rs"),
+                symbols: vec!["expected".to_string()],
+                doc_contains: Vec::new(),
+            },
+            &mut summary,
+        )
+        .expect("existing sidecar manifest should remain valid");
+
+        assert!(summary.updated_files.is_empty());
+        assert_eq!(summary.symbol_updates, 0);
+    }
+
+    #[test]
+    fn apply_autofix_for_reference_reports_invalid_sidecar_manifests() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let root = tempdir.path();
+        fs::write(root.join("trace.rs"), "pub fn expected() {}\n")
+            .expect("trace file should exist");
+        fs::write(
+            root.join("trace.rs.syu-ownership.yaml"),
+            "version: 2\nowners: []\n",
+        )
+        .expect("ownership manifest should exist");
+
+        let mut config = SyuConfig::default();
+        config.validate.trace_ownership_mode = TraceOwnershipMode::Sidecar;
+
+        let error = apply_autofix_for_reference(
+            root,
+            &config,
+            "REQ-1",
+            "rust",
+            &TraceReference {
+                file: PathBuf::from("trace.rs"),
+                symbols: vec!["expected".to_string()],
+                doc_contains: Vec::new(),
+            },
+            &mut super::AutofixSummary::default(),
+        )
+        .expect_err("invalid sidecar manifests should fail autofix");
+        assert!(error.to_string().contains("failed to load"));
+        assert!(error.to_string().contains("trace.rs.syu-ownership.yaml"));
+    }
+
+    #[test]
+    fn apply_autofix_for_reference_reports_duplicate_owner_entries_in_sidecar_manifests() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let root = tempdir.path();
+        fs::write(root.join("trace.rs"), "pub fn expected() {}\n")
+            .expect("trace file should exist");
+        fs::write(
+            root.join("trace.rs.syu-ownership.yaml"),
+            "version: 1\nowners:\n  - id: REQ-1\n    symbols:\n      - expected\n  - id: REQ-1\n    symbols:\n      - other\n",
+        )
+        .expect("ownership manifest should exist");
+
+        let mut config = SyuConfig::default();
+        config.validate.trace_ownership_mode = TraceOwnershipMode::Sidecar;
+
+        let error = apply_autofix_for_reference(
+            root,
+            &config,
+            "REQ-1",
+            "rust",
+            &TraceReference {
+                file: PathBuf::from("trace.rs"),
+                symbols: vec!["expected".to_string()],
+                doc_contains: Vec::new(),
+            },
+            &mut super::AutofixSummary::default(),
+        )
+        .expect_err("duplicate owner manifests should fail autofix");
+        assert!(error.to_string().contains("failed to load"));
+        assert!(
+            error
+                .to_string()
+                .contains("duplicate ownership entry `REQ-1`")
+        );
     }
 
     #[test]
@@ -3861,6 +4597,7 @@ mod tests {
         apply_autofix_for_reference(
             root,
             &SyuConfig::default(),
+            "REQ-1",
             "java",
             &TraceReference {
                 file: PathBuf::from("Trace.java"),
@@ -3874,6 +4611,7 @@ mod tests {
         apply_autofix_for_reference(
             root,
             &SyuConfig::default(),
+            "REQ-1",
             "rust",
             &TraceReference {
                 file: PathBuf::from("trace.rs"),
@@ -3887,6 +4625,7 @@ mod tests {
         apply_autofix_for_reference(
             root,
             &SyuConfig::default(),
+            "REQ-1",
             "rust",
             &TraceReference {
                 file: PathBuf::from("missing.rs"),
@@ -3902,6 +4641,7 @@ mod tests {
         apply_autofix_for_reference(
             root,
             &SyuConfig::default(),
+            "REQ-1",
             "rust",
             &TraceReference {
                 file: PathBuf::from("nested"),
@@ -3917,6 +4657,7 @@ mod tests {
         apply_autofix_for_reference(
             root,
             &SyuConfig::default(),
+            "REQ-1",
             "rust",
             &TraceReference {
                 file: PathBuf::from("trace.rs"),
@@ -3929,6 +4670,77 @@ mod tests {
 
         assert!(summary.updated_files.is_empty());
         assert_eq!(summary.symbol_updates, 0);
+    }
+
+    #[test]
+    fn apply_autofix_for_reference_writes_sidecar_ownership_manifest() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let root = tempdir.path();
+        let source_path = root.join("trace.rs");
+        fs::write(&source_path, "pub fn expected() {}\n").expect("trace file should exist");
+
+        let mut config = SyuConfig::default();
+        config.validate.trace_ownership_mode = TraceOwnershipMode::Sidecar;
+
+        let mut summary = super::AutofixSummary::default();
+        apply_autofix_for_reference(
+            root,
+            &config,
+            "REQ-1",
+            "rust",
+            &TraceReference {
+                file: PathBuf::from("trace.rs"),
+                symbols: vec!["expected".to_string()],
+                doc_contains: Vec::new(),
+            },
+            &mut summary,
+        )
+        .expect("sidecar ownership autofix should succeed");
+
+        let source_contents = fs::read_to_string(&source_path).expect("source contents");
+        assert_eq!(source_contents, "pub fn expected() {}\n");
+
+        let manifest_contents =
+            fs::read_to_string(root.join("trace.rs.syu-ownership.yaml")).expect("manifest");
+        assert!(manifest_contents.contains("version: 1"));
+        assert!(manifest_contents.contains("id: REQ-1"));
+        assert!(manifest_contents.contains("- expected"));
+        assert_eq!(summary.symbol_updates, 1);
+        assert!(
+            summary
+                .updated_files
+                .contains(Path::new("trace.rs.syu-ownership.yaml"))
+        );
+    }
+
+    #[test]
+    fn apply_autofix_for_reference_inserts_inline_owner_id_when_configured() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let root = tempdir.path();
+        let source_path = root.join("trace.rs");
+        fs::write(&source_path, "pub fn expected() {}\n").expect("trace file should exist");
+
+        let mut config = SyuConfig::default();
+        config.validate.trace_ownership_mode = TraceOwnershipMode::Inline;
+
+        let mut summary = super::AutofixSummary::default();
+        apply_autofix_for_reference(
+            root,
+            &config,
+            "REQ-1",
+            "rust",
+            &TraceReference {
+                file: PathBuf::from("trace.rs"),
+                symbols: vec!["expected".to_string()],
+                doc_contains: Vec::new(),
+            },
+            &mut summary,
+        )
+        .expect("inline ownership autofix should succeed");
+
+        let source_contents = fs::read_to_string(&source_path).expect("source contents");
+        assert!(source_contents.contains("REQ-1"));
+        assert_eq!(summary.symbol_updates, 1);
     }
 
     #[test]
@@ -3977,6 +4789,8 @@ mod tests {
 
         assert_eq!(summary.symbol_updates, 2);
         assert_eq!(summary.updated_files.len(), 2);
+        assert!(summary.updated_files.contains(Path::new("requirement.rs")));
+        assert!(summary.updated_files.contains(Path::new("feature.rs")));
         let requirement_contents =
             fs::read_to_string(root.join("requirement.rs")).expect("requirement contents");
         assert!(requirement_contents.contains("Requirement docs"));
@@ -4143,6 +4957,7 @@ mod tests {
         apply_autofix_for_reference(
             tempdir.path(),
             &SyuConfig::default(),
+            "REQ-1",
             "rust",
             &TraceReference {
                 file: PathBuf::from("trace.rs"),
@@ -4172,6 +4987,7 @@ mod tests {
         let result = apply_autofix_for_reference(
             tempdir.path(),
             &SyuConfig::default(),
+            "REQ-1",
             "rust",
             &TraceReference {
                 file: PathBuf::from("trace.rs"),

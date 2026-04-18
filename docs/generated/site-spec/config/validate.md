@@ -94,6 +94,20 @@ description: "Generated reference for docs/syu/config/validate.yaml"
       validate command can enable or disable this for one run with
       `--require-symbol-trace-coverage` or
       `--require-symbol-trace-coverage=false`.
+- **key**: validate.trace_ownership_mode
+  - **type**: enum(mapping|inline|sidecar)
+  - **default**: mapping
+  - **summary**: Chooses whether trace YAML alone is sufficient or ownership must also be declared inline or in a sidecar manifest.
+  - **description**:
+    - |
+      `mapping` keeps the current default where checked-in requirement and
+      feature trace mappings are enough to audit ownership. `inline` adds an
+      extra breadcrumb by requiring traced source and test files to mention
+      their owning requirement or feature ID directly. `sidecar` keeps the YAML
+      trace mapping as the canonical file/symbol link but requires each traced
+      file to have an adjacent `&lt;file&gt;.syu-ownership.yaml` manifest with
+      matching owner IDs and symbols. Autofix updates the sidecar manifest
+      instead of inserting IDs into source when `sidecar` is enabled.
 - **key**: validate.symbol_trace_coverage_ignored_paths
   - **type**: array&lt;path&gt;
   - **default**:
@@ -189,6 +203,19 @@ items:
       validate command can enable or disable this for one run with
       `--require-symbol-trace-coverage` or
       `--require-symbol-trace-coverage=false`.
+  - key: validate.trace_ownership_mode
+    type: enum(mapping|inline|sidecar)
+    default: mapping
+    summary: Chooses whether trace YAML alone is sufficient or ownership must also be declared inline or in a sidecar manifest.
+    description: |
+      `mapping` keeps the current default where checked-in requirement and
+      feature trace mappings are enough to audit ownership. `inline` adds an
+      extra breadcrumb by requiring traced source and test files to mention
+      their owning requirement or feature ID directly. `sidecar` keeps the YAML
+      trace mapping as the canonical file/symbol link but requires each traced
+      file to have an adjacent `<file>.syu-ownership.yaml` manifest with
+      matching owner IDs and symbols. Autofix updates the sidecar manifest
+      instead of inserting IDs into source when `sidecar` is enabled.
   - key: validate.symbol_trace_coverage_ignored_paths
     type: array<path>
     default:

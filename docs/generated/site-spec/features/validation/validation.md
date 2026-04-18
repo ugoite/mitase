@@ -265,6 +265,19 @@ description: "Generated reference for docs/syu/features/validation/validation.ya
       invalid interpretation and reviewers lose confidence in what the trace
       means. This rule keeps the declared language and the referenced artifact in
       sync.
+- **code**: SYU-trace-id-001
+  - **genre**: trace
+  - **severity**: error
+  - **title**: Configured trace ownership breadcrumbs must stay explicit
+  - **summary**: When ownership breadcrumbs are enabled, the trace must stay explicit inline or in its checked-in sidecar manifest.
+  - **description**:
+    - |
+      Some repositories are comfortable letting trace YAML be the only ownership
+      source, while others still want an extra breadcrumb near the code or test
+      itself. `validate.trace_ownership_mode` controls that tradeoff. When it is
+      set to `inline` or `sidecar`, `syu` requires the traced artifact to satisfy
+      the chosen ownership mode so review-time explainability stays
+      repository-native.
 - **code**: SYU-trace-symbol-001
   - **genre**: trace
   - **severity**: error
@@ -681,6 +694,18 @@ rules:
       means. This rule keeps the declared language and the referenced artifact in
       sync.
 
+  - code: SYU-trace-id-001
+    genre: trace
+    severity: error
+    title: Configured trace ownership breadcrumbs must stay explicit
+    summary: When ownership breadcrumbs are enabled, the trace must stay explicit inline or in its checked-in sidecar manifest.
+    description: |
+      Some repositories are comfortable letting trace YAML be the only ownership
+      source, while others still want an extra breadcrumb near the code or test
+      itself. `validate.trace_ownership_mode` controls that tradeoff. When it is
+      set to `inline` or `sidecar`, `syu` requires the traced artifact to satisfy
+      the chosen ownership mode so review-time explainability stays
+      repository-native.
   - code: SYU-trace-symbol-001
     genre: trace
     severity: error

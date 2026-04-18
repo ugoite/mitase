@@ -285,6 +285,43 @@ For the browser app, CLI flags override config:
 2. `app.port`
 3. `3000`
 
+## Ownership declaration mode
+
+`validate.trace_ownership_mode` controls where traced files declare their owning
+requirement or feature ID:
+
+```yaml
+validate:
+  trace_ownership_mode: sidecar
+```
+
+- `mapping` is the default: the checked-in requirement and feature trace YAML is
+  already considered enough to audit ownership.
+- `inline` opts into an extra breadcrumb by requiring the traced source or test
+  file to mention the owning ID directly.
+- `sidecar` expects a checked-in manifest next to each traced file, named
+  `<file>.syu-ownership.yaml`.
+
+Example sidecar manifest:
+
+```yaml
+version: 1
+owners:
+  - id: REQ-001
+    symbols:
+      - req_trace
+  - id: FEAT-001
+    symbols:
+      - req_trace
+```
+
+Use `mapping` when trace YAML alone matches your repository's explainability
+needs, `inline` when reviewers should see ownership in the traced artifact
+itself, and `sidecar` when you want to keep ownership explicit in version
+control without forcing repository IDs into source comments. `syu validate
+--fix` updates the sidecar manifest instead of inserting IDs into the traced
+file in `sidecar` mode.
+
 ## Wildcard file ownership
 
 Traces may use `symbols: ['*']` when one requirement or feature intentionally
@@ -317,6 +354,9 @@ want strict ownership checks without enumerating every public symbol by hand.
 - for mixed-language repositories, keep `validate.require_symbol_trace_coverage:
   false` during adoption and use explicit file or wildcard ownership for areas
   that the current language adapters cannot inspect yet
+- leave `validate.trace_ownership_mode: mapping` unless your repository has a
+  deliberate reason to require ownership breadcrumbs inline or in checked-in
+  sidecar manifests
 - set `report.output` when your repository checks in one stable report artifact
   path
 - set `app.bind` and `app.port` only when your team really has a stable local

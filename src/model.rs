@@ -118,6 +118,22 @@ pub struct TraceReference {
     pub doc_contains: Vec<String>,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct OwnershipManifest {
+    pub version: u32,
+    #[serde(default)]
+    pub owners: Vec<OwnershipEntry>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct OwnershipEntry {
+    pub id: String,
+    #[serde(default)]
+    pub symbols: Vec<String>,
+}
+
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct DefinitionCounts {
     pub philosophies: usize,
