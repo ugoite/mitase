@@ -63,6 +63,7 @@ description: "Generated reference for docs/syu/policies/policies.yaml"
     - REQ-CORE-017
     - REQ-CORE-018
     - REQ-CORE-019
+    - REQ-CORE-022
     - REQ-CORE-021
     - REQ-CORE-023
     - REQ-CORE-024
@@ -87,6 +88,7 @@ description: "Generated reference for docs/syu/policies/policies.yaml"
   - **linked_requirements**:
     - REQ-CORE-002
     - REQ-CORE-003
+    - REQ-CORE-022
     - REQ-CORE-021
     - REQ-CORE-024
 - **id**: POL-004
@@ -109,6 +111,7 @@ description: "Generated reference for docs/syu/policies/policies.yaml"
     - REQ-CORE-018
     - REQ-CORE-019
     - REQ-CORE-020
+    - REQ-CORE-022
     - REQ-CORE-021
     - REQ-CORE-023
     - REQ-CORE-024
@@ -130,6 +133,7 @@ description: "Generated reference for docs/syu/policies/policies.yaml"
     - REQ-CORE-012
     - REQ-CORE-016
     - REQ-CORE-017
+    - REQ-CORE-022
 - **id**: POL-006
   - **title**: The self-hosted repository should demonstrate polyglot, contributor-friendly use
   - **summary**: `syu` should prove that its model works in the kind of mixed repositories it claims to support.
@@ -232,6 +236,7 @@ policies:
       - REQ-CORE-017
       - REQ-CORE-018
       - REQ-CORE-019
+      - REQ-CORE-022
       - REQ-CORE-021
       - REQ-CORE-023
       - REQ-CORE-024
@@ -256,6 +261,7 @@ policies:
     linked_requirements:
       - REQ-CORE-002
       - REQ-CORE-003
+      - REQ-CORE-022
       - REQ-CORE-021
       - REQ-CORE-024
 
@@ -278,6 +284,7 @@ policies:
       - REQ-CORE-018
       - REQ-CORE-019
       - REQ-CORE-020
+      - REQ-CORE-022
       - REQ-CORE-021
       - REQ-CORE-023
       - REQ-CORE-024
@@ -299,6 +306,7 @@ policies:
       - REQ-CORE-012
       - REQ-CORE-016
       - REQ-CORE-017
+      - REQ-CORE-022
 
   - id: POL-006
     title: The self-hosted repository should demonstrate polyglot, contributor-friendly use

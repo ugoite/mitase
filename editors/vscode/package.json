@@ -1,0 +1,80 @@
+{
+  "name": "syu-vscode",
+  "displayName": "syu",
+  "description": "FEAT-VSCODE-001 Surface syu validation diagnostics and trace navigation inside VS Code.",
+  "version": "0.0.1-alpha.7",
+  "publisher": "ugoite",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "syu",
+    "specification",
+    "traceability",
+    "requirements"
+  ],
+  "activationEvents": [
+    "workspaceContains:syu.yaml",
+    "workspaceContains:docs/syu/features/features.yaml",
+    "onCommand:syu.refreshDiagnostics",
+    "onCommand:syu.showTraceForActiveFile",
+    "onCommand:syu.openSpecItemById",
+    "onCommand:syu.showRelatedFilesForSpecId",
+    "onView:syuContext"
+  ],
+  "main": "./src/extension.js",
+  "scripts": {
+    "check": "node --check src/extension.js && node --check src/model.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "yaml": "^2.8.1"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "syu.refreshDiagnostics",
+        "title": "syu: Refresh diagnostics"
+      },
+      {
+        "command": "syu.showTraceForActiveFile",
+        "title": "syu: Trace active file"
+      },
+      {
+        "command": "syu.openSpecItemById",
+        "title": "syu: Open spec item by ID"
+      },
+      {
+        "command": "syu.showRelatedFilesForSpecId",
+        "title": "syu: Show related files for spec ID"
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "syuContext",
+          "name": "syu Context"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "syu",
+      "properties": {
+        "syu.binaryPath": {
+          "type": "string",
+          "default": "syu",
+          "markdownDescription": "Path to the `syu` CLI binary that powers validation diagnostics."
+        },
+        "syu.autoRefreshDiagnostics": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Refresh `syu` diagnostics after saving a file inside a syu workspace."
+        }
+      }
+    }
+  }
+}

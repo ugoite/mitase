@@ -57,6 +57,7 @@ Keep the detailed guides close:
 - [`docs/guide/configuration.md`](docs/guide/configuration.md)
 - [`docs/guide/spec-antipatterns.md`](docs/guide/spec-antipatterns.md)
 - [`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md)
+- [`docs/guide/vscode-extension.md`](docs/guide/vscode-extension.md)
 - [`CONTRIBUTING.md`](CONTRIBUTING.md)
 
 ## Install from published releases
@@ -483,6 +484,22 @@ When contributors change browser app sources or build inputs, they should run
 
 Want the visual tour first? See the [browser UI guide with annotated
 screenshots](docs/guide/app.md).
+
+## VS Code extension
+
+The repository now ships an editor-first extension scaffold under
+[`editors/vscode/`](editors/vscode/).
+
+It refreshes `syu validate --format json` diagnostics into the Problems panel,
+adds a **syu Context** explorer view for the active file, opens YAML documents
+from spec IDs, and jumps from a requirement or feature to its traced files.
+
+To try it from source, open `editors/vscode/` in VS Code and press `F5` to
+start an Extension Development Host. If `syu` is not already on your `PATH`,
+set the extension's `syu.binaryPath` setting first.
+
+See the full setup and command guide in
+[`docs/guide/vscode-extension.md`](docs/guide/vscode-extension.md).
 
 ## Configuration
 
