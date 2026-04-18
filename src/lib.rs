@@ -1,5 +1,6 @@
 // FEAT-ADD-001
 // FEAT-SEARCH-001
+// FEAT-TRACE-001
 // FEAT-BROWSE-001
 
 pub mod cli;
@@ -59,6 +60,7 @@ enum Dispatch {
     List(cli::ListArgs),
     Show(cli::ShowArgs),
     Search(cli::SearchArgs),
+    Trace(cli::TraceArgs),
     App(cli::AppArgs),
     PrintHelp,
     Validate(cli::ValidateArgs),
@@ -74,6 +76,7 @@ fn dispatch(cli: cli::Cli, stdin_is_terminal: bool, stdout_is_terminal: bool) ->
         Some(cli::Commands::List(args)) => Dispatch::List(args),
         Some(cli::Commands::Show(args)) => Dispatch::Show(args),
         Some(cli::Commands::Search(args)) => Dispatch::Search(args),
+        Some(cli::Commands::Trace(args)) => Dispatch::Trace(args),
         Some(cli::Commands::App(args)) => Dispatch::App(args),
         None if stdin_is_terminal && stdout_is_terminal => {
             Dispatch::Browse(cli::BrowseArgs::default())
@@ -93,6 +96,7 @@ fn run_dispatch(dispatch: Dispatch) -> Result<i32> {
         Dispatch::List(args) => command::list::run_list_command(&args),
         Dispatch::Show(args) => command::show::run_show_command(&args),
         Dispatch::Search(args) => command::search::run_search_command(&args),
+        Dispatch::Trace(args) => command::trace::run_trace_command(&args),
         Dispatch::App(args) => command::app::run_app_command(&args),
         Dispatch::PrintHelp => {
             let mut command = cli::Cli::command();
@@ -123,7 +127,7 @@ mod tests {
 
     use crate::cli::{
         AddArgs, AppArgs, Cli, Commands, ListArgs, LookupKind, OutputFormat, SearchArgs, ShowArgs,
-        TemplatesArgs,
+        TemplatesArgs, TraceArgs,
     };
 
     // REQ-CORE-015
@@ -221,6 +225,36 @@ mod tests {
             templates,
             super::Dispatch::Templates(crate::cli::TemplatesArgs { format })
                 if format == OutputFormat::Json
+        ));
+    }
+
+    #[test]
+    // REQ-CORE-021
+    fn dispatches_trace_subcommands_without_rewriting_them() {
+        let trace = super::dispatch(
+            Cli {
+                command: Some(Commands::Trace(TraceArgs {
+                    file: PathBuf::from("src/lib.rs"),
+                    workspace: PathBuf::from("workspace"),
+                    symbol: Some("run".to_string()),
+                    format: OutputFormat::Json,
+                })),
+            },
+            true,
+            true,
+        );
+
+        assert!(matches!(
+            trace,
+            super::Dispatch::Trace(crate::cli::TraceArgs {
+                file,
+                workspace,
+                symbol,
+                format
+            }) if file == Path::new("src/lib.rs")
+                && workspace == Path::new("workspace")
+                && symbol.as_deref() == Some("run")
+                && format == OutputFormat::Json
         ));
     }
 

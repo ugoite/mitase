@@ -286,6 +286,7 @@ syu add feature FEAT-AUTH-LOGIN-001 --kind auth
 syu list requirement
 syu show REQ-001
 syu search traceability --kind requirement
+syu trace src/command/check.rs --symbol run_check_command
 syu app .
 syu report . --output reports/syu.md
 ```
@@ -488,6 +489,16 @@ Search definitions by ID, title, summary, or description:
 syu search audit
 syu search traceability --kind requirement
 syu search FEAT-CHECK-001 --format json
+```
+
+### `syu trace`
+
+Start from a traced file path and optional symbol when review or refactoring
+begins in code instead of from a spec ID:
+
+```bash
+syu trace src/command/check.rs --symbol run_check_command
+syu trace tests/report_command.rs path/to/workspace --format json
 ```
 
 ### `syu app`

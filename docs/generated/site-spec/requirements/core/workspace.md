@@ -290,6 +290,39 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       - **file**: src/command/add.rs
         - **symbols**:
           - *
+- **id**: REQ-CORE-021
+  - **title**: Provide a source-first trace lookup CLI command
+  - **description**:
+    - |
+      The CLI MUST provide a `trace` command that starts from a repository file
+      path and optional symbol, then resolves the linked requirements, features,
+      policies, and philosophies for that source artifact without requiring a
+      known spec ID first. The command SHOULD offer text and JSON output, SHOULD
+      keep working when the workspace still loads despite validation issues, and
+      SHOULD explain whether the source is owned, partially traced, or unowned.
+  - **priority**: medium
+  - **status**: implemented
+  - **linked_policies**:
+    - POL-001
+    - POL-002
+    - POL-003
+    - POL-004
+  - **linked_features**:
+    - FEAT-TRACE-001
+  - **tests**:
+    - **rust**:
+      - **file**: tests/trace_command.rs
+        - **symbols**:
+          - *
+      - **file**: tests/help_command.rs
+        - **symbols**:
+          - trace_help_mentions_symbol_lookup_and_json_output
+      - **file**: src/lib.rs
+        - **symbols**:
+          - dispatches_trace_subcommands_without_rewriting_them
+      - **file**: src/command/trace.rs
+        - **symbols**:
+          - *
 
 ## Source YAML
 
@@ -562,6 +595,38 @@ requirements:
           symbols:
             - dispatches_add_subcommands_without_rewriting_them
         - file: src/command/add.rs
+          symbols:
+            - '*'
+  - id: REQ-CORE-021
+    title: Provide a source-first trace lookup CLI command
+    description: |
+      The CLI MUST provide a `trace` command that starts from a repository file
+      path and optional symbol, then resolves the linked requirements, features,
+      policies, and philosophies for that source artifact without requiring a
+      known spec ID first. The command SHOULD offer text and JSON output, SHOULD
+      keep working when the workspace still loads despite validation issues, and
+      SHOULD explain whether the source is owned, partially traced, or unowned.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-001
+      - POL-002
+      - POL-003
+      - POL-004
+    linked_features:
+      - FEAT-TRACE-001
+    tests:
+      rust:
+        - file: tests/trace_command.rs
+          symbols:
+            - '*'
+        - file: tests/help_command.rs
+          symbols:
+            - trace_help_mentions_symbol_lookup_and_json_output
+        - file: src/lib.rs
+          symbols:
+            - dispatches_trace_subcommands_without_rewriting_them
+        - file: src/command/trace.rs
           symbols:
             - '*'
 ```
