@@ -8,6 +8,9 @@ one Go source file and one Go test file. The current workaround keeps the
 validated trace evidence in this README so `syu validate .` can still prove the
 links today while the real Go files stay visible in the repository.
 
+This workspace is reference-only: it does not correspond to a
+`syu init --template ...` starter.
+
 ## Files
 
 | Path | What it defines |
