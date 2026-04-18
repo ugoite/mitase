@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-    config::{SyuConfig, load_config, resolve_spec_root},
+    config::{CONFIG_FILE_NAME, SyuConfig, load_config, resolve_spec_root},
     model::{
         Feature, FeatureDocument, FeatureRegistryDocument, Philosophy, PhilosophyDocument, Policy,
         PolicyDocument, Requirement, RequirementDocument,
@@ -32,11 +32,40 @@ pub(crate) struct LoadedDocument<T> {
     pub document: T,
 }
 
-// FEAT-CHECK-001
-pub fn load_workspace(root: &Path) -> Result<Workspace> {
-    let root = root
+pub fn resolve_workspace_root(root: &Path) -> Result<PathBuf> {
+    let resolved = root
         .canonicalize()
         .with_context(|| format!("failed to resolve workspace root `{}`", root.display()))?;
+    if resolved.is_dir() && looks_like_workspace_root(&resolved) {
+        return Ok(resolved);
+    }
+    let search_root = if resolved.is_dir() {
+        resolved.clone()
+    } else {
+        resolved.parent().unwrap_or(&resolved).to_path_buf()
+    };
+
+    for candidate in search_root.ancestors() {
+        if candidate.join(CONFIG_FILE_NAME).is_file() {
+            return Ok(candidate.to_path_buf());
+        }
+    }
+
+    Ok(search_root)
+}
+
+fn looks_like_workspace_root(root: &Path) -> bool {
+    let spec_root = resolve_spec_root(root, &SyuConfig::default());
+    spec_root.join("philosophy").is_dir()
+        && spec_root.join("policies").is_dir()
+        && spec_root.join("requirements").is_dir()
+        && spec_root.join("features").is_dir()
+        && spec_root.join("features/features.yaml").is_file()
+}
+
+// FEAT-CHECK-001
+pub fn load_workspace(root: &Path) -> Result<Workspace> {
+    let root = resolve_workspace_root(root)?;
     let loaded_config = load_config(&root)?;
     let spec_root = resolve_spec_root(&root, &loaded_config.config);
     let philosophy_docs = load_philosophy_documents_with_paths(&spec_root.join("philosophy"))?;
@@ -281,7 +310,8 @@ mod tests {
         ensure_yaml_directory, ensure_yaml_directory_recursive, load_feature_document,
         load_feature_registry, load_philosophy_documents_with_paths,
         load_policy_documents_with_paths, load_requirement_documents_with_paths, load_workspace,
-        read_yaml_text, resolve_feature_document_path, yaml_file_paths, yaml_file_paths_recursive,
+        read_yaml_text, resolve_feature_document_path, resolve_workspace_root, yaml_file_paths,
+        yaml_file_paths_recursive,
     };
 
     fn fixture_root(name: &str) -> PathBuf {
@@ -337,6 +367,134 @@ mod tests {
         let workspace = load_workspace(tempdir.path()).expect("nested workspace should load");
         assert_eq!(workspace.requirements.len(), 1);
         assert_eq!(workspace.features.len(), 1);
+        assert_eq!(workspace.requirements[0].id, "REQ-1");
+        assert_eq!(workspace.features[0].id, "FEAT-1");
+    }
+
+    #[test]
+    fn resolve_workspace_root_discovers_parent_config_from_child_directory() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace_root = tempdir.path().join("workspace");
+        let nested = workspace_root.join("src/nested");
+        fs::create_dir_all(&nested).expect("nested dir");
+        fs::write(workspace_root.join("syu.yaml"), "version: 1\n").expect("config");
+
+        let resolved =
+            resolve_workspace_root(&nested).expect("parent workspace root should resolve");
+        assert_eq!(
+            resolved,
+            workspace_root
+                .canonicalize()
+                .expect("workspace root should canonicalize")
+        );
+    }
+
+    #[test]
+    fn resolve_workspace_root_discovers_parent_config_from_workspace_file_path() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace_root = tempdir.path().join("workspace");
+        let source_file = workspace_root.join("src/lib.rs");
+        fs::create_dir_all(source_file.parent().expect("parent dir")).expect("source dir");
+        fs::write(workspace_root.join("syu.yaml"), "version: 1\n").expect("config");
+        fs::write(&source_file, "pub fn demo() {}\n").expect("source file");
+
+        let resolved =
+            resolve_workspace_root(&source_file).expect("parent workspace root should resolve");
+        assert_eq!(
+            resolved,
+            workspace_root
+                .canonicalize()
+                .expect("workspace root should canonicalize")
+        );
+    }
+
+    #[test]
+    fn resolve_workspace_root_keeps_explicit_root_when_config_is_missing() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace_root = tempdir.path().join("workspace");
+        fs::create_dir_all(&workspace_root).expect("workspace dir");
+
+        let resolved =
+            resolve_workspace_root(&workspace_root).expect("workspace root should resolve");
+        assert_eq!(
+            resolved,
+            workspace_root
+                .canonicalize()
+                .expect("workspace root should canonicalize")
+        );
+    }
+
+    #[test]
+    fn resolve_workspace_root_ignores_ancestor_default_spec_root_without_config() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let parent = tempdir.path().join("parent");
+        let nested = parent.join("child/frontend");
+        fs::create_dir_all(parent.join("docs/syu/features")).expect("spec dir");
+        fs::create_dir_all(&nested).expect("nested dir");
+
+        let resolved =
+            resolve_workspace_root(&nested).expect("workspace root should resolve safely");
+        assert_eq!(
+            resolved,
+            nested
+                .canonicalize()
+                .expect("nested path should canonicalize")
+        );
+    }
+
+    #[test]
+    fn load_workspace_discovers_parent_workspace_from_child_directory() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace_root = tempdir.path().join("workspace");
+        let nested = workspace_root.join("frontend");
+        let spec_root = workspace_root.join("docs/syu");
+        fs::create_dir_all(&nested).expect("nested dir");
+        fs::create_dir_all(spec_root.join("philosophy")).expect("dir");
+        fs::create_dir_all(spec_root.join("policies")).expect("dir");
+        fs::create_dir_all(spec_root.join("requirements/core")).expect("dir");
+        fs::create_dir_all(spec_root.join("features/core")).expect("dir");
+        fs::write(
+            workspace_root.join("syu.yaml"),
+            format!(
+                "version: {}\nspec:\n  root: docs/syu\nvalidate:\n  default_fix: false\n  allow_planned: true\n  require_non_orphaned_items: true\n  require_reciprocal_links: true\n  require_symbol_trace_coverage: false\napp:\n  bind: 127.0.0.1\n  port: 3000\nruntimes:\n  python:\n    command: auto\n  node:\n    command: auto\n",
+                env!("CARGO_PKG_VERSION")
+            ),
+        )
+        .expect("config");
+        fs::write(
+            spec_root.join("philosophy/foundation.yaml"),
+            "category: Philosophy\nversion: 1\nphilosophies:\n  - id: PHIL-1\n    title: T\n    product_design_principle: A\n    coding_guideline: B\n    linked_policies:\n      - POL-1\n",
+        )
+        .expect("write");
+        fs::write(
+            spec_root.join("policies/policies.yaml"),
+            "category: Policies\nversion: 1\npolicies:\n  - id: POL-1\n    title: T\n    summary: S\n    description: D\n    linked_philosophies:\n      - PHIL-1\n    linked_requirements:\n      - REQ-1\n",
+        )
+        .expect("write");
+        fs::write(
+            spec_root.join("requirements/core/core.yaml"),
+            "category: Core\nprefix: REQ\nrequirements:\n  - id: REQ-1\n    title: T\n    description: D\n    priority: high\n    status: planned\n    linked_policies:\n      - POL-1\n    linked_features:\n      - FEAT-1\n    tests: {}\n",
+        )
+        .expect("write");
+        fs::write(
+            spec_root.join("features/features.yaml"),
+            "version: '0.1'\nfiles:\n  - kind: core\n    file: core/core.yaml\n",
+        )
+        .expect("write");
+        fs::write(
+            spec_root.join("features/core/core.yaml"),
+            "category: Core\nversion: 1\nfeatures:\n  - id: FEAT-1\n    title: T\n    summary: S\n    status: planned\n    linked_requirements:\n      - REQ-1\n    implementations: {}\n",
+        )
+        .expect("write");
+
+        let workspace =
+            load_workspace(&nested).expect("nested workspace path should discover the root");
+        assert_eq!(
+            workspace.root,
+            workspace_root
+                .canonicalize()
+                .expect("workspace root should canonicalize")
+        );
         assert_eq!(workspace.requirements[0].id, "REQ-1");
         assert_eq!(workspace.features[0].id, "FEAT-1");
     }

@@ -20,8 +20,10 @@ description: "Generated reference for docs/syu/features/validation/validation.ya
   - **summary**: The validator cannot reason about a workspace it cannot parse or read.
   - **description**:
     - |
-      Validation begins with loading the workspace root, configuration, and
-      specification files. When that bootstrap step fails, every later result
+      Validation begins with discovering the workspace root, loading
+      configuration, and reading the specification files. `syu` first walks
+      parent directories until it finds `syu.yaml`, then resolves the spec from
+      that workspace root. When that bootstrap step fails, every later result
       becomes untrustworthy because `syu` no longer knows which definitions,
       paths, or trace mappings should exist. This rule exists to fail early and
       honestly when the repository shape itself is broken.
@@ -448,8 +450,10 @@ rules:
     title: The specification workspace must load cleanly
     summary: The validator cannot reason about a workspace it cannot parse or read.
     description: |
-      Validation begins with loading the workspace root, configuration, and
-      specification files. When that bootstrap step fails, every later result
+      Validation begins with discovering the workspace root, loading
+      configuration, and reading the specification files. `syu` first walks
+      parent directories until it finds `syu.yaml`, then resolves the spec from
+      that workspace root. When that bootstrap step fails, every later result
       becomes untrustworthy because `syu` no longer knows which definitions,
       paths, or trace mappings should exist. This rule exists to fail early and
       honestly when the repository shape itself is broken.

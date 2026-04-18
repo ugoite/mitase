@@ -19,7 +19,7 @@ description: "Generated reference for docs/syu/features/cli/report.yaml"
 
 - **id**: FEAT-REPORT-001
   - **title**: Markdown report generation
-  - **summary**: Render validation results as Markdown and optionally write a file or use a checked-in default output path.
+  - **summary**: Render validation results as Markdown from the workspace root or any child directory, and optionally write a file or use a checked-in default output path.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-004
@@ -56,7 +56,7 @@ version: 1
 features:
   - id: FEAT-REPORT-001
     title: Markdown report generation
-    summary: Render validation results as Markdown and optionally write a file or use a checked-in default output path.
+    summary: Render validation results as Markdown from the workspace root or any child directory, and optionally write a file or use a checked-in default output path.
     status: implemented
     linked_requirements:
       - REQ-CORE-004

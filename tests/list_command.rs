@@ -233,14 +233,24 @@ fn list_command_help_documents_both_argument_orders() {
         "help should show the workspace-first example:\n{stdout}",
     );
     assert!(
-        stdout.contains("Pass the workspace root that contains syu.yaml."),
-        "help should explain the workspace-root expectation:\n{stdout}",
+        stdout.contains(
+            "Pass the workspace root, the configured spec.root directory, or any child directory."
+        ),
+        "help should explain the workspace discovery behavior:\n{stdout}",
     );
     assert!(
         stdout.contains(
-            "The configured spec.root lives inside that workspace; do not pass it directly."
+            "syu walks upward until it finds syu.yaml, then resolves the configured spec.root from that workspace."
         ),
-        "help should explain why the spec.root itself is not the workspace path:\n{stdout}",
+        "help should explain how spec.root is resolved from the discovered workspace:\n{stdout}",
+    );
+    assert!(
+        stdout.contains("syu list requirement docs/syu"),
+        "help should include a spec.root example:\n{stdout}",
+    );
+    assert!(
+        stdout.contains("syu list requirement docs/syu/features"),
+        "help should include a child-directory-under-spec-root example:\n{stdout}",
     );
     assert!(
         stdout.contains("emitted as JSON for automation"),

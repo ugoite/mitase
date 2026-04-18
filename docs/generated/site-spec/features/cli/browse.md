@@ -19,7 +19,7 @@ description: "Generated reference for docs/syu/features/cli/browse.yaml"
 
 - **id**: FEAT-BROWSE-001
   - **title**: Interactive specification browser
-  - **summary**: Let users explore counts, definitions, links, and validation errors from the terminal without needing a passing workspace first.
+  - **summary**: Let users explore counts, definitions, links, and validation errors from the terminal without needing a passing workspace first, even when they start from a nested workspace directory.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-015
@@ -39,7 +39,7 @@ description: "Generated reference for docs/syu/features/cli/browse.yaml"
           - *
 - **id**: FEAT-BROWSE-002
   - **title**: Non-interactive spec tree output
-  - **summary**: Add a --non-interactive flag to `syu browse` that prints the browse snapshot (workspace metadata, grouped item counts and IDs, plus actionable current errors with rule titles, messages, and suggestions when available) to stdout and exits, suitable for plain-text terminal review or logs.
+  - **summary**: Add a --non-interactive flag to `syu browse` that prints the browse snapshot (workspace metadata, grouped item counts and IDs, plus actionable current errors with rule titles, messages, and suggestions when available) to stdout and exits, suitable for plain-text terminal review or logs from the workspace root or a child directory.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-015
@@ -62,7 +62,7 @@ version: 1
 features:
   - id: FEAT-BROWSE-001
     title: Interactive specification browser
-    summary: Let users explore counts, definitions, links, and validation errors from the terminal without needing a passing workspace first.
+    summary: Let users explore counts, definitions, links, and validation errors from the terminal without needing a passing workspace first, even when they start from a nested workspace directory.
     status: implemented
     linked_requirements:
       - REQ-CORE-015
@@ -83,7 +83,7 @@ features:
 
   - id: FEAT-BROWSE-002
     title: Non-interactive spec tree output
-    summary: Add a --non-interactive flag to `syu browse` that prints the browse snapshot (workspace metadata, grouped item counts and IDs, plus actionable current errors with rule titles, messages, and suggestions when available) to stdout and exits, suitable for plain-text terminal review or logs.
+    summary: Add a --non-interactive flag to `syu browse` that prints the browse snapshot (workspace metadata, grouped item counts and IDs, plus actionable current errors with rule titles, messages, and suggestions when available) to stdout and exits, suitable for plain-text terminal review or logs from the workspace root or a child directory.
     status: implemented
     linked_requirements:
       - REQ-CORE-015
