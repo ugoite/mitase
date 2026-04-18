@@ -220,3 +220,86 @@ fn validate_warns_when_implemented_feature_links_only_to_planned_requirements() 
     assert!(stdout.contains("only to planned requirements"));
     assert!(stdout.contains("REQ-001"));
 }
+
+#[test]
+// REQ-CORE-001
+fn validate_can_use_a_custom_warning_exit_code_for_warning_only_runs() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    write_workspace(tempdir.path(), true, "planned", "implemented", false, true);
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(tempdir.path())
+        .arg("--warning-exit-code")
+        .arg("3")
+        .output()
+        .expect("validate should run");
+
+    assert_eq!(
+        output.status.code(),
+        Some(3),
+        "warning-only validation should use the configured warning exit code\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("SYU-delivery-agreement-001"));
+}
+
+#[test]
+// REQ-CORE-001
+fn validate_keeps_error_exit_code_when_warning_exit_code_is_configured() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    write_workspace(
+        tempdir.path(),
+        true,
+        "implemented",
+        "implemented",
+        false,
+        false,
+    );
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(tempdir.path())
+        .arg("--warning-exit-code")
+        .arg("3")
+        .output()
+        .expect("validate should run");
+
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "error-bearing validation should keep the normal failure exit code\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("SYU-delivery-implemented-001"));
+}
+
+#[test]
+// REQ-CORE-001
+fn validate_rejects_zero_warning_exit_code() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    write_workspace(tempdir.path(), true, "planned", "implemented", false, true);
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(tempdir.path())
+        .arg("--warning-exit-code")
+        .arg("0")
+        .output()
+        .expect("validate should run");
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("invalid value '0' for '--warning-exit-code <CODE>'"),
+        "zero warning exit code should be rejected\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}

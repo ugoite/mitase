@@ -45,6 +45,7 @@ description: "Generated reference for docs/syu/requirements/core/documentation.y
           - init_help_mentions_custom_spec_roots
           - init_help_mentions_id_prefix_options
           - validate_help_lists_temporary_config_overrides
+          - validate_help_mentions_warning_exit_code_for_automation
       - **file**: tests/repository_quality.rs
         - **symbols**:
           - repository_declares_documentation_guides
@@ -108,6 +109,7 @@ requirements:
             - init_help_mentions_custom_spec_roots
             - init_help_mentions_id_prefix_options
             - validate_help_lists_temporary_config_overrides
+            - validate_help_mentions_warning_exit_code_for_automation
         - file: tests/repository_quality.rs
           symbols:
             - repository_declares_documentation_guides
