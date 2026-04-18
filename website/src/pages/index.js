@@ -33,6 +33,18 @@ const journeys = [
     to: '/docs/guide/getting-started#is-syu-right-for-this-repository'
   },
   {
+    title: 'Avoid spec anti-patterns',
+    description:
+      'Learn the common bad-but-valid four-layer shapes before a green spec turns into a painful rewrite.',
+    to: '/docs/guide/spec-antipatterns'
+  },
+  {
+    title: 'Adopt an existing repository',
+    description:
+      'Phase syu into a repo that already has code, tests, and docs instead of translating the greenfield flow by hand.',
+    to: '/docs/guide/existing-repository'
+  },
+  {
     title: 'Start a workspace',
     description: 'Scaffold a project, fill in the layered spec, and run validate without guessing the layout.',
     to: '/docs/guide/getting-started'

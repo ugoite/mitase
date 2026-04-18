@@ -4,6 +4,8 @@ This example demonstrates a minimal single-language Rust workspace.
 It contains one philosophy, one policy, one requirement, and one feature —
 all mutually linked and traced to a Rust source file.
 
+It is the checked-in reference workspace that matches `syu init . --template rust-only`.
+
 ## Files
 
 | Path | What it defines |

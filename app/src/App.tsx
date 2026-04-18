@@ -27,7 +27,14 @@ type SectionSummary = {
   itemCount: number;
 };
 
+type SearchResult = {
+  id: string;
+  title: string;
+  kind: SectionKind;
+};
+
 const SECTION_ORDER: SectionKind[] = ["philosophy", "policies", "features", "requirements"];
+const SEARCH_RESULTS_LIST_ID = "spec-search-results-list";
 
 const SECTION_COPY: Record<SectionKind, string> = {
   philosophy: "Project intent and enduring values.",
@@ -40,6 +47,10 @@ const ONBOARDING_STORAGE_KEY = "syu-onboarding-dismissed";
 const SEARCH_RESULT_LIMIT = 20;
 const SEARCH_SHORTCUT_KEY_CLASS_NAME =
   "inline-flex items-center rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-slate-300";
+
+function searchResultOptionId(id: string, index: number) {
+  return `spec-search-result-${index}-${id.toLowerCase().replace(/[^a-z0-9_-]/g, "-")}`;
+}
 
 function App() {
   const [workspace, setWorkspace] = useState<BrowserWorkspace | null>(null);
@@ -329,11 +340,11 @@ function App() {
     const trimmed = searchQuery.trim().toLowerCase();
     if (!workspace || trimmed.length === 0) {
       return {
-        results: [] as Array<{ id: string; title: string; kind: SectionKind }>,
+        results: [] as SearchResult[],
         hasMore: false,
       };
     }
-    const results: Array<{ id: string; title: string; kind: SectionKind }> = [];
+    const results: SearchResult[] = [];
     for (const section of workspace.sections) {
       for (const document of section.documents) {
         for (const item of document.items) {
@@ -354,6 +365,14 @@ function App() {
     };
   }, [workspace, searchQuery]);
   const searchResults = searchState.results;
+  const activeSearchResultId = useMemo(() => {
+    if (focusedResultIndex < 0 || focusedResultIndex >= searchResults.length) {
+      return undefined;
+    }
+
+    return searchResultOptionId(searchResults[focusedResultIndex].id, focusedResultIndex);
+  }, [focusedResultIndex, searchResults]);
+  const hasSearchResultsList = searchQuery.trim().length > 0 && searchResults.length > 0;
 
   useEffect(() => {
     if (loading || !workspace) {
@@ -679,10 +698,18 @@ function App() {
               <input
                 id="spec-search"
                 type="search"
+                role="combobox"
+                aria-autocomplete="list"
                 aria-describedby="spec-search-shortcuts-description"
+                aria-controls={hasSearchResultsList ? SEARCH_RESULTS_LIST_ID : undefined}
+                aria-expanded={hasSearchResultsList}
+                aria-activedescendant={hasSearchResultsList ? activeSearchResultId : undefined}
                 placeholder={`Search items by ID or keyword (up to ${SEARCH_RESULT_LIMIT} matches)…`}
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setFocusedResultIndex(-1);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "ArrowDown") {
                     if (searchResults.length === 0) {
@@ -746,34 +773,46 @@ function App() {
               for a narrower result list.
             </p>
             {searchQuery.trim().length > 0 && (
-              <div id="search-results-list" className="mt-3 space-y-1">
+              <div className="mt-3 space-y-1">
                 {searchResults.length === 0 ? (
-                  <p className="px-2 py-2 text-xs text-slate-500">No items match.</p>
+                  <p className="px-2 py-2 text-xs text-slate-500" role="status">
+                    No items match.
+                  </p>
                 ) : (
-                  searchResults.map((result, index) => (
-                    <button
-                      key={result.id}
-                      type="button"
-                      onClick={() => handleSearchSelect(result.id)}
-                      className={`flex w-full items-start gap-2 rounded-xl border px-3 py-2 text-left transition hover:border-sky-400/40 hover:bg-sky-400/10 ${
-                        index === focusedResultIndex
-                          ? "border-sky-400/60 bg-white/5 ring-2 ring-sky-400"
-                          : "border-white/5 bg-white/5"
-                      }`}
-                    >
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-xs font-semibold text-sky-300">
-                          {result.id}
+                  <div
+                    id={SEARCH_RESULTS_LIST_ID}
+                    role="listbox"
+                    aria-label="Search results"
+                    className="space-y-1"
+                  >
+                    {searchResults.map((result, index) => (
+                      <div
+                        key={result.id}
+                        id={searchResultOptionId(result.id, index)}
+                        role="option"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onMouseEnter={() => setFocusedResultIndex(index)}
+                        onClick={() => handleSearchSelect(result.id)}
+                        className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2 text-left transition hover:border-sky-400/40 hover:bg-sky-400/10 ${
+                          index === focusedResultIndex
+                            ? "border-sky-400/60 bg-white/5 ring-2 ring-sky-400"
+                            : "border-white/5 bg-white/5"
+                        }`}
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-xs font-semibold text-sky-300">
+                            {result.id}
+                          </span>
+                          <span className="block truncate text-xs text-slate-400">
+                            {result.title}
+                          </span>
                         </span>
-                        <span className="block truncate text-xs text-slate-400">
-                          {result.title}
+                        <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] capitalize text-slate-500">
+                          {result.kind}
                         </span>
-                      </span>
-                      <span className="shrink-0 rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] capitalize text-slate-500">
-                        {result.kind}
-                      </span>
-                    </button>
-                  ))
+                      </div>
+                    ))}
+                  </div>
                 )}
                 {searchState.hasMore && (
                   <p className="px-2 py-1 text-[11px] text-slate-500">
