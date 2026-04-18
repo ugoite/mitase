@@ -39,6 +39,12 @@ const journeys = [
     to: '/docs/guide/spec-antipatterns'
   },
   {
+    title: 'Adopt an existing repository',
+    description:
+      'Phase syu into a repo that already has code, tests, and docs instead of translating the greenfield flow by hand.',
+    to: '/docs/guide/existing-repository'
+  },
+  {
     title: 'Start a workspace',
     description: 'Scaffold a project, fill in the layered spec, and run validate without guessing the layout.',
     to: '/docs/guide/getting-started'
