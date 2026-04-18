@@ -15,6 +15,7 @@ policies:
       - REQ-TRACE-002
       - REQ-TRACE-003
       - REQ-TRACE-004
+      - REQ-TRACE-005
 
   - id: POL-TRACE-002
     title: Features need executable evidence
@@ -28,3 +29,4 @@ policies:
       - REQ-TRACE-002
       - REQ-TRACE-003
       - REQ-TRACE-004
+      - REQ-TRACE-005

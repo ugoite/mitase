@@ -56,7 +56,7 @@ fn list_command_supports_json_output() {
             .as_array()
             .expect("items should be an array")
             .len(),
-        4
+        5
     );
     assert_eq!(json["items"][0]["id"], "FEAT-TRACE-001");
 }
