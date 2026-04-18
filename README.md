@@ -599,10 +599,10 @@ missing files.
 
 The repository ships working example projects:
 
-- [`examples/rust-only`](examples/rust-only) — minimal single-language Rust starter
-- [`examples/python-only`](examples/python-only) — minimal Python-first starter
-- [`examples/polyglot`](examples/polyglot) — one requirement and feature traced across Rust, Python, and TypeScript
-- [`examples/team-scale`](examples/team-scale) — a larger Rust workspace that shows phased adoption, nested documents, and recovery drills
+- [`examples/rust-only`](examples/rust-only) — minimal single-language Rust starter, and the checked-in match for `syu init . --template rust-only`
+- [`examples/python-only`](examples/python-only) — minimal Python-first starter, and the checked-in match for `syu init . --template python-only`
+- [`examples/polyglot`](examples/polyglot) — one requirement and feature traced across Rust, Python, and TypeScript, and the checked-in match for `syu init . --template polyglot`
+- [`examples/team-scale`](examples/team-scale) — a larger Rust workspace that shows phased adoption, nested documents, and recovery drills; reference-only, not a starter template
 
 Each one is validated in the automated test suite.
 
