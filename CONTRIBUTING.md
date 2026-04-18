@@ -149,6 +149,10 @@ When you work locally, match the Node major to the surface you are changing:
   other browser-tooling work
 - use **Node 20** for `website/` and docs-site builds
 
+The checked-in source of truth now lives in each package directory:
+`app/.nvmrc` plus `app/package.json#engines`, and `website/.nvmrc` plus
+`website/package.json#engines`.
+
 If you switch between both in one shell session, use a version manager such as
 `nvm`, `fnm`, or `Volta` so the browser app and docs site each run on the same
 major that CI expects.
