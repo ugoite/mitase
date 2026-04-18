@@ -786,6 +786,7 @@ fn render_text_report(
 ) -> String {
     let mut output = String::new();
     let status = if overall_success { "passed" } else { "failed" };
+    let quiet_success = quiet && overall_success && result.issues.is_empty();
     let filtered_suffix = if filtered_view.is_some() {
         " (filtered view)"
     } else {
@@ -794,63 +795,65 @@ fn render_text_report(
 
     writeln!(&mut output, "syu validate {status}{filtered_suffix}")
         .expect("writing to String must succeed");
-    writeln!(
-        &mut output,
-        "workspace: {}",
-        result.workspace_root.display()
-    )
-    .expect("writing to String must succeed");
-    writeln!(
-        &mut output,
-        "definitions: philosophies={} policies={} requirements={} features={}",
-        result.definition_counts.philosophies,
-        result.definition_counts.policies,
-        result.definition_counts.requirements,
-        result.definition_counts.features
-    )
-    .expect("writing to String must succeed");
-    if let Some(summary) = text_summary {
+    if !quiet_success {
         writeln!(
             &mut output,
-            "checks: {} built-in rules across {} workspace items ({})",
-            summary.checked_rule_count,
-            summary.workspace_item_count,
-            summary.checked_genres.join(", ")
+            "workspace: {}",
+            result.workspace_root.display()
         )
         .expect("writing to String must succeed");
-        if !summary.disabled_checks.is_empty() {
-            let disabled_rule_count: usize = summary
-                .disabled_checks
-                .iter()
-                .map(|notice| notice.rule_count)
-                .sum();
-            let noun = if disabled_rule_count == 1 {
-                "rule is"
-            } else {
-                "rules are"
-            };
-            let details = summary
-                .disabled_checks
-                .iter()
-                .map(DisabledRuleNotice::describe)
-                .collect::<Vec<_>>()
-                .join(", ");
+        writeln!(
+            &mut output,
+            "definitions: philosophies={} policies={} requirements={} features={}",
+            result.definition_counts.philosophies,
+            result.definition_counts.policies,
+            result.definition_counts.requirements,
+            result.definition_counts.features
+        )
+        .expect("writing to String must succeed");
+        if let Some(summary) = text_summary {
             writeln!(
                 &mut output,
-                "note: {disabled_rule_count} built-in {noun} disabled by current config ({details})"
+                "checks: {} built-in rules across {} workspace items ({})",
+                summary.checked_rule_count,
+                summary.workspace_item_count,
+                summary.checked_genres.join(", ")
             )
             .expect("writing to String must succeed");
+            if !summary.disabled_checks.is_empty() {
+                let disabled_rule_count: usize = summary
+                    .disabled_checks
+                    .iter()
+                    .map(|notice| notice.rule_count)
+                    .sum();
+                let noun = if disabled_rule_count == 1 {
+                    "rule is"
+                } else {
+                    "rules are"
+                };
+                let details = summary
+                    .disabled_checks
+                    .iter()
+                    .map(DisabledRuleNotice::describe)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                writeln!(
+                    &mut output,
+                    "note: {disabled_rule_count} built-in {noun} disabled by current config ({details})"
+                )
+                .expect("writing to String must succeed");
+            }
         }
+        writeln!(
+            &mut output,
+            "traceability: requirements={}/{} traces validated; features={}/{} traces validated",
+            result.trace_summary.requirement_traces.validated,
+            result.trace_summary.requirement_traces.declared,
+            result.trace_summary.feature_traces.validated,
+            result.trace_summary.feature_traces.declared
+        )
+        .expect("writing to String must succeed");
     }
-    writeln!(
-        &mut output,
-        "traceability: requirements={}/{} traces validated; features={}/{} traces validated",
-        result.trace_summary.requirement_traces.validated,
-        result.trace_summary.requirement_traces.declared,
-        result.trace_summary.feature_traces.validated,
-        result.trace_summary.feature_traces.declared
-    )
-    .expect("writing to String must succeed");
 
     if let Some(filtered_view) = filtered_view {
         writeln!(&mut output, "filters: {}", filtered_view.describe_filters())
