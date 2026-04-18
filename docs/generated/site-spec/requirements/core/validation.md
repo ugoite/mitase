@@ -33,11 +33,8 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       severity, rule genre, and exact rule code for both text and JSON output
       without changing the underlying validation result, and `syu.yaml` MUST be
       able to disable reciprocal-link enforcement without disabling missing-
-      reference validation. When the workspace argument (or default current
-      directory) points at a child directory inside a workspace, `validate`
-      MUST walk parent directories until it finds `syu.yaml`, then report the
-      resolved workspace root in its output. `check` MAY remain as a
-      compatibility alias, but `validate` is the canonical command name.
+      reference validation. `check` MAY remain as a compatibility alias, but
+      `validate` is the canonical command name.
   - **priority**: high
   - **status**: implemented
   - **linked_policies**:
@@ -50,9 +47,6 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       - **file**: tests/check_command.rs
         - **symbols**:
           - *
-      - **file**: tests/workspace_discovery_command.rs
-        - **symbols**:
-          - validate_command_discovers_workspace_from_nested_current_directory
       - **file**: tests/validate_filter_command.rs
         - **symbols**:
           - *
@@ -75,6 +69,9 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
           - validate_cli_override_for_planned_items_mentions_cli_source
           - validate_cli_override_can_disable_orphan_checks
           - validate_cli_override_can_disable_reciprocal_checks
+      - **file**: tests/workspace_discovery_command.rs
+        - **symbols**:
+          - validate_command_discovers_workspace_from_nested_current_directory
       - **file**: src/command/check.rs
         - **symbols**:
           - *
@@ -107,17 +104,16 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       inline IDs in traced artifacts or checked-in sidecar ownership manifests.
       Validation MUST also reject duplicate trace mappings inside a single
       language list, support wildcard file ownership, and provide an optional
-      mode that requires every public symbol (non-underscore-prefixed for Python,
-      `pub` for Rust, exported for TypeScript/JavaScript) and every test symbol
-      (`test_*` functions for Python, `#[test]` for Rust, `test*`-prefixed
-      functions for TypeScript/JavaScript) in repository source and test roots
-      to belong to some feature or requirement respectively. That inventory MUST
-      ignore configured repository-relative generated paths, defaulting to
-      common build outputs such as `app/dist`, `build/`, `coverage/`, `dist/`,
-      and `target/` without hiding authored nested directories like
-      `src/build/`. Go traces are validated when declared, but strict coverage
-      inventory does not yet scan Go files for undeclared public symbols or
-      tests.
+      mode that requires every public symbol (non-underscore-prefixed for
+      Python, exported identifiers for Go, `pub` for Rust, exported for
+      TypeScript/JavaScript) and every test symbol (`test_*` functions for
+      Python, `Test*`, `Benchmark*`, `Fuzz*`, and `Example*` functions in Go
+      `_test.go` files, `#[test]` for Rust, `test*`-prefixed functions for
+      TypeScript/JavaScript) in repository source and test roots to belong to
+      some feature or requirement respectively. That inventory MUST ignore
+      configured repository-relative generated paths, defaulting to common build
+      outputs such as `app/dist`, `build/`, `coverage/`, `dist/`, and `target/`
+      without hiding authored nested directories like `src/build/`.
   - **priority**: high
   - **status**: implemented
   - **linked_policies**:
@@ -132,13 +128,9 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
         - **symbols**:
           - check_command_verifies_requirement_test_traceability_in_all_supported_languages
           - check_command_verifies_feature_implementation_traceability_in_all_supported_languages
-          - check_command_accepts_trace_workspaces_without_inline_spec_ids
           - check_command_warns_for_non_canonical_relative_trace_paths
           - check_command_warns_for_backslash_trace_paths
       - **file**: tests/trace_coverage_validation.rs
-        - **symbols**:
-          - *
-      - **file**: tests/sidecar_ownership_validation.rs
         - **symbols**:
           - *
       - **file**: tests/validate_override_command.rs
@@ -147,6 +139,9 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       - **file**: tests/duplicate_validation.rs
         - **symbols**:
           - validate_reports_duplicate_trace_entries
+      - **file**: tests/sidecar_ownership_validation.rs
+        - **symbols**:
+          - *
       - **file**: src/coverage.rs
         - **symbols**:
           - *
@@ -161,13 +156,16 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
           - *
       - **file**: tests/example_workspaces.rs
         - **symbols**:
-          - go_only_example_validates
           - python_only_example_validates
           - polyglot_example_validates
     - **python**:
       - **file**: tests/fixtures/workspaces/passing/python/test_traceability.py
         - **symbols**:
           - test_req_trace_py
+    - **go**:
+      - **file**: tests/fixtures/workspaces/passing/go/traceability_test.go
+        - **symbols**:
+          - TestReqTraceGo
     - **typescript**:
       - **file**: tests/fixtures/workspaces/passing/frontend/test_traceability.ts
         - **symbols**:
@@ -179,10 +177,7 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       The `validate` command MUST provide a `--fix` mode that performs safe,
       mechanical repairs for documentation-style trace gaps. `syu.yaml` MUST be
       able to configure default fix behavior, and `--no-fix` MUST disable it.
-      Autofix MUST stay conservative, avoid speculative structural edits, and
-      add optional documentation breadcrumbs without injecting bookkeeping spec
-      IDs by default. When sidecar ownership manifests are enabled, autofix MUST
-      update the checked-in manifest instead of inserting owner IDs into source.
+      Autofix MUST stay conservative and avoid speculative structural edits.
   - **priority**: high
   - **status**: implemented
   - **linked_policies**:
@@ -205,9 +200,7 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       file path. `syu.yaml` MUST be able to define a default report output path
       that `--output` can still override. The self-hosted repository SHOULD keep
       a checked-in report artifact so contributors can inspect the current state
-      without running the command first. When the workspace argument points at a
-      child directory, `report` MUST walk parent directories until it finds
-      `syu.yaml`, then render the resolved workspace root in the Markdown output.
+      without running the command first.
   - **priority**: medium
   - **status**: implemented
   - **linked_policies**:
@@ -220,12 +213,12 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       - **file**: tests/report_command.rs
         - **symbols**:
           - *
-      - **file**: tests/workspace_discovery_command.rs
-        - **symbols**:
-          - report_command_discovers_workspace_from_child_directory
       - **file**: tests/main_binary.rs
         - **symbols**:
           - *
+      - **file**: tests/workspace_discovery_command.rs
+        - **symbols**:
+          - report_command_discovers_workspace_from_child_directory
       - **file**: src/command/report.rs
         - **symbols**:
           - *
@@ -254,11 +247,8 @@ requirements:
       severity, rule genre, and exact rule code for both text and JSON output
       without changing the underlying validation result, and `syu.yaml` MUST be
       able to disable reciprocal-link enforcement without disabling missing-
-      reference validation. When the workspace argument (or default current
-      directory) points at a child directory inside a workspace, `validate`
-      MUST walk parent directories until it finds `syu.yaml`, then report the
-      resolved workspace root in its output. `check` MAY remain as a
-      compatibility alias, but `validate` is the canonical command name.
+      reference validation. `check` MAY remain as a compatibility alias, but
+      `validate` is the canonical command name.
     priority: high
     status: implemented
     linked_policies:
@@ -271,9 +261,6 @@ requirements:
         - file: tests/check_command.rs
           symbols:
             - '*'
-        - file: tests/workspace_discovery_command.rs
-          symbols:
-            - validate_command_discovers_workspace_from_nested_current_directory
         - file: tests/validate_filter_command.rs
           symbols:
             - '*'
@@ -296,6 +283,9 @@ requirements:
             - validate_cli_override_for_planned_items_mentions_cli_source
             - validate_cli_override_can_disable_orphan_checks
             - validate_cli_override_can_disable_reciprocal_checks
+        - file: tests/workspace_discovery_command.rs
+          symbols:
+            - validate_command_discovers_workspace_from_nested_current_directory
         - file: src/command/check.rs
           symbols:
             - '*'
@@ -327,17 +317,16 @@ requirements:
       inline IDs in traced artifacts or checked-in sidecar ownership manifests.
       Validation MUST also reject duplicate trace mappings inside a single
       language list, support wildcard file ownership, and provide an optional
-      mode that requires every public symbol (non-underscore-prefixed for Python,
-      `pub` for Rust, exported for TypeScript/JavaScript) and every test symbol
-      (`test_*` functions for Python, `#[test]` for Rust, `test*`-prefixed
-      functions for TypeScript/JavaScript) in repository source and test roots
-      to belong to some feature or requirement respectively. That inventory MUST
-      ignore configured repository-relative generated paths, defaulting to
-      common build outputs such as `app/dist`, `build/`, `coverage/`, `dist/`,
-      and `target/` without hiding authored nested directories like
-      `src/build/`. Go traces are validated when declared, but strict coverage
-      inventory does not yet scan Go files for undeclared public symbols or
-      tests.
+      mode that requires every public symbol (non-underscore-prefixed for
+      Python, exported identifiers for Go, `pub` for Rust, exported for
+      TypeScript/JavaScript) and every test symbol (`test_*` functions for
+      Python, `Test*`, `Benchmark*`, `Fuzz*`, and `Example*` functions in Go
+      `_test.go` files, `#[test]` for Rust, `test*`-prefixed functions for
+      TypeScript/JavaScript) in repository source and test roots to belong to
+      some feature or requirement respectively. That inventory MUST ignore
+      configured repository-relative generated paths, defaulting to common build
+      outputs such as `app/dist`, `build/`, `coverage/`, `dist/`, and `target/`
+      without hiding authored nested directories like `src/build/`.
     priority: high
     status: implemented
     linked_policies:
@@ -352,13 +341,9 @@ requirements:
           symbols:
             - check_command_verifies_requirement_test_traceability_in_all_supported_languages
             - check_command_verifies_feature_implementation_traceability_in_all_supported_languages
-            - check_command_accepts_trace_workspaces_without_inline_spec_ids
             - check_command_warns_for_non_canonical_relative_trace_paths
             - check_command_warns_for_backslash_trace_paths
         - file: tests/trace_coverage_validation.rs
-          symbols:
-            - '*'
-        - file: tests/sidecar_ownership_validation.rs
           symbols:
             - '*'
         - file: tests/validate_override_command.rs
@@ -367,6 +352,9 @@ requirements:
         - file: tests/duplicate_validation.rs
           symbols:
             - validate_reports_duplicate_trace_entries
+        - file: tests/sidecar_ownership_validation.rs
+          symbols:
+            - '*'
         - file: src/coverage.rs
           symbols:
             - '*'
@@ -381,13 +369,16 @@ requirements:
             - '*'
         - file: tests/example_workspaces.rs
           symbols:
-            - go_only_example_validates
             - python_only_example_validates
             - polyglot_example_validates
       python:
         - file: tests/fixtures/workspaces/passing/python/test_traceability.py
           symbols:
             - test_req_trace_py
+      go:
+        - file: tests/fixtures/workspaces/passing/go/traceability_test.go
+          symbols:
+            - TestReqTraceGo
       typescript:
         - file: tests/fixtures/workspaces/passing/frontend/test_traceability.ts
           symbols:
@@ -398,10 +389,7 @@ requirements:
       The `validate` command MUST provide a `--fix` mode that performs safe,
       mechanical repairs for documentation-style trace gaps. `syu.yaml` MUST be
       able to configure default fix behavior, and `--no-fix` MUST disable it.
-      Autofix MUST stay conservative, avoid speculative structural edits, and
-      add optional documentation breadcrumbs without injecting bookkeeping spec
-      IDs by default. When sidecar ownership manifests are enabled, autofix MUST
-      update the checked-in manifest instead of inserting owner IDs into source.
+      Autofix MUST stay conservative and avoid speculative structural edits.
     priority: high
     status: implemented
     linked_policies:
@@ -423,9 +411,7 @@ requirements:
       file path. `syu.yaml` MUST be able to define a default report output path
       that `--output` can still override. The self-hosted repository SHOULD keep
       a checked-in report artifact so contributors can inspect the current state
-      without running the command first. When the workspace argument points at a
-      child directory, `report` MUST walk parent directories until it finds
-      `syu.yaml`, then render the resolved workspace root in the Markdown output.
+      without running the command first.
     priority: medium
     status: implemented
     linked_policies:
@@ -438,12 +424,12 @@ requirements:
         - file: tests/report_command.rs
           symbols:
             - '*'
-        - file: tests/workspace_discovery_command.rs
-          symbols:
-            - report_command_discovers_workspace_from_child_directory
         - file: tests/main_binary.rs
           symbols:
             - '*'
+        - file: tests/workspace_discovery_command.rs
+          symbols:
+            - report_command_discovers_workspace_from_child_directory
         - file: src/command/report.rs
           symbols:
             - '*'

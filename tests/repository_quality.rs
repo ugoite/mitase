@@ -453,7 +453,7 @@ fn repository_declares_documentation_guides() {
     assert!(configuration.contains("validate.default_fix"));
     assert!(configuration.contains("trace-adapter-support.md"));
     assert!(configuration.contains("validate.allow_planned"));
-    assert!(configuration.contains("Rust, Python, and TypeScript/JavaScript"));
+    assert!(configuration.contains("Rust, Python, Go, and TypeScript/JavaScript"));
     assert!(configuration.contains("--spec-root"));
     assert!(configuration.contains(&format!("version: {current_version}")));
     assert!(configuration.contains("docs/syu/config/overview.yaml"));
@@ -463,13 +463,13 @@ fn repository_declares_documentation_guides() {
     assert!(config_spec.contains("spec.root"));
     assert!(config_validate.contains("validate.default_fix"));
     assert!(config_validate.contains("validate.require_symbol_trace_coverage"));
-    assert!(config_validate.contains("Rust, Python, and TypeScript/JavaScript"));
+    assert!(config_validate.contains("Rust, Python, Go, and TypeScript/JavaScript"));
     assert!(config_runtimes.contains("runtimes.python.command"));
     assert!(generated_config_overview.contains("docs/syu/config/overview.yaml"));
     assert!(generated_config_overview.contains("current CLI version"));
     assert!(generated_config_spec.contains("docs/syu/config/spec.yaml"));
     assert!(generated_config_validate.contains("validate.default_fix"));
-    assert!(generated_config_validate.contains("Rust, Python, and TypeScript/JavaScript"));
+    assert!(generated_config_validate.contains("Rust, Python, Go, and TypeScript/JavaScript"));
     assert!(generated_config_validate.contains("array&lt;path&gt;"));
     assert!(generated_config_runtimes.contains("docs/syu/config/runtimes.yaml"));
     assert!(generated_site_index.contains("/docs/generated/site-spec/features/cli/show-list"));
@@ -478,7 +478,7 @@ fn repository_declares_documentation_guides() {
     assert!(generated_validation.contains("SYU-graph-reference-001"));
     assert!(
         generated_validation
-            .contains("Rust, Python, and TypeScript/JavaScript source and test files")
+            .contains("Rust, Python, Go, and TypeScript/JavaScript source and test files")
     );
     assert!(generated_docs_freshness.contains("FEAT-QUALITY-001"));
     assert!(generated_docs_freshness.contains("check_generated_docs_freshness"));

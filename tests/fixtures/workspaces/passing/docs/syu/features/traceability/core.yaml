@@ -37,3 +37,15 @@ features:
         - file: frontend/feature-trace.ts
           symbols:
             - featureTraceTs
+
+  - id: FEAT-TRACE-004
+    title: Go implementation trace
+    summary: Feature links to Go source.
+    status: implemented
+    linked_requirements:
+      - REQ-TRACE-004
+    implementations:
+      go:
+        - file: go/feature_trace.go
+          symbols:
+            - FeatureTraceGo

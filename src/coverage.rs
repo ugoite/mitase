@@ -7,6 +7,7 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
+use regex::Regex;
 use syn::{Attribute, ImplItem, Item, Visibility};
 
 use crate::{
@@ -41,6 +42,7 @@ pub fn validate_symbol_trace_coverage(workspace: &Workspace, issues: &mut Vec<Is
         issues,
         discover_rust_targets,
         discover_python_targets,
+        discover_go_targets,
         discover_typescript_targets,
     );
 }
@@ -50,6 +52,7 @@ fn validate_symbol_trace_coverage_with(
     issues: &mut Vec<Issue>,
     rust_discovery: impl Fn(&SyuConfig, &Path) -> Result<Vec<CoverageTarget>, Box<Issue>>,
     python_discovery: impl Fn(&SyuConfig, &Path) -> Result<Vec<CoverageTarget>, Box<Issue>>,
+    go_discovery: impl Fn(&SyuConfig, &Path) -> Result<Vec<CoverageTarget>, Box<Issue>>,
     ts_discovery: impl Fn(&SyuConfig, &Path) -> Result<Vec<CoverageTarget>, Box<Issue>>,
 ) {
     if !workspace.config.validate.require_symbol_trace_coverage {
@@ -66,6 +69,14 @@ fn validate_symbol_trace_coverage_with(
 
     match python_discovery(&workspace.config, &workspace.root) {
         Ok(python_targets) => targets.extend(python_targets),
+        Err(issue) => {
+            issues.push(*issue);
+            return;
+        }
+    }
+
+    match go_discovery(&workspace.config, &workspace.root) {
+        Ok(go_targets) => targets.extend(go_targets),
         Err(issue) => {
             issues.push(*issue);
             return;
@@ -586,6 +597,177 @@ fn discover_typescript_targets(
     Ok(targets)
 }
 
+fn discover_go_targets(config: &SyuConfig, root: &Path) -> Result<Vec<CoverageTarget>, Box<Issue>> {
+    let ignored_paths = normalized_symbol_trace_coverage_ignored_paths(config);
+    let mut files = go_files_under(root, &root.join("src"), &ignored_paths)?;
+    files.extend(go_files_under(root, &root.join("tests"), &ignored_paths)?);
+    files.sort();
+
+    if files.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut targets = Vec::new();
+    for path in files {
+        let contents = fs::read_to_string(&path).map_err(|error| {
+            Box::new(Issue::error(
+                "SYU-coverage-read-001",
+                "trace coverage inventory",
+                Some(path.display().to_string()),
+                format!(
+                    "Failed to read `{}` while building trace coverage inventory: {error}",
+                    path.display()
+                ),
+                Some("Fix the unreadable file or disable `validate.require_symbol_trace_coverage` until the workspace can be scanned.".to_string()),
+            ))
+        })?;
+
+        let relative = path
+            .strip_prefix(root)
+            .expect("scanned file should remain under the workspace root")
+            .to_path_buf();
+
+        if is_go_test_file(&path) {
+            for symbol in collect_go_test_symbols(&contents) {
+                targets.push(CoverageTarget {
+                    file: relative.clone(),
+                    symbol,
+                    kind: CoverageTargetKind::TestSymbol,
+                });
+            }
+            continue;
+        }
+
+        for symbol in collect_go_public_symbols(&contents) {
+            targets.push(CoverageTarget {
+                file: relative.clone(),
+                symbol,
+                kind: CoverageTargetKind::PublicSymbol,
+            });
+        }
+    }
+
+    targets.sort_by(|left, right| {
+        (
+            left.file.as_os_str(),
+            left.symbol.as_str(),
+            match left.kind {
+                CoverageTargetKind::PublicSymbol => 0,
+                CoverageTargetKind::TestSymbol => 1,
+            },
+        )
+            .cmp(&(
+                right.file.as_os_str(),
+                right.symbol.as_str(),
+                match right.kind {
+                    CoverageTargetKind::PublicSymbol => 0,
+                    CoverageTargetKind::TestSymbol => 1,
+                },
+            ))
+    });
+    targets.dedup();
+
+    Ok(targets)
+}
+
+fn collect_go_public_symbols(contents: &str) -> Vec<String> {
+    let function_regex = Regex::new(
+        r"^\s*func\s+(?:\([^)]*\)\s*)?(?P<name>[A-Z][A-Za-z0-9_]*)\s*(?:\[[^\n\r\]]+\])?\s*\(",
+    )
+    .expect("Go function regex should compile");
+    let type_regex = Regex::new(r"^\s*type\s+(?P<name>[A-Z][A-Za-z0-9_]*)\b")
+        .expect("Go type regex should compile");
+    let value_regex = Regex::new(r"^\s*(?:const|var)\s+(?P<name>[A-Z][A-Za-z0-9_]*)\b")
+        .expect("Go value regex should compile");
+    let block_start_regex =
+        Regex::new(r"^\s*(?:const|var)\s*\(\s*$").expect("Go block regex should compile");
+    let block_value_regex = Regex::new(r"^\s*(?P<name>[A-Z][A-Za-z0-9_]*)\b")
+        .expect("Go block value regex should compile");
+    let block_end_regex = Regex::new(r"^\s*\)\s*$").expect("Go block end regex should compile");
+
+    let mut symbols = Vec::new();
+    let mut in_value_block = false;
+
+    for line in contents.lines() {
+        if in_value_block {
+            if block_end_regex.is_match(line) {
+                in_value_block = false;
+                continue;
+            }
+            if let Some(captures) = block_value_regex.captures(line) {
+                symbols.push(captures["name"].to_string());
+            }
+            continue;
+        }
+
+        if block_start_regex.is_match(line) {
+            in_value_block = true;
+            continue;
+        }
+
+        if let Some(captures) = function_regex.captures(line) {
+            symbols.push(captures["name"].to_string());
+            continue;
+        }
+        if let Some(captures) = type_regex.captures(line) {
+            symbols.push(captures["name"].to_string());
+            continue;
+        }
+        if let Some(captures) = value_regex.captures(line) {
+            symbols.push(captures["name"].to_string());
+        }
+    }
+
+    symbols.dedup();
+    symbols
+}
+
+fn collect_go_test_symbols(contents: &str) -> Vec<String> {
+    let regex =
+        Regex::new(r"(?m)^\s*func\s+(?P<name>(?:Test|Benchmark|Fuzz|Example)[A-Za-z0-9_]*)\s*\(")
+            .expect("Go test symbol regex should compile");
+    regex
+        .captures_iter(contents)
+        .filter_map(|captures| {
+            captures
+                .name("name")
+                .map(|symbol| symbol.as_str().to_string())
+        })
+        .collect()
+}
+
+fn go_files_under(
+    workspace_root: &Path,
+    root: &Path,
+    ignored_paths: &BTreeSet<PathBuf>,
+) -> Result<Vec<PathBuf>, Box<Issue>> {
+    if !root.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut files = Vec::new();
+    collect_files_recursive_by_extension(workspace_root, root, "go", ignored_paths, &mut files)
+        .map_err(|error| {
+            Box::new(Issue::error(
+                "SYU-coverage-walk-001",
+                "trace coverage inventory",
+                Some(root.display().to_string()),
+                format!(
+                    "Failed to walk `{}` while building trace coverage inventory: {error}",
+                    root.display()
+                ),
+                Some("Fix the directory layout or disable `validate.require_symbol_trace_coverage` until the workspace can be scanned.".to_string()),
+            ))
+        })?;
+    Ok(files)
+}
+
+fn is_go_test_file(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.ends_with("_test.go"))
+}
+
 fn typescript_files_under(
     workspace_root: &Path,
     root: &Path,
@@ -727,16 +909,24 @@ mod tests {
 
     use super::{
         CoverageTargetKind, collect_feature_coverage, collect_files_recursive_by_extension,
-        collect_requirement_coverage, discover_python_targets, discover_rust_targets,
-        discover_typescript_targets, normalize_relative_path, python_files_under, rust_files_under,
-        typescript_files_under, validate_symbol_trace_coverage,
+        collect_go_public_symbols, collect_go_test_symbols, collect_requirement_coverage,
+        discover_go_targets, discover_python_targets, discover_rust_targets,
+        discover_typescript_targets, go_files_under, normalize_relative_path, python_files_under,
+        rust_files_under, typescript_files_under, validate_symbol_trace_coverage,
         validate_symbol_trace_coverage_with,
     };
     use crate::{
         config::SyuConfig,
-        model::{Feature, Requirement, TraceReference},
+        model::{Feature, Issue, Requirement, TraceReference},
         workspace::Workspace,
     };
+
+    fn no_targets(
+        _config: &SyuConfig,
+        _root: &Path,
+    ) -> Result<Vec<super::CoverageTarget>, Box<Issue>> {
+        Ok(Vec::new())
+    }
 
     #[test]
     fn discover_rust_targets_collects_public_symbols_and_tests() {
@@ -1035,6 +1225,138 @@ mod tests {
     }
 
     #[test]
+    fn collect_go_public_symbols_covers_values_blocks_and_generic_functions() {
+        let symbols = collect_go_public_symbols(
+            "package trace\n\n\
+             func CoveredAPI() {}\n\
+             func GenericAPI[T any]() {}\n\
+             type PublicThing interface { Run() }\n\
+             var ExportedConfig = \"ok\"\n\
+             const ExportedFlag = true\n\
+             const (\n\
+                 ExportedBlockFlag = true\n\
+                 hiddenBlockFlag = false\n\
+             )\n\
+             var (\n\
+                 ExportedBlockConfig = \"ok\"\n\
+                 hiddenBlockConfig = \"no\"\n\
+             )\n\
+             func hiddenAPI() {}\n",
+        );
+
+        assert_eq!(
+            symbols,
+            vec![
+                "CoveredAPI",
+                "GenericAPI",
+                "PublicThing",
+                "ExportedConfig",
+                "ExportedFlag",
+                "ExportedBlockFlag",
+                "ExportedBlockConfig",
+            ]
+        );
+    }
+
+    #[test]
+    fn collect_go_test_symbols_covers_all_go_entry_points() {
+        let symbols = collect_go_test_symbols(
+            "package trace\n\n\
+             import \"testing\"\n\n\
+             func TestCovered(t *testing.T) {}\n\
+             func BenchmarkCovered(b *testing.B) {}\n\
+             func FuzzCovered(f *testing.F) {}\n\
+             func ExampleCovered() {}\n\
+             func helperCase(t *testing.T) {}\n",
+        );
+
+        assert_eq!(
+            symbols,
+            vec![
+                "TestCovered",
+                "BenchmarkCovered",
+                "FuzzCovered",
+                "ExampleCovered",
+            ]
+        );
+    }
+
+    #[test]
+    fn go_files_under_returns_empty_for_nonexistent_dir() {
+        let tempdir = tempdir().expect("tempdir");
+        let missing = tempdir.path().join("nonexistent");
+        let result = go_files_under(tempdir.path(), &missing, &BTreeSet::new())
+            .expect("should return empty ok");
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn go_files_under_errors_on_file_path() {
+        let tempdir = tempdir().expect("tempdir");
+        let src = tempdir.path().join("src");
+        fs::write(&src, "not a directory").expect("write blocking file");
+        let result = go_files_under(tempdir.path(), &src, &BTreeSet::new());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn discover_go_targets_collects_exported_symbols_and_tests() {
+        let tempdir = tempdir().expect("tempdir");
+        fs::create_dir_all(tempdir.path().join("src")).expect("src");
+        fs::create_dir_all(tempdir.path().join("tests")).expect("tests");
+        fs::write(
+            tempdir.path().join("src/api.go"),
+            "package trace\n\n\
+             func FeatureTraceGo() {}\n\
+             func GenericAPI[T any]() {}\n\
+             type PublicThing interface { Run() }\n\
+             const (\n\
+                 ExportedBlockFlag = true\n\
+             )\n",
+        )
+        .expect("go source");
+        fs::write(
+            tempdir.path().join("tests/api_test.go"),
+            "package trace\n\n\
+             import \"testing\"\n\n\
+             func TestTraceCoverage(t *testing.T) {}\n\
+             func BenchmarkTraceCoverage(b *testing.B) {}\n",
+        )
+        .expect("go tests");
+
+        let targets = discover_go_targets(&SyuConfig::default(), tempdir.path()).expect("targets");
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("src/api.go")
+                && target.symbol == "FeatureTraceGo"
+                && target.kind == CoverageTargetKind::PublicSymbol
+        }));
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("src/api.go")
+                && target.symbol == "GenericAPI"
+                && target.kind == CoverageTargetKind::PublicSymbol
+        }));
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("src/api.go")
+                && target.symbol == "ExportedBlockFlag"
+                && target.kind == CoverageTargetKind::PublicSymbol
+        }));
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("tests/api_test.go")
+                && target.symbol == "BenchmarkTraceCoverage"
+                && target.kind == CoverageTargetKind::TestSymbol
+        }));
+    }
+
+    #[test]
+    fn discover_go_targets_returns_empty_without_go_files() {
+        let tempdir = tempdir().expect("tempdir");
+        fs::create_dir_all(tempdir.path().join("src")).expect("src");
+        let result =
+            discover_go_targets(&SyuConfig::default(), tempdir.path()).expect("should succeed");
+        assert!(result.is_empty());
+    }
+
+    #[test]
     fn python_files_under_returns_empty_for_nonexistent_dir() {
         let tempdir = tempdir().expect("tempdir");
         let missing = tempdir.path().join("nonexistent");
@@ -1174,6 +1496,58 @@ mod tests {
     }
 
     #[test]
+    fn discover_go_targets_reports_unreadable_go_files() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tempdir = tempdir().expect("tempdir");
+        let src_dir = tempdir.path().join("src");
+        fs::create_dir_all(&src_dir).expect("src dir");
+        let go_file = src_dir.join("api.go");
+        fs::write(&go_file, "package trace\n\nfunc FeatureTraceGo() {}\n").expect("go file");
+
+        let mut perm = fs::metadata(&go_file).expect("meta").permissions();
+        let mode = perm.mode();
+        perm.set_mode(0o000);
+        fs::set_permissions(&go_file, perm).expect("set unreadable");
+
+        let result = discover_go_targets(&SyuConfig::default(), tempdir.path());
+
+        let mut restore = fs::metadata(&go_file).expect("meta").permissions();
+        restore.set_mode(mode);
+        fs::set_permissions(&go_file, restore).expect("restore");
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn discover_go_targets_reports_unreadable_go_test_files() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tempdir = tempdir().expect("tempdir");
+        let tests_dir = tempdir.path().join("tests");
+        fs::create_dir_all(&tests_dir).expect("tests dir");
+        let go_file = tests_dir.join("api_test.go");
+        fs::write(
+            &go_file,
+            "package trace\n\nimport \"testing\"\n\nfunc TestTraceCoverage(t *testing.T) {}\n",
+        )
+        .expect("go test file");
+
+        let mut perm = fs::metadata(&go_file).expect("meta").permissions();
+        let mode = perm.mode();
+        perm.set_mode(0o000);
+        fs::set_permissions(&go_file, perm).expect("set unreadable");
+
+        let result = discover_go_targets(&SyuConfig::default(), tempdir.path());
+
+        let mut restore = fs::metadata(&go_file).expect("meta").permissions();
+        restore.set_mode(mode);
+        fs::set_permissions(&go_file, restore).expect("restore");
+
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn discover_typescript_targets_skips_unreadable_ts_files() {
         use std::os::unix::fs::PermissionsExt;
 
@@ -1242,7 +1616,7 @@ mod tests {
         validate_symbol_trace_coverage_with(
             &workspace,
             &mut issues,
-            |_config, _root| Ok(Vec::new()),
+            no_targets,
             |_config, _root| {
                 Err(Box::new(crate::model::Issue::error(
                     "SYU-coverage-walk-001",
@@ -1252,6 +1626,7 @@ mod tests {
                     None,
                 )))
             },
+            no_targets,
             discover_typescript_targets,
         );
 
@@ -1278,8 +1653,9 @@ mod tests {
         validate_symbol_trace_coverage_with(
             &workspace,
             &mut issues,
-            |_config, _root| Ok(Vec::new()),
-            |_config, _root| Ok(Vec::new()),
+            no_targets,
+            no_targets,
+            no_targets,
             |_config, _root| {
                 Err(Box::new(crate::model::Issue::error(
                     "SYU-coverage-walk-001",
@@ -1289,6 +1665,43 @@ mod tests {
                     None,
                 )))
             },
+        );
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].code, "SYU-coverage-walk-001");
+    }
+
+    #[test]
+    fn validate_with_go_discovery_error_records_issue_and_returns() {
+        let tempdir = tempdir().expect("tempdir");
+        let mut config = SyuConfig::default();
+        config.validate.require_symbol_trace_coverage = true;
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("docs/syu"),
+            config,
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+
+        let mut issues = Vec::new();
+        validate_symbol_trace_coverage_with(
+            &workspace,
+            &mut issues,
+            no_targets,
+            no_targets,
+            |_config, _root| {
+                Err(Box::new(crate::model::Issue::error(
+                    "SYU-coverage-walk-001",
+                    "trace coverage inventory",
+                    None,
+                    "injected go discovery error".to_string(),
+                    None,
+                )))
+            },
+            no_targets,
         );
 
         assert_eq!(issues.len(), 1);
