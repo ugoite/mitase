@@ -21,7 +21,8 @@ Need a different level of guidance?
   repository already has code and history and you want to add `syu` without
   treating it like a blank workspace.
 - Stay on this page when you want the first workspace setup explained step by
-  step, including why the manual YAML edits matter before validation.
+  step, including why the manual YAML edits matter before validation and how the
+  same commands fit together as one guided story.
 - Follow the [end-to-end tutorial](./tutorial.md) when you want a realistic,
   worked repository story instead of the shortest setup path.
 - Use the [trace adapter capability matrix](./trace-adapter-support.md) when
