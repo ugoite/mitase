@@ -1,0 +1,13 @@
+category: Policies
+version: 1
+language: en
+
+policies:
+  - id: POL-GO-001
+    title: Go-first adoption should keep real code visible while using supported trace anchors
+    summary: Demonstrate unsupported-language adoption without pretending that Go is fully inspected yet.
+    description: Require the example to ship real Go source and test files while validated trace evidence stays in a supported file type.
+    linked_philosophies:
+      - PHIL-GO-001
+    linked_requirements:
+      - REQ-GO-001

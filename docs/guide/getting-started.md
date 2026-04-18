@@ -472,7 +472,7 @@ syu validate . --fix
 ```
 
 Autofix is conservative. It currently repairs documentation-style trace gaps
-for Rust, Python, and TypeScript without guessing at larger structural changes.
+for Rust, Python, Go, and TypeScript without guessing at larger structural changes.
 
 ## 6. Generate a report
 
@@ -486,6 +486,7 @@ The repository includes complete examples:
 
 - `examples/rust-only`
 - `examples/python-only`
+- `examples/go-only`
 - `examples/polyglot`
 
 If one of those examples is already close to your repository, use the matching
@@ -493,6 +494,10 @@ If one of those examples is already close to your repository, use the matching
 shape. `syu templates` prints the same mapping directly in the CLI, including
 which starter is template-only (`generic`) versus backed by a checked-in
 example.
+
+Use `examples/go-only` when your repository is Go-first today: it keeps the
+real `.go` files in the example, but validates the trace anchors from
+`README.md` until `syu` ships stricter Go ownership inventory.
 
 For a side-by-side decision table that explains which paths are template-backed,
 example-backed, or both, see the

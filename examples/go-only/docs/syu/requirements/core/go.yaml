@@ -1,0 +1,18 @@
+category: Go Example Requirements
+prefix: REQ-GO
+
+requirements:
+  - id: REQ-GO-001
+    title: Demonstrate a Go-first requirement trace workaround
+    description: The Go example should keep a real Go test file in the repository while today's validated trace anchor lives in README.md.
+    priority: high
+    status: implemented
+    linked_policies:
+      - POL-GO-001
+    linked_features:
+      - FEAT-GO-001
+    tests:
+      markdown:
+        - file: README.md
+          symbols:
+            - TestGoRequirement

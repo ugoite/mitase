@@ -559,7 +559,7 @@ Key behaviors:
 - `validate.allow_planned` controls whether `planned` requirements and features are allowed at all
 - `validate.require_non_orphaned_items` turns isolated layered definitions into validation errors
 - `validate.require_reciprocal_links` keeps adjacent-layer backlinks mandatory by default while still allowing phased migration when disabled
-- `validate.require_symbol_trace_coverage` opt-in checks that public Rust, Python, and TypeScript/JavaScript symbols belong to features and tests belong to requirements
+- `validate.require_symbol_trace_coverage` opt-in checks that public Rust, Python, and TypeScript/JavaScript symbols belong to features and tests belong to requirements, while declared Go traces are still validated separately until strict Go ownership inventory support lands
 - the [trace adapter capability matrix](docs/guide/trace-adapter-support.md) shows which built-in languages stop at symbol validation versus also supporting `doc_contains` and strict ownership inventory
 - `report.output` sets the default `syu report` destination while `--output` still takes precedence
 - `app.bind` and `app.port` define the default local browser-app address and port unless `--bind` / `--port` override them
@@ -600,7 +600,7 @@ The `syu` repository itself enables `validate.require_non_orphaned_items`,
 documentation-style trace gaps that can be updated mechanically:
 
 - missing requirement / feature IDs in symbol documentation
-- missing `doc_contains` snippets for Rust, Python, and TypeScript symbols
+- missing `doc_contains` snippets for Rust, Python, Go, and TypeScript symbols
 
 It does **not** attempt speculative edits like renaming symbols or inventing
 missing files.
@@ -610,6 +610,7 @@ missing files.
 The repository ships working example projects:
 
 - [`examples/rust-only`](examples/rust-only) — minimal single-language Rust starter, and the checked-in match for `syu init . --template rust-only`
+- [`examples/go-only`](examples/go-only) — a Go-first example that keeps real `.go` files in the repository while showing the current unsupported-language adoption path
 - [`examples/python-only`](examples/python-only) — minimal Python-first starter, and the checked-in match for `syu init . --template python-only`
 - [`examples/polyglot`](examples/polyglot) — one requirement and feature traced across Rust, Python, and TypeScript, and the checked-in match for `syu init . --template polyglot`
 - [`examples/team-scale`](examples/team-scale) — a larger Rust workspace that shows phased adoption, nested documents, and recovery drills; reference-only, not a starter template
