@@ -122,8 +122,8 @@ description: "Generated reference for docs/syu/requirements/core/repository.yaml
   - **description**:
     - |
       The repository MUST include example projects for Rust-only, Python-only,
-      and polyglot workflows and MUST validate them in the automated test suite
-      so contributors can learn from working patterns.
+      Go-first workaround, and polyglot workflows and MUST validate them in the
+      automated test suite so contributors can learn from working patterns.
   - **priority**: medium
   - **status**: implemented
   - **linked_policies**:
@@ -292,8 +292,8 @@ requirements:
     title: Ship curated example workspaces and validate them in tests
     description: |
       The repository MUST include example projects for Rust-only, Python-only,
-      and polyglot workflows and MUST validate them in the automated test suite
-      so contributors can learn from working patterns.
+      Go-first workaround, and polyglot workflows and MUST validate them in the
+      automated test suite so contributors can learn from working patterns.
     priority: medium
     status: implemented
     linked_policies:

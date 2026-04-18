@@ -137,9 +137,10 @@ of editing `syu.yaml`.
 
 ### `validate.require_symbol_trace_coverage`
 
-When `true`, `syu` scans Rust, Python, and TypeScript/JavaScript source and
-test files to confirm that every public symbol belongs to some feature and
-every test belongs to some requirement.
+When `true`, `syu` scans Rust, Python, and TypeScript/JavaScript source and test
+files to confirm that every public symbol belongs to some feature and every
+test belongs to some requirement. Declared Go traces are still validated, but
+Go is not yet part of this strict undeclared-symbol inventory.
 
 - `false`: only declared traces are verified
 - `true`: undeclared public APIs and tests become validation errors

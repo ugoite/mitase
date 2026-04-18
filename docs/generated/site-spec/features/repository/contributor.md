@@ -19,7 +19,7 @@ description: "Generated reference for docs/syu/features/repository/contributor.y
 
 - **id**: FEAT-CONTRIB-001
   - **title**: Contributor devcontainer and example workspaces
-  - **summary**: Provide a ready-to-use contributor container and validated example projects.
+  - **summary**: Provide a ready-to-use contributor container and validated example projects, including unsupported-language adoption examples.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-011
@@ -45,6 +45,7 @@ description: "Generated reference for docs/syu/features/repository/contributor.y
           - FEAT-CONTRIB-001
           - rust_only_example_validates
           - python_only_example_validates
+          - go_only_example_validates
           - polyglot_example_validates
 - **id**: FEAT-CONTRIB-002
   - **title**: Contributor workflow templates
@@ -110,7 +111,7 @@ version: 1
 features:
   - id: FEAT-CONTRIB-001
     title: Contributor devcontainer and example workspaces
-    summary: Provide a ready-to-use contributor container and validated example projects.
+    summary: Provide a ready-to-use contributor container and validated example projects, including unsupported-language adoption examples.
     status: implemented
     linked_requirements:
       - REQ-CORE-011
@@ -136,6 +137,7 @@ features:
             - FEAT-CONTRIB-001
             - rust_only_example_validates
             - python_only_example_validates
+            - go_only_example_validates
             - polyglot_example_validates
 
   - id: FEAT-CONTRIB-002
