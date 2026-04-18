@@ -185,11 +185,14 @@ test("loads deep links and supports keyboard search navigation", async ({ page }
   ).toBeVisible();
   await expect(page).toHaveURL(/#requirements\/REQ-CORE-001$/);
 
-  const searchInput = page.getByRole("searchbox", { name: "Search spec items" });
+  const searchInput = page.getByRole("combobox", { name: "Search spec items" });
   await expect(searchInput).toHaveAttribute(
     "aria-describedby",
     "spec-search-shortcuts-description",
   );
+  await expect(searchInput).toHaveAttribute("aria-autocomplete", "list");
+  await expect(searchInput).toHaveAttribute("aria-expanded", "false");
+  await expect(searchInput).not.toHaveAttribute("aria-controls", "spec-search-results-list");
   await expect(searchInput).toHaveAttribute(
     "placeholder",
     "Search items by ID or keyword (up to 20 matches)…",
@@ -226,7 +229,17 @@ test("loads deep links and supports keyboard search navigation", async ({ page }
   await searchInput.press("Escape");
   await expect(searchInput).toHaveValue("");
   await searchInput.fill("FEAT-CHECK-001");
+  await expect(searchInput).toHaveAttribute("aria-expanded", "true");
+  await expect(searchInput).toHaveAttribute("aria-controls", "spec-search-results-list");
+  const searchResults = page.getByRole("listbox", { name: "Search results" });
+  const firstSearchResult = searchResults.getByRole("option").first();
+  await expect(firstSearchResult).toContainText("FEAT-CHECK-001");
   await searchInput.press("ArrowDown");
+  const activeResultId = await searchInput.getAttribute("aria-activedescendant");
+  expect(activeResultId).toBeTruthy();
+  const activeResult = page.locator(`#${activeResultId!}`);
+  await expect(activeResult).toContainText("FEAT-CHECK-001");
+  await expect(activeResult).not.toHaveAttribute("aria-selected", "true");
   await searchInput.press("ArrowUp");
   await searchInput.press("ArrowDown");
   await searchInput.press("Enter");
@@ -237,13 +250,16 @@ test("loads deep links and supports keyboard search navigation", async ({ page }
   await expect(page).toHaveURL(/#features\/FEAT-CHECK-001$/);
 
   await searchInput.fill("no-such-result");
+  await expect(searchInput).toHaveAttribute("aria-expanded", "false");
+  await expect(searchInput).not.toHaveAttribute("aria-controls", "spec-search-results-list");
   await searchInput.press("ArrowUp");
   await searchInput.press("Enter");
 
   await expect(page.getByText("No items match.")).toBeVisible();
   await searchInput.press("Escape");
   await expect(searchInput).toHaveValue("");
-  await expect(page.locator("#search-results-list")).toHaveCount(0);
+  await expect(searchInput).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("listbox", { name: "Search results" })).toHaveCount(0);
   await expect(
     page.getByRole("heading", { name: /FEAT-CHECK-001 .* Unified validation command/i }),
   ).toBeVisible();
