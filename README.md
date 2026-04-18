@@ -601,6 +601,7 @@ The repository ships working example projects:
 - [`examples/rust-only`](examples/rust-only)
 - [`examples/python-only`](examples/python-only)
 - [`examples/polyglot`](examples/polyglot)
+- [`examples/team-scale`](examples/team-scale)
 
 Each one is validated in the automated test suite. If you are deciding between a
 checked-in example and a scaffold template, start with

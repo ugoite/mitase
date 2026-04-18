@@ -27,9 +27,11 @@ whether you should scaffold a template or open one of the repository examples.
 | --- | --- | --- | --- |
 | `docs-first` | Example only | documentation-heavy repositories that want a small reference for shell, markdown, and wildcard YAML traces | `examples/docs-first` |
 | `generic` | Template only | the shortest neutral scaffold when you do not want language-specific starter copy yet | `syu init .` |
+| `go-only` | Example only | unsupported-language repositories that need a checked-in workaround shape today while direct Go tracing is still future work | `examples/go-only` |
 | `rust-only` | Template + example | Rust-first repositories that want starter IDs, file names, and copy tuned for Rust work | `syu init . --template rust-only` or `examples/rust-only` |
 | `python-only` | Template + example | Python-first repositories that want the same tuned starter shape for Python workflows | `syu init . --template python-only` or `examples/python-only` |
 | `polyglot` | Template + example | repositories that already expect multiple languages and want the starter text to say that from the first commit | `syu init . --template polyglot` or `examples/polyglot` |
+| `team-scale` | Example only | repositories that already outgrew the single-feature starter shape and want to inspect a larger split-by-area workspace | `examples/team-scale` |
 
 ## What templates give you
 
