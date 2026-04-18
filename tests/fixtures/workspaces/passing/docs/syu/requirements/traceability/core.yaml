@@ -49,3 +49,19 @@ requirements:
         - file: frontend/traceability.test.ts
           symbols:
             - reqTraceTsTest
+
+  - id: REQ-TRACE-004
+    title: Go requirement trace
+    description: Go requirements should point to Go test files.
+    priority: high
+    status: implemented
+    linked_policies:
+      - POL-TRACE-001
+      - POL-TRACE-002
+    linked_features:
+      - FEAT-TRACE-004
+    tests:
+      go:
+        - file: go/traceability_test.go
+          symbols:
+            - TestReqTraceGo

@@ -170,6 +170,7 @@ impl LanguageAdapter for GoAdapter {
             format!(r"(?m)\bfunc\s+(?:\([^)]+\)\s*)?{escaped}\b"),
             format!(r"(?m)\btype\s+{escaped}\b"),
             format!(r"(?m)\b(?:var|const)\s+{escaped}\b"),
+            format!(r"(?ms)\b(?:var|const)\s*\([^)]*\b{escaped}\b"),
             format!(r"(?m)\b{escaped}\b"),
         ]
     }
@@ -400,10 +401,12 @@ mod tests {
             "func GoFeatureImpl() string { return \"ok\" }\n",
             "GoFeatureImpl"
         ));
+        assert!(go.symbol_exists("func GenericAPI[T any]() {}\n", "GenericAPI"));
         assert!(go.symbol_exists(
             "func (svc Service) TestGoRequirement(t *testing.T) {}\n",
             "TestGoRequirement"
         ));
+        assert!(go.symbol_exists("const (\n    ExportedFlag = true\n)\n", "ExportedFlag"));
         assert!(shell.symbol_exists("install_syu() {\n  echo ok\n}\n", "install_syu"));
         assert!(yaml.symbol_exists("name: CI\njobs:\n  quality:\n", "quality"));
         assert!(json.symbol_exists("{\"package\":\"syu\"}", "package"));
