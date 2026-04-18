@@ -18,7 +18,7 @@
 // REQ-CORE-001
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, builder::BoolishValueParser};
-use std::path::PathBuf;
+use std::{num::NonZeroU8, path::PathBuf};
 
 const ROOT_AFTER_HELP: &str = "\
 New here?
@@ -472,6 +472,10 @@ pub struct ValidateArgs {
         help = "Temporarily override validate.require_symbol_trace_coverage for this run"
     )]
     pub require_symbol_trace_coverage: Option<bool>,
+
+    #[arg(help = "Use this exit code when validation has warnings but no errors")]
+    #[arg(long, value_name = "CODE")]
+    pub warning_exit_code: Option<NonZeroU8>,
 
     #[arg(help = "Suppress next-step guidance in successful text output")]
     #[arg(short, long, action = ArgAction::SetTrue)]

@@ -356,6 +356,11 @@ pub fn run_check_command(args: &CheckArgs) -> Result<i32> {
         ),
     };
     let overall_success = result.is_success();
+    let warning_only_success = overall_success
+        && result
+            .issues
+            .iter()
+            .any(|issue| issue.severity == Severity::Warning);
     let filters = IssueFilters::from_args(args);
     let (result, filtered_view) = filter_check_result(result, &filters);
 
@@ -395,7 +400,17 @@ pub fn run_check_command(args: &CheckArgs) -> Result<i32> {
         }
     }
 
-    Ok(if overall_success { 0 } else { 1 })
+    Ok(
+        match (
+            overall_success,
+            warning_only_success,
+            args.warning_exit_code,
+        ) {
+            (false, _, _) => 1,
+            (true, true, Some(code)) => i32::from(code.get()),
+            (true, _, _) => 0,
+        },
+    )
 }
 
 // FEAT-CHECK-001
@@ -2738,6 +2753,7 @@ mod tests {
             require_non_orphaned_items: None,
             require_reciprocal_links: None,
             require_symbol_trace_coverage: None,
+            warning_exit_code: None,
             quiet: false,
         })
         .expect("command should render load errors");
@@ -2804,6 +2820,7 @@ mod tests {
             require_non_orphaned_items: None,
             require_reciprocal_links: None,
             require_symbol_trace_coverage: None,
+            warning_exit_code: None,
             quiet: false,
         })
         .expect_err("autofix failures should bubble up");
@@ -2829,6 +2846,7 @@ mod tests {
             require_non_orphaned_items: None,
             require_reciprocal_links: None,
             require_symbol_trace_coverage: None,
+            warning_exit_code: None,
             quiet: false,
         })
         .expect("command should complete");
