@@ -2,9 +2,13 @@
 
 <!-- FEAT-DOCS-001 -->
 
-:::tip New to syu?
-New to `syu`? Read [syu concepts](./concepts.md) first to understand the four
-layers before you start editing YAML.
+:::tip New to `syu`?
+If you already understand the four-layer model and only want the fastest command
+path, jump to the
+[README quick start on GitHub](https://github.com/ugoite/syu/blob/main/README.md#quick-start).
+Stay on this page when you want the same first-run flow narrated step by step.
+If you want the fuller mental model before you start editing YAML, read
+[syu concepts](./concepts.md) first.
 :::
 
 Need a different level of guidance?
