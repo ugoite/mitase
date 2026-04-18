@@ -9,6 +9,8 @@ Describe the user-visible change and the repository surfaces it touches.
 - Issue:
 - Requirement / feature IDs:
 
+If you list requirement or feature IDs here, include the same IDs in the PR title so the squash commit headline preserves them in `git log`.
+
 ## Validation
 
 - [ ] `scripts/ci/quality-gates.sh`

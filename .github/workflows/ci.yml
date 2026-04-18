@@ -190,6 +190,21 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: scripts/ci/check-pr-spec-links.sh
 
+  squash-history-spec-ids:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Require spec IDs in squash commit titles
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: scripts/ci/check-squash-title-spec-ids.sh
+
   installer-smoke:
     if: github.event_name != 'schedule'
     strategy:

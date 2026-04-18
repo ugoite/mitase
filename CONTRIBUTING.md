@@ -27,6 +27,9 @@ after-the-fact documentation.
 5. Merge with squash once CI is green and review conversations are resolved.
 6. Delete the branch after merge.
 
+When the PR body lists requirement or feature IDs, include
+the same IDs in the PR title. GitHub uses the PR title as the squash commit headline,
+so this keeps spec traceability visible in local `git log` after merge.
 If the pull request changes `docs/syu/`, fill in the PR template's
 **Linked issue or specification** section with either an issue reference (`#123`)
 or one or more spec IDs such as `REQ-CORE-001` / `FEAT-CHECK-001`. CI checks
