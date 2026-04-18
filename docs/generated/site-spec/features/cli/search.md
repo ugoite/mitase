@@ -19,7 +19,7 @@ description: "Generated reference for docs/syu/features/cli/search.yaml"
 
 - **id**: FEAT-SEARCH-001
   - **title**: Terminal-first definition search
-  - **summary**: Match spec items by ID, title, summary, or description from the CLI with optional kind scoping and JSON output.
+  - **summary**: Match spec items by ID, title, summary, or description from the CLI with optional kind scoping, JSON output, and workspace discovery from child directories.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-019
@@ -46,7 +46,7 @@ version: 1
 features:
   - id: FEAT-SEARCH-001
     title: Terminal-first definition search
-    summary: Match spec items by ID, title, summary, or description from the CLI with optional kind scoping and JSON output.
+    summary: Match spec items by ID, title, summary, or description from the CLI with optional kind scoping, JSON output, and workspace discovery from child directories.
     status: implemented
     linked_requirements:
       - REQ-CORE-019

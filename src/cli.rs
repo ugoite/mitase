@@ -64,7 +64,7 @@ Examples:
   syu add feature path/to/workspace --interactive
   syu add feature FEAT-AUTH-001 --kind auth --file docs/syu/features/auth/login.yaml";
 
-const WORKSPACE_HELP: &str = "Workspace root containing syu.yaml and the configured spec tree";
+const WORKSPACE_HELP: &str = "Workspace root or any child directory; syu walks upward to find syu.yaml and the configured spec tree";
 
 const LIST_AFTER_HELP: &str = "\
 Choose `syu list` when you want list-shaped output that can be narrowed to one layer or emitted as JSON for automation.
@@ -77,10 +77,12 @@ Examples:
   syu list path/to/workspace
   syu list requirement path/to/workspace
   syu list path/to/workspace requirement
+  syu list requirement docs/syu
+  syu list requirement docs/syu/features
 
 Note:
-  Pass the workspace root that contains syu.yaml.
-  The configured spec.root lives inside that workspace; do not pass it directly.";
+  Pass the workspace root, the configured spec.root directory, or any child directory.
+  syu walks upward until it finds syu.yaml, then resolves the configured spec.root from that workspace.";
 const BROWSE_AFTER_HELP: &str = "\
 Choose `syu browse --non-interactive` when you want the browse snapshot in plain text: workspace metadata, per-layer counts, grouped items, and the current validation errors.
 Choose `syu list` when you want list-shaped output that can be narrowed to one layer or emitted as JSON for automation.

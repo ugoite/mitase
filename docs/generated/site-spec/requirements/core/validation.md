@@ -33,8 +33,11 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       severity, rule genre, and exact rule code for both text and JSON output
       without changing the underlying validation result, and `syu.yaml` MUST be
       able to disable reciprocal-link enforcement without disabling missing-
-      reference validation. `check` MAY remain as a compatibility alias, but
-      `validate` is the canonical command name.
+      reference validation. When the workspace argument (or default current
+      directory) points at a child directory inside a workspace, `validate`
+      MUST walk parent directories until it finds `syu.yaml`, then report the
+      resolved workspace root in its output. `check` MAY remain as a
+      compatibility alias, but `validate` is the canonical command name.
   - **priority**: high
   - **status**: implemented
   - **linked_policies**:
@@ -47,6 +50,9 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       - **file**: tests/check_command.rs
         - **symbols**:
           - *
+      - **file**: tests/workspace_discovery_command.rs
+        - **symbols**:
+          - validate_command_discovers_workspace_from_nested_current_directory
       - **file**: tests/validate_filter_command.rs
         - **symbols**:
           - *
@@ -199,7 +205,9 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       file path. `syu.yaml` MUST be able to define a default report output path
       that `--output` can still override. The self-hosted repository SHOULD keep
       a checked-in report artifact so contributors can inspect the current state
-      without running the command first.
+      without running the command first. When the workspace argument points at a
+      child directory, `report` MUST walk parent directories until it finds
+      `syu.yaml`, then render the resolved workspace root in the Markdown output.
   - **priority**: medium
   - **status**: implemented
   - **linked_policies**:
@@ -212,6 +220,9 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       - **file**: tests/report_command.rs
         - **symbols**:
           - *
+      - **file**: tests/workspace_discovery_command.rs
+        - **symbols**:
+          - report_command_discovers_workspace_from_child_directory
       - **file**: tests/main_binary.rs
         - **symbols**:
           - *
@@ -243,8 +254,11 @@ requirements:
       severity, rule genre, and exact rule code for both text and JSON output
       without changing the underlying validation result, and `syu.yaml` MUST be
       able to disable reciprocal-link enforcement without disabling missing-
-      reference validation. `check` MAY remain as a compatibility alias, but
-      `validate` is the canonical command name.
+      reference validation. When the workspace argument (or default current
+      directory) points at a child directory inside a workspace, `validate`
+      MUST walk parent directories until it finds `syu.yaml`, then report the
+      resolved workspace root in its output. `check` MAY remain as a
+      compatibility alias, but `validate` is the canonical command name.
     priority: high
     status: implemented
     linked_policies:
@@ -257,6 +271,9 @@ requirements:
         - file: tests/check_command.rs
           symbols:
             - '*'
+        - file: tests/workspace_discovery_command.rs
+          symbols:
+            - validate_command_discovers_workspace_from_nested_current_directory
         - file: tests/validate_filter_command.rs
           symbols:
             - '*'
@@ -406,7 +423,9 @@ requirements:
       file path. `syu.yaml` MUST be able to define a default report output path
       that `--output` can still override. The self-hosted repository SHOULD keep
       a checked-in report artifact so contributors can inspect the current state
-      without running the command first.
+      without running the command first. When the workspace argument points at a
+      child directory, `report` MUST walk parent directories until it finds
+      `syu.yaml`, then render the resolved workspace root in the Markdown output.
     priority: medium
     status: implemented
     linked_policies:
@@ -419,6 +438,9 @@ requirements:
         - file: tests/report_command.rs
           symbols:
             - '*'
+        - file: tests/workspace_discovery_command.rs
+          symbols:
+            - report_command_discovers_workspace_from_child_directory
         - file: tests/main_binary.rs
           symbols:
             - '*'
