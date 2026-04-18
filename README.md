@@ -250,6 +250,10 @@ scaffold flow, follow
 [`docs/guide/existing-repository.md`](docs/guide/existing-repository.md)
 instead.
 
+Prefer a guided first run? Use `syu init . --interactive` to choose the starter
+template, spec root, shared ID stem, and whether stricter validation defaults
+should start enabled.
+
 ```bash
 syu init .                           # 1. Create spec scaffold
 syu add requirement REQ-AUTH-001     # 2. Generate a requirement stub
@@ -313,6 +317,17 @@ That renders `PHIL-STORE-001`, `POL-STORE-001`, `REQ-STORE-001`, and
 `--philosophy-prefix`, `--policy-prefix`, `--requirement-prefix`, or
 `--feature-prefix`.
 
+Want `syu` to walk you through those choices instead of remembering the flags
+up front?
+
+```bash
+syu init . --interactive
+```
+
+The guided flow keeps the same checked-in scaffold, but asks for the starter
+template, `spec.root`, shared ID stem, and whether to enable stricter
+validation defaults immediately.
+
 Want a closer starting point for a repository that is already clearly
 Rust-first, Python-first, or polyglot? Start with a lightweight template:
 
@@ -345,6 +360,7 @@ Bootstrap a new workspace:
 
 ```bash
 syu init .
+syu init . --interactive
 syu init path/to/workspace --name my-project
 syu init . --id-prefix store
 syu init . --template rust-only
@@ -358,6 +374,8 @@ style you already expect. Use `--id-prefix` when you want stable project-wide
 starter IDs from the first command, and the per-layer `--*-prefix` flags when a
 single shared stem is not enough. Use `--spec-root` to scaffold into a
 repository-relative spec tree without moving the generated files by hand later.
+Use `--interactive` when you want the CLI to guide those choices in a terminal
+before it writes the scaffold.
 
 ### `syu templates`
 

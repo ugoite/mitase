@@ -61,6 +61,36 @@ fn init_command_bootstraps_a_workspace_that_validate_accepts() {
 }
 
 #[test]
+// FEAT-INIT-007
+fn init_command_interactive_requires_a_terminal() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    let workspace = tempdir.path().join("demo");
+
+    let init = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("init")
+        .arg(&workspace)
+        .arg("--interactive")
+        .output()
+        .expect("init should run");
+
+    assert!(
+        !init.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&init.stdout),
+        String::from_utf8_lossy(&init.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&init.stderr)
+            .contains("`syu init --interactive` requires a terminal")
+    );
+    assert!(
+        !workspace.exists(),
+        "non-terminal interactive init should fail before creating the workspace"
+    );
+}
+
+#[test]
 // REQ-CORE-009
 fn init_command_bootstraps_language_templates_that_validate_accept() {
     for (template, requirement_path, feature_path, requirement_id, feature_id) in [
