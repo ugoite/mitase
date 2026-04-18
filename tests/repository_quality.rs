@@ -375,8 +375,12 @@ fn repository_declares_documentation_guides() {
         getting_started.contains("[trace adapter capability matrix](./trace-adapter-support.md)")
     );
     assert!(
-        getting_started.contains("https://github.com/ugoite/syu/blob/main/README.md#quick-start")
+        getting_started
+            .contains("https://github.com/ugoite/syu/blob/main/README.md#choose-your-path")
     );
+    assert!(getting_started.contains(
+        "https://github.com/ugoite/syu/blob/main/README.md#is-syu-right-for-this-repository"
+    ));
     assert!(getting_started.contains("narrated first-run path"));
     assert!(getting_started.contains("first workspace setup explained step by"));
     assert!(getting_started.contains("first manual editing step"));
