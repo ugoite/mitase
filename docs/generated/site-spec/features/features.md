@@ -23,6 +23,8 @@ description: "Generated reference for docs/syu/features/features.yaml"
   - **file**: cli/browse.yaml
 - **kind**: show-list
   - **file**: cli/show-list.yaml
+- **kind**: relate
+  - **file**: cli/relate.yaml
 - **kind**: search
   - **file**: cli/search.yaml
 - **kind**: trace
@@ -61,6 +63,8 @@ files:
     file: cli/browse.yaml
   - kind: show-list
     file: cli/show-list.yaml
+  - kind: relate
+    file: cli/relate.yaml
   - kind: search
     file: cli/search.yaml
   - kind: trace

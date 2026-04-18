@@ -323,6 +323,39 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       - **file**: src/command/trace.rs
         - **symbols**:
           - *
+- **id**: REQ-CORE-023
+  - **title**: Provide a cross-layer relation inspection CLI command
+  - **description**:
+    - |
+      The CLI MUST provide a `relate` command that accepts a philosophy, policy,
+      requirement, or feature ID, plus repository-relative paths or traced
+      source symbols, and returns the connected graph that reviewers should
+      inspect next. The command MUST walk upstream and downstream across the
+      layered links, MUST include traced files and symbols for connected
+      requirements and features, SHOULD surface sparse or suspicious gaps that
+      weaken explainability, and SHOULD emit both text and JSON output.
+  - **priority**: medium
+  - **status**: implemented
+  - **linked_policies**:
+    - POL-001
+    - POL-002
+    - POL-004
+  - **linked_features**:
+    - FEAT-RELATE-001
+  - **tests**:
+    - **rust**:
+      - **file**: tests/relate_command.rs
+        - **symbols**:
+          - *
+      - **file**: tests/help_command.rs
+        - **symbols**:
+          - relate_help_mentions_ids_paths_symbols_and_json_output
+      - **file**: src/lib.rs
+        - **symbols**:
+          - dispatches_relate_subcommands_without_rewriting_them
+      - **file**: src/command/relate.rs
+        - **symbols**:
+          - *
 
 ## Source YAML
 
@@ -627,6 +660,38 @@ requirements:
           symbols:
             - dispatches_trace_subcommands_without_rewriting_them
         - file: src/command/trace.rs
+          symbols:
+            - '*'
+  - id: REQ-CORE-023
+    title: Provide a cross-layer relation inspection CLI command
+    description: |
+      The CLI MUST provide a `relate` command that accepts a philosophy, policy,
+      requirement, or feature ID, plus repository-relative paths or traced
+      source symbols, and returns the connected graph that reviewers should
+      inspect next. The command MUST walk upstream and downstream across the
+      layered links, MUST include traced files and symbols for connected
+      requirements and features, SHOULD surface sparse or suspicious gaps that
+      weaken explainability, and SHOULD emit both text and JSON output.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-001
+      - POL-002
+      - POL-004
+    linked_features:
+      - FEAT-RELATE-001
+    tests:
+      rust:
+        - file: tests/relate_command.rs
+          symbols:
+            - '*'
+        - file: tests/help_command.rs
+          symbols:
+            - relate_help_mentions_ids_paths_symbols_and_json_output
+        - file: src/lib.rs
+          symbols:
+            - dispatches_relate_subcommands_without_rewriting_them
+        - file: src/command/relate.rs
           symbols:
             - '*'
 ```

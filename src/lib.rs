@@ -1,7 +1,10 @@
 // FEAT-ADD-001
+// FEAT-RELATE-001
 // FEAT-SEARCH-001
 // FEAT-TRACE-001
 // FEAT-BROWSE-001
+// REQ-CORE-021
+// REQ-CORE-023
 
 pub mod cli;
 pub mod command;
@@ -60,6 +63,7 @@ enum Dispatch {
     List(cli::ListArgs),
     Show(cli::ShowArgs),
     Search(cli::SearchArgs),
+    Relate(cli::RelateArgs),
     Trace(cli::TraceArgs),
     App(cli::AppArgs),
     PrintHelp,
@@ -76,6 +80,7 @@ fn dispatch(cli: cli::Cli, stdin_is_terminal: bool, stdout_is_terminal: bool) ->
         Some(cli::Commands::List(args)) => Dispatch::List(args),
         Some(cli::Commands::Show(args)) => Dispatch::Show(args),
         Some(cli::Commands::Search(args)) => Dispatch::Search(args),
+        Some(cli::Commands::Relate(args)) => Dispatch::Relate(args),
         Some(cli::Commands::Trace(args)) => Dispatch::Trace(args),
         Some(cli::Commands::App(args)) => Dispatch::App(args),
         None if stdin_is_terminal && stdout_is_terminal => {
@@ -96,6 +101,7 @@ fn run_dispatch(dispatch: Dispatch) -> Result<i32> {
         Dispatch::List(args) => command::list::run_list_command(&args),
         Dispatch::Show(args) => command::show::run_show_command(&args),
         Dispatch::Search(args) => command::search::run_search_command(&args),
+        Dispatch::Relate(args) => command::relate::run_relate_command(&args),
         Dispatch::Trace(args) => command::trace::run_trace_command(&args),
         Dispatch::App(args) => command::app::run_app_command(&args),
         Dispatch::PrintHelp => {
@@ -126,8 +132,8 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use crate::cli::{
-        AddArgs, AppArgs, Cli, Commands, ListArgs, LookupKind, OutputFormat, SearchArgs, ShowArgs,
-        TemplatesArgs, TraceArgs,
+        AddArgs, AppArgs, Cli, Commands, ListArgs, LookupKind, OutputFormat, RelateArgs,
+        SearchArgs, ShowArgs, TemplatesArgs, TraceArgs,
     };
 
     // REQ-CORE-015
@@ -280,6 +286,30 @@ mod tests {
                 if query == "traceability"
                     && workspace == Path::new("workspace")
                     && kind == Some(LookupKind::Feature)
+                    && format == OutputFormat::Json
+        ));
+    }
+
+    #[test]
+    // REQ-CORE-023
+    fn dispatches_relate_subcommands_without_rewriting_them() {
+        let relate = super::dispatch(
+            Cli {
+                command: Some(Commands::Relate(RelateArgs {
+                    selector: "REQ-CORE-023".to_string(),
+                    workspace: PathBuf::from("workspace"),
+                    format: OutputFormat::Json,
+                })),
+            },
+            true,
+            true,
+        );
+
+        assert!(matches!(
+            relate,
+            super::Dispatch::Relate(crate::cli::RelateArgs { selector, workspace, format })
+                if selector == "REQ-CORE-023"
+                    && workspace == Path::new("workspace")
                     && format == OutputFormat::Json
         ));
     }
