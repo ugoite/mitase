@@ -42,6 +42,9 @@ Pick the newcomer path that matches what you need next:
   [`docs/guide/existing-repository.md`](docs/guide/existing-repository.md) when
   the repository already has code and history and you want an incremental
   adoption path instead of starting with `syu init`.
+- **Visual explorer**: open [`docs/guide/app.md`](docs/guide/app.md) or run
+  `syu app .` when you want graphical spec navigation before learning the full
+  CLI workflow.
 - **Tutorial**: follow [`docs/guide/tutorial.md`](docs/guide/tutorial.md) when you
   want a realistic end-to-end repository story instead of a short scaffold flow.
 - **Trace adapter matrix**: open
