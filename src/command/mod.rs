@@ -9,6 +9,7 @@ pub mod check;
 pub mod init;
 mod issue_text;
 pub mod list;
+pub mod log;
 mod lookup;
 mod prompt;
 pub mod relate;
