@@ -31,14 +31,15 @@ verified.
 
 Pick the newcomer path that matches what you need next:
 
-- **Getting started**: if you are using `syu` for the first time and want the
-  shortest install-to-validate path, the in-page four-layer refresher is the
-  fastest path through first workspace setup explained step by step.
-- **Quick start**: stay in this README when you want the shortest path from install
-  to `syu validate .` and only need a short layer refresher before the first
-  commands.
+- **Getting started**: choose this if you are new to `syu`, want a guided first
+  run, and do **not** already know the four-layer model. Expect the most
+  hand-holding and roughly 10-15 minutes for the first workspace setup.
+- **Quick start**: stay in this README when you already want a compact reference
+  card, are happy with a short layer refresher, and want the fastest install-to-
+  `syu validate .` path in about 5 minutes.
 - **Tutorial**: follow [`docs/guide/tutorial.md`](docs/guide/tutorial.md) when you
-  want a realistic end-to-end repository story instead of a short scaffold flow.
+  learn best from a realistic repository story, want more narrative context than
+  Quick start, and do not mind a longer walkthrough.
 - **Migration / upgrade**: open [`docs/guide/migration.md`](docs/guide/migration.md)
   when you already have a `syu` workspace and want the release-specific steps
   for moving between alpha versions safely.
@@ -47,12 +48,13 @@ Pick the newcomer path that matches what you need next:
   text-first CLI flow.
 - **Trace adapter matrix**: open
   [`docs/guide/trace-adapter-support.md`](docs/guide/trace-adapter-support.md)
-  when you already have a workspace and need to know which built-in languages
-  support symbol validation only versus richer `doc_contains` and strict
-  coverage checks.
+  when you already have a workspace and need a capability reference for which
+  built-in languages support symbol validation only versus richer
+  `doc_contains` and strict coverage checks.
 - **Troubleshooting**: jump to
   [`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md) when validation
-  or traceability errors are already blocking you.
+  or traceability errors are already blocking you and you want the shortest path
+  to unblocking an existing workspace instead of following the onboarding flow.
 
 Keep the detailed guides close:
 
