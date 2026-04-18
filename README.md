@@ -286,6 +286,7 @@ syu add feature FEAT-AUTH-LOGIN-001 --kind auth
 syu list requirement
 syu show REQ-001
 syu search traceability --kind requirement
+syu log REQ-CORE-002
 syu relate REQ-001
 syu trace src/command/check.rs --symbol run_check_command
 syu app .
@@ -492,6 +493,22 @@ syu search traceability --kind requirement
 syu search FEAT-CHECK-001 --format json
 ```
 
+### `syu log`
+
+Project one traced requirement or feature onto checked-in Git history:
+
+```bash
+syu log REQ-CORE-002
+syu log FEAT-CHECK-001 --kind implementation --path src/command
+syu log REQ-CORE-019 --format json
+```
+
+`syu log` works from the current trace graph. It looks up the checked-in
+definition path plus the traced test or implementation files for one requirement
+or feature, then shows the commits that touched those paths and why each commit
+matched. Use `--kind` when you only want definition, test, or implementation
+history, and `--path` when you want to narrow the traced paths to one
+repository-relative file or directory prefix.
 ### `syu relate`
 
 Inspect the connected graph around one definition, repository path, or traced
