@@ -125,8 +125,30 @@ match your change:
    Stop after the shared gates only when your change does not feed the docs
    site. If you touched `README.md`, files under `docs/guide/` or
    `docs/generated/site-spec/`, or docs-site build inputs such as
-   `scripts/generate-site-docs.py` or `.github/actions/build-docs-site`, also
-   run branch 4's docs-site build.
+    `scripts/generate-site-docs.py` or `.github/actions/build-docs-site`, also
+    run branch 4's docs-site build.
+
+### Node.js version strategy
+
+The repository intentionally uses different Node.js majors for different
+surfaces:
+
+- **Browser app and browser-adjacent CI jobs use Node 25.** That is the runtime
+  used in `ci/npm-audit` for `app/` and in the `check-msrv` job that still
+  bootstraps the browser toolchain.
+- **Docs-site automation uses Node 20.** The shared
+  `.github/actions/build-docs-site` action pins the Docusaurus build to Node 20,
+  and `ci/npm-audit` uses the same major for `website/`.
+
+When you work locally, match the Node major to the surface you are changing:
+
+- use **Node 25** for `app/`, browser-app freshness checks, Playwright, and
+  other browser-tooling work
+- use **Node 20** for `website/` and docs-site builds
+
+If you switch between both in one shell session, use a version manager such as
+`nvm`, `fnm`, or `Volta` so the browser app and docs site each run on the same
+major that CI expects.
 
 ### Rust version
 
