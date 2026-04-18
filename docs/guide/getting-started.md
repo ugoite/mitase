@@ -268,7 +268,10 @@ language-specific `tests:` or `implementations:` entries such as `csharp:`.
 Those keys still fail validation before `doc_contains` support even becomes
 relevant. If you need code-level tracing immediately with `doc_contains`, stay
 with Rust, Python, or TypeScript/JavaScript for now; otherwise, keep the spec
-layers connected and add the source mappings once adapter support lands.
+layers connected and add the source mappings once adapter support lands. The
+[`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
+shows one checked-in version of that workaround with real Go files plus
+markdown-backed trace anchors.
 
 Keep this adoption path in mind for mixed-language repositories too: start with
 declared traces, keep `validate.require_symbol_trace_coverage: false`, then turn
