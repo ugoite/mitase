@@ -1,8 +1,9 @@
 # Migration guide
 
-This page documents breaking changes and upgrade steps for each `syu` alpha
-release. When `syu validate .` starts failing after an upgrade, check the
-section for the version you just installed.
+Start here when you are upgrading an existing `syu` workspace between alpha
+releases. This page documents breaking changes and release-specific upgrade
+steps. When `syu validate .` starts failing after an upgrade, check the section
+for the version you just installed.
 
 > **Note:** `syu` is in alpha. The config schema, YAML spec format, and CLI
 > flags may change in any alpha release. This guide is updated with every
