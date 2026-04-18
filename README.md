@@ -39,6 +39,9 @@ Pick the newcomer path that matches what you need next:
   commands.
 - **Tutorial**: follow [`docs/guide/tutorial.md`](docs/guide/tutorial.md) when you
   want a realistic end-to-end repository story instead of a short scaffold flow.
+- **Migration / upgrade**: open [`docs/guide/migration.md`](docs/guide/migration.md)
+  when you already have a `syu` workspace and want the release-specific steps
+  for moving between alpha versions safely.
 - **Visual explorer**: start with [`docs/guide/app.md`](docs/guide/app.md) or run
   `syu app .` when you want graphical spec navigation before learning the full
   text-first CLI flow.
@@ -56,6 +59,7 @@ Keep the detailed guides close:
 - [`docs/guide/concepts.md`](docs/guide/concepts.md)
 - [`docs/guide/getting-started.md`](docs/guide/getting-started.md)
 - [`docs/guide/tutorial.md`](docs/guide/tutorial.md)
+- [`docs/guide/migration.md`](docs/guide/migration.md)
 - [`docs/guide/app.md`](docs/guide/app.md)
 - [`docs/guide/trace-adapter-support.md`](docs/guide/trace-adapter-support.md)
 - [`docs/guide/configuration.md`](docs/guide/configuration.md)
