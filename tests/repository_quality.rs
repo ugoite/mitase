@@ -323,6 +323,7 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("syu show REQ-001"));
     assert!(!readme.contains("syu show REQ-CORE-015"));
     assert!(readme.contains("syu app"));
+    assert!(readme.contains("examples/go-only"));
     assert!(readme.contains("examples/polyglot"));
     assert!(readme.contains("examples-and-templates.md"));
     assert!(readme.contains("CONTRIBUTING.md"));
@@ -414,6 +415,7 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("Keep exploring"));
     assert!(getting_started.contains("examples/rust-only"));
     assert!(getting_started.contains("examples/python-only"));
+    assert!(getting_started.contains("examples/go-only"));
     assert!(getting_started.contains("examples/polyglot"));
     assert!(
         getting_started.contains("[examples and templates guide](./examples-and-templates.md)")
@@ -546,16 +548,22 @@ fn repository_ships_example_workspaces() {
     let rust_example_config = read_file("examples/rust-only/syu.yaml");
     let python_example_requirement =
         read_file("examples/python-only/docs/syu/requirements/core/python.yaml");
+    let go_example_requirement = read_file("examples/go-only/docs/syu/requirements/core/go.yaml");
+    let go_example_readme = read_file("examples/go-only/README.md");
     let polyglot_feature = read_file("examples/polyglot/docs/syu/features/languages/polyglot.yaml");
     let example_tests = read_file("tests/example_workspaces.rs");
 
     assert!(rust_example_requirement.contains("REQ-RUST-001"));
     assert!(rust_example_config.contains(&format!("version: {current_version}")));
     assert!(python_example_requirement.contains("REQ-PY-001"));
+    assert!(go_example_requirement.contains("REQ-GO-001"));
+    assert!(go_example_readme.contains("TestGoRequirement"));
+    assert!(go_example_readme.contains("GoFeatureImpl"));
     assert!(polyglot_feature.contains("FEAT-MIX-001"));
     assert!(polyglot_feature.contains("status: implemented"));
     assert!(example_tests.contains("rust_only_example_validates"));
     assert!(example_tests.contains("python_only_example_validates"));
+    assert!(example_tests.contains("go_only_example_validates"));
     assert!(example_tests.contains("polyglot_example_validates"));
 }
 

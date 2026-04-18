@@ -3258,9 +3258,9 @@ mod tests {
         let mut entry = requirement("REQ-1");
         entry.status = "proposed".to_string();
         entry.tests.insert(
-            "go".to_string(),
+            "java".to_string(),
             vec![TraceReference {
-                file: PathBuf::from("trace.go"),
+                file: PathBuf::from("Trace.java"),
                 symbols: vec!["trace".to_string()],
                 doc_contains: Vec::new(),
             }],
@@ -3448,7 +3448,7 @@ mod tests {
     #[test]
     fn verify_trace_reference_reports_unsupported_languages() {
         let reference = TraceReference {
-            file: PathBuf::from("test.go"),
+            file: PathBuf::from("Trace.java"),
             symbols: vec!["main".to_string()],
             doc_contains: Vec::new(),
         };
@@ -3458,7 +3458,7 @@ mod tests {
             &SyuConfig::default(),
             "REQ-1",
             TraceRole::RequirementTest,
-            "go",
+            "java",
             &reference,
             &mut issues,
         ));
@@ -3861,9 +3861,9 @@ mod tests {
         apply_autofix_for_reference(
             root,
             &SyuConfig::default(),
-            "go",
+            "java",
             &TraceReference {
-                file: PathBuf::from("trace.go"),
+                file: PathBuf::from("Trace.java"),
                 symbols: vec!["expected".to_string()],
                 doc_contains: vec!["Explain expected".to_string()],
             },

@@ -1,0 +1,11 @@
+category: Philosophy
+version: 1
+language: en
+
+philosophies:
+  - id: PHIL-GO-001
+    title: Go-first repositories should be able to adopt syu before native Go tracing lands
+    product_design_principle: Keep the Go example small, runnable, and honest about today's tracing limits.
+    coding_guideline: Use supported trace adapters as explicit temporary evidence until direct Go tracing is available.
+    linked_policies:
+      - POL-GO-001

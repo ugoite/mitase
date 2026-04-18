@@ -88,9 +88,11 @@ description: "Generated reference for docs/syu/config/validate.yaml"
     - |
       When enabled, `syu` requires every public Rust, Python, and
       TypeScript/JavaScript symbol to belong to some feature and every test in
-      those supported languages to belong to some requirement, in addition to
-      verifying declared traces. The validate command can enable or disable this
-      for one run with `--require-symbol-trace-coverage` or
+      those inventoried languages to belong to some requirement, in addition to
+      verifying declared traces. Declared Go traces are still checked, but Go is
+      not yet part of the strict undeclared-symbol coverage inventory. The
+      validate command can enable or disable this for one run with
+      `--require-symbol-trace-coverage` or
       `--require-symbol-trace-coverage=false`.
 - **key**: validate.symbol_trace_coverage_ignored_paths
   - **type**: array&lt;path&gt;
@@ -181,9 +183,11 @@ items:
     description: |
       When enabled, `syu` requires every public Rust, Python, and
       TypeScript/JavaScript symbol to belong to some feature and every test in
-      those supported languages to belong to some requirement, in addition to
-      verifying declared traces. The validate command can enable or disable this
-      for one run with `--require-symbol-trace-coverage` or
+      those inventoried languages to belong to some requirement, in addition to
+      verifying declared traces. Declared Go traces are still checked, but Go is
+      not yet part of the strict undeclared-symbol coverage inventory. The
+      validate command can enable or disable this for one run with
+      `--require-symbol-trace-coverage` or
       `--require-symbol-trace-coverage=false`.
   - key: validate.symbol_trace_coverage_ignored_paths
     type: array<path>

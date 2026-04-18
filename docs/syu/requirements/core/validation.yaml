@@ -72,8 +72,8 @@ requirements:
     description: |
       The `validate` command MUST verify requirement-to-test and
       feature-to-implementation traceability in the languages used by `syu`
-      today: Rust, Python, and TypeScript/JavaScript. A declared trace is valid
-      only when the file exists, the symbol exists, the trace path uses
+      today: Rust, Python, Go, and TypeScript/JavaScript. A declared trace is
+      valid only when the file exists, the symbol exists, the trace path uses
       canonical repository-relative form, and any `doc_contains` snippets are
       present in the symbol documentation when the declared language supports
       rich inspection. The checked-in trace mapping itself MUST remain enough
@@ -86,9 +86,12 @@ requirements:
       (`test_*` functions for Python, `#[test]` for Rust, `test*`-prefixed
       functions for TypeScript/JavaScript) in repository source and test roots
       to belong to some feature or requirement respectively. That inventory MUST
-      ignore configured repository-relative generated paths, defaulting to common
-      build outputs such as `app/dist`, `build/`, `coverage/`, `dist/`, and
-      `target/` without hiding authored nested directories like `src/build/`.
+      ignore configured repository-relative generated paths, defaulting to
+      common build outputs such as `app/dist`, `build/`, `coverage/`, `dist/`,
+      and `target/` without hiding authored nested directories like
+      `src/build/`. Go traces are validated when declared, but strict coverage
+      inventory does not yet scan Go files for undeclared public symbols or
+      tests.
     priority: high
     status: implemented
     linked_policies:
@@ -129,6 +132,7 @@ requirements:
             - '*'
         - file: tests/example_workspaces.rs
           symbols:
+            - go_only_example_validates
             - python_only_example_validates
             - polyglot_example_validates
       python:
