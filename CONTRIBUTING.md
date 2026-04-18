@@ -125,8 +125,8 @@ match your change:
    Stop after the shared gates only when your change does not feed the docs
    site. If you touched `README.md`, files under `docs/guide/` or
    `docs/generated/site-spec/`, or docs-site build inputs such as
-    `scripts/generate-site-docs.py` or `.github/actions/build-docs-site`, also
-    run branch 4's docs-site build.
+   `scripts/generate-site-docs.py` or `.github/actions/build-docs-site`, also
+   run branch 4's docs-site build.
 
 ### Node.js version strategy
 
