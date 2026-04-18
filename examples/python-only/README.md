@@ -4,7 +4,8 @@ This example demonstrates a minimal single-language Python workspace.
 It contains one philosophy, one policy, one requirement, and one feature —
 all mutually linked and traced to a Python test file.
 
-It is the checked-in reference workspace that matches `syu init . --template python-only`.
+It is the checked-in reference workspace that matches
+`syu init . --template python-only` exactly.
 
 ## Files
 

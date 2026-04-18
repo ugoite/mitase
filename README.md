@@ -603,6 +603,10 @@ The repository ships working example projects:
 - [`examples/python-only`](examples/python-only)
 - [`examples/polyglot`](examples/polyglot)
 - [`examples/team-scale`](examples/team-scale)
+`rust-only`, `python-only`, and `polyglot` match `syu init --template ...`
+starters directly. `go-only` is a reference-only workaround example for an
+unsupported implementation language, and `team-scale` is a reference-only
+example for studying a larger split-by-area repository shape.
 
 Each one is validated in the automated test suite. If you are deciding between a
 checked-in example and a scaffold template, start with
