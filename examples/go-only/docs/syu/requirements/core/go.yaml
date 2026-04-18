@@ -3,8 +3,8 @@ prefix: REQ-GO
 
 requirements:
   - id: REQ-GO-001
-    title: Demonstrate a Go-first requirement trace workaround
-    description: The Go example should keep a real Go test file in the repository while today's validated trace anchor lives in README.md.
+    title: Demonstrate a Go-first requirement trace with the built-in Go adapter
+    description: The Go example should validate a real Go test symbol directly through the built-in adapter.
     priority: high
     status: implemented
     linked_policies:
@@ -12,7 +12,7 @@ requirements:
     linked_features:
       - FEAT-GO-001
     tests:
-      markdown:
-        - file: README.md
+      go:
+        - file: go/app_test.go
           symbols:
             - TestGoRequirement
