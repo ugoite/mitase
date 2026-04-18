@@ -3,6 +3,10 @@ use std::{fs, path::Path, process::Command};
 use tempfile::tempdir;
 
 fn write_workspace(root: &Path, default_fix: bool) {
+    write_workspace_with_ownership_mode(root, default_fix, "mapping");
+}
+
+fn write_workspace_with_ownership_mode(root: &Path, default_fix: bool, trace_ownership_mode: &str) {
     fs::create_dir_all(root.join("docs/syu/philosophy")).expect("philosophy dir");
     fs::create_dir_all(root.join("docs/syu/policies")).expect("policies dir");
     fs::create_dir_all(root.join("docs/syu/requirements")).expect("requirements dir");
@@ -12,9 +16,10 @@ fn write_workspace(root: &Path, default_fix: bool) {
     fs::write(
         root.join("syu.yaml"),
         format!(
-            "version: {version}\nspec:\n  root: docs/syu\nvalidate:\n  default_fix: {default_fix}\n  allow_planned: true\nruntimes:\n  python:\n    command: auto\n  node:\n    command: auto\n",
+            "version: {version}\nspec:\n  root: docs/syu\nvalidate:\n  default_fix: {default_fix}\n  allow_planned: true\n  trace_ownership_mode: {trace_ownership_mode}\nruntimes:\n  python:\n    command: auto\n  node:\n    command: auto\n",
             version = env!("CARGO_PKG_VERSION"),
-            default_fix = if default_fix { "true" } else { "false" }
+            default_fix = if default_fix { "true" } else { "false" },
+            trace_ownership_mode = trace_ownership_mode
         ),
     )
     .expect("config");
@@ -122,4 +127,42 @@ fn validate_uses_config_default_fix_and_no_fix_disables_it() {
         String::from_utf8_lossy(&default_fix.stderr)
     );
     assert!(String::from_utf8_lossy(&default_fix.stdout).contains("applied 2 autofix updates"));
+}
+
+#[test]
+// REQ-CORE-003
+fn validate_fix_writes_sidecar_ownership_manifests_when_configured() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    write_workspace_with_ownership_mode(tempdir.path(), false, "sidecar");
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(tempdir.path())
+        .arg("--fix")
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("applied 4 autofix updates across 2 files"));
+    assert!(stdout.contains("syu validate passed"));
+
+    let source = fs::read_to_string(tempdir.path().join("src/trace.rs")).expect("source");
+    assert!(!source.contains("REQ-001"));
+    assert!(!source.contains("FEAT-001"));
+    assert!(source.contains("requirement doc line"));
+    assert!(source.contains("feature doc line"));
+
+    let manifest = fs::read_to_string(tempdir.path().join("src/trace.rs.syu-ownership.yaml"))
+        .expect("manifest");
+    assert!(manifest.contains("id: FEAT-001"));
+    assert!(manifest.contains("id: REQ-001"));
+    assert!(manifest.contains("- req_trace"));
 }
