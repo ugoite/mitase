@@ -1,10 +1,12 @@
 // FEAT-ADD-001
+// FEAT-LOG-001
 // FEAT-RELATE-001
 // FEAT-SEARCH-001
 // FEAT-TRACE-001
 // FEAT-BROWSE-001
 // REQ-CORE-021
 // REQ-CORE-023
+// REQ-CORE-024
 
 pub mod cli;
 pub mod command;
@@ -63,6 +65,7 @@ enum Dispatch {
     List(cli::ListArgs),
     Show(cli::ShowArgs),
     Search(cli::SearchArgs),
+    Log(cli::LogArgs),
     Relate(cli::RelateArgs),
     Trace(cli::TraceArgs),
     App(cli::AppArgs),
@@ -80,6 +83,7 @@ fn dispatch(cli: cli::Cli, stdin_is_terminal: bool, stdout_is_terminal: bool) ->
         Some(cli::Commands::List(args)) => Dispatch::List(args),
         Some(cli::Commands::Show(args)) => Dispatch::Show(args),
         Some(cli::Commands::Search(args)) => Dispatch::Search(args),
+        Some(cli::Commands::Log(args)) => Dispatch::Log(args),
         Some(cli::Commands::Relate(args)) => Dispatch::Relate(args),
         Some(cli::Commands::Trace(args)) => Dispatch::Trace(args),
         Some(cli::Commands::App(args)) => Dispatch::App(args),
@@ -101,6 +105,7 @@ fn run_dispatch(dispatch: Dispatch) -> Result<i32> {
         Dispatch::List(args) => command::list::run_list_command(&args),
         Dispatch::Show(args) => command::show::run_show_command(&args),
         Dispatch::Search(args) => command::search::run_search_command(&args),
+        Dispatch::Log(args) => command::log::run_log_command(&args),
         Dispatch::Relate(args) => command::relate::run_relate_command(&args),
         Dispatch::Trace(args) => command::trace::run_trace_command(&args),
         Dispatch::App(args) => command::app::run_app_command(&args),
@@ -132,8 +137,8 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use crate::cli::{
-        AddArgs, AppArgs, Cli, Commands, ListArgs, LookupKind, OutputFormat, RelateArgs,
-        SearchArgs, ShowArgs, TemplatesArgs, TraceArgs,
+        AddArgs, AppArgs, Cli, Commands, HistoryKind, ListArgs, LogArgs, LookupKind, OutputFormat,
+        RelateArgs, SearchArgs, ShowArgs, TemplatesArgs, TraceArgs,
     };
 
     // REQ-CORE-015
@@ -286,6 +291,43 @@ mod tests {
                 if query == "traceability"
                     && workspace == Path::new("workspace")
                     && kind == Some(LookupKind::Feature)
+                    && format == OutputFormat::Json
+        ));
+    }
+
+    #[test]
+    // REQ-CORE-024
+    fn dispatches_log_subcommands_without_rewriting_them() {
+        let log = super::dispatch(
+            Cli {
+                command: Some(Commands::Log(LogArgs {
+                    id: "REQ-CORE-024".to_string(),
+                    workspace: PathBuf::from("workspace"),
+                    kind: HistoryKind::Definition,
+                    path: Some(PathBuf::from("docs/syu/requirements")),
+                    limit: 5,
+                    format: OutputFormat::Json,
+                })),
+            },
+            true,
+            true,
+        );
+
+        assert!(matches!(
+            log,
+            super::Dispatch::Log(crate::cli::LogArgs {
+                id,
+                workspace,
+                kind,
+                path,
+                limit,
+                format
+            })
+                if id == "REQ-CORE-024"
+                    && workspace == Path::new("workspace")
+                    && kind == HistoryKind::Definition
+                    && path == Some(PathBuf::from("docs/syu/requirements"))
+                    && limit == 5
                     && format == OutputFormat::Json
         ));
     }
