@@ -1,0 +1,32 @@
+category: Docs-first Example Requirements
+prefix: REQ-DOCS
+
+requirements:
+  - id: REQ-DOCS-001
+    title: Release-note publishing should stay traceable through a supported shell mapping
+    description: The example should show that shell-backed workflows can use explicit symbol ownership without doc inspection.
+    priority: high
+    status: implemented
+    linked_policies:
+      - POL-DOCS-001
+    linked_features:
+      - FEAT-DOCS-001
+    tests:
+      markdown:
+        - file: README.md
+          symbols:
+            - DocsFirstAcceptanceChecklist
+  - id: REQ-DOCS-002
+    title: Whole-file config ownership should stay explicit when one YAML file belongs to one feature
+    description: The example should show when wildcard ownership is appropriate for a dedicated configuration file.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-DOCS-001
+    linked_features:
+      - FEAT-DOCS-002
+    tests:
+      markdown:
+        - file: README.md
+          symbols:
+            - DocsFirstNavigationChecklist

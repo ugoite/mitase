@@ -58,6 +58,10 @@ they do **not** participate in the repository-wide strict ownership scan.
   `file` + `symbols` (or `symbols: ["*"]` when one file intentionally belongs
   to one item), but do not expect doc-comment inspection or strict ownership
   inventory.
+- Want a runnable reference for that lighter mapping? Start with the
+  [`examples/docs-first` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/docs-first),
+  which demonstrates a shell symbol trace, markdown-backed requirement
+  evidence, and cautious wildcard YAML ownership in one small workspace.
 
 Even in rich-inspection languages, wildcard traces cannot use `doc_contains`
 because `symbols: ["*"]` does not point to one inspectable symbol.

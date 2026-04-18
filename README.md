@@ -596,6 +596,7 @@ missing files.
 
 The repository ships working example projects:
 
+- [`examples/docs-first`](examples/docs-first)
 - [`examples/go-only`](examples/go-only)
 - [`examples/rust-only`](examples/rust-only)
 - [`examples/python-only`](examples/python-only)
