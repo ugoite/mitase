@@ -274,6 +274,11 @@ fn check_command_reports_missing_definition_links() {
     assert!(stdout.contains("referenced rules:"));
     assert!(stdout.contains("Linked definitions must exist"));
     assert!(stdout.contains("REQ-MISSING-999"));
+    assert!(stdout.contains("What to inspect next:"));
+    assert!(stdout.contains("syu show <ID>"));
+    assert!(stdout.contains("--severity error"));
+    assert!(stdout.contains("--genre graph"));
+    assert!(stdout.contains("syu app "));
 }
 
 #[test]
