@@ -4,6 +4,8 @@ This example demonstrates a multi-language workspace where a single
 requirement and feature are traced across **Rust**, **Python**, and
 **TypeScript** source files simultaneously.
 
+It is the checked-in reference workspace that matches `syu init . --template polyglot`.
+
 ## Files
 
 | Path | What it defines |

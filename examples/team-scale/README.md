@@ -5,6 +5,9 @@ the single-feature starter shape. It keeps one philosophy, two policies, three
 requirements, and four features split across nested documents and traced into
 separate Rust source and test files.
 
+Unlike the smaller language-focused examples, this workspace is reference-only:
+it does not correspond to a `syu init --template ...` starter.
+
 ## What this example demonstrates
 
 - **Team-scale growth**: multiple requirements and features are split by area
