@@ -60,6 +60,11 @@ const journeys = [
     to: '/docs/guide/troubleshooting'
   },
   {
+    title: 'Stay in VS Code',
+    description: 'Run the checked-in editor extension so diagnostics and trace links stay inside your editor.',
+    to: '/docs/guide/vscode-extension'
+  },
+  {
     title: 'Tune validation',
     description: 'Review config switches for autofix, planned work, orphan checks, and runtime behavior.',
     to: '/docs/guide/configuration'

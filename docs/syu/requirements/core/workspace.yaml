@@ -300,6 +300,36 @@ requirements:
         - file: src/command/trace.rs
           symbols:
             - '*'
+  - id: REQ-CORE-022
+    title: Provide a VS Code extension for diagnostics and source-first navigation
+    description: |
+      The repository MUST ship a VS Code extension that keeps common `syu`
+      workflows inside the editor. The extension MUST surface validation
+      diagnostics in the Problems panel, MUST let users jump from spec IDs to
+      their YAML documents and traced files, and SHOULD show the current file's
+      related requirements, features, policies, and philosophies without
+      requiring manual terminal commands for each lookup. The first cut MAY use
+      the existing CLI plus checked-in spec files directly, but the integration
+      contract SHOULD stay explicit enough to support richer editor clients
+      later.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-002
+      - POL-003
+      - POL-004
+      - POL-005
+    linked_features:
+      - FEAT-VSCODE-001
+    tests:
+      rust:
+        - file: tests/repository_quality.rs
+          symbols:
+            - repository_ships_vscode_extension
+      javascript:
+        - file: editors/vscode/test/model.test.js
+          symbols:
+            - '*'
   - id: REQ-CORE-023
     title: Provide a cross-layer relation inspection CLI command
     description: |
