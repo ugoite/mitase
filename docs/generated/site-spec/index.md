@@ -21,6 +21,7 @@ This section is generated from the YAML source under `docs/syu/`.
 - [Report Command / Report](/docs/generated/site-spec/features/cli/report)
 - [Lookup Search CLI / Search](/docs/generated/site-spec/features/cli/search)
 - [Lookup CLI / Show List](/docs/generated/site-spec/features/cli/show-list)
+- [Trace Lookup CLI / Trace](/docs/generated/site-spec/features/cli/trace)
 - [Documentation / Docs](/docs/generated/site-spec/features/documentation/docs)
 - [Agent Skills / Skills](/docs/generated/site-spec/features/documentation/skills)
 - [Features](/docs/generated/site-spec/features)
