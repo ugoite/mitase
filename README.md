@@ -189,6 +189,9 @@ Stay in this README for the shortest install-to-validate path. If you skipped
 [Why four layers?](#why-four-layers) section above as the refresher on
 `philosophy`, `policy`, `requirements`, and `features`. There is no other
 required pre-read before the commands below.
+If you want the same flow narrated step by step with more context around the
+manual edits, switch to
+[`docs/guide/getting-started.md`](docs/guide/getting-started.md) instead.
 
 The first manual edit in this quick start happens in the generated requirement
 YAML: add `linked_policies:` and `linked_features:` there, then update the
