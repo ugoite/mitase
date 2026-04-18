@@ -6,7 +6,8 @@ requirements, and four features split across nested documents and traced into
 separate Rust source and test files.
 
 Unlike the smaller language-focused examples, this workspace is reference-only:
-it does not correspond to a `syu init --template ...` starter.
+it does not correspond to a `syu init --template ...` starter and is meant for
+studying a larger repository shape rather than matching a scaffold one-for-one.
 
 ## What this example demonstrates
 
