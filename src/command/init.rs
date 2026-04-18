@@ -1179,6 +1179,7 @@ mod tests {
             require_non_orphaned_items: None,
             require_reciprocal_links: None,
             require_symbol_trace_coverage: None,
+            warning_exit_code: None,
             quiet: false,
         })
         .expect("interactive init workspace should validate");

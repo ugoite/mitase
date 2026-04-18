@@ -173,6 +173,22 @@ fn add_help_mentions_explicit_file_and_feature_kind() {
 }
 
 #[test]
+// REQ-CORE-024
+fn validate_help_mentions_warning_exit_code_for_automation() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args(["validate", "--help"])
+        .output()
+        .expect("help should render");
+
+    assert!(output.status.success(), "validate help should succeed");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--warning-exit-code"));
+    assert!(stdout.contains("warnings but no errors"));
+}
+
+#[test]
 fn init_help_lists_starter_templates() {
     let output = Command::cargo_bin("syu")
         .expect("binary should build")
