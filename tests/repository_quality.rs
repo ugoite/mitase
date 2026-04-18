@@ -293,6 +293,9 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("docs/guide/troubleshooting.md"));
     assert!(readme.contains("docs/guide/spec-antipatterns.md"));
     assert!(readme.contains("shortest install-to-validate path"));
+    assert!(readme.contains("the in-page four-layer refresher is"));
+    assert!(readme.contains("**Getting started**"));
+    assert!(readme.contains("same first workspace setup explained step by step"));
     assert!(readme.contains("[Why four layers?](#why-four-layers)"));
     assert!(readme.contains("Step 0: required"));
     assert!(readme.contains("Generate a requirement stub"));
@@ -358,8 +361,10 @@ fn repository_declares_documentation_guides() {
     assert!(
         getting_started.contains("https://github.com/ugoite/syu/blob/main/README.md#quick-start")
     );
+    assert!(getting_started.contains("narrated first-run path"));
     assert!(getting_started.contains("first workspace setup explained step by"));
-    assert!(getting_started.contains("slows down at the first manual editing step"));
+    assert!(getting_started.contains("first manual editing step"));
+    assert!(getting_started.contains("compact command card"));
     assert!(getting_started.contains("install-syu.sh"));
     assert!(getting_started.contains("checksums.sha256"));
     assert!(getting_started.contains("security-sensitive environments"));
