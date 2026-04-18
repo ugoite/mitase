@@ -10,6 +10,7 @@
 // FEAT-INIT-004
 // FEAT-INIT-003
 // FEAT-LIST-002
+// FEAT-TRACE-001
 // FEAT-REPORT-001
 // FEAT-INIT-002
 // REQ-CORE-001
@@ -98,6 +99,12 @@ Examples:
   syu search traceability --kind requirement
   syu search FEAT-CHECK-001 --format json";
 
+const TRACE_AFTER_HELP: &str = "\
+Examples:
+  syu trace src/rust_feature.rs
+  syu trace src/rust_feature.rs --symbol feature_trace_rust
+  syu trace src/rust_feature.rs path/to/workspace --format json";
+
 #[derive(Debug, Parser)]
 #[command(
     name = "syu",
@@ -131,6 +138,11 @@ pub enum Commands {
         after_help = SEARCH_AFTER_HELP
     )]
     Search(SearchArgs),
+    #[command(
+        about = "Resolve linked requirements, features, policies, and philosophies from a traced file or symbol",
+        after_help = TRACE_AFTER_HELP
+    )]
+    Trace(TraceArgs),
     #[command(
         about = "Start a local HTTP server and browser UI for workspace exploration, then print the URL to open in your browser",
         after_help = APP_AFTER_HELP
@@ -255,6 +267,24 @@ pub struct SearchArgs {
     pub kind: Option<LookupKind>,
 
     #[arg(help = "Output format for matched items")]
+    #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct TraceArgs {
+    #[arg(help = "Repository-relative source or test file to resolve through trace ownership")]
+    pub file: PathBuf,
+
+    #[arg(help = WORKSPACE_HELP)]
+    #[arg(default_value = ".")]
+    pub workspace: PathBuf,
+
+    #[arg(help = "Optional symbol name to resolve within the traced file")]
+    #[arg(long)]
+    pub symbol: Option<String>,
+
+    #[arg(help = "Output format for trace lookup results")]
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
     pub format: OutputFormat,
 }

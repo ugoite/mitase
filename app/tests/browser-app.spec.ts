@@ -218,7 +218,7 @@ test("loads deep links and supports keyboard search navigation", async ({ page }
       "Search shows up to 20 matches at a time, so refine broad queries for a narrower result list.",
     ),
   ).toBeVisible();
-  await searchInput.fill("core");
+  await searchInput.fill("REQ-CORE-001");
   await expect(
     page.getByText("Showing the first 20 matches — refine your query for fewer results."),
   ).toHaveCount(0);
