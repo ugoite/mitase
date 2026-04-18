@@ -3,13 +3,13 @@ version: 1
 
 features:
   - id: FEAT-GO-001
-    title: Demonstrate a Go-first implementation trace workaround
-    summary: Keep a real Go implementation file visible while today's validated trace anchor stays in README.md.
+    title: Demonstrate a Go-first implementation trace with the built-in Go adapter
+    summary: Validate a real Go implementation symbol directly through the built-in adapter.
     status: implemented
     linked_requirements:
       - REQ-GO-001
     implementations:
-      markdown:
-        - file: README.md
+      go:
+        - file: go/app.go
           symbols:
             - GoFeatureImpl

@@ -1,12 +1,12 @@
 # go-only example
 
-This example demonstrates a minimal Go-first workspace for repositories that
-want to adopt `syu` before Go gets a built-in trace adapter.
+This example demonstrates a minimal Go-first workspace using the built-in Go
+trace adapter.
 
 It contains one philosophy, one policy, one requirement, and one feature, plus
-one Go source file and one Go test file. The current workaround keeps the
-validated trace evidence in this README so `syu validate .` can still prove the
-links today while the real Go files stay visible in the repository.
+one Go source file and one Go test file. The example uses pattern-based symbol
+matching for the real `.go` files, so `syu validate .` proves the Go-backed
+links directly.
 
 This workspace is reference-only: it does not correspond to a
 `syu init --template ...` starter.
@@ -17,11 +17,11 @@ This workspace is reference-only: it does not correspond to a
 |------|-----------------|
 | `docs/syu/philosophy/foundation.yaml` | `PHIL-GO-001` — the guiding principle |
 | `docs/syu/policies/policies.yaml` | `POL-GO-001` linked to `PHIL-GO-001` |
-| `docs/syu/requirements/core/go.yaml` | `REQ-GO-001` with a markdown-backed test trace |
-| `docs/syu/features/languages/go.yaml` | `FEAT-GO-001` with a markdown-backed implementation trace |
+| `docs/syu/requirements/core/go.yaml` | `REQ-GO-001` with a Go test trace |
+| `docs/syu/features/languages/go.yaml` | `FEAT-GO-001` with a Go implementation trace |
 | `go/app.go` | Go source file containing `GoFeatureImpl` |
 | `go/app_test.go` | Go test file containing `TestGoRequirement` |
-| `README.md` | Current-day trace evidence for the Go symbols |
+| `README.md` | Explains what the Go adapter validates today |
 
 ## Try it
 
@@ -42,21 +42,21 @@ definitions: philosophies=1 policies=1 requirements=1 features=1
 traceability: requirements=1/1 traces validated; features=1/1 traces validated
 ```
 
-## Current-day workaround trace anchors
+## What the Go adapter validates today
 
-- `TestGoRequirement` lives in `go/app_test.go` and is the real test symbol for
-  `REQ-GO-001`.
-- `GoFeatureImpl` lives in `go/app.go` and is the real implementation symbol for
-  `FEAT-GO-001`.
-- Until `syu` ships a Go adapter, the validated trace mappings point at this
-  README under the `markdown` adapter instead of the `.go` files directly.
+- `TestGoRequirement` lives in `go/app_test.go` and is the validated test symbol
+  for `REQ-GO-001`.
+- `GoFeatureImpl` lives in `go/app.go` and is the validated implementation
+  symbol for `FEAT-GO-001`.
+- The Go adapter currently supports pattern-based symbol validation and strict
+  ownership coverage, but not `doc_contains` checks.
 
 ## Key things to notice
 
-- **Go files are present today** — the repository shape still looks like a real
-  Go project with implementation and test files you can inspect immediately.
-- **Trace evidence stays explicit** — the requirement and feature are marked
-  `implemented`, but the validated `tests:` and `implementations:` mappings point
-  at this README because `go` is not a supported trace language yet.
-- **Direct Go tracing is future work** — once `syu` gains a Go adapter, the same
-  spec IDs can move from these markdown-backed anchors to the real `.go` files.
+- **Go files are traced directly** — the requirement and feature point at the
+  real `.go` files instead of a markdown workaround.
+- **Pattern-based matching is enough here** — `syu` validates that the named Go
+  symbols exist, even though the adapter does not inspect doc comments.
+- **Strict coverage is available elsewhere** — the Go adapter participates in
+  `validate.require_symbol_trace_coverage`, but this example keeps the minimal
+  `go/` layout and is not demonstrating the stricter ownership-inventory path.
