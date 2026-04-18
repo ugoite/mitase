@@ -3,7 +3,6 @@
 
 use std::{
     fs,
-    io::{self, IsTerminal, Write},
     path::{Component, Path, PathBuf},
 };
 
@@ -19,7 +18,14 @@ use crate::{
     workspace::{Workspace, load_workspace},
 };
 
-use super::{lookup::WorkspaceLookup, shell_quote_path};
+use super::{
+    lookup::WorkspaceLookup,
+    prompt::{
+        PromptIo, StdioPromptIo, ensure_prompt_terminal, prompt_optional, prompt_required,
+        prompt_with_default,
+    },
+    shell_quote_path,
+};
 
 const ADD_MISSING_ID_NON_TTY_MESSAGE: &str = "`syu add` needs a definition ID when stdin/stdout are not terminals; pass the ID explicitly or rerun in a terminal to be prompted";
 const ADD_INTERACTIVE_KIND_NON_TTY_MESSAGE: &str =
@@ -181,35 +187,6 @@ struct FeatureRegistryUpdate {
     updated_contents: Option<String>,
 }
 
-trait AddPromptIo {
-    fn is_terminal(&self) -> bool;
-    fn prompt_line(&mut self, label: &str, default: Option<&str>) -> Result<String>;
-}
-
-struct StdioPromptIo;
-
-impl AddPromptIo for StdioPromptIo {
-    fn is_terminal(&self) -> bool {
-        io::stdin().is_terminal() && io::stdout().is_terminal()
-    }
-
-    fn prompt_line(&mut self, label: &str, default: Option<&str>) -> Result<String> {
-        match default {
-            Some(value) => print!("{label} [{value}]: "),
-            None => print!("{label}: "),
-        }
-        io::stdout()
-            .flush()
-            .context("failed to flush interactive `syu add` prompt")?;
-
-        let mut input = String::new();
-        io::stdin()
-            .read_line(&mut input)
-            .context("failed to read interactive `syu add` input")?;
-        Ok(input.trim().to_string())
-    }
-}
-
 fn resolve_add_invocation(args: &AddArgs) -> Result<ResolvedAddInvocation> {
     let mut prompt_io = StdioPromptIo;
     resolve_add_invocation_with_prompt_io(args, &mut prompt_io)
@@ -217,7 +194,7 @@ fn resolve_add_invocation(args: &AddArgs) -> Result<ResolvedAddInvocation> {
 
 fn resolve_add_invocation_with_prompt_io(
     args: &AddArgs,
-    prompt_io: &mut impl AddPromptIo,
+    prompt_io: &mut impl PromptIo,
 ) -> Result<ResolvedAddInvocation> {
     let (raw_id, workspace) = resolve_workspace_and_id(args)?;
     let parsed_id = match raw_id {
@@ -261,7 +238,7 @@ fn resolve_workspace_and_id(args: &AddArgs) -> Result<(Option<String>, PathBuf)>
 fn resolve_feature_kind(
     args: &AddArgs,
     parsed_id: &ParsedId,
-    prompt_io: &mut impl AddPromptIo,
+    prompt_io: &mut impl PromptIo,
 ) -> Result<String> {
     if let Some(kind) = args.kind.as_deref() {
         return normalize_feature_kind(kind);
@@ -285,7 +262,7 @@ fn resolve_interactive_file_prompt(
     args: &AddArgs,
     parsed_id: &ParsedId,
     feature_kind: Option<&str>,
-    prompt_io: &mut impl AddPromptIo,
+    prompt_io: &mut impl PromptIo,
 ) -> Result<Option<PathBuf>> {
     if let Some(file) = &args.file {
         return Ok(Some(file.clone()));
@@ -297,11 +274,11 @@ fn resolve_interactive_file_prompt(
     ensure_prompt_terminal(prompt_io, ADD_INTERACTIVE_FILE_NON_TTY_MESSAGE)?;
     let default_relative = default_document_path(args.layer, parsed_id, feature_kind);
     let default_relative_display = default_relative.display().to_string();
-    let prompted_path = prompt_optional_path(prompt_io, "YAML file", &default_relative_display)?;
+    let prompted_path = prompt_optional(prompt_io, "YAML file", Some(&default_relative_display))?;
     Ok(prompted_path.map(PathBuf::from))
 }
 
-fn prompt_for_parsed_id(layer: LookupKind, prompt_io: &mut impl AddPromptIo) -> Result<ParsedId> {
+fn prompt_for_parsed_id(layer: LookupKind, prompt_io: &mut impl PromptIo) -> Result<ParsedId> {
     ensure_prompt_terminal(prompt_io, ADD_MISSING_ID_NON_TTY_MESSAGE)?;
 
     loop {
@@ -310,50 +287,6 @@ fn prompt_for_parsed_id(layer: LookupKind, prompt_io: &mut impl AddPromptIo) -> 
             Ok(parsed) => return Ok(parsed),
             Err(error) => eprintln!("{error:#}"),
         }
-    }
-}
-
-fn ensure_prompt_terminal(prompt_io: &impl AddPromptIo, message: &str) -> Result<()> {
-    if prompt_io.is_terminal() {
-        return Ok(());
-    }
-
-    bail!("{message}");
-}
-
-fn prompt_required(prompt_io: &mut impl AddPromptIo, label: &str) -> Result<String> {
-    loop {
-        let raw = prompt_io.prompt_line(label, None)?;
-        if !raw.is_empty() {
-            return Ok(raw);
-        }
-        eprintln!("{label} is required.");
-    }
-}
-
-fn prompt_with_default(
-    prompt_io: &mut impl AddPromptIo,
-    label: &str,
-    default: &str,
-) -> Result<String> {
-    let raw = prompt_io.prompt_line(label, Some(default))?;
-    if raw.is_empty() {
-        Ok(default.to_string())
-    } else {
-        Ok(raw)
-    }
-}
-
-fn prompt_optional_path(
-    prompt_io: &mut impl AddPromptIo,
-    label: &str,
-    default: &str,
-) -> Result<Option<String>> {
-    let raw = prompt_io.prompt_line(label, Some(default))?;
-    if raw.is_empty() {
-        Ok(None)
-    } else {
-        Ok(Some(raw))
     }
 }
 
@@ -999,14 +932,15 @@ mod tests {
 
     use crate::{
         cli::{AddArgs, InitArgs, LookupKind, OutputFormat, StarterTemplate},
+        command::prompt::PromptIo,
         config::SyuConfig,
         model::Requirement,
         workspace::Workspace,
     };
 
     use super::{
-        AddPromptIo, FeatureRegistryUpdate, ParsedId, TargetPath, add_follow_up_steps,
-        default_document_path, default_folder_slug, default_title, ensure_target_within_spec_root,
+        FeatureRegistryUpdate, ParsedId, TargetPath, add_follow_up_steps, default_document_path,
+        default_folder_slug, default_title, ensure_target_within_spec_root,
         normalize_definition_id, normalize_feature_kind, prepare_feature_registry_update,
         prompt_for_parsed_id, render_item_block, render_new_document,
         resolve_add_invocation_with_prompt_io, resolve_explicit_file, resolve_feature_kind,
@@ -1021,7 +955,7 @@ mod tests {
         prompts: Vec<(String, Option<String>)>,
     }
 
-    impl AddPromptIo for FakePromptIo {
+    impl PromptIo for FakePromptIo {
         fn is_terminal(&self) -> bool {
             self.terminal
         }
@@ -1478,6 +1412,7 @@ mod tests {
         let workspace = tempdir.path().join("workspace");
         crate::command::init::run_init_command(&InitArgs {
             workspace: workspace.clone(),
+            interactive: false,
             name: Some("workspace".to_string()),
             spec_root: None,
             template: StarterTemplate::Generic,

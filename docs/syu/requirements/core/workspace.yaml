@@ -9,21 +9,24 @@ requirements:
       requirements and features begin as `planned` so users can begin from a
       working structure instead of manually creating directories and
       placeholder YAML files. By default the tree lives under `docs/syu/`.
-       `syu init --spec-root` MUST support scaffolding the same layout into
-       another repository-relative specification root while writing the matching
-       `spec.root` value into `syu.yaml`, and `syu init --template` MUST support
-       small `rust-only`, `python-only`, and `polyglot` starter layouts so
-       adopters can begin closer to their repository style without copying
-       example files by hand. The CLI MUST also provide `syu templates` so users
-       can discover the available starter layouts, short descriptions, and any
-       matching checked-in examples before they scaffold, and the root help plus
-       closely related `syu init` guidance MUST surface that discovery command
-       alongside `syu init` without sending newcomers to docs first.
-       `syu init --id-prefix` MUST support seeding a
-       shared project-specific stem into the starter philosophy, policy,
-       requirement, and feature IDs, and the per-layer `--philosophy-prefix`,
-       `--policy-prefix`, `--requirement-prefix`, and `--feature-prefix` flags
-       MUST allow narrower overrides when one shared stem is not enough.
+      `syu init --spec-root` MUST support scaffolding the same layout into
+      another repository-relative specification root while writing the matching
+      `spec.root` value into `syu.yaml`, and `syu init --template` MUST support
+      small `rust-only`, `python-only`, and `polyglot` starter layouts so
+      adopters can begin closer to their repository style without copying
+      example files by hand. The CLI MUST also provide `syu templates` so users
+      can discover the available starter layouts, short descriptions, and any
+      matching checked-in examples before they scaffold, and the root help plus
+      closely related `syu init` guidance MUST surface that discovery command
+      alongside `syu init` without sending newcomers to docs first.
+      `syu init --id-prefix` MUST support seeding a
+      shared project-specific stem into the starter philosophy, policy,
+      requirement, and feature IDs, and the per-layer `--philosophy-prefix`,
+      `--policy-prefix`, `--requirement-prefix`, and `--feature-prefix` flags
+      MUST allow narrower overrides when one shared stem is not enough.
+      `syu init --interactive` MUST guide first-run users through the starter
+      template, `spec.root`, shared ID stem, and stricter validation defaults
+      in a terminal while still writing the same checked-in scaffold.
     priority: high
     status: implemented
     linked_policies:
@@ -36,6 +39,7 @@ requirements:
       - FEAT-INIT-004
       - FEAT-INIT-005
       - FEAT-INIT-006
+      - FEAT-INIT-007
     tests:
       rust:
         - file: tests/init_command.rs
@@ -45,6 +49,9 @@ requirements:
           symbols:
             - '*'
         - file: src/command/templates.rs
+          symbols:
+            - '*'
+        - file: src/command/prompt.rs
           symbols:
             - '*'
         - file: src/command/mod.rs

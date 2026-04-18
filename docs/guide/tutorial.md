@@ -31,6 +31,13 @@ mkdir filestore && cd filestore
 syu init .
 ```
 
+If you want the CLI to guide the starter choices instead of supplying flags up
+front, start with:
+
+```bash
+syu init . --interactive
+```
+
 If the repository already uses another documentation layout, initialize there
 instead:
 

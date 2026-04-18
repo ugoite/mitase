@@ -4,6 +4,8 @@
 // FEAT-SEARCH-001
 // FEAT-BROWSE-001
 // FEAT-BROWSE-002
+// FEAT-INIT-007
+// FEAT-INIT-006
 // FEAT-INIT-005
 // FEAT-INIT-004
 // FEAT-INIT-003
@@ -35,6 +37,7 @@ Use `syu templates` first when you want to compare starter layouts before you sc
 Examples:
   syu templates
   syu init .
+  syu init . --interactive
   syu init . --id-prefix store
   syu init . --template rust-only
   syu init . --spec-root docs/spec
@@ -375,6 +378,10 @@ pub struct InitArgs {
     #[arg(default_value = ".")]
     pub workspace: PathBuf,
 
+    #[arg(help = "Prompt for starter settings in a terminal before scaffolding files")]
+    #[arg(long, action = ArgAction::SetTrue)]
+    pub interactive: bool,
+
     #[arg(help = "Override the inferred project name")]
     #[arg(long)]
     pub name: Option<String>,
@@ -415,7 +422,9 @@ pub struct InitArgs {
     #[arg(long)]
     pub force: bool,
 
-    #[arg(help = "Output format (text shows next-step guidance; json returns created file paths)")]
+    #[arg(
+        help = "Output format (text shows next-step guidance; json returns created file paths; --interactive supports text only)"
+    )]
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
     pub format: OutputFormat,
 }
@@ -471,6 +480,17 @@ pub enum StarterTemplate {
     Polyglot,
 }
 
+impl StarterTemplate {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Generic => "generic",
+            Self::RustOnly => "rust-only",
+            Self::PythonOnly => "python-only",
+            Self::Polyglot => "polyglot",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum OutputFormat {
     Text,
@@ -515,7 +535,9 @@ impl ValidationGenreFilter {
 
 #[cfg(test)]
 mod tests {
-    use super::{Cli, LookupKind, ValidationGenreFilter, ValidationSeverityFilter};
+    use super::{
+        Cli, LookupKind, StarterTemplate, ValidationGenreFilter, ValidationSeverityFilter,
+    };
     use clap::Parser;
 
     #[test]
@@ -524,6 +546,10 @@ mod tests {
         assert_eq!(LookupKind::Policy.label(), "policy");
         assert_eq!(LookupKind::Requirement.label(), "requirement");
         assert_eq!(LookupKind::Feature.label(), "feature");
+        assert_eq!(StarterTemplate::Generic.label(), "generic");
+        assert_eq!(StarterTemplate::RustOnly.label(), "rust-only");
+        assert_eq!(StarterTemplate::PythonOnly.label(), "python-only");
+        assert_eq!(StarterTemplate::Polyglot.label(), "polyglot");
         assert_eq!(ValidationSeverityFilter::Error.as_str(), "error");
         assert_eq!(ValidationSeverityFilter::Warning.as_str(), "warning");
         assert_eq!(ValidationGenreFilter::Workspace.as_str(), "workspace");
@@ -631,6 +657,17 @@ mod tests {
         let rendered = format!("{cli:?}");
         assert!(rendered.contains("command: Some(Init("));
         assert!(rendered.contains("id_prefix: Some(\"store\")"));
+    }
+
+    #[test]
+    fn init_args_support_interactive_mode() {
+        let cli = Cli::try_parse_from(["syu", "init", ".", "--interactive"])
+            .expect("interactive init args should parse");
+
+        let rendered = format!("{cli:?}");
+        assert!(rendered.contains("command: Some(Init("));
+        assert!(rendered.contains("workspace: \".\""));
+        assert!(rendered.contains("interactive: true"));
     }
 
     #[test]
