@@ -336,6 +336,7 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("syu app"));
     assert!(readme.contains("examples/go-only"));
     assert!(readme.contains("examples/polyglot"));
+    assert!(readme.contains("examples/team-scale"));
     assert!(readme.contains("examples-and-templates.md"));
     assert!(readme.contains("CONTRIBUTING.md"));
     assert!(readme.contains("Contributing and local development"));
@@ -463,7 +464,9 @@ fn repository_declares_documentation_guides() {
     assert!(examples_and_templates.contains("checked-in examples"));
     assert!(examples_and_templates.contains("examples/docs-first"));
     assert!(examples_and_templates.contains("`syu init . --template rust-only`"));
+    assert!(examples_and_templates.contains("examples/go-only"));
     assert!(examples_and_templates.contains("examples/polyglot"));
+    assert!(examples_and_templates.contains("examples/team-scale"));
     assert!(merge_queue_playbook.contains("merge_group"));
     assert!(merge_queue_playbook.contains("gh api graphql"));
     assert!(merge_queue_playbook.contains("AWAITING_CHECKS"));
