@@ -32,8 +32,9 @@ verified.
 Pick the newcomer path that matches what you need next:
 
 - **Quick start**: stay in this README when the in-page four-layer refresher is
-  enough, you want the shortest path from install to `syu validate .`, and you
-  are comfortable editing the first reciprocal links yourself.
+  enough, you already grasp the four-layer idea, want the shortest roughly
+  5-minute path from install to `syu validate .`, and are comfortable making
+  the first manual YAML edits after a short refresher.
 - **Getting started**: follow
   [`docs/guide/getting-started.md`](docs/guide/getting-started.md) when you want
   the same first workspace setup explained step by step before the manual YAML
@@ -46,14 +47,15 @@ Pick the newcomer path that matches what you need next:
   `syu app .` when you want graphical spec navigation before learning the full
   CLI workflow.
 - **Tutorial**: follow [`docs/guide/tutorial.md`](docs/guide/tutorial.md) when you
-  want a realistic end-to-end repository story instead of a short scaffold flow.
+  want a realistic end-to-end repository story instead of a short setup path.
 - **Trace adapter matrix**: open
   [`docs/guide/trace-adapter-support.md`](docs/guide/trace-adapter-support.md)
   when you need to know which built-in languages support symbol validation
   only versus `doc_contains` and strict coverage.
 - **Troubleshooting**: jump to
-  [`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md) when validation
-  or traceability errors are already blocking you.
+  [`docs/guide/troubleshooting.md`](docs/guide/troubleshooting.md) when you
+  already have a workspace and validation or traceability errors are blocking
+  the next step more than onboarding is.
 - **Spec anti-patterns**: read
   [`docs/guide/spec-antipatterns.md`](docs/guide/spec-antipatterns.md) when the
   workspace validates but the layer boundaries still feel messy.
