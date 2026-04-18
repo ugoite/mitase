@@ -2,7 +2,7 @@
   "name": "syu-docs",
   "description": "FEAT-DOCS-002 Docusaurus site for the checked-in syu docs tree",
   "private": true,
-  "version": "0.0.1-alpha.5",
+  "version": "0.0.1-alpha.7",
   "scripts": {
     "generate": "python3 ../scripts/generate-site-docs.py",
     "prestart": "npm run generate",
