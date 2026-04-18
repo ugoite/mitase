@@ -34,9 +34,9 @@ Pick the newcomer path that matches what you need next:
 - **Getting started**: choose this if you are new to `syu`, want a guided first
   run, and do **not** already know the four-layer model. Expect the most
   hand-holding and roughly 10-15 minutes for the first workspace setup.
-- **Quick start**: stay in this README when you already want a compact reference
-  card, are happy with a short layer refresher, and want the fastest install-to-
-  `syu validate .` path in about 5 minutes.
+- **Quick start**: stay in this README when you want a compact, self-contained
+  reference card, are happy with a short layer refresher, and want the fastest
+  install-to-`syu validate .` path in about 5 minutes.
 - **Tutorial**: follow [`docs/guide/tutorial.md`](docs/guide/tutorial.md) when you
   learn best from a realistic repository story, want more narrative context than
   Quick start, and do not mind a longer walkthrough.
@@ -187,15 +187,16 @@ below. The rest of this section assumes you installed the published CLI.
 Stay in this README for the shortest install-to-validate path. If you skipped
 [`docs/guide/concepts.md`](docs/guide/concepts.md), use the
 [Why four layers?](#why-four-layers) section above as the refresher on
-`philosophy`, `policy`, `requirements`, and `features`.
+`philosophy`, `policy`, `requirements`, and `features`. There is no other
+required pre-read before the commands below.
 
 The first manual edit in this quick start happens in the generated requirement
 YAML: add `linked_policies:` and `linked_features:` there, then update the
 adjacent policy and feature YAML so they add the reciprocal
 `linked_requirements:` entry back to the new requirement.
 
-Read [`docs/guide/concepts.md`](docs/guide/concepts.md) first if you want the
-fuller rationale and authoring guidance before continuing.
+Read [`docs/guide/concepts.md`](docs/guide/concepts.md) first only when you want
+the fuller rationale and authoring guidance before continuing.
 
 Step 0: required — run `syu init .` before any of the other commands in a new repository.
 
