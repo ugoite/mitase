@@ -68,6 +68,10 @@ description: "Generated reference for docs/syu/features/cli/check.yaml"
           - SYU-workspace-load-001
           - SYU-graph-reference-001
           - SYU-coverage-test-001
+    - **go**:
+      - **file**: tests/fixtures/workspaces/passing/go/feature_trace.go
+        - **symbols**:
+          - FeatureTraceGo
 
 ## Source YAML
 
@@ -127,4 +131,8 @@ features:
             - SYU-workspace-load-001
             - SYU-graph-reference-001
             - SYU-coverage-test-001
+      go:
+        - file: tests/fixtures/workspaces/passing/go/feature_trace.go
+          symbols:
+            - FeatureTraceGo
 ```
