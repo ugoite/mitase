@@ -96,7 +96,9 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       present in the symbol documentation when the declared language supports
       rich inspection. The checked-in trace mapping itself MUST remain enough
       to audit ownership without requiring inline requirement or feature IDs in
-      implementation files by default.
+      implementation files by default. Repositories that want an extra
+      repository-native ownership breadcrumb MUST be able to opt into either
+      inline IDs in traced artifacts or checked-in sidecar ownership manifests.
       Validation MUST also reject duplicate trace mappings inside a single
       language list, support wildcard file ownership, and provide an optional
       mode that requires every public symbol (non-underscore-prefixed for Python,
@@ -128,6 +130,9 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
           - check_command_warns_for_non_canonical_relative_trace_paths
           - check_command_warns_for_backslash_trace_paths
       - **file**: tests/trace_coverage_validation.rs
+        - **symbols**:
+          - *
+      - **file**: tests/sidecar_ownership_validation.rs
         - **symbols**:
           - *
       - **file**: tests/validate_override_command.rs
@@ -170,7 +175,8 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       able to configure default fix behavior, and `--no-fix` MUST disable it.
       Autofix MUST stay conservative, avoid speculative structural edits, and
       add optional documentation breadcrumbs without injecting bookkeeping spec
-      IDs by default.
+      IDs by default. When sidecar ownership manifests are enabled, autofix MUST
+      update the checked-in manifest instead of inserting owner IDs into source.
   - **priority**: high
   - **status**: implemented
   - **linked_policies**:
@@ -299,7 +305,9 @@ requirements:
       present in the symbol documentation when the declared language supports
       rich inspection. The checked-in trace mapping itself MUST remain enough
       to audit ownership without requiring inline requirement or feature IDs in
-      implementation files by default.
+      implementation files by default. Repositories that want an extra
+      repository-native ownership breadcrumb MUST be able to opt into either
+      inline IDs in traced artifacts or checked-in sidecar ownership manifests.
       Validation MUST also reject duplicate trace mappings inside a single
       language list, support wildcard file ownership, and provide an optional
       mode that requires every public symbol (non-underscore-prefixed for Python,
@@ -331,6 +339,9 @@ requirements:
             - check_command_warns_for_non_canonical_relative_trace_paths
             - check_command_warns_for_backslash_trace_paths
         - file: tests/trace_coverage_validation.rs
+          symbols:
+            - '*'
+        - file: tests/sidecar_ownership_validation.rs
           symbols:
             - '*'
         - file: tests/validate_override_command.rs
@@ -372,7 +383,8 @@ requirements:
       able to configure default fix behavior, and `--no-fix` MUST disable it.
       Autofix MUST stay conservative, avoid speculative structural edits, and
       add optional documentation breadcrumbs without injecting bookkeeping spec
-      IDs by default.
+      IDs by default. When sidecar ownership manifests are enabled, autofix MUST
+      update the checked-in manifest instead of inserting owner IDs into source.
     priority: high
     status: implemented
     linked_policies:
