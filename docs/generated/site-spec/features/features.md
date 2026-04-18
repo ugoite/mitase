@@ -39,6 +39,8 @@ description: "Generated reference for docs/syu/features/features.yaml"
   - **file**: cli/add.yaml
 - **kind**: report
   - **file**: cli/report.yaml
+- **kind**: vscode
+  - **file**: editor/vscode.yaml
 - **kind**: docs
   - **file**: documentation/docs.yaml
 - **kind**: skills
@@ -81,6 +83,8 @@ files:
     file: cli/add.yaml
   - kind: report
     file: cli/report.yaml
+  - kind: vscode
+    file: editor/vscode.yaml
   - kind: docs
     file: documentation/docs.yaml
   - kind: skills

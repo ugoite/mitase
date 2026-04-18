@@ -26,6 +26,7 @@ This section is generated from the YAML source under `docs/syu/`.
 - [Trace Lookup CLI / Trace](/docs/generated/site-spec/features/cli/trace)
 - [Documentation / Docs](/docs/generated/site-spec/features/documentation/docs)
 - [Agent Skills / Skills](/docs/generated/site-spec/features/documentation/skills)
+- [Editor Integrations / Vscode](/docs/generated/site-spec/features/editor/vscode)
 - [Features](/docs/generated/site-spec/features)
 - [Contributor Experience / Contributor](/docs/generated/site-spec/features/repository/contributor)
 - [Installer / Install](/docs/generated/site-spec/features/repository/install)
