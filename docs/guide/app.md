@@ -6,8 +6,9 @@
 
 If you started from the README newcomer chooser, this guide is the visual-first
 path back into the same onboarding flow. Return to the
-[`site landing page`](/) when you want the text-first install, tutorial,
-migration, or troubleshooting entry points instead.
+[`README chooser on GitHub`](https://github.com/ugoite/syu/blob/main/README.md#choose-your-path)
+when you want the text-first install, tutorial, migration, or troubleshooting
+entry points instead.
 
 ```bash
 syu app .
