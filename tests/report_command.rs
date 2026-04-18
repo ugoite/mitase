@@ -60,7 +60,7 @@ fn report_command_generates_markdown_output() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("# syu validation report"));
-    assert!(stdout.contains("Requirement-to-test traceability: 4/4"));
+    assert!(stdout.contains("Requirement-to-test traceability: 5/5"));
 }
 
 #[test]

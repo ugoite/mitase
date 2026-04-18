@@ -46,6 +46,9 @@ struct TypeScriptAdapter;
 struct GoAdapter;
 
 #[derive(Debug)]
+struct JavaAdapter;
+
+#[derive(Debug)]
 struct ShellAdapter;
 
 #[derive(Debug)]
@@ -64,6 +67,7 @@ static RUST_ADAPTER: RustAdapter = RustAdapter;
 static PYTHON_ADAPTER: PythonAdapter = PythonAdapter;
 static TYPESCRIPT_ADAPTER: TypeScriptAdapter = TypeScriptAdapter;
 static GO_ADAPTER: GoAdapter = GoAdapter;
+static JAVA_ADAPTER: JavaAdapter = JavaAdapter;
 static SHELL_ADAPTER: ShellAdapter = ShellAdapter;
 static YAML_ADAPTER: YamlAdapter = YamlAdapter;
 static JSON_ADAPTER: JsonAdapter = JsonAdapter;
@@ -171,6 +175,30 @@ impl LanguageAdapter for GoAdapter {
             format!(r"(?m)\btype\s+{escaped}\b"),
             format!(r"(?m)\b(?:var|const)\s+{escaped}\b"),
             format!(r"(?ms)\b(?:var|const)\s*\([^)]*\b{escaped}\b"),
+            format!(r"(?m)\b{escaped}\b"),
+        ]
+    }
+}
+
+impl LanguageAdapter for JavaAdapter {
+    fn canonical_name(&self) -> &'static str {
+        "java"
+    }
+
+    fn aliases(&self) -> &'static [&'static str] {
+        &["java", "junit"]
+    }
+
+    fn extensions(&self) -> &'static [&'static str] {
+        &["java"]
+    }
+
+    fn patterns(&self, symbol: &str) -> Vec<String> {
+        let escaped = regex::escape(symbol);
+        vec![
+            format!(r"(?m)\b(?:class|interface|enum|record)\s+{escaped}\b"),
+            format!(r"(?m)\b{escaped}\s*\("),
+            format!(r"(?m)\b{escaped}\s*(?:=|;)"),
             format!(r"(?m)\b{escaped}\b"),
         ]
     }
@@ -290,6 +318,7 @@ pub fn adapter_for_language(language: &str) -> Option<&'static dyn LanguageAdapt
         &PYTHON_ADAPTER as &dyn LanguageAdapter,
         &TYPESCRIPT_ADAPTER as &dyn LanguageAdapter,
         &GO_ADAPTER as &dyn LanguageAdapter,
+        &JAVA_ADAPTER as &dyn LanguageAdapter,
         &SHELL_ADAPTER as &dyn LanguageAdapter,
         &YAML_ADAPTER as &dyn LanguageAdapter,
         &JSON_ADAPTER as &dyn LanguageAdapter,

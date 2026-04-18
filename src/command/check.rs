@@ -2214,16 +2214,16 @@ fn verify_trace_reference(
     let subject = format!("{} {}", role.subject_kind(), owner_id);
     let Some(adapter) = adapter_for_language(language) else {
         issues.push(Issue::error(
-            "SYU-trace-language-001",
-            subject,
-            Some(format_reference_location(language, reference)),
-            format!(
-                "Language `{language}` is not supported. Built-in adapters currently cover Rust, Python, TypeScript, Shell, YAML, JSON, Markdown, and Gitignore."
-            ),
-            Some(format!(
-                "Use a supported language alias such as `rust`, `python`, `typescript`, `shell`, `yaml`, `json`, `markdown`, or `gitignore` for `{owner_id}`."
-            )),
-        ));
+                "SYU-trace-language-001",
+                subject,
+                Some(format_reference_location(language, reference)),
+                format!(
+                    "Language `{language}` is not supported. Built-in adapters currently cover Rust, Python, Java, TypeScript, Shell, YAML, JSON, Markdown, and Gitignore."
+                ),
+                Some(format!(
+                    "Use a supported language alias such as `rust`, `python`, `java`, `typescript`, `shell`, `yaml`, `json`, `markdown`, or `gitignore` for `{owner_id}`."
+                )),
+            ));
         return false;
     };
 
@@ -3591,9 +3591,9 @@ mod tests {
         let mut entry = requirement("REQ-1");
         entry.status = "proposed".to_string();
         entry.tests.insert(
-            "java".to_string(),
+            "csharp".to_string(),
             vec![TraceReference {
-                file: PathBuf::from("Trace.java"),
+                file: PathBuf::from("Trace.cs"),
                 symbols: vec!["trace".to_string()],
                 doc_contains: Vec::new(),
             }],
@@ -3781,7 +3781,7 @@ mod tests {
     #[test]
     fn verify_trace_reference_reports_unsupported_languages() {
         let reference = TraceReference {
-            file: PathBuf::from("Trace.java"),
+            file: PathBuf::from("Trace.cs"),
             symbols: vec!["main".to_string()],
             doc_contains: Vec::new(),
         };
@@ -3791,7 +3791,7 @@ mod tests {
             &SyuConfig::default(),
             "REQ-1",
             TraceRole::RequirementTest,
-            "java",
+            "csharp",
             &reference,
             &mut issues,
         ));
@@ -4108,6 +4108,34 @@ mod tests {
             "FEAT-1",
             TraceRole::FeatureImplementation,
             "shell",
+            &reference,
+            &mut issues,
+        ));
+        assert!(issues.is_empty());
+    }
+
+    #[test]
+    fn verify_trace_reference_accepts_valid_java_files() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let path = tempdir.path().join("TraceService.java");
+        fs::write(
+            &path,
+            "// FEAT-TRACE-004\npublic class TraceService {\n    public void featureTraceJava() {}\n}\n",
+        )
+        .expect("file should exist");
+
+        let reference = TraceReference {
+            file: PathBuf::from("TraceService.java"),
+            symbols: vec!["featureTraceJava".to_string()],
+            doc_contains: Vec::new(),
+        };
+        let mut issues = Vec::new();
+        assert!(verify_trace_reference(
+            tempdir.path(),
+            &SyuConfig::default(),
+            "FEAT-TRACE-004",
+            TraceRole::FeatureImplementation,
+            "java",
             &reference,
             &mut issues,
         ));
@@ -4598,9 +4626,9 @@ mod tests {
             root,
             &SyuConfig::default(),
             "REQ-1",
-            "java",
+            "kotlin",
             &TraceReference {
-                file: PathBuf::from("Trace.java"),
+                file: PathBuf::from("Trace.kt"),
                 symbols: vec!["expected".to_string()],
                 doc_contains: vec!["Explain expected".to_string()],
             },

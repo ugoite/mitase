@@ -221,6 +221,7 @@ fn default_symbol_trace_coverage_ignored_paths() -> Vec<PathBuf> {
         "app/coverage",
         "app/dist",
         "app/target",
+        "tests/fixtures/workspaces",
     ]
     .into_iter()
     .map(PathBuf::from)
@@ -371,6 +372,7 @@ mod tests {
                 std::path::PathBuf::from("app/coverage"),
                 std::path::PathBuf::from("app/dist"),
                 std::path::PathBuf::from("app/target"),
+                std::path::PathBuf::from("tests/fixtures/workspaces"),
             ]
         );
         assert_eq!(loaded.config.report.output, None);
@@ -416,6 +418,7 @@ mod tests {
                 std::path::PathBuf::from("app/coverage"),
                 std::path::PathBuf::from("app/dist"),
                 std::path::PathBuf::from("app/target"),
+                std::path::PathBuf::from("tests/fixtures/workspaces"),
             ]
         );
         assert_eq!(
@@ -462,6 +465,7 @@ mod tests {
         assert!(rendered.contains("symbol_trace_coverage_ignored_paths:"));
         assert!(rendered.contains("- build"));
         assert!(rendered.contains("- app/dist"));
+        assert!(rendered.contains("- tests/fixtures/workspaces"));
         assert!(!rendered.contains("report:"));
         assert!(rendered.contains("bind: 127.0.0.1"));
         assert!(rendered.contains("port: 3000"));
