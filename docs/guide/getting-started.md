@@ -444,8 +444,7 @@ Filters stay view-oriented: they narrow the visible diagnostics while preserving
 the full validation result and exit code.
 
 For CI or shell scripts that still want text output, add `--quiet` to suppress
-the next-step guidance block while keeping the validation summary and default
-exit code behavior.
+the success summary and next-step guidance while keeping the exit code behavior.
 
 Need warnings to stay visible in text output but still fail the job? Add
 `--warning-exit-code 3` (or another non-zero code) so warning-only runs return
