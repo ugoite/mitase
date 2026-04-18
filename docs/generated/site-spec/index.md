@@ -18,6 +18,7 @@ This section is generated from the YAML source under `docs/syu/`.
 - [Interactive CLI / Browse](/docs/generated/site-spec/features/cli/browse)
 - [Validate Command / Check](/docs/generated/site-spec/features/cli/check)
 - [Init Command / Init](/docs/generated/site-spec/features/cli/init)
+- [Relation Inspection CLI / Relate](/docs/generated/site-spec/features/cli/relate)
 - [Report Command / Report](/docs/generated/site-spec/features/cli/report)
 - [Lookup Search CLI / Search](/docs/generated/site-spec/features/cli/search)
 - [Lookup CLI / Show List](/docs/generated/site-spec/features/cli/show-list)
