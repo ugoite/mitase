@@ -139,10 +139,12 @@ test("renders top tabs and linked spec content", async ({ page }) => {
 
   await expect(page.getByRole("heading", { level: 1, name: /^syu\b/i })).toBeVisible();
   await expect(page.getByRole("button", { name: "syu — go to first item" })).toBeVisible();
-  await expect(topLevelSections.getByRole("button", { name: /^philosophy\b/i })).toBeVisible();
-  await expect(topLevelSections.getByRole("button", { name: /^policies\b/i })).toBeVisible();
-  await expect(topLevelSections.getByRole("button", { name: /^features\b/i })).toBeVisible();
-  await expect(topLevelSections.getByRole("button", { name: /^requirements\b/i })).toBeVisible();
+  await expect(topLevelSections.getByRole("button")).toHaveText([
+    /^philosophy\b/i,
+    /^policies\b/i,
+    /^requirements\b/i,
+    /^features\b/i,
+  ]);
   await expect(page.getByText("Welcome to syu.")).toBeVisible();
 
   await page.getByRole("button", { name: "Dismiss welcome banner" }).click();
