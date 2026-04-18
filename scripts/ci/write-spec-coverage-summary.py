@@ -45,7 +45,7 @@ def run_syu_json(repo_root: Path, *args: str) -> dict:
 
 def percent_string(covered: int, total: int) -> str:
     if total == 0:
-        return "n/a"
+        return "0.0% (0/0)"
     return f"{covered * 100.0 / total:.1f}% ({covered}/{total})"
 
 
@@ -82,16 +82,38 @@ def load_spec_items(
     return items_by_id
 
 
-def summarize_paths(repo_root: Path, lcov: dict[str, tuple[int, int]], paths: list[str]) -> tuple[int, int]:
+def summarize_paths(
+    repo_root: Path, lcov: dict[str, tuple[int, int]], paths: list[str]
+) -> tuple[int, int, int]:
     covered = 0
     total = 0
+    instrumented_paths = 0
     for path in sorted(set(paths)):
         stats = lcov.get(str(resolve_workspace_path(repo_root, path)))
         if stats is None:
             continue
+        instrumented_paths += 1
         covered += stats[0]
         total += stats[1]
-    return covered, total
+    return covered, total, instrumented_paths
+
+
+def coverage_label(
+    *,
+    total_refs: int,
+    rust_file_count: int,
+    instrumented_paths: int,
+    covered: int,
+    total: int,
+    empty_label: str,
+) -> str:
+    if total_refs == 0:
+        return empty_label
+    if rust_file_count == 0:
+        return "no Rust files"
+    if instrumented_paths == 0:
+        return "not instrumented"
+    return percent_string(covered, total)
 
 
 def main() -> int:
@@ -110,38 +132,68 @@ def main() -> int:
 
     feature_details: dict[str, dict] = {}
     for feature_id, item in sorted(features.items()):
+        implementation_refs = sum(len(references) for references in item.get("implementations", {}).values())
         rust_refs = item.get("implementations", {}).get("rust", [])
         rust_files = [reference["file"] for reference in rust_refs]
-        covered, total = summarize_paths(repo_root, lcov, rust_files)
+        covered, total, instrumented_paths = summarize_paths(repo_root, lcov, rust_files)
         feature_details[feature_id] = {
             "linked_requirements": item.get("linked_requirements", []),
-            "implementation_refs": sum(
-                len(references) for references in item.get("implementations", {}).values()
-            ),
+            "implementation_refs": implementation_refs,
             "rust_files": len(sorted(set(rust_files))),
-            "rust_coverage": percent_string(covered, total),
+            "rust_coverage": coverage_label(
+                total_refs=implementation_refs,
+                rust_file_count=len(sorted(set(rust_files))),
+                instrumented_paths=instrumented_paths,
+                covered=covered,
+                total=total,
+                empty_label="no implementation refs",
+            ),
             "rust_paths": rust_files,
         }
 
     requirement_rows: list[str] = []
     for requirement_id, item in sorted(requirements.items()):
+        test_refs = sum(len(references) for references in item.get("tests", {}).values())
         rust_test_refs = item.get("tests", {}).get("rust", [])
         rust_test_files = [reference["file"] for reference in rust_test_refs]
-        test_covered, test_total = summarize_paths(repo_root, lcov, rust_test_files)
+        test_covered, test_total, test_instrumented_paths = summarize_paths(
+            repo_root, lcov, rust_test_files
+        )
 
         linked_feature_ids = item.get("linked_features", [])
         linked_feature_paths: list[str] = []
         for feature_id in linked_feature_ids:
             linked_feature_paths.extend(feature_details.get(feature_id, {}).get("rust_paths", []))
-        feature_covered, feature_total = summarize_paths(repo_root, lcov, linked_feature_paths)
+        feature_covered, feature_total, feature_instrumented_paths = summarize_paths(
+            repo_root, lcov, linked_feature_paths
+        )
+        linked_feature_rust_files = len(sorted(set(linked_feature_paths)))
 
         requirement_rows.append(
             "| {id} | {features} | {test_refs} | {test_coverage} | {feature_coverage} |".format(
                 id=requirement_id,
                 features=", ".join(linked_feature_ids) if linked_feature_ids else "—",
-                test_refs=sum(len(references) for references in item.get("tests", {}).values()),
-                test_coverage=percent_string(test_covered, test_total),
-                feature_coverage=percent_string(feature_covered, feature_total),
+                test_refs=test_refs,
+                test_coverage=coverage_label(
+                    total_refs=test_refs,
+                    rust_file_count=len(sorted(set(rust_test_files))),
+                    instrumented_paths=test_instrumented_paths,
+                    covered=test_covered,
+                    total=test_total,
+                    empty_label="no test refs",
+                ),
+                feature_coverage=(
+                    "—"
+                    if not linked_feature_ids
+                    else coverage_label(
+                        total_refs=len(linked_feature_ids),
+                        rust_file_count=linked_feature_rust_files,
+                        instrumented_paths=feature_instrumented_paths,
+                        covered=feature_covered,
+                        total=feature_total,
+                        empty_label="no linked features",
+                    )
+                ),
             )
         )
 
