@@ -49,3 +49,16 @@ features:
         - file: go/feature_trace.go
           symbols:
             - FeatureTraceGo
+
+  - id: FEAT-TRACE-005
+    title: Java implementation trace
+    summary: Feature links to Java source.
+    status: implemented
+    linked_requirements:
+      - REQ-TRACE-005
+    implementations:
+      java:
+        - file: java/FeatureTrace.java
+          symbols:
+            - FeatureTrace
+            - featureTraceJava

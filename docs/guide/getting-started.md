@@ -260,9 +260,9 @@ implementations:
 ```
 
 What you should avoid for unsupported-language files today is adding
-language-specific `tests:` or `implementations:` entries such as `go:`,
-`java:`, or `csharp:`. Those keys still fail validation before `doc_contains`
-support even becomes relevant. If you need code-level tracing immediately, stay
+language-specific `tests:` or `implementations:` entries such as `csharp:`.
+Those keys still fail validation before `doc_contains` support even becomes
+relevant. If you need code-level tracing immediately with `doc_contains`, stay
 with Rust, Python, or TypeScript/JavaScript for now; otherwise, keep the spec
 layers connected and add the source mappings once adapter support lands.
 
@@ -272,13 +272,11 @@ strict coverage on later for the languages `syu` can already scan deeply.
 
 When `SYU-trace-docsupport-001` fires, read it as “this mapping can stay, but
 without `doc_contains`, only if the language adapter already exists.” That
-works for `shell`, `yaml`, `json`, `markdown`, and `gitignore`; it does not
-bypass `SYU-trace-language-001` for Go, Java, or C#.
+works for `go`, `java`, `shell`, `yaml`, `json`, `markdown`, and `gitignore`;
+it does not bypass `SYU-trace-language-001` for C#.
 
 Language-support roadmap:
 
-- [Go trace validation and symbol ownership (#280)](https://github.com/ugoite/syu/issues/280)
-- [Java trace validation and symbol ownership (#282)](https://github.com/ugoite/syu/issues/282)
 - [C# trace validation and symbol ownership (#314)](https://github.com/ugoite/syu/issues/314)
 
 Not sure whether you should scaffold a template or study a working repository

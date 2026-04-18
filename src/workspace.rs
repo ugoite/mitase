@@ -325,8 +325,8 @@ mod tests {
         let workspace = load_workspace(&fixture_root("passing")).expect("fixture should load");
         assert_eq!(workspace.philosophies.len(), 1);
         assert_eq!(workspace.policies.len(), 2);
-        assert_eq!(workspace.requirements.len(), 4);
-        assert_eq!(workspace.features.len(), 4);
+        assert_eq!(workspace.requirements.len(), 5);
+        assert_eq!(workspace.features.len(), 5);
     }
 
     #[test]

@@ -83,14 +83,13 @@ description: "Generated reference for docs/syu/config/validate.yaml"
 - **key**: validate.require_symbol_trace_coverage
   - **type**: boolean
   - **default**: False
-  - **summary**: Enforces ownership for public Rust, Python, Go, and TypeScript/JavaScript symbols and tests.
+  - **summary**: Enforces ownership for public Rust, Python, Go, Java, and TypeScript/JavaScript symbols and tests.
   - **description**:
     - |
-      When enabled, `syu` requires every public Rust, Python, Go, and
+      When enabled, `syu` requires every public Rust, Python, Go, Java, and
       TypeScript/JavaScript symbol to belong to some feature and every test in
       those inventoried languages to belong to some requirement, in addition to
-      verifying declared traces. Declared Go traces are still checked, but Go is
-      not yet part of the strict undeclared-symbol coverage inventory. The
+      verifying declared traces. The
       validate command can enable or disable this for one run with
       `--require-symbol-trace-coverage` or
       `--require-symbol-trace-coverage=false`.
@@ -119,13 +118,15 @@ description: "Generated reference for docs/syu/config/validate.yaml"
     - app/coverage
     - app/dist
     - app/target
+    - tests/fixtures/workspaces
   - **summary**: Exact repository-relative directories that strict symbol coverage skips.
   - **description**:
     - |
       These paths are matched exactly against repository-relative directories
       while `syu` inventories public symbols and tests for strict ownership
-      checks. The defaults skip common build outputs such as `app/dist` and
-      repository-root `build/`, `coverage/`, `dist/`, and `target/` without
+      checks. The defaults skip common build outputs such as `app/dist`,
+      repository-root `build/`, `coverage/`, `dist/`, and `target/`, plus the
+      checked-in `tests/fixtures/workspaces/` sample repositories, without
       hiding authored nested paths like `src/build/`. Set this list to `[]`
       when you intentionally want generated artifacts to count toward strict
       trace coverage too.
@@ -193,13 +194,12 @@ items:
   - key: validate.require_symbol_trace_coverage
     type: boolean
     default: false
-    summary: Enforces ownership for public Rust, Python, Go, and TypeScript/JavaScript symbols and tests.
+    summary: Enforces ownership for public Rust, Python, Go, Java, and TypeScript/JavaScript symbols and tests.
     description: |
-      When enabled, `syu` requires every public Rust, Python, Go, and
+      When enabled, `syu` requires every public Rust, Python, Go, Java, and
       TypeScript/JavaScript symbol to belong to some feature and every test in
       those inventoried languages to belong to some requirement, in addition to
-      verifying declared traces. Declared Go traces are still checked, but Go is
-      not yet part of the strict undeclared-symbol coverage inventory. The
+      verifying declared traces. The
       validate command can enable or disable this for one run with
       `--require-symbol-trace-coverage` or
       `--require-symbol-trace-coverage=false`.
@@ -227,12 +227,14 @@ items:
       - app/coverage
       - app/dist
       - app/target
+      - tests/fixtures/workspaces
     summary: Exact repository-relative directories that strict symbol coverage skips.
     description: |
       These paths are matched exactly against repository-relative directories
       while `syu` inventories public symbols and tests for strict ownership
-      checks. The defaults skip common build outputs such as `app/dist` and
-      repository-root `build/`, `coverage/`, `dist/`, and `target/` without
+      checks. The defaults skip common build outputs such as `app/dist`,
+      repository-root `build/`, `coverage/`, `dist/`, and `target/`, plus the
+      checked-in `tests/fixtures/workspaces/` sample repositories, without
       hiding authored nested paths like `src/build/`. Set this list to `[]`
       when you intentionally want generated artifacts to count toward strict
       trace coverage too.

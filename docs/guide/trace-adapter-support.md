@@ -20,6 +20,8 @@ enable strict coverage in a mixed-language repository.
 | --- | --- | --- | --- | --- |
 | Rust | `rust`, `rs` / `.rs` | ✅ Rich symbol inspection plus declaration matching | ✅ | ✅ |
 | Python | `python`, `py`, `pytest`, `unittest` / `.py` | ✅ Rich symbol inspection plus pattern fallback | ✅ | ✅ |
+| Go | `go`, `golang`, `gotest` / `.go` | ✅ Pattern-based symbol matching | ❌ | ✅ |
+| Java | `java`, `junit` / `.java` | ✅ Pattern-based symbol matching | ❌ | ✅ |
 | TypeScript / JavaScript | `typescript`, `ts`, `tsx`, `javascript`, `js`, `jsx`, `vitest`, `bun`, `bun-test` / `.ts`, `.tsx`, `.js`, `.jsx` | ✅ Rich symbol inspection plus pattern fallback | ✅ | ✅ |
 | Shell | `shell`, `sh`, `bash`, `zsh` / `.sh`, `.bash`, `.zsh` | ✅ Pattern-based symbol matching | ❌ | ❌ |
 | YAML | `yaml`, `yml` / `.yaml`, `.yml` | ✅ Pattern-based symbol matching | ❌ | ❌ |
@@ -36,6 +38,11 @@ builds ownership inventories for these languages only:
   `tests/`
 - **Python** — public names in `src/` that do not start with `_`, plus
   `test_...` and `Test...` symbols in `tests/`
+- **Go** — exported identifiers in `src/`, plus `Test...`, `Benchmark...`,
+  `Fuzz...`, and `Example...` symbols in `_test.go` files
+- **Java** — public classes/interfaces/enums/records plus public or implicit
+  interface members in `src/`, plus JUnit `@Test` methods and legacy `test...`
+  methods in `tests/`
 - **TypeScript / JavaScript** — exported symbols in `src/`, plus `test...` and
   `Test...` symbols in `tests/`
 
@@ -45,8 +52,8 @@ they do **not** participate in the repository-wide strict ownership scan.
 ## How to choose the right promises
 
 - Need `doc_contains`? Use Rust, Python, or TypeScript / JavaScript traces.
-- Need strict ownership coverage? Keep it limited to Rust, Python, or
-  TypeScript / JavaScript until another language gains an inventory scanner.
+- Need strict ownership coverage? Rust, Python, Go, Java, and
+  TypeScript / JavaScript all participate today.
 - Using Shell, YAML, JSON, Markdown, or Gitignore traces? Keep the mapping to
   `file` + `symbols` (or `symbols: ["*"]` when one file intentionally belongs
   to one item), but do not expect doc-comment inspection or strict ownership
@@ -55,9 +62,8 @@ they do **not** participate in the repository-wide strict ownership scan.
 Even in rich-inspection languages, wildcard traces cannot use `doc_contains`
 because `symbols: ["*"]` does not point to one inspectable symbol.
 
-## What about Go?
+## What about unsupported languages?
 
-`lang: go` is **not** a built-in trace adapter in this checked-in version, so
-`syu validate` reports `SYU-trace-language-001` instead of treating Go as a
-supported symbol-validation target. Re-check the implementation before relying
-on Go-specific `doc_contains` or strict coverage behavior in a later release.
+Unsupported adapters such as `csharp` still raise `SYU-trace-language-001`.
+Keep those repositories connected through the spec layers first, and only add
+language-specific code traces once adapter support lands.
