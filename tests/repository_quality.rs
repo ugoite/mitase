@@ -294,6 +294,7 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("docs/guide/trace-adapter-support.md"));
     assert!(readme.contains("Trace adapter matrix"));
     assert!(readme.contains("docs/guide/tutorial.md"));
+    assert!(readme.contains("docs/guide/migration.md"));
     assert!(readme.contains("docs/guide/app.md"));
     assert!(readme.contains("docs/guide/troubleshooting.md"));
     assert!(readme.contains("docs/guide/spec-antipatterns.md"));
@@ -301,6 +302,7 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("shortest install-to-validate path"));
     assert!(readme.contains("the in-page four-layer refresher is"));
     assert!(readme.contains("**Getting started**"));
+    assert!(readme.contains("**Migration / upgrade**"));
     assert!(readme.contains("**Visual explorer**"));
     assert!(readme.contains("using `syu` for the first time"));
     assert!(readme.contains("already have a workspace"));
