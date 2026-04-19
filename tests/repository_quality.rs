@@ -654,18 +654,21 @@ fn repository_ships_vscode_extension() {
 fn repository_declares_devcontainer_configuration() {
     let devcontainer = read_file(".devcontainer/devcontainer.json");
     let post_create = read_file(".devcontainer/post-create.sh");
+    let browser_setup = read_file(".devcontainer/setup-browser-tooling.sh");
     assert!(devcontainer.contains("FEAT-CONTRIB-001"));
     assert!(devcontainer.contains("bash .devcontainer/post-create.sh"));
     assert!(devcontainer.contains("ghcr.io/devcontainers/features/python:1"));
     assert!(post_create.contains("FEAT-CONTRIB-001"));
     assert!(post_create.contains("cargo install cargo-llvm-cov --locked"));
     assert!(post_create.contains("cargo install wasm-pack --locked"));
-    assert!(post_create.contains("npm --prefix app ci"));
-    assert!(post_create.contains("playwright install --with-deps chromium"));
     assert!(post_create.contains("scripts/install-precommit.sh"));
     assert!(post_create.contains("CONTRIBUTING.md#local-checks"));
-    assert!(post_create.contains("local app builds"));
+    assert!(post_create.contains("bash .devcontainer/setup-browser-tooling.sh"));
     assert!(post_create.contains("stay opt-in"));
+    assert!(browser_setup.contains("FEAT-CONTRIB-001"));
+    assert!(browser_setup.contains("npm --prefix app ci"));
+    assert!(browser_setup.contains("playwright install --with-deps chromium"));
+    assert!(browser_setup.contains("local app builds"));
 }
 
 #[test]
@@ -733,6 +736,7 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(contributing.contains("requirement/feature coverage summary"));
     assert!(contributing.contains("Linked issue or specification"));
     assert!(contributing.contains("app/dist"));
+    assert!(contributing.contains("bash .devcontainer/setup-browser-tooling.sh"));
     assert!(contributing.contains("npm run build:wasm"));
     assert!(contributing.contains("npm run check"));
     assert!(contributing.contains("npx --prefix app playwright install --with-deps chromium"));

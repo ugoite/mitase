@@ -21,14 +21,6 @@ install_wasm_tooling() {
   cargo install wasm-pack --locked
 }
 
-install_browser_tooling() {
-  log_step "Installing browser-app dependencies for local app builds, scripts/ci/check-browser-app-freshness.sh, and npm --prefix app run test:e2e."
-  npm --prefix app ci
-
-  log_step "Installing Playwright Chromium for npm --prefix app run test:e2e."
-  npx --prefix app playwright install --with-deps chromium
-}
-
 install_precommit_tooling() {
   log_step "Installing local hooks with scripts/install-precommit.sh."
   bash scripts/install-precommit.sh
@@ -43,8 +35,8 @@ main() {
   log_step "Setting up the contributor toolchain. See CONTRIBUTING.md#local-checks for what this bootstrap installs and which workflows still stay opt-in."
   install_coverage_tooling
   install_wasm_tooling
-  install_browser_tooling
   install_precommit_tooling
+  log_step "Browser-app npm installs and Playwright browsers stay opt-in. Run bash .devcontainer/setup-browser-tooling.sh when you need app builds or end-to-end coverage."
   log_step "Devcontainer setup complete."
 }
 
