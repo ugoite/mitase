@@ -71,7 +71,15 @@ match your change:
 3. **Browser app, WASM, or checked-in `app/dist` bundle** (`app/src`,
    `app/wasm`, browser build config, or generated browser assets)
 
-   Install the browser app dependencies first:
+   For the CI-aligned happy path, run:
+
+   ```bash
+   scripts/ci/validate-app.sh
+   ```
+
+   `scripts/ci/validate-app.sh` starts with the shared repository gates and then
+   runs the browser-specific checks below. Install the browser app dependencies
+   first when you need the raw follow-up steps only:
 
    ```bash
    npm --prefix app ci
@@ -92,17 +100,31 @@ match your change:
    also install the local browser once and run the end-to-end suite:
 
    ```bash
+   scripts/ci/validate-app.sh --e2e
+   ```
+
+   The wrapper expands to:
+
+   ```bash
    npx --prefix app playwright install --with-deps chromium
    npm --prefix app run test:e2e
    ```
 
-   `npm run test:e2e` uses `app/playwright.config.ts` to launch
-   `cargo run -- app .` automatically, so run it after the shared Rust gates
-   pass.
+   `scripts/ci/validate-app.sh --e2e` also installs Playwright Chromium and runs
+   `npm --prefix app run test:e2e`, which uses `app/playwright.config.ts` to
+   launch `cargo run -- app .` automatically.
 
 4. **Documentation site** (`website/`)
 
-   Install the docs-site dependencies first:
+   For the CI-aligned happy path, run:
+
+   ```bash
+   scripts/ci/validate-website.sh
+   ```
+
+   `scripts/ci/validate-website.sh` starts with the shared repository gates and
+   then runs the docs-site install/build sequence below. Install the docs-site
+   dependencies first when you need the raw follow-up steps only:
 
    ```bash
    npm --prefix website ci
@@ -120,8 +142,8 @@ match your change:
    npm --prefix website run build
    ```
 
-   `npm run build` regenerates the checked-in site docs first, matching
-   `.github/actions/build-docs-site`.
+   After the shared gates, `scripts/ci/validate-website.sh` runs the same
+   install and build sequence as `.github/actions/build-docs-site`.
 
 5. **Docs-only edits outside `website/`, `app/`, or Rust logic**
 
