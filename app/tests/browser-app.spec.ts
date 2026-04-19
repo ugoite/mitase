@@ -7,6 +7,7 @@ const usesFailingWorkspace =
   process.env.SYU_APP_E2E_WORKSPACE?.includes("tests/fixtures/workspaces/failing") ?? false;
 
 type AppDataPayload = {
+  workspace_root?: string;
   source_documents: Array<{
     section: "philosophy" | "policies" | "features" | "requirements";
     path: string;
@@ -175,6 +176,38 @@ test("renders top tabs and linked spec content", async ({ page }) => {
     page.getByRole("heading", { name: /FEAT-CHECK-001 .* Unified validation command/i }),
   ).toBeVisible();
   await expect(page).toHaveURL(/#features\/FEAT-CHECK-001$/);
+});
+
+test("scopes welcome-banner dismissal to the current workspace root", async ({ page }) => {
+  let appDataRequests = 0;
+
+  await page.route("**/api/app-data.json", async (route) => {
+    appDataRequests += 1;
+
+    const response = await route.fetch();
+    const payload = (await response.json()) as AppDataPayload;
+    const workspaceRoot =
+      appDataRequests >= 2
+        ? "/tmp/other-workspace"
+        : (payload.workspace_root ?? "/tmp/current-workspace");
+
+    await route.fulfill({
+      response,
+      body: JSON.stringify({
+        ...payload,
+        workspace_root: workspaceRoot,
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await expect(page.getByText("Welcome to syu.")).toBeVisible();
+
+  await page.getByRole("button", { name: "Dismiss welcome banner" }).click();
+  await expect(page.getByText("Welcome to syu.")).toHaveCount(0);
+
+  await page.reload();
+  await expect(page.getByText("Welcome to syu.")).toBeVisible();
 });
 
 test("loads deep links and supports keyboard search navigation", async ({ page }) => {
