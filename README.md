@@ -702,10 +702,12 @@ checked-in `docs/` tree directly, and the published site is available at
 `https://ugoite.github.io/syu/`.
 
 ```bash
-cd website
-npm install
-npm run start
+bash scripts/ci/install-docs-site-deps.sh
+npm --prefix website run start
 ```
+
+The install script removes `website/node_modules` first so repeated docs-site
+setup stays deterministic across branch switches and reused worktrees.
 
 The landing page links the core guides, the self-hosted specification reference,
 the latest checked-in validation report, and the published site is deployed
