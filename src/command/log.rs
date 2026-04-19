@@ -149,11 +149,16 @@ fn build_history_target(
             item.title.clone(),
             tracked_paths_for_feature(item, kind, &definition_path)?,
         ),
-        WorkspaceEntity::Philosophy(_) | WorkspaceEntity::Policy(_) => {
-            bail!(
-                "`syu log` currently supports requirement and feature IDs only; `{id}` belongs to a non-trace layer."
-            );
-        }
+        WorkspaceEntity::Philosophy(item) => (
+            "philosophy",
+            item.title.clone(),
+            tracked_paths_for_non_trace_layer(&item.id, "philosophy", kind, &definition_path)?,
+        ),
+        WorkspaceEntity::Policy(item) => (
+            "policy",
+            item.title.clone(),
+            tracked_paths_for_non_trace_layer(&item.id, "policy", kind, &definition_path)?,
+        ),
     };
 
     let mut tracked_paths = traces;
@@ -286,6 +291,25 @@ fn tracked_paths_for_feature(
         HistoryKind::Implementation => {
             Ok(collect_trace_paths("implementation", &item.implementations))
         }
+    }
+}
+
+fn tracked_paths_for_non_trace_layer(
+    id: &str,
+    layer_label: &str,
+    kind: HistoryKind,
+    definition_path: &str,
+) -> Result<Vec<TrackedPath>> {
+    match kind {
+        HistoryKind::All | HistoryKind::Definition => {
+            Ok(vec![TrackedPath::definition(definition_path)])
+        }
+        HistoryKind::Test => bail!(
+            "`{id}` is a {layer_label}, so `--kind test` is not available. Use `--kind definition` or omit the flag."
+        ),
+        HistoryKind::Implementation => bail!(
+            "`{id}` is a {layer_label}, so `--kind implementation` is not available. Use `--kind definition` or omit the flag."
+        ),
     }
 }
 

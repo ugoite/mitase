@@ -320,7 +320,9 @@ impl HistoryKind {
 
 #[derive(Debug, Clone, Args)]
 pub struct LogArgs {
-    #[arg(help = "Requirement or feature ID whose traced history should be inspected")]
+    #[arg(
+        help = "Philosophy, policy, requirement, or feature ID whose traced history should be inspected"
+    )]
     pub id: String,
 
     #[arg(help = WORKSPACE_HELP)]
