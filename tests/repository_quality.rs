@@ -217,6 +217,8 @@ fn repository_declares_release_automation() {
     assert!(release_artifacts.contains("install-syu.sh"));
     assert!(release_artifacts.contains("release-notes:"));
     assert!(release_artifacts.contains("release-track-notes.sh"));
+    assert!(release_artifacts.contains("scripts/ci/pinned-npm.sh install app"));
+    assert!(release_artifacts.contains("npm --prefix app ci"));
     assert!(release_artifacts.contains("attestations: write"));
     assert!(release_artifacts.contains("id-token: write"));
     assert!(release_artifacts.contains("actions/attest-build-provenance@v4"));
@@ -863,6 +865,7 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(ci_workflow.contains("tool: cargo-llvm-cov"));
     assert!(ci_workflow.contains("tool: cargo-audit"));
     assert!(ci_workflow.contains("tool: wasm-pack"));
+    assert!(release_artifacts.contains("libc6-dev-arm64-cross"));
     assert!(ci_workflow.contains("merge_group:"));
     assert!(ci_workflow.contains("check-msrv:"));
     assert!(ci_workflow.contains("Set up Python with pip cache"));
