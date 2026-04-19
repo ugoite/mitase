@@ -56,7 +56,7 @@ coverage behavior.
 ## Minimal configuration
 
 ```yaml
-version: 0.0.1-alpha.7
+version: 0.0.1-alpha.8
 spec:
   root: docs/syu
 validate:
