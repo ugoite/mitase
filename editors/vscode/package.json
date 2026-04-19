@@ -20,6 +20,7 @@
   "activationEvents": [
     "workspaceContains:syu.yaml",
     "workspaceContains:docs/syu/features/features.yaml",
+    "workspaceContains:features/features.yaml",
     "onCommand:syu.refreshDiagnostics",
     "onCommand:syu.showTraceForActiveFile",
     "onCommand:syu.openSpecItemById",
