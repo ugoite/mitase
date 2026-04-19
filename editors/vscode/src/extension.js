@@ -6,6 +6,7 @@ const path = require('node:path');
 const vscode = require('vscode');
 
 const {
+  collectInlineNavigationTargets,
   loadDiagnostics,
   loadSpecModel,
   lookupTrace,
@@ -309,6 +310,75 @@ function activeSymbol(editor) {
   return null;
 }
 
+function codeLensRange(target) {
+  return new vscode.Range(
+    target.line,
+    target.startCharacter,
+    target.line,
+    target.endCharacter
+  );
+}
+
+function createCodeLens(range, command, title, argumentsList) {
+  return new vscode.CodeLens(range, {
+    command,
+    title,
+    arguments: argumentsList
+  });
+}
+
+function createInlineNavigationProvider(modelCache, treeProvider) {
+  return {
+    async provideCodeLenses(document) {
+      const folder = vscode.workspace.getWorkspaceFolder(document.uri);
+      if (!folder || !(await isSyuWorkspace(folder))) {
+        return [];
+      }
+
+      const model = await ensureModel(folder, modelCache);
+      const lenses = [];
+
+      for (const target of collectInlineNavigationTargets(document.getText())) {
+        const range = codeLensRange(target);
+        if (target.kind === 'specId') {
+          if (!model.byId.has(target.id)) {
+            continue;
+          }
+
+          lenses.push(
+            createCodeLens(range, 'syu.openSpecItemById', 'syu: Open spec item', [target.id]),
+            createCodeLens(range, 'syu.showRelatedFilesForSpecId', 'syu: Show related files', [
+              target.id
+            ])
+          );
+          continue;
+        }
+
+        const traceTarget = {
+          path: path.join(model.workspaceRoot, target.file.split('/').join(path.sep)),
+          symbol: target.kind === 'traceSymbol' ? target.symbol : null
+        };
+
+        if (target.kind === 'traceFile') {
+          lenses.push(
+            createCodeLens(range, 'syu.openResolvedTarget', 'syu: Open traced file', [
+              { path: traceTarget.path, searchText: null }
+            ]),
+            createCodeLens(range, 'syu.showTraceForActiveFile', 'syu: Trace file', [traceTarget])
+          );
+          continue;
+        }
+
+        lenses.push(
+          createCodeLens(range, 'syu.showTraceForActiveFile', 'syu: Trace symbol', [traceTarget])
+        );
+      }
+
+      return lenses;
+    }
+  };
+}
+
 async function pickSpecItem(model, preferredId) {
   if (preferredId && model.byId.has(preferredId)) {
     return model.byId.get(preferredId);
@@ -388,8 +458,16 @@ function registerCommands(context, modelCache, treeProvider, collection) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('syu.showTraceForActiveFile', async () => {
-      const editor = vscode.window.activeTextEditor;
+    vscode.commands.registerCommand('syu.showTraceForActiveFile', async (traceTarget) => {
+      let editor = vscode.window.activeTextEditor;
+      if (traceTarget?.path) {
+        await openResolvedTarget({
+          path: traceTarget.path,
+          searchText: traceTarget.symbol || null
+        });
+        editor = vscode.window.activeTextEditor;
+      }
+
       if (!editor) {
         await vscode.window.showInformationMessage('Open a file before tracing it with syu.');
         return;
@@ -402,14 +480,14 @@ function registerCommands(context, modelCache, treeProvider, collection) {
       }
 
       const model = await ensureModel(folder, modelCache);
-      const symbol = activeSymbol(editor);
+      const symbol = traceTarget?.symbol || activeSymbol(editor);
       const traceContext = lookupTrace(model, editor.document.uri.fsPath, symbol);
       treeProvider.setTraceContext(model.workspaceRoot, traceContext);
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('syu.openSpecItemById', async () => {
+    vscode.commands.registerCommand('syu.openSpecItemById', async (preferredId) => {
       const folder =
         vscode.window.activeTextEditor &&
         vscode.workspace.getWorkspaceFolder(vscode.window.activeTextEditor.document.uri);
@@ -424,7 +502,10 @@ function registerCommands(context, modelCache, treeProvider, collection) {
       }
 
       const model = await ensureModel(workspaceFolder, modelCache);
-      const item = await pickSpecItem(model, activeSpecId(vscode.window.activeTextEditor));
+      const item = await pickSpecItem(
+        model,
+        preferredId || activeSpecId(vscode.window.activeTextEditor)
+      );
       if (!item) {
         return;
       }
@@ -437,7 +518,7 @@ function registerCommands(context, modelCache, treeProvider, collection) {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('syu.showRelatedFilesForSpecId', async () => {
+    vscode.commands.registerCommand('syu.showRelatedFilesForSpecId', async (preferredId) => {
       const folder =
         vscode.window.activeTextEditor &&
         vscode.workspace.getWorkspaceFolder(vscode.window.activeTextEditor.document.uri);
@@ -452,7 +533,10 @@ function registerCommands(context, modelCache, treeProvider, collection) {
       }
 
       const model = await ensureModel(workspaceFolder, modelCache);
-      const item = await pickSpecItem(model, activeSpecId(vscode.window.activeTextEditor));
+      const item = await pickSpecItem(
+        model,
+        preferredId || activeSpecId(vscode.window.activeTextEditor)
+      );
       if (!item) {
         return;
       }
@@ -477,11 +561,16 @@ function activate(context) {
   const modelCache = new Map();
   const diagnostics = vscode.languages.createDiagnosticCollection('syu');
   const treeProvider = new SyuContextTreeProvider();
+  const inlineNavigationProvider = createInlineNavigationProvider(modelCache, treeProvider);
   const treeView = vscode.window.createTreeView('syuContext', {
     treeDataProvider: treeProvider
   });
 
-  context.subscriptions.push(diagnostics, treeView);
+  context.subscriptions.push(
+    diagnostics,
+    treeView,
+    vscode.languages.registerCodeLensProvider({ language: 'yaml', scheme: 'file' }, inlineNavigationProvider)
+  );
 
   registerCommands(context, modelCache, treeProvider, diagnostics);
 
