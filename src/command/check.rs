@@ -855,7 +855,7 @@ fn render_text_report(
         .expect("writing to String must succeed");
     }
 
-    if let Some(filtered_view) = filtered_view {
+    if !quiet_success && let Some(filtered_view) = filtered_view {
         writeln!(&mut output, "filters: {}", filtered_view.describe_filters())
             .expect("writing to String must succeed");
         writeln!(
@@ -874,7 +874,8 @@ fn render_text_report(
                 writeln!(&mut output, "{line}").expect("writing to String must succeed");
             }
         }
-    } else if let Some(filtered_view) = filtered_view
+    } else if !quiet_success
+        && let Some(filtered_view) = filtered_view
         && filtered_view.total_issue_count > 0
     {
         writeln!(&mut output).expect("writing to String must succeed");
@@ -3010,6 +3011,37 @@ mod tests {
         assert!(report.contains("filters: severity=warning"));
         assert!(report.contains("showing 0 of 2 issues after filtering"));
         assert!(report.contains("no issues matched the active filters."));
+    }
+
+    #[test]
+    fn render_text_report_quiet_success_suppresses_filtered_footer() {
+        let result = crate::model::CheckResult {
+            workspace_root: PathBuf::from("."),
+            definition_counts: Default::default(),
+            trace_summary: Default::default(),
+            referenced_rules: Vec::new(),
+            issues: Vec::new(),
+        };
+        let filtered_view = FilteredIssueView {
+            severities: vec!["warning".to_string()],
+            genres: Vec::new(),
+            rules: Vec::new(),
+            ids: Vec::new(),
+            displayed_issue_count: 0,
+            total_issue_count: 2,
+            hidden_issue_count: 2,
+        };
+
+        let report = render_text_report(
+            true,
+            &result,
+            Path::new("."),
+            Some(&filtered_view),
+            None,
+            true,
+        );
+
+        assert_eq!(report.trim(), "syu validate passed (filtered view)");
     }
 
     #[test]
