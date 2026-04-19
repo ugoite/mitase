@@ -76,7 +76,7 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
         - **symbols**:
           - actions/setup-node@v6
           - cache-dependency-path: website/package-lock.json
-          - npm ci
+          - install-docs-site-deps.sh
       - **file**: .github/workflows/codeql.yml
         - **symbols**:
           - merge_group
@@ -156,7 +156,7 @@ features:
           symbols:
             - actions/setup-node@v6
             - "cache-dependency-path: website/package-lock.json"
-            - npm ci
+            - install-docs-site-deps.sh
         - file: .github/workflows/codeql.yml
           symbols:
             - merge_group

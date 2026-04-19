@@ -578,7 +578,7 @@ fn repository_declares_documentation_guides() {
     assert!(docs_build_action.contains("FEAT-DOCS-002"));
     assert!(docs_build_action.contains("actions/setup-node@v6"));
     assert!(docs_build_action.contains("cache-dependency-path: website/package-lock.json"));
-    assert!(docs_build_action.contains("npm ci"));
+    assert!(docs_build_action.contains("install-docs-site-deps.sh"));
     assert!(docs_build_action.contains("npm run build"));
     assert!(docs_package.contains("@docusaurus/core"));
     assert!(docs_lock.contains("\"name\": \"syu-docs\""));
@@ -742,6 +742,7 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(contributing.contains("npx --prefix app playwright install --with-deps chromium"));
     assert!(contributing.contains("npm --prefix app run test:e2e"));
     assert!(contributing.contains("app/playwright.config.ts"));
+    assert!(contributing.contains("install-docs-site-deps.sh"));
     assert!(contributing.contains("npm --prefix website ci"));
     assert!(contributing.contains("npm --prefix website run start"));
     assert!(contributing.contains("npm --prefix website run build"));
@@ -830,7 +831,7 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(ci_workflow.contains("./.github/actions/build-docs-site"));
     assert!(docs_build_action.contains("actions/setup-node@v6"));
     assert!(docs_build_action.contains("cache-dependency-path: website/package-lock.json"));
-    assert!(docs_build_action.contains("npm ci"));
+    assert!(docs_build_action.contains("install-docs-site-deps.sh"));
     assert!(docs_build_action.contains("npm run build"));
     assert!(docs_lock.contains("\"lockfileVersion\":"));
     assert!(codeql_workflow.contains("FEAT-QUALITY-001"));

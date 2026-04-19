@@ -136,6 +136,14 @@ match your change:
    dependencies first when you need the raw follow-up steps only:
 
    ```bash
+   bash scripts/ci/install-docs-site-deps.sh
+   ```
+
+   The script removes `website/node_modules` before reinstalling so repeated
+   runs stay deterministic across branch switches and reused worktrees. The raw
+   install step remains:
+
+   ```bash
    npm --prefix website ci
    ```
 
@@ -227,7 +235,8 @@ it provisions. That script:
 
 Read the script output or this section when you want to map setup time to the
 checks it unlocks. It does **not** install `website/` docs-site dependencies,
-so run `npm --prefix website ci` yourself when you are working on the docs site.
+so run `bash scripts/ci/install-docs-site-deps.sh` yourself when you are working
+on the docs site.
 
 ## Dependency security
 
