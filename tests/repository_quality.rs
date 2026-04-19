@@ -346,6 +346,8 @@ fn repository_declares_documentation_guides() {
     let generated_config_spec = read_file("docs/generated/site-spec/config/spec.md");
     let generated_config_validate = read_file("docs/generated/site-spec/config/validate.md");
     let generated_config_runtimes = read_file("docs/generated/site-spec/config/runtimes.md");
+    let generated_contributor =
+        read_file("docs/generated/site-spec/features/repository/contributor.md");
     let generated_site_index = read_file("docs/generated/site-spec/index.md");
     let generated_validation =
         read_file("docs/generated/site-spec/features/validation/validation.md");
@@ -568,6 +570,7 @@ fn repository_declares_documentation_guides() {
     );
     assert!(generated_config_validate.contains("array&lt;path&gt;"));
     assert!(generated_config_runtimes.contains("docs/syu/config/runtimes.yaml"));
+    assert!(generated_contributor.contains("Closes #123"));
     assert!(generated_site_index.contains("features/cli/show-list"));
     assert!(generated_site_index.contains("features/validation"));
     assert!(generated_validation.contains("docs/syu/features/validation/validation.yaml"));
@@ -722,6 +725,7 @@ fn repository_declares_contribution_workflow_assets() {
     let squash_title_script = read_file("scripts/ci/check-squash-title-spec-ids.sh");
     let pr_link_script = read_file("scripts/ci/check-pr-spec-links.sh");
     let gitignore = read_file(".gitignore");
+    let shared_merge_queue_guidance = "Use a GitHub closing keyword (`Closes #123`, `Fixes #123`, or `Resolves #123`) when this PR implements an issue so the issue closes automatically after the merge queue lands the change on `main`.";
 
     assert!(contributing.contains("FEAT-CONTRIB-002"));
     assert!(contributing.contains("GitHub Flow"));
@@ -743,6 +747,9 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(contributing.contains("GitHub uses the PR title as the squash commit headline"));
     assert!(contributing.contains("requirement/feature coverage summary"));
     assert!(contributing.contains("Linked issue or specification"));
+    assert!(contributing.contains("Closes #123"));
+    assert!(contributing.contains("merge queue lands the change on `main`"));
+    assert!(contributing.contains(shared_merge_queue_guidance));
     assert!(contributing.contains("app/dist"));
     assert!(contributing.contains("bash .devcontainer/setup-browser-tooling.sh"));
     assert!(contributing.contains("npm run build:wasm"));
@@ -773,6 +780,9 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(pr_template.contains("requirement or feature IDs"));
     assert!(pr_template.contains("include the same IDs in the PR title"));
     assert!(pr_template.contains("preserves them in `git log`"));
+    assert!(pr_template.contains("Closes #123"));
+    assert!(pr_template.contains("automatically after the merge queue lands the change on `main`"));
+    assert!(pr_template.contains(shared_merge_queue_guidance));
 
     assert!(squash_title_script.contains("FEAT-CONTRIB-002"));
     assert!(squash_title_script.contains("GitHub squash merges use the PR title"));
