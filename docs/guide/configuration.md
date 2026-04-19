@@ -153,10 +153,11 @@ coverage still skips configured repository-relative generated paths such as
 `build/`, `coverage/`, `dist/`, and `target/` so authored files nested under
 `src/` or `tests/` keep counting.
 For an experimental strict run, use `syu validate . --require-symbol-trace-coverage`.
-If part of the repository still depends on an unsupported language, keep strict
-coverage off there and borrow the workaround shape from the
+If part of the repository still depends on a language without a built-in
+adapter, keep strict coverage off there and borrow the starter shape from the
 [`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
-until a dedicated adapter lands.
+or `syu init . --template go-only` as a reminder that Go currently supports
+symbol checks and coverage ownership, but not `doc_contains`.
 
 ### `app.bind`
 

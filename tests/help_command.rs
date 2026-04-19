@@ -204,6 +204,7 @@ fn init_help_lists_starter_templates() {
     assert!(stdout.contains("--template"));
     assert!(stdout.contains("rust-only"));
     assert!(stdout.contains("python-only"));
+    assert!(stdout.contains("go-only"));
     assert!(stdout.contains("polyglot"));
 }
 

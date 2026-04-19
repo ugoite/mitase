@@ -52,11 +52,12 @@ into the starter IDs immediately:
 syu init . --id-prefix store
 ```
 
-For a repository that is already clearly Rust-first, Python-first, or
+For a repository that is already clearly Rust-first, Python-first, Go-first, or
 polyglot, you can start from a closer scaffold instead:
 
 ```bash
 syu init . --template rust-only
+syu init . --template go-only
 ```
 
 You can combine both flags, but the walkthrough below assumes the default

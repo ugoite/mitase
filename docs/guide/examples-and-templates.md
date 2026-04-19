@@ -27,7 +27,7 @@ whether you should scaffold a template or open one of the repository examples.
 | --- | --- | --- | --- |
 | `docs-first` | Example only | documentation-heavy repositories that want a small reference for shell, markdown, and wildcard YAML traces | `examples/docs-first` |
 | `generic` | Template only | the shortest neutral scaffold when you do not want language-specific starter copy yet | `syu init .` |
-| `go-only` | Example only | Go-first repositories that want a checked-in reference for the built-in Go adapter, including real `.go` source and test traces | `examples/go-only` |
+| `go-only` | Template + example | Go-first repositories that want starter IDs, file names, a minimal `go.mod`, and small Go source/test files from the first scaffold | `syu init . --template go-only` or `examples/go-only` |
 | `rust-only` | Template + example | Rust-first repositories that want starter IDs, file names, and copy tuned for Rust work | `syu init . --template rust-only` or `examples/rust-only` |
 | `python-only` | Template + example | Python-first repositories that want the same tuned starter shape for Python workflows | `syu init . --template python-only` or `examples/python-only` |
 | `polyglot` | Template + example | repositories that already expect multiple languages and want the starter text to say that from the first commit | `syu init . --template polyglot` or `examples/polyglot` |
@@ -63,7 +63,7 @@ scaffold wholesale.
 
 1. **Fastest path into your own repository**: run `syu init .`, then switch to a
    language-specific template only if the generic starter feels too abstract.
-2. **I already know the repo is Rust-first / Python-first / polyglot**: start
+2. **I already know the repo is Rust-first / Python-first / Go-first / polyglot**: start
    with the matching template, then compare against the matching example when
    you want a fuller repository story.
 3. **I am Go-first and want to inspect native Go tracing before I scaffold

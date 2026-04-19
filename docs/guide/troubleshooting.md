@@ -299,8 +299,8 @@ removing `doc_contains` is not enough: those entries still raise
 adapter support before adding the code-level trace.
 The
 [`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
-shows one concrete version of that workaround with real source files plus
-markdown-backed trace anchors.
+and `syu init . --template go-only` show one concrete Go-first starting point
+with real source files plus symbol-level trace mappings.
 
 The [trace adapter capability matrix](./trace-adapter-support.md) shows which
 built-in adapters stop at symbol validation, which ones can inspect docs, and

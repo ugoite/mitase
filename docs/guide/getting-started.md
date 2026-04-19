@@ -150,11 +150,12 @@ syu init . --id-prefix store
 ```
 
 Need a closer starting point for a repository that is already Rust-first,
-Python-first, or polyglot?
+Python-first, Go-first, or polyglot?
 
 ```bash
 syu templates
 syu init . --template rust-only
+syu init . --template go-only
 ```
 
 Run `syu templates` first if you want the starter names, one-line descriptions,
@@ -246,11 +247,10 @@ What you should avoid for unsupported-language files today is adding
 language-specific `tests:` or `implementations:` entries such as `csharp:`.
 Those keys still fail validation before `doc_contains` support even becomes
 relevant. If you need code-level tracing immediately with `doc_contains`, stay
-with Rust, Python, or TypeScript/JavaScript for now; otherwise, keep the spec
-layers connected and add the source mappings once adapter support lands. The
-[`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
-shows one checked-in version of that workaround with real Go files plus
-markdown-backed trace anchors.
+with Rust, Python, or TypeScript/JavaScript for now. For Go-first repositories,
+use [`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
+or `syu init . --template go-only`: both use real Go files plus symbol-level
+trace mappings that validate today.
 
 Keep this adoption path in mind for mixed-language repositories too: start with
 declared traces, keep `validate.require_symbol_trace_coverage: false`, then turn
@@ -307,10 +307,10 @@ Direct YAML editing is still supported. The default scaffolded files are:
 - `<spec.root>/policies/policies.yaml`
 - `<spec.root>/requirements/core/core.yaml` (template starters may use
   `requirements/core/rust.yaml`, `requirements/core/python.yaml`, or
-  `requirements/core/polyglot.yaml`)
+  `requirements/core/go.yaml`, or `requirements/core/polyglot.yaml`)
 - `<spec.root>/features/core/core.yaml` (template starters may use
-  `features/languages/rust.yaml`, `features/languages/python.yaml`, or
-  `features/languages/polyglot.yaml`)
+  `features/languages/rust.yaml`, `features/languages/python.yaml`,
+  `features/languages/go.yaml`, or `features/languages/polyglot.yaml`)
 
 As the workspace grows, you can group requirement and feature files into nested
 folders. `syu add` chooses a default folder from the ID or feature `--kind`,
@@ -490,9 +490,11 @@ If one of those examples is already close to your repository, use the matching
 shape. `syu templates` prints the same mapping directly in the CLI, including
 which starter is template-only (`generic`) versus backed by a checked-in
 example.
-Use `examples/go-only` when your repository is Go-first today: it keeps the
-real `.go` files in the example, but validates the trace anchors from
-`README.md` until `syu` ships stricter Go ownership inventory.
+Use `syu init . --template go-only` when your repository is Go-first today: it
+scaffolds the same minimal spec plus `go.mod`, `go/app.go`, and
+`go/app_test.go`, while the checked-in example shows the same shape in a
+repository you can inspect
+before generating files locally.
 
 For a side-by-side decision table that explains which paths are template-backed,
 example-backed, or both, see the

@@ -395,6 +395,7 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("syu add"));
     assert!(readme.contains("--id-prefix"));
     assert!(readme.contains("--template rust-only"));
+    assert!(readme.contains("--template go-only"));
     assert!(readme.contains("syu templates"));
     assert!(readme.contains("starter-only"));
     assert!(readme.contains("syu validate"));
@@ -476,6 +477,7 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("current checked-in release"));
     assert!(getting_started.contains("latest published alpha"));
     assert!(getting_started.contains("--template rust-only"));
+    assert!(getting_started.contains("--template go-only"));
     assert!(getting_started.contains("syu templates"));
     assert!(getting_started.contains("--id-prefix"));
     assert!(getting_started.contains("syu validate . --fix"));
@@ -535,6 +537,7 @@ fn repository_declares_documentation_guides() {
     assert!(examples_and_templates.contains("checked-in examples"));
     assert!(examples_and_templates.contains("examples/docs-first"));
     assert!(examples_and_templates.contains("`syu init . --template rust-only`"));
+    assert!(examples_and_templates.contains("`syu init . --template go-only`"));
     assert!(examples_and_templates.contains("examples/go-only"));
     assert!(examples_and_templates.contains("examples/polyglot"));
     assert!(examples_and_templates.contains("examples/team-scale"));
