@@ -13,6 +13,7 @@ const candidates = [
   path.join(cargoHome, "bin", "wasm-pack"),
 ].filter(Boolean);
 const repoCargoBin = path.join(repoCargoHome, "bin");
+const usesSharedTargetDir = Boolean(process.env.CARGO_TARGET_DIR);
 
 for (const candidate of candidates) {
   const looksLikePath = candidate.includes(path.sep);
@@ -48,7 +49,7 @@ for (const candidate of candidates) {
   );
 
   if (!result.error) {
-    if ((result.status ?? 0) === 0) {
+    if ((result.status ?? 0) === 0 && !usesSharedTargetDir) {
       rmSync(path.join(process.cwd(), "wasm", "target"), {
         force: true,
         recursive: true,

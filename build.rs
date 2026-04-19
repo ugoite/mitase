@@ -31,7 +31,7 @@ fn main() {
 
     if let Err(error) = required_npm_version(&app_dir).and_then(|required_npm| {
         ensure_app_dependencies(&app_dir, &required_npm)
-            .and_then(|_| rebuild_browser_wasm_bindings(&app_dir, &required_npm))
+            .and_then(|_| rebuild_browser_wasm_bindings(&manifest_dir, &app_dir, &required_npm))
             .and_then(|_| build_browser_bundle(&app_dir, &out_dir, &required_npm))
     }) {
         panic!("{error}");
@@ -172,6 +172,7 @@ fn run_npm(
     required_npm: &str,
     args: &[String],
     action: &str,
+    extra_env: &[(&str, String)],
 ) -> Result<(), String> {
     let mut command;
     let command_display;
@@ -195,6 +196,7 @@ fn run_npm(
 
     let status = command
         .current_dir(app_dir)
+        .envs(extra_env.iter().map(|(key, value)| (*key, value)))
         .status()
         .map_err(|error| format!("failed to {action}: {error}"))?;
 
@@ -225,17 +227,26 @@ fn remove_dir_if_exists(path: &Path, description: &str) -> Result<(), String> {
     fs::remove_dir_all(path).map_err(|error| format!("failed to clear {description}: {error}"))
 }
 
-fn rebuild_browser_wasm_bindings(app_dir: &Path, required_npm: &str) -> Result<(), String> {
+fn rebuild_browser_wasm_bindings(
+    manifest_dir: &Path,
+    app_dir: &Path,
+    required_npm: &str,
+) -> Result<(), String> {
     remove_dir_if_exists(
         &app_dir.join("src").join("wasm"),
         "generated browser app Wasm bindings",
     )?;
+
+    let wasm_target_dir = default_wasm_target_dir(manifest_dir)
+        .to_string_lossy()
+        .into_owned();
 
     run_npm(
         app_dir,
         required_npm,
         &[String::from("run"), String::from("build:wasm")],
         "generate the browser app Wasm bridge",
+        &[("CARGO_TARGET_DIR", wasm_target_dir)],
     )
 }
 
@@ -256,6 +267,7 @@ fn build_browser_bundle(app_dir: &Path, out_dir: &Path, required_npm: &str) -> R
             out_dir_arg,
         ],
         "build the embedded browser app bundle",
+        &[],
     )?;
 
     let index = out_dir.join("index.html");
@@ -267,4 +279,103 @@ fn build_browser_bundle(app_dir: &Path, out_dir: &Path, required_npm: &str) -> R
         "embedded browser app build succeeded but `{}` was not produced",
         index.display()
     ))
+}
+
+fn default_wasm_target_dir(manifest_dir: &Path) -> PathBuf {
+    default_wasm_target_dir_from_common_dir(
+        manifest_dir,
+        git_common_dir(manifest_dir).as_deref(),
+        env::var_os("CARGO_TARGET_DIR")
+            .map(PathBuf::from)
+            .as_deref(),
+    )
+}
+
+fn default_wasm_target_dir_from_common_dir(
+    manifest_dir: &Path,
+    git_common_dir: Option<&Path>,
+    configured_target_dir: Option<&Path>,
+) -> PathBuf {
+    if let Some(configured_target_dir) = configured_target_dir {
+        return if configured_target_dir.is_absolute() {
+            configured_target_dir.to_path_buf()
+        } else {
+            manifest_dir.join(configured_target_dir)
+        };
+    }
+
+    if let Some(repo_root) = git_common_dir.and_then(Path::parent) {
+        return repo_root.join("target").join("app-wasm");
+    }
+
+    manifest_dir.join("target").join("app-wasm")
+}
+
+fn git_common_dir(manifest_dir: &Path) -> Option<PathBuf> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--git-common-dir"])
+        .current_dir(manifest_dir)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let raw = String::from_utf8(output.stdout).ok()?;
+    let path = PathBuf::from(raw.trim());
+    Some(if path.is_absolute() {
+        path
+    } else {
+        manifest_dir.join(path)
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::default_wasm_target_dir_from_common_dir;
+    use std::path::Path;
+
+    #[test]
+    fn default_wasm_target_dir_uses_configured_target_dir_first() {
+        assert_eq!(
+            default_wasm_target_dir_from_common_dir(
+                Path::new("/repo/.worktrees/impl"),
+                Some(Path::new("/repo/.git")),
+                Some(Path::new("/shared/target"))
+            ),
+            Path::new("/shared/target")
+        );
+    }
+
+    #[test]
+    fn default_wasm_target_dir_resolves_relative_configured_target_dir_from_manifest_dir() {
+        assert_eq!(
+            default_wasm_target_dir_from_common_dir(
+                Path::new("/repo/.worktrees/impl"),
+                Some(Path::new("/repo/.git")),
+                Some(Path::new("target"))
+            ),
+            Path::new("/repo/.worktrees/impl/target")
+        );
+    }
+
+    #[test]
+    fn default_wasm_target_dir_uses_git_common_dir_parent_when_available() {
+        assert_eq!(
+            default_wasm_target_dir_from_common_dir(
+                Path::new("/repo/.worktrees/impl"),
+                Some(Path::new("/repo/.git")),
+                None
+            ),
+            Path::new("/repo/target/app-wasm")
+        );
+    }
+
+    #[test]
+    fn default_wasm_target_dir_falls_back_to_manifest_target() {
+        assert_eq!(
+            default_wasm_target_dir_from_common_dir(Path::new("/repo/.worktrees/impl"), None, None),
+            Path::new("/repo/.worktrees/impl/target/app-wasm")
+        );
+    }
 }
