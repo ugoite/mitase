@@ -248,13 +248,56 @@ test("loads deep links and supports keyboard search navigation", async ({ page }
   await expect(shortcutPanel).toContainText("Escape");
   await expect(
     page.getByText(
-      "Search shows up to 20 matches at a time, so refine broad queries for a narrower result list.",
+      "Search shows up to 20 matches at a time. Filter by layer or refine broad queries for a narrower result list.",
     ),
   ).toBeVisible();
+  const filterGroup = page.getByRole("group", { name: "Search layer filters" });
+  await expect(filterGroup.getByRole("button", { name: "All" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(filterGroup.getByRole("button", { name: "Requirements" })).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
   await searchInput.fill("REQ-CORE-001");
   await expect(
     page.getByText("Showing the first 20 matches — refine your query for fewer results."),
   ).toHaveCount(0);
+  await searchInput.press("Escape");
+  await expect(searchInput).toHaveValue("");
+  await searchInput.fill("syu");
+  await filterGroup.getByRole("button", { name: "Requirements" }).click();
+  await expect(filterGroup.getByRole("button", { name: "Requirements" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(filterGroup.getByRole("button", { name: "All" })).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
+  const requirementResults = page.locator('[role="option"]');
+  await expect(requirementResults.first()).toBeVisible();
+  await expect(
+    page.locator('[role="option"] span').filter({ hasText: "requirements" }).first(),
+  ).toBeVisible();
+  await searchInput.press("Escape");
+  await expect(searchInput).toHaveValue("");
+  await expect(filterGroup.getByRole("button", { name: "All" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(filterGroup.getByRole("button", { name: "Requirements" })).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
+  await expect(page.getByRole("listbox", { name: "Search results" })).toHaveCount(0);
+  await searchInput.fill("syu");
+  await filterGroup.getByRole("button", { name: "All" }).click();
+  await expect(filterGroup.getByRole("button", { name: "All" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
   await searchInput.press("Escape");
   await expect(searchInput).toHaveValue("");
   await searchInput.fill("spec");
