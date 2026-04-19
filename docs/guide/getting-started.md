@@ -207,9 +207,9 @@ TypeScript/JavaScript, plus lighter file/symbol ownership in `shell`, `yaml`,
 unsupported implementation language can still adopt `syu` today, but they
 should treat code-level mappings for those files as future work.
 
-Go and Java already have built-in pattern-based symbol validation and
-participate in strict `validate.require_symbol_trace_coverage` inventory, even
-though they do not support `doc_contains` checks yet. The
+Go and Java already have built-in symbol validation and participate in strict
+`validate.require_symbol_trace_coverage` inventory. Go now supports
+`doc_contains` checks as well, while Java still stops at symbol validation. The
 [trace adapter capability matrix](./trace-adapter-support.md) summarizes that
 language-by-language support.
 
@@ -248,13 +248,13 @@ What you should avoid for unsupported-language files today is adding
 language-specific `tests:` or `implementations:` entries such as `csharp:`.
 Those keys still fail validation before `doc_contains` support even becomes
 relevant. If you need code-level tracing immediately with `doc_contains`, stay
-with Rust, Python, or TypeScript/JavaScript for now. For unsupported-language
-repositories, use the
-[`examples/csharp-fallback` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/csharp-fallback)
-to study the fallback pattern. For Go-first repositories, use
-[`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
-or `syu init . --template go-only`: those use real Go files plus symbol-level
+with Rust, Python, Go, or TypeScript/JavaScript for now. For Go-first repositories,
+use [`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
+or `syu init . --template go-only`: both use real Go files plus symbol-level
 trace mappings that validate today.
+For unsupported-language repositories, use the
+[`examples/csharp-fallback` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/csharp-fallback)
+to study the fallback pattern.
 
 Keep this adoption path in mind for mixed-language repositories too: start with
 declared traces, keep `validate.require_symbol_trace_coverage: false`, then turn
@@ -373,8 +373,8 @@ If checked-in YAML plus the symbol name already gives you enough traceability,
 you can omit `doc_contains` entirely and keep source files free of spec-ID
 bookkeeping.
 
-That richer `doc_contains` inspection is currently limited to Rust, Python, and
-TypeScript / JavaScript traces. The same built-in matrix also tells you which
+That richer `doc_contains` inspection is currently available for Rust, Python,
+Go, and TypeScript / JavaScript traces. The same built-in matrix also tells you which
 languages participate in strict `validate.require_symbol_trace_coverage`
 inventory and which ones stop at symbol-existence checks: see the [trace
 adapter capability matrix](./trace-adapter-support.md).
