@@ -5,6 +5,55 @@
 Use this guide when pull requests look stuck in the merge queue even though the
 branch itself looks clean.
 
+## Know the difference between auto-merge and an actual queue entry
+
+These two states look close in the GitHub UI but mean different things:
+
+- **auto-merge enabled**: GitHub is willing to queue the PR once every
+  prerequisite is satisfied
+- **in the merge queue**: GitHub has already created a queue entry and will run
+  the required `merge_group` checks for that entry
+
+Check both before you assume the queue is doing work:
+
+```bash
+gh api graphql -f query='
+query($owner:String!,$repo:String!,$num:Int!) {
+  repository(owner:$owner,name:$repo) {
+    pullRequest(number:$num) {
+      state
+      reviewDecision
+      mergeStateStatus
+      autoMergeRequest {
+        enabledAt
+      }
+      isInMergeQueue
+      mergeQueueEntry {
+        position
+        state
+        estimatedTimeToMerge
+      }
+      commits(last:1) {
+        nodes {
+          commit {
+            statusCheckRollup {
+              state
+            }
+          }
+        }
+      }
+    }
+  }
+}' -F owner=ugoite -F repo=syu -F num=123
+```
+
+- `autoMergeRequest != null` means auto-merge is enabled
+- `isInMergeQueue` plus `mergeQueueEntry` tell you whether GitHub actually
+  created a queue entry yet
+- `reviewDecision` tells you whether GitHub still sees a review requirement
+- `commits.nodes[0].commit.statusCheckRollup.state` tells you whether the
+  current PR-head checks are green enough to enter the queue at all
+
 ## Which workflows must react to `merge_group`
 
 The repository currently relies on these workflows for merge-queue progress:
@@ -60,6 +109,25 @@ in the web UI:
 - **queued and waiting**: `isInMergeQueue: true`
 - **already merged**: `state: MERGED` or a non-null `mergedAt`
 
+If `autoMergeRequest` is present but `isInMergeQueue` is still `false`, the PR
+is only **queue-eligible**. GitHub is still waiting on another prerequisite.
+
+## Review threads can block queue progress
+
+The merge queue only helps once GitHub considers the PR review-complete.
+Unresolved review conversations can still block queue entry even when the branch
+looks clean and every required job is green.
+
+When a PR looks queue-ready but will not enroll, check:
+
+1. `reviewDecision` from `gh pr view ... --json reviewDecision`
+2. the review-thread state in the GitHub UI
+3. recent merge errors such as `All comments must be resolved`
+
+If maintainers intentionally want the PR to advance, resolve or explicitly close
+the outstanding review conversations first. Do not assume `mergeStateStatus:
+CLEAN` is enough on its own.
+
 ## How to read common queue states
 
 | Signal | What it usually means | What to check next |
@@ -104,6 +172,31 @@ queue incident rather than a contributor error.
    inspected.
 4. Re-read the PR GraphQL queue state to see whether the entry moved, merged, or
    dropped out of the queue.
+
+## When to requeue
+
+Requeue the PR when the branch is still valid but GitHub has dropped the queue
+entry or left the PR outside the queue after base churn.
+
+Typical signals:
+
+- `mergeStateStatus: CLEAN`
+- `autoMergeRequest: null`
+- `isInMergeQueue: false`
+- `mergeQueueEntry: null`
+
+That combination means the PR is open and mergeable, but GitHub is no longer
+trying to merge it.
+
+To requeue from the CLI:
+
+```bash
+gh pr merge 123 --auto --squash
+```
+
+Or use the GitHub UI to re-enable auto-merge. After that, re-run the GraphQL
+queue query above and confirm that `isInMergeQueue` turned `true` or
+`mergeQueueEntry` became non-null before walking away.
 
 ## When to update repository docs or tests
 
