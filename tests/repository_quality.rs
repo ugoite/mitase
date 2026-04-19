@@ -409,6 +409,10 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("syu validate"));
     assert!(readme.contains("syu browse"));
     assert!(readme.contains("syu list"));
+    assert!(readme.contains("### Command chooser"));
+    assert!(readme.contains("check whether your workspace currently validates"));
+    assert!(readme.contains("syu validate ."));
+    assert!(readme.contains("review what changed for one spec item in Git history"));
     assert!(readme.contains("list-shaped output"));
     assert!(readme.contains("workspace metadata, per-layer"));
     assert!(readme.contains("current validation errors in plain text"));
@@ -492,9 +496,16 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("--id-prefix"));
     assert!(getting_started.contains("syu validate . --fix"));
     assert!(getting_started.contains("syu browse ."));
+    assert!(getting_started.contains("If you only remember the task and not the command name yet"));
+    assert!(
+        getting_started
+            .contains("check whether the workspace is healthy before deeper exploration")
+    );
+    assert!(getting_started.contains("syu validate ."));
     assert!(getting_started.contains("emitted as JSON for automation"));
     assert!(getting_started.contains("workspace metadata, per-layer"));
     assert!(getting_started.contains("current validation errors in plain text"));
+    assert!(getting_started.contains("review change history for one requirement or feature"));
     assert!(getting_started.contains("syu list feature"));
     assert!(getting_started.contains("syu show REQ-001"));
     assert!(getting_started.contains("syu app ."));

@@ -388,6 +388,22 @@ keeping error-bearing runs on exit code 1.
 For a plain-English guide to common validation errors, see the
 [troubleshooting guide](docs/guide/troubleshooting.md).
 
+### Command chooser
+
+Use this quick chooser when you know the task but not yet the subcommand:
+
+| If you want to... | Start with... | Why |
+| --- | --- | --- |
+| check whether your workspace currently validates | `syu validate .` | runs the full repository checks and points you to concrete errors before deeper browsing |
+| inspect the whole workspace interactively in a terminal | `syu browse .` | shows the layered graph plus current validation errors in one terminal-first view |
+| render one layer or emit automation-friendly lists | `syu list ...` | keeps the output list-shaped instead of opening the browser-style explorer |
+| open one specific philosophy, policy, requirement, or feature by ID | `syu show ID` | jumps straight to the matched definition |
+| look up IDs or keywords when you do not know the exact item yet | `syu search QUERY` | searches IDs, titles, summaries, and descriptions across layers |
+| start from code or a test file and walk back to the owning spec item | `syu trace path/to/file --symbol name` | begins from traced implementation or test evidence instead of from YAML |
+| inspect everything connected to one ID, symbol, or file | `syu relate TARGET` | expands upstream/downstream links plus traced files and symbols for review |
+| review what changed for one spec item in Git history | `syu log ID` | projects the traced definition and implementation paths onto checked-in commits |
+| prefer a browser-first view for demos or visual navigation | `syu app .` | serves the same workspace graph in the local browser UI |
+
 ### `syu browse`
 
 Browse philosophies, policies, features, requirements, and current validation
