@@ -212,12 +212,9 @@ fn ensure_app_dependencies(app_dir: &Path, required_npm: &str) -> Result<(), Str
         return Ok(());
     }
 
-    run_npm(
-        app_dir,
-        required_npm,
-        &[String::from("ci")],
-        "install browser app dependencies with `npm ci`",
-    )
+    Err(format!(
+        "browser app dependencies are not ready; run `scripts/ci/pinned-npm.sh install app && npm --prefix app ci` from the repository root with npm {required_npm} before running Cargo commands that embed the browser app"
+    ))
 }
 
 fn remove_dir_if_exists(path: &Path, description: &str) -> Result<(), String> {
