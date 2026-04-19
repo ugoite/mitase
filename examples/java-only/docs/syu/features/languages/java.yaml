@@ -1,0 +1,15 @@
+category: Java Example Features
+version: 1
+
+features:
+  - id: FEAT-JAVA-001
+    title: Demonstrate a Java-first implementation trace with the built-in Java adapter
+    summary: Validate a real Java implementation symbol directly through the built-in adapter.
+    status: implemented
+    linked_requirements:
+      - REQ-JAVA-001
+    implementations:
+      java:
+        - file: src/main/java/example/app/OrderSummary.java
+          symbols:
+            - JavaFeatureImpl
