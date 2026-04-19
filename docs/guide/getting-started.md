@@ -67,7 +67,9 @@ one maintained place. This is the best fit for security-sensitive environments.
 
 The getting-started path above verifies the installer script itself. If you need
 additional archive-level provenance checks, follow the same README section and
-then verify the platform archive separately before installation.
+then verify the platform archive separately before installation with
+`gh release download`, `gh attestation verify`, and the same
+`--signer-workflow` / `--source-ref` pinning the README shows.
 
 **Option B — Run the installer directly**
 
