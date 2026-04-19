@@ -47,6 +47,8 @@ features:
             - GitHub Flow
             - .worktrees/
             - scripts/ci/quality-gates.sh
+            - scripts/ci/validate-app.sh
+            - scripts/ci/validate-website.sh
         - file: .github/pull_request_template.md
           symbols:
             - FEAT-CONTRIB-002

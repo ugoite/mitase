@@ -61,6 +61,8 @@ description: "Generated reference for docs/syu/features/repository/contributor.y
           - GitHub Flow
           - .worktrees/
           - scripts/ci/quality-gates.sh
+          - scripts/ci/validate-app.sh
+          - scripts/ci/validate-website.sh
       - **file**: .github/pull_request_template.md
         - **symbols**:
           - FEAT-CONTRIB-002
@@ -154,6 +156,8 @@ features:
             - GitHub Flow
             - .worktrees/
             - scripts/ci/quality-gates.sh
+            - scripts/ci/validate-app.sh
+            - scripts/ci/validate-website.sh
         - file: .github/pull_request_template.md
           symbols:
             - FEAT-CONTRIB-002

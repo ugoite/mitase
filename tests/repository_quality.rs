@@ -20,6 +20,8 @@ fn repository_declares_precommit_and_quality_gates() {
     let precommit = read_file(".pre-commit-config.yaml");
     let install_precommit = read_file("scripts/install-precommit.sh");
     let quality_script = read_file("scripts/ci/quality-gates.sh");
+    let validate_app_script = read_file("scripts/ci/validate-app.sh");
+    let validate_website_script = read_file("scripts/ci/validate-website.sh");
     let ci_workflow = read_file(".github/workflows/ci.yml");
     let contributing = read_file("CONTRIBUTING.md");
     let repo_config = read_file("syu.yaml");
@@ -37,6 +39,16 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(quality_script.contains("cargo test"));
     assert!(quality_script.contains("cargo run -- validate ."));
     assert!(quality_script.contains("check-generated-docs-freshness.sh"));
+    assert!(validate_app_script.contains("FEAT-QUALITY-001"));
+    assert!(validate_app_script.contains("validate_app"));
+    assert!(validate_app_script.contains("scripts/ci/quality-gates.sh"));
+    assert!(validate_app_script.contains("check-browser-app-freshness.sh"));
+    assert!(validate_app_script.contains("npm --prefix app run test:e2e"));
+    assert!(validate_website_script.contains("FEAT-QUALITY-001"));
+    assert!(validate_website_script.contains("validate_website"));
+    assert!(validate_website_script.contains("scripts/ci/quality-gates.sh"));
+    assert!(validate_website_script.contains("npm --prefix website ci"));
+    assert!(validate_website_script.contains("npm --prefix website run build"));
     assert!(install_precommit.contains("site --user-base"));
     assert!(install_precommit.contains("pipx environment --value PIPX_BIN_DIR"));
     assert!(install_precommit.contains("Troubleshooting: compare"));
@@ -76,10 +88,13 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(contributing.contains("npm audit"));
     assert!(contributing.contains("Contributors do **not** need to run manual audits"));
     assert!(contributing.contains("check-generated-docs-freshness.sh"));
+    assert!(contributing.contains("scripts/ci/validate-app.sh"));
+    assert!(contributing.contains("scripts/ci/validate-website.sh"));
     assert!(contributing.contains("docs/generated/"));
     assert!(contributing.contains("python3 -m site --user-base"));
     assert!(contributing.contains("If you installed `pre-commit` with"));
     assert!(contributing.contains("pipx environment --value PIPX_BIN_DIR"));
+    assert!(contributing.contains("scripts/ci/check-browser-app-freshness.sh"));
 
     assert!(repo_config.contains("FEAT-CHECK-001"));
     assert!(repo_config.contains("FEAT-REPORT-001"));
