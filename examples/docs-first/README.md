@@ -10,6 +10,10 @@ adapter shapes:
 - an explicit shell symbol trace for a single script function
 - wildcard YAML ownership for a file that intentionally belongs to one feature
 
+This workspace now matches the built-in `syu init --template docs-first`
+starter, so you can either inspect the checked-in example first or generate the
+same shape directly in your own repository.
+
 ## Files
 
 | Path | What it defines |
