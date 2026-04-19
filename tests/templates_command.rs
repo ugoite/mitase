@@ -29,6 +29,11 @@ fn templates_command_lists_all_supported_templates_in_text_output() {
     assert!(stdout.contains(
         "python-only\ttemplate-and-example\texamples/python-only\tStarter for Python-first repos"
     ));
+    assert!(
+        stdout.contains(
+            "go-only\ttemplate-and-example\texamples/go-only\tStarter for Go-first repos with Go-oriented IDs plus a minimal go.mod, source, and test files."
+        )
+    );
     assert!(stdout.contains(
         "polyglot\ttemplate-and-example\texamples/polyglot\tStarter for mixed-language repos"
     ));
@@ -54,10 +59,12 @@ fn templates_command_supports_json_output() {
     let templates = json["templates"]
         .as_array()
         .expect("templates should be an array");
-    assert_eq!(templates.len(), 4);
+    assert_eq!(templates.len(), 5);
     assert_eq!(templates[0]["name"], "generic");
     assert_eq!(templates[0]["relationship"], "starter-only");
     assert_eq!(templates[1]["name"], "rust-only");
     assert_eq!(templates[1]["related_example"], "examples/rust-only");
-    assert_eq!(templates[3]["name"], "polyglot");
+    assert_eq!(templates[3]["name"], "go-only");
+    assert_eq!(templates[3]["related_example"], "examples/go-only");
+    assert_eq!(templates[4]["name"], "polyglot");
 }

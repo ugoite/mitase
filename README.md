@@ -282,6 +282,7 @@ Rust-first, Python-first, or polyglot? Start with a lightweight template:
 ```bash
 syu templates
 syu init . --template rust-only
+syu init . --template go-only
 syu init . --template python-only
 syu init . --template polyglot
 ```
@@ -308,6 +309,7 @@ syu init .
 syu init path/to/workspace --name my-project
 syu init . --id-prefix store
 syu init . --template rust-only
+syu init . --template go-only
 syu init . --spec-root docs/spec
 syu init . --requirement-prefix REQ-STORE --feature-prefix FEAT-STORE
 ```
@@ -625,10 +627,9 @@ The repository ships working example projects:
 - [`examples/python-only`](examples/python-only)
 - [`examples/polyglot`](examples/polyglot)
 - [`examples/team-scale`](examples/team-scale)
-`rust-only`, `python-only`, and `polyglot` match `syu init --template ...`
-starters directly. `go-only` is a reference-only workaround example for an
-unsupported implementation language, and `team-scale` is a reference-only
-example for studying a larger split-by-area repository shape.
+`rust-only`, `python-only`, `go-only`, and `polyglot` match
+`syu init --template ...` starters directly. `team-scale` remains a
+reference-only example for studying a larger split-by-area repository shape.
 
 Each one is validated in the automated test suite. If you are deciding between a
 checked-in example and a scaffold template, start with
