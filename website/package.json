@@ -22,5 +22,6 @@
   },
   "engines": {
     "node": ">=20 <21"
-  }
+  },
+  "packageManager": "npm@11.8.0"
 }
