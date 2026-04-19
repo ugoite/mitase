@@ -29,7 +29,7 @@ you are done.
 
 The UI is divided into three areas:
 
-![Annotated overview of the syu app layout](/img/app-guide-overview.png)
+![Annotated overview of the syu app layout](../../website/static/img/app-guide-overview.png)
 
 The screenshot above highlights the top tabs, the left sidebar, the main item
 detail panel, and the validation summary that stays visible while you browse.
@@ -93,7 +93,7 @@ The top card shows the workspace root path, the spec root path, and three metric
 When validation passes cleanly, the sidebar gives you a quick confidence check
 before you start exploring relationships and trace details:
 
-![Annotated clean workspace state in the syu app](/img/app-guide-passing.png)
+![Annotated clean workspace state in the syu app](../../website/static/img/app-guide-passing.png)
 
 ### Sections panel
 
@@ -117,7 +117,7 @@ Selecting an item shows:
 - **Links panel** — the upstream and downstream relationships (e.g. which requirements a feature satisfies; which policies a requirement enforces)
 - **Traces panel** — the declared test and implementation traces, with file path and symbol name
 
-![Annotated feature detail view with linked requirements and implementation traces](/img/app-guide-detail.png)
+![Annotated feature detail view with linked requirements and implementation traces](../../website/static/img/app-guide-detail.png)
 
 ### Clicking links
 
@@ -148,7 +148,7 @@ Each row shows:
 | **Subject** | The spec item ID the issue refers to (if any) |
 | **Message** | A short human-readable description |
 
-![Annotated validation workflow in the syu app](/img/app-guide-validation.png)
+![Annotated validation workflow in the syu app](../../website/static/img/app-guide-validation.png)
 
 Click any issue row to load the selected issue detail on the right. When the
 subject maps to a known item in the workspace, the detail panel shows a
