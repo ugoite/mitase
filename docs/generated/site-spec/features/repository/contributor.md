@@ -36,8 +36,11 @@ description: "Generated reference for docs/syu/features/repository/contributor.y
           - FEAT-CONTRIB-001
           - install_coverage_tooling
           - install_wasm_tooling
-          - install_browser_tooling
           - install_precommit_tooling
+          - main
+      - **file**: .devcontainer/setup-browser-tooling.sh
+        - **symbols**:
+          - FEAT-CONTRIB-001
           - main
     - **rust**:
       - **file**: tests/example_workspaces.rs
@@ -130,8 +133,11 @@ features:
             - FEAT-CONTRIB-001
             - install_coverage_tooling
             - install_wasm_tooling
-            - install_browser_tooling
             - install_precommit_tooling
+            - main
+        - file: .devcontainer/setup-browser-tooling.sh
+          symbols:
+            - FEAT-CONTRIB-001
             - main
       rust:
         - file: tests/example_workspaces.rs
