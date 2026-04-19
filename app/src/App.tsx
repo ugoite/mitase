@@ -35,6 +35,8 @@ type SearchResult = {
 
 const SECTION_ORDER: SectionKind[] = ["philosophy", "policies", "requirements", "features"];
 const SEARCH_RESULTS_LIST_ID = "spec-search-results-list";
+const REFRESH_POLL_MIN_MS = 2_000;
+const REFRESH_POLL_MAX_MS = 10_000;
 
 const SECTION_COPY: Record<SectionKind, string> = {
   philosophy: "Project intent and enduring values.",
@@ -172,8 +174,30 @@ function App() {
     }
 
     let cancelled = false;
-    const intervalId = window.setInterval(async () => {
+    let stablePollCount = 0;
+    let timeoutId: number | null = null;
+
+    const currentDelay = () =>
+      Math.min(REFRESH_POLL_MAX_MS, REFRESH_POLL_MIN_MS * 2 ** stablePollCount);
+
+    const schedulePoll = (delay: number) => {
+      if (cancelled) {
+        return;
+      }
+      if (timeoutId != null) {
+        window.clearTimeout(timeoutId);
+      }
+      timeoutId = window.setTimeout(() => {
+        void pollVersion();
+      }, delay);
+    };
+
+    const pollVersion = async () => {
+      if (cancelled) {
+        return;
+      }
       if (document.hidden || isRefreshing) {
+        schedulePoll(currentDelay());
         return;
       }
 
@@ -187,20 +211,45 @@ function App() {
           setRefreshError(null);
         }
         if (!cancelled && nextVersion.snapshot !== snapshotVersion) {
+          stablePollCount = 0;
           await loadWorkspace("refresh");
+          schedulePoll(REFRESH_POLL_MIN_MS);
+          return;
         }
+
+        stablePollCount = Math.min(stablePollCount + 1, 3);
+        schedulePoll(currentDelay());
       } catch (pollError) {
+        stablePollCount = 0;
         if (!cancelled) {
           // eslint-disable-next-line no-console
           console.error("Failed to poll app version for refresh", pollError);
           setRefreshError(formatRefreshFailure("check for workspace updates", pollError));
         }
+        schedulePoll(REFRESH_POLL_MIN_MS);
       }
-    }, 2000);
+    };
+
+    const handleVisibilityChange = () => {
+      if (cancelled) {
+        return;
+      }
+      if (!document.hidden) {
+        stablePollCount = 0;
+        schedulePoll(REFRESH_POLL_MIN_MS);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    schedulePoll(REFRESH_POLL_MIN_MS);
 
     return () => {
       cancelled = true;
-      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (timeoutId != null) {
+        window.clearTimeout(timeoutId);
+        timeoutId = null;
+      }
     };
   }, [isRefreshing, loadWorkspace, snapshotVersion]);
 
