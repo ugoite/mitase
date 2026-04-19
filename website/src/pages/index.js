@@ -50,6 +50,12 @@ const journeys = [
     to: '/docs/guide/getting-started'
   },
   {
+    title: 'Explore the browser UI',
+    description:
+      'Take the visual-first path through `syu app` when you want tabs, trace links, and validation context in one browser view.',
+    to: '/docs/guide/app'
+  },
+  {
     title: 'Follow a full tutorial',
     description: 'Build a realistic four-layer example from scratch when you want the full repository story.',
     to: '/docs/guide/tutorial'
