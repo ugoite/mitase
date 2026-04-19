@@ -82,6 +82,12 @@ const journeys = [
     to: '/docs/guide/configuration'
   },
   {
+    title: 'Understand trace adapter support',
+    description:
+      'Compare which languages support rich inspection, which stay pattern-based, and where `doc_contains` is still unavailable.',
+    to: '/docs/guide/trace-adapter-support'
+  },
+  {
     title: 'Inspect the self-hosted spec',
     description: 'Browse the generated reference pages that explain how this repository uses syu on itself.',
     to: '/docs/generated/site-spec'
