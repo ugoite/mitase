@@ -4,7 +4,9 @@
 use anyhow::Result;
 use serde::Serialize;
 
-use crate::cli::{OutputFormat, StarterTemplate, TemplatesArgs};
+use crate::cli::{OutputFormat, TemplatesArgs};
+
+use super::init::starter_template_catalog as shared_starter_template_catalog;
 
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -28,7 +30,7 @@ struct JsonTemplatesOutput {
 }
 
 pub fn run_templates_command(args: &TemplatesArgs) -> Result<i32> {
-    let templates = starter_template_catalog();
+    let templates = template_catalog_entries();
 
     match args.format {
         OutputFormat::Text => print_text_catalog(&templates),
@@ -42,45 +44,19 @@ pub fn run_templates_command(args: &TemplatesArgs) -> Result<i32> {
     Ok(0)
 }
 
-fn starter_template_catalog() -> Vec<TemplateCatalogEntry> {
-    [
-        StarterTemplate::Generic,
-        StarterTemplate::RustOnly,
-        StarterTemplate::PythonOnly,
-        StarterTemplate::Polyglot,
-    ]
-    .into_iter()
-    .map(template_catalog_entry)
-    .collect()
-}
-
-fn template_catalog_entry(template: StarterTemplate) -> TemplateCatalogEntry {
-    match template {
-        StarterTemplate::Generic => TemplateCatalogEntry {
-            name: "generic",
-            description: "Starter with minimal four-layer files, neutral IDs, and core file names.",
-            relationship: TemplateRelationship::StarterOnly,
-            related_example: None,
-        },
-        StarterTemplate::RustOnly => TemplateCatalogEntry {
-            name: "rust-only",
-            description: "Starter for Rust-first repos with Rust-oriented IDs plus requirement and feature files.",
-            relationship: TemplateRelationship::TemplateAndExample,
-            related_example: Some("examples/rust-only"),
-        },
-        StarterTemplate::PythonOnly => TemplateCatalogEntry {
-            name: "python-only",
-            description: "Starter for Python-first repos with Python-oriented IDs plus requirement and feature files.",
-            relationship: TemplateRelationship::TemplateAndExample,
-            related_example: Some("examples/python-only"),
-        },
-        StarterTemplate::Polyglot => TemplateCatalogEntry {
-            name: "polyglot",
-            description: "Starter for mixed-language repos with the same four layers and a polyglot first spec.",
-            relationship: TemplateRelationship::TemplateAndExample,
-            related_example: Some("examples/polyglot"),
-        },
-    }
+fn template_catalog_entries() -> Vec<TemplateCatalogEntry> {
+    shared_starter_template_catalog()
+        .iter()
+        .map(|template| TemplateCatalogEntry {
+            name: template.name,
+            description: template.description,
+            relationship: match template.related_example {
+                Some(_) => TemplateRelationship::TemplateAndExample,
+                None => TemplateRelationship::StarterOnly,
+            },
+            related_example: template.related_example,
+        })
+        .collect()
 }
 
 fn print_text_catalog(templates: &[TemplateCatalogEntry]) {
@@ -115,11 +91,11 @@ impl TemplateCatalogEntry {
 
 #[cfg(test)]
 mod tests {
-    use super::starter_template_catalog;
+    use super::template_catalog_entries;
 
     #[test]
     fn starter_template_catalog_lists_every_supported_template() {
-        let templates = starter_template_catalog();
+        let templates = template_catalog_entries();
         assert_eq!(templates.len(), 4);
         assert_eq!(templates[0].name, "generic");
         assert_eq!(templates[1].name, "rust-only");
@@ -129,7 +105,7 @@ mod tests {
 
     #[test]
     fn starter_template_catalog_marks_example_backed_templates() {
-        let templates = starter_template_catalog();
+        let templates = template_catalog_entries();
         assert_eq!(templates[0].relationship_label(), "starter-only");
         assert_eq!(templates[1].relationship_label(), "template-and-example");
         assert_eq!(templates[0].related_example, None);

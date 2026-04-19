@@ -56,6 +56,45 @@ struct ResolvedInitOptions {
     strict_validate_defaults: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct StarterTemplateCatalogEntry {
+    pub(crate) template: StarterTemplate,
+    pub(crate) name: &'static str,
+    pub(crate) description: &'static str,
+    pub(crate) related_example: Option<&'static str>,
+}
+
+const STARTER_TEMPLATE_CATALOG: [StarterTemplateCatalogEntry; 4] = [
+    StarterTemplateCatalogEntry {
+        template: StarterTemplate::Generic,
+        name: "generic",
+        description: "Starter with minimal four-layer files, neutral IDs, and core file names.",
+        related_example: None,
+    },
+    StarterTemplateCatalogEntry {
+        template: StarterTemplate::RustOnly,
+        name: "rust-only",
+        description: "Starter for Rust-first repos with Rust-oriented IDs plus requirement and feature files.",
+        related_example: Some("examples/rust-only"),
+    },
+    StarterTemplateCatalogEntry {
+        template: StarterTemplate::PythonOnly,
+        name: "python-only",
+        description: "Starter for Python-first repos with Python-oriented IDs plus requirement and feature files.",
+        related_example: Some("examples/python-only"),
+    },
+    StarterTemplateCatalogEntry {
+        template: StarterTemplate::Polyglot,
+        name: "polyglot",
+        description: "Starter for mixed-language repos with the same four layers and a polyglot first spec.",
+        related_example: Some("examples/polyglot"),
+    },
+];
+
+pub(crate) const fn starter_template_catalog() -> &'static [StarterTemplateCatalogEntry] {
+    &STARTER_TEMPLATE_CATALOG
+}
+
 impl StarterIdPrefixes {
     fn philosophy_id(&self) -> String {
         format!("{}-001", self.philosophy)
@@ -233,14 +272,19 @@ fn prompt_for_starter_template(
     prompt_io: &mut impl PromptIo,
     default: StarterTemplate,
 ) -> Result<StarterTemplate> {
-    let template_choices = "generic|rust-only|python-only|polyglot";
+    let template_names = starter_template_catalog()
+        .iter()
+        .map(|template| template.name)
+        .collect::<Vec<_>>();
+    let template_choices = template_names.join("|");
     let label = format!("Starter template ({template_choices})");
     loop {
         let raw = prompt_with_default(prompt_io, &label, default.label())?;
         match parse_starter_template_prompt(&raw) {
             Some(template) => return Ok(template),
             None => eprintln!(
-                "Starter template must be one of: generic, rust-only, python-only, polyglot."
+                "Starter template must be one of: {}.",
+                template_names.join(", ")
             ),
         }
     }

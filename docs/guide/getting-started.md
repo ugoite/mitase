@@ -519,7 +519,6 @@ If one of those examples is already close to your repository, use the matching
 shape. `syu templates` prints the same mapping directly in the CLI, including
 which starter is template-only (`generic`) versus backed by a checked-in
 example.
-
 Use `examples/go-only` when your repository is Go-first today: it keeps the
 real `.go` files in the example, but validates the trace anchors from
 `README.md` until `syu` ships stricter Go ownership inventory.
