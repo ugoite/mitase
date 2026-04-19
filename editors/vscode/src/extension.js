@@ -10,6 +10,7 @@ const {
   loadSpecModel,
   lookupTrace,
   openTargetsForSpecId,
+  resolveWorkspaceContext,
   specIdFromText
 } = require('./model');
 
@@ -170,12 +171,12 @@ function fileExists(filePath) {
   );
 }
 
+async function resolveFolderWorkspace(folder) {
+  return resolveWorkspaceContext(folder.uri.fsPath);
+}
+
 async function isSyuWorkspace(folder) {
-  const workspaceRoot = folder.uri.fsPath;
-  return (
-    (await fileExists(path.join(workspaceRoot, 'syu.yaml'))) ||
-    (await fileExists(path.join(workspaceRoot, 'docs/syu/features/features.yaml')))
-  );
+  return (await resolveFolderWorkspace(folder)) != null;
 }
 
 async function syuWorkspaceFolders() {
@@ -197,19 +198,28 @@ function getAutoRefreshDiagnostics(folder) {
 }
 
 async function ensureModel(folder, modelCache) {
-  const workspaceRoot = folder.uri.fsPath;
-  const cached = modelCache.get(workspaceRoot);
+  const workspace = await resolveFolderWorkspace(folder);
+  if (!workspace) {
+    throw new Error('The selected folder is not inside a syu workspace.');
+  }
+
+  const cached = modelCache.get(workspace.workspaceRoot);
   if (cached && !cached.dirty) {
     return cached.model;
   }
 
-  const model = await loadSpecModel(workspaceRoot);
-  modelCache.set(workspaceRoot, { model, dirty: false });
+  const model = await loadSpecModel(workspace.workspaceRoot);
+  modelCache.set(workspace.workspaceRoot, { model, dirty: false });
   return model;
 }
 
-function invalidateModel(folder, modelCache) {
-  const entry = modelCache.get(folder.uri.fsPath);
+async function invalidateModel(folder, modelCache) {
+  const workspace = await resolveFolderWorkspace(folder);
+  if (!workspace) {
+    return;
+  }
+
+  const entry = modelCache.get(workspace.workspaceRoot);
   if (entry) {
     entry.dirty = true;
   }
@@ -222,8 +232,12 @@ async function refreshDiagnostics(modelCache, collection) {
   for (const folder of folders) {
     try {
       const model = await ensureModel(folder, modelCache);
+      const workspace = await resolveFolderWorkspace(folder);
+      if (!workspace) {
+        continue;
+      }
       const records = await loadDiagnostics({
-        workspaceRoot: folder.uri.fsPath,
+        workspaceRoot: workspace.workspaceRoot,
         binaryPath: getBinaryPath(folder),
         model
       });
@@ -353,7 +367,7 @@ async function refreshContextForActiveEditor(modelCache, treeProvider) {
   try {
     const model = await ensureModel(folder, modelCache);
     treeProvider.setTraceContext(
-      folder.uri.fsPath,
+      model.workspaceRoot,
       lookupTrace(model, editor.document.uri.fsPath, null)
     );
   } catch (error) {
@@ -390,7 +404,7 @@ function registerCommands(context, modelCache, treeProvider, collection) {
       const model = await ensureModel(folder, modelCache);
       const symbol = activeSymbol(editor);
       const traceContext = lookupTrace(model, editor.document.uri.fsPath, symbol);
-      treeProvider.setTraceContext(folder.uri.fsPath, traceContext);
+      treeProvider.setTraceContext(model.workspaceRoot, traceContext);
     })
   );
 
@@ -478,7 +492,7 @@ function activate(context) {
         return;
       }
 
-      invalidateModel(folder, modelCache);
+      await invalidateModel(folder, modelCache);
       if (getAutoRefreshDiagnostics(folder)) {
         await refreshDiagnostics(modelCache, diagnostics);
       }
