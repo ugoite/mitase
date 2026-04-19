@@ -10,6 +10,8 @@ through a terminal:
   philosophies in the **syu Context** explorer view
 - jump from a spec ID to its YAML document
 - open the traced files that belong to a requirement or feature
+- use inline CodeLens actions on YAML spec IDs, traced files, and traced symbols
+  without opening the command palette first
 
 ## Current protocol
 
