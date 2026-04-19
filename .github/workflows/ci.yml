@@ -190,10 +190,7 @@ jobs:
 
       - name: Audit docs site dependencies
         working-directory: website
-        # Docusaurus 3.9.x transitive deps have high-severity advisories that
-        # require a breaking downgrade to fix; use critical threshold until
-        # Docusaurus ships a non-breaking fix upstream.
-        run: npm audit --audit-level=critical
+        run: npm audit --audit-level=high
 
   dependency-review:
     if: github.event_name == 'pull_request'
