@@ -231,6 +231,9 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       - **file**: src/report.rs
         - **symbols**:
           - *
+      - **file**: tests/repository_quality.rs
+        - **symbols**:
+          - repository_generates_spec_coverage_without_relaunching_the_cli
 
 ## Source YAML
 
@@ -448,4 +451,7 @@ requirements:
         - file: src/report.rs
           symbols:
             - '*'
+        - file: tests/repository_quality.rs
+          symbols:
+            - repository_generates_spec_coverage_without_relaunching_the_cli
 ```
