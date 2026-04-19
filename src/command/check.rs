@@ -15,7 +15,10 @@ use crate::{
     cli::{CheckArgs, OutputFormat, ValidationGenreFilter, ValidationSeverityFilter},
     command::shell_quote_path,
     config::{SyuConfig, TraceOwnershipMode},
-    coverage::{normalize_relative_path, validate_symbol_trace_coverage},
+    coverage::{
+        normalize_relative_path, normalized_symbol_trace_coverage_ignored_paths,
+        path_matches_ignored_generated_directory, validate_symbol_trace_coverage,
+    },
     inspect::{apply_symbol_doc_fix, inspect_symbol, supports_rich_inspection},
     language::adapter_for_language,
     model::{
@@ -2374,74 +2377,77 @@ fn verify_trace_reference(
         }
     };
 
-    match evaluate_trace_ownership(root, config, owner_id, &path, reference, &contents) {
-        OwnershipDeclaration::Satisfied => {}
-        OwnershipDeclaration::Missing { manifest_path } => {
-            let (message, suggestion) = match manifest_path {
-                Some(manifest_path) => {
-                    let manifest_display = manifest_path
-                        .strip_prefix(root)
-                        .unwrap_or(manifest_path.as_path());
-                    (
+    let ignored_paths = normalized_symbol_trace_coverage_ignored_paths(config);
+    if !path_matches_ignored_generated_directory(display_path, &ignored_paths) {
+        match evaluate_trace_ownership(root, config, owner_id, &path, reference, &contents) {
+            OwnershipDeclaration::Satisfied => {}
+            OwnershipDeclaration::Missing { manifest_path } => {
+                let (message, suggestion) = match manifest_path {
+                    Some(manifest_path) => {
+                        let manifest_display = manifest_path
+                            .strip_prefix(root)
+                            .unwrap_or(manifest_path.as_path());
+                        (
+                            format!(
+                                "Declared {} file `{}` does not declare ownership for `{owner_id}` in sidecar manifest `{}`.",
+                                role.label(),
+                                display_path.display(),
+                                manifest_display.display()
+                            ),
+                            format!(
+                                "Add `{owner_id}` with {} to `{}` so the {} remains explicitly traceable.",
+                                ownership_symbols_hint(reference),
+                                manifest_display.display(),
+                                role.label()
+                            ),
+                        )
+                    }
+                    None => (
                         format!(
-                            "Declared {} file `{}` does not declare ownership for `{owner_id}` in sidecar manifest `{}`.",
+                            "Declared {} file `{}` does not mention `{owner_id}`.",
                             role.label(),
-                            display_path.display(),
-                            manifest_display.display()
+                            display_path.display()
                         ),
                         format!(
-                            "Add `{owner_id}` with {} to `{}` so the {} remains explicitly traceable.",
-                            ownership_symbols_hint(reference),
-                            manifest_display.display(),
+                            "Add `{owner_id}` to `{}` so the {} remains explicitly traceable.",
+                            display_path.display(),
                             role.label()
                         ),
-                    )
-                }
-                None => (
+                    ),
+                };
+                issues.push(Issue::error(
+                    "SYU-trace-id-001",
+                    subject.clone(),
+                    Some(format_reference_location(language, reference)),
+                    message,
+                    Some(suggestion),
+                ));
+                success = false;
+            }
+            OwnershipDeclaration::Invalid {
+                manifest_path,
+                reason,
+            } => {
+                let manifest_display = manifest_path
+                    .strip_prefix(root)
+                    .unwrap_or(manifest_path.as_path());
+                issues.push(Issue::error(
+                    "SYU-trace-id-001",
+                    subject.clone(),
+                    Some(format_reference_location(language, reference)),
                     format!(
-                        "Declared {} file `{}` does not mention `{owner_id}`.",
+                        "Sidecar ownership manifest `{}` for declared {} file `{}` is invalid: {reason}",
+                        manifest_display.display(),
                         role.label(),
                         display_path.display()
                     ),
-                    format!(
-                        "Add `{owner_id}` to `{}` so the {} remains explicitly traceable.",
-                        display_path.display(),
-                        role.label()
-                    ),
-                ),
-            };
-            issues.push(Issue::error(
-                "SYU-trace-id-001",
-                subject.clone(),
-                Some(format_reference_location(language, reference)),
-                message,
-                Some(suggestion),
-            ));
-            success = false;
-        }
-        OwnershipDeclaration::Invalid {
-            manifest_path,
-            reason,
-        } => {
-            let manifest_display = manifest_path
-                .strip_prefix(root)
-                .unwrap_or(manifest_path.as_path());
-            issues.push(Issue::error(
-                "SYU-trace-id-001",
-                subject.clone(),
-                Some(format_reference_location(language, reference)),
-                format!(
-                    "Sidecar ownership manifest `{}` for declared {} file `{}` is invalid: {reason}",
-                    manifest_display.display(),
-                    role.label(),
-                    display_path.display()
-                ),
-                Some(format!(
-                    "Fix `{}` or switch `validate.trace_ownership_mode` to `mapping` or `inline`.",
-                    manifest_display.display()
-                )),
-            ));
-            success = false;
+                    Some(format!(
+                        "Fix `{}` or switch `validate.trace_ownership_mode` to `mapping` or `inline`.",
+                        manifest_display.display()
+                    )),
+                ));
+                success = false;
+            }
         }
     }
     if reference.symbols.is_empty() {
@@ -4112,6 +4118,77 @@ mod tests {
     }
 
     #[test]
+    fn verify_trace_reference_skips_inline_ownership_for_ignored_generated_paths() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let path = tempdir.path().join("app/dist/assets/generated.js");
+        fs::create_dir_all(path.parent().expect("generated dir")).expect("generated dir");
+        fs::write(
+            &path,
+            "export function generatedBundle() { return true; }\n",
+        )
+        .expect("generated file should exist");
+
+        let reference = TraceReference {
+            file: PathBuf::from("app/dist/assets/generated.js"),
+            symbols: vec!["generatedBundle".to_string()],
+            doc_contains: Vec::new(),
+        };
+        let mut config = SyuConfig::default();
+        config.validate.trace_ownership_mode = TraceOwnershipMode::Inline;
+        let mut issues = Vec::new();
+
+        assert!(verify_trace_reference(
+            tempdir.path(),
+            &config,
+            "FEAT-1",
+            TraceRole::FeatureImplementation,
+            "typescript",
+            &reference,
+            &mut issues,
+        ));
+        assert!(
+            issues.iter().all(|issue| issue.code != "SYU-trace-id-001"),
+            "issues: {issues:#?}"
+        );
+    }
+
+    #[test]
+    fn verify_trace_reference_can_opt_generated_paths_back_into_inline_ownership() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let path = tempdir.path().join("app/dist/assets/generated.js");
+        fs::create_dir_all(path.parent().expect("generated dir")).expect("generated dir");
+        fs::write(
+            &path,
+            "export function generatedBundle() { return true; }\n",
+        )
+        .expect("generated file should exist");
+
+        let reference = TraceReference {
+            file: PathBuf::from("app/dist/assets/generated.js"),
+            symbols: vec!["generatedBundle".to_string()],
+            doc_contains: Vec::new(),
+        };
+        let mut config = SyuConfig::default();
+        config.validate.trace_ownership_mode = TraceOwnershipMode::Inline;
+        config.validate.symbol_trace_coverage_ignored_paths.clear();
+        let mut issues = Vec::new();
+
+        assert!(!verify_trace_reference(
+            tempdir.path(),
+            &config,
+            "FEAT-1",
+            TraceRole::FeatureImplementation,
+            "typescript",
+            &reference,
+            &mut issues,
+        ));
+        assert!(
+            issues.iter().any(|issue| issue.code == "SYU-trace-id-001"),
+            "issues: {issues:#?}"
+        );
+    }
+
+    #[test]
     fn verify_trace_reference_reports_missing_symbol() {
         let tempdir = tempdir().expect("tempdir should exist");
         let path = tempdir.path().join("trace.rs");
@@ -4273,6 +4350,40 @@ mod tests {
             &mut issues,
         ));
         assert!(issues.is_empty());
+    }
+
+    #[test]
+    fn verify_trace_reference_skips_sidecar_ownership_for_ignored_generated_paths() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let path = tempdir.path().join("app/dist/assets/generated.js");
+        fs::create_dir_all(path.parent().expect("generated dir")).expect("generated dir");
+        fs::write(
+            &path,
+            "export function generatedBundle() { return true; }\n",
+        )
+        .expect("generated file should exist");
+
+        let mut config = SyuConfig::default();
+        config.validate.trace_ownership_mode = TraceOwnershipMode::Sidecar;
+        let mut issues = Vec::new();
+
+        assert!(verify_trace_reference(
+            tempdir.path(),
+            &config,
+            "FEAT-1",
+            TraceRole::FeatureImplementation,
+            "typescript",
+            &TraceReference {
+                file: PathBuf::from("app/dist/assets/generated.js"),
+                symbols: vec!["generatedBundle".to_string()],
+                doc_contains: Vec::new(),
+            },
+            &mut issues,
+        ));
+        assert!(
+            issues.iter().all(|issue| issue.code != "SYU-trace-id-001"),
+            "issues: {issues:#?}"
+        );
     }
 
     #[test]

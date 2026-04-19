@@ -162,6 +162,40 @@ without pretending unsupported `csharp:` mappings validate today. Use
 or `syu init . --template go-only` as a reminder that Go now supports
 symbol checks, coverage ownership, and `doc_contains`.
 
+### `validate.trace_ownership_mode`
+
+Controls whether traced files need an extra ownership breadcrumb beyond the
+checked-in requirement or feature trace mapping.
+
+- `mapping`: the YAML trace entries are enough on their own
+- `inline`: traced files must also mention their owning requirement or feature ID
+- `sidecar`: traced files must carry ownership in adjacent `<file>.syu-ownership.yaml` manifests
+
+Keep `mapping` when you want the lightest workflow. Use `inline` or `sidecar`
+when repositories want a second ownership signal close to the code as well.
+Generated paths listed in `validate.symbol_trace_coverage_ignored_paths` stay
+opted out of the extra `SYU-trace-id-001` ownership check in `inline` and
+`sidecar` mode so build outputs do not need checked-in IDs or sidecar manifests.
+Declared traces in those files are still validated for file readability and
+symbol existence.
+
+### `validate.symbol_trace_coverage_ignored_paths`
+
+Controls which repository-relative generated directories `syu` skips while
+building the strict symbol-coverage inventory.
+
+By default this list excludes common build outputs such as `build/`,
+`coverage/`, `dist/`, `target/`, `app/dist`, and the checked-in
+`tests/fixtures/workspaces/` repositories without hiding authored nested paths
+like `src/build/`.
+
+This same list also opts those generated paths out of the extra ownership
+breadcrumb enforced by `validate.trace_ownership_mode: inline` or `sidecar`.
+That keeps generated assets from failing `SYU-trace-id-001` just because they
+do not carry inline IDs or adjacent ownership manifests. Set the list to `[]`
+when you intentionally want generated outputs to participate in both strict
+coverage inventory and ownership enforcement.
+
 ### `app.bind`
 
 Controls the default address that `syu app` binds to.
