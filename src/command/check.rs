@@ -936,12 +936,12 @@ fn render_text_report(
             "  syu show <ID> {workspace_arg}    inspect a single spec item in detail"
         )
         .expect("writing to String must succeed");
-    } else if !overall_success {
+    } else if !overall_success && !quiet {
         writeln!(&mut output).expect("writing to String must succeed");
         writeln!(&mut output, "What to inspect next:").expect("writing to String must succeed");
         writeln!(
             &mut output,
-            "  syu show <ID> {workspace_arg}           inspect one requirement, feature, policy, or philosophy named above"
+            "  syu show <ID> {workspace_arg}           inspect a specific requirement, feature, policy, or philosophy by ID"
         )
         .expect("writing to String must succeed");
         writeln!(

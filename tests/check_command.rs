@@ -262,6 +262,30 @@ fn check_command_quiet_suppresses_success_summary_and_next_step_guidance() {
 
 #[test]
 // REQ-CORE-001
+fn check_command_quiet_suppresses_failure_guidance() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(fixture_path("failing"))
+        .arg("--quiet")
+        .output()
+        .expect("command should run");
+
+    assert!(
+        !output.status.success(),
+        "failing fixture should fail quietly"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("syu validate failed"));
+    assert!(!stdout.contains("What to inspect next:"));
+    assert!(!stdout.contains("syu show <ID>"));
+    assert!(!stdout.contains("--severity error"));
+    assert!(!stdout.contains("--genre graph"));
+}
+
+#[test]
+// REQ-CORE-001
 fn check_command_quiet_suppresses_filtered_footer_on_success() {
     let output = Command::cargo_bin("syu")
         .expect("binary should build")
@@ -303,9 +327,40 @@ fn check_command_reports_missing_definition_links() {
     assert!(stdout.contains("REQ-MISSING-999"));
     assert!(stdout.contains("What to inspect next:"));
     assert!(stdout.contains("syu show <ID>"));
+    assert!(
+        stdout.contains("inspect a specific requirement, feature, policy, or philosophy by ID")
+    );
     assert!(stdout.contains("--severity error"));
     assert!(stdout.contains("--genre graph"));
     assert!(stdout.contains("syu app "));
+}
+
+#[test]
+// REQ-CORE-001
+fn check_command_failure_guidance_avoids_named_above_wording_for_empty_filtered_views() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(fixture_path("failing"))
+        .arg("--id")
+        .arg("REQ-NOT-FOUND")
+        .output()
+        .expect("command should run");
+
+    assert!(
+        !output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("syu validate failed (filtered view)"));
+    assert!(stdout.contains("no issues matched the active filters."));
+    assert!(
+        stdout.contains("inspect a specific requirement, feature, policy, or philosophy by ID")
+    );
+    assert!(!stdout.contains("named above"));
 }
 
 #[test]
