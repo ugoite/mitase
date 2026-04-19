@@ -107,6 +107,10 @@ description: "Generated reference for docs/syu/config/validate.yaml"
       file to have an adjacent `&lt;file&gt;.syu-ownership.yaml` manifest with
       matching owner IDs and symbols. Autofix updates the sidecar manifest
       instead of inserting IDs into source when `sidecar` is enabled.
+      Repository-relative generated paths listed in
+      `validate.symbol_trace_coverage_ignored_paths` stay opted out of the
+      extra `SYU-trace-id-001` ownership requirement in `inline` and `sidecar`
+      mode so generated outputs do not need inline IDs or sidecar manifests.
 - **key**: validate.symbol_trace_coverage_ignored_paths
   - **type**: array&lt;path&gt;
   - **default**:
@@ -127,9 +131,13 @@ description: "Generated reference for docs/syu/config/validate.yaml"
       checks. The defaults skip common build outputs such as `app/dist`,
       repository-root `build/`, `coverage/`, `dist/`, and `target/`, plus the
       checked-in `tests/fixtures/workspaces/` sample repositories, without
-      hiding authored nested paths like `src/build/`. Set this list to `[]`
-      when you intentionally want generated artifacts to count toward strict
-      trace coverage too.
+      hiding authored nested paths like `src/build/`. The same list also opts
+      those generated paths out of the extra inline or sidecar ownership
+      breadcrumb enforced by `validate.trace_ownership_mode`, so generated
+      artifacts do not fail `SYU-trace-id-001` just because they lack checked-in
+      IDs or adjacent ownership manifests. Set this list to `[]` when you
+      intentionally want generated artifacts to count toward strict trace
+      coverage and ownership enforcement too.
 
 ## Source YAML
 
@@ -216,6 +224,10 @@ items:
       file to have an adjacent `<file>.syu-ownership.yaml` manifest with
       matching owner IDs and symbols. Autofix updates the sidecar manifest
       instead of inserting IDs into source when `sidecar` is enabled.
+      Repository-relative generated paths listed in
+      `validate.symbol_trace_coverage_ignored_paths` stay opted out of the
+      extra `SYU-trace-id-001` ownership requirement in `inline` and `sidecar`
+      mode so generated outputs do not need inline IDs or sidecar manifests.
   - key: validate.symbol_trace_coverage_ignored_paths
     type: array<path>
     default:
@@ -235,7 +247,11 @@ items:
       checks. The defaults skip common build outputs such as `app/dist`,
       repository-root `build/`, `coverage/`, `dist/`, and `target/`, plus the
       checked-in `tests/fixtures/workspaces/` sample repositories, without
-      hiding authored nested paths like `src/build/`. Set this list to `[]`
-      when you intentionally want generated artifacts to count toward strict
-      trace coverage too.
+      hiding authored nested paths like `src/build/`. The same list also opts
+      those generated paths out of the extra inline or sidecar ownership
+      breadcrumb enforced by `validate.trace_ownership_mode`, so generated
+      artifacts do not fail `SYU-trace-id-001` just because they lack checked-in
+      IDs or adjacent ownership manifests. Set this list to `[]` when you
+      intentionally want generated artifacts to count toward strict trace
+      coverage and ownership enforcement too.
 ```

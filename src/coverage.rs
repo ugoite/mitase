@@ -207,7 +207,9 @@ impl CoverageMap {
     }
 }
 
-fn normalized_symbol_trace_coverage_ignored_paths(config: &SyuConfig) -> BTreeSet<PathBuf> {
+pub(crate) fn normalized_symbol_trace_coverage_ignored_paths(
+    config: &SyuConfig,
+) -> BTreeSet<PathBuf> {
     config
         .validate
         .symbol_trace_coverage_ignored_paths
@@ -217,6 +219,16 @@ fn normalized_symbol_trace_coverage_ignored_paths(config: &SyuConfig) -> BTreeSe
             (!normalized.as_os_str().is_empty()).then_some(normalized)
         })
         .collect()
+}
+
+pub(crate) fn path_matches_ignored_generated_directory(
+    path: &Path,
+    ignored_paths: &BTreeSet<PathBuf>,
+) -> bool {
+    let normalized = normalize_relative_path(path);
+    ignored_paths
+        .iter()
+        .any(|ignored| normalized == *ignored || normalized.starts_with(ignored))
 }
 
 fn discover_rust_targets(
@@ -1097,8 +1109,7 @@ fn should_skip_generated_directory(
 ) -> bool {
     path.strip_prefix(workspace_root)
         .ok()
-        .map(normalize_relative_path)
-        .is_some_and(|relative| ignored_paths.contains(&relative))
+        .is_some_and(|relative| path_matches_ignored_generated_directory(relative, ignored_paths))
 }
 
 pub(crate) fn normalize_relative_path(path: &Path) -> PathBuf {
@@ -1173,9 +1184,9 @@ mod tests {
         collect_java_test_symbols, collect_requirement_coverage, discover_go_targets,
         discover_java_targets, discover_python_targets, discover_rust_targets,
         discover_typescript_targets, go_files_under, java_files_under, normalize_relative_path,
-        normalized_symbol_trace_coverage_ignored_paths, python_files_under, rust_files_under,
-        typescript_files_under, validate_symbol_trace_coverage,
-        validate_symbol_trace_coverage_with,
+        normalized_symbol_trace_coverage_ignored_paths, path_matches_ignored_generated_directory,
+        python_files_under, rust_files_under, typescript_files_under,
+        validate_symbol_trace_coverage, validate_symbol_trace_coverage_with,
     };
     use crate::{
         config::SyuConfig,
@@ -1660,6 +1671,32 @@ mod tests {
             normalize_relative_path(Path::new("../spec/trace.rs")),
             PathBuf::from("../spec/trace.rs")
         );
+    }
+
+    #[test]
+    fn ignored_generated_paths_match_nested_entries_without_hiding_authored_nested_dirs() {
+        let ignored_paths = BTreeSet::from([
+            PathBuf::from("app/dist"),
+            PathBuf::from("build"),
+            PathBuf::from("target"),
+        ]);
+
+        assert!(path_matches_ignored_generated_directory(
+            Path::new("app/dist/assets/index.js"),
+            &ignored_paths
+        ));
+        assert!(path_matches_ignored_generated_directory(
+            Path::new("target/debug/syu"),
+            &ignored_paths
+        ));
+        assert!(!path_matches_ignored_generated_directory(
+            Path::new("src/build/authored.rs"),
+            &ignored_paths
+        ));
+        assert!(!path_matches_ignored_generated_directory(
+            Path::new("app/src/distinct.ts"),
+            &ignored_paths
+        ));
     }
 
     #[test]
