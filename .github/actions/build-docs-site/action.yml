@@ -13,9 +13,8 @@ runs:
         cache-dependency-path: website/package-lock.json
 
     - name: Install docs dependencies
-      working-directory: website
       shell: bash
-      run: npm ci
+      run: bash scripts/ci/install-docs-site-deps.sh
 
     - name: Build documentation site
       working-directory: website
