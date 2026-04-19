@@ -94,6 +94,29 @@ fn init_command_interactive_requires_a_terminal() {
 
 #[test]
 // REQ-CORE-009
+fn init_help_lists_go_only_template_as_a_supported_starter() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("init")
+        .arg("--help")
+        .output()
+        .expect("help should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--template <TEMPLATE>"));
+    assert!(stdout.contains("go-only"));
+    assert!(stdout.contains("syu init . --template go-only"));
+}
+
+#[test]
+// REQ-CORE-009
 fn init_command_bootstraps_language_templates_that_validate_accept() {
     for (template, requirement_path, feature_path, requirement_id, feature_id) in [
         (
