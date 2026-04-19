@@ -149,11 +149,12 @@ Need stable project-specific starter IDs from the first command?
 syu init . --id-prefix store
 ```
 
-Need a closer starting point for a repository that is already Rust-first,
-Python-first, Go-first, or polyglot?
+Need a closer starting point for a repository that is already docs-first,
+Rust-first, Python-first, Go-first, or polyglot?
 
 ```bash
 syu templates
+syu init . --template docs-first
 syu init . --template rust-only
 syu init . --template go-only
 ```
@@ -493,6 +494,9 @@ If one of those examples is already close to your repository, use the matching
 shape. `syu templates` prints the same mapping directly in the CLI, including
 which starter is template-only (`generic`) versus backed by a checked-in
 example.
+Use `syu init . --template docs-first` when your repository is documentation-led:
+it scaffolds the same markdown, shell, and YAML starter shape as the checked-in
+example without forcing a language-specific code scaffold first.
 Use `syu init . --template go-only` when your repository is Go-first today: it
 scaffolds the same minimal spec plus `go.mod`, `go/app.go`, and
 `go/app_test.go`, while the checked-in example shows the same shape in a

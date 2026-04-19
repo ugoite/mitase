@@ -202,6 +202,7 @@ fn init_help_lists_starter_templates() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("syu templates"));
     assert!(stdout.contains("--template"));
+    assert!(stdout.contains("docs-first"));
     assert!(stdout.contains("rust-only"));
     assert!(stdout.contains("python-only"));
     assert!(stdout.contains("go-only"));

@@ -24,6 +24,9 @@ fn templates_command_lists_all_supported_templates_in_text_output() {
         "generic\tstarter-only\t-\tStarter with minimal four-layer files, neutral IDs, and core file names."
     ));
     assert!(stdout.contains(
+        "docs-first\ttemplate-and-example\texamples/docs-first\tStarter for documentation-heavy repos with markdown acceptance anchors, a shell trace, and a wildcard-owned YAML file."
+    ));
+    assert!(stdout.contains(
         "rust-only\ttemplate-and-example\texamples/rust-only\tStarter for Rust-first repos"
     ));
     assert!(stdout.contains(
@@ -59,12 +62,14 @@ fn templates_command_supports_json_output() {
     let templates = json["templates"]
         .as_array()
         .expect("templates should be an array");
-    assert_eq!(templates.len(), 5);
+    assert_eq!(templates.len(), 6);
     assert_eq!(templates[0]["name"], "generic");
     assert_eq!(templates[0]["relationship"], "starter-only");
-    assert_eq!(templates[1]["name"], "rust-only");
-    assert_eq!(templates[1]["related_example"], "examples/rust-only");
-    assert_eq!(templates[3]["name"], "go-only");
-    assert_eq!(templates[3]["related_example"], "examples/go-only");
-    assert_eq!(templates[4]["name"], "polyglot");
+    assert_eq!(templates[1]["name"], "docs-first");
+    assert_eq!(templates[1]["related_example"], "examples/docs-first");
+    assert_eq!(templates[2]["name"], "rust-only");
+    assert_eq!(templates[2]["related_example"], "examples/rust-only");
+    assert_eq!(templates[4]["name"], "go-only");
+    assert_eq!(templates[4]["related_example"], "examples/go-only");
+    assert_eq!(templates[5]["name"], "polyglot");
 }

@@ -399,6 +399,7 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("syu init ."));
     assert!(readme.contains("syu add"));
     assert!(readme.contains("--id-prefix"));
+    assert!(readme.contains("--template docs-first"));
     assert!(readme.contains("--template rust-only"));
     assert!(readme.contains("--template go-only"));
     assert!(readme.contains("syu templates"));
@@ -482,6 +483,7 @@ fn repository_declares_documentation_guides() {
     assert!(!getting_started.contains("$asset.sha256"));
     assert!(getting_started.contains("current checked-in release"));
     assert!(getting_started.contains("latest published alpha"));
+    assert!(getting_started.contains("--template docs-first"));
     assert!(getting_started.contains("--template rust-only"));
     assert!(getting_started.contains("--template go-only"));
     assert!(getting_started.contains("syu templates"));
@@ -544,6 +546,7 @@ fn repository_declares_documentation_guides() {
     assert!(examples_and_templates.contains("checked-in examples"));
     assert!(examples_and_templates.contains("examples/csharp-fallback"));
     assert!(examples_and_templates.contains("examples/docs-first"));
+    assert!(examples_and_templates.contains("`syu init . --template docs-first`"));
     assert!(examples_and_templates.contains("`syu init . --template rust-only`"));
     assert!(examples_and_templates.contains("`syu init . --template go-only`"));
     assert!(examples_and_templates.contains("examples/go-only"));
@@ -707,6 +710,7 @@ fn repository_ships_example_workspaces() {
     let csharp_fallback_readme = read_file("examples/csharp-fallback/README.md");
     let docs_first_requirement =
         read_file("examples/docs-first/docs/syu/requirements/core/docs.yaml");
+    let docs_first_readme = read_file("examples/docs-first/README.md");
     let go_example_requirement = read_file("examples/go-only/docs/syu/requirements/core/go.yaml");
     let go_example_readme = read_file("examples/go-only/README.md");
     let polyglot_feature = read_file("examples/polyglot/docs/syu/features/languages/polyglot.yaml");
@@ -721,6 +725,7 @@ fn repository_ships_example_workspaces() {
     assert!(csharp_fallback_readme.contains("SYU-trace-language-001"));
     assert!(docs_first_requirement.contains("REQ-DOCS-001"));
     assert!(docs_first_requirement.contains("DocsFirstAcceptanceChecklist"));
+    assert!(docs_first_readme.contains("syu init --template docs-first"));
     assert!(go_example_requirement.contains("REQ-GO-001"));
     assert!(go_example_readme.contains("TestGoRequirement"));
     assert!(go_example_readme.contains("GoFeatureImpl"));

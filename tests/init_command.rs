@@ -1,5 +1,7 @@
 use assert_cmd::cargo::CommandCargoExt;
 use serde_yaml::Value;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::{fs, process::Command};
 use tempfile::tempdir;
 
@@ -95,6 +97,13 @@ fn init_command_interactive_requires_a_terminal() {
 fn init_command_bootstraps_language_templates_that_validate_accept() {
     for (template, requirement_path, feature_path, requirement_id, feature_id) in [
         (
+            "docs-first",
+            "docs/syu/requirements/core/docs.yaml",
+            "docs/syu/features/documentation/docs.yaml",
+            "REQ-DOCS-001",
+            "FEAT-DOCS-001",
+        ),
+        (
             "rust-only",
             "docs/syu/requirements/core/rust.yaml",
             "docs/syu/features/languages/rust.yaml",
@@ -159,7 +168,26 @@ fn init_command_bootstraps_language_templates_that_validate_accept() {
             "missing {requirement_id}"
         );
         assert!(feature.contains(feature_id), "missing {feature_id}");
-        if template == "go-only" {
+        if template == "docs-first" {
+            assert!(workspace.join("scripts/publish-docs.sh").exists());
+            assert!(workspace.join("config/navigation.yaml").exists());
+            assert!(requirement.contains("status: implemented"));
+            assert!(requirement.contains("DocsFirstAcceptanceChecklist"));
+            assert!(feature.contains("status: implemented"));
+            assert!(feature.contains("publish_release_notes"));
+            #[cfg(unix)]
+            {
+                let mode = fs::metadata(workspace.join("scripts/publish-docs.sh"))
+                    .expect("script metadata should exist")
+                    .permissions()
+                    .mode();
+                assert_ne!(
+                    mode & 0o111,
+                    0,
+                    "docs-first starter script should be executable"
+                );
+            }
+        } else if template == "go-only" {
             assert!(workspace.join("go.mod").exists(), "missing go.mod");
             assert!(workspace.join("go/app.go").exists(), "missing go/app.go");
             assert!(
