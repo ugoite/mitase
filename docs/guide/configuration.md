@@ -155,9 +155,12 @@ coverage still skips configured repository-relative generated paths such as
 For an experimental strict run, use `syu validate . --require-symbol-trace-coverage`.
 If part of the repository still depends on a language without a built-in
 adapter, keep strict coverage off there and borrow the starter shape from the
+[`examples/csharp-fallback` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/csharp-fallback).
+That example keeps the higher-layer spec and adjacent supported traces explicit
+without pretending unsupported `csharp:` mappings validate today. Use
 [`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
-or `syu init . --template go-only` as a reminder that Go currently supports
-symbol checks and coverage ownership, but not `doc_contains`.
+or `syu init . --template go-only` when you specifically want the built-in Go
+adapter and its symbol checks plus coverage ownership.
 
 ### `app.bind`
 

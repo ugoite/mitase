@@ -25,6 +25,7 @@ whether you should scaffold a template or open one of the repository examples.
 
 | Path | Type | Best for | How to start |
 | --- | --- | --- | --- |
+| `csharp-fallback` | Example only | repositories whose main implementation language is still unsupported and need a truthful fallback reference | `examples/csharp-fallback` |
 | `docs-first` | Example only | documentation-heavy repositories that want a small reference for shell, markdown, and wildcard YAML traces | `examples/docs-first` |
 | `generic` | Template only | the shortest neutral scaffold when you do not want language-specific starter copy yet | `syu init .` |
 | `go-only` | Template + example | Go-first repositories that want starter IDs, file names, a minimal `go.mod`, and small Go source/test files from the first scaffold | `syu init . --template go-only` or `examples/go-only` |
@@ -66,10 +67,13 @@ scaffold wholesale.
 2. **I already know the repo is Rust-first / Python-first / Go-first / polyglot**: start
    with the matching template, then compare against the matching example when
    you want a fuller repository story.
-3. **I am Go-first and want to inspect native Go tracing before I scaffold
+3. **My main implementation language is still unsupported**: open
+   `examples/csharp-fallback` first to study the fallback pattern before you
+   invent placeholder `csharp:` traces that will not validate.
+4. **I am Go-first and want to inspect native Go tracing before I scaffold
    anything**: open `examples/go-only` first, then copy the shape you need into
    your own repository.
-4. **I am still deciding whether `syu` fits my repo**: read the example first so
+5. **I am still deciding whether `syu` fits my repo**: read the example first so
    you can inspect a working shape without creating files locally yet.
 
 ## Continue with these pages

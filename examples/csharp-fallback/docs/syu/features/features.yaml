@@ -1,0 +1,4 @@
+version: "0.0.1-alpha.7"
+files:
+  - kind: csharp
+    file: languages/csharp.yaml

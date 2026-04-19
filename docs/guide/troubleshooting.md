@@ -298,9 +298,13 @@ removing `doc_contains` is not enough: those entries still raise
 `SYU-trace-language-001`. Keep the higher-layer spec link in place and wait for
 adapter support before adding the code-level trace.
 The
+[`examples/csharp-fallback` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/csharp-fallback)
+shows one concrete unsupported-language starting point that keeps real C#
+source files in the repository while validated traces stay in supported shell
+and markdown files. The
 [`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
-and `syu init . --template go-only` show one concrete Go-first starting point
-with real source files plus symbol-level trace mappings.
+and `syu init . --template go-only` remain the concrete Go-first path with real
+source files plus symbol-level trace mappings.
 
 The [trace adapter capability matrix](./trace-adapter-support.md) shows which
 built-in adapters stop at symbol validation, which ones can inspect docs, and

@@ -247,9 +247,12 @@ What you should avoid for unsupported-language files today is adding
 language-specific `tests:` or `implementations:` entries such as `csharp:`.
 Those keys still fail validation before `doc_contains` support even becomes
 relevant. If you need code-level tracing immediately with `doc_contains`, stay
-with Rust, Python, or TypeScript/JavaScript for now. For Go-first repositories,
-use [`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
-or `syu init . --template go-only`: both use real Go files plus symbol-level
+with Rust, Python, or TypeScript/JavaScript for now. For unsupported-language
+repositories, use the
+[`examples/csharp-fallback` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/csharp-fallback)
+to study the fallback pattern. For Go-first repositories, use
+[`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
+or `syu init . --template go-only`: those use real Go files plus symbol-level
 trace mappings that validate today.
 
 Keep this adoption path in mind for mixed-language repositories too: start with

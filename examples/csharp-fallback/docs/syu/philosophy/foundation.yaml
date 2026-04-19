@@ -1,0 +1,11 @@
+category: Philosophy
+version: 1
+language: en
+
+philosophies:
+  - id: PHIL-CSHARP-001
+    title: Unsupported-language repositories should still connect intent to reviewable evidence
+    product_design_principle: Keep the unsupported-language example honest about current adapter limits while still showing a low-friction adoption path.
+    coding_guideline: Trace the surrounding docs and automation with supported adapters until native language support lands.
+    linked_policies:
+      - POL-CSHARP-001
