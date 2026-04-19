@@ -56,70 +56,38 @@ Make sure `syu` is installed and available on your `PATH`.
 
 **Option A — Verify the release installer before running it (recommended)**
 
-For security-sensitive environments, download the installer and checksum file
-first, verify the checksum locally, then run the checked file:
-
-```bash
-RELEASE=v0.0.1-alpha.7
-curl -fsSL "https://github.com/ugoite/syu/releases/download/${RELEASE}/install-syu.sh" -o install-syu.sh
-curl -fsSL "https://github.com/ugoite/syu/releases/download/${RELEASE}/checksums.sha256" -o checksums.sha256
-sha256sum --ignore-missing -c checksums.sha256
-bash install-syu.sh
-```
-
-On macOS, run the checksum check with the matching command instead:
-
-```bash
-shasum -a 256 --ignore-missing -c checksums.sha256
-```
+Follow the canonical
+[README installer verification flow](https://github.com/ugoite/syu/blob/main/README.md#recommended-verify-before-running)
+when you want the current checked-in release tag, the `install-syu.sh` and
+`checksums.sha256` download commands, plus the macOS `shasum -a 256` variant in
+one maintained place. This is the best fit for security-sensitive environments.
 
 The getting-started path above verifies the installer script itself. If you need
-additional archive-level provenance checks, download the platform archive
-separately and verify it before installation.
+additional archive-level provenance checks, follow the same README section and
+then verify the platform archive separately before installation.
 
 **Option B — Run the installer directly**
 
-```bash
-RELEASE=v0.0.1-alpha.7
-curl -fsSL "https://github.com/ugoite/syu/releases/download/${RELEASE}/install-syu.sh" | env SYU_VERSION=alpha bash
-```
-
-This keeps the download URL pinned to the current checked-in release while
-`SYU_VERSION=alpha` tells the installer to fetch the latest published alpha
-package once it starts. Use this shortcut when you already trust the release
-source and want the shortest path. It places `syu` in `~/.local/bin`. Add that
+Use the canonical
+[README shortcut installer entrypoint](https://github.com/ugoite/syu/blob/main/README.md#shortcut-run-the-installer-directly)
+when you already trust the release source and want the shortest path. That
+section keeps the checked-in release tag aligned in one place while
+`SYU_VERSION=alpha` still points the installer at the latest published alpha
+package after it starts. The installer places `syu` in `~/.local/bin`; add that
 directory to your `PATH` if it is not already there.
 
 **Windows — Use PowerShell for the zip, Git Bash for the installer script**
 
 If you are on Windows and want a first-party path that does not depend on Git
-Bash or WSL, download the Windows archive directly from PowerShell:
-
-```powershell
-$release = 'v0.0.1-alpha.7'
-$asset = 'syu-x86_64-pc-windows-msvc.zip'
-$checksums = 'checksums.sha256'
-Invoke-WebRequest "https://github.com/ugoite/syu/releases/download/$release/$asset" -OutFile $asset
-Invoke-WebRequest "https://github.com/ugoite/syu/releases/download/$release/$checksums" -OutFile $checksums
-$expected = (
-  Get-Content $checksums |
-  Select-String -SimpleMatch $asset |
-  ForEach-Object { $_.Line.Split()[0].ToLower() }
-)
-if (-not $expected) { throw "Checksum for $asset not found" }
-$actual = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLower()
-if ($actual -ne $expected) { throw 'Checksum mismatch' }
-$installDir = Join-Path $env:LOCALAPPDATA 'Programs\syu\bin'
-New-Item -ItemType Directory -Path $installDir -Force | Out-Null
-Expand-Archive $asset -DestinationPath $installDir -Force
-& (Join-Path $installDir 'syu.exe') --version
-```
-
-If a fresh shell still cannot find `syu`, add
-`$env:LOCALAPPDATA\Programs\syu\bin` to your user `PATH`.
+Bash or WSL, follow the canonical
+[README PowerShell install flow](https://github.com/ugoite/syu/blob/main/README.md#windows-powershell-by-default-git-bash-on-windows-wsl-as-linux).
+That section keeps the checked-in `$release`, `checksums.sha256`, and `syu.exe`
+steps aligned with the published installer docs, including the
+`syu-x86_64-pc-windows-msvc.zip` archive name.
 
 If you prefer the shell installer on Windows, run `install-syu.sh` from Git
-Bash. It resolves the same `x86_64-pc-windows-msvc` archive and installs to
+Bash. The same README section explains how it resolves the
+`x86_64-pc-windows-msvc` archive and installs to
 `%LOCALAPPDATA%\Programs\syu\bin`.
 
 If you are inside WSL, use the Linux installer path instead. There, the script
