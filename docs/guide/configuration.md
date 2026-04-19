@@ -159,8 +159,8 @@ adapter, keep strict coverage off there and borrow the starter shape from the
 That example keeps the higher-layer spec and adjacent supported traces explicit
 without pretending unsupported `csharp:` mappings validate today. Use
 [`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
-or `syu init . --template go-only` when you specifically want the built-in Go
-adapter and its symbol checks plus coverage ownership.
+or `syu init . --template go-only` as a reminder that Go now supports
+symbol checks, coverage ownership, and `doc_contains`.
 
 ### `app.bind`
 

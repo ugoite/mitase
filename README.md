@@ -615,7 +615,7 @@ The `syu` repository itself enables `validate.require_non_orphaned_items`,
 documentation-style trace gaps that can be updated mechanically:
 
 - missing requirement / feature IDs in symbol documentation
-- missing `doc_contains` snippets for Rust, Python, and TypeScript symbols
+- missing `doc_contains` snippets for Rust, Python, Go, and TypeScript symbols
 
 It does **not** attempt speculative edits like renaming symbols or inventing
 missing files.
