@@ -10,7 +10,7 @@ validate_website() {
   cd "$repo_root"
 
   bash scripts/ci/quality-gates.sh
-  npm --prefix website ci
+  bash scripts/ci/install-docs-site-deps.sh
   npm --prefix website run build
 }
 
