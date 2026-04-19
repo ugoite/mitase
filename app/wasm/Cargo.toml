@@ -1,6 +1,6 @@
 [package]
 name = "syu-app-wasm"
-version = "0.0.1-alpha.7"
+version = "0.0.1-alpha.8"
 edition = "2024"
 description = "WebAssembly bridge for the syu browser app"
 license = "MIT"

@@ -255,7 +255,7 @@ CLI flags always override the config values. See the [configuration guide](./con
 Once the app has loaded the workspace successfully, `GET /health` returns:
 
 ```json
-{"status":"ok","version":"0.0.1-alpha.7"}
+{"status":"ok","version":"0.0.1-alpha.8"}
 ```
 
 The startup log also prints a distinct ready line:

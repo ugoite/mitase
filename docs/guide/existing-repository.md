@@ -108,7 +108,7 @@ more clearly, not force a parallel vocabulary that nobody else uses.
 When you add the first feature document, remember the feature registry:
 
 ```yaml
-version: 0.0.1-alpha.7
+version: 0.0.1-alpha.8
 files:
   - kind: adoption
     file: adoption/core.yaml
