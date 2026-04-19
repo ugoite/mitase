@@ -11,6 +11,9 @@ Want a different entry point?
 - Use [existing repository adoption](./existing-repository.md) when the
   repository already has code and history and you want an incremental rollout
   instead of a from-scratch scaffold.
+- Use [reviewer workflow](./reviewer-workflow.md) when the repository already
+  has an open PR and you want to inspect the linked spec, traced code, and Git
+  history instead of creating new definitions.
 - Stay on this tutorial when you want the full repository story and the edits
   behind each command.
 - Jump to [troubleshooting](./troubleshooting.md) if you are already blocked on
