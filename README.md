@@ -479,6 +479,8 @@ The browser app serves a VitePlus / React / Tailwind UI and uses Rust plus
 WebAssembly to build the layered browser view from the live workspace data.
 When `syu.yaml` defines `app.bind` or `app.port`, `syu app` uses those defaults
 unless the CLI flags override them.
+Choose `syu app` when you want a browser-first view of the same workspace graph
+that `syu browse` shows in the terminal.
 
 ### `syu report`
 
@@ -499,24 +501,18 @@ with `scripts/ci/check-generated-docs-freshness.sh`.
 
 ## Browser app
 
-The installed CLI can launch a local browser app for richer spec exploration:
+Use [`syu app`](#syu-app) when you want a local browser UI for searching the
+four-layer graph, following links across related documents, and sharing the
+same live workspace data that `syu browse` exposes in the terminal.
 
 ```bash
 syu app .
 syu app . --bind 127.0.0.1 --port 3000
 ```
 
-The repository keeps the source UI in `app/` and generates the embedded
-production bundle during Rust builds, so `syu app` still works from installed
-binaries without checking `app/dist/` into `main`.
-
-When contributors change browser app sources or build inputs, they should run
-`scripts/ci/check-browser-app-freshness.sh`. That flow regenerates the local
-`app/src/wasm` bridge, typechecks the browser app, and builds a fresh local
-`app/dist/` artifact the same way CI does before uploading it.
-
-Want the visual tour first? See the [browser UI guide with annotated
-screenshots](docs/guide/app.md).
+For a visual tour with annotated screenshots, see the
+[browser UI guide](docs/guide/app.md). Contributor-only implementation and
+build details live under [Browser app development](#browser-app-development).
 
 ## VS Code extension
 
@@ -672,6 +668,15 @@ If you prefer to install `pre-commit` manually, `pipx install pre-commit` or
 `python -m pip install --user pre-commit` also work.
 
 ### Browser app development
+
+The repository keeps the source UI in `app/` and generates the embedded
+production bundle during Rust builds, so `syu app` still works from installed
+binaries without checking `app/dist/` into `main`.
+
+When contributors change browser app sources or build inputs, they should run
+`scripts/ci/check-browser-app-freshness.sh`. That flow regenerates the local
+`app/src/wasm` bridge, typechecks the browser app, and builds a fresh local
+`app/dist/` artifact the same way CI does before uploading it.
 
 ```bash
 cd app
