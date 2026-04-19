@@ -167,6 +167,11 @@ fn repository_keeps_node_majors_aligned_across_docs_packages_and_ci() {
         website_package["engines"]["node"].as_str(),
         Some(website_engine.as_str())
     );
+    assert_eq!(app_package["packageManager"].as_str(), Some("npm@11.8.0"));
+    assert_eq!(
+        website_package["packageManager"].as_str(),
+        Some("npm@11.8.0")
+    );
 
     assert!(contributing.contains("use **Node 25** for `app/`"));
     assert!(contributing.contains("use **Node 20** for `website/`"));
@@ -734,6 +739,7 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(contributing.contains("scripts/ci/check-generated-docs-freshness.sh"));
     assert!(contributing.contains("docs/generated/"));
     assert!(contributing.contains("scripts/ci/check-browser-app-freshness.sh"));
+    assert!(contributing.contains("scripts/ci/pinned-npm.sh install app"));
     assert!(contributing.contains("GitHub uses the PR title as the squash commit headline"));
     assert!(contributing.contains("requirement/feature coverage summary"));
     assert!(contributing.contains("Linked issue or specification"));
@@ -919,11 +925,14 @@ fn repository_ships_browser_app() {
     let app_playwright = read_file("app/tests/browser-app.spec.ts");
     let app_wasm = read_file("app/wasm/src/lib.rs");
     let bundle_freshness = read_file("scripts/ci/check-browser-app-freshness.sh");
+    let pinned_npm = read_file("scripts/ci/pinned-npm.sh");
     let readme = read_file("README.md");
     let shared_core = read_file("crates/syu-core/src/lib.rs");
 
     assert!(ci_workflow.contains("browser-app:"));
     assert!(ci_workflow.contains("Build browser app bundle"));
+    assert!(ci_workflow.contains("scripts/ci/pinned-npm.sh install app"));
+    assert!(ci_workflow.contains("scripts/ci/pinned-npm.sh install website"));
     assert!(ci_workflow.contains("scripts/ci/check-browser-app-freshness.sh"));
     assert!(ci_workflow.contains("if: success()"));
     assert!(
@@ -938,6 +947,7 @@ fn repository_ships_browser_app() {
     assert!(build_script.contains("shared_core_dir"));
     assert!(build_script.contains("scripts"));
     assert!(build_script.contains("remove_dir_if_exists"));
+    assert!(app_package.contains("\"packageManager\": \"npm@11.8.0\""));
     assert!(app_package.contains("\"vite-plus\""));
     assert!(app_package.contains("\"@playwright/test\""));
     assert!(app_gitignore.contains("dist"));
@@ -952,6 +962,7 @@ fn repository_ships_browser_app() {
     assert!(bundle_freshness.contains("FEAT-QUALITY-001"));
     assert!(bundle_freshness.contains("ensure_app_dependencies"));
     assert!(bundle_freshness.contains("clear_generated_browser_outputs"));
+    assert!(bundle_freshness.contains("pinned-npm.sh"));
     assert!(bundle_freshness.contains("npm ci"));
     assert!(bundle_freshness.contains("check_browser_app_freshness"));
     assert!(bundle_freshness.contains("npm run build:wasm"));
@@ -959,6 +970,10 @@ fn repository_ships_browser_app() {
     assert!(bundle_freshness.contains("rm -rf src/wasm dist"));
     assert!(bundle_freshness.contains("Browser app Wasm bridge was not regenerated"));
     assert!(!bundle_freshness.contains("[[ -d node_modules ]]"));
+    assert!(pinned_npm.contains("FEAT-QUALITY-001"));
+    assert!(pinned_npm.contains("packageManager"));
+    assert!(pinned_npm.contains("npm install --global"));
+    assert!(pinned_npm.contains("Run 'scripts/ci/pinned-npm.sh install"));
     assert!(readme.contains("generates the embedded"));
     assert!(readme.contains("check-browser-app-freshness.sh"));
     assert!(readme.contains("regenerates the local"));

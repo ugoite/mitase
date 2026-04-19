@@ -89,6 +89,7 @@ match your change:
    install the browser app dependencies with:
 
    ```bash
+   scripts/ci/pinned-npm.sh install app
    npm --prefix app ci
    ```
 
@@ -144,6 +145,7 @@ match your change:
    install step remains:
 
    ```bash
+   scripts/ci/pinned-npm.sh install website
    npm --prefix website ci
    ```
 
