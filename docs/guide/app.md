@@ -163,6 +163,28 @@ Use the validation flow in this order:
 2. Read the selected issue message, location, suggestion, and rule reference.
 3. Click `View <ID>` to open the affected spec item in the main content area.
 
+### Recovering from a failing workspace
+
+When the workspace starts with validation issues already present, the same UI
+becomes a recovery checklist instead of a passive summary:
+
+1. Check the **issues** count in the sidebar first so you know whether you are
+   looking at one blocker or a longer queue.
+2. Open the validation row with the highest-severity problem you can fix next.
+3. Use the selected issue's **suggestion** and **rule reference** to understand
+   whether the problem is a missing backlink, a missing trace, or a broken file
+   reference.
+4. Click `View <ID>` to jump from the issue directly to the affected item, then
+   compare the YAML, links, and traces in the detail panel against the problem
+   description.
+5. After you edit the workspace, keep the tab visible or switch back to it so
+   the app refreshes the snapshot and the issue count drops as the workspace
+   recovers. If a refresh fails, the stale-snapshot banner can stay visible
+   until the next successful refresh even after you fix the underlying issue.
+
+That workflow lets you move from a red validation state to the exact item that
+needs attention without losing the broader workspace context.
+
 ---
 
 ## Common workflows
