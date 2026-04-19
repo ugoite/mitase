@@ -1093,6 +1093,9 @@ fn repository_ships_browser_app() {
     assert!(pinned_npm.contains("npm install --global"));
     assert!(pinned_npm.contains("Run 'scripts/ci/pinned-npm.sh install"));
     assert!(readme.contains("generates the embedded"));
+    assert!(readme.contains("scripts/ci/pinned-npm.sh install app"));
+    assert!(readme.contains("Cargo no longer runs `npm ci` for you during normal builds."));
+    assert!(readme.contains("offline, hermetic, and security-sensitive environments"));
     assert!(readme.contains("check-browser-app-freshness.sh"));
     assert!(readme.contains("regenerates the local"));
     assert!(readme.contains("app/dist"));
