@@ -30,6 +30,13 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
       - **file**: scripts/ci/quality-gates.sh
         - **symbols**:
           - run_quality_gates
+      - **file**: scripts/ci/validate-app.sh
+        - **symbols**:
+          - run_optional_e2e
+          - validate_app
+      - **file**: scripts/ci/validate-website.sh
+        - **symbols**:
+          - validate_website
       - **file**: scripts/ci/coverage.sh
         - **symbols**:
           - configure_llvm_tools
@@ -103,6 +110,13 @@ features:
         - file: scripts/ci/quality-gates.sh
           symbols:
             - run_quality_gates
+        - file: scripts/ci/validate-app.sh
+          symbols:
+            - run_optional_e2e
+            - validate_app
+        - file: scripts/ci/validate-website.sh
+          symbols:
+            - validate_website
         - file: scripts/ci/coverage.sh
           symbols:
             - configure_llvm_tools
