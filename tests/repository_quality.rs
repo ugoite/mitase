@@ -265,6 +265,12 @@ fn repository_declares_release_automation() {
     assert!(manifest.contains("\".\": \"0.0.0\""));
     assert!(readme.contains("gh attestation verify"));
     assert!(readme.contains("--repo ugoite/syu"));
+    assert!(readme.contains("gh release download"));
+    assert!(
+        readme.contains("--signer-workflow ugoite/syu/.github/workflows/release-artifacts.yml")
+    );
+    assert!(readme.contains("--source-ref \"refs/tags/${RELEASE}\""));
+    assert!(readme.contains("--format json"));
     assert!(
         !repo_root()
             .join("release-please-config.alpha.json")
@@ -502,6 +508,8 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("compact command card"));
     assert!(getting_started.contains("install-syu.sh"));
     assert!(getting_started.contains("checksums.sha256"));
+    assert!(getting_started.contains("--signer-workflow"));
+    assert!(getting_started.contains("--source-ref"));
     assert!(getting_started.contains("security-sensitive environments"));
     assert!(getting_started.contains("README installer verification flow"));
     assert!(getting_started.contains("SYU_VERSION=alpha"));
