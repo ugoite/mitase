@@ -971,12 +971,14 @@ fn repository_ships_browser_app() {
         )
     );
     assert!(build_script.contains("syu-app-dist"));
-    assert!(build_script.contains("npm ci"));
+    assert!(build_script.contains("scripts/ci/pinned-npm.sh install app"));
+    assert!(build_script.contains("browser app dependencies are not ready"));
     assert!(build_script.contains("build:wasm"));
     assert!(build_script.contains("--outDir"));
     assert!(build_script.contains("shared_core_dir"));
     assert!(build_script.contains("scripts"));
     assert!(build_script.contains("remove_dir_if_exists"));
+    assert!(!build_script.contains("install browser app dependencies with `npm ci`"));
     assert!(app_package.contains("\"packageManager\": \"npm@11.8.0\""));
     assert!(app_package.contains("\"vite-plus\""));
     assert!(app_package.contains("\"@playwright/test\""));
