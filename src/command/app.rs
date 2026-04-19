@@ -1053,7 +1053,7 @@ mod tests {
         .expect("requirement");
         fs::write(
             spec_root.join("features/features.yaml"),
-            "version: \"0.0.1-alpha.7\"\nupdated: \"2026-04\"\n\nfiles:\n  - kind: core\n    file: core.yaml\n",
+            "version: \"0.0.1-alpha.8\"\nupdated: \"2026-04\"\n\nfiles:\n  - kind: core\n    file: core.yaml\n",
         )
         .expect("feature registry");
         fs::write(

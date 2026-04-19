@@ -30,7 +30,7 @@ async function createCustomSpecRootWorkspace() {
   await fs.mkdir(path.join(specRoot, 'features'), { recursive: true });
   await fs.writeFile(
     path.join(workspaceRoot, 'syu.yaml'),
-    'version: 0.0.1-alpha.7\nspec:\n  root: spec/contracts\n'
+    'version: 0.0.1-alpha.8\nspec:\n  root: spec/contracts\n'
   );
   await fs.writeFile(
     path.join(specRoot, 'philosophy', 'foundation.yaml'),
