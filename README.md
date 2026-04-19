@@ -621,6 +621,7 @@ missing files.
 
 The repository ships working example projects:
 
+- [`examples/csharp-fallback`](examples/csharp-fallback)
 - [`examples/docs-first`](examples/docs-first)
 - [`examples/go-only`](examples/go-only)
 - [`examples/rust-only`](examples/rust-only)
@@ -628,8 +629,10 @@ The repository ships working example projects:
 - [`examples/polyglot`](examples/polyglot)
 - [`examples/team-scale`](examples/team-scale)
 `rust-only`, `python-only`, `go-only`, and `polyglot` match
-`syu init --template ...` starters directly. `team-scale` remains a
-reference-only example for studying a larger split-by-area repository shape.
+`syu init --template ...` starters directly. `csharp-fallback` remains the
+reference-only example for repositories whose main implementation language is
+still unsupported, and `team-scale` remains a reference-only example for
+studying a larger split-by-area repository shape.
 
 Each one is validated in the automated test suite. If you are deciding between a
 checked-in example and a scaffold template, start with

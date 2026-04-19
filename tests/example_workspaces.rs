@@ -34,6 +34,29 @@ fn docs_first_example_validates() {
 
 #[test]
 // REQ-CORE-012
+fn csharp_fallback_example_validates() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(example_path("csharp-fallback"))
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("definitions: philosophies=1 policies=1 requirements=1 features=1"));
+    assert!(stdout.contains(
+        "traceability: requirements=1/1 traces validated; features=1/1 traces validated"
+    ));
+}
+
+#[test]
+// REQ-CORE-012
 fn rust_only_example_validates() {
     let output = Command::cargo_bin("syu")
         .expect("binary should build")
