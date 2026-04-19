@@ -25,17 +25,12 @@ previous_track_tag() {
   local repository="$1"
   local current_tag="$2"
   local track="$3"
-  local releases_json
-
-  releases_json="$(gh api "repos/${repository}/releases?per_page=100")"
-
-  RELEASES_JSON="$releases_json" python3 - "$current_tag" "$track" <<'PY'
+  gh api "repos/${repository}/releases?per_page=100" | python3 -c '
 import json
-import os
 import sys
 
 current_tag, desired_track = sys.argv[1:3]
-releases = json.loads(os.environ["RELEASES_JSON"])
+releases = json.load(sys.stdin)
 
 def track_for(tag: str) -> str:
     if "-alpha." in tag:
@@ -54,7 +49,7 @@ for release in releases:
         continue
     print(tag)
     break
-PY
+' "$current_tag" "$track"
 }
 
 generate_release_notes() {
@@ -78,14 +73,7 @@ generate_release_notes() {
       -f target_commitish="main")"
   fi
 
-  RELEASE_NOTES_PAYLOAD="$payload" python3 - <<'PY'
-import json
-import os
-import sys
-
-payload = json.loads(os.environ["RELEASE_NOTES_PAYLOAD"])
-print(payload["body"])
-PY
+  printf '%s' "$payload" | python3 -c 'import json, sys; print(json.load(sys.stdin)["body"])'
 }
 
 main() {
