@@ -4646,6 +4646,25 @@ mod tests {
             1
         );
 
+        let go_path = tempdir.path().join("trace.go");
+        fs::write(&go_path, "// Explain expected\nfunc expected() {}\n")
+            .expect("go file should exist");
+        let mut go_issues = Vec::new();
+        assert!(verify_trace_reference(
+            tempdir.path(),
+            &SyuConfig::default(),
+            "REQ-1",
+            TraceRole::RequirementTest,
+            "go",
+            &TraceReference {
+                file: PathBuf::from("trace.go"),
+                symbols: vec!["expected".to_string()],
+                doc_contains: vec!["Explain expected".to_string()],
+            },
+            &mut go_issues,
+        ));
+        assert!(go_issues.is_empty());
+
         let shell_path = tempdir.path().join("trace.sh");
         fs::write(&shell_path, "# REQ-1\nexpected() {\n  echo ok\n}\n")
             .expect("shell file should exist");

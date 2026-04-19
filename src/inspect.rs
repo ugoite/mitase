@@ -98,6 +98,12 @@ pub(crate) struct TypeScriptSymbolInspection {
 }
 
 #[derive(Debug, Clone)]
+pub(crate) struct GoSymbolInspection {
+    pub(crate) docs: String,
+    pub(crate) line: usize,
+}
+
+#[derive(Debug, Clone)]
 struct JsDocBlock {
     end_line: usize,
     text: String,
@@ -117,7 +123,7 @@ struct PythonSymbolRecord {
 pub fn supports_rich_inspection(language: &str) -> bool {
     matches!(
         adapter_for_language(language).map(LanguageAdapter::canonical_name),
-        Some("rust" | "python" | "typescript")
+        Some("rust" | "python" | "typescript" | "go")
     )
 }
 
@@ -150,6 +156,12 @@ pub fn inspect_symbol(
                 line: item.line,
             }),
         ),
+        Some("go") => Ok(
+            inspect_go_symbol(contents, symbol).map(|item| SymbolInspection {
+                docs: item.docs,
+                line: item.line,
+            }),
+        ),
         _ => Ok(None),
     }
 }
@@ -172,6 +184,7 @@ pub fn apply_symbol_doc_fix(
         Some("rust") => fix_rust_symbol_docs(contents, symbol, &required),
         Some("python") => fix_python_symbol_docs(config, path, contents, symbol, &required),
         Some("typescript") => fix_typescript_symbol_docs(path, contents, symbol, &required),
+        Some("go") => fix_go_symbol_docs(contents, symbol, &required),
         _ => Ok(None),
     }
 }
@@ -320,6 +333,43 @@ pub(crate) fn inspect_typescript_file(
     Ok(symbols)
 }
 
+fn inspect_go_symbol(contents: &str, symbol: &str) -> Option<GoSymbolInspection> {
+    let escaped = regex::escape(symbol);
+    let function_regex = Regex::new(&format!(r"^\s*func\s*(?:\([^)]+\)\s*)?{escaped}\b")).ok()?;
+    let type_regex = Regex::new(&format!(r"^\s*type\s+{escaped}\b")).ok()?;
+    let value_regex = Regex::new(&format!(r"^\s*(?:var|const)\s+{escaped}\b")).ok()?;
+    let block_start_regex = Regex::new(r"^\s*(?:var|const)\s*\(\s*$").ok()?;
+    let block_end_regex = Regex::new(r"^\s*\)\s*$").ok()?;
+    let block_value_regex = Regex::new(&format!(r"^\s*{escaped}\b")).ok()?;
+    let lines = contents.lines().collect::<Vec<_>>();
+    let mut in_value_block = false;
+
+    for (index, line) in lines.iter().enumerate() {
+        let is_match = if in_value_block {
+            if block_end_regex.is_match(line) {
+                in_value_block = false;
+                false
+            } else {
+                block_value_regex.is_match(line)
+            }
+        } else if block_start_regex.is_match(line) {
+            in_value_block = true;
+            false
+        } else {
+            function_regex.is_match(line) || type_regex.is_match(line) || value_regex.is_match(line)
+        };
+
+        if is_match {
+            return Some(GoSymbolInspection {
+                docs: collect_go_doc_comments(&lines, index),
+                line: index + 1,
+            });
+        }
+    }
+
+    None
+}
+
 fn collect_typescript_symbols(
     node: tree_sitter::Node<'_>,
     contents: &str,
@@ -369,6 +419,72 @@ fn collect_typescript_symbols(
 
 fn node_text<'a>(node: tree_sitter::Node<'_>, contents: &'a str) -> &'a str {
     &contents[node.byte_range()]
+}
+
+fn collect_go_doc_comments(lines: &[&str], declaration_index: usize) -> String {
+    if declaration_index == 0 {
+        return String::new();
+    }
+
+    let previous = lines[declaration_index - 1].trim();
+    if previous.is_empty() {
+        return String::new();
+    }
+
+    if previous.starts_with("//") {
+        return collect_go_line_comments(lines, declaration_index - 1);
+    }
+
+    if previous.ends_with("*/") {
+        return collect_go_block_comment(lines, declaration_index - 1);
+    }
+
+    String::new()
+}
+
+fn collect_go_line_comments(lines: &[&str], comment_index: usize) -> String {
+    let mut start = comment_index;
+    while start > 0 && lines[start - 1].trim().starts_with("//") {
+        start -= 1;
+    }
+
+    lines[start..=comment_index]
+        .iter()
+        .map(|line| strip_go_comment_markers(line))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn collect_go_block_comment(lines: &[&str], comment_end_index: usize) -> String {
+    let mut start = comment_end_index;
+    loop {
+        let candidate = lines[start].trim();
+        if candidate.contains("/*") {
+            break;
+        }
+        if start == 0 || candidate.is_empty() {
+            return String::new();
+        }
+        start -= 1;
+    }
+
+    lines[start..=comment_end_index]
+        .iter()
+        .map(|line| strip_go_comment_markers(line))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string()
+}
+
+fn strip_go_comment_markers(line: &str) -> String {
+    line.trim()
+        .trim_start_matches("/*")
+        .trim_end_matches("*/")
+        .trim_start_matches("//")
+        .trim_start_matches('*')
+        .trim()
+        .to_string()
 }
 
 fn fix_rust_symbol_docs(
@@ -460,6 +576,25 @@ fn fix_typescript_symbol_docs(
         block.push(format!("{indent} */"));
         lines.splice(existing.line - 1..existing.line - 1, block);
     }
+
+    Ok(Some(join_lines(lines, contents.ends_with('\n'))))
+}
+
+fn fix_go_symbol_docs(contents: &str, symbol: &str, required: &[String]) -> Result<Option<String>> {
+    let Some(existing) = inspect_go_symbol(contents, symbol) else {
+        return Ok(None);
+    };
+    let missing = missing_doc_snippets(&existing.docs, required);
+    if missing.is_empty() {
+        return Ok(None);
+    }
+
+    let mut lines = to_lines(contents);
+    let inserts = missing
+        .into_iter()
+        .map(|snippet| format!("// {snippet}"))
+        .collect::<Vec<_>>();
+    lines.splice(existing.line - 1..existing.line - 1, inserts);
 
     Ok(Some(join_lines(lines, contents.ends_with('\n'))))
 }
@@ -614,6 +749,7 @@ mod tests {
         assert!(supports_rich_inspection("rust"));
         assert!(supports_rich_inspection("python"));
         assert!(supports_rich_inspection("typescript"));
+        assert!(supports_rich_inspection("go"));
         assert!(!supports_rich_inspection("shell"));
     }
 
@@ -984,6 +1120,157 @@ mod external;
         .expect("symbol should exist");
 
         assert!(inspected.docs.contains("REQ-1"));
+    }
+
+    #[test]
+    fn go_inspection_reads_line_and_block_comments() {
+        let line_comment_source =
+            "// REQ-1\n// stable docs\nfunc sample() string {\n\treturn \"ok\"\n}\n";
+        let line_comment_inspected = inspect_symbol(
+            "go",
+            &SyuConfig::default(),
+            std::path::Path::new("go/sample.go"),
+            line_comment_source,
+            "sample",
+        )
+        .expect("inspection should succeed")
+        .expect("symbol should exist");
+        assert!(line_comment_inspected.docs.contains("REQ-1"));
+        assert!(line_comment_inspected.docs.contains("stable docs"));
+        assert_eq!(line_comment_inspected.line, 3);
+
+        let block_comment_source = "type service struct{}\n\n/*\n * FEAT-1\n * service docs\n */\nfunc (svc service) serve() {}\n";
+        let block_comment_inspected = inspect_symbol(
+            "go",
+            &SyuConfig::default(),
+            std::path::Path::new("go/sample.go"),
+            block_comment_source,
+            "serve",
+        )
+        .expect("inspection should succeed")
+        .expect("method should exist");
+        assert!(block_comment_inspected.docs.contains("FEAT-1"));
+        assert!(block_comment_inspected.docs.contains("service docs"));
+        assert_eq!(block_comment_inspected.line, 7);
+    }
+
+    #[test]
+    fn go_inspection_covers_types_values_blocks_and_empty_docs() {
+        let type_source = "// REQ-TYPE\n type sample struct{}\n";
+        let type_inspected = inspect_symbol(
+            "go",
+            &SyuConfig::default(),
+            std::path::Path::new("go/sample.go"),
+            type_source,
+            "sample",
+        )
+        .expect("inspection should succeed")
+        .expect("type should exist");
+        assert!(type_inspected.docs.contains("REQ-TYPE"));
+
+        let value_source = "// REQ-VALUE\nconst sample = 1\n";
+        let value_inspected = inspect_symbol(
+            "go",
+            &SyuConfig::default(),
+            std::path::Path::new("go/sample.go"),
+            value_source,
+            "sample",
+        )
+        .expect("inspection should succeed")
+        .expect("value should exist");
+        assert!(value_inspected.docs.contains("REQ-VALUE"));
+
+        let block_source = "const (\n\tother = 1\n\t// REQ-BLOCK\n\tsample = 2\n)\n";
+        let block_inspected = inspect_symbol(
+            "go",
+            &SyuConfig::default(),
+            std::path::Path::new("go/sample.go"),
+            block_source,
+            "sample",
+        )
+        .expect("inspection should succeed")
+        .expect("block value should exist");
+        assert!(block_inspected.docs.contains("REQ-BLOCK"));
+
+        assert_eq!(
+            inspect_symbol(
+                "go",
+                &SyuConfig::default(),
+                std::path::Path::new("go/sample.go"),
+                block_source,
+                "missing",
+            )
+            .expect("inspection should succeed"),
+            None
+        );
+
+        let no_doc_source = "value := sampleFactory()\nfunc sample() {}\n";
+        let no_doc_inspected = inspect_symbol(
+            "go",
+            &SyuConfig::default(),
+            std::path::Path::new("go/sample.go"),
+            no_doc_source,
+            "sample",
+        )
+        .expect("inspection should succeed")
+        .expect("function should exist");
+        assert!(no_doc_inspected.docs.is_empty());
+
+        let broken_block_source = "*/\nfunc sample() {}\n";
+        let broken_block_inspected = inspect_symbol(
+            "go",
+            &SyuConfig::default(),
+            std::path::Path::new("go/sample.go"),
+            broken_block_source,
+            "sample",
+        )
+        .expect("inspection should succeed")
+        .expect("function should exist");
+        assert!(broken_block_inspected.docs.is_empty());
+    }
+
+    #[test]
+    fn go_fix_inserts_missing_doc_lines() {
+        let source = "func sample() string {\n\treturn \"ok\"\n}\n";
+        let updated = apply_symbol_doc_fix(
+            "go",
+            &SyuConfig::default(),
+            std::path::Path::new("go/sample.go"),
+            source,
+            "sample",
+            &["REQ-1".to_string(), "Explain sample".to_string()],
+        )
+        .expect("fix should succeed")
+        .expect("fix should update source");
+
+        assert!(updated.contains("// REQ-1"));
+        assert!(updated.contains("// Explain sample"));
+
+        assert_eq!(
+            apply_symbol_doc_fix(
+                "go",
+                &SyuConfig::default(),
+                std::path::Path::new("go/sample.go"),
+                "// REQ-1\n// Explain sample\nfunc sample() string {\n\treturn \"ok\"\n}\n",
+                "sample",
+                &["REQ-1".to_string(), "Explain sample".to_string()],
+            )
+            .expect("fix should succeed"),
+            None
+        );
+
+        assert_eq!(
+            apply_symbol_doc_fix(
+                "go",
+                &SyuConfig::default(),
+                std::path::Path::new("go/sample.go"),
+                source,
+                "missing",
+                &["REQ-1".to_string()],
+            )
+            .expect("fix should succeed"),
+            None
+        );
     }
 
     #[test]
