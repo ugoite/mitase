@@ -312,6 +312,21 @@ starter IDs from the first command, and the per-layer `--*-prefix` flags when a
 single shared stem is not enough. Use `--spec-root` to scaffold into a
 repository-relative spec tree without moving the generated files by hand later.
 
+### `syu templates`
+
+List starter templates and their related checked-in examples before you
+scaffold:
+
+```bash
+syu templates
+syu templates --format json
+```
+
+Use this command when you want a quick discovery view. Each row shows the
+template name, whether it is starter-only or backed by both a template and a
+checked-in example, the related example path when one exists, and a short
+description of the starter shape.
+
 ### `syu add`
 
 Scaffold a new YAML stub after the initial workspace exists:
