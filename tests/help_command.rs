@@ -78,6 +78,7 @@ fn log_help_mentions_kind_path_and_json_output() {
     assert!(stdout.contains("--kind"));
     assert!(stdout.contains("--path"));
     assert!(stdout.contains("--format"));
+    assert!(stdout.contains("Philosophy, policy, requirement, or feature ID"));
     assert!(stdout.contains("syu log FEAT-CHECK-001 --kind implementation --path src/command"));
 }
 
