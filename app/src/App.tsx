@@ -70,6 +70,7 @@ function App() {
 
   const applyWorkspace = useCallback((browserWorkspace: BrowserWorkspace) => {
     setWorkspace(browserWorkspace);
+    setShowOnboarding(shouldShowOnboarding(browserWorkspace.workspace_root));
 
     const hash = window.location.hash.replace(/^#\/?/, "");
     const hashParts = hash.split("/");
@@ -490,7 +491,7 @@ function App() {
 
   const dismissOnboarding = () => {
     setShowOnboarding(false);
-    persistOnboardingDismissal();
+    persistOnboardingDismissal(workspace?.workspace_root);
   };
 
   const goBack = () => {
@@ -1190,26 +1191,36 @@ function ratio(validated: number, declared: number): number {
   return Math.max(0, Math.min(1, validated / declared));
 }
 
-function shouldShowOnboarding(): boolean {
+function onboardingStorageKey(workspaceRoot: string | null | undefined): string {
+  const normalizedRoot = workspaceRoot?.trim();
+
+  if (!normalizedRoot) {
+    return ONBOARDING_STORAGE_KEY;
+  }
+
+  return `${ONBOARDING_STORAGE_KEY}:${normalizedRoot}`;
+}
+
+function shouldShowOnboarding(workspaceRoot?: string): boolean {
   if (typeof window === "undefined") {
     return true;
   }
 
   try {
-    return window.sessionStorage.getItem(ONBOARDING_STORAGE_KEY) !== "true";
+    return window.sessionStorage.getItem(onboardingStorageKey(workspaceRoot)) !== "true";
   } catch (error) {
     console.warn("syu app could not read onboarding dismissal state from sessionStorage.", error);
     return true;
   }
 }
 
-function persistOnboardingDismissal() {
+function persistOnboardingDismissal(workspaceRoot?: string) {
   if (typeof window === "undefined") {
     return;
   }
 
   try {
-    window.sessionStorage.setItem(ONBOARDING_STORAGE_KEY, "true");
+    window.sessionStorage.setItem(onboardingStorageKey(workspaceRoot), "true");
   } catch (error) {
     console.warn("syu app could not persist onboarding dismissal in sessionStorage.", error);
   }
