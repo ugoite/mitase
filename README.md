@@ -50,6 +50,10 @@ Pick the newcomer path that matches what you need next:
 - **Visual explorer**: start with [`docs/guide/app.md`](docs/guide/app.md) or run
   `syu app .` when you want graphical spec navigation before learning the full
   text-first CLI flow.
+- **Reviewer workflow**: open
+  [`docs/guide/reviewer-workflow.md`](docs/guide/reviewer-workflow.md) when a
+  PR already exists and you want one concrete loop for moving between spec IDs,
+  traced code, and recent Git history.
 - **Trace adapter matrix**: open
   [`docs/guide/trace-adapter-support.md`](docs/guide/trace-adapter-support.md)
   when you already have a workspace and need a capability reference for which
@@ -67,6 +71,7 @@ Keep the detailed guides close:
 - [`docs/guide/tutorial.md`](docs/guide/tutorial.md)
 - [`docs/guide/migration.md`](docs/guide/migration.md)
 - [`docs/guide/app.md`](docs/guide/app.md)
+- [`docs/guide/reviewer-workflow.md`](docs/guide/reviewer-workflow.md)
 - [`docs/guide/trace-adapter-support.md`](docs/guide/trace-adapter-support.md)
 - [`docs/guide/configuration.md`](docs/guide/configuration.md)
 - [`docs/guide/spec-antipatterns.md`](docs/guide/spec-antipatterns.md)
