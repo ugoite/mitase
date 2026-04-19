@@ -51,6 +51,16 @@ async function pathExists(filePath) {
   }
 }
 
+async function looksLikeSpecRoot(root) {
+  return (
+    (await pathExists(path.join(root, 'philosophy'))) &&
+    (await pathExists(path.join(root, 'policies'))) &&
+    (await pathExists(path.join(root, 'requirements'))) &&
+    (await pathExists(path.join(root, 'features'))) &&
+    (await pathExists(path.join(root, 'features', 'features.yaml')))
+  )
+}
+
 async function readWorkspaceConfig(workspaceRoot) {
   const configPath = path.join(workspaceRoot, 'syu.yaml')
   if (!(await pathExists(configPath))) {
@@ -67,6 +77,43 @@ async function readWorkspaceConfig(workspaceRoot) {
   } catch {
     return { specRoot: DEFAULT_SPEC_ROOT }
   }
+}
+
+async function resolveWorkspaceContext(startPath) {
+  const resolved = path.resolve(startPath)
+  const searchRoot = resolved
+  let current = searchRoot
+
+  while (true) {
+    const configPath = path.join(current, 'syu.yaml')
+    if (await pathExists(configPath)) {
+      const { specRoot } = await readWorkspaceConfig(current)
+      const absoluteSpecRoot = path.resolve(current, specRoot)
+      if (
+        (searchRoot === current || isWithinPath(searchRoot, absoluteSpecRoot)) &&
+        (await looksLikeSpecRoot(absoluteSpecRoot))
+      ) {
+        return { workspaceRoot: current, specRoot: absoluteSpecRoot }
+      }
+    }
+
+    const parent = path.dirname(current)
+    if (parent === current) {
+      break
+    }
+    current = parent
+  }
+
+  if (await looksLikeSpecRoot(searchRoot)) {
+    return { workspaceRoot: searchRoot, specRoot: searchRoot }
+  }
+
+  return null
+}
+
+function isWithinPath(candidate, parent) {
+  const relative = path.relative(parent, candidate)
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
 }
 
 async function walkYamlFiles(root) {
@@ -152,8 +199,14 @@ function collectDocumentEntries(kind, items, documentPath, byId, byKind) {
 }
 
 async function loadSpecModel(workspaceRoot) {
-  const { specRoot } = await readWorkspaceConfig(workspaceRoot)
-  const absoluteSpecRoot = path.resolve(workspaceRoot, specRoot)
+  const context = await resolveWorkspaceContext(workspaceRoot)
+  const resolvedWorkspaceRoot = context?.workspaceRoot || workspaceRoot
+  const absoluteSpecRoot =
+    context?.specRoot ||
+    path.resolve(
+      resolvedWorkspaceRoot,
+      (await readWorkspaceConfig(resolvedWorkspaceRoot)).specRoot
+    )
   const yamlFiles = await walkYamlFiles(absoluteSpecRoot)
   const byId = new Map()
   const byKind = new Map(SPEC_KINDS.map((kind) => [kind, []]))
@@ -167,7 +220,7 @@ async function loadSpecModel(workspaceRoot) {
       continue
     }
 
-    const documentPath = normalizeRelativePath(path.relative(workspaceRoot, filePath))
+    const documentPath = normalizeRelativePath(path.relative(resolvedWorkspaceRoot, filePath))
     collectDocumentEntries('philosophy', parsed?.philosophies, documentPath, byId, byKind)
     collectDocumentEntries('policy', parsed?.policies, documentPath, byId, byKind)
     collectDocumentEntries('requirement', parsed?.requirements, documentPath, byId, byKind)
@@ -175,7 +228,7 @@ async function loadSpecModel(workspaceRoot) {
   }
 
   return {
-    workspaceRoot,
+    workspaceRoot: resolvedWorkspaceRoot,
     specRoot: absoluteSpecRoot,
     byId,
     byKind
@@ -683,6 +736,8 @@ module.exports = {
   lookupTrace,
   normalizeRelativePath,
   openTargetsForSpecId,
+  readWorkspaceConfig,
+  resolveWorkspaceContext,
   resolveIssueTarget,
   runSyuJson,
   specIdFromText
