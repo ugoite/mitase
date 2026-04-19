@@ -420,6 +420,20 @@ layer or emitted as JSON for automation. Use `syu browse --non-interactive`
 when you want the browse snapshot instead: workspace metadata, per-layer
 counts, and the current validation errors in plain text.
 
+If you only remember the task and not the command name yet, use this chooser:
+
+| If you want to... | Start with... | Why |
+| --- | --- | --- |
+| check whether the workspace is healthy before deeper exploration | `syu validate .` | runs the validation pass first so you can fix structural problems before navigating the graph |
+| inspect the whole workspace interactively in a terminal | `syu browse .` | best first stop when you want the layered graph and current validation state together |
+| render one layer or emit machine-friendly lists | `syu list ...` | keeps the output list-shaped and scriptable |
+| open one exact definition by ID | `syu show ID` | jumps directly to the matched philosophy, policy, requirement, or feature |
+| search when you only know a keyword or partial ID | `syu search QUERY` | searches titles, summaries, descriptions, and IDs across the spec |
+| start from a traced file or symbol during review | `syu trace path --symbol name` | works code-first instead of spec-first |
+| inspect everything connected to one ID, file, or symbol | `syu relate TARGET` | expands nearby links, traced files, and symbols to show the surrounding context |
+| review change history for one requirement or feature | `syu log ID` | follows the checked-in definition plus traced evidence through Git history |
+| switch to a browser-first workflow | `syu app .` | shows the same workspace graph in the local browser UI |
+
 Use JSON when integrating with automation:
 
 ```bash
