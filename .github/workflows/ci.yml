@@ -33,6 +33,19 @@ jobs:
         with:
           components: rustfmt,clippy
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "25"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install browser app dependencies
+        shell: bash
+        run: |
+          scripts/ci/pinned-npm.sh install app
+          npm --prefix app ci
+
       - name: Install cargo-llvm-cov
         uses: taiki-e/cache-cargo-install-action@v3
         with:
@@ -65,6 +78,19 @@ jobs:
         with:
           components: rustfmt,clippy
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "25"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install browser app dependencies
+        shell: bash
+        run: |
+          scripts/ci/pinned-npm.sh install app
+          npm --prefix app ci
+
       - name: Run quality gates
         run: scripts/ci/quality-gates.sh
 
@@ -76,6 +102,19 @@ jobs:
 
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "25"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install browser app dependencies
+        shell: bash
+        run: |
+          scripts/ci/pinned-npm.sh install app
+          npm --prefix app ci
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/cache-cargo-install-action@v3
@@ -255,6 +294,19 @@ jobs:
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "25"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install browser app dependencies
+        shell: bash
+        run: |
+          scripts/ci/pinned-npm.sh install app
+          npm --prefix app ci
+
       - name: Set up Python with pip cache
         uses: actions/setup-python@v6
         with:
@@ -331,6 +383,12 @@ jobs:
           node-version: "25"
           cache: npm
           cache-dependency-path: app/package-lock.json
+
+      - name: Install browser app dependencies
+        shell: bash
+        run: |
+          scripts/ci/pinned-npm.sh install app
+          npm --prefix app ci
 
       - name: Install stable toolchain for wasm-pack bootstrap
         uses: dtolnay/rust-toolchain@stable
