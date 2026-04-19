@@ -22,6 +22,7 @@ fn repository_declares_precommit_and_quality_gates() {
     let quality_script = read_file("scripts/ci/quality-gates.sh");
     let validate_app_script = read_file("scripts/ci/validate-app.sh");
     let validate_website_script = read_file("scripts/ci/validate-website.sh");
+    let install_docs_site_deps_script = read_file("scripts/ci/install-docs-site-deps.sh");
     let ci_workflow = read_file(".github/workflows/ci.yml");
     let contributing = read_file("CONTRIBUTING.md");
     let repo_config = read_file("syu.yaml");
@@ -47,8 +48,12 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(validate_website_script.contains("FEAT-QUALITY-001"));
     assert!(validate_website_script.contains("validate_website"));
     assert!(validate_website_script.contains("scripts/ci/quality-gates.sh"));
-    assert!(validate_website_script.contains("npm --prefix website ci"));
+    assert!(validate_website_script.contains("install-docs-site-deps.sh"));
     assert!(validate_website_script.contains("npm --prefix website run build"));
+    assert!(install_docs_site_deps_script.contains("Branch switches can leave behind"));
+    assert!(install_docs_site_deps_script.contains("website/node_modules"));
+    assert!(install_docs_site_deps_script.contains("shutil.rmtree"));
+    assert!(install_docs_site_deps_script.contains("npm --prefix website ci"));
     assert!(install_precommit.contains("site --user-base"));
     assert!(install_precommit.contains("pipx environment --value PIPX_BIN_DIR"));
     assert!(install_precommit.contains("Troubleshooting: compare"));
