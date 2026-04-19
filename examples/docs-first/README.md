@@ -27,8 +27,20 @@ adapter shapes:
 ```bash
 cd examples/docs-first
 syu validate .
+syu list feature
 syu show REQ-DOCS-001
 syu show FEAT-DOCS-002
+syu browse .
+syu app .
+```
+
+A successful `syu validate .` produces output similar to:
+
+```text
+syu validate passed
+workspace: examples/docs-first
+definitions: philosophies=1 policies=1 requirements=2 features=2
+traceability: requirements=2/2 traces validated; features=2/2 traces validated
 ```
 
 ## DocsFirstAcceptanceChecklist
@@ -44,3 +56,12 @@ syu show FEAT-DOCS-002
 - `FEAT-DOCS-002` owns `config/navigation.yaml` with `symbols: ["*"]`.
 - Use wildcard ownership carefully: it works best when one file intentionally
   belongs to one feature instead of collecting unrelated concerns.
+
+## What to look for in the interactive flows
+
+- `syu browse .` keeps the docs-first example readable from the terminal: start
+  with `feature`, open `FEAT-DOCS-001`, and verify that the shell trace and the
+  wildcard-owned YAML file stay easy to inspect without a larger codebase.
+- `syu app .` shows the same two features visually, including the trace panels
+  for `scripts/publish-docs.sh` and `config/navigation.yaml`, so the newcomer
+  path is not limited to raw YAML inspection.
