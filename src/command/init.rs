@@ -66,7 +66,7 @@ pub(crate) struct StarterTemplateCatalogEntry {
     pub(crate) related_example: Option<&'static str>,
 }
 
-const STARTER_TEMPLATE_CATALOG: [StarterTemplateCatalogEntry; 6] = [
+const STARTER_TEMPLATE_CATALOG: [StarterTemplateCatalogEntry; 7] = [
     StarterTemplateCatalogEntry {
         template: StarterTemplate::Generic,
         name: "generic",
@@ -96,6 +96,12 @@ const STARTER_TEMPLATE_CATALOG: [StarterTemplateCatalogEntry; 6] = [
         name: "go-only",
         description: "Starter for Go-first repos with Go-oriented IDs plus a minimal go.mod, source, and test files.",
         related_example: Some("examples/go-only"),
+    },
+    StarterTemplateCatalogEntry {
+        template: StarterTemplate::JavaOnly,
+        name: "java-only",
+        description: "Starter for Java-first repos with Java-oriented IDs plus a minimal pom.xml, source, and test files.",
+        related_example: Some("examples/java-only"),
     },
     StarterTemplateCatalogEntry {
         template: StarterTemplate::Polyglot,
@@ -339,7 +345,8 @@ fn parse_starter_template_prompt(raw: &str) -> Option<StarterTemplate> {
         "rust" | "rust-only" | "3" => Some(StarterTemplate::RustOnly),
         "python" | "python-only" | "4" => Some(StarterTemplate::PythonOnly),
         "go" | "go-only" | "5" => Some(StarterTemplate::GoOnly),
-        "polyglot" | "mixed" | "6" => Some(StarterTemplate::Polyglot),
+        "java" | "java-only" | "6" => Some(StarterTemplate::JavaOnly),
+        "polyglot" | "mixed" | "7" => Some(StarterTemplate::Polyglot),
         _ => None,
     }
 }
@@ -525,6 +532,12 @@ fn default_id_prefixes(template: StarterTemplate) -> StarterIdPrefixes {
             requirement: "REQ-GO".to_string(),
             feature: "FEAT-GO".to_string(),
         },
+        StarterTemplate::JavaOnly => StarterIdPrefixes {
+            philosophy: "PHIL-JAVA".to_string(),
+            policy: "POL-JAVA".to_string(),
+            requirement: "REQ-JAVA".to_string(),
+            feature: "FEAT-JAVA".to_string(),
+        },
         StarterTemplate::Polyglot => StarterIdPrefixes {
             philosophy: "PHIL-MIX".to_string(),
             policy: "POL-MIX".to_string(),
@@ -646,6 +659,19 @@ fn starter_source_files(project_name: &str, template: StarterTemplate) -> Vec<(S
                     .to_string(),
             ),
         ],
+        StarterTemplate::JavaOnly => vec![
+            ("pom.xml".to_string(), render_java_pom_file(project_name)),
+            (
+                "src/main/java/example/app/OrderSummary.java".to_string(),
+                "package example.app;\n\n/** JavaFeatureImpl implements FEAT-JAVA-001 in the starter workspace. */\npublic final class OrderSummary {\n    public String JavaFeatureImpl() {\n        return \"java-only starter\";\n    }\n}\n"
+                    .to_string(),
+            ),
+            (
+                "src/test/java/example/app/OrderSummaryTest.java".to_string(),
+                "package example.app;\n\nimport static org.junit.jupiter.api.Assertions.assertFalse;\n\nimport org.junit.jupiter.api.Test;\n\nclass OrderSummaryTest {\n    @Test\n    void JavaRequirementTest() {\n        assertFalse(new OrderSummary().JavaFeatureImpl().isEmpty());\n    }\n}\n"
+                    .to_string(),
+            ),
+        ],
         _ => Vec::new(),
     }
 }
@@ -654,7 +680,18 @@ fn render_go_module_file(project_name: &str) -> String {
     format!("module {}\n\ngo 1.19\n", go_module_path(project_name))
 }
 
+fn render_java_pom_file(project_name: &str) -> String {
+    format!(
+        "<project xmlns=\"http://maven.apache.org/POM/4.0.0\"\n         xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n         xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd\">\n  <modelVersion>4.0.0</modelVersion>\n  <groupId>example.app</groupId>\n  <artifactId>{}</artifactId>\n  <version>0.1.0-SNAPSHOT</version>\n  <properties>\n    <maven.compiler.source>17</maven.compiler.source>\n    <maven.compiler.target>17</maven.compiler.target>\n    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>\n    <junit.version>5.12.2</junit.version>\n  </properties>\n  <dependencies>\n    <dependency>\n      <groupId>org.junit.jupiter</groupId>\n      <artifactId>junit-jupiter</artifactId>\n      <version>${{junit.version}}</version>\n      <scope>test</scope>\n    </dependency>\n  </dependencies>\n  <build>\n    <plugins>\n      <plugin>\n        <groupId>org.apache.maven.plugins</groupId>\n        <artifactId>maven-surefire-plugin</artifactId>\n        <version>3.5.4</version>\n      </plugin>\n    </plugins>\n  </build>\n</project>\n",
+        project_slug(project_name)
+    )
+}
+
 fn go_module_path(project_name: &str) -> String {
+    format!("example.com/{}", project_slug(project_name))
+}
+
+fn project_slug(project_name: &str) -> String {
     let mut segment = String::new();
     let mut last_was_dash = false;
 
@@ -677,13 +714,11 @@ fn go_module_path(project_name: &str) -> String {
     }
 
     let segment = segment.trim_matches(|c| matches!(c, '-' | '_' | '.'));
-    let segment = if segment.is_empty() {
-        "project"
+    if segment.is_empty() {
+        "project".to_string()
     } else {
-        segment
-    };
-
-    format!("example.com/{segment}")
+        segment.to_string()
+    }
 }
 
 fn render_default_config(spec_root: &Path, strict_validate_defaults: bool) -> Result<String> {
@@ -718,6 +753,9 @@ fn philosophy_template(
         StarterTemplate::GoOnly => format!(
             "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: {philosophy_id}\n    title: {project_name} should keep Go traces explicit from the first commit\n    product_design_principle: |\n      The project should prove that a Go-first repository can adopt `syu`\n      without waiting for a larger multi-language scaffold.\n    coding_guideline: |\n      Prefer stable IDs and small Go starter files whose traced symbols stay\n      obvious in review.\n    linked_policies:\n      - {policy_id}\n"
         ),
+        StarterTemplate::JavaOnly => format!(
+            "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: {philosophy_id}\n    title: {project_name} should keep Java traces explicit from the first commit\n    product_design_principle: |\n      The project should prove that a Java-first repository can adopt `syu`\n      with real source and test files before deeper framework integration is needed.\n    coding_guideline: |\n      Prefer stable IDs and small Java starter files whose traced symbols stay\n      obvious in review.\n    linked_policies:\n      - {policy_id}\n"
+        ),
         StarterTemplate::Polyglot => format!(
             "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: {philosophy_id}\n    title: {project_name} should keep polyglot traces coherent\n    product_design_principle: |\n      The project should prove that one specification can stay understandable\n      even when implementation and tests span multiple languages.\n    coding_guideline: |\n      Prefer stable IDs and short language-native docs on every traced symbol.\n    linked_policies:\n      - {policy_id}\n"
         ),
@@ -748,6 +786,9 @@ fn policy_template(
         ),
         StarterTemplate::GoOnly => format!(
             "category: Policies\nversion: 1\nlanguage: en\n\npolicies:\n  - id: {policy_id}\n    title: Go requirement and feature traces must stay explicit in {project_name}\n    summary: Start with a Go-first workflow that keeps the first traced symbols easy to inspect.\n    description: |\n      The starter workspace should include real Go source and test files so the\n      first requirement and feature validate against code contributors can open immediately.\n    linked_philosophies:\n      - {philosophy_id}\n    linked_requirements:\n      - {requirement_id}\n"
+        ),
+        StarterTemplate::JavaOnly => format!(
+            "category: Policies\nversion: 1\nlanguage: en\n\npolicies:\n  - id: {policy_id}\n    title: Java requirement and feature traces must stay explicit in {project_name}\n    summary: Start with a Java-first workflow that keeps the first traced symbols easy to inspect.\n    description: |\n      The starter workspace should include real Java source and test files plus\n      a minimal Maven project so the first requirement and feature stay easy to review.\n    linked_philosophies:\n      - {philosophy_id}\n    linked_requirements:\n      - {requirement_id}\n"
         ),
         StarterTemplate::Polyglot => format!(
             "category: Policies\nversion: 1\nlanguage: en\n\npolicies:\n  - id: {policy_id}\n    title: Polyglot requirement and feature traces must stay verifiable in {project_name}\n    summary: Start with one specification flow that can grow across languages.\n    description: |\n      The starter workspace should make it obvious how one requirement and one\n      feature can stay linked even when implementation later spans Rust,\n      Python, and TypeScript.\n    linked_philosophies:\n      - {philosophy_id}\n    linked_requirements:\n      - {requirement_id}\n"
@@ -784,6 +825,10 @@ fn requirement_template(
         ),
         StarterTemplate::GoOnly => format!(
             "category: Go Requirements\nprefix: {}\n\nrequirements:\n  - id: {requirement_id}\n    title: Bootstrap {project_name} with a Go-backed requirement trace\n    description: |\n      The project should start with one Go test symbol so the first requirement\n      already validates against a real `_test.go` file.\n    priority: high\n    status: implemented\n    linked_policies:\n      - {policy_id}\n    linked_features:\n      - {feature_id}\n    tests:\n      go:\n        - file: go/app_test.go\n          symbols:\n            - TestGoRequirement\n",
+            id_prefixes.requirement
+        ),
+        StarterTemplate::JavaOnly => format!(
+            "category: Java Requirements\nprefix: {}\n\nrequirements:\n  - id: {requirement_id}\n    title: Bootstrap {project_name} with a Java-backed requirement trace\n    description: |\n      The project should start with one JUnit test symbol so the first requirement\n      already validates against a real Java test file.\n    priority: high\n    status: implemented\n    linked_policies:\n      - {policy_id}\n    linked_features:\n      - {feature_id}\n    tests:\n      java:\n        - file: src/test/java/example/app/OrderSummaryTest.java\n          symbols:\n            - JavaRequirementTest\n",
             id_prefixes.requirement
         ),
         StarterTemplate::Polyglot => format!(
@@ -830,6 +875,9 @@ fn feature_template(
         StarterTemplate::GoOnly => format!(
             "category: Go Features\nversion: 1\n\nfeatures:\n  - id: {feature_id}\n    title: Bootstrap the {project_name} Go spec workspace\n    summary: Provide a Go-oriented starter structure with one traced implementation symbol.\n    status: implemented\n    linked_requirements:\n      - {requirement_id}\n    implementations:\n      go:\n        - file: go/app.go\n          symbols:\n            - GoFeatureImpl\n"
         ),
+        StarterTemplate::JavaOnly => format!(
+            "category: Java Features\nversion: 1\n\nfeatures:\n  - id: {feature_id}\n    title: Bootstrap the {project_name} Java spec workspace\n    summary: Provide a Java-oriented starter structure with one traced implementation symbol.\n    status: implemented\n    linked_requirements:\n      - {requirement_id}\n    implementations:\n      java:\n        - file: src/main/java/example/app/OrderSummary.java\n          symbols:\n            - JavaFeatureImpl\n"
+        ),
         StarterTemplate::Polyglot => format!(
             "category: Polyglot Features\nversion: 1\n\nfeatures:\n  - id: {feature_id}\n    title: Bootstrap the {project_name} polyglot spec workspace\n    summary: Provide a starter structure that can grow across Rust, Python, and TypeScript.\n    status: planned\n    linked_requirements:\n      - {requirement_id}\n    implementations: {{}}\n"
         ),
@@ -843,6 +891,7 @@ fn requirement_document_path(template: StarterTemplate) -> &'static str {
         StarterTemplate::RustOnly => "requirements/core/rust.yaml",
         StarterTemplate::PythonOnly => "requirements/core/python.yaml",
         StarterTemplate::GoOnly => "requirements/core/go.yaml",
+        StarterTemplate::JavaOnly => "requirements/core/java.yaml",
         StarterTemplate::Polyglot => "requirements/core/polyglot.yaml",
     }
 }
@@ -854,6 +903,7 @@ fn feature_document_path(template: StarterTemplate) -> &'static str {
         StarterTemplate::RustOnly => "features/languages/rust.yaml",
         StarterTemplate::PythonOnly => "features/languages/python.yaml",
         StarterTemplate::GoOnly => "features/languages/go.yaml",
+        StarterTemplate::JavaOnly => "features/languages/java.yaml",
         StarterTemplate::Polyglot => "features/languages/polyglot.yaml",
     }
 }
@@ -865,6 +915,7 @@ fn feature_kind(template: StarterTemplate) -> &'static str {
         StarterTemplate::RustOnly => "rust",
         StarterTemplate::PythonOnly => "python",
         StarterTemplate::GoOnly => "go",
+        StarterTemplate::JavaOnly => "java",
         StarterTemplate::Polyglot => "polyglot",
     }
 }
@@ -885,10 +936,10 @@ mod tests {
     use super::{
         DEFAULT_SPEC_ROOT, GENERATED_PATHS, INIT_INTERACTIVE_JSON_MESSAGE, default_id_prefixes,
         ensure_writable_targets, feature_document_path, feature_kind, go_module_path,
-        infer_project_name, parse_starter_template_prompt, path_label, prompt_for_spec_root,
-        prompt_for_starter_template, requirement_document_path, resolve_init_id_prefixes,
-        resolve_init_spec_root, resolve_interactive_id_prefixes, run_init_command,
-        run_init_command_with_prompt_io, scaffold_files,
+        infer_project_name, parse_starter_template_prompt, path_label, project_slug,
+        prompt_for_spec_root, prompt_for_starter_template, requirement_document_path,
+        resolve_init_id_prefixes, resolve_init_spec_root, resolve_interactive_id_prefixes,
+        run_init_command, run_init_command_with_prompt_io, scaffold_files,
     };
 
     #[derive(Default)]
@@ -931,6 +982,12 @@ mod tests {
     }
 
     #[test]
+    fn project_slug_normalizes_project_names() {
+        assert_eq!(project_slug("Java Only Demo"), "java-only-demo");
+        assert_eq!(project_slug("..."), "project");
+    }
+
+    #[test]
     fn scaffold_files_include_all_expected_templates() {
         let files = scaffold_files(
             "demo",
@@ -961,6 +1018,24 @@ mod tests {
             .expect("go-only scaffold should include go.mod");
 
         assert_eq!(go_mod.1, "module example.com/go-only-demo\n\ngo 1.19\n");
+    }
+
+    #[test]
+    fn java_only_scaffold_includes_a_maven_project_file() {
+        let files = scaffold_files(
+            "Java Only Demo",
+            std::path::Path::new(DEFAULT_SPEC_ROOT),
+            StarterTemplate::JavaOnly,
+            &default_id_prefixes(StarterTemplate::JavaOnly),
+            false,
+        );
+        let pom = files
+            .into_iter()
+            .find(|(path, _)| path == "pom.xml")
+            .expect("java-only scaffold should include pom.xml");
+
+        assert!(pom.1.contains("<artifactId>java-only-demo</artifactId>"));
+        assert!(pom.1.contains("<artifactId>junit-jupiter</artifactId>"));
     }
 
     #[test]
@@ -1252,7 +1327,7 @@ mod tests {
     fn prompt_for_starter_template_retries_invalid_values() {
         let mut prompt_io = FakePromptIo {
             terminal: true,
-            lines: VecDeque::from(["unknown".to_string(), "6".to_string()]),
+            lines: VecDeque::from(["unknown".to_string(), "7".to_string()]),
             ..Default::default()
         };
 
@@ -1276,6 +1351,10 @@ mod tests {
         assert_eq!(
             parse_starter_template_prompt("go"),
             Some(StarterTemplate::GoOnly)
+        );
+        assert_eq!(
+            parse_starter_template_prompt("java"),
+            Some(StarterTemplate::JavaOnly)
         );
         assert_eq!(
             parse_starter_template_prompt("mixed"),
@@ -1572,6 +1651,7 @@ mod tests {
             StarterTemplate::DocsFirst,
             StarterTemplate::RustOnly,
             StarterTemplate::PythonOnly,
+            StarterTemplate::JavaOnly,
             StarterTemplate::Polyglot,
         ] {
             let files = scaffold_files(

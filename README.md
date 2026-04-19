@@ -296,7 +296,7 @@ That renders `PHIL-STORE-001`, `POL-STORE-001`, `REQ-STORE-001`, and
 `--feature-prefix`.
 
 Want a closer starting point for a repository that is already clearly
-docs-first, Rust-first, Python-first, Go-first, or polyglot? Start with a
+docs-first, Rust-first, Python-first, Go-first, Java-first, or polyglot? Start with a
 lightweight template:
 
 ```bash
@@ -304,6 +304,7 @@ syu templates
 syu init . --template docs-first
 syu init . --template rust-only
 syu init . --template go-only
+syu init . --template java-only
 syu init . --template python-only
 syu init . --template polyglot
 ```
@@ -332,6 +333,7 @@ syu init . --id-prefix store
 syu init . --template docs-first
 syu init . --template rust-only
 syu init . --template go-only
+syu init . --template java-only
 syu init . --spec-root docs/spec
 syu init . --requirement-prefix REQ-STORE --feature-prefix FEAT-STORE
 ```
@@ -662,16 +664,17 @@ The repository ships working example projects:
 - [`examples/csharp-fallback`](examples/csharp-fallback)
 - [`examples/docs-first`](examples/docs-first)
 - [`examples/go-only`](examples/go-only)
+- [`examples/java-only`](examples/java-only)
 - [`examples/rust-only`](examples/rust-only)
 - [`examples/python-only`](examples/python-only)
 - [`examples/polyglot`](examples/polyglot)
 - [`examples/team-scale`](examples/team-scale)
 
-`docs-first`, `rust-only`, `python-only`, `go-only`, and `polyglot` match
-`syu init --template ...` starters directly. `csharp-fallback` remains the
-reference-only example for repositories whose main implementation language is
-still unsupported, and `team-scale` remains a reference-only example for
-studying a larger split-by-area repository shape.
+`docs-first`, `rust-only`, `python-only`, `go-only`, `java-only`, and
+`polyglot` match `syu init --template ...` starters directly.
+`csharp-fallback` remains the reference-only example for repositories whose
+main implementation language is still unsupported, and `team-scale` remains a
+reference-only example for studying a larger split-by-area repository shape.
 
 Each one is validated in the automated test suite. If you are deciding between a
 checked-in example and a scaffold template, start with
