@@ -681,6 +681,9 @@ The repository keeps the source UI in `app/` and generates the embedded
 production bundle during Rust builds, so `syu app` still works from installed
 binaries without checking `app/dist/` into `main`.
 
+Use the checked-in Node 25 version from `app/package.json` and `app/.nvmrc`
+when working in `app/`; that is the local contributor expectation, not only a
+CI matrix detail.
 When contributors change browser app sources or build inputs, they should run
 `scripts/ci/check-browser-app-freshness.sh`. That flow regenerates the local
 `app/src/wasm` bridge, typechecks the browser app, and builds a fresh local
@@ -688,7 +691,7 @@ When contributors change browser app sources or build inputs, they should run
 
 ```bash
 cd app
-npm install
+npm ci
 npm run build:wasm
 npm run build
 cd ..
@@ -700,6 +703,10 @@ cargo run -- app .
 The repository ships a Docusaurus site rooted at `website/` that renders the
 checked-in `docs/` tree directly, and the published site is available at
 `https://ugoite.github.io/syu/`.
+
+Use the checked-in Node 20 version from `website/package.json` and
+`website/.nvmrc` when working in `website/`, and use the helper below so local
+installs follow the same pinned npm flow CI uses:
 
 ```bash
 bash scripts/ci/install-docs-site-deps.sh
