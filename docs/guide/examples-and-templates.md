@@ -27,7 +27,7 @@ whether you should scaffold a template or open one of the repository examples.
 | --- | --- | --- | --- |
 | `docs-first` | Example only | documentation-heavy repositories that want a small reference for shell, markdown, and wildcard YAML traces | `examples/docs-first` |
 | `generic` | Template only | the shortest neutral scaffold when you do not want language-specific starter copy yet | `syu init .` |
-| `go-only` | Example only | unsupported-language repositories that need a checked-in workaround shape today while direct Go tracing is still future work | `examples/go-only` |
+| `go-only` | Example only | Go-first repositories that want a checked-in reference for the built-in Go adapter, including real `.go` source and test traces | `examples/go-only` |
 | `rust-only` | Template + example | Rust-first repositories that want starter IDs, file names, and copy tuned for Rust work | `syu init . --template rust-only` or `examples/rust-only` |
 | `python-only` | Template + example | Python-first repositories that want the same tuned starter shape for Python workflows | `syu init . --template python-only` or `examples/python-only` |
 | `polyglot` | Template + example | repositories that already expect multiple languages and want the starter text to say that from the first commit | `syu init . --template polyglot` or `examples/polyglot` |
@@ -66,7 +66,10 @@ scaffold wholesale.
 2. **I already know the repo is Rust-first / Python-first / polyglot**: start
    with the matching template, then compare against the matching example when
    you want a fuller repository story.
-3. **I am still deciding whether `syu` fits my repo**: read the example first so
+3. **I am Go-first and want to inspect native Go tracing before I scaffold
+   anything**: open `examples/go-only` first, then copy the shape you need into
+   your own repository.
+4. **I am still deciding whether `syu` fits my repo**: read the example first so
    you can inspect a working shape without creating files locally yet.
 
 ## Continue with these pages
