@@ -729,18 +729,32 @@ binaries without checking `app/dist/` into `main`.
 
 Use the checked-in Node 25 version from `app/package.json` and `app/.nvmrc`
 when working in `app/`; that is the local contributor expectation, not only a
-CI matrix detail.
+CI matrix detail. Before you run the install commands below, switch your shell
+to that Node major with a version manager such as `nvm`, `fnm`, or `Volta`
+using the checked-in `app/.nvmrc`.
+Before you run Cargo commands that embed the browser app, provision the app
+dependencies intentionally from the repository root:
+
+```bash
+scripts/ci/pinned-npm.sh install app
+npm --prefix app ci
+```
+
+Cargo no longer runs `npm ci` for you during normal builds. If `app/node_modules`
+is missing or stale, `build.rs` stops and points back to the commands above so
+offline, hermetic, and security-sensitive environments do not hide a networked
+package-manager install inside an ordinary Rust build.
+
 When contributors change browser app sources or build inputs, they should run
 `scripts/ci/check-browser-app-freshness.sh`. That flow regenerates the local
 `app/src/wasm` bridge, typechecks the browser app, and builds a fresh local
 `app/dist/` artifact the same way CI does before uploading it.
 
 ```bash
-cd app
-npm ci
-npm run build:wasm
-npm run build
-cd ..
+scripts/ci/pinned-npm.sh install app
+npm --prefix app ci
+npm --prefix app run build:wasm
+npm --prefix app run build
 cargo run -- app .
 ```
 
