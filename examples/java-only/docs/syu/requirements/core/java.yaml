@@ -1,0 +1,18 @@
+category: Java Example Requirements
+prefix: REQ-JAVA
+
+requirements:
+  - id: REQ-JAVA-001
+    title: Demonstrate a Java-first requirement trace with the built-in Java adapter
+    description: The Java example should validate a real Java test symbol directly through the built-in adapter.
+    priority: high
+    status: implemented
+    linked_policies:
+      - POL-JAVA-001
+    linked_features:
+      - FEAT-JAVA-001
+    tests:
+      java:
+        - file: src/test/java/example/app/OrderSummaryTest.java
+          symbols:
+            - JavaRequirementTest

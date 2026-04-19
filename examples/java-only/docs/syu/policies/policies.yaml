@@ -1,0 +1,16 @@
+category: Policies
+version: 1
+language: en
+
+policies:
+  - id: POL-JAVA-001
+    title: Java requirement and feature traces must stay explicit in the example workspace
+    summary: The Java example should demonstrate real code and test files from the start.
+    description: |
+      The example workspace should include a minimal Maven project plus real
+      Java source and test files so the first requirement and feature validate
+      against code contributors can open immediately.
+    linked_philosophies:
+      - PHIL-JAVA-001
+    linked_requirements:
+      - REQ-JAVA-001
