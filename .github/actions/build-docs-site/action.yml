@@ -12,6 +12,10 @@ runs:
         cache: npm
         cache-dependency-path: website/package-lock.json
 
+    - name: Align npm with website/package.json
+      shell: bash
+      run: scripts/ci/pinned-npm.sh install website
+
     - name: Install docs dependencies
       shell: bash
       run: bash scripts/ci/install-docs-site-deps.sh

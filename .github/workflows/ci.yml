@@ -130,6 +130,10 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
 
+      - name: Align npm with app/package.json
+        shell: bash
+        run: scripts/ci/pinned-npm.sh install app
+
       - name: Audit browser app dependencies
         working-directory: app
         run: npm audit --audit-level=high
@@ -140,6 +144,10 @@ jobs:
           node-version: "20"
           cache: npm
           cache-dependency-path: website/package-lock.json
+
+      - name: Align npm with website/package.json
+        shell: bash
+        run: scripts/ci/pinned-npm.sh install website
 
       - name: Audit docs site dependencies
         working-directory: website
@@ -271,6 +279,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "25"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Align npm with app/package.json
+        shell: bash
+        run: scripts/ci/pinned-npm.sh install app
 
       - name: Set up Rust
         uses: ./.github/actions/setup-rust

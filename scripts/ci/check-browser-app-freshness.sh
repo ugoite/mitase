@@ -4,6 +4,7 @@
 set -euo pipefail
 
 ensure_app_dependencies() {
+  "${repo_root}/scripts/ci/pinned-npm.sh" check app
   npm ci
 }
 
@@ -12,9 +13,11 @@ clear_generated_browser_outputs() {
 }
 
 check_browser_app_freshness() {
+  local repo_root
   local app_dir
 
-  app_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/app"
+  repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+  app_dir="${repo_root}/app"
 
   cd "$app_dir"
   ensure_app_dependencies
