@@ -434,6 +434,8 @@ fn repository_declares_documentation_guides() {
     assert!(app_guide.contains("ArrowDown"));
     assert!(app_guide.contains("Escape"));
     assert!(app_guide.contains("the item's YAML `status:` field"));
+    assert!(app_guide.contains("../../website/static/img/app-guide-overview.png"));
+    assert!(!app_guide.contains("](/img/"));
     assert!(!app_guide.contains("`planned`, `implemented`, or `deprecated`"));
     assert!(getting_started.contains("New to `syu`?"));
     assert!(getting_started.contains("Need a different level of guidance?"));
@@ -561,8 +563,8 @@ fn repository_declares_documentation_guides() {
     );
     assert!(generated_config_validate.contains("array&lt;path&gt;"));
     assert!(generated_config_runtimes.contains("docs/syu/config/runtimes.yaml"));
-    assert!(generated_site_index.contains("/docs/generated/site-spec/features/cli/show-list"));
-    assert!(generated_site_index.contains("/docs/generated/site-spec/features/validation"));
+    assert!(generated_site_index.contains("features/cli/show-list"));
+    assert!(generated_site_index.contains("features/validation"));
     assert!(generated_validation.contains("docs/syu/features/validation/validation.yaml"));
     assert!(generated_validation.contains("SYU-graph-reference-001"));
     assert!(

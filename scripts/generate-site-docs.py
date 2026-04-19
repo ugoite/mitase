@@ -163,9 +163,7 @@ def write_markdown(source_path: Path, spec_root: Path) -> tuple[str, str]:
     route_parts = list(relative_path.with_suffix("").parts)
     if len(route_parts) >= 2 and route_parts[-1] == route_parts[-2]:
         route_parts.pop()
-    doc_link = "/docs/generated/site-spec"
-    if route_parts:
-        doc_link = f"{doc_link}/{'/'.join(route_parts)}"
+    doc_link = "/".join(route_parts) if route_parts else relative_path.with_suffix("").as_posix()
     return title, doc_link
 
 
