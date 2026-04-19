@@ -126,6 +126,12 @@ export default function Home() {
             </Link>
             <Link
               className="button button--outline button--lg siteHeroOutlineButton"
+              to="https://github.com/ugoite/syu/blob/main/README.md#quick-start"
+            >
+              Quick start for experienced users
+            </Link>
+            <Link
+              className="button button--outline button--lg siteHeroOutlineButton"
               to="/docs/generated/site-spec"
             >
               Browse the self-hosted spec
