@@ -71,8 +71,8 @@ because `symbols: ["*"]` does not point to one inspectable symbol.
 Unsupported adapters such as `csharp` still raise `SYU-trace-language-001`.
 Keep those repositories connected through the spec layers first, and only add
 language-specific code traces once adapter support lands.
-If you need a Go-first starting point today, study the
-[`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
-or scaffold `syu init . --template go-only`. Both keep real Go files in the
-repository while relying on symbol checks and coverage ownership rather than
-`doc_contains`.
+If you need a concrete fallback shape today, study the
+[`examples/csharp-fallback` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/csharp-fallback).
+It keeps real C# files in the repository while validating supported shell and
+markdown evidence around them instead of inventing unsupported `csharp:` trace
+keys.

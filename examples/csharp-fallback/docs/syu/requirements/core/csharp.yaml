@@ -1,0 +1,18 @@
+category: C# Fallback Example Requirements
+prefix: REQ-CSHARP
+
+requirements:
+  - id: REQ-CSHARP-001
+    title: Unsupported-language repositories should be able to adopt syu without fake code-level traces
+    description: The fallback example should keep real C# files in the repository while validating supported evidence around them.
+    priority: high
+    status: implemented
+    linked_policies:
+      - POL-CSHARP-001
+    linked_features:
+      - FEAT-CSHARP-001
+    tests:
+      markdown:
+        - file: README.md
+          symbols:
+            - CsharpFallbackAcceptanceChecklist

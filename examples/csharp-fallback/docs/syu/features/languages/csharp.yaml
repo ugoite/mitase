@@ -1,0 +1,15 @@
+category: C# Fallback Example Features
+version: 1
+
+features:
+  - id: FEAT-CSHARP-001
+    title: Trace the fallback workflow through an explicit shell symbol
+    summary: Demonstrate one concrete implementation trace that keeps the unsupported-language repository connected to the spec.
+    status: implemented
+    linked_requirements:
+      - REQ-CSHARP-001
+    implementations:
+      shell:
+        - file: scripts/check-workspace.sh
+          symbols:
+            - verify_spec_links

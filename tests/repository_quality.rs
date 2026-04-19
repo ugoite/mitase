@@ -408,6 +408,7 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("syu show REQ-001"));
     assert!(!readme.contains("syu show REQ-CORE-015"));
     assert!(readme.contains("syu app"));
+    assert!(readme.contains("examples/csharp-fallback"));
     assert!(readme.contains("examples/go-only"));
     assert!(readme.contains("examples/polyglot"));
     assert!(readme.contains("examples/team-scale"));
@@ -505,6 +506,7 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("Keep exploring"));
     assert!(getting_started.contains("examples/rust-only"));
     assert!(getting_started.contains("examples/python-only"));
+    assert!(getting_started.contains("examples/csharp-fallback"));
     assert!(getting_started.contains("examples/go-only"));
     assert!(getting_started.contains("examples/polyglot"));
     assert!(
@@ -535,6 +537,7 @@ fn repository_declares_documentation_guides() {
     assert!(trace_adapter_support.contains("| Go | `go`, `golang`, `gotest` / `.go` |"));
     assert!(examples_and_templates.contains("starter templates"));
     assert!(examples_and_templates.contains("checked-in examples"));
+    assert!(examples_and_templates.contains("examples/csharp-fallback"));
     assert!(examples_and_templates.contains("examples/docs-first"));
     assert!(examples_and_templates.contains("`syu init . --template rust-only`"));
     assert!(examples_and_templates.contains("`syu init . --template go-only`"));
@@ -693,6 +696,10 @@ fn repository_ships_example_workspaces() {
     let rust_example_config = read_file("examples/rust-only/syu.yaml");
     let python_example_requirement =
         read_file("examples/python-only/docs/syu/requirements/core/python.yaml");
+    let csharp_fallback_requirement =
+        read_file("examples/csharp-fallback/docs/syu/requirements/core/csharp.yaml");
+    let csharp_fallback_config = read_file("examples/csharp-fallback/syu.yaml");
+    let csharp_fallback_readme = read_file("examples/csharp-fallback/README.md");
     let docs_first_requirement =
         read_file("examples/docs-first/docs/syu/requirements/core/docs.yaml");
     let go_example_requirement = read_file("examples/go-only/docs/syu/requirements/core/go.yaml");
@@ -703,6 +710,10 @@ fn repository_ships_example_workspaces() {
     assert!(rust_example_requirement.contains("REQ-RUST-001"));
     assert!(rust_example_config.contains(&format!("version: {current_version}")));
     assert!(python_example_requirement.contains("REQ-PY-001"));
+    assert!(csharp_fallback_requirement.contains("REQ-CSHARP-001"));
+    assert!(csharp_fallback_config.contains(&format!("version: {current_version}")));
+    assert!(csharp_fallback_readme.contains("CsharpFallbackAcceptanceChecklist"));
+    assert!(csharp_fallback_readme.contains("SYU-trace-language-001"));
     assert!(docs_first_requirement.contains("REQ-DOCS-001"));
     assert!(docs_first_requirement.contains("DocsFirstAcceptanceChecklist"));
     assert!(go_example_requirement.contains("REQ-GO-001"));
@@ -711,6 +722,7 @@ fn repository_ships_example_workspaces() {
     assert!(polyglot_feature.contains("FEAT-MIX-001"));
     assert!(polyglot_feature.contains("status: implemented"));
     assert!(example_tests.contains("docs_first_example_validates"));
+    assert!(example_tests.contains("csharp_fallback_example_validates"));
     assert!(example_tests.contains("rust_only_example_validates"));
     assert!(example_tests.contains("python_only_example_validates"));
     assert!(example_tests.contains("go_only_example_validates"));
