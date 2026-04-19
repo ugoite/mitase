@@ -40,6 +40,10 @@ Pick the newcomer path that matches what you need next:
 - **Tutorial**: follow [`docs/guide/tutorial.md`](docs/guide/tutorial.md) when you
   learn best from a realistic repository story, want more narrative context than
   Quick start, and do not mind a longer walkthrough.
+- **Editor-first path**: start with
+  [`docs/guide/vscode-extension.md`](docs/guide/vscode-extension.md) when you
+  want diagnostics, spec navigation, and trace lookups inside VS Code before
+  you memorize the CLI or browser flows.
 - **Migration / upgrade**: open [`docs/guide/migration.md`](docs/guide/migration.md)
   when you already have a `syu` workspace and want the release-specific steps
   for moving between alpha versions safely.

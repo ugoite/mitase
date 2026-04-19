@@ -25,6 +25,9 @@ Need a different level of guidance?
   same commands fit together as one guided story.
 - Follow the [end-to-end tutorial](./tutorial.md) when you want a realistic,
   worked repository story instead of the shortest setup path.
+- Start with the [VS Code extension guide](./vscode-extension.md) when you want
+  diagnostics, spec navigation, and related-file lookups in the editor before
+  you settle into the terminal or browser flows.
 - Use the [trace adapter capability matrix](./trace-adapter-support.md) when
   you need to know which built-in languages support symbol validation only
   versus `doc_contains` and strict coverage.
