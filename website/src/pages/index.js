@@ -60,6 +60,12 @@ const journeys = [
     to: '/docs/guide/troubleshooting'
   },
   {
+    title: 'Upgrade an existing workspace',
+    description:
+      'Jump straight to the migration guide when a new alpha release changes config, validation defaults, or guide structure.',
+    to: '/docs/guide/migration'
+  },
+  {
     title: 'Stay in VS Code',
     description: 'Run the checked-in editor extension so diagnostics and trace links stay inside your editor.',
     to: '/docs/guide/vscode-extension'
