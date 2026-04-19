@@ -142,11 +142,25 @@ resolves the Linux archive and installs to `~/.local/bin`.
 
 The checksum step above verifies the installer script itself. Published release
 archives also carry GitHub artifact attestations, so you can separately verify
-the platform archive that the installer downloads before it unpacks the binary:
+the platform archive that the installer downloads before it unpacks the binary.
+For a stronger authenticity check, download the archive you expect to install
+and pin the verification to this repository's release workflow plus the tag you
+selected:
 
 ```bash
-gh attestation verify syu-x86_64-unknown-linux-gnu.tar.gz --repo ugoite/syu
+RELEASE="$(git describe --tags --abbrev=0)"
+gh release download "${RELEASE}" --repo ugoite/syu --pattern 'syu-x86_64-unknown-linux-gnu.tar.gz'
+gh attestation verify syu-x86_64-unknown-linux-gnu.tar.gz \
+  --repo ugoite/syu \
+  --signer-workflow ugoite/syu/.github/workflows/release-artifacts.yml \
+  --source-ref "refs/tags/${RELEASE}" \
+  --format json
 ```
+
+Replace the archive name with the platform asset you plan to install
+(`syu-x86_64-pc-windows-msvc.zip`, `syu-aarch64-apple-darwin.tar.gz`, and so
+on). `--format json` lets you keep the verified certificate and provenance
+details for your own policy checks.
 
 ### Shortcut: run the installer directly
 
