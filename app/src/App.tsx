@@ -33,8 +33,11 @@ type SearchResult = {
   kind: SectionKind;
 };
 
+type SearchFilter = "all" | SectionKind;
+
 const SECTION_ORDER: SectionKind[] = ["philosophy", "policies", "requirements", "features"];
 const SEARCH_RESULTS_LIST_ID = "spec-search-results-list";
+const SEARCH_FILTER_GROUP_ID = "spec-search-filter-group";
 const REFRESH_POLL_MIN_MS = 2_000;
 const REFRESH_POLL_MAX_MS = 10_000;
 
@@ -49,6 +52,13 @@ const ONBOARDING_STORAGE_KEY = "syu-onboarding-dismissed";
 const SEARCH_RESULT_LIMIT = 20;
 const SEARCH_SHORTCUT_KEY_CLASS_NAME =
   "inline-flex items-center rounded-md border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-slate-300";
+const SEARCH_FILTER_OPTIONS: Array<{ value: SearchFilter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "philosophy", label: "Philosophy" },
+  { value: "policies", label: "Policies" },
+  { value: "requirements", label: "Requirements" },
+  { value: "features", label: "Features" },
+];
 
 function searchResultOptionId(id: string, index: number) {
   return `spec-search-result-${index}-${id.toLowerCase().replace(/[^a-z0-9_-]/g, "-")}`;
@@ -63,6 +73,7 @@ function App() {
   const [selectedItemId, setSelectedItemId] = useState("");
   const [selectedIssueKey, setSelectedIssueKey] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchFilter, setSearchFilter] = useState<SearchFilter>("all");
   const [focusedResultIndex, setFocusedResultIndex] = useState(-1);
   const [showOnboarding, setShowOnboarding] = useState(() => shouldShowOnboarding());
   const [navigationHistory, setNavigationHistory] = useState<string[]>([]);
@@ -255,7 +266,7 @@ function App() {
 
   useEffect(() => {
     setFocusedResultIndex(-1);
-  }, [workspace, searchQuery]);
+  }, [workspace, searchFilter, searchQuery]);
 
   const sectionSummaries = useMemo(() => {
     if (!workspace) {
@@ -404,6 +415,9 @@ function App() {
             (item.summary?.toLowerCase().includes(trimmed) ?? false) ||
             (item.description?.toLowerCase().includes(trimmed) ?? false)
           ) {
+            if (searchFilter !== "all" && item.kind !== searchFilter) {
+              continue;
+            }
             results.push({ id: item.id, title: item.title, kind: item.kind });
           }
         }
@@ -413,7 +427,7 @@ function App() {
       results: results.slice(0, SEARCH_RESULT_LIMIT),
       hasMore: results.length > SEARCH_RESULT_LIMIT,
     };
-  }, [workspace, searchQuery]);
+  }, [searchFilter, workspace, searchQuery]);
   const searchResults = searchState.results;
   const activeSearchResultId = useMemo(() => {
     if (focusedResultIndex < 0 || focusedResultIndex >= searchResults.length) {
@@ -786,6 +800,7 @@ function App() {
                     }
                   } else if (e.key === "Escape") {
                     setSearchQuery("");
+                    setSearchFilter("all");
                     setFocusedResultIndex(-1);
                   }
                 }}
@@ -819,14 +834,42 @@ function App() {
               </p>
             </div>
             <p className="mt-2 text-xs text-slate-400">
-              Search shows up to {SEARCH_RESULT_LIMIT} matches at a time, so refine broad queries
-              for a narrower result list.
+              Search shows up to {SEARCH_RESULT_LIMIT} matches at a time. Filter by layer or refine
+              broad queries for a narrower result list.
             </p>
+            <div
+              id={SEARCH_FILTER_GROUP_ID}
+              role="group"
+              aria-label="Search layer filters"
+              className="mt-3 flex flex-wrap gap-2"
+            >
+              {SEARCH_FILTER_OPTIONS.map((option) => {
+                const active = searchFilter === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => {
+                      setSearchFilter(option.value);
+                      setFocusedResultIndex(-1);
+                    }}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                      active
+                        ? "border-sky-400/60 bg-sky-400/20 text-sky-50"
+                        : "border-white/10 bg-white/5 text-slate-300 hover:border-sky-400/40 hover:text-white"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
             {searchQuery.trim().length > 0 && (
               <div className="mt-3 space-y-1">
                 {searchResults.length === 0 ? (
                   <p className="px-2 py-2 text-xs text-slate-500" role="status">
-                    No items match.
+                    No items match{searchFilter === "all" ? "." : ` in ${searchFilter}.`}
                   </p>
                 ) : (
                   <div
@@ -866,8 +909,9 @@ function App() {
                 )}
                 {searchState.hasMore && (
                   <p className="px-2 py-1 text-[11px] text-slate-500">
-                    Showing the first {SEARCH_RESULT_LIMIT} matches — refine your query for fewer
-                    results.
+                    Showing the first {SEARCH_RESULT_LIMIT}{" "}
+                    {searchFilter === "all" ? "matches" : `${searchFilter} matches`} — refine your
+                    query for fewer results.
                   </p>
                 )}
               </div>
