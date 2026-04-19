@@ -277,10 +277,12 @@ That renders `PHIL-STORE-001`, `POL-STORE-001`, `REQ-STORE-001`, and
 `--feature-prefix`.
 
 Want a closer starting point for a repository that is already clearly
-Rust-first, Python-first, or polyglot? Start with a lightweight template:
+docs-first, Rust-first, Python-first, Go-first, or polyglot? Start with a
+lightweight template:
 
 ```bash
 syu templates
+syu init . --template docs-first
 syu init . --template rust-only
 syu init . --template go-only
 syu init . --template python-only
@@ -308,6 +310,7 @@ Bootstrap a new workspace:
 syu init .
 syu init path/to/workspace --name my-project
 syu init . --id-prefix store
+syu init . --template docs-first
 syu init . --template rust-only
 syu init . --template go-only
 syu init . --spec-root docs/spec
@@ -628,7 +631,8 @@ The repository ships working example projects:
 - [`examples/python-only`](examples/python-only)
 - [`examples/polyglot`](examples/polyglot)
 - [`examples/team-scale`](examples/team-scale)
-`rust-only`, `python-only`, `go-only`, and `polyglot` match
+
+`docs-first`, `rust-only`, `python-only`, `go-only`, and `polyglot` match
 `syu init --template ...` starters directly. `csharp-fallback` remains the
 reference-only example for repositories whose main implementation language is
 still unsupported, and `team-scale` remains a reference-only example for

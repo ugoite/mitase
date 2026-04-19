@@ -6,6 +6,8 @@
 // FEAT-INIT-002
 
 use anyhow::{Result, bail};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::{
     fs,
     path::{Component, Path, PathBuf},
@@ -64,12 +66,18 @@ pub(crate) struct StarterTemplateCatalogEntry {
     pub(crate) related_example: Option<&'static str>,
 }
 
-const STARTER_TEMPLATE_CATALOG: [StarterTemplateCatalogEntry; 5] = [
+const STARTER_TEMPLATE_CATALOG: [StarterTemplateCatalogEntry; 6] = [
     StarterTemplateCatalogEntry {
         template: StarterTemplate::Generic,
         name: "generic",
         description: "Starter with minimal four-layer files, neutral IDs, and core file names.",
         related_example: None,
+    },
+    StarterTemplateCatalogEntry {
+        template: StarterTemplate::DocsFirst,
+        name: "docs-first",
+        description: "Starter for documentation-heavy repos with markdown acceptance anchors, a shell trace, and a wildcard-owned YAML file.",
+        related_example: Some("examples/docs-first"),
     },
     StarterTemplateCatalogEntry {
         template: StarterTemplate::RustOnly,
@@ -150,7 +158,7 @@ fn run_init_command_with_prompt_io(args: &InitArgs, prompt_io: &mut impl PromptI
             .parent()
             .expect("generated scaffold paths should always have a parent");
         fs::create_dir_all(parent)?;
-        fs::write(full_path, contents)?;
+        write_scaffold_file(&full_path, contents)?;
     }
 
     let created_paths: Vec<&str> = files.iter().map(|(path, _)| path.as_str()).collect();
@@ -210,6 +218,34 @@ fn run_init_command_with_prompt_io(args: &InitArgs, prompt_io: &mut impl PromptI
     }
 
     Ok(0)
+}
+
+fn write_scaffold_file(full_path: &Path, contents: &str) -> Result<()> {
+    fs::write(full_path, contents)?;
+    maybe_mark_scaffold_file_executable(full_path, contents)?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn maybe_mark_scaffold_file_executable(full_path: &Path, contents: &str) -> Result<()> {
+    if is_executable_shell_scaffold(full_path, contents) {
+        let mut permissions = fs::metadata(full_path)?.permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(full_path, permissions)?;
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn maybe_mark_scaffold_file_executable(_full_path: &Path, _contents: &str) -> Result<()> {
+    Ok(())
+}
+
+fn is_executable_shell_scaffold(full_path: &Path, contents: &str) -> bool {
+    matches!(
+        full_path.extension().and_then(|ext| ext.to_str()),
+        Some("sh")
+    ) && contents.starts_with("#!")
 }
 
 fn resolve_init_options_with_prompt_io(
@@ -299,10 +335,11 @@ fn prompt_for_starter_template(
 fn parse_starter_template_prompt(raw: &str) -> Option<StarterTemplate> {
     match raw.trim().to_ascii_lowercase().as_str() {
         "generic" | "1" => Some(StarterTemplate::Generic),
-        "rust" | "rust-only" | "2" => Some(StarterTemplate::RustOnly),
-        "python" | "python-only" | "3" => Some(StarterTemplate::PythonOnly),
-        "go" | "go-only" | "4" => Some(StarterTemplate::GoOnly),
-        "polyglot" | "mixed" | "5" => Some(StarterTemplate::Polyglot),
+        "docs" | "docs-first" | "2" => Some(StarterTemplate::DocsFirst),
+        "rust" | "rust-only" | "3" => Some(StarterTemplate::RustOnly),
+        "python" | "python-only" | "4" => Some(StarterTemplate::PythonOnly),
+        "go" | "go-only" | "5" => Some(StarterTemplate::GoOnly),
+        "polyglot" | "mixed" | "6" => Some(StarterTemplate::Polyglot),
         _ => None,
     }
 }
@@ -464,6 +501,12 @@ fn default_id_prefixes(template: StarterTemplate) -> StarterIdPrefixes {
             requirement: "REQ".to_string(),
             feature: "FEAT".to_string(),
         },
+        StarterTemplate::DocsFirst => StarterIdPrefixes {
+            philosophy: "PHIL-DOCS".to_string(),
+            policy: "POL-DOCS".to_string(),
+            requirement: "REQ-DOCS".to_string(),
+            feature: "FEAT-DOCS".to_string(),
+        },
         StarterTemplate::RustOnly => StarterIdPrefixes {
             philosophy: "PHIL-RUST".to_string(),
             policy: "POL-RUST".to_string(),
@@ -573,6 +616,23 @@ fn scaffold_files(
 
 fn starter_source_files(project_name: &str, template: StarterTemplate) -> Vec<(String, String)> {
     match template {
+        StarterTemplate::DocsFirst => vec![
+            (
+                "README.md".to_string(),
+                "# docs-first starter\n\nUse this starter when documentation, shell automation, and checked-in\nconfiguration are the first repository artifacts you want to keep traceable.\n\n## DocsFirstAcceptanceChecklist\n\n- `REQ-DOCS-001` expects the release-note publishing flow to stay explicit.\n- `FEAT-DOCS-001` traces directly to the shell symbol `publish_release_notes`.\n- This mapping is valid without `doc_contains` because shell only supports\n  pattern-based symbol existence today.\n\n## DocsFirstNavigationChecklist\n\n- `REQ-DOCS-002` expects one checked-in navigation file to stay easy to inspect.\n- `FEAT-DOCS-002` owns `config/navigation.yaml` with `symbols: [\"*\"]`.\n- Use wildcard ownership carefully: it works best when one file intentionally\n  belongs to one feature instead of collecting unrelated concerns.\n"
+                    .to_string(),
+            ),
+            (
+                "scripts/publish-docs.sh".to_string(),
+                "#!/usr/bin/env bash\n\npublish_release_notes() {\n  printf '%s\\n' \"publishing release notes\"\n}\n\npublish_release_notes\n"
+                    .to_string(),
+            ),
+            (
+                "config/navigation.yaml".to_string(),
+                "sections:\n  - id: intro\n    title: Introduction\n  - id: release-notes\n    title: Release notes\n  - id: troubleshooting\n    title: Troubleshooting\n"
+                    .to_string(),
+            ),
+        ],
         StarterTemplate::GoOnly => vec![
             ("go.mod".to_string(), render_go_module_file(project_name)),
             (
@@ -646,6 +706,9 @@ fn philosophy_template(
         StarterTemplate::Generic => format!(
             "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: {philosophy_id}\n    title: {project_name} should turn intent into executable agreements\n    product_design_principle: |\n      The project should keep philosophy, policy, requirements, and features\n      explicit enough that contributors can validate changes mechanically.\n    coding_guideline: |\n      Prefer stable IDs, typed data, and explicit traceability over conventions\n      that live only in contributor memory.\n    linked_policies:\n      - {policy_id}\n"
         ),
+        StarterTemplate::DocsFirst => format!(
+            "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: {philosophy_id}\n    title: {project_name} should keep documentation-first work traceable from the files people read first\n    product_design_principle: |\n      The project should keep documentation, scripts, and checked-in\n      configuration explicit enough that contributors can validate intent\n      without a large code scaffold first.\n    coding_guideline: |\n      Prefer explicit file or symbol ownership over vague repository-level\n      documentation promises.\n    linked_policies:\n      - {policy_id}\n"
+        ),
         StarterTemplate::RustOnly => format!(
             "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: {philosophy_id}\n    title: {project_name} should keep Rust traces explicit\n    product_design_principle: |\n      The project should keep Rust-first traceability small, reviewable, and\n      obvious to contributors reading the code.\n    coding_guideline: |\n      Prefer stable IDs and Rust doc comments on traced symbols from the first\n      requirement onward.\n    linked_policies:\n      - {policy_id}\n"
         ),
@@ -669,9 +732,13 @@ fn policy_template(
     let philosophy_id = id_prefixes.philosophy_id();
     let policy_id = id_prefixes.policy_id();
     let requirement_id = id_prefixes.requirement_id();
+    let requirement_id_two = format!("{}-002", id_prefixes.requirement);
     match template {
         StarterTemplate::Generic => format!(
             "category: Policies\nversion: 1\nlanguage: en\n\npolicies:\n  - id: {policy_id}\n    title: Every change in {project_name} should remain traceable\n    summary: Define rules that turn philosophy into a verifiable workflow.\n    description: |\n      A specification entry is only useful when contributors can trace it to\n      concrete requirements, features, code, and tests inside the repository.\n    linked_philosophies:\n      - {philosophy_id}\n    linked_requirements:\n      - {requirement_id}\n"
+        ),
+        StarterTemplate::DocsFirst => format!(
+            "category: Policies\nversion: 1\nlanguage: en\n\npolicies:\n  - id: {policy_id}\n    title: Documentation-first traces must stay explicit in {project_name}\n    summary: Use markdown, shell, and YAML traces for explicit ownership without pretending they provide rich code inspection.\n    description: |\n      The starter workspace should demonstrate named shell symbols where\n      possible and wildcard YAML ownership only for files that intentionally\n      belong to one feature.\n    linked_philosophies:\n      - {philosophy_id}\n    linked_requirements:\n      - {requirement_id}\n      - {requirement_id_two}\n"
         ),
         StarterTemplate::RustOnly => format!(
             "category: Policies\nversion: 1\nlanguage: en\n\npolicies:\n  - id: {policy_id}\n    title: Rust requirement and feature traces must stay documented in {project_name}\n    summary: Start with a Rust-first workflow that stays explicit in code review.\n    description: |\n      Rust requirement and feature traces should point to symbols whose doc\n      comments carry both the stable ID and a short explanation.\n    linked_philosophies:\n      - {philosophy_id}\n    linked_requirements:\n      - {requirement_id}\n"
@@ -694,11 +761,17 @@ fn requirement_template(
     id_prefixes: &StarterIdPrefixes,
 ) -> String {
     let requirement_id = id_prefixes.requirement_id();
+    let requirement_id_two = format!("{}-002", id_prefixes.requirement);
     let policy_id = id_prefixes.policy_id();
     let feature_id = id_prefixes.feature_id();
+    let feature_id_two = format!("{}-002", id_prefixes.feature);
     match template {
         StarterTemplate::Generic => format!(
             "category: Core Requirements\nprefix: {}\n\nrequirements:\n  - id: {requirement_id}\n    title: Bootstrap {project_name} with a four-layer specification\n    description: |\n      The project should keep philosophy, policy, requirements, and features in\n      YAML so contributors can evolve behavior deliberately.\n    priority: high\n    status: planned\n    linked_policies:\n      - {policy_id}\n    linked_features:\n      - {feature_id}\n    tests: {{}}\n",
+            id_prefixes.requirement
+        ),
+        StarterTemplate::DocsFirst => format!(
+            "category: Docs-first Requirements\nprefix: {}\n\nrequirements:\n  - id: {requirement_id}\n    title: Release-note publishing should stay traceable through a supported shell mapping\n    description: The starter should show that shell-backed workflows can use explicit symbol ownership without doc inspection.\n    priority: high\n    status: implemented\n    linked_policies:\n      - {policy_id}\n    linked_features:\n      - {feature_id}\n    tests:\n      markdown:\n        - file: README.md\n          symbols:\n            - DocsFirstAcceptanceChecklist\n  - id: {requirement_id_two}\n    title: Whole-file config ownership should stay explicit when one YAML file belongs to one feature\n    description: The starter should show when wildcard ownership is appropriate for a dedicated configuration file.\n    priority: medium\n    status: implemented\n    linked_policies:\n      - {policy_id}\n    linked_features:\n      - {feature_id_two}\n    tests:\n      markdown:\n        - file: README.md\n          symbols:\n            - DocsFirstNavigationChecklist\n",
             id_prefixes.requirement
         ),
         StarterTemplate::RustOnly => format!(
@@ -739,9 +812,14 @@ fn feature_template(
 ) -> String {
     let feature_id = id_prefixes.feature_id();
     let requirement_id = id_prefixes.requirement_id();
+    let feature_id_two = format!("{}-002", id_prefixes.feature);
+    let requirement_id_two = format!("{}-002", id_prefixes.requirement);
     match template {
         StarterTemplate::Generic => format!(
             "category: Core Features\nversion: 1\n\nfeatures:\n  - id: {feature_id}\n    title: Bootstrap the {project_name} spec workspace\n    summary: Provide a starter structure that contributors can extend.\n    status: planned\n    linked_requirements:\n      - {requirement_id}\n    implementations: {{}}\n"
+        ),
+        StarterTemplate::DocsFirst => format!(
+            "category: Docs-first Features\nversion: 1\n\nfeatures:\n  - id: {feature_id}\n    title: Trace the release-note publishing script with an explicit shell symbol\n    summary: Demonstrate a named shell function trace for documentation-heavy repositories.\n    status: implemented\n    linked_requirements:\n      - {requirement_id}\n    implementations:\n      shell:\n        - file: scripts/publish-docs.sh\n          symbols:\n            - publish_release_notes\n  - id: {feature_id_two}\n    title: Trace one dedicated navigation file with wildcard YAML ownership\n    summary: Demonstrate that wildcard ownership is acceptable when one YAML file intentionally belongs to one feature.\n    status: implemented\n    linked_requirements:\n      - {requirement_id_two}\n    implementations:\n      yaml:\n        - file: config/navigation.yaml\n          symbols:\n            - \"*\"\n"
         ),
         StarterTemplate::RustOnly => format!(
             "category: Rust Features\nversion: 1\n\nfeatures:\n  - id: {feature_id}\n    title: Bootstrap the {project_name} Rust spec workspace\n    summary: Provide a Rust-oriented starter structure that contributors can extend.\n    status: planned\n    linked_requirements:\n      - {requirement_id}\n    implementations: {{}}\n"
@@ -761,6 +839,7 @@ fn feature_template(
 fn requirement_document_path(template: StarterTemplate) -> &'static str {
     match template {
         StarterTemplate::Generic => "requirements/core/core.yaml",
+        StarterTemplate::DocsFirst => "requirements/core/docs.yaml",
         StarterTemplate::RustOnly => "requirements/core/rust.yaml",
         StarterTemplate::PythonOnly => "requirements/core/python.yaml",
         StarterTemplate::GoOnly => "requirements/core/go.yaml",
@@ -771,6 +850,7 @@ fn requirement_document_path(template: StarterTemplate) -> &'static str {
 fn feature_document_path(template: StarterTemplate) -> &'static str {
     match template {
         StarterTemplate::Generic => "features/core/core.yaml",
+        StarterTemplate::DocsFirst => "features/documentation/docs.yaml",
         StarterTemplate::RustOnly => "features/languages/rust.yaml",
         StarterTemplate::PythonOnly => "features/languages/python.yaml",
         StarterTemplate::GoOnly => "features/languages/go.yaml",
@@ -781,6 +861,7 @@ fn feature_document_path(template: StarterTemplate) -> &'static str {
 fn feature_kind(template: StarterTemplate) -> &'static str {
     match template {
         StarterTemplate::Generic => "core",
+        StarterTemplate::DocsFirst => "documentation",
         StarterTemplate::RustOnly => "rust",
         StarterTemplate::PythonOnly => "python",
         StarterTemplate::GoOnly => "go",
@@ -1171,7 +1252,7 @@ mod tests {
     fn prompt_for_starter_template_retries_invalid_values() {
         let mut prompt_io = FakePromptIo {
             terminal: true,
-            lines: VecDeque::from(["unknown".to_string(), "5".to_string()]),
+            lines: VecDeque::from(["unknown".to_string(), "6".to_string()]),
             ..Default::default()
         };
 
@@ -1184,6 +1265,10 @@ mod tests {
 
     #[test]
     fn parse_starter_template_prompt_accepts_remaining_aliases() {
+        assert_eq!(
+            parse_starter_template_prompt("docs"),
+            Some(StarterTemplate::DocsFirst)
+        );
         assert_eq!(
             parse_starter_template_prompt("python"),
             Some(StarterTemplate::PythonOnly)
@@ -1484,6 +1569,7 @@ mod tests {
     fn scaffold_files_support_language_oriented_templates() {
         let spec_root = std::path::Path::new(DEFAULT_SPEC_ROOT);
         for template in [
+            StarterTemplate::DocsFirst,
             StarterTemplate::RustOnly,
             StarterTemplate::PythonOnly,
             StarterTemplate::Polyglot,
@@ -1509,6 +1595,10 @@ mod tests {
                 .find(|(path, _)| path == "docs/syu/features/features.yaml")
                 .expect("feature registry should exist");
             assert!(registry.1.contains(feature_kind(template)));
+            if template == StarterTemplate::DocsFirst {
+                assert!(paths.contains(&"scripts/publish-docs.sh"));
+                assert!(paths.contains(&"config/navigation.yaml"));
+            }
         }
     }
 

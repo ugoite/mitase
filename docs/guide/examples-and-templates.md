@@ -26,7 +26,7 @@ whether you should scaffold a template or open one of the repository examples.
 | Path | Type | Best for | How to start |
 | --- | --- | --- | --- |
 | `csharp-fallback` | Example only | repositories whose main implementation language is still unsupported and need a truthful fallback reference | `examples/csharp-fallback` |
-| `docs-first` | Example only | documentation-heavy repositories that want a small reference for shell, markdown, and wildcard YAML traces | `examples/docs-first` |
+| `docs-first` | Template + example | documentation-heavy repositories that want starter markdown acceptance anchors, one shell trace, and one wildcard-owned YAML file | `syu init . --template docs-first` or `examples/docs-first` |
 | `generic` | Template only | the shortest neutral scaffold when you do not want language-specific starter copy yet | `syu init .` |
 | `go-only` | Template + example | Go-first repositories that want starter IDs, file names, a minimal `go.mod`, and small Go source/test files from the first scaffold | `syu init . --template go-only` or `examples/go-only` |
 | `rust-only` | Template + example | Rust-first repositories that want starter IDs, file names, and copy tuned for Rust work | `syu init . --template rust-only` or `examples/rust-only` |
@@ -64,7 +64,7 @@ scaffold wholesale.
 
 1. **Fastest path into your own repository**: run `syu init .`, then switch to a
    language-specific template only if the generic starter feels too abstract.
-2. **I already know the repo is Rust-first / Python-first / Go-first / polyglot**: start
+2. **I already know the repo is docs-first / Rust-first / Python-first / Go-first / polyglot**: start
    with the matching template, then compare against the matching example when
    you want a fuller repository story.
 3. **My main implementation language is still unsupported**: open

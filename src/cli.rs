@@ -519,7 +519,7 @@ pub struct InitArgs {
     pub spec_root: Option<PathBuf>,
 
     #[arg(
-        help = "Starter layout to scaffold (generic, rust-only, python-only, go-only, or polyglot)"
+        help = "Starter layout to scaffold (generic, docs-first, rust-only, python-only, go-only, or polyglot)"
     )]
     #[arg(long, value_enum, default_value_t = StarterTemplate::Generic)]
     pub template: StarterTemplate,
@@ -603,6 +603,7 @@ pub struct AddArgs {
 pub enum StarterTemplate {
     #[default]
     Generic,
+    DocsFirst,
     RustOnly,
     PythonOnly,
     GoOnly,
@@ -613,6 +614,7 @@ impl StarterTemplate {
     pub const fn label(self) -> &'static str {
         match self {
             Self::Generic => "generic",
+            Self::DocsFirst => "docs-first",
             Self::RustOnly => "rust-only",
             Self::PythonOnly => "python-only",
             Self::GoOnly => "go-only",
@@ -677,6 +679,7 @@ mod tests {
         assert_eq!(LookupKind::Requirement.label(), "requirement");
         assert_eq!(LookupKind::Feature.label(), "feature");
         assert_eq!(StarterTemplate::Generic.label(), "generic");
+        assert_eq!(StarterTemplate::DocsFirst.label(), "docs-first");
         assert_eq!(StarterTemplate::RustOnly.label(), "rust-only");
         assert_eq!(StarterTemplate::PythonOnly.label(), "python-only");
         assert_eq!(StarterTemplate::GoOnly.label(), "go-only");
