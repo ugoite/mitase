@@ -262,6 +262,30 @@ fn check_command_quiet_suppresses_success_summary_and_next_step_guidance() {
 
 #[test]
 // REQ-CORE-001
+fn check_command_quiet_suppresses_filtered_footer_on_success() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(fixture_path("passing"))
+        .arg("--quiet")
+        .arg("--severity")
+        .arg("error")
+        .output()
+        .expect("command should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(stdout.trim(), "syu validate passed (filtered view)");
+}
+
+#[test]
+// REQ-CORE-001
 fn check_command_reports_missing_definition_links() {
     let output = Command::cargo_bin("syu")
         .expect("binary should build")
