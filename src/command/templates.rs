@@ -96,11 +96,12 @@ mod tests {
     #[test]
     fn starter_template_catalog_lists_every_supported_template() {
         let templates = template_catalog_entries();
-        assert_eq!(templates.len(), 4);
+        assert_eq!(templates.len(), 5);
         assert_eq!(templates[0].name, "generic");
         assert_eq!(templates[1].name, "rust-only");
         assert_eq!(templates[2].name, "python-only");
-        assert_eq!(templates[3].name, "polyglot");
+        assert_eq!(templates[3].name, "go-only");
+        assert_eq!(templates[4].name, "polyglot");
     }
 
     #[test]
@@ -111,6 +112,7 @@ mod tests {
         assert_eq!(templates[0].related_example, None);
         assert_eq!(templates[1].related_example, Some("examples/rust-only"));
         assert_eq!(templates[2].related_example, Some("examples/python-only"));
-        assert_eq!(templates[3].related_example, Some("examples/polyglot"));
+        assert_eq!(templates[3].related_example, Some("examples/go-only"));
+        assert_eq!(templates[4].related_example, Some("examples/polyglot"));
     }
 }
