@@ -520,7 +520,11 @@ fn repository_declares_documentation_guides() {
     assert!(examples_and_templates.contains("examples/team-scale"));
     assert!(merge_queue_playbook.contains("merge_group"));
     assert!(merge_queue_playbook.contains("gh api graphql"));
+    assert!(merge_queue_playbook.contains("autoMergeRequest"));
+    assert!(merge_queue_playbook.contains("reviewDecision"));
     assert!(merge_queue_playbook.contains("AWAITING_CHECKS"));
+    assert!(merge_queue_playbook.contains("All comments must be resolved"));
+    assert!(merge_queue_playbook.contains("gh pr merge 123 --auto --squash"));
     assert!(merge_queue_playbook.contains("gh-readonly-queue/main/pr-123-<sha>"));
     assert!(configuration.contains("validate.default_fix"));
     assert!(configuration.contains("trace-adapter-support.md"));
