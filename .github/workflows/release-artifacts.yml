@@ -83,6 +83,12 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
 
+      - name: Install browser app dependencies
+        shell: bash
+        run: |
+          scripts/ci/pinned-npm.sh install app
+          npm --prefix app ci
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -100,7 +106,7 @@ jobs:
         if: matrix.cross_compile == true
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu
+          sudo apt-get install -y --no-install-recommends gcc-aarch64-linux-gnu libc6-dev-arm64-cross
 
       - name: Build release binary (cross-compile aarch64 linux)
         if: matrix.cross_compile == true
