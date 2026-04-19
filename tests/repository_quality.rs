@@ -718,15 +718,20 @@ fn repository_ships_vscode_extension() {
     assert!(extension_lock.contains("\"yaml\""));
     assert!(extension_readme.contains("Problems panel"));
     assert!(extension_readme.contains("syu Context"));
+    assert!(extension_readme.contains("inline CodeLens actions"));
     assert!(extension_readme.contains("Extension Development Host"));
     assert!(extension_launch.contains("\"extensionHost\""));
     assert!(extension_entry.contains("FEAT-VSCODE-001"));
     assert!(extension_entry.contains("SyuContextTreeProvider"));
     assert!(extension_entry.contains("refreshDiagnostics"));
+    assert!(extension_entry.contains("registerCodeLensProvider"));
+    assert!(extension_entry.contains("collectInlineNavigationTargets"));
     assert!(extension_model.contains("lookupTrace"));
     assert!(extension_model.contains("loadDiagnostics"));
+    assert!(extension_model.contains("collectInlineNavigationTargets"));
     assert!(extension_tests.contains("REQ-CORE-022"));
     assert!(extension_tests.contains("lookupTrace"));
+    assert!(extension_tests.contains("collectInlineNavigationTargets finds spec IDs"));
     assert!(gitignore.contains("editors/vscode/node_modules"));
     assert!(readme.contains("## VS Code extension"));
 }

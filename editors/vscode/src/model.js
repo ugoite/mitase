@@ -435,6 +435,121 @@ function specIdFromText(value) {
   return match ? match[0] : null
 }
 
+function collectInlineNavigationTargets(documentText) {
+  const lines = String(documentText || '').split(/\r?\n/u)
+  const targets = []
+  let activeTraceFile = null
+  let traceFileIndent = -1
+  let inSymbols = false
+  let symbolsIndent = -1
+
+  for (let line = 0; line < lines.length; line += 1) {
+    const text = lines[line]
+    const trimmed = text.trim()
+    const indent = text.match(/^(\s*)/u)?.[1].length ?? 0
+
+    for (const match of text.matchAll(/\b(?:PHIL|POL|REQ|FEAT)-[A-Z0-9-]+\b/gu)) {
+      targets.push({
+        kind: 'specId',
+        id: match[0],
+        line,
+        startCharacter: match.index,
+        endCharacter: match.index + match[0].length
+      })
+    }
+
+    const fileMatch = /^(\s*)(?:-\s+)?file:\s*["']?([^"'#]+?)["']?\s*$/u.exec(text)
+    if (fileMatch) {
+      const file = normalizeRelativePath(fileMatch[2])
+      activeTraceFile = file || null
+      traceFileIndent = fileMatch[1].length
+      inSymbols = false
+      symbolsIndent = -1
+
+      if (activeTraceFile) {
+        const startCharacter = text.indexOf(fileMatch[2])
+        targets.push({
+          kind: 'traceFile',
+          file: activeTraceFile,
+          line,
+          startCharacter,
+          endCharacter: startCharacter + fileMatch[2].length
+        })
+      }
+      continue
+    }
+
+    if (!trimmed) {
+      continue
+    }
+
+    if (activeTraceFile && indent <= traceFileIndent) {
+      activeTraceFile = null
+      traceFileIndent = -1
+      inSymbols = false
+      symbolsIndent = -1
+    }
+
+    if (!activeTraceFile) {
+      continue
+    }
+
+    if (/^\s*symbols:\s*$/u.test(text) && indent > traceFileIndent) {
+      inSymbols = true
+      symbolsIndent = indent
+      continue
+    }
+
+    if (!inSymbols) {
+      continue
+    }
+
+    if (indent <= symbolsIndent) {
+      inSymbols = false
+      symbolsIndent = -1
+      continue
+    }
+
+    const symbolValue = parseTraceSymbolEntry(text)
+    if (!symbolValue) {
+      continue
+    }
+
+    const startCharacter = text.indexOf(symbolValue)
+    targets.push({
+      kind: 'traceSymbol',
+      file: activeTraceFile,
+      symbol: symbolValue,
+      line,
+      startCharacter,
+      endCharacter: startCharacter + symbolValue.length
+    })
+  }
+
+  return targets
+}
+
+function parseTraceSymbolEntry(text) {
+  const match = /^\s*-\s*(.+?)\s*$/u.exec(text)
+  if (!match) {
+    return null
+  }
+
+  const rawValue = match[1].replace(/\s+#.*$/u, '').trim()
+  if (!rawValue) {
+    return null
+  }
+
+  if (
+    (rawValue.startsWith('"') && rawValue.endsWith('"')) ||
+    (rawValue.startsWith("'") && rawValue.endsWith("'"))
+  ) {
+    return rawValue.slice(1, -1).trim() || null
+  }
+
+  return rawValue
+}
+
 function itemFromIssueSubject(issue, model) {
   const id = specIdFromText(issue.subject)
   return id ? model?.byId.get(id) || null : null
@@ -730,6 +845,7 @@ function openTargetsForSpecId(model, id) {
 }
 
 module.exports = {
+  collectInlineNavigationTargets,
   formatDiagnosticMessage,
   loadDiagnostics,
   loadSpecModel,
