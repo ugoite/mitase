@@ -401,9 +401,12 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       test or implementation files from the workspace. The command MUST explain
       why each returned commit matched, SHOULD support narrowing the lookup to
       definition versus traced evidence and to one path subset, SHOULD offer
-      JSON output for audit or release automation, and SHOULD continue working
-      when validation issues exist so long as the workspace still loads and is
-      inside a Git repository.
+      a reviewer-oriented mode that can include related spec items and traced
+      files from the relation graph, SHOULD support scoping the returned history
+      to an explicit Git range or the current branch's merge-base with another
+      ref, SHOULD offer JSON output for audit or release automation, and SHOULD
+      continue working when validation issues exist so long as the workspace
+      still loads and is inside a Git repository.
   - **priority**: medium
   - **status**: implemented
   - **linked_policies**:
@@ -807,9 +810,12 @@ requirements:
       test or implementation files from the workspace. The command MUST explain
       why each returned commit matched, SHOULD support narrowing the lookup to
       definition versus traced evidence and to one path subset, SHOULD offer
-      JSON output for audit or release automation, and SHOULD continue working
-      when validation issues exist so long as the workspace still loads and is
-      inside a Git repository.
+      a reviewer-oriented mode that can include related spec items and traced
+      files from the relation graph, SHOULD support scoping the returned history
+      to an explicit Git range or the current branch's merge-base with another
+      ref, SHOULD offer JSON output for audit or release automation, and SHOULD
+      continue working when validation issues exist so long as the workspace
+      still loads and is inside a Git repository.
     priority: medium
     status: implemented
     linked_policies:

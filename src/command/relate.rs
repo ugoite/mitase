@@ -20,53 +20,53 @@ use crate::{
 use super::lookup::{EntitySummary, WorkspaceEntity, WorkspaceLookup};
 
 #[derive(Debug, Serialize)]
-struct JsonRelateOutput {
-    selection: SelectionSummary,
-    direct_matches: DirectMatches,
-    philosophies: Vec<RelatedNode>,
-    policies: Vec<RelatedNode>,
-    requirements: Vec<RelatedNode>,
-    features: Vec<RelatedNode>,
-    traces: Vec<RelatedTrace>,
-    gaps: Vec<Gap>,
+pub(crate) struct JsonRelateOutput {
+    pub(crate) selection: SelectionSummary,
+    pub(crate) direct_matches: DirectMatches,
+    pub(crate) philosophies: Vec<RelatedNode>,
+    pub(crate) policies: Vec<RelatedNode>,
+    pub(crate) requirements: Vec<RelatedNode>,
+    pub(crate) features: Vec<RelatedNode>,
+    pub(crate) traces: Vec<RelatedTrace>,
+    pub(crate) gaps: Vec<Gap>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct SelectionSummary {
-    kind: &'static str,
-    query: String,
+pub(crate) struct SelectionSummary {
+    pub(crate) kind: &'static str,
+    pub(crate) query: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize)]
-struct DirectMatches {
-    definitions: Vec<RelatedNode>,
-    traces: Vec<RelatedTrace>,
+pub(crate) struct DirectMatches {
+    pub(crate) definitions: Vec<RelatedNode>,
+    pub(crate) traces: Vec<RelatedTrace>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct RelatedNode {
-    kind: &'static str,
-    id: String,
-    title: String,
-    document_path: String,
+pub(crate) struct RelatedNode {
+    pub(crate) kind: &'static str,
+    pub(crate) id: String,
+    pub(crate) title: String,
+    pub(crate) document_path: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct RelatedTrace {
-    owner_kind: &'static str,
-    owner_id: String,
-    relation_kind: &'static str,
-    language: String,
-    file: String,
-    symbols: Vec<String>,
-    direct_match: bool,
+pub(crate) struct RelatedTrace {
+    pub(crate) owner_kind: &'static str,
+    pub(crate) owner_id: String,
+    pub(crate) relation_kind: &'static str,
+    pub(crate) language: String,
+    pub(crate) file: String,
+    pub(crate) symbols: Vec<String>,
+    pub(crate) direct_match: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct Gap {
-    kind: &'static str,
-    id: String,
-    message: String,
+pub(crate) struct Gap {
+    pub(crate) kind: &'static str,
+    pub(crate) id: String,
+    pub(crate) message: String,
 }
 
 #[derive(Debug, Clone)]
@@ -123,7 +123,10 @@ pub fn run_relate_command(args: &RelateArgs) -> Result<i32> {
     Ok(0)
 }
 
-fn build_relation_report(workspace: &Workspace, selector: &str) -> Result<JsonRelateOutput> {
+pub(crate) fn build_relation_report(
+    workspace: &Workspace,
+    selector: &str,
+) -> Result<JsonRelateOutput> {
     let lookup = WorkspaceLookup::new(workspace);
     let catalog = RelationCatalog::load(lookup)?;
     let selection = resolve_selection(workspace, lookup, &catalog, selector)?;

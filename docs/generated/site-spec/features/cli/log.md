@@ -19,7 +19,7 @@ description: "Generated reference for docs/syu/features/cli/log.yaml"
 
 - **id**: FEAT-LOG-001
   - **title**: Trace-aware Git history lookup
-  - **summary**: Show the commit history behind one requirement or feature by projecting the current trace graph onto checked-in Git paths.
+  - **summary**: Show reviewer-friendly commit history behind one requirement or feature by projecting the current trace graph, related spec surface, and optional review range onto checked-in Git paths.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-024
@@ -53,7 +53,7 @@ version: 1
 features:
   - id: FEAT-LOG-001
     title: Trace-aware Git history lookup
-    summary: Show the commit history behind one requirement or feature by projecting the current trace graph onto checked-in Git paths.
+    summary: Show reviewer-friendly commit history behind one requirement or feature by projecting the current trace graph, related spec surface, and optional review range onto checked-in Git paths.
     status: implemented
     linked_requirements:
       - REQ-CORE-024

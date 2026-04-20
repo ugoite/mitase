@@ -109,6 +109,7 @@ const LOG_AFTER_HELP: &str = "\
 Examples:
   syu log REQ-CORE-002
   syu log FEAT-CHECK-001 --kind implementation --path src/command
+  syu log REQ-CORE-024 --include-related --merge-base-ref origin/main
   syu log REQ-CORE-019 --format json";
 
 const RELATE_AFTER_HELP: &str = "\
@@ -345,6 +346,18 @@ pub struct LogArgs {
     #[arg(help = "Limit traced paths to one repository-relative file or directory prefix")]
     #[arg(long, value_name = "PATH")]
     pub path: Option<PathBuf>,
+
+    #[arg(help = "Also include related spec definitions and traces from `syu relate`")]
+    #[arg(long)]
+    pub include_related: bool,
+
+    #[arg(help = "Limit history to commits after the merge-base between HEAD and the given ref")]
+    #[arg(long, value_name = "REF", conflicts_with = "range")]
+    pub merge_base_ref: Option<String>,
+
+    #[arg(help = "Limit history to an explicit git revision range such as origin/main..HEAD")]
+    #[arg(long, value_name = "RANGE", conflicts_with = "merge_base_ref")]
+    pub range: Option<String>,
 
     #[arg(help = "Maximum number of matching commits to show")]
     #[arg(long, default_value_t = 20)]

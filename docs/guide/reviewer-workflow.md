@@ -90,6 +90,7 @@ After you know the owning ID and traced files, inspect their recent Git history:
 
 ```bash
 syu log FEAT-CHECK-001 --kind implementation --path src/command
+syu log REQ-CORE-017 --include-related --merge-base-ref origin/main
 ```
 
 Use `syu log` when review needs historical context:
@@ -97,6 +98,8 @@ Use `syu log` when review needs historical context:
 - has this area changed repeatedly in the same way?
 - did a recent commit rename the traced file or symbol?
 - is the PR fixing a regression in a path that already has relevant history?
+- do I need the linked requirement/feature surface, not just one selected ID?
+- what changed on this review branch since it diverged from main?
 
 Treat `syu log` as history for the **currently traced** surface, not proof that
 the whole PR diff is covered. A newly added implementation or test file can be
