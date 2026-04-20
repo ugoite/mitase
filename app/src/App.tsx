@@ -80,6 +80,7 @@ function App() {
   const [snapshotVersion, setSnapshotVersion] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [lastSuccessfulRefreshAt, setLastSuccessfulRefreshAt] = useState<string | null>(null);
 
   const applyWorkspace = useCallback((browserWorkspace: BrowserWorkspace) => {
     setWorkspace(browserWorkspace);
@@ -156,6 +157,7 @@ function App() {
         setError(null);
         setRefreshError(null);
         setSnapshotVersion(snapshot);
+        setLastSuccessfulRefreshAt(new Date().toISOString());
         applyWorkspace(browserWorkspace);
       } catch (loadError) {
         if (refreshing) {
@@ -268,6 +270,10 @@ function App() {
     setFocusedResultIndex(-1);
   }, [workspace, searchFilter, searchQuery]);
 
+  const triggerRefresh = useCallback(() => {
+    void loadWorkspace("refresh");
+  }, [loadWorkspace]);
+
   const sectionSummaries = useMemo(() => {
     if (!workspace) {
       return [] as SectionSummary[];
@@ -316,6 +322,21 @@ function App() {
       null
     );
   }, [currentDocument, selectedItemId]);
+
+  const refreshState = refreshError ? "stale" : isRefreshing ? "refreshing" : "current";
+  const refreshStateClasses =
+    refreshState === "stale"
+      ? "border-rose-400/40 bg-rose-400/10 text-rose-100"
+      : refreshState === "refreshing"
+        ? "border-amber-400/40 bg-amber-400/10 text-amber-100"
+        : "border-emerald-400/40 bg-emerald-400/10 text-emerald-100";
+  const refreshStateLabel =
+    refreshState === "stale"
+      ? "Stale snapshot"
+      : refreshState === "refreshing"
+        ? "Refreshing…"
+        : "Current";
+  const lastRefreshLabel = formatRefreshTimestamp(lastSuccessfulRefreshAt);
 
   const documentGroups = useMemo(() => {
     if (!currentSection) {
@@ -607,16 +628,44 @@ function App() {
     <div className="app-shell text-slate-100">
       <header className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/90 backdrop-blur-2xl">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 md:flex-row md:items-center md:justify-between md:px-8">
-          <h1 className="text-2xl font-semibold tracking-tight text-white">
-            <button
-              type="button"
-              onClick={resetNavigation}
-              className="transition hover:text-sky-300"
-              aria-label="syu — go to first item"
-            >
-              syu
-            </button>
-          </h1>
+          <div className="flex items-center justify-between gap-4 md:min-w-0">
+            <h1 className="text-2xl font-semibold tracking-tight text-white">
+              <button
+                type="button"
+                onClick={resetNavigation}
+                className="transition hover:text-sky-300"
+                aria-label="syu — go to first item"
+              >
+                syu
+              </button>
+            </h1>
+            <div className="flex items-center gap-3 md:hidden">
+              <div className="text-right text-[11px] text-slate-300">
+                <div className="font-medium text-slate-100">Last refreshed</div>
+                <time
+                  aria-label="Last successful refresh"
+                  className="block text-slate-400"
+                  dateTime={lastSuccessfulRefreshAt ?? ""}
+                  title={lastSuccessfulRefreshAt ?? undefined}
+                >
+                  {lastRefreshLabel}
+                </time>
+              </div>
+              <span
+                className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${refreshStateClasses}`}
+              >
+                {refreshStateLabel}
+              </span>
+              <button
+                type="button"
+                onClick={triggerRefresh}
+                disabled={isRefreshing}
+                className="inline-flex items-center rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-1.5 text-xs font-semibold text-sky-100 transition hover:bg-sky-400/20 disabled:cursor-wait disabled:opacity-60"
+              >
+                Refresh now
+              </button>
+            </div>
+          </div>
           <nav
             aria-label="Top level sections"
             className="flex gap-2 overflow-x-auto whitespace-nowrap pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -654,6 +703,32 @@ function App() {
               );
             })}
           </nav>
+          <div className="hidden shrink-0 items-center gap-3 md:flex">
+            <div className="text-right text-xs text-slate-300">
+              <div className="font-medium text-slate-100">Last refreshed</div>
+              <time
+                aria-label="Last successful refresh"
+                className="block text-slate-400"
+                dateTime={lastSuccessfulRefreshAt ?? ""}
+                title={lastSuccessfulRefreshAt ?? undefined}
+              >
+                {lastRefreshLabel}
+              </time>
+            </div>
+            <span
+              className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] ${refreshStateClasses}`}
+            >
+              {refreshStateLabel}
+            </span>
+            <button
+              type="button"
+              onClick={triggerRefresh}
+              disabled={isRefreshing}
+              className="inline-flex items-center rounded-full border border-sky-400/30 bg-sky-400/10 px-4 py-2 text-sm font-semibold text-sky-100 transition hover:bg-sky-400/20 disabled:cursor-wait disabled:opacity-60"
+            >
+              Refresh now
+            </button>
+          </div>
         </div>
       </header>
 
@@ -668,6 +743,26 @@ function App() {
               Showing the last successfully loaded workspace snapshot while `syu app` recovers. Fix
               the workspace or keep this tab open until the next refresh succeeds.
             </p>
+            <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-rose-200/90">
+                Last successful refresh:{" "}
+                <time
+                  aria-label="Last successful refresh"
+                  dateTime={lastSuccessfulRefreshAt ?? ""}
+                  title={lastSuccessfulRefreshAt ?? undefined}
+                >
+                  {lastRefreshLabel}
+                </time>
+              </p>
+              <button
+                type="button"
+                onClick={triggerRefresh}
+                disabled={isRefreshing}
+                className="inline-flex items-center justify-center rounded-full border border-rose-200/30 bg-rose-200/10 px-4 py-2 text-sm font-semibold text-rose-50 transition hover:bg-rose-200/20 disabled:cursor-wait disabled:opacity-60"
+              >
+                Refresh now
+              </button>
+            </div>
             <p className="mt-2 break-words text-xs text-rose-200/90">{refreshError}</p>
           </div>
         )}
@@ -707,6 +802,24 @@ function App() {
             <p className="mt-2 break-all text-sm text-slate-400">
               spec root: {workspace.spec_root}
             </p>
+            <div className="mt-4 flex flex-wrap items-center gap-3 text-xs">
+              <span
+                className={`inline-flex rounded-full border px-3 py-1 font-semibold uppercase tracking-[0.2em] ${refreshStateClasses}`}
+              >
+                {refreshStateLabel}
+              </span>
+              <p className="text-slate-400">
+                Last successful refresh:{" "}
+                <time
+                  aria-label="Last successful refresh"
+                  className="text-slate-300"
+                  dateTime={lastSuccessfulRefreshAt ?? ""}
+                  title={lastSuccessfulRefreshAt ?? undefined}
+                >
+                  {lastRefreshLabel}
+                </time>
+              </p>
+            </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
               <CompactMetric
                 label="issues"
@@ -1275,6 +1388,22 @@ function errorMessage(error: unknown, fallback: string): string {
 
 function formatRefreshFailure(action: string, error: unknown): string {
   return `Could not ${action}: ${errorMessage(error, "Unexpected refresh failure")}`;
+}
+
+function formatRefreshTimestamp(iso: string | null): string {
+  if (!iso) {
+    return "Waiting for first successful load";
+  }
+
+  const timestamp = new Date(iso);
+  if (Number.isNaN(timestamp.getTime())) {
+    return iso;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "medium",
+  }).format(timestamp);
 }
 
 function ratio(validated: number, declared: number): number {
