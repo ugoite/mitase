@@ -740,10 +740,9 @@ scripts/ci/pinned-npm.sh install app
 npm --prefix app ci
 ```
 
-Cargo no longer runs `npm ci` for you during normal builds. If `app/node_modules`
-is missing or stale, `build.rs` stops and points back to the commands above so
-offline, hermetic, and security-sensitive environments do not hide a networked
-package-manager install inside an ordinary Rust build.
+Cargo no longer runs `npm ci` for you during normal builds. If you are in a
+fresh clone or fresh worktree and `app/node_modules` is missing or stale,
+`build.rs` stops and points back to the commands above so offline, hermetic, and security-sensitive environments do not hide a networked package-manager install inside an ordinary Rust build.
 
 When contributors change browser app sources or build inputs, they should run
 `scripts/ci/check-browser-app-freshness.sh`. That flow regenerates the local

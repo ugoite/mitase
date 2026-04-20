@@ -1079,6 +1079,8 @@ fn repository_ships_browser_app() {
     assert!(build_script.contains("syu-app-dist"));
     assert!(build_script.contains("scripts/ci/pinned-npm.sh install app"));
     assert!(build_script.contains("browser app dependencies are not ready"));
+    assert!(build_script.contains("fresh clone or fresh worktree"));
+    assert!(build_script.contains("Cargo intentionally does not run a networked npm install"));
     assert!(build_script.contains("build:wasm"));
     assert!(build_script.contains("--outDir"));
     assert!(build_script.contains("shared_core_dir"));
@@ -1115,6 +1117,7 @@ fn repository_ships_browser_app() {
     assert!(readme.contains("generates the embedded"));
     assert!(readme.contains("scripts/ci/pinned-npm.sh install app"));
     assert!(readme.contains("Cargo no longer runs `npm ci` for you during normal builds."));
+    assert!(readme.contains("fresh clone or fresh worktree"));
     assert!(readme.contains("offline, hermetic, and security-sensitive environments"));
     assert!(readme.contains("check-browser-app-freshness.sh"));
     assert!(readme.contains("regenerates the local"));
