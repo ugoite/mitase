@@ -672,6 +672,7 @@ missing files.
 
 The repository ships working example projects:
 
+- [`examples/browser-ui`](examples/browser-ui)
 - [`examples/csharp-fallback`](examples/csharp-fallback)
 - [`examples/docs-first`](examples/docs-first)
 - [`examples/go-only`](examples/go-only)
@@ -682,6 +683,7 @@ The repository ships working example projects:
 - [`examples/polyglot`](examples/polyglot)
 - [`examples/team-scale`](examples/team-scale)
 
+`browser-ui` is the reference-only frontend example for traced React/TypeScript UI work.
 `docs-first`, `rust-only`, `python-only`, `go-only`, `java-only`, `typescript-only`, and
 `polyglot` match `syu init --template ...` starters directly.
 `csharp-fallback` remains the reference-only example for teams that want a
