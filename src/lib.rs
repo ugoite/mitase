@@ -246,9 +246,10 @@ mod tests {
         let trace = super::dispatch(
             Cli {
                 command: Some(Commands::Trace(TraceArgs {
-                    file: PathBuf::from("src/lib.rs"),
+                    file: Some(PathBuf::from("src/lib.rs")),
                     workspace: PathBuf::from("workspace"),
                     symbol: Some("run".to_string()),
+                    range: None,
                     format: OutputFormat::Json,
                 })),
             },
@@ -262,8 +263,9 @@ mod tests {
                 file,
                 workspace,
                 symbol,
-                format
-            }) if file == Path::new("src/lib.rs")
+                format,
+                ..
+            }) if file == Some(PathBuf::from("src/lib.rs"))
                 && workspace == Path::new("workspace")
                 && symbol.as_deref() == Some("run")
                 && format == OutputFormat::Json
@@ -348,8 +350,9 @@ mod tests {
         let relate = super::dispatch(
             Cli {
                 command: Some(Commands::Relate(RelateArgs {
-                    selector: "REQ-CORE-023".to_string(),
+                    selector: Some("REQ-CORE-023".to_string()),
                     workspace: PathBuf::from("workspace"),
+                    range: None,
                     format: OutputFormat::Json,
                 })),
             },
@@ -359,8 +362,8 @@ mod tests {
 
         assert!(matches!(
             relate,
-            super::Dispatch::Relate(crate::cli::RelateArgs { selector, workspace, format })
-                if selector == "REQ-CORE-023"
+            super::Dispatch::Relate(crate::cli::RelateArgs { selector, workspace, format, .. })
+                if selector.as_deref() == Some("REQ-CORE-023")
                     && workspace == Path::new("workspace")
                     && format == OutputFormat::Json
         ));
