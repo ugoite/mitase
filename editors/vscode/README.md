@@ -29,7 +29,10 @@ later.
 
 Switch your shell to the checked-in Node 20 version from
 `editors/vscode/.nvmrc`, then use the pinned npm release from
-`editors/vscode/package.json` to install dependencies from the repository root:
+`editors/vscode/package.json` to install dependencies from the repository root.
+If you are hopping between the extension, docs site, and browser app, use the
+repository Node workflow guide at `docs/guide/node-workflow.md` as the one-place
+runtime map first:
 
 ```bash
 nvm use "$(cat editors/vscode/.nvmrc)"

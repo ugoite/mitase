@@ -371,6 +371,7 @@ fn repository_declares_documentation_guides() {
     let examples_and_templates = read_file("docs/guide/examples-and-templates.md");
     let merge_queue_playbook = read_file("docs/guide/merge-queue-playbook.md");
     let getting_started = read_file("docs/guide/getting-started.md");
+    let node_workflow = read_file("docs/guide/node-workflow.md");
     let command_card = read_file("docs/guide/command-card.md");
     let trace_adapter_support = read_file("docs/guide/trace-adapter-support.md");
     let vscode_guide = read_file("docs/guide/vscode-extension.md");
@@ -407,6 +408,7 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("docs/guide/migration.md"));
     assert!(readme.contains("docs/guide/app.md"));
     assert!(readme.contains("docs/guide/reviewer-workflow.md"));
+    assert!(readme.contains("docs/guide/node-workflow.md"));
     assert!(readme.contains("docs/guide/troubleshooting.md"));
     assert!(readme.contains("docs/guide/spec-antipatterns.md"));
     assert!(readme.contains("docs/guide/vscode-extension.md"));
@@ -416,6 +418,7 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("**Migration / upgrade**"));
     assert!(readme.contains("**Visual explorer**"));
     assert!(readme.contains("**Reviewer workflow**"));
+    assert!(readme.contains("**Contributor runtime setup**"));
     assert!(readme.contains("new to `syu`"));
     assert!(readme.contains("already have a workspace"));
     assert!(readme.contains("10-15 minutes"));
@@ -587,6 +590,15 @@ fn repository_declares_documentation_guides() {
     );
     assert!(getting_started.contains("[troubleshooting](./troubleshooting.md)"));
     assert!(getting_started.contains("live [validation report]"));
+    assert!(node_workflow.contains("# Repository Node workflow"));
+    assert!(node_workflow.contains("| Browser app (`app/`) |"));
+    assert!(node_workflow.contains("| Docs site (`website/`) |"));
+    assert!(node_workflow.contains("| VS Code extension (`editors/vscode/`) |"));
+    assert!(node_workflow.contains("devcontainer installs `node:lts`"));
+    assert!(node_workflow.contains("nvm use \"$(cat app/.nvmrc)\""));
+    assert!(node_workflow.contains("scripts/ci/pinned-npm.sh install app"));
+    assert!(node_workflow.contains("bash scripts/ci/install-docs-site-deps.sh"));
+    assert!(node_workflow.contains("scripts/ci/pinned-npm.sh install editors/vscode"));
     assert!(command_card.contains("# syu command card"));
     assert!(command_card.contains("| Task | Command | Choose it when |"));
     assert!(command_card.contains("syu templates"));
@@ -600,6 +612,7 @@ fn repository_declares_documentation_guides() {
     assert!(vscode_guide.contains("syu.binaryPath"));
     assert!(vscode_guide.contains("editors/vscode/.nvmrc"));
     assert!(vscode_guide.contains("nvm use"));
+    assert!(vscode_guide.contains("[repository Node workflow guide](./node-workflow.md)"));
     assert!(vscode_guide.contains("scripts/ci/pinned-npm.sh install editors/vscode"));
     assert!(vscode_guide.contains("npm --prefix editors/vscode ci"));
     let tutorial = read_file("docs/guide/tutorial.md");
@@ -914,6 +927,7 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(contributing.contains("Docs-only edits outside"));
     assert!(contributing.contains("README.md"));
     assert!(contributing.contains("docs/guide/"));
+    assert!(contributing.contains("docs/guide/node-workflow.md"));
     assert!(contributing.contains("docs/generated/site-spec/"));
     assert!(contributing.contains(".worktrees/"));
     assert!(contributing.contains("scripts/ci/quality-gates.sh"));

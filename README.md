@@ -57,6 +57,10 @@ Pick the newcomer path that matches what you need next:
   [`docs/guide/reviewer-workflow.md`](docs/guide/reviewer-workflow.md) when a
   PR already exists and you want one concrete loop for moving between spec IDs,
   traced code, and recent Git history.
+- **Contributor runtime setup**: open
+  [`docs/guide/node-workflow.md`](docs/guide/node-workflow.md) when you are
+  contributing to this repository and need one place to see which Node major
+  the browser app, docs site, and VS Code extension expect today.
 - **Trace adapter matrix**: open
   [`docs/guide/trace-adapter-support.md`](docs/guide/trace-adapter-support.md)
   when you already have a workspace and need a capability reference for which
@@ -76,6 +80,7 @@ Keep the detailed guides close:
 - [`docs/guide/migration.md`](docs/guide/migration.md)
 - [`docs/guide/app.md`](docs/guide/app.md)
 - [`docs/guide/reviewer-workflow.md`](docs/guide/reviewer-workflow.md)
+- [`docs/guide/node-workflow.md`](docs/guide/node-workflow.md)
 - [`docs/guide/trace-adapter-support.md`](docs/guide/trace-adapter-support.md)
 - [`docs/guide/configuration.md`](docs/guide/configuration.md)
 - [`docs/guide/spec-antipatterns.md`](docs/guide/spec-antipatterns.md)
@@ -737,9 +742,10 @@ binaries without checking `app/dist/` into `main`.
 
 Use the checked-in Node 25 version from `app/package.json` and `app/.nvmrc`
 when working in `app/`; that is the local contributor expectation, not only a
-CI matrix detail. Before you run the install commands below, switch your shell
-to that Node major with a version manager such as `nvm`, `fnm`, or `Volta`
-using the checked-in `app/.nvmrc`.
+CI matrix detail. For the repo-wide app/docs/editor version map, use the
+[repository Node workflow guide](docs/guide/node-workflow.md). Before you run
+the install commands below, switch your shell to that Node major with a version
+manager such as `nvm`, `fnm`, or `Volta` using the checked-in `app/.nvmrc`.
 Before you run Cargo commands that embed the browser app, provision the app
 dependencies intentionally from the repository root:
 
@@ -772,8 +778,10 @@ checked-in `docs/` tree directly, and the published site is available at
 `https://ugoite.github.io/syu/`.
 
 Use the checked-in Node 20 version from `website/package.json` and
-`website/.nvmrc` when working in `website/`, and use the helper below so local
-installs follow the same pinned npm flow CI uses:
+`website/.nvmrc` when working in `website/`, and use the
+[repository Node workflow guide](docs/guide/node-workflow.md) when you need the
+full app/docs/editor runtime map in one place. Then use the helper below so
+local installs follow the same pinned npm flow CI uses:
 
 ```bash
 bash scripts/ci/install-docs-site-deps.sh
