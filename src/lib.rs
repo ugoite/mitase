@@ -306,6 +306,9 @@ mod tests {
                     workspace: PathBuf::from("workspace"),
                     kind: HistoryKind::Definition,
                     path: Some(PathBuf::from("docs/syu/requirements")),
+                    include_related: true,
+                    merge_base_ref: Some("origin/main".to_string()),
+                    range: None,
                     limit: 5,
                     format: OutputFormat::Json,
                 })),
@@ -321,6 +324,9 @@ mod tests {
                 workspace,
                 kind,
                 path,
+                include_related,
+                merge_base_ref,
+                range,
                 limit,
                 format
             })
@@ -328,6 +334,9 @@ mod tests {
                     && workspace == Path::new("workspace")
                     && kind == HistoryKind::Definition
                     && path == Some(PathBuf::from("docs/syu/requirements"))
+                    && include_related
+                    && merge_base_ref.as_deref() == Some("origin/main")
+                    && range.is_none()
                     && limit == 5
                     && format == OutputFormat::Json
         ));

@@ -15,11 +15,12 @@ use crate::{
     cli::{HistoryKind, LogArgs, LookupKind, OutputFormat},
     coverage::normalize_relative_path,
     model::{Feature, Requirement, TraceReference},
-    workspace::load_workspace,
+    workspace::{Workspace, load_workspace},
 };
 
 use super::{
     lookup::{WorkspaceEntity, WorkspaceLookup},
+    relate::build_relation_report,
     shell_quote_path,
 };
 
@@ -42,6 +43,9 @@ struct JsonLogOutput {
     title: String,
     repository_root: String,
     kind: &'static str,
+    include_related: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    scope: Option<JsonHistoryScope>,
     #[serde(skip_serializing_if = "Option::is_none")]
     path_filter: Option<String>,
     tracked_paths: Vec<TrackedPath>,
@@ -49,9 +53,18 @@ struct JsonLogOutput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+struct JsonHistoryScope {
+    label: String,
+    revision_range: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct TrackedPath {
     kind: &'static str,
     path: String,
+    owner_kind: &'static str,
+    owner_id: String,
+    source: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     language: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -76,6 +89,12 @@ struct HistoryTarget {
     tracked_paths: Vec<TrackedPath>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct HistoryScope {
+    label: String,
+    revision_range: String,
+}
+
 pub fn run_log_command(args: &LogArgs) -> Result<i32> {
     if args.limit == 0 {
         bail!("`--limit` must be greater than zero");
@@ -89,15 +108,28 @@ pub fn run_log_command(args: &LogArgs) -> Result<i32> {
         .map(|path| normalize_path_filter(&workspace.root, path))
         .transpose()?
         .filter(|path| !path.as_os_str().is_empty());
-    let target = build_history_target(
+    let mut target = build_history_target(
         lookup,
         &workspace.root,
         &args.id,
         args.kind,
         path_filter.as_deref(),
     )?;
+    if args.include_related {
+        let related =
+            collect_related_tracked_paths(&workspace, &args.id, args.kind, path_filter.as_deref())?;
+        target.tracked_paths.extend(related);
+        dedupe_tracked_paths(&mut target.tracked_paths);
+    }
     let repository_root = resolve_git_repository_root(&workspace.root)?;
-    let commits = load_git_history(&workspace.root, args.limit, &target.tracked_paths)?;
+    let merge_base_ref = args.merge_base_ref.as_deref();
+    let scope = resolve_history_scope(&workspace.root, args.range.as_deref(), merge_base_ref)?;
+    let commits = load_git_history(
+        &workspace.root,
+        args.limit,
+        &target.tracked_paths,
+        scope.as_ref(),
+    )?;
 
     match args.format {
         OutputFormat::Text => print!(
@@ -106,6 +138,8 @@ pub fn run_log_command(args: &LogArgs) -> Result<i32> {
                 &target,
                 &repository_root,
                 args.kind,
+                args.include_related,
+                scope.as_ref(),
                 path_filter.as_deref(),
                 &commits,
             )
@@ -118,6 +152,11 @@ pub fn run_log_command(args: &LogArgs) -> Result<i32> {
                 title: target.title.clone(),
                 repository_root: repository_root.display().to_string(),
                 kind: args.kind.label(),
+                include_related: args.include_related,
+                scope: scope.as_ref().map(|scope| JsonHistoryScope {
+                    label: scope.label.clone(),
+                    revision_range: scope.revision_range.clone(),
+                }),
                 path_filter: path_filter.map(|path| path.display().to_string()),
                 tracked_paths: target.tracked_paths.clone(),
                 commits,
@@ -263,12 +302,34 @@ fn tracked_paths_for_requirement(
             item.id
         ),
         HistoryKind::All => {
-            let mut tracked = vec![TrackedPath::definition(definition_path)];
-            tracked.extend(collect_trace_paths("test", &item.tests));
+            let mut tracked = vec![TrackedPath::definition(
+                "requirement",
+                &item.id,
+                "selected",
+                definition_path,
+            )];
+            tracked.extend(collect_trace_paths(
+                "requirement",
+                &item.id,
+                "selected",
+                "test",
+                &item.tests,
+            ));
             Ok(tracked)
         }
-        HistoryKind::Definition => Ok(vec![TrackedPath::definition(definition_path)]),
-        HistoryKind::Test => Ok(collect_trace_paths("test", &item.tests)),
+        HistoryKind::Definition => Ok(vec![TrackedPath::definition(
+            "requirement",
+            &item.id,
+            "selected",
+            definition_path,
+        )]),
+        HistoryKind::Test => Ok(collect_trace_paths(
+            "requirement",
+            &item.id,
+            "selected",
+            "test",
+            &item.tests,
+        )),
     }
 }
 
@@ -283,27 +344,50 @@ fn tracked_paths_for_feature(
             item.id
         ),
         HistoryKind::All => {
-            let mut tracked = vec![TrackedPath::definition(definition_path)];
-            tracked.extend(collect_trace_paths("implementation", &item.implementations));
+            let mut tracked = vec![TrackedPath::definition(
+                "feature",
+                &item.id,
+                "selected",
+                definition_path,
+            )];
+            tracked.extend(collect_trace_paths(
+                "feature",
+                &item.id,
+                "selected",
+                "implementation",
+                &item.implementations,
+            ));
             Ok(tracked)
         }
-        HistoryKind::Definition => Ok(vec![TrackedPath::definition(definition_path)]),
-        HistoryKind::Implementation => {
-            Ok(collect_trace_paths("implementation", &item.implementations))
-        }
+        HistoryKind::Definition => Ok(vec![TrackedPath::definition(
+            "feature",
+            &item.id,
+            "selected",
+            definition_path,
+        )]),
+        HistoryKind::Implementation => Ok(collect_trace_paths(
+            "feature",
+            &item.id,
+            "selected",
+            "implementation",
+            &item.implementations,
+        )),
     }
 }
 
 fn tracked_paths_for_non_trace_layer(
     id: &str,
-    layer_label: &str,
+    layer_label: &'static str,
     kind: HistoryKind,
     definition_path: &str,
 ) -> Result<Vec<TrackedPath>> {
     match kind {
-        HistoryKind::All | HistoryKind::Definition => {
-            Ok(vec![TrackedPath::definition(definition_path)])
-        }
+        HistoryKind::All | HistoryKind::Definition => Ok(vec![TrackedPath::definition(
+            layer_label,
+            id,
+            "selected",
+            definition_path,
+        )]),
         HistoryKind::Test => bail!(
             "`{id}` is a {layer_label}, so `--kind test` is not available. Use `--kind definition` or omit the flag."
         ),
@@ -314,6 +398,9 @@ fn tracked_paths_for_non_trace_layer(
 }
 
 fn collect_trace_paths(
+    owner_kind: &'static str,
+    owner_id: &str,
+    source: &'static str,
     kind: &'static str,
     traces: &std::collections::BTreeMap<String, Vec<TraceReference>>,
 ) -> Vec<TrackedPath> {
@@ -323,12 +410,79 @@ fn collect_trace_paths(
             tracked.push(TrackedPath {
                 kind,
                 path: reference.file.display().to_string(),
+                owner_kind,
+                owner_id: owner_id.to_string(),
+                source,
                 language: Some(language.clone()),
                 symbols: reference.symbols.clone(),
             });
         }
     }
     tracked
+}
+
+fn collect_related_tracked_paths(
+    workspace: &Workspace,
+    selector: &str,
+    kind: HistoryKind,
+    path_filter: Option<&Path>,
+) -> Result<Vec<TrackedPath>> {
+    let report = build_relation_report(workspace, selector)?;
+    let mut tracked = Vec::new();
+
+    if matches!(kind, HistoryKind::All | HistoryKind::Definition) {
+        for node in report
+            .philosophies
+            .iter()
+            .chain(report.policies.iter())
+            .chain(report.requirements.iter())
+            .chain(report.features.iter())
+        {
+            tracked.push(TrackedPath::definition(
+                node.kind,
+                &node.id,
+                "related",
+                &node.document_path,
+            ));
+        }
+        tracked.retain(|entry| !(entry.owner_id == selector && entry.source == "related"));
+    }
+
+    if !matches!(kind, HistoryKind::Definition) {
+        for trace in &report.traces {
+            if kind != HistoryKind::All && trace.relation_kind != kind.label() {
+                continue;
+            }
+            tracked.push(TrackedPath {
+                kind: trace.relation_kind,
+                path: trace.file.clone(),
+                owner_kind: trace.owner_kind,
+                owner_id: trace.owner_id.clone(),
+                source: "related",
+                language: Some(trace.language.clone()),
+                symbols: trace.symbols.clone(),
+            });
+        }
+    }
+
+    if let Some(path_filter) = path_filter {
+        tracked.retain(|tracked| {
+            tracked.kind == "definition"
+                || normalized_tracked_path(&tracked.path).starts_with(path_filter)
+        });
+    }
+
+    Ok(tracked)
+}
+
+fn dedupe_tracked_paths(tracked_paths: &mut Vec<TrackedPath>) {
+    let mut deduped = Vec::with_capacity(tracked_paths.len());
+    for tracked in tracked_paths.drain(..) {
+        if !deduped.contains(&tracked) {
+            deduped.push(tracked);
+        }
+    }
+    *tracked_paths = deduped;
 }
 
 fn normalize_path_filter(workspace_root: &Path, path: &Path) -> Result<PathBuf> {
@@ -387,10 +541,59 @@ fn resolve_git_repository_root(workspace_root: &Path) -> Result<PathBuf> {
     Ok(PathBuf::from(repository_root))
 }
 
+fn resolve_history_scope(
+    workspace_root: &Path,
+    range: Option<&str>,
+    merge_base_ref: Option<&str>,
+) -> Result<Option<HistoryScope>> {
+    if let Some(range) = range {
+        return Ok(Some(HistoryScope {
+            label: format!("range `{range}`"),
+            revision_range: range.to_string(),
+        }));
+    }
+
+    let Some(reference) = merge_base_ref else {
+        return Ok(None);
+    };
+    let output = git_command(workspace_root)
+        .args(["merge-base", "HEAD", reference])
+        .output()
+        .with_context(|| {
+            format!(
+                "failed to run `git merge-base HEAD {reference}` in `{}`",
+                workspace_root.display()
+            )
+        })?;
+    if !output.status.success() {
+        bail!(
+            "failed to compute merge-base between `HEAD` and `{reference}` in `{}`: {}",
+            workspace_root.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    let merge_base = String::from_utf8(output.stdout)
+        .context("git merge-base output should be valid UTF-8")?
+        .trim()
+        .to_string();
+    if merge_base.is_empty() {
+        bail!(
+            "failed to compute merge-base between `HEAD` and `{reference}` in `{}`: git returned an empty base SHA",
+            workspace_root.display()
+        );
+    }
+
+    Ok(Some(HistoryScope {
+        label: format!("merge-base({reference})..HEAD"),
+        revision_range: format!("{merge_base}..HEAD"),
+    }))
+}
+
 fn load_git_history(
     workspace_root: &Path,
     limit: usize,
     tracked_paths: &[TrackedPath],
+    scope: Option<&HistoryScope>,
 ) -> Result<Vec<MatchedCommit>> {
     if tracked_paths.is_empty() {
         return Ok(Vec::new());
@@ -406,7 +609,7 @@ fn load_git_history(
 
     let mut merged_commits = BTreeMap::<String, MatchedCommit>::new();
     for (path, reasons) in grouped_paths {
-        for commit in load_git_history_for_path(workspace_root, limit, &path)? {
+        for commit in load_git_history_for_path(workspace_root, limit, &path, scope)? {
             let entry = merged_commits
                 .entry(commit.sha.clone())
                 .or_insert_with(|| MatchedCommit {
@@ -428,6 +631,7 @@ fn load_git_history_for_path(
     workspace_root: &Path,
     limit: usize,
     path: &Path,
+    scope: Option<&HistoryScope>,
 ) -> Result<Vec<MatchedCommit>> {
     let mut command = git_command(workspace_root);
     command.args([
@@ -439,8 +643,11 @@ fn load_git_history_for_path(
         "--format=%x1E%H%x00%h%x00%an%x00%aI%x00%s",
         "--name-only",
         "-z",
-        "--",
     ]);
+    if let Some(scope) = scope {
+        command.arg(&scope.revision_range);
+    }
+    command.arg("--");
     command.arg(path);
 
     let output = command
@@ -644,6 +851,8 @@ fn render_history_text(
     target: &HistoryTarget,
     repository_root: &Path,
     kind: HistoryKind,
+    include_related: bool,
+    scope: Option<&HistoryScope>,
     path_filter: Option<&Path>,
     commits: &[MatchedCommit],
 ) -> String {
@@ -657,6 +866,19 @@ fn render_history_text(
     writeln!(output, "Repository: {}", repository_root.display())
         .expect("writing to String must succeed");
     writeln!(output, "Selection: {}", kind.label()).expect("writing to String must succeed");
+    writeln!(
+        output,
+        "Related surface: {}",
+        if include_related {
+            "included"
+        } else {
+            "selected only"
+        }
+    )
+    .expect("writing to String must succeed");
+    if let Some(scope) = scope {
+        writeln!(output, "Scope: {}", scope.label).expect("writing to String must succeed");
+    }
     if let Some(path_filter) = path_filter {
         writeln!(output, "Path filter: {}", path_filter.display())
             .expect("writing to String must succeed");
@@ -708,14 +930,28 @@ fn render_tracked_path(tracked: &TrackedPath) -> String {
         )
         .expect("writing to String must succeed");
     }
+    write!(
+        output,
+        "\t{} {} ({})",
+        tracked.owner_kind, tracked.owner_id, tracked.source
+    )
+    .expect("writing to String must succeed");
     output
 }
 
 impl TrackedPath {
-    fn definition(path: &str) -> Self {
+    fn definition(
+        owner_kind: &'static str,
+        owner_id: &str,
+        source: &'static str,
+        path: &str,
+    ) -> Self {
         Self {
             kind: "definition",
             path: path.to_string(),
+            owner_kind,
+            owner_id: owner_id.to_string(),
+            source,
             language: None,
             symbols: Vec::new(),
         }
@@ -740,10 +976,10 @@ mod tests {
     };
 
     use super::{
-        HistoryKind, MatchedCommit, TrackedPath, collect_trace_paths, commit_is_ancestor_of,
-        load_git_history, lookup_kind_for_id, normalize_path_filter,
+        HistoryKind, HistoryScope, MatchedCommit, TrackedPath, collect_trace_paths,
+        commit_is_ancestor_of, load_git_history, lookup_kind_for_id, normalize_path_filter,
         order_commits_by_repository_history, parse_git_history, render_history_text,
-        sort_commits_by_history_relationship, tracked_paths_for_feature,
+        resolve_history_scope, sort_commits_by_history_relationship, tracked_paths_for_feature,
         tracked_paths_for_requirement,
     };
 
@@ -842,9 +1078,17 @@ mod tests {
             }],
         );
 
-        let tracked = collect_trace_paths("implementation", &traces);
+        let tracked = collect_trace_paths(
+            "feature",
+            "FEAT-LOG-001",
+            "selected",
+            "implementation",
+            &traces,
+        );
         assert_eq!(tracked[0].kind, "implementation");
         assert_eq!(tracked[0].path, "src/log.rs");
+        assert_eq!(tracked[0].owner_kind, "feature");
+        assert_eq!(tracked[0].owner_id, "FEAT-LOG-001");
         assert_eq!(tracked[0].language.as_deref(), Some("rust"));
         assert_eq!(tracked[0].symbols, vec!["run_log_command"]);
     }
@@ -925,8 +1169,113 @@ mod tests {
     #[test]
     fn load_git_history_returns_empty_without_tracked_paths() {
         let history =
-            load_git_history(Path::new("."), 5, &[]).expect("empty tracked paths are okay");
+            load_git_history(Path::new("."), 5, &[], None).expect("empty tracked paths are okay");
         assert!(history.is_empty());
+    }
+
+    #[test]
+    fn resolve_history_scope_returns_none_without_filters() {
+        assert_eq!(
+            resolve_history_scope(Path::new("."), None, None).expect("scope should resolve"),
+            None
+        );
+    }
+
+    #[test]
+    fn resolve_history_scope_keeps_explicit_ranges() {
+        let scope = resolve_history_scope(Path::new("."), Some("origin/main..HEAD"), None)
+            .expect("scope should resolve")
+            .expect("scope should exist");
+        assert_eq!(scope.label, "range `origin/main..HEAD`");
+        assert_eq!(scope.revision_range, "origin/main..HEAD");
+    }
+
+    #[test]
+    fn resolve_history_scope_reports_merge_base_failures() {
+        let fake_bin = tempdir().expect("tempdir should exist");
+        let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
+        write_fake_git_for_scope_merge_base_failure(fake_bin.path());
+
+        let error = resolve_history_scope(Path::new("/repo"), None, Some("origin/main"))
+            .expect_err("merge-base failures should be reported");
+        assert!(error.to_string().contains("failed to compute merge-base"));
+        assert!(error.to_string().contains("synthetic merge-base failure"));
+    }
+
+    #[test]
+    fn resolve_history_scope_rejects_empty_merge_base_output() {
+        let fake_bin = tempdir().expect("tempdir should exist");
+        let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
+        write_fake_git_for_scope_merge_base_empty_output(fake_bin.path());
+
+        let error = resolve_history_scope(Path::new("/repo"), None, Some("origin/main"))
+            .expect_err("empty merge-base output should fail");
+        assert!(error.to_string().contains("empty base SHA"));
+    }
+
+    #[test]
+    fn resolve_history_scope_reports_spawn_failures() {
+        let fake_bin = tempdir().expect("tempdir should exist");
+        let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
+
+        let error = resolve_history_scope(Path::new("/repo"), None, Some("origin/main"))
+            .expect_err("missing git binary should fail");
+        assert!(
+            error
+                .to_string()
+                .contains("failed to run `git merge-base HEAD origin/main`")
+        );
+    }
+
+    #[test]
+    fn collect_related_tracked_paths_excludes_selected_definition_from_related_set() {
+        let workspace_root = tempdir().expect("tempdir should exist");
+        write_related_workspace_fixture(workspace_root.path());
+        let workspace =
+            crate::workspace::load_workspace(workspace_root.path()).expect("workspace should load");
+
+        let tracked = super::collect_related_tracked_paths(
+            &workspace,
+            "REQ-HIST-001",
+            HistoryKind::Definition,
+            None,
+        )
+        .expect("related tracked paths should resolve");
+        assert!(tracked.iter().any(|entry| {
+            entry.owner_id == "FEAT-HIST-001"
+                && entry.owner_kind == "feature"
+                && entry.kind == "definition"
+                && entry.source == "related"
+        }));
+        assert!(
+            !tracked
+                .iter()
+                .any(|entry| entry.owner_id == "REQ-HIST-001" && entry.source == "related")
+        );
+    }
+
+    #[test]
+    fn run_log_command_supports_related_surface_and_merge_base_scope() {
+        let _lock = PATH_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        let workspace_root = tempdir().expect("tempdir should exist");
+        write_related_workspace_fixture(workspace_root.path());
+        init_test_git_repository(workspace_root.path());
+        git(workspace_root.path(), &["branch", "review-base", "HEAD"]);
+
+        let exit = super::run_log_command(&crate::cli::LogArgs {
+            id: "REQ-HIST-001".to_string(),
+            workspace: workspace_root.path().to_path_buf(),
+            kind: HistoryKind::Test,
+            path: Some(PathBuf::from("src")),
+            include_related: true,
+            merge_base_ref: Some("review-base".to_string()),
+            range: None,
+            limit: 5,
+            format: crate::cli::OutputFormat::Json,
+        })
+        .expect("log command should succeed");
+
+        assert_eq!(exit, 0);
     }
 
     #[test]
@@ -954,7 +1303,12 @@ mod tests {
                     summary: "feat: old history".to_string(),
                     author: "Tester".to_string(),
                     authored_at: "2026-04-13T00:00:00+00:00".to_string(),
-                    reasons: vec![TrackedPath::definition("history.txt")],
+                    reasons: vec![TrackedPath::definition(
+                        "feature",
+                        "FEAT-LOG-001",
+                        "selected",
+                        "history.txt",
+                    )],
                 },
             ),
             (
@@ -965,7 +1319,12 @@ mod tests {
                     summary: "feat: new history".to_string(),
                     author: "Tester".to_string(),
                     authored_at: "2026-04-13T01:00:00+00:00".to_string(),
-                    reasons: vec![TrackedPath::definition("history.txt")],
+                    reasons: vec![TrackedPath::definition(
+                        "feature",
+                        "FEAT-LOG-001",
+                        "selected",
+                        "history.txt",
+                    )],
                 },
             ),
         ]);
@@ -992,7 +1351,12 @@ mod tests {
                     summary: "old".to_string(),
                     author: "Tester".to_string(),
                     authored_at: "2026-04-13T00:00:00+00:00".to_string(),
-                    reasons: vec![TrackedPath::definition("docs/old.yaml")],
+                    reasons: vec![TrackedPath::definition(
+                        "feature",
+                        "FEAT-LOG-001",
+                        "selected",
+                        "docs/old.yaml",
+                    )],
                 },
             ),
             (
@@ -1003,7 +1367,12 @@ mod tests {
                     summary: "new".to_string(),
                     author: "Tester".to_string(),
                     authored_at: "2026-04-13T01:00:00+00:00".to_string(),
-                    reasons: vec![TrackedPath::definition("docs/new.yaml")],
+                    reasons: vec![TrackedPath::definition(
+                        "feature",
+                        "FEAT-LOG-001",
+                        "selected",
+                        "docs/new.yaml",
+                    )],
                 },
             ),
         ]);
@@ -1054,7 +1423,12 @@ mod tests {
                     summary: "old-a".to_string(),
                     author: "Tester".to_string(),
                     authored_at: "2026-04-13T00:00:00+00:00".to_string(),
-                    reasons: vec![TrackedPath::definition("docs/old-a.yaml")],
+                    reasons: vec![TrackedPath::definition(
+                        "feature",
+                        "FEAT-LOG-001",
+                        "selected",
+                        "docs/old-a.yaml",
+                    )],
                 },
             ),
             (
@@ -1065,7 +1439,12 @@ mod tests {
                     summary: "old-b".to_string(),
                     author: "Tester".to_string(),
                     authored_at: "2026-04-13T01:00:00+00:00".to_string(),
-                    reasons: vec![TrackedPath::definition("docs/old-b.yaml")],
+                    reasons: vec![TrackedPath::definition(
+                        "feature",
+                        "FEAT-LOG-001",
+                        "selected",
+                        "docs/old-b.yaml",
+                    )],
                 },
             ),
             (
@@ -1076,7 +1455,12 @@ mod tests {
                     summary: "new".to_string(),
                     author: "Tester".to_string(),
                     authored_at: "2026-04-13T02:00:00+00:00".to_string(),
-                    reasons: vec![TrackedPath::definition("docs/new.yaml")],
+                    reasons: vec![TrackedPath::definition(
+                        "feature",
+                        "FEAT-LOG-001",
+                        "selected",
+                        "docs/new.yaml",
+                    )],
                 },
             ),
         ]);
@@ -1115,7 +1499,12 @@ mod tests {
                     summary: "root".to_string(),
                     author: "Tester".to_string(),
                     authored_at: "2026-04-13T00:00:00+00:00".to_string(),
-                    reasons: vec![TrackedPath::definition("docs/root.yaml")],
+                    reasons: vec![TrackedPath::definition(
+                        "feature",
+                        "FEAT-LOG-001",
+                        "selected",
+                        "docs/root.yaml",
+                    )],
                 },
             ),
             (
@@ -1126,7 +1515,12 @@ mod tests {
                     summary: "mid-a".to_string(),
                     author: "Tester".to_string(),
                     authored_at: "2026-04-13T01:00:00+00:00".to_string(),
-                    reasons: vec![TrackedPath::definition("docs/mid-a.yaml")],
+                    reasons: vec![TrackedPath::definition(
+                        "feature",
+                        "FEAT-LOG-001",
+                        "selected",
+                        "docs/mid-a.yaml",
+                    )],
                 },
             ),
             (
@@ -1137,7 +1531,12 @@ mod tests {
                     summary: "mid-b".to_string(),
                     author: "Tester".to_string(),
                     authored_at: "2026-04-13T02:00:00+00:00".to_string(),
-                    reasons: vec![TrackedPath::definition("docs/mid-b.yaml")],
+                    reasons: vec![TrackedPath::definition(
+                        "feature",
+                        "FEAT-LOG-001",
+                        "selected",
+                        "docs/mid-b.yaml",
+                    )],
                 },
             ),
         ]);
@@ -1173,7 +1572,12 @@ mod tests {
                 summary: "old-a".to_string(),
                 author: "Tester".to_string(),
                 authored_at: "2026-04-13T00:00:00+00:00".to_string(),
-                reasons: vec![TrackedPath::definition("docs/old-a.yaml")],
+                reasons: vec![TrackedPath::definition(
+                    "feature",
+                    "FEAT-LOG-001",
+                    "selected",
+                    "docs/old-a.yaml",
+                )],
             },
             MatchedCommit {
                 sha: "old-b".to_string(),
@@ -1181,7 +1585,12 @@ mod tests {
                 summary: "old-b".to_string(),
                 author: "Tester".to_string(),
                 authored_at: "2026-04-13T01:00:00+00:00".to_string(),
-                reasons: vec![TrackedPath::definition("docs/old-b.yaml")],
+                reasons: vec![TrackedPath::definition(
+                    "feature",
+                    "FEAT-LOG-001",
+                    "selected",
+                    "docs/old-b.yaml",
+                )],
             },
             MatchedCommit {
                 sha: "old-c".to_string(),
@@ -1189,7 +1598,12 @@ mod tests {
                 summary: "old-c".to_string(),
                 author: "Tester".to_string(),
                 authored_at: "2026-04-13T02:00:00+00:00".to_string(),
-                reasons: vec![TrackedPath::definition("docs/old-c.yaml")],
+                reasons: vec![TrackedPath::definition(
+                    "feature",
+                    "FEAT-LOG-001",
+                    "selected",
+                    "docs/old-c.yaml",
+                )],
             },
         ];
 
@@ -1258,13 +1672,21 @@ mod tests {
                 id: "REQ-LOG-001".to_string(),
                 entity_kind: "requirement",
                 title: "Requirement history".to_string(),
-                tracked_paths: vec![TrackedPath::definition("docs/req.yaml")],
+                tracked_paths: vec![TrackedPath::definition(
+                    "requirement",
+                    "REQ-LOG-001",
+                    "selected",
+                    "docs/req.yaml",
+                )],
             },
             Path::new("/repo"),
             HistoryKind::Definition,
+            false,
+            None,
             Some(Path::new("docs")),
             &[],
         );
+        assert!(rendered.contains("Related surface: selected only"));
         assert!(rendered.contains("Path filter: docs"));
         assert!(rendered.contains("Commits:\n- none"));
     }
@@ -1279,12 +1701,20 @@ mod tests {
                 tracked_paths: vec![TrackedPath {
                     kind: "implementation",
                     path: "src/history.rs".to_string(),
+                    owner_kind: "feature",
+                    owner_id: "FEAT-LOG-001".to_string(),
+                    source: "selected",
                     language: Some("rust".to_string()),
                     symbols: vec!["history".to_string()],
                 }],
             },
             Path::new("/repo"),
             HistoryKind::Implementation,
+            true,
+            Some(&HistoryScope {
+                label: "merge-base(origin/main)..HEAD".to_string(),
+                revision_range: "abc123..HEAD".to_string(),
+            }),
             None,
             &[MatchedCommit {
                 sha: "abc".to_string(),
@@ -1295,13 +1725,20 @@ mod tests {
                 reasons: vec![TrackedPath {
                     kind: "implementation",
                     path: "src/history.rs".to_string(),
+                    owner_kind: "feature",
+                    owner_id: "FEAT-LOG-001".to_string(),
+                    source: "selected",
                     language: Some("rust".to_string()),
                     symbols: vec!["history".to_string()],
                 }],
             }],
         );
+        assert!(rendered.contains("Related surface: included"));
+        assert!(rendered.contains("Scope: merge-base(origin/main)..HEAD"));
         assert!(rendered.contains("feat: update history"));
-        assert!(rendered.contains("implementation\tsrc/history.rs\trust\t[`history`]"));
+        assert!(rendered.contains(
+            "implementation\tsrc/history.rs\trust\t[`history`]\tfeature FEAT-LOG-001 (selected)"
+        ));
     }
 
     #[test]
@@ -1324,7 +1761,12 @@ mod tests {
                     summary: "older".to_string(),
                     author: "Tester".to_string(),
                     authored_at: "2026-04-13T00:00:00+00:00".to_string(),
-                    reasons: vec![TrackedPath::definition("docs/older.yaml")],
+                    reasons: vec![TrackedPath::definition(
+                        "feature",
+                        "FEAT-LOG-001",
+                        "selected",
+                        "docs/older.yaml",
+                    )],
                 },
             ),
             (
@@ -1335,7 +1777,12 @@ mod tests {
                     summary: "newer".to_string(),
                     author: "Tester".to_string(),
                     authored_at: "2026-04-13T01:00:00+00:00".to_string(),
-                    reasons: vec![TrackedPath::definition("docs/newer.yaml")],
+                    reasons: vec![TrackedPath::definition(
+                        "feature",
+                        "FEAT-LOG-001",
+                        "selected",
+                        "docs/newer.yaml",
+                    )],
                 },
             ),
         ]);
@@ -1356,6 +1803,91 @@ mod tests {
             }],
         );
         traces
+    }
+
+    fn write_related_workspace_fixture(root: &Path) {
+        fs::create_dir_all(root.join("docs/syu/philosophy")).expect("philosophy dir");
+        fs::create_dir_all(root.join("docs/syu/policies")).expect("policies dir");
+        fs::create_dir_all(root.join("docs/syu/requirements")).expect("requirements dir");
+        fs::create_dir_all(root.join("docs/syu/features/cli")).expect("features dir");
+        fs::create_dir_all(root.join("src")).expect("src dir");
+
+        fs::write(
+            root.join("syu.yaml"),
+            format!(
+                "version: {}\nspec:\n  root: docs/syu\nvalidate:\n  default_fix: false\n  allow_planned: true\n  require_non_orphaned_items: true\n  require_symbol_trace_coverage: false\n",
+                env!("CARGO_PKG_VERSION")
+            ),
+        )
+        .expect("config");
+        fs::write(
+            root.join("docs/syu/philosophy/foundation.yaml"),
+            "category: Philosophy\nversion: 1\nlanguage: en\nphilosophies:\n  - id: PHIL-HIST-001\n    title: History should stay explorable.\n    product_design_principle: Keep commit history close to trace links.\n    coding_guideline: Prefer one-command repository history lookups.\n    linked_policies:\n      - POL-HIST-001\n",
+        )
+        .expect("philosophy file");
+        fs::write(
+            root.join("docs/syu/policies/policies.yaml"),
+            "category: Policies\nversion: 1\nlanguage: en\npolicies:\n  - id: POL-HIST-001\n    title: History should be reachable from traces.\n    summary: Git history is useful when it is derived from checked-in trace metadata.\n    description: The repository history should be explorable from requirement and feature traces.\n    linked_philosophies:\n      - PHIL-HIST-001\n    linked_requirements:\n      - REQ-HIST-001\n",
+        )
+        .expect("policy file");
+        fs::write(
+            root.join("docs/syu/requirements/core.yaml"),
+            "category: Core\nprefix: REQ-HIST\n\nrequirements:\n  - id: REQ-HIST-001\n    title: Requirement history lookup\n    description: Requirement history should show the traced test and checked-in definition.\n    priority: medium\n    status: implemented\n    linked_policies:\n      - POL-HIST-001\n    linked_features:\n      - FEAT-HIST-001\n    tests:\n      rust:\n        - file: src/history_tests.rs\n          symbols:\n            - requirement_history_test\n",
+        )
+        .expect("requirement file");
+        fs::write(
+            root.join("docs/syu/features/features.yaml"),
+            "version: \"1\"\nfiles:\n  - kind: history\n    file: cli/history.yaml\n",
+        )
+        .expect("feature registry");
+        fs::write(
+            root.join("docs/syu/features/cli/history.yaml"),
+            "category: History\nversion: 1\nfeatures:\n  - id: FEAT-HIST-001\n    title: Feature history lookup\n    summary: Feature history should show the traced implementation and checked-in definition.\n    status: implemented\n    linked_requirements:\n      - REQ-HIST-001\n    implementations:\n      rust:\n        - file: src/history_feature.rs\n          symbols:\n            - feature_history\n",
+        )
+        .expect("feature file");
+        fs::write(
+            root.join("src/history_tests.rs"),
+            "// REQ-HIST-001\nfn requirement_history_test() {}\n",
+        )
+        .expect("history test file");
+        fs::write(
+            root.join("src/history_feature.rs"),
+            "// FEAT-HIST-001\nfn feature_history() {}\n",
+        )
+        .expect("history feature file");
+    }
+
+    fn write_fake_git_for_scope_merge_base_failure(script_dir: &Path) {
+        let script_path = script_dir.join("git");
+        fs::write(
+            &script_path,
+            "#!/bin/sh\nset -eu\nif [ \"$3\" = \"merge-base\" ]; then\n  echo 'synthetic merge-base failure' >&2\n  exit 2\nfi\necho 'unexpected git invocation' >&2\nexit 1\n",
+        )
+        .expect("fake git script");
+        set_executable(&script_path);
+    }
+
+    fn write_fake_git_for_scope_merge_base_empty_output(script_dir: &Path) {
+        let script_path = script_dir.join("git");
+        fs::write(
+            &script_path,
+            "#!/bin/sh\nset -eu\nif [ \"$3\" = \"merge-base\" ]; then\n  exit 0\nfi\necho 'unexpected git invocation' >&2\nexit 1\n",
+        )
+        .expect("fake git script");
+        set_executable(&script_path);
+    }
+
+    fn set_executable(path: &Path) {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            let mut permissions = fs::metadata(path)
+                .expect("metadata should exist")
+                .permissions();
+            permissions.set_mode(0o755);
+            fs::set_permissions(path, permissions).expect("permissions should update");
+        }
     }
 
     fn init_test_git_repository(path: &Path) {

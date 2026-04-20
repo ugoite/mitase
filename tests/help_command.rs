@@ -92,6 +92,9 @@ fn log_help_mentions_kind_path_and_json_output() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("--kind"));
     assert!(stdout.contains("--path"));
+    assert!(stdout.contains("--include-related"));
+    assert!(stdout.contains("--merge-base-ref"));
+    assert!(stdout.contains("--range"));
     assert!(stdout.contains("--format"));
     assert!(stdout.contains("Philosophy, policy, requirement, or feature ID"));
     assert!(stdout.contains("syu log FEAT-CHECK-001 --kind implementation --path src/command"));
