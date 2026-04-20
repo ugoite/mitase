@@ -1009,11 +1009,13 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     let ci_workflow = read_file(".github/workflows/ci.yml");
     let setup_rust_action = read_file(".github/actions/setup-rust/action.yml");
     let codeql_workflow = read_file(".github/workflows/codeql.yml");
+    let merge_queue_reenroll_workflow = read_file(".github/workflows/merge-queue-reenroll.yml");
     let merge_queue_checks = read_file(".github/merge-queue-checks.json");
     let docs_build_action = read_file(".github/actions/build-docs-site/action.yml");
     let docs_lock = read_file("website/package-lock.json");
     let release_artifacts = read_file(".github/workflows/release-artifacts.yml");
     let browser_app_freshness = read_file("scripts/ci/check-browser-app-freshness.sh");
+    let merge_queue_reenroll = read_file("scripts/ci/requeue-dropped-merge-queue-prs.sh");
     let dependabot = read_file(".github/dependabot.yml");
 
     assert!(ci_workflow.contains("concurrency:"));
@@ -1055,6 +1057,23 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(codeql_workflow.contains("github/codeql-action/init@v4"));
     assert!(codeql_workflow.contains("github/codeql-action/autobuild@v4"));
     assert!(codeql_workflow.contains("github/codeql-action/analyze@v4"));
+    assert!(merge_queue_reenroll_workflow.contains("schedule:"));
+    assert!(merge_queue_reenroll_workflow.contains("workflow_dispatch:"));
+    assert!(merge_queue_reenroll_workflow.contains("pull-requests: write"));
+    assert!(merge_queue_reenroll_workflow.contains("MERGE_QUEUE_REQUEUE_DRY_RUN"));
+    assert!(
+        merge_queue_reenroll_workflow
+            .contains("bash scripts/ci/requeue-dropped-merge-queue-prs.sh")
+    );
+    assert!(
+        merge_queue_reenroll.contains("mergeStateStatus")
+            && merge_queue_reenroll.contains("reviewDecision")
+    );
+    assert!(
+        merge_queue_reenroll.contains("gh pr merge")
+            && merge_queue_reenroll.contains("--auto --squash")
+    );
+    assert!(merge_queue_reenroll.contains("MERGE_QUEUE_REQUEUE_DRY_RUN"));
     let merge_queue_manifest: serde_json::Value = serde_json::from_str(&merge_queue_checks)
         .expect("merge queue manifest should be valid JSON");
     let required_checks = merge_queue_manifest["required_checks"]

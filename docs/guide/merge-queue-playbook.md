@@ -198,6 +198,18 @@ Or use the GitHub UI to re-enable auto-merge. After that, re-run the GraphQL
 queue query above and confirm that `isInMergeQueue` turned `true` or
 `mergeQueueEntry` became non-null before walking away.
 
+The repository also ships a scheduled/manual recovery workflow for this failure
+mode:
+
+```bash
+bash scripts/ci/requeue-dropped-merge-queue-prs.sh
+MERGE_QUEUE_REQUEUE_DRY_RUN=true bash scripts/ci/requeue-dropped-merge-queue-prs.sh
+```
+
+Use the dry-run mode first when you want a report without changing GitHub state.
+The scheduled workflow re-enables auto-merge only for PRs that are still open,
+clean, approved, outside the queue, and already green on the PR head.
+
 ## When to update repository docs or tests
 
 If maintainers intentionally rename required queue jobs or add/remove required
@@ -205,5 +217,6 @@ merge-group workflows, update:
 
 - `.github/merge-queue-checks.json`
 - the affected workflow files
+- `scripts/ci/requeue-dropped-merge-queue-prs.sh` if the queue signals change
 - repository-quality tests that assert the queue contract
 - this playbook so the troubleshooting commands stay aligned with reality

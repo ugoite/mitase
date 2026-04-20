@@ -1,0 +1,28 @@
+# FEAT-QUALITY-001
+name: merge-queue-reenroll
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Report dropped queue entries without re-enabling auto-merge"
+        required: false
+        default: "false"
+  schedule:
+    - cron: "13,43 * * * *"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  reenroll:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Re-enroll dropped merge queue PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MERGE_QUEUE_REQUEUE_DRY_RUN: ${{ github.event.inputs.dry-run || 'false' }}
+        run: bash scripts/ci/requeue-dropped-merge-queue-prs.sh
