@@ -1,0 +1,11 @@
+category: Philosophy
+version: 1
+language: en
+
+philosophies:
+  - id: PHIL-UI-001
+    title: Frontend traces should reflect user flows
+    product_design_principle: Keep browser UI examples practical and testable.
+    coding_guideline: Use component-level traces with clear state management and test coverage.
+    linked_policies:
+      - POL-UI-001

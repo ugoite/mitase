@@ -1,0 +1,17 @@
+category: UI Features
+version: 1
+
+features:
+  - id: FEAT-UI-001
+    title: Interactive counter component
+    summary: A React component that displays and increments a counter value.
+    status: implemented
+    linked_requirements:
+      - REQ-UI-001
+    implementations:
+      typescript:
+        - file: src/components/Counter.tsx
+          symbols:
+            - Counter
+          doc_contains:
+            - FEAT-UI-001

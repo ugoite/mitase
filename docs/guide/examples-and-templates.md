@@ -25,6 +25,7 @@ whether you should scaffold a template or open one of the repository examples.
 
 | Path | Type | Best for | How to start |
 | --- | --- | --- | --- |
+| `browser-ui` | Example only | frontend teams evaluating syu for React/TypeScript UI work, looking for a traced component and test story | `examples/browser-ui` |
 | `csharp-fallback` | Example only | C#-heavy repositories that want a staged adoption path with spec-first traces before they trace every C# file directly | `examples/csharp-fallback` |
 | `docs-first` | Template + example | documentation-heavy repositories that want starter markdown acceptance anchors, one shell trace, and one wildcard-owned YAML file | `syu init . --template docs-first` or `examples/docs-first` |
 | `generic` | Template only | the shortest neutral scaffold when you do not want language-specific starter copy yet | `syu init .` |
@@ -78,10 +79,13 @@ scaffold wholesale.
 5. **I am Java-first and want to inspect native Java tracing before I scaffold
    anything**: open `examples/java-only` first, then copy the shape you need into
    your own repository.
-6. **I am TypeScript-first and want to inspect native TypeScript tracing before I scaffold
+6. **I am evaluating syu for a frontend product team**: open
+   `examples/browser-ui` to see a traced React/TypeScript component and test flow
+   before you decide how to adapt it for your UI codebase.
+7. **I am TypeScript-first and want to inspect native TypeScript tracing before I scaffold
    anything**: open `examples/typescript-only` first, then copy the shape you need into
    your own repository.
-7. **I am still deciding whether `syu` fits my repo**: read the example first so
+8. **I am still deciding whether `syu` fits my repo**: read the example first so
    you can inspect a working shape without creating files locally yet.
 
 ## Continue with these pages

@@ -201,3 +201,26 @@ fn team_scale_example_validates() {
         "traceability: requirements=3/3 traces validated; features=4/4 traces validated"
     ));
 }
+
+#[test]
+// REQ-CORE-012
+fn browser_ui_example_validates() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(example_path("browser-ui"))
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("definitions: philosophies=1 policies=1 requirements=1 features=1"));
+    assert!(stdout.contains(
+        "traceability: requirements=1/1 traces validated; features=1/1 traces validated"
+    ));
+}
