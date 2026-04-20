@@ -95,10 +95,11 @@ match your change:
    npm --prefix app ci
    ```
 
-   Normal Cargo-driven builds no longer run that install step for you. If the
-   embedded browser app dependencies are missing or stale, `build.rs` stops and
-   points back to the commands above so Rust-only or docs-only work does not
-   silently mutate your `app/node_modules` tree.
+Normal Cargo-driven builds no longer run that install step for you. If you are
+in a fresh clone or fresh worktree and the embedded browser app dependencies are
+missing or stale, `build.rs` stops and points back to the commands above so
+Rust-only or docs-only work does not silently mutate your `app/node_modules`
+tree.
 
    Then run the same freshness flow CI uses:
 

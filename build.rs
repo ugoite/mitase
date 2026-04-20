@@ -214,9 +214,22 @@ fn ensure_app_dependencies(app_dir: &Path, required_npm: &str) -> Result<(), Str
         return Ok(());
     }
 
-    Err(format!(
-        "browser app dependencies are not ready; run `scripts/ci/pinned-npm.sh install app && npm --prefix app ci` from the repository root with npm {required_npm} before running Cargo commands that embed the browser app"
-    ))
+    Err(missing_app_dependencies_message(required_npm))
+}
+
+fn missing_app_dependencies_message(required_npm: &str) -> String {
+    format!(
+        concat!(
+            "browser app dependencies are not ready.\n\n",
+            "This usually means you are in a fresh clone or fresh worktree that does not have `app/node_modules` yet.\n",
+            "Cargo intentionally does not run a networked npm install for you during embedded browser-app builds.\n\n",
+            "From the repository root, run:\n",
+            "  scripts/ci/pinned-npm.sh install app\n",
+            "  npm --prefix app ci\n\n",
+            "Then rerun the Cargo command. The pinned npm workflow expects npm {}."
+        ),
+        required_npm
+    )
 }
 
 fn remove_dir_if_exists(path: &Path, description: &str) -> Result<(), String> {
@@ -377,5 +390,16 @@ mod tests {
             default_wasm_target_dir_from_common_dir(Path::new("/repo/.worktrees/impl"), None, None),
             Path::new("/repo/.worktrees/impl/target/app-wasm")
         );
+    }
+
+    #[test]
+    fn missing_app_dependencies_message_guides_fresh_worktrees() {
+        let message = super::missing_app_dependencies_message("11.8.0");
+
+        assert!(message.contains("fresh clone or fresh worktree"));
+        assert!(message.contains("Cargo intentionally does not run a networked npm install"));
+        assert!(message.contains("scripts/ci/pinned-npm.sh install app"));
+        assert!(message.contains("npm --prefix app ci"));
+        assert!(message.contains("npm 11.8.0"));
     }
 }
