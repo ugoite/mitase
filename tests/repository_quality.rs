@@ -593,6 +593,8 @@ fn repository_declares_documentation_guides() {
     assert!(reviewer_workflow.contains("currently traced"));
     assert!(reviewer_workflow.contains("the whole PR diff is covered"));
     assert!(reviewer_workflow.contains("too-small log result with the PR diff"));
+    assert!(reviewer_workflow.contains("filtered down to that item"));
+    assert!(reviewer_workflow.contains("not a smaller or faster"));
     assert!(trace_adapter_support.contains("# Trace adapter capability matrix"));
     assert!(trace_adapter_support.contains("validate.require_symbol_trace_coverage"));
     assert!(trace_adapter_support.contains("TypeScript / JavaScript"));
