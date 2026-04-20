@@ -806,6 +806,15 @@ fn repository_ships_example_workspaces() {
             "{} should use the current CLI version",
             relative.display()
         );
+        let example_name = relative
+            .parent()
+            .and_then(|path| path.file_name())
+            .and_then(|name| name.to_str())
+            .expect("example config should live under examples/<name>/");
+        assert!(
+            example_tests.contains(&format!("example_path(\"{example_name}\")")),
+            "example {example_name} should have a dedicated validation smoke test"
+        );
     }
 
     assert!(rust_example_requirement.contains("REQ-RUST-001"));
@@ -826,14 +835,6 @@ fn repository_ships_example_workspaces() {
     assert!(polyglot_config.contains(&format!("version: {current_version}")));
     assert!(polyglot_feature.contains("FEAT-MIX-001"));
     assert!(polyglot_feature.contains("status: implemented"));
-    assert!(example_tests.contains("docs_first_example_validates"));
-    assert!(example_tests.contains("csharp_fallback_example_validates"));
-    assert!(example_tests.contains("rust_only_example_validates"));
-    assert!(example_tests.contains("python_only_example_validates"));
-    assert!(example_tests.contains("go_only_example_validates"));
-    assert!(example_tests.contains("java_only_example_validates"));
-    assert!(example_tests.contains("polyglot_example_validates"));
-    assert!(example_tests.contains("team_scale_example_validates"));
 }
 
 #[test]
