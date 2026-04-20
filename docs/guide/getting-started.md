@@ -17,6 +17,9 @@ Need a different level of guidance?
   [README quick start on GitHub](https://github.com/ugoite/syu/blob/main/README.md#choose-your-path)
   when you want the shortest install-to-validate path and are happy with a
   compact command card.
+- Open the [command card](./command-card.md) when you already understand the
+  model and want one docs-site page that keeps the core install / init /
+  validate / report / browse / app / review commands close at hand.
 - Follow [existing repository adoption](./existing-repository.md) when the
   repository already has code and history and you want to add `syu` without
   treating it like a blank workspace.
