@@ -4,9 +4,9 @@ language: en
 
 policies:
   - id: POL-CSHARP-001
-    title: Unsupported-language adoption should keep real code visible without pretending it is traced already
-    summary: Demonstrate the fallback pattern for a C#-backed repository by validating supported shell and markdown evidence first.
-    description: Require the example to ship real C# source and test files while validated trace evidence stays in supported file types until a native adapter exists.
+    title: Staged C# adoption should keep real code visible without pretending it is traced already
+    summary: Demonstrate a lighter C# adoption pattern by validating supported shell and markdown evidence first.
+    description: Require the example to ship real C# source and test files while validated trace evidence stays in supported file types until the repository is ready to trace more C# directly.
     linked_philosophies:
       - PHIL-CSHARP-001
     linked_requirements:

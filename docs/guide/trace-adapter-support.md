@@ -22,6 +22,7 @@ enable strict coverage in a mixed-language repository.
 | Python | `python`, `py`, `pytest`, `unittest` / `.py` | ✅ Rich symbol inspection plus pattern fallback | ✅ | ✅ |
 | Go | `go`, `golang`, `gotest` / `.go` | ✅ Rich doc-comment inspection plus pattern fallback | ✅ | ✅ |
 | Java | `java`, `junit` / `.java` | ✅ Pattern-based symbol matching | ❌ | ✅ |
+| C# | `csharp`, `cs`, `dotnet`, `xunit`, `nunit`, `mstest` / `.cs` | ✅ Pattern-based symbol matching | ❌ | ✅ |
 | TypeScript / JavaScript | `typescript`, `ts`, `tsx`, `javascript`, `js`, `jsx`, `vitest`, `bun`, `bun-test` / `.ts`, `.tsx`, `.js`, `.jsx` | ✅ Rich symbol inspection plus pattern fallback | ✅ | ✅ |
 | Shell | `shell`, `sh`, `bash`, `zsh` / `.sh`, `.bash`, `.zsh` | ✅ Pattern-based symbol matching | ❌ | ❌ |
 | YAML | `yaml`, `yml` / `.yaml`, `.yml` | ✅ Pattern-based symbol matching | ❌ | ❌ |
@@ -43,6 +44,10 @@ builds ownership inventories for these languages only:
 - **Java** — public classes/interfaces/enums/records plus public or implicit
   interface members in `src/`, plus JUnit `@Test` methods and legacy `test...`
   methods in `tests/`
+- **C#** — public classes/interfaces/enums/records/structs plus public or
+  implicit interface members in `src/`, plus xUnit/NUnit/MSTest-style test
+  methods marked with attributes such as `[Fact]`, `[Theory]`, `[Test]`, and
+  `[TestMethod]` in `tests/`
 - **TypeScript / JavaScript** — exported symbols in `src/`, plus `test...` and
   `Test...` symbols in `tests/`
 
@@ -52,7 +57,7 @@ they do **not** participate in the repository-wide strict ownership scan.
 ## How to choose the right promises
 
 - Need `doc_contains`? Rust, Python, Go, and TypeScript / JavaScript traces all support it today.
-- Need strict ownership coverage? Rust, Python, Go, Java, and
+- Need strict ownership coverage? Rust, Python, Go, Java, C#, and
   TypeScript / JavaScript all participate today.
 - Using Shell, YAML, JSON, Markdown, or Gitignore traces? Keep the mapping to
   `file` + `symbols` (or `symbols: ["*"]` when one file intentionally belongs
@@ -68,7 +73,7 @@ because `symbols: ["*"]` does not point to one inspectable symbol.
 
 ## What about unsupported languages?
 
-Unsupported adapters such as `csharp` still raise `SYU-trace-language-001`.
+Unsupported adapters such as `kotlin` still raise `SYU-trace-language-001`.
 Keep those repositories connected through the spec layers first, and only add
 language-specific code traces once adapter support lands.
 If you need a Go-first starting point today, study the
@@ -81,8 +86,8 @@ If you need a Java-first starting point today, study the
 or scaffold `syu init . --template java-only`. Both keep real Java files in the
 repository while validating explicit symbol mappings, but Java traces should
 still stay with `file` plus `symbols` because `doc_contains` is not supported yet.
-If you need a concrete fallback shape today, study the
+If you want a concrete staged C# adoption shape today, study the
 [`examples/csharp-fallback` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/csharp-fallback).
 It keeps real C# files in the repository while validating supported shell and
-markdown evidence around them instead of inventing unsupported `csharp:` trace
-keys.
+markdown evidence around them before you decide how aggressively to trace the
+rest of the C# codebase.

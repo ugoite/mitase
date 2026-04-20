@@ -19,7 +19,7 @@ description: "Generated reference for docs/syu/features/repository/contributor.y
 
 - **id**: FEAT-CONTRIB-001
   - **title**: Contributor devcontainer and example workspaces
-  - **summary**: Provide a ready-to-use contributor container and validated example projects, including unsupported-language adoption examples.
+  - **summary**: Provide a ready-to-use contributor container and validated example projects, including staged C# adoption examples.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-011
@@ -119,7 +119,7 @@ version: 1
 features:
   - id: FEAT-CONTRIB-001
     title: Contributor devcontainer and example workspaces
-    summary: Provide a ready-to-use contributor container and validated example projects, including unsupported-language adoption examples.
+    summary: Provide a ready-to-use contributor container and validated example projects, including staged C# adoption examples.
     status: implemented
     linked_requirements:
       - REQ-CORE-011
