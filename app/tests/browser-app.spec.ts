@@ -518,3 +518,43 @@ test("shows a visible banner when a workspace refresh reload fails after the ini
   await expect(page.getByRole("heading", { level: 1, name: /^syu\b/i })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Workspace could not load" })).toHaveCount(0);
 });
+
+test("allows a manual refresh and updates the last refresh timestamp after a stale snapshot banner", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1, name: /^syu\b/i })).toBeVisible();
+  await expect(page.locator("header").getByLabel("Last successful refresh").first()).toBeVisible();
+
+  const refreshTimestamp = page.getByLabel("Last successful refresh").first();
+  const initialTimestamp = await refreshTimestamp.getAttribute("datetime");
+  expect(initialTimestamp).not.toBeNull();
+
+  let pollAttempts = 0;
+  await page.route("**/api/version", async (route) => {
+    pollAttempts += 1;
+    await route.fulfill({
+      status: 500,
+      contentType: "text/plain",
+      body: "app data refresh failed",
+    });
+  });
+
+  let manualRefreshLoads = 0;
+  await page.route("**/api/app-data.json", async (route) => {
+    manualRefreshLoads += 1;
+    await route.continue();
+  });
+
+  const alert = page.getByRole("alert");
+  await expect.poll(() => pollAttempts, { timeout: 10000 }).toBeGreaterThan(0);
+  await expect(alert).toContainText("Live refresh needs attention.");
+
+  await page.waitForTimeout(20);
+  await page.getByRole("button", { name: "Refresh now" }).first().click();
+
+  await expect.poll(() => manualRefreshLoads, { timeout: 10000 }).toBeGreaterThan(0);
+  await expect(alert).toHaveCount(0);
+  await expect(refreshTimestamp).not.toHaveAttribute("datetime", initialTimestamp ?? "");
+});

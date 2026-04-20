@@ -137,7 +137,9 @@ need to run `syu validate` first: the app computes the same validation snapshot
 when it starts, refreshes it while the tab stays visible, and catches up again
 when you return to the tab after spec changes. If a later refresh fails, the UI
 keeps the last successfully loaded snapshot visible and shows a banner so you
-know the data is stale until refresh recovers.
+know the data is stale until refresh recovers. The header and workspace card
+also show the last successful refresh timestamp plus a `Refresh now` action so
+you can force a reload without waiting for the next poll.
 
 Each row shows:
 
@@ -177,10 +179,12 @@ becomes a recovery checklist instead of a passive summary:
 4. Click `View <ID>` to jump from the issue directly to the affected item, then
    compare the YAML, links, and traces in the detail panel against the problem
    description.
-5. After you edit the workspace, keep the tab visible or switch back to it so
-   the app refreshes the snapshot and the issue count drops as the workspace
-   recovers. If a refresh fails, the stale-snapshot banner can stay visible
-   until the next successful refresh even after you fix the underlying issue.
+5. After you edit the workspace, either keep the tab visible, switch back to it,
+   or click `Refresh now` so the app reloads the snapshot and the issue count
+   drops as the workspace recovers. If a refresh fails, the stale-snapshot
+   banner stays visible, the last successful refresh timestamp tells you how old
+   the visible data is, and the manual refresh button gives you a direct retry
+   path after the underlying issue is fixed.
 
 That workflow lets you move from a red validation state to the exact item that
 needs attention without losing the broader workspace context.
