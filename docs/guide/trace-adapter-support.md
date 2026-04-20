@@ -20,6 +20,7 @@ enable strict coverage in a mixed-language repository.
 | --- | --- | --- | --- | --- |
 | Rust | `rust`, `rs` / `.rs` | ✅ Rich symbol inspection plus declaration matching | ✅ | ✅ |
 | Python | `python`, `py`, `pytest`, `unittest` / `.py` | ✅ Rich symbol inspection plus pattern fallback | ✅ | ✅ |
+| Ruby | `ruby`, `rb`, `minitest`, `rspec` / `.rb` | ✅ Pattern-based symbol matching | ❌ | ❌ |
 | Go | `go`, `golang`, `gotest` / `.go` | ✅ Rich doc-comment inspection plus pattern fallback | ✅ | ✅ |
 | Java | `java`, `junit` / `.java` | ✅ Pattern-based symbol matching | ❌ | ✅ |
 | C# | `csharp`, `cs`, `dotnet`, `xunit`, `nunit`, `mstest` / `.cs` | ✅ Pattern-based symbol matching | ❌ | ✅ |
@@ -59,7 +60,7 @@ they do **not** participate in the repository-wide strict ownership scan.
 - Need `doc_contains`? Rust, Python, Go, and TypeScript / JavaScript traces all support it today.
 - Need strict ownership coverage? Rust, Python, Go, Java, C#, and
   TypeScript / JavaScript all participate today.
-- Using Shell, YAML, JSON, Markdown, or Gitignore traces? Keep the mapping to
+- Using Ruby, Shell, YAML, JSON, Markdown, or Gitignore traces? Keep the mapping to
   `file` + `symbols` (or `symbols: ["*"]` when one file intentionally belongs
   to one item), but do not expect doc-comment inspection or strict ownership
   inventory.
@@ -85,6 +86,11 @@ If you need a Java-first starting point today, study the
 [`examples/java-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/java-only)
 or scaffold `syu init . --template java-only`. Both keep real Java files in the
 repository while validating explicit symbol mappings, but Java traces should
+still stay with `file` plus `symbols` because `doc_contains` is not supported yet.
+If you need a Ruby-first starting point today, study the
+[`examples/ruby-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/ruby-only)
+or scaffold `syu init . --template ruby-only`. Both keep real Ruby files in the
+repository while validating explicit symbol mappings, but Ruby traces should
 still stay with `file` plus `symbols` because `doc_contains` is not supported yet.
 If you want a concrete staged C# adoption shape today, study the
 [`examples/csharp-fallback` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/csharp-fallback).

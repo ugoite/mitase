@@ -111,6 +111,7 @@ fn init_help_lists_go_only_template_as_a_supported_starter() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("--template <TEMPLATE>"));
+    assert!(stdout.contains("ruby-only"));
     assert!(stdout.contains("go-only"));
     assert!(stdout.contains("typescript-only"));
     assert!(stdout.contains("syu init . --template go-only"));
@@ -140,6 +141,13 @@ fn init_command_bootstraps_language_templates_that_validate_accept() {
             "docs/syu/features/languages/python.yaml",
             "REQ-PY-001",
             "FEAT-PY-001",
+        ),
+        (
+            "ruby-only",
+            "docs/syu/requirements/core/ruby.yaml",
+            "docs/syu/features/languages/ruby.yaml",
+            "REQ-RB-001",
+            "FEAT-RB-001",
         ),
         (
             "go-only",
@@ -239,6 +247,24 @@ fn init_command_bootstraps_language_templates_that_validate_accept() {
             assert!(requirement.contains("TestGoRequirement"));
             assert!(feature.contains("status: implemented"));
             assert!(feature.contains("GoFeatureImpl"));
+        } else if template == "ruby-only" {
+            assert!(workspace.join("Gemfile").exists(), "missing Gemfile");
+            assert!(
+                workspace.join("lib/order_summary.rb").exists(),
+                "missing Ruby source file"
+            );
+            assert!(
+                workspace.join("test/order_summary_test.rb").exists(),
+                "missing Ruby test file"
+            );
+            let gemfile =
+                fs::read_to_string(workspace.join("Gemfile")).expect("Gemfile should exist");
+            assert!(gemfile.contains("rubygems.org"));
+            assert!(gemfile.contains("gem \"minitest\""));
+            assert!(requirement.contains("status: implemented"));
+            assert!(requirement.contains("test_ruby_requirement"));
+            assert!(feature.contains("status: implemented"));
+            assert!(feature.contains("ruby_feature_impl"));
         } else if template == "java-only" {
             assert!(workspace.join("pom.xml").exists(), "missing pom.xml");
             assert!(

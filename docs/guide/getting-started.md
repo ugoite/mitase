@@ -174,12 +174,13 @@ syu init . --id-prefix store
 ```
 
 Need a closer starting point for a repository that is already docs-first,
-Rust-first, Python-first, Go-first, Java-first, TypeScript-first, or polyglot?
+Rust-first, Python-first, Ruby-first, Go-first, Java-first, TypeScript-first, or polyglot?
 
 ```bash
 syu templates
 syu init . --template docs-first
 syu init . --template rust-only
+syu init . --template ruby-only
 syu init . --template go-only
 syu init . --template java-only
 syu init . --template typescript-only
@@ -274,6 +275,11 @@ What you should avoid for unsupported-language files today is adding
 language-specific `tests:` or `implementations:` entries before the adapter
 exists at all. If you need code-level tracing with `doc_contains`, stay with
 Rust, Python, Go, or TypeScript/JavaScript for now. For Go-first repositories,
+For Ruby-first repositories, use
+[`examples/ruby-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/ruby-only)
+or `syu init . --template ruby-only`: both use real Ruby files plus symbol-level
+trace mappings that validate today.
+For Go-first repositories,
 use [`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
 or `syu init . --template go-only`: both use real Go files plus symbol-level
 trace mappings that validate today.
@@ -530,6 +536,7 @@ The repository includes complete examples:
 - `examples/browser-ui`
 - `examples/rust-only`
 - `examples/python-only`
+- `examples/ruby-only`
 - `examples/go-only`
 - `examples/java-only`
 - `examples/typescript-only`
@@ -543,6 +550,10 @@ example.
 Use `syu init . --template docs-first` when your repository is documentation-led:
 it scaffolds the same markdown, shell, and YAML starter shape as the checked-in
 example without forcing a language-specific code scaffold first.
+Use `syu init . --template ruby-only` when your repository is Ruby-first today:
+it scaffolds the same minimal spec plus `Gemfile`, `lib/order_summary.rb`, and
+`test/order_summary_test.rb`, while the checked-in example shows the same shape
+in a repository you can inspect before generating files locally.
 Use `syu init . --template go-only` when your repository is Go-first today: it
 scaffolds the same minimal spec plus `go.mod`, `go/app.go`, and
 `go/app_test.go`, while the checked-in example shows the same shape in a

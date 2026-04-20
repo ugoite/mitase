@@ -96,15 +96,16 @@ mod tests {
     #[test]
     fn starter_template_catalog_lists_every_supported_template() {
         let templates = template_catalog_entries();
-        assert_eq!(templates.len(), 8);
+        assert_eq!(templates.len(), 9);
         assert_eq!(templates[0].name, "generic");
         assert_eq!(templates[1].name, "docs-first");
         assert_eq!(templates[2].name, "rust-only");
         assert_eq!(templates[3].name, "python-only");
-        assert_eq!(templates[4].name, "go-only");
-        assert_eq!(templates[5].name, "java-only");
-        assert_eq!(templates[6].name, "typescript-only");
-        assert_eq!(templates[7].name, "polyglot");
+        assert_eq!(templates[4].name, "ruby-only");
+        assert_eq!(templates[5].name, "go-only");
+        assert_eq!(templates[6].name, "java-only");
+        assert_eq!(templates[7].name, "typescript-only");
+        assert_eq!(templates[8].name, "polyglot");
     }
 
     #[test]
@@ -116,12 +117,13 @@ mod tests {
         assert_eq!(templates[1].related_example, Some("examples/docs-first"));
         assert_eq!(templates[2].related_example, Some("examples/rust-only"));
         assert_eq!(templates[3].related_example, Some("examples/python-only"));
-        assert_eq!(templates[4].related_example, Some("examples/go-only"));
-        assert_eq!(templates[5].related_example, Some("examples/java-only"));
+        assert_eq!(templates[4].related_example, Some("examples/ruby-only"));
+        assert_eq!(templates[5].related_example, Some("examples/go-only"));
+        assert_eq!(templates[6].related_example, Some("examples/java-only"));
         assert_eq!(
-            templates[6].related_example,
+            templates[7].related_example,
             Some("examples/typescript-only")
         );
-        assert_eq!(templates[7].related_example, Some("examples/polyglot"));
+        assert_eq!(templates[8].related_example, Some("examples/polyglot"));
     }
 }

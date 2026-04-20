@@ -1,0 +1,11 @@
+category: Philosophy
+version: 1
+language: en
+
+philosophies:
+  - id: PHIL-RB-001
+    title: Ruby traces should stay explicit
+    product_design_principle: Keep the Ruby example focused on named source and test symbols.
+    coding_guideline: Prefer small Ruby files whose traced classes and methods stay obvious in review.
+    linked_policies:
+      - POL-RB-001
