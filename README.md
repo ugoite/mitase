@@ -37,6 +37,9 @@ Pick the newcomer path that matches what you need next:
 - **Quick start**: stay in this README when you want a compact, self-contained
   reference card, are happy with a short layer refresher, and want the fastest
   install-to-`syu validate .` path in about 5 minutes.
+- **Command card**: open [`docs/guide/command-card.md`](docs/guide/command-card.md)
+  when you already know the model and want one compact guide page for the core
+  install / init / validate / browse / app / review commands.
 - **Tutorial**: follow [`docs/guide/tutorial.md`](docs/guide/tutorial.md) when you
   learn best from a realistic repository story, want more narrative context than
   Quick start, and do not mind a longer walkthrough.
@@ -68,6 +71,7 @@ Keep the detailed guides close:
 
 - [`docs/guide/concepts.md`](docs/guide/concepts.md)
 - [`docs/guide/getting-started.md`](docs/guide/getting-started.md)
+- [`docs/guide/command-card.md`](docs/guide/command-card.md)
 - [`docs/guide/tutorial.md`](docs/guide/tutorial.md)
 - [`docs/guide/migration.md`](docs/guide/migration.md)
 - [`docs/guide/app.md`](docs/guide/app.md)
