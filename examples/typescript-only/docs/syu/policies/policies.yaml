@@ -1,0 +1,15 @@
+category: Policies
+version: 1
+language: en
+
+policies:
+  - id: POL-TS-001
+    title: TypeScript requirement and feature traces must stay explicit
+    summary: Start with a TypeScript-first workflow that keeps the first traced symbols easy to inspect.
+    description: |
+      The starter workspace should include real TypeScript source and test files
+      plus a minimal npm-driven project so the first requirement and feature stay easy to review.
+    linked_philosophies:
+      - PHIL-TS-001
+    linked_requirements:
+      - REQ-TS-001
