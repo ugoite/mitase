@@ -26,6 +26,63 @@ const layers = [
   }
 ];
 
+const chooseYourPath = [
+  {
+    title: 'Getting started',
+    description:
+      'Choose this if you are new to syu, want the guided first-run path, and do not already know the four-layer model.',
+    to: '/docs/guide/getting-started'
+  },
+  {
+    title: 'Quick start',
+    description:
+      'Stay on the shortest site-local install-to-validate path when you want the fastest route into `syu validate .`.',
+    to: '/docs/guide/getting-started#quick-start-commands'
+  },
+  {
+    title: 'Tutorial',
+    description:
+      'Follow the longer repository story when you want more narrative context than a first-run checklist.',
+    to: '/docs/guide/tutorial'
+  },
+  {
+    title: 'Editor-first path',
+    description:
+      'Open the VS Code extension guide when you want diagnostics, spec navigation, and trace lookups before you memorize the CLI.',
+    to: '/docs/guide/vscode-extension'
+  },
+  {
+    title: 'Migration / upgrade',
+    description:
+      'Use the release-specific upgrade steps when you already have a syu workspace and need to move between alpha versions safely.',
+    to: '/docs/guide/migration'
+  },
+  {
+    title: 'Visual explorer',
+    description:
+      'Take the browser-first path when you want graphical spec navigation before learning the full text-first CLI flow.',
+    to: '/docs/guide/app'
+  },
+  {
+    title: 'Reviewer workflow',
+    description:
+      'Open the review loop guide when a pull request already exists and you need one concrete path through spec IDs, traced code, and git history.',
+    to: '/docs/guide/reviewer-workflow'
+  },
+  {
+    title: 'Trace adapter matrix',
+    description:
+      'Check which built-in languages support symbol validation only versus richer `doc_contains` and strict coverage checks.',
+    to: '/docs/guide/trace-adapter-support'
+  },
+  {
+    title: 'Troubleshooting',
+    description:
+      'Jump straight to validation and traceability repair guidance when an existing workspace is already blocked.',
+    to: '/docs/guide/troubleshooting'
+  }
+];
+
 const journeys = [
   {
     title: 'Decide repository fit',
@@ -124,23 +181,20 @@ export default function Home() {
             <Link className="button button--secondary button--lg" to="/docs/guide/getting-started">
               Get started
             </Link>
-            <Link
-              className="button button--secondary button--lg"
-              to="https://github.com/ugoite/syu#quick-start"
-            >
-              Quick start on GitHub
+            <Link className="button button--secondary button--lg" to="/docs/guide/tutorial">
+              Follow the tutorial
             </Link>
             <Link
               className="button button--outline button--lg siteHeroOutlineButton"
-              to="https://github.com/ugoite/syu/blob/main/README.md#quick-start"
+              to="/docs/guide/reviewer-workflow"
             >
-              Quick start for experienced users
+              Reviewer workflow
             </Link>
             <Link
               className="button button--outline button--lg siteHeroOutlineButton"
-              to="/docs/generated/site-spec"
+              to="/docs/guide/troubleshooting"
             >
-              Browse the self-hosted spec
+              Troubleshoot a workspace
             </Link>
           </div>
         </div>
@@ -148,6 +202,29 @@ export default function Home() {
 
       <main>
         <section className="siteSection">
+          <div className="container">
+            <div className="siteSectionHeader">
+              <h2>Choose your path</h2>
+              <p>
+                Stay inside the published docs and start from the same task-oriented entry
+                points the checked-in README uses.
+              </p>
+            </div>
+            <div className="siteCardGrid">
+              {chooseYourPath.map((path) => (
+                <article className="siteCard" key={path.title}>
+                  <h3>{path.title}</h3>
+                  <p>{path.description}</p>
+                  <Link className="siteCardLink" to={path.to}>
+                    {`Open the ${path.title} path`}
+                  </Link>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="siteSection siteSectionAlt">
           <div className="container">
             <div className="siteSectionHeader">
               <h2>Four specification layers</h2>
@@ -170,7 +247,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="siteSection siteSectionAlt">
+        <section className="siteSection">
           <div className="container">
             <div className="siteSectionHeader">
               <h2>Common journeys</h2>
@@ -193,7 +270,7 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="siteSection">
+        <section className="siteSection siteSectionAlt">
           <div className="container siteCallout">
             <div>
               <h2>Stay close to checked-in source</h2>
