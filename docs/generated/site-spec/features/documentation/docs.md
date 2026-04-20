@@ -93,7 +93,7 @@ description: "Generated reference for docs/syu/features/documentation/docs.yaml"
         - **symbols**:
           - deploy-pages
           - actions/configure-pages@v6
-          - actions/upload-pages-artifact@v4
+          - actions/upload-pages-artifact@v5
           - actions/deploy-pages@v5
 
 ## Source YAML
@@ -180,6 +180,6 @@ features:
           symbols:
             - deploy-pages
             - actions/configure-pages@v6
-            - actions/upload-pages-artifact@v4
+            - actions/upload-pages-artifact@v5
             - actions/deploy-pages@v5
 ```

@@ -223,7 +223,7 @@ fn repository_declares_release_automation() {
     let readme = read_file("README.md");
 
     assert!(release_please.contains("FEAT-RELEASE-001"));
-    assert!(release_please.contains("googleapis/release-please-action@v4.4.0"));
+    assert!(release_please.contains("googleapis/release-please-action@v4.4.1"));
     assert!(release_please.contains("release-please:"));
     assert!(release_please.contains("target-branch: main"));
     assert!(release_please.contains("release-please skipped"));
@@ -675,7 +675,7 @@ fn repository_declares_documentation_guides() {
     assert!(docs_deploy_workflow.contains("permissions:"));
     assert!(docs_deploy_workflow.contains("./.github/actions/build-docs-site"));
     assert!(docs_deploy_workflow.contains("actions/configure-pages@v6"));
-    assert!(docs_deploy_workflow.contains("actions/upload-pages-artifact@v4"));
+    assert!(docs_deploy_workflow.contains("actions/upload-pages-artifact@v5"));
     assert!(docs_deploy_workflow.contains("actions/deploy-pages@v5"));
     assert!(docs_deploy_workflow.contains("github-pages"));
     assert!(docs_config.contains("FEAT-DOCS-002"));
