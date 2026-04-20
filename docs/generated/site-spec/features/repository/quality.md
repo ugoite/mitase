@@ -47,6 +47,12 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
       - **file**: scripts/ci/check-browser-app-freshness.sh
         - **symbols**:
           - check_browser_app_freshness
+      - **file**: scripts/ci/requeue-dropped-merge-queue-prs.sh
+        - **symbols**:
+          - requeue_dropped_merge_queue_prs
+          - fetch_pull_request_queue_state
+          - select_requeue_candidates
+          - reenroll_candidates
       - **file**: scripts/ci/pinned-npm.sh
         - **symbols**:
           - FEAT-QUALITY-001
@@ -89,6 +95,12 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
           - merge_group
           - Analyze (rust)
           - github/codeql-action/init@v4
+      - **file**: .github/workflows/merge-queue-reenroll.yml
+        - **symbols**:
+          - workflow_dispatch
+          - schedule
+          - reenroll
+          - Re-enroll dropped merge queue PRs
       - **file**: .github/dependabot.yml
         - **symbols**:
           - FEAT-QUALITY-001
@@ -134,6 +146,12 @@ features:
         - file: scripts/ci/check-browser-app-freshness.sh
           symbols:
             - check_browser_app_freshness
+        - file: scripts/ci/requeue-dropped-merge-queue-prs.sh
+          symbols:
+            - requeue_dropped_merge_queue_prs
+            - fetch_pull_request_queue_state
+            - select_requeue_candidates
+            - reenroll_candidates
         - file: scripts/ci/pinned-npm.sh
           symbols:
             - FEAT-QUALITY-001
@@ -176,6 +194,12 @@ features:
             - merge_group
             - Analyze (rust)
             - github/codeql-action/init@v4
+        - file: .github/workflows/merge-queue-reenroll.yml
+          symbols:
+            - workflow_dispatch
+            - schedule
+            - reenroll
+            - Re-enroll dropped merge queue PRs
         - file: .github/dependabot.yml
           symbols:
             - FEAT-QUALITY-001
