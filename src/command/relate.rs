@@ -4,7 +4,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::Write,
-    path::{Component, Path},
+    path::{Component, Path, PathBuf},
 };
 
 use anyhow::{Context, Result, bail};
@@ -17,7 +17,10 @@ use crate::{
     workspace::{Workspace, load_workspace},
 };
 
-use super::lookup::{EntitySummary, WorkspaceEntity, WorkspaceLookup};
+use super::{
+    log::resolve_git_range_changed_files,
+    lookup::{EntitySummary, WorkspaceEntity, WorkspaceLookup},
+};
 
 #[derive(Debug, Serialize)]
 pub(crate) struct JsonRelateOutput {
@@ -29,6 +32,27 @@ pub(crate) struct JsonRelateOutput {
     pub(crate) features: Vec<RelatedNode>,
     pub(crate) traces: Vec<RelatedTrace>,
     pub(crate) gaps: Vec<Gap>,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonRelateRangeOutput {
+    range: String,
+    philosophies: Vec<RelatedNode>,
+    policies: Vec<RelatedNode>,
+    requirements: Vec<RelatedNode>,
+    features: Vec<RelatedNode>,
+    traces: Vec<RelatedTrace>,
+    gaps: Vec<Gap>,
+    summary: RelateRangeSummary,
+}
+
+#[derive(Debug, Serialize)]
+struct RelateRangeSummary {
+    total_files: usize,
+    total_philosophies: usize,
+    total_policies: usize,
+    total_requirements: usize,
+    total_features: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -88,6 +112,7 @@ enum SelectionKind {
 enum SelectionSource {
     Definition { kind: LookupKind, id: String },
     Path { path: String },
+    RangePaths { paths: Vec<String> },
     Symbol { symbol: String },
 }
 
@@ -109,7 +134,16 @@ struct RelatedIds {
 
 pub fn run_relate_command(args: &RelateArgs) -> Result<i32> {
     let workspace = load_workspace(&args.workspace)?;
-    let report = build_relation_report(&workspace, &args.selector)?;
+
+    if let Some(range) = &args.range {
+        return run_relate_range(&workspace, range, args.format);
+    }
+
+    let Some(selector) = &args.selector else {
+        bail!("either SELECTOR or --range must be provided");
+    };
+
+    let report = build_relation_report(&workspace, selector)?;
 
     match args.format {
         OutputFormat::Text => print!("{}", render_relation_text(&report)),
@@ -121,6 +155,112 @@ pub fn run_relate_command(args: &RelateArgs) -> Result<i32> {
     }
 
     Ok(0)
+}
+
+fn run_relate_range(workspace: &Workspace, range: &str, format: OutputFormat) -> Result<i32> {
+    let changed_files = resolve_git_range_changed_files(&workspace.root, range)?;
+
+    if changed_files.is_empty() {
+        match format {
+            OutputFormat::Text => {
+                println!("Git range: {range}");
+                println!("No files changed in range");
+            }
+            OutputFormat::Json => {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&JsonRelateRangeOutput {
+                        range: range.to_string(),
+                        philosophies: Vec::new(),
+                        policies: Vec::new(),
+                        requirements: Vec::new(),
+                        features: Vec::new(),
+                        traces: Vec::new(),
+                        gaps: Vec::new(),
+                        summary: RelateRangeSummary {
+                            total_files: 0,
+                            total_philosophies: 0,
+                            total_policies: 0,
+                            total_requirements: 0,
+                            total_features: 0,
+                        },
+                    })
+                    .expect("serializing empty relate range output to JSON should succeed")
+                );
+            }
+        }
+        return Ok(0);
+    }
+
+    let lookup = WorkspaceLookup::new(workspace);
+    let catalog = RelationCatalog::load(lookup)?;
+
+    let combined_ids = collect_related_ids_for_changed_files(workspace, &catalog, &changed_files);
+
+    let expanded_ids = expand_related_ids(workspace, combined_ids);
+
+    let report = JsonRelateRangeOutput {
+        range: range.to_string(),
+        philosophies: catalog.nodes_for(LookupKind::Philosophy, &expanded_ids.philosophies),
+        policies: catalog.nodes_for(LookupKind::Policy, &expanded_ids.policies),
+        requirements: catalog.nodes_for(LookupKind::Requirement, &expanded_ids.requirements),
+        features: catalog.nodes_for(LookupKind::Feature, &expanded_ids.features),
+        traces: collect_related_traces(
+            workspace,
+            &expanded_ids,
+            &SelectionSource::RangePaths {
+                paths: changed_files
+                    .iter()
+                    .map(|path| path.display().to_string())
+                    .collect(),
+            },
+        ),
+        gaps: collect_gaps(workspace, &expanded_ids),
+        summary: RelateRangeSummary {
+            total_files: changed_files.len(),
+            total_philosophies: expanded_ids.philosophies.len(),
+            total_policies: expanded_ids.policies.len(),
+            total_requirements: expanded_ids.requirements.len(),
+            total_features: expanded_ids.features.len(),
+        },
+    };
+
+    match format {
+        OutputFormat::Text => print!("{}", render_range_relation_text(&report)),
+        OutputFormat::Json => println!(
+            "{}",
+            serde_json::to_string_pretty(&report)
+                .expect("serializing relate range output to JSON should succeed")
+        ),
+    }
+
+    Ok(0)
+}
+
+fn collect_related_ids_for_changed_files(
+    workspace: &Workspace,
+    catalog: &RelationCatalog,
+    changed_files: &[PathBuf],
+) -> RelatedIds {
+    let mut combined_ids = RelatedIds::default();
+
+    for file in changed_files {
+        let file_str = file.display().to_string();
+
+        if let Ok(normalized_path) = normalize_selector_path(&workspace.root, &file_str) {
+            let definitions = catalog.nodes_matching_path(&normalized_path);
+            for node in &definitions {
+                combined_ids.add(node.lookup_kind(), &node.id);
+            }
+
+            let traces = collect_matching_traces_for_path(workspace, &normalized_path);
+            for trace in &traces {
+                combined_ids.add(trace.owner_lookup_kind(), &trace.owner_id);
+            }
+        }
+    }
+
+    combined_ids
 }
 
 pub(crate) fn build_relation_report(
@@ -617,6 +757,41 @@ fn render_relation_text(report: &JsonRelateOutput) -> String {
     output
 }
 
+fn render_range_relation_text(report: &JsonRelateRangeOutput) -> String {
+    let mut output = String::new();
+    writeln!(output, "Git range: {}", report.range).expect("writing to String must succeed");
+    writeln!(output, "Changed files: {}", report.summary.total_files)
+        .expect("writing to String must succeed");
+    writeln!(output).expect("writing to String must succeed");
+
+    writeln!(output, "Summary:").expect("writing to String must succeed");
+    writeln!(
+        output,
+        "  Philosophies: {}",
+        report.summary.total_philosophies
+    )
+    .expect("writing to String must succeed");
+    writeln!(output, "  Policies: {}", report.summary.total_policies)
+        .expect("writing to String must succeed");
+    writeln!(
+        output,
+        "  Requirements: {}",
+        report.summary.total_requirements
+    )
+    .expect("writing to String must succeed");
+    writeln!(output, "  Features: {}", report.summary.total_features)
+        .expect("writing to String must succeed");
+    writeln!(output).expect("writing to String must succeed");
+
+    write_node_section(&mut output, "Philosophies", &report.philosophies);
+    write_node_section(&mut output, "Policies", &report.policies);
+    write_node_section(&mut output, "Requirements", &report.requirements);
+    write_node_section(&mut output, "Features", &report.features);
+    write_trace_section(&mut output, "Traces", &report.traces);
+    write_gap_section(&mut output, "Gaps", &report.gaps);
+    output
+}
+
 fn write_node_section(output: &mut String, heading: &str, nodes: &[RelatedNode]) {
     writeln!(output, "{heading}:").expect("writing to String must succeed");
     if nodes.is_empty() {
@@ -878,6 +1053,9 @@ fn trace_is_direct_match(
                 )
         }
         SelectionSource::Path { path } => reference.file.display().to_string() == *path,
+        SelectionSource::RangePaths { paths } => paths
+            .iter()
+            .any(|path| reference.file.display().to_string() == *path),
         SelectionSource::Symbol { symbol } => reference
             .symbols
             .iter()
@@ -959,6 +1137,17 @@ mod tests {
         assert!(trace_is_direct_match(
             &SelectionSource::Path {
                 path: "src/command/relate.rs".to_string(),
+            },
+            "feature",
+            "FEAT-RELATE-001",
+            &reference,
+        ));
+        assert!(trace_is_direct_match(
+            &SelectionSource::RangePaths {
+                paths: vec![
+                    "src/command/relate.rs".to_string(),
+                    "src/other.rs".to_string()
+                ],
             },
             "feature",
             "FEAT-RELATE-001",
@@ -1351,6 +1540,43 @@ mod tests {
             direct_match: false,
         };
         assert!(std::panic::catch_unwind(|| invalid_trace.owner_lookup_kind()).is_err());
+    }
+
+    #[test]
+    fn run_relate_command_requires_a_selector_or_range() {
+        let error = super::run_relate_command(&crate::cli::RelateArgs {
+            selector: None,
+            workspace: PathBuf::from("."),
+            range: None,
+            format: crate::cli::OutputFormat::Text,
+        })
+        .expect_err("missing selector and range should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("either SELECTOR or --range must be provided")
+        );
+    }
+
+    #[test]
+    fn run_relate_range_collects_definition_ids_from_changed_documents() {
+        let workspace_root =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/workspaces/passing");
+        let workspace = crate::workspace::load_workspace(&workspace_root).expect("workspace");
+        let lookup = crate::command::lookup::WorkspaceLookup::new(&workspace);
+        let document_path = lookup
+            .document_path_for_id("FEAT-TRACE-001")
+            .expect("feature path lookup")
+            .expect("feature document path");
+        let catalog = RelationCatalog::load(lookup).expect("catalog");
+        let related_ids = super::collect_related_ids_for_changed_files(
+            &workspace,
+            &catalog,
+            &[workspace_root.join(document_path)],
+        );
+
+        assert!(related_ids.features.contains("FEAT-TRACE-001"));
     }
 
     fn demo_workspace() -> Workspace {

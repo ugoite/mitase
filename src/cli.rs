@@ -117,13 +117,17 @@ Examples:
   syu relate REQ-CORE-018
   syu relate FEAT-SEARCH-001 --format json
   syu relate src/command/search.rs
-  syu relate run_search_command";
+  syu relate run_search_command
+  syu relate --range main..HEAD
+  syu relate --range origin/main...HEAD --format json";
 
 const TRACE_AFTER_HELP: &str = "\
 Examples:
   syu trace src/rust_feature.rs
   syu trace src/rust_feature.rs --symbol feature_trace_rust
-  syu trace src/rust_feature.rs path/to/workspace --format json";
+  syu trace src/rust_feature.rs path/to/workspace --format json
+  syu trace --range main..HEAD
+  syu trace --range origin/main...HEAD --format json";
 
 #[derive(Debug, Parser)]
 #[command(
@@ -371,7 +375,7 @@ pub struct LogArgs {
 #[derive(Debug, Clone, Args)]
 pub struct TraceArgs {
     #[arg(help = "Repository-relative source or test file to resolve through trace ownership")]
-    pub file: PathBuf,
+    pub file: Option<PathBuf>,
 
     #[arg(help = WORKSPACE_HELP)]
     #[arg(default_value = ".")]
@@ -381,6 +385,10 @@ pub struct TraceArgs {
     #[arg(long)]
     pub symbol: Option<String>,
 
+    #[arg(help = "Git range to analyze (e.g., main..HEAD or origin/main...HEAD)")]
+    #[arg(long, conflicts_with = "file")]
+    pub range: Option<String>,
+
     #[arg(help = "Output format for trace lookup results")]
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
     pub format: OutputFormat,
@@ -389,11 +397,15 @@ pub struct TraceArgs {
 #[derive(Debug, Clone, Args)]
 pub struct RelateArgs {
     #[arg(help = "Definition ID, repository-relative path, or traced source symbol to inspect")]
-    pub selector: String,
+    pub selector: Option<String>,
 
     #[arg(help = WORKSPACE_HELP)]
     #[arg(default_value = ".")]
     pub workspace: PathBuf,
+
+    #[arg(help = "Git range to analyze (e.g., main..HEAD or origin/main...HEAD)")]
+    #[arg(long, conflicts_with = "selector")]
+    pub range: Option<String>,
 
     #[arg(help = "Output format for the related graph")]
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
