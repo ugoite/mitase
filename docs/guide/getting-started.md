@@ -41,6 +41,25 @@ If you are still deciding whether to adopt `syu`, start with the
 [repository-fit guide in the README](https://github.com/ugoite/syu/blob/main/README.md#is-syu-right-for-this-repository)
 before installing anything.
 
+## Quick start path {#quick-start-commands}
+
+Use this when you already know `syu` fits the repository and want the shortest
+site-local route into `syu validate .`. This section deliberately skips the
+longer installer discussion in [Before you begin](#before-you-begin).
+
+```bash
+RELEASE=v0.0.1-alpha.8
+curl -fsSL "https://github.com/ugoite/syu/releases/download/${RELEASE}/install-syu.sh" | env SYU_VERSION=alpha bash
+syu init .
+syu validate .
+```
+
+If `syu` is already installed, skip the installer line and start with
+`syu init .`. Need the verified-download, Windows, or source-build variants
+instead? Use [Before you begin](#before-you-begin). Want the narrated version
+of the same flow? Continue with
+[Is syu right for this repository?](#is-syu-right-for-this-repository).
+
 ## Is syu right for this repository?
 
 Use the canonical fit check in the
