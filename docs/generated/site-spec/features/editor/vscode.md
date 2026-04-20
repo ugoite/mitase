@@ -42,6 +42,26 @@ description: "Generated reference for docs/syu/features/editor/vscode.yaml"
           - syu.openSpecItemById
           - syu.showRelatedFilesForSpecId
           - syuContext
+- **id**: FEAT-VSCODE-002
+  - **title**: Editor-facing LSP server foundation
+  - **summary**: Provide an editor-agnostic LSP transport so VS Code and future clients can reuse syu hover and navigation semantics over stdio.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-022
+  - **implementations**:
+    - **rust**:
+      - **file**: src/lsp/mod.rs
+        - **symbols**:
+          - run_lsp_server
+      - **file**: src/lsp/server.rs
+        - **symbols**:
+          - *
+      - **file**: src/lsp/handlers.rs
+        - **symbols**:
+          - *
+      - **file**: src/lsp/protocol.rs
+        - **symbols**:
+          - *
 
 ## Source YAML
 
@@ -75,4 +95,24 @@ features:
             - syu.openSpecItemById
             - syu.showRelatedFilesForSpecId
             - syuContext
+  - id: FEAT-VSCODE-002
+    title: Editor-facing LSP server foundation
+    summary: Provide an editor-agnostic LSP transport so VS Code and future clients can reuse syu hover and navigation semantics over stdio.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-022
+    implementations:
+      rust:
+        - file: src/lsp/mod.rs
+          symbols:
+            - run_lsp_server
+        - file: src/lsp/server.rs
+          symbols:
+            - '*'
+        - file: src/lsp/handlers.rs
+          symbols:
+            - '*'
+        - file: src/lsp/protocol.rs
+          symbols:
+            - '*'
 ```
