@@ -73,7 +73,7 @@ const WORKSPACE_HELP: &str = "Workspace root or any child directory; syu walks u
 
 const LIST_AFTER_HELP: &str = "\
 Choose `syu list` when you want list-shaped output that can be narrowed to one layer or emitted as JSON for automation.
-Choose `syu browse --non-interactive` when you want the browse snapshot instead: workspace metadata, per-layer counts, and the current validation errors in plain text.
+Choose `syu browse --non-interactive` when you want the browse snapshot instead: workspace metadata, per-layer counts, grouped items, and the current validation errors in text or JSON.
 
 Examples:
   syu list
@@ -89,12 +89,13 @@ Note:
   Pass the workspace root, the configured spec.root directory, or any child directory.
   syu walks upward until it finds syu.yaml, then resolves the configured spec.root from that workspace.";
 const BROWSE_AFTER_HELP: &str = "\
-Choose `syu browse --non-interactive` when you want the browse snapshot in plain text: workspace metadata, per-layer counts, grouped items, and the current validation errors.
-Choose `syu list` when you want list-shaped output that can be narrowed to one layer or emitted as JSON for automation.
+Choose `syu browse --non-interactive` when you want the browse snapshot in text or JSON: workspace metadata, per-layer counts, grouped items, and the current validation errors.
+Choose `syu list` when you want list-shaped output that can be narrowed to one layer.
 
 Examples:
   syu browse .
   syu browse . --non-interactive
+  syu browse . --non-interactive --format json
 ";
 
 const SEARCH_AFTER_HELP: &str = "\
@@ -209,6 +210,10 @@ pub struct BrowseArgs {
     /// Useful in CI pipelines and scripts.
     #[arg(long, action = ArgAction::SetTrue)]
     pub non_interactive: bool,
+
+    #[arg(help = "Output format for non-interactive browse snapshots")]
+    #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
 }
 
 impl Default for BrowseArgs {
@@ -216,6 +221,7 @@ impl Default for BrowseArgs {
         Self {
             workspace: PathBuf::from("."),
             non_interactive: false,
+            format: OutputFormat::Text,
         }
     }
 }
