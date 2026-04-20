@@ -8,6 +8,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const {
+  collectInlineNavigationTargets,
   loadSpecModel,
   lookupTrace,
   normalizeRelativePath,
@@ -152,4 +153,66 @@ test('resolveWorkspaceContext resolves an opened spec root back to the repositor
 
   assert.equal(context.workspaceRoot, workspace.workspaceRoot);
   assert.equal(context.specRoot, workspace.specRoot);
+});
+
+test('collectInlineNavigationTargets finds spec IDs traced files and traced symbols', () => {
+  const targets = collectInlineNavigationTargets(`
+requirements:
+  - id: REQ-TRACE-001
+    linked_policies:
+      - POL-TRACE-001
+features:
+  - id: FEAT-TRACE-001
+    linked_requirements:
+      - REQ-TRACE-001
+    implementations:
+      rust:
+        - file: src/rust_feature.rs
+          symbols:
+            - runFeature
+            - helper_value
+`);
+
+  assert.deepEqual(
+    targets
+      .filter((target) => target.kind === 'specId')
+      .map((target) => target.id),
+    ['REQ-TRACE-001', 'POL-TRACE-001', 'FEAT-TRACE-001', 'REQ-TRACE-001']
+  );
+  assert.deepEqual(
+    targets.filter((target) => target.kind === 'traceFile').map((target) => target.file),
+    ['src/rust_feature.rs']
+  );
+  assert.deepEqual(
+    targets
+      .filter((target) => target.kind === 'traceSymbol')
+      .map((target) => [target.file, target.symbol]),
+    [
+      ['src/rust_feature.rs', 'runFeature'],
+      ['src/rust_feature.rs', 'helper_value']
+    ]
+  );
+});
+
+test('collectInlineNavigationTargets keeps wildcard and quoted trace symbols addressable', () => {
+  const targets = collectInlineNavigationTargets(`
+features:
+  - id: FEAT-TRACE-001
+    implementations:
+      rust:
+        - file: src/rust_feature.rs
+          symbols:
+            - "*"
+            - "example::run"
+`);
+
+  assert.deepEqual(
+    targets
+      .filter((target) => target.kind === 'traceSymbol')
+      .map((target) => [target.file, target.symbol]),
+    [
+      ['src/rust_feature.rs', '*'],
+      ['src/rust_feature.rs', 'example::run']
+    ]
+  );
 });

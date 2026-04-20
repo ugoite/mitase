@@ -94,6 +94,29 @@ fn init_command_interactive_requires_a_terminal() {
 
 #[test]
 // REQ-CORE-009
+fn init_help_lists_go_only_template_as_a_supported_starter() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("init")
+        .arg("--help")
+        .output()
+        .expect("help should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--template <TEMPLATE>"));
+    assert!(stdout.contains("go-only"));
+    assert!(stdout.contains("syu init . --template go-only"));
+}
+
+#[test]
+// REQ-CORE-009
 fn init_command_bootstraps_language_templates_that_validate_accept() {
     for (template, requirement_path, feature_path, requirement_id, feature_id) in [
         (
@@ -123,6 +146,13 @@ fn init_command_bootstraps_language_templates_that_validate_accept() {
             "docs/syu/features/languages/go.yaml",
             "REQ-GO-001",
             "FEAT-GO-001",
+        ),
+        (
+            "java-only",
+            "docs/syu/requirements/core/java.yaml",
+            "docs/syu/features/languages/java.yaml",
+            "REQ-JAVA-001",
+            "FEAT-JAVA-001",
         ),
         (
             "polyglot",
@@ -201,6 +231,27 @@ fn init_command_bootstraps_language_templates_that_validate_accept() {
             assert!(requirement.contains("TestGoRequirement"));
             assert!(feature.contains("status: implemented"));
             assert!(feature.contains("GoFeatureImpl"));
+        } else if template == "java-only" {
+            assert!(workspace.join("pom.xml").exists(), "missing pom.xml");
+            assert!(
+                workspace
+                    .join("src/main/java/example/app/OrderSummary.java")
+                    .exists(),
+                "missing Java source file"
+            );
+            assert!(
+                workspace
+                    .join("src/test/java/example/app/OrderSummaryTest.java")
+                    .exists(),
+                "missing Java test file"
+            );
+            let pom = fs::read_to_string(workspace.join("pom.xml")).expect("pom.xml should exist");
+            assert!(pom.contains("<artifactId>java-only</artifactId>"));
+            assert!(pom.contains("<artifactId>junit-jupiter</artifactId>"));
+            assert!(requirement.contains("status: implemented"));
+            assert!(requirement.contains("JavaRequirementTest"));
+            assert!(feature.contains("status: implemented"));
+            assert!(feature.contains("JavaFeatureImpl"));
         } else {
             assert!(requirement.contains("status: planned"));
             assert!(feature.contains("status: planned"));
@@ -219,6 +270,22 @@ fn init_command_bootstraps_language_templates_that_validate_accept() {
             String::from_utf8_lossy(&validate.stdout),
             String::from_utf8_lossy(&validate.stderr)
         );
+
+        if template == "java-only" {
+            let smoke = Command::new("mvn")
+                .arg("test")
+                .arg("-q")
+                .current_dir(&workspace)
+                .output()
+                .expect("java-only template smoke test should run");
+
+            assert!(
+                smoke.status.success(),
+                "template={template}\nstdout:\n{}\nstderr:\n{}",
+                String::from_utf8_lossy(&smoke.stdout),
+                String::from_utf8_lossy(&smoke.stderr)
+            );
+        }
     }
 }
 

@@ -67,7 +67,9 @@ one maintained place. This is the best fit for security-sensitive environments.
 
 The getting-started path above verifies the installer script itself. If you need
 additional archive-level provenance checks, follow the same README section and
-then verify the platform archive separately before installation.
+then verify the platform archive separately before installation with
+`gh release download`, `gh attestation verify`, and the same
+`--signer-workflow` / `--source-ref` pinning the README shows.
 
 **Option B — Run the installer directly**
 
@@ -150,13 +152,14 @@ syu init . --id-prefix store
 ```
 
 Need a closer starting point for a repository that is already docs-first,
-Rust-first, Python-first, Go-first, or polyglot?
+Rust-first, Python-first, Go-first, Java-first, or polyglot?
 
 ```bash
 syu templates
 syu init . --template docs-first
 syu init . --template rust-only
 syu init . --template go-only
+syu init . --template java-only
 ```
 
 Run `syu templates` first if you want the starter names, one-line descriptions,
@@ -252,6 +255,11 @@ with Rust, Python, Go, or TypeScript/JavaScript for now. For Go-first repositori
 use [`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
 or `syu init . --template go-only`: both use real Go files plus symbol-level
 trace mappings that validate today.
+For Java-first repositories, use
+[`examples/java-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/java-only)
+or `syu init . --template java-only`: both use real Java files plus
+symbol-level trace mappings that validate today, even though `doc_contains`
+is still out of scope for Java.
 For unsupported-language repositories, use the
 [`examples/csharp-fallback` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/csharp-fallback)
 to study the fallback pattern.
@@ -311,10 +319,12 @@ Direct YAML editing is still supported. The default scaffolded files are:
 - `<spec.root>/policies/policies.yaml`
 - `<spec.root>/requirements/core/core.yaml` (template starters may use
   `requirements/core/rust.yaml`, `requirements/core/python.yaml`, or
-  `requirements/core/go.yaml`, or `requirements/core/polyglot.yaml`)
+  `requirements/core/go.yaml`, `requirements/core/java.yaml`, or
+  `requirements/core/polyglot.yaml`)
 - `<spec.root>/features/core/core.yaml` (template starters may use
   `features/languages/rust.yaml`, `features/languages/python.yaml`,
-  `features/languages/go.yaml`, or `features/languages/polyglot.yaml`)
+  `features/languages/go.yaml`, `features/languages/java.yaml`, or
+  `features/languages/polyglot.yaml`)
 
 As the workspace grows, you can group requirement and feature files into nested
 folders. `syu add` chooses a default folder from the ID or feature `--kind`,
@@ -501,6 +511,7 @@ The repository includes complete examples:
 - `examples/rust-only`
 - `examples/python-only`
 - `examples/go-only`
+- `examples/java-only`
 - `examples/polyglot`
 
 If one of those examples is already close to your repository, use the matching
@@ -516,6 +527,12 @@ scaffolds the same minimal spec plus `go.mod`, `go/app.go`, and
 `go/app_test.go`, while the checked-in example shows the same shape in a
 repository you can inspect
 before generating files locally.
+Use `syu init . --template java-only` when your repository is Java-first today:
+it scaffolds the same minimal spec plus `pom.xml`,
+`src/main/java/example/app/OrderSummary.java`, and
+`src/test/java/example/app/OrderSummaryTest.java`, while the checked-in example
+shows the same shape in a repository you can inspect before generating files
+locally.
 
 For a side-by-side decision table that explains which paths are template-backed,
 example-backed, or both, see the

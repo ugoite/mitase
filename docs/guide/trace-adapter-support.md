@@ -76,6 +76,11 @@ If you need a Go-first starting point today, study the
 or scaffold `syu init . --template go-only`. Both keep real Go files in the
 repository while validating explicit symbol mappings, and Go traces can now add
 `doc_contains` when reviewers want comment-level evidence too.
+If you need a Java-first starting point today, study the
+[`examples/java-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/java-only)
+or scaffold `syu init . --template java-only`. Both keep real Java files in the
+repository while validating explicit symbol mappings, but Java traces should
+still stay with `file` plus `symbols` because `doc_contains` is not supported yet.
 If you need a concrete fallback shape today, study the
 [`examples/csharp-fallback` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/csharp-fallback).
 It keeps real C# files in the repository while validating supported shell and
