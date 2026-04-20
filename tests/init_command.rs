@@ -112,6 +112,7 @@ fn init_help_lists_go_only_template_as_a_supported_starter() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("--template <TEMPLATE>"));
     assert!(stdout.contains("go-only"));
+    assert!(stdout.contains("typescript-only"));
     assert!(stdout.contains("syu init . --template go-only"));
 }
 
@@ -153,6 +154,13 @@ fn init_command_bootstraps_language_templates_that_validate_accept() {
             "docs/syu/features/languages/java.yaml",
             "REQ-JAVA-001",
             "FEAT-JAVA-001",
+        ),
+        (
+            "typescript-only",
+            "docs/syu/requirements/core/typescript.yaml",
+            "docs/syu/features/languages/typescript.yaml",
+            "REQ-TS-001",
+            "FEAT-TS-001",
         ),
         (
             "polyglot",
@@ -252,6 +260,35 @@ fn init_command_bootstraps_language_templates_that_validate_accept() {
             assert!(requirement.contains("JavaRequirementTest"));
             assert!(feature.contains("status: implemented"));
             assert!(feature.contains("JavaFeatureImpl"));
+        } else if template == "typescript-only" {
+            assert!(workspace.join(".nvmrc").exists(), "missing .nvmrc");
+            assert!(
+                workspace.join("package.json").exists(),
+                "missing package.json"
+            );
+            assert!(
+                workspace.join("tsconfig.json").exists(),
+                "missing tsconfig.json"
+            );
+            assert!(
+                workspace.join("src/app.ts").exists(),
+                "missing TypeScript source file"
+            );
+            assert!(
+                workspace.join("src/app.test.ts").exists(),
+                "missing TypeScript test file"
+            );
+            let package_json = fs::read_to_string(workspace.join("package.json"))
+                .expect("package.json should exist");
+            assert!(package_json.contains("\"name\": \"typescript-only\""));
+            assert!(package_json.contains("TypeScript-first starter workspace for Node 20."));
+            assert!(package_json.contains("\"node\": \">=20 <21\""));
+            assert!(package_json.contains("\"@types/node\""));
+            assert!(package_json.contains("\"packageManager\": \"npm@11.8.0\""));
+            assert!(requirement.contains("status: implemented"));
+            assert!(requirement.contains("typescriptRequirementTest"));
+            assert!(feature.contains("status: implemented"));
+            assert!(feature.contains("typescriptFeature"));
         } else {
             assert!(requirement.contains("status: planned"));
             assert!(feature.contains("status: planned"));
@@ -279,6 +316,30 @@ fn init_command_bootstraps_language_templates_that_validate_accept() {
                 .output()
                 .expect("java-only template smoke test should run");
 
+            assert!(
+                smoke.status.success(),
+                "template={template}\nstdout:\n{}\nstderr:\n{}",
+                String::from_utf8_lossy(&smoke.stdout),
+                String::from_utf8_lossy(&smoke.stderr)
+            );
+        } else if template == "typescript-only" {
+            let install = Command::new("npm")
+                .arg("install")
+                .current_dir(&workspace)
+                .output()
+                .expect("typescript-only template install should run");
+            assert!(
+                install.status.success(),
+                "template={template}\nstdout:\n{}\nstderr:\n{}",
+                String::from_utf8_lossy(&install.stdout),
+                String::from_utf8_lossy(&install.stderr)
+            );
+
+            let smoke = Command::new("npm")
+                .arg("test")
+                .current_dir(&workspace)
+                .output()
+                .expect("typescript-only template smoke test should run");
             assert!(
                 smoke.status.success(),
                 "template={template}\nstdout:\n{}\nstderr:\n{}",

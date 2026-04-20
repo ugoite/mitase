@@ -66,7 +66,7 @@ pub(crate) struct StarterTemplateCatalogEntry {
     pub(crate) related_example: Option<&'static str>,
 }
 
-const STARTER_TEMPLATE_CATALOG: [StarterTemplateCatalogEntry; 7] = [
+const STARTER_TEMPLATE_CATALOG: [StarterTemplateCatalogEntry; 8] = [
     StarterTemplateCatalogEntry {
         template: StarterTemplate::Generic,
         name: "generic",
@@ -102,6 +102,12 @@ const STARTER_TEMPLATE_CATALOG: [StarterTemplateCatalogEntry; 7] = [
         name: "java-only",
         description: "Starter for Java-first repos with Java-oriented IDs plus a minimal pom.xml, source, and test files.",
         related_example: Some("examples/java-only"),
+    },
+    StarterTemplateCatalogEntry {
+        template: StarterTemplate::TypeScriptOnly,
+        name: "typescript-only",
+        description: "Starter for TypeScript-first repos with TypeScript-oriented IDs plus a minimal package.json, source, and test files.",
+        related_example: Some("examples/typescript-only"),
     },
     StarterTemplateCatalogEntry {
         template: StarterTemplate::Polyglot,
@@ -346,7 +352,8 @@ fn parse_starter_template_prompt(raw: &str) -> Option<StarterTemplate> {
         "python" | "python-only" | "4" => Some(StarterTemplate::PythonOnly),
         "go" | "go-only" | "5" => Some(StarterTemplate::GoOnly),
         "java" | "java-only" | "6" => Some(StarterTemplate::JavaOnly),
-        "polyglot" | "mixed" | "7" => Some(StarterTemplate::Polyglot),
+        "typescript" | "typescript-only" | "ts-only" | "7" => Some(StarterTemplate::TypeScriptOnly),
+        "polyglot" | "mixed" | "8" => Some(StarterTemplate::Polyglot),
         _ => None,
     }
 }
@@ -538,6 +545,12 @@ fn default_id_prefixes(template: StarterTemplate) -> StarterIdPrefixes {
             requirement: "REQ-JAVA".to_string(),
             feature: "FEAT-JAVA".to_string(),
         },
+        StarterTemplate::TypeScriptOnly => StarterIdPrefixes {
+            philosophy: "PHIL-TS".to_string(),
+            policy: "POL-TS".to_string(),
+            requirement: "REQ-TS".to_string(),
+            feature: "FEAT-TS".to_string(),
+        },
         StarterTemplate::Polyglot => StarterIdPrefixes {
             philosophy: "PHIL-MIX".to_string(),
             policy: "POL-MIX".to_string(),
@@ -672,6 +685,25 @@ fn starter_source_files(project_name: &str, template: StarterTemplate) -> Vec<(S
                     .to_string(),
             ),
         ],
+        StarterTemplate::TypeScriptOnly => vec![
+            (".nvmrc".to_string(), "20\n".to_string()),
+            ("package.json".to_string(), render_typescript_package_file(project_name)),
+            (
+                "tsconfig.json".to_string(),
+                "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"NodeNext\",\n    \"moduleResolution\": \"NodeNext\",\n    \"strict\": true,\n    \"noEmit\": true\n  },\n  \"include\": [\"src/**/*.ts\"]\n}\n"
+                    .to_string(),
+            ),
+            (
+                "src/app.ts".to_string(),
+                "/** FEAT-TS-001 keeps the first TypeScript implementation trace explicit. */\nexport function typescriptFeature(): string {\n  return 'typescript-only starter'\n}\n"
+                    .to_string(),
+            ),
+            (
+                "src/app.test.ts".to_string(),
+                "import assert from 'node:assert/strict'\nimport test from 'node:test'\n\nimport { typescriptFeature } from './app.ts'\n\n/** REQ-TS-001 keeps the first TypeScript test trace explicit. */\ntest('typescriptRequirementTest', () => {\n  assert.notEqual(typescriptFeature(), '')\n})\n"
+                    .to_string(),
+            ),
+        ],
         _ => Vec::new(),
     }
 }
@@ -683,6 +715,13 @@ fn render_go_module_file(project_name: &str) -> String {
 fn render_java_pom_file(project_name: &str) -> String {
     format!(
         "<project xmlns=\"http://maven.apache.org/POM/4.0.0\"\n         xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n         xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd\">\n  <modelVersion>4.0.0</modelVersion>\n  <groupId>example.app</groupId>\n  <artifactId>{}</artifactId>\n  <version>0.1.0-SNAPSHOT</version>\n  <properties>\n    <maven.compiler.source>17</maven.compiler.source>\n    <maven.compiler.target>17</maven.compiler.target>\n    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>\n    <junit.version>5.12.2</junit.version>\n  </properties>\n  <dependencies>\n    <dependency>\n      <groupId>org.junit.jupiter</groupId>\n      <artifactId>junit-jupiter</artifactId>\n      <version>${{junit.version}}</version>\n      <scope>test</scope>\n    </dependency>\n  </dependencies>\n  <build>\n    <plugins>\n      <plugin>\n        <groupId>org.apache.maven.plugins</groupId>\n        <artifactId>maven-surefire-plugin</artifactId>\n        <version>3.5.4</version>\n      </plugin>\n    </plugins>\n  </build>\n</project>\n",
+        project_slug(project_name)
+    )
+}
+
+fn render_typescript_package_file(project_name: &str) -> String {
+    format!(
+        "{{\n  \"name\": \"{}\",\n  \"description\": \"TypeScript-first starter workspace for Node 20.\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"engines\": {{\n    \"node\": \">=20 <21\"\n  }},\n  \"scripts\": {{\n    \"test\": \"node --import tsx --test src/app.test.ts\"\n  }},\n  \"devDependencies\": {{\n    \"@types/node\": \"^24.7.2\",\n    \"tsx\": \"^4.20.6\",\n    \"typescript\": \"^5.9.3\"\n  }},\n  \"packageManager\": \"npm@11.8.0\"\n}}\n",
         project_slug(project_name)
     )
 }
@@ -756,6 +795,9 @@ fn philosophy_template(
         StarterTemplate::JavaOnly => format!(
             "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: {philosophy_id}\n    title: {project_name} should keep Java traces explicit from the first commit\n    product_design_principle: |\n      The project should prove that a Java-first repository can adopt `syu`\n      with real source and test files before deeper framework integration is needed.\n    coding_guideline: |\n      Prefer stable IDs and small Java starter files whose traced symbols stay\n      obvious in review.\n    linked_policies:\n      - {policy_id}\n"
         ),
+        StarterTemplate::TypeScriptOnly => format!(
+            "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: {philosophy_id}\n    title: {project_name} should keep TypeScript traces explicit from the first commit\n    product_design_principle: |\n      The project should prove that a TypeScript-first repository can adopt `syu`\n      with real source and test files before larger frontend tooling shows up.\n    coding_guideline: |\n      Prefer stable IDs and short JSDoc comments on traced TypeScript symbols from\n      the first requirement onward.\n    linked_policies:\n      - {policy_id}\n"
+        ),
         StarterTemplate::Polyglot => format!(
             "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: {philosophy_id}\n    title: {project_name} should keep polyglot traces coherent\n    product_design_principle: |\n      The project should prove that one specification can stay understandable\n      even when implementation and tests span multiple languages.\n    coding_guideline: |\n      Prefer stable IDs and short language-native docs on every traced symbol.\n    linked_policies:\n      - {policy_id}\n"
         ),
@@ -789,6 +831,9 @@ fn policy_template(
         ),
         StarterTemplate::JavaOnly => format!(
             "category: Policies\nversion: 1\nlanguage: en\n\npolicies:\n  - id: {policy_id}\n    title: Java requirement and feature traces must stay explicit in {project_name}\n    summary: Start with a Java-first workflow that keeps the first traced symbols easy to inspect.\n    description: |\n      The starter workspace should include real Java source and test files plus\n      a minimal Maven project so the first requirement and feature stay easy to review.\n    linked_philosophies:\n      - {philosophy_id}\n    linked_requirements:\n      - {requirement_id}\n"
+        ),
+        StarterTemplate::TypeScriptOnly => format!(
+            "category: Policies\nversion: 1\nlanguage: en\n\npolicies:\n  - id: {policy_id}\n    title: TypeScript requirement and feature traces must stay explicit in {project_name}\n    summary: Start with a TypeScript-first workflow that keeps the first traced symbols easy to inspect.\n    description: |\n      The starter workspace should include real TypeScript source and test files\n      plus a minimal npm-driven project so the first requirement and feature stay easy to review.\n    linked_philosophies:\n      - {philosophy_id}\n    linked_requirements:\n      - {requirement_id}\n"
         ),
         StarterTemplate::Polyglot => format!(
             "category: Policies\nversion: 1\nlanguage: en\n\npolicies:\n  - id: {policy_id}\n    title: Polyglot requirement and feature traces must stay verifiable in {project_name}\n    summary: Start with one specification flow that can grow across languages.\n    description: |\n      The starter workspace should make it obvious how one requirement and one\n      feature can stay linked even when implementation later spans Rust,\n      Python, and TypeScript.\n    linked_philosophies:\n      - {philosophy_id}\n    linked_requirements:\n      - {requirement_id}\n"
@@ -829,6 +874,10 @@ fn requirement_template(
         ),
         StarterTemplate::JavaOnly => format!(
             "category: Java Requirements\nprefix: {}\n\nrequirements:\n  - id: {requirement_id}\n    title: Bootstrap {project_name} with a Java-backed requirement trace\n    description: |\n      The project should start with one JUnit test symbol so the first requirement\n      already validates against a real Java test file.\n    priority: high\n    status: implemented\n    linked_policies:\n      - {policy_id}\n    linked_features:\n      - {feature_id}\n    tests:\n      java:\n        - file: src/test/java/example/app/OrderSummaryTest.java\n          symbols:\n            - JavaRequirementTest\n",
+            id_prefixes.requirement
+        ),
+        StarterTemplate::TypeScriptOnly => format!(
+            "category: TypeScript Requirements\nprefix: {}\n\nrequirements:\n  - id: {requirement_id}\n    title: Bootstrap {project_name} with a TypeScript-backed requirement trace\n    description: |\n      The project should start with one Node-backed TypeScript test symbol so the\n      first requirement already validates against a real `.test.ts` file.\n    priority: high\n    status: implemented\n    linked_policies:\n      - {policy_id}\n    linked_features:\n      - {feature_id}\n    tests:\n      typescript:\n        - file: src/app.test.ts\n          symbols:\n            - typescriptRequirementTest\n",
             id_prefixes.requirement
         ),
         StarterTemplate::Polyglot => format!(
@@ -878,6 +927,9 @@ fn feature_template(
         StarterTemplate::JavaOnly => format!(
             "category: Java Features\nversion: 1\n\nfeatures:\n  - id: {feature_id}\n    title: Bootstrap the {project_name} Java spec workspace\n    summary: Provide a Java-oriented starter structure with one traced implementation symbol.\n    status: implemented\n    linked_requirements:\n      - {requirement_id}\n    implementations:\n      java:\n        - file: src/main/java/example/app/OrderSummary.java\n          symbols:\n            - JavaFeatureImpl\n"
         ),
+        StarterTemplate::TypeScriptOnly => format!(
+            "category: TypeScript Features\nversion: 1\n\nfeatures:\n  - id: {feature_id}\n    title: Bootstrap the {project_name} TypeScript spec workspace\n    summary: Provide a TypeScript-oriented starter structure with one traced implementation symbol.\n    status: implemented\n    linked_requirements:\n      - {requirement_id}\n    implementations:\n      typescript:\n        - file: src/app.ts\n          symbols:\n            - typescriptFeature\n"
+        ),
         StarterTemplate::Polyglot => format!(
             "category: Polyglot Features\nversion: 1\n\nfeatures:\n  - id: {feature_id}\n    title: Bootstrap the {project_name} polyglot spec workspace\n    summary: Provide a starter structure that can grow across Rust, Python, and TypeScript.\n    status: planned\n    linked_requirements:\n      - {requirement_id}\n    implementations: {{}}\n"
         ),
@@ -892,6 +944,7 @@ fn requirement_document_path(template: StarterTemplate) -> &'static str {
         StarterTemplate::PythonOnly => "requirements/core/python.yaml",
         StarterTemplate::GoOnly => "requirements/core/go.yaml",
         StarterTemplate::JavaOnly => "requirements/core/java.yaml",
+        StarterTemplate::TypeScriptOnly => "requirements/core/typescript.yaml",
         StarterTemplate::Polyglot => "requirements/core/polyglot.yaml",
     }
 }
@@ -904,6 +957,7 @@ fn feature_document_path(template: StarterTemplate) -> &'static str {
         StarterTemplate::PythonOnly => "features/languages/python.yaml",
         StarterTemplate::GoOnly => "features/languages/go.yaml",
         StarterTemplate::JavaOnly => "features/languages/java.yaml",
+        StarterTemplate::TypeScriptOnly => "features/languages/typescript.yaml",
         StarterTemplate::Polyglot => "features/languages/polyglot.yaml",
     }
 }
@@ -916,6 +970,7 @@ fn feature_kind(template: StarterTemplate) -> &'static str {
         StarterTemplate::PythonOnly => "python",
         StarterTemplate::GoOnly => "go",
         StarterTemplate::JavaOnly => "java",
+        StarterTemplate::TypeScriptOnly => "typescript",
         StarterTemplate::Polyglot => "polyglot",
     }
 }
@@ -1327,14 +1382,14 @@ mod tests {
     fn prompt_for_starter_template_retries_invalid_values() {
         let mut prompt_io = FakePromptIo {
             terminal: true,
-            lines: VecDeque::from(["unknown".to_string(), "7".to_string()]),
+            lines: VecDeque::from(["unknown".to_string(), "typescript-only".to_string()]),
             ..Default::default()
         };
 
         let template = prompt_for_starter_template(&mut prompt_io, StarterTemplate::Generic)
             .expect("template prompt should retry");
 
-        assert_eq!(template, StarterTemplate::Polyglot);
+        assert_eq!(template, StarterTemplate::TypeScriptOnly);
         assert_eq!(prompt_io.prompts.len(), 2);
     }
 
@@ -1355,6 +1410,10 @@ mod tests {
         assert_eq!(
             parse_starter_template_prompt("java"),
             Some(StarterTemplate::JavaOnly)
+        );
+        assert_eq!(
+            parse_starter_template_prompt("ts-only"),
+            Some(StarterTemplate::TypeScriptOnly)
         );
         assert_eq!(
             parse_starter_template_prompt("mixed"),

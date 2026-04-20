@@ -1,0 +1,20 @@
+category: TypeScript Requirements
+prefix: REQ-TS
+
+requirements:
+  - id: REQ-TS-001
+    title: Bootstrap the example with a TypeScript-backed requirement trace
+    description: |
+      The workspace should start with one Node-backed TypeScript test symbol so the
+      first requirement already validates against a real `.test.ts` file.
+    priority: high
+    status: implemented
+    linked_policies:
+      - POL-TS-001
+    linked_features:
+      - FEAT-TS-001
+    tests:
+      typescript:
+        - file: src/app.test.ts
+          symbols:
+            - typescriptRequirementTest

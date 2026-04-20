@@ -1,0 +1,15 @@
+category: Philosophy
+version: 1
+language: en
+
+philosophies:
+  - id: PHIL-TS-001
+    title: TypeScript-first repositories should keep traceability explicit from the first commit
+    product_design_principle: |
+      The project should prove that a TypeScript-oriented repository can adopt
+      `syu` with real source and test files before larger frontend tooling shows up.
+    coding_guideline: |
+      Prefer stable IDs and short JSDoc comments on traced TypeScript symbols from
+      the first requirement onward.
+    linked_policies:
+      - POL-TS-001
