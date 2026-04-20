@@ -182,6 +182,9 @@ tree.
 
 ### Node.js version strategy
 
+For the contributor-facing quick matrix, switching rules, and app/docs/editor
+commands in one place, start with [`docs/guide/node-workflow.md`](docs/guide/node-workflow.md).
+
 The repository intentionally uses different Node.js majors for different
 surfaces:
 
