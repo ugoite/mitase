@@ -1,0 +1,18 @@
+category: Ruby Example Requirements
+prefix: REQ-RB
+
+requirements:
+  - id: REQ-RB-001
+    title: Demonstrate a Ruby requirement trace
+    description: The Ruby example should link a requirement to a real Ruby test symbol.
+    priority: high
+    status: implemented
+    linked_policies:
+      - POL-RB-001
+    linked_features:
+      - FEAT-RB-001
+    tests:
+      ruby:
+        - file: test/order_summary_test.rb
+          symbols:
+            - test_ruby_requirement

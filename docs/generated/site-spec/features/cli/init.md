@@ -65,7 +65,7 @@ description: "Generated reference for docs/syu/features/cli/init.yaml"
           - InitArgs
 - **id**: FEAT-INIT-004
   - **title**: Language-oriented starter templates
-  - **summary**: Allow `syu init --template` to scaffold small rust-only, python-only, go-only, and polyglot starter layouts that better match the repository style from the first commit.
+  - **summary**: Allow `syu init --template` to scaffold small rust-only, python-only, ruby-only, go-only, java-only, and polyglot starter layouts that better match the repository style from the first commit.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-009
@@ -197,7 +197,7 @@ features:
             - InitArgs
   - id: FEAT-INIT-004
     title: Language-oriented starter templates
-    summary: Allow `syu init --template` to scaffold small rust-only, python-only, go-only, and polyglot starter layouts that better match the repository style from the first commit.
+    summary: Allow `syu init --template` to scaffold small rust-only, python-only, ruby-only, go-only, java-only, and polyglot starter layouts that better match the repository style from the first commit.
     status: implemented
     linked_requirements:
       - REQ-CORE-009
