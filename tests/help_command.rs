@@ -33,6 +33,21 @@ fn root_help_includes_start_here_guidance() {
 }
 
 #[test]
+fn app_help_mentions_remote_bind_opt_in() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args(["app", "--help"])
+        .output()
+        .expect("help should render");
+
+    assert!(output.status.success(), "app help should succeed");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--allow-remote"));
+    assert!(stdout.contains("non-loopback address"));
+}
+
+#[test]
 fn workspace_help_uses_current_directory_default_consistently() {
     for command in [
         "browse", "show", "search", "trace", "app", "validate", "check", "report", "add", "relate",

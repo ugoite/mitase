@@ -131,8 +131,10 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       browser-safe Rust logic through WebAssembly instead of reimplementing the
       layered model only in JavaScript. When `syu.yaml` defines app defaults,
       `syu app` MUST use `app.bind` and `app.port` unless CLI flags override
-      them. When the workspace argument (or default current directory) points
-      inside a workspace, `syu app` MUST walk parent directories until it finds
+      them. When `app.bind` or `--bind` selects a non-loopback address, `syu
+      app` MUST require an explicit `--allow-remote` opt-in before it starts.
+      When the workspace argument (or default current directory) points inside a
+      workspace, `syu app` MUST walk parent directories until it finds
       `syu.yaml`. The startup output MUST also tell users which workspace root
       was selected, which local URL to open in a browser, and how to stop the
       server cleanly.
@@ -155,6 +157,9 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       - **file**: tests/app_command.rs
         - **symbols**:
           - *
+      - **file**: tests/help_command.rs
+        - **symbols**:
+          - app_help_mentions_remote_bind_opt_in
       - **file**: src/command/app.rs
         - **symbols**:
           - *
@@ -539,8 +544,10 @@ requirements:
       browser-safe Rust logic through WebAssembly instead of reimplementing the
       layered model only in JavaScript. When `syu.yaml` defines app defaults,
       `syu app` MUST use `app.bind` and `app.port` unless CLI flags override
-      them. When the workspace argument (or default current directory) points
-      inside a workspace, `syu app` MUST walk parent directories until it finds
+      them. When `app.bind` or `--bind` selects a non-loopback address, `syu
+      app` MUST require an explicit `--allow-remote` opt-in before it starts.
+      When the workspace argument (or default current directory) points inside a
+      workspace, `syu app` MUST walk parent directories until it finds
       `syu.yaml`. The startup output MUST also tell users which workspace root
       was selected, which local URL to open in a browser, and how to stop the
       server cleanly.
@@ -563,6 +570,9 @@ requirements:
         - file: tests/app_command.rs
           symbols:
             - '*'
+        - file: tests/help_command.rs
+          symbols:
+            - app_help_mentions_remote_bind_opt_in
         - file: src/command/app.rs
           symbols:
             - '*'

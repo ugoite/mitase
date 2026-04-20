@@ -177,6 +177,19 @@ fn bind_failure_message(
         "failed to bind `{bind}:{port}`. {likely_cause} Try `syu app {workspace} --port <free-port>` to retry with a different port, or set `app.port` in syu.yaml to change the default. {error}"
     )
 }
+
+fn require_remote_bind_opt_in(bind: IpAddr, allow_remote: bool) -> Result<()> {
+    if bind.is_loopback() || allow_remote {
+        return Ok(());
+    }
+
+    Err(anyhow!(
+        "refusing to bind `syu app` to non-loopback address `{bind}` without `--allow-remote`. \
+This protects workspace data and source documents from accidental network exposure. \
+Use `--bind 127.0.0.1` to keep the browser UI local, or pass `--allow-remote` when remote access is intentional."
+    ))
+}
+
 pub fn run_app_command(args: &AppArgs) -> Result<i32> {
     let workspace_root = canonical_workspace_root(&args.workspace)?;
     let loaded = load_config(&workspace_root)?;
@@ -185,6 +198,7 @@ pub fn run_app_command(args: &AppArgs) -> Result<i32> {
         .bind
         .parse::<IpAddr>()
         .with_context(|| format!("invalid bind address `{}`", settings.bind))?;
+    require_remote_bind_opt_in(bind, args.allow_remote)?;
     build_app_payload_from_config(&workspace_root, &loaded.config)?;
     println!("workspace: {}", workspace_root.display());
     let state = AppState::new(workspace_root.clone(), loaded.config);
@@ -984,9 +998,9 @@ mod tests {
         content_type_for_path, is_asset_like, load_current_snapshot, non_loopback_warning_lines,
         normalized_asset_path, normalized_trace_snapshot_path, readiness_probe_request_sent,
         readiness_probe_succeeds, redacted_relative_label, redacted_root_label,
-        refresh_current_once, relative_display, resolve_app_server_settings, spec_snapshot,
-        startup_lines, trailing_path_components_label, validation_snapshot,
-        wait_for_ready_with_retry,
+        refresh_current_once, relative_display, require_remote_bind_opt_in,
+        resolve_app_server_settings, spec_snapshot, startup_lines, trailing_path_components_label,
+        validation_snapshot, wait_for_ready_with_retry,
     };
 
     fn fixture_root(name: &str) -> PathBuf {
@@ -1136,6 +1150,7 @@ mod tests {
                 workspace: PathBuf::from("."),
                 bind: None,
                 port: None,
+                allow_remote: false,
             },
             &config,
         );
@@ -1163,6 +1178,7 @@ mod tests {
                 workspace: tempdir.path().to_path_buf(),
                 bind: None,
                 port: None,
+                allow_remote: false,
             },
             &config,
         );
@@ -1190,6 +1206,7 @@ mod tests {
                 workspace: tempdir.path().to_path_buf(),
                 bind: Some("127.0.0.1".to_string()),
                 port: Some(5123),
+                allow_remote: false,
             },
             &config,
         );
@@ -1254,6 +1271,28 @@ mod tests {
                     .to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn require_remote_bind_opt_in_allows_loopback_without_flag() {
+        require_remote_bind_opt_in("127.0.0.1".parse().expect("valid ip"), false)
+            .expect("loopback should stay allowed");
+    }
+
+    #[test]
+    fn require_remote_bind_opt_in_rejects_non_loopback_without_flag() {
+        let error = require_remote_bind_opt_in("0.0.0.0".parse().expect("valid ip"), false)
+            .expect_err("non-loopback should require explicit opt-in");
+        let message = error.to_string();
+        assert!(message.contains("--allow-remote"));
+        assert!(message.contains("127.0.0.1"));
+        assert!(message.contains("accidental network exposure"));
+    }
+
+    #[test]
+    fn require_remote_bind_opt_in_allows_non_loopback_with_flag() {
+        require_remote_bind_opt_in("0.0.0.0".parse().expect("valid ip"), true)
+            .expect("explicit opt-in should allow non-loopback binds");
     }
 
     #[test]
