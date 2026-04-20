@@ -1,6 +1,7 @@
 // REQ-CORE-015
 
 use assert_cmd::{Command, cargo::CommandCargoExt};
+use serde_json::Value;
 use std::{fs, path::PathBuf, process::Command as StdCommand};
 use tempfile::tempdir;
 
@@ -65,8 +66,8 @@ fn browse_command_help_explains_when_to_use_non_interactive_mode() {
         "help should explain the browse snapshot shape:\n{stdout}",
     );
     assert!(
-        stdout.contains("emitted as JSON for automation"),
-        "help should point to syu list for automation-oriented output:\n{stdout}",
+        stdout.contains("syu browse . --non-interactive --format json"),
+        "help should show the JSON browse example:\n{stdout}",
     );
 }
 
@@ -321,5 +322,46 @@ fn browse_command_non_interactive_shows_errors_when_workspace_is_failing() {
     assert!(
         stdout.contains("suggestion: Declare requirement `REQ-MISSING-999`"),
         "should include actionable suggestions: {stdout}"
+    );
+}
+
+#[test]
+// REQ-CORE-015
+fn browse_command_non_interactive_supports_json_output() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args([
+            "browse",
+            fixture_path("passing").to_str().expect("utf8 path"),
+            "--non-interactive",
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("browse command should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let json: Value = serde_json::from_slice(&output.stdout).expect("output should be valid json");
+    assert_eq!(json["definition_counts"]["philosophies"], 1);
+    assert_eq!(json["groups"]["philosophies"][0]["id"], "PHIL-TRACE-001");
+    assert_eq!(json["groups"]["requirements"][0]["id"], "REQ-TRACE-001");
+    assert_eq!(
+        json["issues"]
+            .as_array()
+            .expect("issues should be an array")
+            .len(),
+        0
+    );
+    assert_eq!(
+        json["spec_root"],
+        fixture_path("passing")
+            .join("docs/syu")
+            .display()
+            .to_string()
     );
 }

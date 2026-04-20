@@ -448,7 +448,7 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("review what changed for one spec item in Git history"));
     assert!(readme.contains("list-shaped output"));
     assert!(readme.contains("workspace metadata, per-layer"));
-    assert!(readme.contains("current validation errors in plain text"));
+    assert!(readme.contains("current validation errors in text or JSON"));
     assert!(readme.contains("syu show"));
     assert!(readme.contains("syu show REQ-001"));
     assert!(!readme.contains("syu show REQ-CORE-015"));
@@ -543,7 +543,7 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("syu validate ."));
     assert!(getting_started.contains("emitted as JSON for automation"));
     assert!(getting_started.contains("workspace metadata, per-layer"));
-    assert!(getting_started.contains("current validation errors in plain text"));
+    assert!(getting_started.contains("current validation errors in text or JSON"));
     assert!(getting_started.contains("review change history for one requirement or feature"));
     assert!(getting_started.contains("syu list feature"));
     assert!(getting_started.contains("syu show REQ-001"));
