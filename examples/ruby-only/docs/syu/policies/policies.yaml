@@ -1,0 +1,13 @@
+category: Policies
+version: 1
+language: en
+
+policies:
+  - id: POL-RB-001
+    title: Ruby traces must stay explicit from the first commit
+    summary: Demonstrate Ruby-first symbol validation with real source and test files.
+    description: Ruby requirement and feature traces should point to named methods in `.rb` files that contributors can inspect directly.
+    linked_philosophies:
+      - PHIL-RB-001
+    linked_requirements:
+      - REQ-RB-001

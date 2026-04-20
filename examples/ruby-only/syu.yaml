@@ -1,0 +1,12 @@
+version: 0.0.1-alpha.8
+spec:
+  root: docs/syu
+validate:
+  default_fix: false
+  allow_planned: true
+  require_symbol_trace_coverage: false
+runtimes:
+  python:
+    command: auto
+  node:
+    command: auto

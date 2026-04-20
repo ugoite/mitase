@@ -34,6 +34,11 @@ fn templates_command_lists_all_supported_templates_in_text_output() {
     ));
     assert!(
         stdout.contains(
+            "ruby-only\ttemplate-and-example\texamples/ruby-only\tStarter for Ruby-first repos with Ruby-oriented IDs plus a minimal Gemfile, source, and test files."
+        )
+    );
+    assert!(
+        stdout.contains(
             "go-only\ttemplate-and-example\texamples/go-only\tStarter for Go-first repos with Go-oriented IDs plus a minimal go.mod, source, and test files."
         )
     );
@@ -72,18 +77,20 @@ fn templates_command_supports_json_output() {
     let templates = json["templates"]
         .as_array()
         .expect("templates should be an array");
-    assert_eq!(templates.len(), 8);
+    assert_eq!(templates.len(), 9);
     assert_eq!(templates[0]["name"], "generic");
     assert_eq!(templates[0]["relationship"], "starter-only");
     assert_eq!(templates[1]["name"], "docs-first");
     assert_eq!(templates[1]["related_example"], "examples/docs-first");
     assert_eq!(templates[2]["name"], "rust-only");
     assert_eq!(templates[2]["related_example"], "examples/rust-only");
-    assert_eq!(templates[4]["name"], "go-only");
-    assert_eq!(templates[4]["related_example"], "examples/go-only");
-    assert_eq!(templates[5]["name"], "java-only");
-    assert_eq!(templates[5]["related_example"], "examples/java-only");
-    assert_eq!(templates[6]["name"], "typescript-only");
-    assert_eq!(templates[6]["related_example"], "examples/typescript-only");
-    assert_eq!(templates[7]["name"], "polyglot");
+    assert_eq!(templates[4]["name"], "ruby-only");
+    assert_eq!(templates[4]["related_example"], "examples/ruby-only");
+    assert_eq!(templates[5]["name"], "go-only");
+    assert_eq!(templates[5]["related_example"], "examples/go-only");
+    assert_eq!(templates[6]["name"], "java-only");
+    assert_eq!(templates[6]["related_example"], "examples/java-only");
+    assert_eq!(templates[7]["name"], "typescript-only");
+    assert_eq!(templates[7]["related_example"], "examples/typescript-only");
+    assert_eq!(templates[8]["name"], "polyglot");
 }

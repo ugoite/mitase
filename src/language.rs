@@ -40,6 +40,9 @@ struct RustAdapter;
 struct PythonAdapter;
 
 #[derive(Debug)]
+struct RubyAdapter;
+
+#[derive(Debug)]
 struct TypeScriptAdapter;
 
 #[derive(Debug)]
@@ -68,6 +71,7 @@ struct GitignoreAdapter;
 
 static RUST_ADAPTER: RustAdapter = RustAdapter;
 static PYTHON_ADAPTER: PythonAdapter = PythonAdapter;
+static RUBY_ADAPTER: RubyAdapter = RubyAdapter;
 static TYPESCRIPT_ADAPTER: TypeScriptAdapter = TypeScriptAdapter;
 static GO_ADAPTER: GoAdapter = GoAdapter;
 static JAVA_ADAPTER: JavaAdapter = JavaAdapter;
@@ -118,10 +122,32 @@ impl LanguageAdapter for PythonAdapter {
     fn patterns(&self, symbol: &str) -> Vec<String> {
         let escaped = regex::escape(symbol);
         vec![
-            format!(r"(?m)\bdef\s+{escaped}\b"),
-            format!(r"(?m)\bclass\s+{escaped}\b"),
+            format!(r"(?m)\bdef\s+(?:self\.)?{escaped}\b"),
+            format!(r"(?m)\b(?:class|module)\s+{escaped}\b"),
+            format!(r"(?m)^\s*(?:self\.)?{escaped}\s*="),
+        ]
+    }
+}
+
+impl LanguageAdapter for RubyAdapter {
+    fn canonical_name(&self) -> &'static str {
+        "ruby"
+    }
+
+    fn aliases(&self) -> &'static [&'static str] {
+        &["ruby", "rb", "minitest", "rspec"]
+    }
+
+    fn extensions(&self) -> &'static [&'static str] {
+        &["rb"]
+    }
+
+    fn patterns(&self, symbol: &str) -> Vec<String> {
+        let escaped = regex::escape(symbol);
+        vec![
+            format!(r"(?m)\b(?:class|module)\s+{escaped}\b"),
+            format!(r"(?m)^\s*def\s+(?:self\.)?{escaped}\b"),
             format!(r"(?m)^\s*{escaped}\s*="),
-            format!(r"(?m)\b{escaped}\b"),
         ]
     }
 }
@@ -354,6 +380,7 @@ pub fn adapter_for_language(language: &str) -> Option<&'static dyn LanguageAdapt
     [
         &RUST_ADAPTER as &dyn LanguageAdapter,
         &PYTHON_ADAPTER as &dyn LanguageAdapter,
+        &RUBY_ADAPTER as &dyn LanguageAdapter,
         &TYPESCRIPT_ADAPTER as &dyn LanguageAdapter,
         &GO_ADAPTER as &dyn LanguageAdapter,
         &JAVA_ADAPTER as &dyn LanguageAdapter,
@@ -390,6 +417,10 @@ mod tests {
         assert_eq!(
             adapter_for_language("pytest").map(LanguageAdapter::canonical_name),
             Some("python")
+        );
+        assert_eq!(
+            adapter_for_language("rspec").map(LanguageAdapter::canonical_name),
+            Some("ruby")
         );
         assert_eq!(
             adapter_for_language("bun-test").map(LanguageAdapter::canonical_name),
@@ -430,6 +461,7 @@ mod tests {
     fn adapters_match_supported_extensions() {
         let rust = adapter_for_language("rust").expect("rust adapter should exist");
         let go = adapter_for_language("go").expect("go adapter should exist");
+        let ruby = adapter_for_language("ruby").expect("ruby adapter should exist");
         let shell = adapter_for_language("shell").expect("shell adapter should exist");
         let yaml = adapter_for_language("yaml").expect("yaml adapter should exist");
         let json = adapter_for_language("json").expect("json adapter should exist");
@@ -439,6 +471,7 @@ mod tests {
 
         assert!(rust.supports_path(Path::new("src/lib.rs")));
         assert!(go.supports_path(Path::new("go/app.go")));
+        assert!(ruby.supports_path(Path::new("lib/order_summary.rb")));
         assert!(!rust.supports_path(Path::new("src/lib.py")));
         assert!(shell.supports_path(Path::new("scripts/install-syu.sh")));
         assert!(yaml.supports_path(Path::new(".github/workflows/ci.yml")));
@@ -456,6 +489,7 @@ mod tests {
     fn adapters_find_symbols_in_source_text() {
         let rust = adapter_for_language("rust").expect("rust adapter should exist");
         let python = adapter_for_language("python").expect("python adapter should exist");
+        let ruby = adapter_for_language("ruby").expect("ruby adapter should exist");
         let typescript =
             adapter_for_language("typescript").expect("typescript adapter should exist");
         let go = adapter_for_language("go").expect("go adapter should exist");
@@ -468,6 +502,14 @@ mod tests {
 
         assert!(rust.symbol_exists("pub fn hello_world() {}", "hello_world"));
         assert!(python.symbol_exists("def test_trace():\n    return True\n", "test_trace"));
+        assert!(ruby.symbol_exists("class OrderSummary\nend\n", "OrderSummary"));
+        assert!(ruby.symbol_exists("def ruby_feature_impl\n  true\nend\n", "ruby_feature_impl"));
+        assert!(ruby.symbol_exists("def self.build\n  new\nend\n", "build"));
+        assert!(ruby.symbol_exists("module CheckoutFlow\nend\n", "CheckoutFlow"));
+        assert!(!ruby.symbol_exists(
+            "# no declaration here\nputs 'OrderSummary'\n",
+            "OrderSummary"
+        ));
         assert!(typescript.symbol_exists(
             "export function featureTraceTs(): boolean { return true; }",
             "featureTraceTs"
