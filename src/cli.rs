@@ -393,6 +393,10 @@ pub struct AppArgs {
     #[arg(help = "Port to bind the local app server to (default: app.port or 3000)")]
     #[arg(short, long)]
     pub port: Option<u16>,
+
+    #[arg(help = "Allow syu app to bind to a non-loopback address such as 0.0.0.0")]
+    #[arg(long, action = ArgAction::SetTrue)]
+    pub allow_remote: bool,
 }
 
 #[derive(Debug, Clone, Args)]

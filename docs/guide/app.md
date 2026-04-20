@@ -246,7 +246,10 @@ app:
   port: 3000
 ```
 
-CLI flags always override the config values. See the [configuration guide](./configuration.md#appbind) for the full reference.
+CLI flags always override the config values. If you switch `bind` to a
+non-loopback address such as `0.0.0.0`, you must also pass `--allow-remote`
+when starting `syu app`. See the [configuration guide](./configuration.md#appbind)
+for the full reference.
 
 ---
 

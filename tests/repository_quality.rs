@@ -488,6 +488,7 @@ fn repository_declares_documentation_guides() {
     assert!(app_guide.contains("ArrowDown"));
     assert!(app_guide.contains("Escape"));
     assert!(app_guide.contains("the item's YAML `status:` field"));
+    assert!(app_guide.contains("--allow-remote"));
     assert!(app_guide.contains("../../website/static/img/app-guide-overview.png"));
     assert!(!app_guide.contains("](/img/"));
     assert!(!app_guide.contains("`planned`, `implemented`, or `deprecated`"));
@@ -625,6 +626,7 @@ fn repository_declares_documentation_guides() {
     assert!(merge_queue_playbook.contains("gh pr merge 123 --auto --squash"));
     assert!(merge_queue_playbook.contains("gh-readonly-queue/main/pr-123-<sha>"));
     assert!(configuration.contains("validate.default_fix"));
+    assert!(configuration.contains("--allow-remote"));
     assert!(configuration.contains("trace-adapter-support.md"));
     assert!(configuration.contains("validate.allow_planned"));
     assert!(configuration.contains("Rust, Python, Go, Java, and TypeScript/JavaScript"));

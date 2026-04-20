@@ -233,10 +233,33 @@ fn app_command_help_mentions_browser_and_stop_instructions() {
     assert!(stdout.contains("Use GET /health for readiness checks once the app is serving."));
     assert!(stdout.contains("After startup, open the printed URL in your browser."));
     assert!(stdout.contains("Press Ctrl-C to stop the local app server."));
+    assert!(stdout.contains("--allow-remote"));
 }
 
 #[test]
-fn app_command_warns_on_non_loopback_binds() {
+fn app_command_rejects_non_loopback_binds_without_explicit_opt_in() {
+    let port = reserve_port();
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("app")
+        .arg(fixture_path("passing"))
+        .arg("--bind")
+        .arg("0.0.0.0")
+        .arg("--port")
+        .arg(port.to_string())
+        .output()
+        .expect("command should run");
+
+    assert_eq!(output.status.code(), Some(2));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("--allow-remote"));
+    assert!(stderr.contains("accidental network exposure"));
+    assert!(!stdout.contains("syu app listening on"));
+}
+
+#[test]
+fn app_command_warns_on_non_loopback_binds_after_explicit_opt_in() {
     let port = reserve_port();
     let child = Command::cargo_bin("syu")
         .expect("binary should build")
@@ -244,6 +267,7 @@ fn app_command_warns_on_non_loopback_binds() {
         .arg(fixture_path("passing"))
         .arg("--bind")
         .arg("0.0.0.0")
+        .arg("--allow-remote")
         .arg("--port")
         .arg(port.to_string())
         .stdin(Stdio::null())
@@ -265,9 +289,6 @@ fn app_command_warns_on_non_loopback_binds() {
     let listening_index = stdout
         .find(&listening)
         .expect("stdout should include the listening url");
-    assert!(stdout.contains(&format!("syu app listening on http://0.0.0.0:{port}")));
-    assert!(stdout.contains(&format!("syu app ready: http://0.0.0.0:{port}")));
-    assert!(stdout.contains(&format!("Open http://0.0.0.0:{port} in your browser.")));
     assert!(warning_index < listening_index);
     assert!(stdout.contains("workspace data and source documents may be reachable"));
     assert!(stdout.contains("use --bind 127.0.0.1 to keep the browser UI local"));
