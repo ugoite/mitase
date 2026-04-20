@@ -427,7 +427,7 @@ syu app .
 Use `syu list` when you want list-shaped output that can be narrowed to one
 layer or emitted as JSON for automation. Use `syu browse --non-interactive`
 when you want the browse snapshot instead: workspace metadata, per-layer
-counts, and the current validation errors in plain text.
+counts, grouped items, and the current validation errors in text or JSON.
 
 If you only remember the task and not the command name yet, use this chooser:
 

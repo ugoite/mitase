@@ -5,9 +5,10 @@
 use std::io::{self, Write};
 
 use anyhow::Result;
+use serde::Serialize;
 
 use crate::{
-    cli::{BrowseArgs, LookupKind as EntityKind},
+    cli::{BrowseArgs, LookupKind as EntityKind, OutputFormat},
     command::check::collect_check_result,
     model::{CheckResult, Feature, Issue, Philosophy, Policy, Requirement},
     rules::rule_by_code,
@@ -43,13 +44,37 @@ struct EntityRef {
     id: String,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct JsonBrowseEntry {
+    id: String,
+    title: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct JsonBrowseGroups {
+    philosophies: Vec<JsonBrowseEntry>,
+    policies: Vec<JsonBrowseEntry>,
+    requirements: Vec<JsonBrowseEntry>,
+    features: Vec<JsonBrowseEntry>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct JsonBrowseOutput {
+    workspace_root: String,
+    spec_root: Option<String>,
+    definition_counts: crate::model::DefinitionCounts,
+    trace_summary: crate::model::TraceSummary,
+    groups: JsonBrowseGroups,
+    issues: Vec<Issue>,
+}
+
 pub fn run_browse_command(args: &BrowseArgs) -> Result<i32> {
     let result = collect_check_result(&args.workspace);
     let workspace = load_workspace(&args.workspace).ok();
     let state = BrowseState { workspace, result };
 
     if args.non_interactive {
-        state.print_non_interactive();
+        state.print_non_interactive(args.format);
         return Ok(0);
     }
 
@@ -376,7 +401,16 @@ impl BrowseState {
         println!();
     }
 
-    fn print_non_interactive(&self) {
+    fn print_non_interactive(&self, format: OutputFormat) {
+        if matches!(format, OutputFormat::Json) {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&self.non_interactive_json())
+                    .expect("serializing browse snapshot to JSON should succeed")
+            );
+            return;
+        }
+
         self.print_summary("syu spec tree");
 
         for (heading, kind) in [
@@ -401,6 +435,25 @@ impl BrowseState {
                 }
             }
             println!();
+        }
+    }
+
+    fn non_interactive_json(&self) -> JsonBrowseOutput {
+        JsonBrowseOutput {
+            workspace_root: self.result.workspace_root.display().to_string(),
+            spec_root: self
+                .workspace
+                .as_ref()
+                .map(|workspace| workspace.spec_root.display().to_string()),
+            definition_counts: self.result.definition_counts.clone(),
+            trace_summary: self.result.trace_summary.clone(),
+            groups: JsonBrowseGroups {
+                philosophies: self.json_entries(EntityKind::Philosophy),
+                policies: self.json_entries(EntityKind::Policy),
+                requirements: self.json_entries(EntityKind::Requirement),
+                features: self.json_entries(EntityKind::Feature),
+            },
+            issues: self.result.issues.clone(),
         }
     }
 
@@ -441,6 +494,13 @@ impl BrowseState {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    fn json_entries(&self, kind: EntityKind) -> Vec<JsonBrowseEntry> {
+        self.entity_entries(kind)
+            .into_iter()
+            .map(|(id, title)| JsonBrowseEntry { id, title })
+            .collect()
     }
 
     fn philosophy(&self, id: &str) -> Option<&Philosophy> {
