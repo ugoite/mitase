@@ -1,12 +1,13 @@
 # csharp-fallback example
 
-This example demonstrates the current fallback pattern for a repository whose
-main application language still does not have a built-in `syu` trace adapter.
+This example demonstrates a lighter staged adoption pattern for a repository
+whose main application language is C#, even when the team is not ready to trace
+every C# file directly yet.
 
-It keeps a real C# source file and test file in the repository, but it does
-not add unsupported `csharp:` trace mappings yet. Instead, the example keeps
-the higher-layer spec links explicit and validates the surrounding automation in
-supported lightweight adapters.
+It keeps a real C# source file and test file in the repository, but it does not
+trace those C# files directly yet. Instead, the example keeps the higher-layer
+spec links explicit and validates the surrounding automation in supported
+lightweight adapters.
 
 ## Files
 
@@ -17,9 +18,9 @@ supported lightweight adapters.
 | `docs/syu/requirements/core/csharp.yaml` | `REQ-CSHARP-001` with a markdown-backed acceptance anchor |
 | `docs/syu/features/languages/csharp.yaml` | `FEAT-CSHARP-001` with a shell-backed implementation trace |
 | `scripts/check-workspace.sh` | shell implementation containing `verify_spec_links` |
-| `src/OrderSummary.cs` | real C# source kept visible but intentionally untraced for now |
-| `tests/OrderSummaryTests.cs` | real C# test kept visible but intentionally untraced for now |
-| `README.md` | explains why the C# files are not traced directly yet |
+| `src/OrderSummary.cs` | real C# source kept visible while the example focuses on surrounding workflow traces first |
+| `tests/OrderSummaryTests.cs` | real C# test kept visible while the example focuses on surrounding workflow traces first |
+| `README.md` | explains why the example delays direct C# tracing |
 
 ## Try it
 
@@ -42,22 +43,22 @@ traceability: requirements=1/1 traces validated; features=1/1 traces validated
 
 ## CsharpFallbackAcceptanceChecklist
 
-- `REQ-CSHARP-001` expects unsupported-language repositories to keep the spec
-  layers explicit from the first commit.
+- `REQ-CSHARP-001` expects staged-adoption repositories to keep the spec layers
+  explicit from the first commit.
 - `FEAT-CSHARP-001` traces the supporting shell workflow with the named
   `verify_spec_links` symbol.
-- The checked-in C# files stay visible to contributors, but this example does
-  **not** add `tests.csharp` or `implementations.csharp` entries yet because
-  those mappings still fail with `SYU-trace-language-001`.
+- The checked-in C# files stay visible to contributors, but this example
+  intentionally delays `tests.csharp` and `implementations.csharp` entries so
+  the lighter adoption path stays obvious.
 
 ## Key things to notice
 
-- **Real unsupported-language files still belong in the repository** — `syu`
-  can help the team connect intent and workflow before the language adapter
-  exists.
+- **Real C# files still belong in the repository even before full tracing** —
+  `syu` can help the team connect intent and workflow before they trace every
+  code symbol directly.
 - **Supported lightweight traces are the bridge** — shell and markdown keep the
-  repository mechanically connected to the spec while code-level C# traces wait
-  for native support.
+  repository mechanically connected to the spec while code-level C# traces roll
+  out more gradually.
 - **Go is no longer the workaround** — use `examples/go-only` when you want the
-  built-in Go adapter, and use this example when your main implementation
-  language is still unsupported.
+  built-in Go adapter, and use this example when you want a lighter C#-first
+  rollout.

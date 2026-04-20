@@ -25,7 +25,7 @@ whether you should scaffold a template or open one of the repository examples.
 
 | Path | Type | Best for | How to start |
 | --- | --- | --- | --- |
-| `csharp-fallback` | Example only | repositories whose main implementation language is still unsupported and need a truthful fallback reference | `examples/csharp-fallback` |
+| `csharp-fallback` | Example only | C#-heavy repositories that want a staged adoption path with spec-first traces before they trace every C# file directly | `examples/csharp-fallback` |
 | `docs-first` | Template + example | documentation-heavy repositories that want starter markdown acceptance anchors, one shell trace, and one wildcard-owned YAML file | `syu init . --template docs-first` or `examples/docs-first` |
 | `generic` | Template only | the shortest neutral scaffold when you do not want language-specific starter copy yet | `syu init .` |
 | `go-only` | Template + example | Go-first repositories that want starter IDs, file names, a minimal `go.mod`, and small Go source/test files from the first scaffold | `syu init . --template go-only` or `examples/go-only` |
@@ -68,9 +68,9 @@ scaffold wholesale.
 2. **I already know the repo is docs-first / Rust-first / Python-first / Go-first / Java-first / polyglot**: start
    with the matching template, then compare against the matching example when
    you want a fuller repository story.
-3. **My main implementation language is still unsupported**: open
-   `examples/csharp-fallback` first to study the fallback pattern before you
-   invent placeholder `csharp:` traces that will not validate.
+3. **I want a staged C# adoption path instead of tracing every C# file on day one**:
+   open `examples/csharp-fallback` first to study the lighter pattern before
+   you turn strict C# ownership on everywhere.
 4. **I am Go-first and want to inspect native Go tracing before I scaffold
    anything**: open `examples/go-only` first, then copy the shape you need into
    your own repository.

@@ -62,3 +62,16 @@ features:
           symbols:
             - FeatureTrace
             - featureTraceJava
+
+  - id: FEAT-TRACE-006
+    title: C# implementation trace
+    summary: Feature links to C# source.
+    status: implemented
+    linked_requirements:
+      - REQ-TRACE-006
+    implementations:
+      csharp:
+        - file: csharp/FeatureTrace.cs
+          symbols:
+            - FeatureTrace
+            - FeatureTraceCSharp

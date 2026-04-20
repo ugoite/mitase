@@ -4,8 +4,8 @@ language: en
 
 philosophies:
   - id: PHIL-CSHARP-001
-    title: Unsupported-language repositories should still connect intent to reviewable evidence
-    product_design_principle: Keep the unsupported-language example honest about current adapter limits while still showing a low-friction adoption path.
-    coding_guideline: Trace the surrounding docs and automation with supported adapters until native language support lands.
+    title: Staged C# repositories should still connect intent to reviewable evidence
+    product_design_principle: Keep the staged-adoption example honest about what is already traced while still showing a low-friction C# path.
+    coding_guideline: Trace the surrounding docs and automation with supported adapters before tracing every C# file directly.
     linked_policies:
       - POL-CSHARP-001

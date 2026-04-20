@@ -140,9 +140,9 @@ of editing `syu.yaml`.
 
 ### `validate.require_symbol_trace_coverage`
 
-When `true`, `syu` scans Rust, Python, Go, Java, and TypeScript/JavaScript source and
-test files to confirm that every public symbol belongs to some feature and
-every test belongs to some requirement.
+When `true`, `syu` scans Rust, Python, Go, Java, C#, and TypeScript/JavaScript
+source and test files to confirm that every public symbol belongs to some
+feature and every test belongs to some requirement.
 
 - `false`: only declared traces are verified
 - `true`: undeclared public APIs and tests become validation errors
@@ -153,11 +153,10 @@ coverage still skips configured repository-relative generated paths such as
 `build/`, `coverage/`, `dist/`, and `target/` so authored files nested under
 `src/` or `tests/` keep counting.
 For an experimental strict run, use `syu validate . --require-symbol-trace-coverage`.
-If part of the repository still depends on a language without a built-in
-adapter, keep strict coverage off there and borrow the starter shape from the
+If you want a gradual C# rollout, borrow the lighter starter shape from the
 [`examples/csharp-fallback` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/csharp-fallback).
-That example keeps the higher-layer spec and adjacent supported traces explicit
-without pretending unsupported `csharp:` mappings validate today. Use
+That example keeps the higher-layer spec and surrounding automation explicit
+without requiring every checked-in C# file to be traced immediately. Use
 [`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
 or `syu init . --template go-only` as a reminder that Go now supports
 symbol checks, coverage ownership, and `doc_contains`.
