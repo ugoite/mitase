@@ -786,13 +786,13 @@ fn repository_ships_example_workspaces() {
     assert!(go_example_readme.contains("GoFeatureImpl"));
     assert!(polyglot_feature.contains("FEAT-MIX-001"));
     assert!(polyglot_feature.contains("status: implemented"));
-    assert!(example_tests.contains("docs_first_example_validates"));
-    assert!(example_tests.contains("csharp_fallback_example_validates"));
-    assert!(example_tests.contains("rust_only_example_validates"));
-    assert!(example_tests.contains("python_only_example_validates"));
-    assert!(example_tests.contains("go_only_example_validates"));
-    assert!(example_tests.contains("polyglot_example_validates"));
-    assert!(example_tests.contains("team_scale_example_validates"));
+    assert!(example_tests.contains("example_path(\"docs-first\")"));
+    assert!(example_tests.contains("example_path(\"csharp-fallback\")"));
+    assert!(example_tests.contains("example_path(\"rust-only\")"));
+    assert!(example_tests.contains("example_path(\"python-only\")"));
+    assert!(example_tests.contains("example_path(\"go-only\")"));
+    assert!(example_tests.contains("example_path(\"polyglot\")"));
+    assert!(example_tests.contains("example_path(\"team-scale\")"));
 }
 
 #[test]
