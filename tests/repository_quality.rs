@@ -639,7 +639,7 @@ fn repository_declares_documentation_guides() {
     assert!(configuration.contains("--allow-remote"));
     assert!(configuration.contains("trace-adapter-support.md"));
     assert!(configuration.contains("validate.allow_planned"));
-    assert!(configuration.contains("Rust, Python, Go, Java, and TypeScript/JavaScript"));
+    assert!(configuration.contains("Rust, Python, Go, Java, C#, and TypeScript/JavaScript"));
     assert!(configuration.contains("--spec-root"));
     assert!(configuration.contains(&format!("version: {current_version}")));
     assert!(configuration.contains("docs/syu/config/overview.yaml"));
@@ -649,14 +649,14 @@ fn repository_declares_documentation_guides() {
     assert!(config_spec.contains("spec.root"));
     assert!(config_validate.contains("validate.default_fix"));
     assert!(config_validate.contains("validate.require_symbol_trace_coverage"));
-    assert!(config_validate.contains("Rust, Python, Go, Java, and TypeScript/JavaScript"));
+    assert!(config_validate.contains("Rust, Python, Go, Java, C#, and TypeScript/JavaScript"));
     assert!(config_runtimes.contains("runtimes.python.command"));
     assert!(generated_config_overview.contains("docs/syu/config/overview.yaml"));
     assert!(generated_config_overview.contains("current CLI version"));
     assert!(generated_config_spec.contains("docs/syu/config/spec.yaml"));
     assert!(generated_config_validate.contains("validate.default_fix"));
     assert!(
-        generated_config_validate.contains("Rust, Python, Go, Java, and TypeScript/JavaScript")
+        generated_config_validate.contains("Rust, Python, Go, Java, C#, and TypeScript/JavaScript")
     );
     assert!(generated_config_validate.contains("array&lt;path&gt;"));
     assert!(generated_config_runtimes.contains("docs/syu/config/runtimes.yaml"));
@@ -666,8 +666,9 @@ fn repository_declares_documentation_guides() {
     assert!(generated_validation.contains("docs/syu/features/validation/validation.yaml"));
     assert!(generated_validation.contains("SYU-graph-reference-001"));
     assert!(
-        generated_validation
-            .contains("Rust, Python, Go, Java, and TypeScript/JavaScript source and test files")
+        generated_validation.contains(
+            "Rust, Python, Go, Java, C#, and TypeScript/JavaScript source and test files"
+        )
     );
     assert!(generated_docs_freshness.contains("FEAT-QUALITY-001"));
     assert!(generated_docs_freshness.contains("check_generated_docs_freshness"));
@@ -835,7 +836,7 @@ fn repository_ships_example_workspaces() {
     assert!(python_example_requirement.contains("REQ-PY-001"));
     assert!(csharp_fallback_requirement.contains("REQ-CSHARP-001"));
     assert!(csharp_fallback_readme.contains("CsharpFallbackAcceptanceChecklist"));
-    assert!(csharp_fallback_readme.contains("SYU-trace-language-001"));
+    assert!(csharp_fallback_readme.contains("staged adoption pattern"));
     assert!(docs_first_requirement.contains("REQ-DOCS-001"));
     assert!(docs_first_requirement.contains("DocsFirstAcceptanceChecklist"));
     assert!(docs_first_readme.contains("syu init --template docs-first"));

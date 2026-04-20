@@ -1342,7 +1342,7 @@ mod tests {
                 .iter()
                 .any(|source| source.section == SectionKind::Features)
         );
-        assert_eq!(payload.validation.definition_counts.features, 5);
+        assert_eq!(payload.validation.definition_counts.features, 6);
     }
 
     #[test]

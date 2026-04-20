@@ -238,8 +238,8 @@ current name.
 ### `SYU-trace-language-001` — unsupported trace adapter
 
 **What it means:** The `lang:` key does not match any built-in adapter. Today
-`syu` ships Rust, Python, TypeScript / JavaScript, Shell, YAML, JSON, Markdown,
-and Gitignore adapters.
+`syu` ships Rust, Python, Go, Java, C#, TypeScript / JavaScript, Shell, YAML,
+JSON, Markdown, and Gitignore adapters.
 
 **Fix:** Change the trace to one of those built-in language aliases, or check
 the [trace adapter capability matrix](./trace-adapter-support.md) before you
@@ -293,15 +293,15 @@ implementations:
 ```
 
 Use that lighter mapping until the language gains richer inspection support.
-If the mapping uses an unsupported implementation language such as `csharp`,
+If the mapping uses an unsupported implementation language such as `kotlin`,
 removing `doc_contains` is not enough: those entries still raise
 `SYU-trace-language-001`. Keep the higher-layer spec link in place and wait for
 adapter support before adding the code-level trace.
 The
 [`examples/csharp-fallback` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/csharp-fallback)
-shows one concrete unsupported-language starting point that keeps real C#
-source files in the repository while validated traces stay in supported shell
-and markdown files. The
+shows one concrete staged C# starting point that keeps real C# source files in
+the repository while validated traces stay in supported shell and markdown
+files until you are ready to trace more C# directly. The
 [`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
 and `syu init . --template go-only` remain the concrete Go-first path with real
 source files plus symbol-level trace mappings.

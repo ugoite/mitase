@@ -36,32 +36,43 @@ struct CoverageMap {
     wildcard_files: BTreeSet<PathBuf>,
 }
 
+type DiscoveryFn = fn(&SyuConfig, &Path) -> Result<Vec<CoverageTarget>, Box<Issue>>;
+
+#[derive(Clone, Copy)]
+struct CoverageDiscoverers {
+    rust: DiscoveryFn,
+    python: DiscoveryFn,
+    go: DiscoveryFn,
+    java: DiscoveryFn,
+    csharp: DiscoveryFn,
+    typescript: DiscoveryFn,
+}
+
 pub fn validate_symbol_trace_coverage(workspace: &Workspace, issues: &mut Vec<Issue>) {
     validate_symbol_trace_coverage_with(
         workspace,
         issues,
-        discover_rust_targets,
-        discover_python_targets,
-        discover_go_targets,
-        discover_java_targets,
-        discover_typescript_targets,
+        CoverageDiscoverers {
+            rust: discover_rust_targets,
+            python: discover_python_targets,
+            go: discover_go_targets,
+            java: discover_java_targets,
+            csharp: discover_csharp_targets,
+            typescript: discover_typescript_targets,
+        },
     );
 }
 
 fn validate_symbol_trace_coverage_with(
     workspace: &Workspace,
     issues: &mut Vec<Issue>,
-    rust_discovery: impl Fn(&SyuConfig, &Path) -> Result<Vec<CoverageTarget>, Box<Issue>>,
-    python_discovery: impl Fn(&SyuConfig, &Path) -> Result<Vec<CoverageTarget>, Box<Issue>>,
-    go_discovery: impl Fn(&SyuConfig, &Path) -> Result<Vec<CoverageTarget>, Box<Issue>>,
-    java_discovery: impl Fn(&SyuConfig, &Path) -> Result<Vec<CoverageTarget>, Box<Issue>>,
-    ts_discovery: impl Fn(&SyuConfig, &Path) -> Result<Vec<CoverageTarget>, Box<Issue>>,
+    discoverers: CoverageDiscoverers,
 ) {
     if !workspace.config.validate.require_symbol_trace_coverage {
         return;
     }
 
-    let mut targets = match rust_discovery(&workspace.config, &workspace.root) {
+    let mut targets = match (discoverers.rust)(&workspace.config, &workspace.root) {
         Ok(targets) => targets,
         Err(issue) => {
             issues.push(*issue);
@@ -69,7 +80,7 @@ fn validate_symbol_trace_coverage_with(
         }
     };
 
-    match python_discovery(&workspace.config, &workspace.root) {
+    match (discoverers.python)(&workspace.config, &workspace.root) {
         Ok(python_targets) => targets.extend(python_targets),
         Err(issue) => {
             issues.push(*issue);
@@ -77,7 +88,7 @@ fn validate_symbol_trace_coverage_with(
         }
     }
 
-    match go_discovery(&workspace.config, &workspace.root) {
+    match (discoverers.go)(&workspace.config, &workspace.root) {
         Ok(go_targets) => targets.extend(go_targets),
         Err(issue) => {
             issues.push(*issue);
@@ -85,7 +96,7 @@ fn validate_symbol_trace_coverage_with(
         }
     }
 
-    match java_discovery(&workspace.config, &workspace.root) {
+    match (discoverers.java)(&workspace.config, &workspace.root) {
         Ok(java_targets) => targets.extend(java_targets),
         Err(issue) => {
             issues.push(*issue);
@@ -93,7 +104,15 @@ fn validate_symbol_trace_coverage_with(
         }
     }
 
-    match ts_discovery(&workspace.config, &workspace.root) {
+    match (discoverers.csharp)(&workspace.config, &workspace.root) {
+        Ok(csharp_targets) => targets.extend(csharp_targets),
+        Err(issue) => {
+            issues.push(*issue);
+            return;
+        }
+    }
+
+    match (discoverers.typescript)(&workspace.config, &workspace.root) {
         Ok(ts_targets) => targets.extend(ts_targets),
         Err(issue) => {
             issues.push(*issue);
@@ -790,6 +809,15 @@ fn is_go_test_file(path: &Path) -> bool {
         .is_some_and(|name| name.ends_with("_test.go"))
 }
 
+fn is_csharp_test_file(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.ends_with("Tests.cs") || name.ends_with("Test.cs"))
+        || path
+            .components()
+            .any(|component| component.as_os_str().eq_ignore_ascii_case("tests"))
+}
+
 fn discover_java_targets(
     config: &SyuConfig,
     root: &Path,
@@ -827,6 +855,75 @@ fn discover_java_targets(
         }
 
         for symbol in collect_java_public_symbols(&contents) {
+            targets.push(CoverageTarget {
+                file: relative.clone(),
+                symbol,
+                kind: CoverageTargetKind::PublicSymbol,
+            });
+        }
+    }
+
+    targets.sort_by(|left, right| {
+        (
+            left.file.as_os_str(),
+            left.symbol.as_str(),
+            match left.kind {
+                CoverageTargetKind::PublicSymbol => 0,
+                CoverageTargetKind::TestSymbol => 1,
+            },
+        )
+            .cmp(&(
+                right.file.as_os_str(),
+                right.symbol.as_str(),
+                match right.kind {
+                    CoverageTargetKind::PublicSymbol => 0,
+                    CoverageTargetKind::TestSymbol => 1,
+                },
+            ))
+    });
+    targets.dedup();
+
+    Ok(targets)
+}
+
+fn discover_csharp_targets(
+    config: &SyuConfig,
+    root: &Path,
+) -> Result<Vec<CoverageTarget>, Box<Issue>> {
+    let ignored_paths = normalized_symbol_trace_coverage_ignored_paths(config);
+    let mut files = csharp_files_under(root, &root.join("src"), &ignored_paths)?;
+    let test_files = csharp_files_under(root, &root.join("tests"), &ignored_paths)?;
+    files.extend(test_files);
+    files.sort();
+
+    if files.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut targets = Vec::new();
+    for path in files {
+        let contents = match fs::read_to_string(&path) {
+            Ok(contents) => contents,
+            Err(_) => continue,
+        };
+
+        let relative = path
+            .strip_prefix(root)
+            .expect("scanned file should remain under the workspace root")
+            .to_path_buf();
+
+        if is_csharp_test_file(&path) {
+            for symbol in collect_csharp_test_symbols(&contents) {
+                targets.push(CoverageTarget {
+                    file: relative.clone(),
+                    symbol,
+                    kind: CoverageTargetKind::TestSymbol,
+                });
+            }
+            continue;
+        }
+
+        for symbol in collect_csharp_public_symbols(&contents) {
             targets.push(CoverageTarget {
                 file: relative.clone(),
                 symbol,
@@ -924,6 +1021,123 @@ fn collect_java_test_symbols(contents: &str) -> Vec<String> {
     symbols.into_iter().collect()
 }
 
+fn collect_csharp_public_symbols(contents: &str) -> Vec<String> {
+    let type_regex = Regex::new(
+        r"(?m)^\s*public\s+(?:sealed\s+|abstract\s+|static\s+|partial\s+)*(?:class|interface|enum|record|struct)\s+(?P<name>[A-Z][A-Za-z0-9_]*)\b",
+    )
+    .expect("C# type regex should compile");
+    let method_regex = Regex::new(
+        r"(?m)^\s*public\s+(?:static\s+)?(?:sealed\s+|override\s+|virtual\s+|abstract\s+|async\s+|partial\s+|new\s+)*(?:<[^>{}]+>\s*)?(?:[\w\[\]<>?,.]+\s+)+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(",
+    )
+    .expect("C# method regex should compile");
+    let constructor_regex = Regex::new(r"(?m)^\s*public\s+(?P<name>[A-Z][A-Za-z0-9_]*)\s*\(")
+        .expect("C# constructor regex should compile");
+    let property_regex = Regex::new(
+        r"(?m)^\s*public\s+(?:static\s+)?(?:[\w\[\]<>?,.]+\s+)+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*(?:\{|=>)",
+    )
+    .expect("C# property regex should compile");
+    let field_regex = Regex::new(
+        r"(?m)^\s*public\s+(?:static\s+)?(?:readonly\s+|const\s+)?(?:[\w\[\]<>?,.]+\s+)+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*(?:=|;)",
+    )
+    .expect("C# field regex should compile");
+
+    let mut symbols = BTreeSet::new();
+    for captures in type_regex.captures_iter(contents) {
+        if let Some(name) = captures.name("name") {
+            symbols.insert(name.as_str().to_string());
+        }
+    }
+    for captures in method_regex.captures_iter(contents) {
+        if let Some(name) = captures.name("name") {
+            symbols.insert(name.as_str().to_string());
+        }
+    }
+    for captures in constructor_regex.captures_iter(contents) {
+        if let Some(name) = captures.name("name") {
+            symbols.insert(name.as_str().to_string());
+        }
+    }
+    for captures in property_regex.captures_iter(contents) {
+        if let Some(name) = captures.name("name") {
+            symbols.insert(name.as_str().to_string());
+        }
+    }
+    for captures in field_regex.captures_iter(contents) {
+        if let Some(name) = captures.name("name") {
+            symbols.insert(name.as_str().to_string());
+        }
+    }
+    for symbol in collect_csharp_public_interface_members(contents) {
+        symbols.insert(symbol);
+    }
+    symbols.into_iter().collect()
+}
+
+fn collect_csharp_test_symbols(contents: &str) -> Vec<String> {
+    let attribute_regex = Regex::new(
+        r"(?ms)\[(?:[\w.]+\.)?(?:Fact|Theory|Test|TestCase|TestCaseSource|TestMethod|DataTestMethod)(?:Attribute)?(?:\s*\([^)]*\))?\s*\](?:(?:\s*//[^\n]*)?\s*(?:\r?\n\s*)*(?:\[[^\]]+\]\s*)*)*(?:public|internal|protected|private)\s+(?:async\s+)?(?:Task|ValueTask|void)\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(",
+    )
+    .expect("C# test attribute regex should compile");
+    let legacy_regex = Regex::new(
+        r"(?m)^\s*public\s+(?:async\s+)?(?:Task|ValueTask|void)\s+(?P<name>Test[A-Za-z0-9_]*)\s*\(",
+    )
+    .expect("C# legacy test regex should compile");
+
+    let mut symbols = BTreeSet::new();
+    for captures in attribute_regex.captures_iter(contents) {
+        if let Some(name) = captures.name("name") {
+            symbols.insert(name.as_str().to_string());
+        }
+    }
+    for captures in legacy_regex.captures_iter(contents) {
+        if let Some(name) = captures.name("name") {
+            symbols.insert(name.as_str().to_string());
+        }
+    }
+    symbols.into_iter().collect()
+}
+
+fn collect_csharp_public_interface_members(contents: &str) -> Vec<String> {
+    let interface_start_regex =
+        Regex::new(r"(?m)^\s*public\s+(?:partial\s+)?interface\s+[A-Z][A-Za-z0-9_]*\b[^{]*\{")
+            .expect("C# interface regex should compile");
+    let method_regex =
+        Regex::new(r"^\s*(?:async\s+)?(?:[\w\[\]<>?,.]+\s+)+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(")
+            .expect("C# interface method regex should compile");
+    let property_regex =
+        Regex::new(r"^\s*(?:[\w\[\]<>?,.]+\s+)+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*(?:\{|=>)")
+            .expect("C# interface property regex should compile");
+
+    let mut symbols = BTreeSet::new();
+    for mat in interface_start_regex.find_iter(contents) {
+        let body_start = mat.end() - 1;
+        let Some(body_end) = find_matching_brace(contents, body_start) else {
+            continue;
+        };
+        let body = &contents[body_start + 1..body_end];
+        let top_level = collect_java_top_level_lines(body);
+        for line in top_level.lines() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("private ") || trimmed.is_empty() {
+                continue;
+            }
+            if let Some(captures) = method_regex.captures(trimmed) {
+                if let Some(name) = captures.name("name") {
+                    symbols.insert(name.as_str().to_string());
+                }
+                continue;
+            }
+            if let Some(captures) = property_regex.captures(trimmed)
+                && let Some(name) = captures.name("name")
+            {
+                symbols.insert(name.as_str().to_string());
+            }
+        }
+    }
+
+    symbols.into_iter().collect()
+}
+
 fn collect_java_public_interface_members(contents: &str) -> Vec<String> {
     let interface_start_regex = Regex::new(
         r"(?m)^\s*public\s+(?:sealed\s+|non-sealed\s+)?interface\s+[A-Z][A-Za-z0-9_]*\b[^{]*\{",
@@ -1015,6 +1229,32 @@ fn java_files_under(
 
     let mut files = Vec::new();
     collect_files_recursive_by_extension(workspace_root, root, "java", ignored_paths, &mut files)
+        .map_err(|error| {
+            Box::new(Issue::error(
+                "SYU-coverage-walk-001",
+                "trace coverage inventory",
+                Some(root.display().to_string()),
+                format!(
+                    "Failed to walk `{}` while building trace coverage inventory: {error}",
+                    root.display()
+                ),
+                Some("Fix the directory layout or disable `validate.require_symbol_trace_coverage` until the workspace can be scanned.".to_string()),
+            ))
+        })?;
+    Ok(files)
+}
+
+fn csharp_files_under(
+    workspace_root: &Path,
+    root: &Path,
+    ignored_paths: &BTreeSet<PathBuf>,
+) -> Result<Vec<PathBuf>, Box<Issue>> {
+    if !root.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut files = Vec::new();
+    collect_files_recursive_by_extension(workspace_root, root, "cs", ignored_paths, &mut files)
         .map_err(|error| {
             Box::new(Issue::error(
                 "SYU-coverage-walk-001",
@@ -1176,14 +1416,19 @@ mod tests {
         path::{Path, PathBuf},
     };
 
+    #[cfg(unix)]
+    use std::os::unix::fs::symlink;
+
     use tempfile::tempdir;
 
     use super::{
-        CoverageTargetKind, collect_feature_coverage, collect_files_recursive_by_extension,
-        collect_go_public_symbols, collect_go_test_symbols, collect_java_public_symbols,
-        collect_java_test_symbols, collect_requirement_coverage, discover_go_targets,
-        discover_java_targets, discover_python_targets, discover_rust_targets,
-        discover_typescript_targets, go_files_under, java_files_under, normalize_relative_path,
+        CoverageDiscoverers, CoverageTargetKind, collect_csharp_public_symbols,
+        collect_csharp_test_symbols, collect_feature_coverage,
+        collect_files_recursive_by_extension, collect_go_public_symbols, collect_go_test_symbols,
+        collect_java_public_symbols, collect_java_test_symbols, collect_requirement_coverage,
+        csharp_files_under, discover_csharp_targets, discover_go_targets, discover_java_targets,
+        discover_python_targets, discover_rust_targets, discover_typescript_targets,
+        go_files_under, java_files_under, normalize_relative_path,
         normalized_symbol_trace_coverage_ignored_paths, path_matches_ignored_generated_directory,
         python_files_under, rust_files_under, typescript_files_under,
         validate_symbol_trace_coverage, validate_symbol_trace_coverage_with,
@@ -1545,6 +1790,132 @@ mod tests {
     }
 
     #[test]
+    fn discover_csharp_targets_collects_public_symbols_and_tests() {
+        let tempdir = tempdir().expect("tempdir");
+        fs::create_dir_all(tempdir.path().join("src")).expect("src");
+        fs::create_dir_all(tempdir.path().join("tests")).expect("tests");
+        fs::write(
+            tempdir.path().join("src/FeatureTrace.cs"),
+            "public interface FeatureTrace {\n    string EXPORTED_NAME { get; }\n    void FeatureTraceCSharp();\n}\npublic record FeatureTraceRecord(string Value);\npublic class FeatureTraceService {\n    public const string TraceLabel = \"ok\";\n    public Task FeatureTraceAsync() => Task.CompletedTask;\n    private void HiddenHelper() {}\n}\n",
+        )
+        .expect("csharp source");
+        fs::write(
+            tempdir.path().join("tests/TraceabilityTests.cs"),
+            "using Xunit;\n\npublic class TraceabilityTests {\n    [Fact]\n    public void ReqTraceCSharpTest() {}\n\n    [Theory]\n    public async Task ReqTraceCSharpTheory() => await Task.CompletedTask;\n\n    public void HelperCase() {}\n}\n",
+        )
+        .expect("csharp tests");
+
+        let targets =
+            discover_csharp_targets(&SyuConfig::default(), tempdir.path()).expect("targets");
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("src/FeatureTrace.cs")
+                && target.symbol == "FeatureTrace"
+                && target.kind == CoverageTargetKind::PublicSymbol
+        }));
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("src/FeatureTrace.cs")
+                && target.symbol == "FeatureTraceRecord"
+                && target.kind == CoverageTargetKind::PublicSymbol
+        }));
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("src/FeatureTrace.cs")
+                && target.symbol == "FeatureTraceService"
+                && target.kind == CoverageTargetKind::PublicSymbol
+        }));
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("src/FeatureTrace.cs")
+                && target.symbol == "FeatureTraceCSharp"
+                && target.kind == CoverageTargetKind::PublicSymbol
+        }));
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("src/FeatureTrace.cs")
+                && target.symbol == "TraceLabel"
+                && target.kind == CoverageTargetKind::PublicSymbol
+        }));
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("tests/TraceabilityTests.cs")
+                && target.symbol == "ReqTraceCSharpTest"
+                && target.kind == CoverageTargetKind::TestSymbol
+        }));
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("tests/TraceabilityTests.cs")
+                && target.symbol == "ReqTraceCSharpTheory"
+                && target.kind == CoverageTargetKind::TestSymbol
+        }));
+        assert!(!targets.iter().any(|target| target.symbol == "HelperCase"));
+        assert!(!targets.iter().any(|target| target.symbol == "HiddenHelper"));
+    }
+
+    #[test]
+    fn collect_csharp_public_symbols_covers_properties_fields_and_methods() {
+        let symbols = collect_csharp_public_symbols(
+            "public interface FeatureTrace {\n    string EXPORTED_NAME { get; }\n    void FeatureTraceCSharp();\n}\npublic class FeatureTraceService {\n    public FeatureTraceService() {}\n    public const string TraceLabel = \"ok\";\n    public Task FeatureTraceAsync() => Task.CompletedTask;\n}\n",
+        );
+
+        assert_eq!(
+            symbols,
+            vec![
+                "EXPORTED_NAME",
+                "FeatureTrace",
+                "FeatureTraceAsync",
+                "FeatureTraceCSharp",
+                "FeatureTraceService",
+                "TraceLabel"
+            ]
+        );
+    }
+
+    #[test]
+    fn collect_csharp_test_symbols_covers_xunit_nunit_and_mstest() {
+        let symbols = collect_csharp_test_symbols(
+            "using Xunit;\nusing NUnit.Framework;\nusing Microsoft.VisualStudio.TestTools.UnitTesting;\n\npublic class TraceabilityTests {\n    [Fact]\n    public void ReqTraceCSharpFact() {}\n\n    [Test]\n    public void ReqTraceCSharpNUnit() {}\n\n    [TestMethod]\n    public async Task ReqTraceCSharpMsTest() => await Task.CompletedTask;\n\n    public void TestLegacyTrace() {}\n}\n",
+        );
+
+        assert_eq!(
+            symbols,
+            vec![
+                "ReqTraceCSharpFact",
+                "ReqTraceCSharpMsTest",
+                "ReqTraceCSharpNUnit",
+                "TestLegacyTrace"
+            ]
+        );
+    }
+
+    #[test]
+    fn collect_csharp_public_symbols_ignores_unclosed_interfaces() {
+        let symbols = collect_csharp_public_symbols(
+            "public interface FeatureTrace {\n    string EXPORTED_NAME { get; }\n",
+        );
+
+        assert_eq!(symbols, vec!["FeatureTrace"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn discover_csharp_targets_skips_unreadable_symlinks() {
+        let tempdir = tempdir().expect("tempdir");
+        fs::create_dir_all(tempdir.path().join("src")).expect("src");
+        fs::create_dir_all(tempdir.path().join("tests")).expect("tests");
+        symlink(
+            tempdir.path().join("missing/FeatureTrace.cs"),
+            tempdir.path().join("src/BrokenTrace.cs"),
+        )
+        .expect("symlink");
+        fs::write(
+            tempdir.path().join("tests/TraceabilityTests.cs"),
+            "using Xunit;\n\npublic class TraceabilityTests {\n    [Fact]\n    public void ReqTraceCSharpTest() {}\n}\n",
+        )
+        .expect("csharp tests");
+
+        let targets =
+            discover_csharp_targets(&SyuConfig::default(), tempdir.path()).expect("targets");
+
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].symbol, "ReqTraceCSharpTest");
+    }
+
+    #[test]
     fn rust_files_under_handles_missing_and_invalid_roots() {
         let tempdir = tempdir().expect("tempdir");
         let ignored_paths = BTreeSet::new();
@@ -1561,6 +1932,27 @@ mod tests {
         let file_root = tempdir.path().join("not-a-dir.rs");
         fs::write(&file_root, "pub fn nope() {}\n").expect("file");
         let issue = rust_files_under(tempdir.path(), &file_root, &ignored_paths)
+            .expect_err("file roots should fail");
+        assert_eq!(issue.code, "SYU-coverage-walk-001");
+    }
+
+    #[test]
+    fn csharp_files_under_handles_missing_and_invalid_roots() {
+        let tempdir = tempdir().expect("tempdir");
+        let ignored_paths = BTreeSet::new();
+        assert!(
+            csharp_files_under(
+                tempdir.path(),
+                &tempdir.path().join("missing"),
+                &ignored_paths
+            )
+            .expect("missing directories should be ignored")
+            .is_empty()
+        );
+
+        let file_root = tempdir.path().join("not-a-dir.cs");
+        fs::write(&file_root, "public class BrokenTrace {}\n").expect("file");
+        let issue = csharp_files_under(tempdir.path(), &file_root, &ignored_paths)
             .expect_err("file roots should fail");
         assert_eq!(issue.code, "SYU-coverage-walk-001");
     }
@@ -2147,19 +2539,22 @@ mod tests {
         validate_symbol_trace_coverage_with(
             &workspace,
             &mut issues,
-            no_targets,
-            |_config, _root| {
-                Err(Box::new(crate::model::Issue::error(
-                    "SYU-coverage-walk-001",
-                    "trace coverage inventory",
-                    None,
-                    "injected python discovery error".to_string(),
-                    None,
-                )))
+            CoverageDiscoverers {
+                rust: no_targets,
+                python: |_config, _root| {
+                    Err(Box::new(crate::model::Issue::error(
+                        "SYU-coverage-walk-001",
+                        "trace coverage inventory",
+                        None,
+                        "injected python discovery error".to_string(),
+                        None,
+                    )))
+                },
+                go: no_targets,
+                java: no_java_targets,
+                csharp: no_targets,
+                typescript: discover_typescript_targets,
             },
-            no_targets,
-            no_java_targets,
-            discover_typescript_targets,
         );
 
         assert_eq!(issues.len(), 1);
@@ -2185,19 +2580,22 @@ mod tests {
         validate_symbol_trace_coverage_with(
             &workspace,
             &mut issues,
-            |_config, _root| Ok(Vec::new()),
-            |_config, _root| Ok(Vec::new()),
-            |_config, _root| {
-                Err(Box::new(crate::model::Issue::error(
-                    "SYU-coverage-walk-001",
-                    "trace coverage inventory",
-                    None,
-                    "injected go discovery error".to_string(),
-                    None,
-                )))
+            CoverageDiscoverers {
+                rust: |_config, _root| Ok(Vec::new()),
+                python: |_config, _root| Ok(Vec::new()),
+                go: |_config, _root| {
+                    Err(Box::new(crate::model::Issue::error(
+                        "SYU-coverage-walk-001",
+                        "trace coverage inventory",
+                        None,
+                        "injected go discovery error".to_string(),
+                        None,
+                    )))
+                },
+                java: discover_java_targets,
+                csharp: no_targets,
+                typescript: discover_typescript_targets,
             },
-            discover_java_targets,
-            discover_typescript_targets,
         );
 
         assert_eq!(issues.len(), 1);
@@ -2223,19 +2621,63 @@ mod tests {
         validate_symbol_trace_coverage_with(
             &workspace,
             &mut issues,
-            |_config, _root| Ok(Vec::new()),
-            |_config, _root| Ok(Vec::new()),
-            |_config, _root| Ok(Vec::new()),
-            |_config, _root| {
-                Err(Box::new(crate::model::Issue::error(
-                    "SYU-coverage-walk-001",
-                    "trace coverage inventory",
-                    None,
-                    "injected java discovery error".to_string(),
-                    None,
-                )))
+            CoverageDiscoverers {
+                rust: |_config, _root| Ok(Vec::new()),
+                python: |_config, _root| Ok(Vec::new()),
+                go: |_config, _root| Ok(Vec::new()),
+                java: |_config, _root| {
+                    Err(Box::new(crate::model::Issue::error(
+                        "SYU-coverage-walk-001",
+                        "trace coverage inventory",
+                        None,
+                        "injected java discovery error".to_string(),
+                        None,
+                    )))
+                },
+                csharp: no_targets,
+                typescript: discover_typescript_targets,
             },
-            discover_typescript_targets,
+        );
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].code, "SYU-coverage-walk-001");
+    }
+
+    #[test]
+    fn validate_with_csharp_discovery_error_records_issue_and_returns() {
+        let tempdir = tempdir().expect("tempdir");
+        let mut config = SyuConfig::default();
+        config.validate.require_symbol_trace_coverage = true;
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("docs/syu"),
+            config,
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+
+        let mut issues = Vec::new();
+        validate_symbol_trace_coverage_with(
+            &workspace,
+            &mut issues,
+            CoverageDiscoverers {
+                rust: no_targets,
+                python: no_targets,
+                go: no_targets,
+                java: no_java_targets,
+                csharp: |_config, _root| {
+                    Err(Box::new(crate::model::Issue::error(
+                        "SYU-coverage-walk-001",
+                        "trace coverage inventory",
+                        None,
+                        "injected csharp discovery error".to_string(),
+                        None,
+                    )))
+                },
+                typescript: discover_typescript_targets,
+            },
         );
 
         assert_eq!(issues.len(), 1);
@@ -2261,18 +2703,21 @@ mod tests {
         validate_symbol_trace_coverage_with(
             &workspace,
             &mut issues,
-            no_targets,
-            no_targets,
-            no_targets,
-            no_java_targets,
-            |_config, _root| {
-                Err(Box::new(crate::model::Issue::error(
-                    "SYU-coverage-walk-001",
-                    "trace coverage inventory",
-                    None,
-                    "injected typescript discovery error".to_string(),
-                    None,
-                )))
+            CoverageDiscoverers {
+                rust: no_targets,
+                python: no_targets,
+                go: no_targets,
+                java: no_java_targets,
+                csharp: no_targets,
+                typescript: |_config, _root| {
+                    Err(Box::new(crate::model::Issue::error(
+                        "SYU-coverage-walk-001",
+                        "trace coverage inventory",
+                        None,
+                        "injected typescript discovery error".to_string(),
+                        None,
+                    )))
+                },
             },
         );
 

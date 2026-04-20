@@ -616,7 +616,7 @@ Key behaviors:
 - `validate.allow_planned` controls whether `planned` requirements and features are allowed at all
 - `validate.require_non_orphaned_items` turns isolated layered definitions into validation errors
 - `validate.require_reciprocal_links` keeps adjacent-layer backlinks mandatory by default while still allowing phased migration when disabled
-- `validate.require_symbol_trace_coverage` opt-in checks that public Rust, Python, Go, Java, and TypeScript/JavaScript symbols belong to features and tests belong to requirements, while still skipping configured repository-relative generated paths
+- `validate.require_symbol_trace_coverage` opt-in checks that public Rust, Python, Go, Java, C#, and TypeScript/JavaScript symbols belong to features and tests belong to requirements, while still skipping configured repository-relative generated paths
 - `report.output` sets the default `syu report` destination while `--output` still takes precedence
 - `app.bind` and `app.port` define the default local browser-app address and port unless `--bind` / `--port` override them
 - `report.output` sets the default `syu report` destination while `--output` still takes precedence
@@ -676,9 +676,10 @@ The repository ships working example projects:
 
 `docs-first`, `rust-only`, `python-only`, `go-only`, `java-only`, and
 `polyglot` match `syu init --template ...` starters directly.
-`csharp-fallback` remains the reference-only example for repositories whose
-main implementation language is still unsupported, and `team-scale` remains a
-reference-only example for studying a larger split-by-area repository shape.
+`csharp-fallback` remains the reference-only example for teams that want a
+lighter staged C# adoption path before tracing every C# symbol directly, and
+`team-scale` remains a reference-only example for studying a larger
+split-by-area repository shape.
 
 Each one is validated in the automated test suite. If you are deciding between a
 checked-in example and a scaffold template, start with

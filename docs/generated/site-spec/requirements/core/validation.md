@@ -93,7 +93,7 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
     - |
       The `validate` command MUST verify requirement-to-test and
       feature-to-implementation traceability in the languages used by `syu`
-      today: Rust, Python, Go, Java, and TypeScript/JavaScript. A declared
+      today: Rust, Python, Go, Java, C#, and TypeScript/JavaScript. A declared
       trace is valid only when the file exists, the symbol exists, the trace
       path uses canonical repository-relative form, and any `doc_contains`
       snippets are present in the symbol documentation when the declared
@@ -106,11 +106,12 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       duplicate trace mappings inside a single language list, support wildcard
       file ownership, and provide an optional mode that requires every public
       symbol (non-underscore-prefixed for Python, exported identifiers for Go,
-      public Java types and members, `pub` for Rust, exported for
-      TypeScript/JavaScript) and every test symbol (`test_*` functions for
-      Python, `Test*`, `Benchmark*`, `Fuzz*`, and `Example*` functions in Go
-      `_test.go` files, JUnit `@Test` methods or legacy `test*` methods for
-      Java, `#[test]` for Rust, `test*`-prefixed functions for
+      public Java types and members, public C# types and members, `pub` for
+      Rust, exported for TypeScript/JavaScript) and every test symbol
+      (`test_*` functions for Python, `Test*`, `Benchmark*`, `Fuzz*`, and
+      `Example*` functions in Go `_test.go` files, JUnit `@Test` methods or
+      legacy `test*` methods for Java, xUnit/NUnit/MSTest-attributed methods
+      for C#, `#[test]` for Rust, `test*`-prefixed functions for
       TypeScript/JavaScript) in repository source and test roots to belong to
       some feature or requirement respectively. That inventory MUST ignore
       configured repository-relative generated paths, defaulting to common
@@ -315,7 +316,7 @@ requirements:
     description: |
       The `validate` command MUST verify requirement-to-test and
       feature-to-implementation traceability in the languages used by `syu`
-      today: Rust, Python, Go, Java, and TypeScript/JavaScript. A declared
+      today: Rust, Python, Go, Java, C#, and TypeScript/JavaScript. A declared
       trace is valid only when the file exists, the symbol exists, the trace
       path uses canonical repository-relative form, and any `doc_contains`
       snippets are present in the symbol documentation when the declared
@@ -328,11 +329,12 @@ requirements:
       duplicate trace mappings inside a single language list, support wildcard
       file ownership, and provide an optional mode that requires every public
       symbol (non-underscore-prefixed for Python, exported identifiers for Go,
-      public Java types and members, `pub` for Rust, exported for
-      TypeScript/JavaScript) and every test symbol (`test_*` functions for
-      Python, `Test*`, `Benchmark*`, `Fuzz*`, and `Example*` functions in Go
-      `_test.go` files, JUnit `@Test` methods or legacy `test*` methods for
-      Java, `#[test]` for Rust, `test*`-prefixed functions for
+      public Java types and members, public C# types and members, `pub` for
+      Rust, exported for TypeScript/JavaScript) and every test symbol
+      (`test_*` functions for Python, `Test*`, `Benchmark*`, `Fuzz*`, and
+      `Example*` functions in Go `_test.go` files, JUnit `@Test` methods or
+      legacy `test*` methods for Java, xUnit/NUnit/MSTest-attributed methods
+      for C#, `#[test]` for Rust, `test*`-prefixed functions for
       TypeScript/JavaScript) in repository source and test roots to belong to
       some feature or requirement respectively. That inventory MUST ignore
       configured repository-relative generated paths, defaulting to common

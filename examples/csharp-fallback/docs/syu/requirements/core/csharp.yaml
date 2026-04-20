@@ -3,8 +3,8 @@ prefix: REQ-CSHARP
 
 requirements:
   - id: REQ-CSHARP-001
-    title: Unsupported-language repositories should be able to adopt syu without fake code-level traces
-    description: The fallback example should keep real C# files in the repository while validating supported evidence around them.
+    title: C# repositories should be able to adopt syu without tracing every code file immediately
+    description: The staged-adoption example should keep real C# files in the repository while validating supported evidence around them.
     priority: high
     status: implemented
     linked_policies:

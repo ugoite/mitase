@@ -169,7 +169,7 @@ fn check_command_accepts_passing_workspace() {
     assert!(stdout.contains("(workspace, graph, delivery, trace)"));
     assert!(stdout.contains("validate.require_symbol_trace_coverage=false"));
     assert!(stdout.contains(
-        "traceability: requirements=5/5 traces validated; features=5/5 traces validated"
+        "traceability: requirements=6/6 traces validated; features=6/6 traces validated"
     ));
     assert!(
         stdout.contains("What to do next:"),
@@ -520,8 +520,8 @@ fn check_command_verifies_requirement_test_traceability_in_all_supported_languag
 
     let json: serde_json::Value =
         serde_json::from_slice(&output.stdout).expect("output should be valid JSON");
-    assert_eq!(json["trace_summary"]["requirement_traces"]["declared"], 5);
-    assert_eq!(json["trace_summary"]["requirement_traces"]["validated"], 5);
+    assert_eq!(json["trace_summary"]["requirement_traces"]["declared"], 6);
+    assert_eq!(json["trace_summary"]["requirement_traces"]["validated"], 6);
 }
 
 #[test]
@@ -545,8 +545,8 @@ fn check_command_verifies_feature_implementation_traceability_in_all_supported_l
 
     let json: serde_json::Value =
         serde_json::from_slice(&output.stdout).expect("output should be valid JSON");
-    assert_eq!(json["trace_summary"]["feature_traces"]["declared"], 5);
-    assert_eq!(json["trace_summary"]["feature_traces"]["validated"], 5);
+    assert_eq!(json["trace_summary"]["feature_traces"]["declared"], 6);
+    assert_eq!(json["trace_summary"]["feature_traces"]["validated"], 6);
 }
 
 #[test]

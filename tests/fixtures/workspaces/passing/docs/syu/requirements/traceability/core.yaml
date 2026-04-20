@@ -81,3 +81,19 @@ requirements:
         - file: java/TraceabilityTest.java
           symbols:
             - reqTraceJavaTest
+
+  - id: REQ-TRACE-006
+    title: C# requirement trace
+    description: C# requirements should point to C# test files.
+    priority: high
+    status: implemented
+    linked_policies:
+      - POL-TRACE-001
+      - POL-TRACE-002
+    linked_features:
+      - FEAT-TRACE-006
+    tests:
+      csharp:
+        - file: csharp/TraceabilityTests.cs
+          symbols:
+            - ReqTraceCSharpTest
