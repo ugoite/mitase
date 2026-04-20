@@ -4,6 +4,7 @@
 // FEAT-SEARCH-001
 // FEAT-TRACE-001
 // FEAT-BROWSE-001
+// FEAT-LSP-001
 // REQ-CORE-021
 // REQ-CORE-023
 // REQ-CORE-024
@@ -14,6 +15,7 @@ pub mod config;
 pub mod coverage;
 pub mod inspect;
 pub mod language;
+mod lsp;
 pub mod model;
 pub mod report;
 pub mod rules;
@@ -75,6 +77,7 @@ enum Dispatch {
     Init(cli::InitArgs),
     Templates(cli::TemplatesArgs),
     Add(cli::AddArgs),
+    Lsp,
 }
 
 fn dispatch(cli: cli::Cli, stdin_is_terminal: bool, stdout_is_terminal: bool) -> Dispatch {
@@ -96,6 +99,7 @@ fn dispatch(cli: cli::Cli, stdin_is_terminal: bool, stdout_is_terminal: bool) ->
         Some(cli::Commands::Init(args)) => Dispatch::Init(args),
         Some(cli::Commands::Templates(args)) => Dispatch::Templates(args),
         Some(cli::Commands::Add(args)) => Dispatch::Add(args),
+        Some(cli::Commands::Lsp) => Dispatch::Lsp,
     }
 }
 
@@ -120,6 +124,10 @@ fn run_dispatch(dispatch: Dispatch) -> Result<i32> {
         Dispatch::Init(args) => command::init::run_init_command(&args),
         Dispatch::Templates(args) => command::templates::run_templates_command(&args),
         Dispatch::Add(args) => command::add::run_add_command(&args),
+        Dispatch::Lsp => {
+            lsp::run_lsp_server()?;
+            Ok(0)
+        }
     }
 }
 

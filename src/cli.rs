@@ -204,6 +204,8 @@ pub enum Commands {
         after_help = ADD_AFTER_HELP
     )]
     Add(AddArgs),
+    #[command(about = "Start LSP server for editor integrations (JSON-RPC 2.0 over stdio)")]
+    Lsp,
 }
 
 #[derive(Debug, Clone, Args)]
