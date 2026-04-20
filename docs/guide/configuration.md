@@ -202,6 +202,8 @@ Controls the default address that `syu app` binds to.
 
 Use `127.0.0.1` for a localhost-only browser app or `0.0.0.0` when a demo or
 container workflow needs the server to be reachable from outside the process.
+When the configured address is non-loopback, `syu app` still requires the
+explicit `--allow-remote` flag before it starts serving workspace data.
 
 ### `app.port`
 

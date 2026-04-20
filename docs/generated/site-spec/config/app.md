@@ -40,7 +40,9 @@ description: "Generated reference for docs/syu/config/app.yaml"
     - |
       `syu app` uses this address when `--bind` is not passed. Repositories can
       keep a checked-in default when contributors usually inspect the app through
-      a shared local workflow or demo setup.
+      a shared local workflow or demo setup. Non-loopback addresses such as
+      `0.0.0.0` still require the explicit `--allow-remote` CLI opt-in before
+      the server starts.
 - **key**: app.port
   - **type**: integer
   - **default**: 3000
@@ -74,7 +76,9 @@ items:
     description: |
       `syu app` uses this address when `--bind` is not passed. Repositories can
       keep a checked-in default when contributors usually inspect the app through
-      a shared local workflow or demo setup.
+      a shared local workflow or demo setup. Non-loopback addresses such as
+      `0.0.0.0` still require the explicit `--allow-remote` CLI opt-in before
+      the server starts.
   - key: app.port
     type: integer
     default: 3000
