@@ -27,6 +27,9 @@ command feature:
 You can follow the same flow in any repository by swapping in your own spec ID,
 file path, and symbol name.
 
+If you only need the short-form command reminder while you review, keep the
+[command card](./command-card.md) open alongside this guide.
+
 ## 1. Start from the spec item under review
 
 Open the feature or requirement that the PR says it changed:

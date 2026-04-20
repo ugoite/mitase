@@ -50,6 +50,12 @@ const journeys = [
     to: '/docs/guide/getting-started'
   },
   {
+    title: 'Keep a command card open',
+    description:
+      'Use one compact docs-site page for the core install, init, validate, browse, app, and reviewer commands.',
+    to: '/docs/guide/command-card'
+  },
+  {
     title: 'Explore the browser UI',
     description:
       'Take the visual-first path through `syu app` when you want tabs, trace links, and validation context in one browser view.',
