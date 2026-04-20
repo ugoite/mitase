@@ -43,6 +43,7 @@ Examples:
   syu init . --interactive
   syu init . --id-prefix store
   syu init . --template rust-only
+  syu init . --template typescript-only
   syu init . --template go-only
   syu init . --template java-only
   syu init . --spec-root docs/spec
@@ -619,6 +620,8 @@ pub enum StarterTemplate {
     PythonOnly,
     GoOnly,
     JavaOnly,
+    #[value(name = "typescript-only")]
+    TypeScriptOnly,
     Polyglot,
 }
 
@@ -631,6 +634,7 @@ impl StarterTemplate {
             Self::PythonOnly => "python-only",
             Self::GoOnly => "go-only",
             Self::JavaOnly => "java-only",
+            Self::TypeScriptOnly => "typescript-only",
             Self::Polyglot => "polyglot",
         }
     }
@@ -697,6 +701,7 @@ mod tests {
         assert_eq!(StarterTemplate::PythonOnly.label(), "python-only");
         assert_eq!(StarterTemplate::GoOnly.label(), "go-only");
         assert_eq!(StarterTemplate::JavaOnly.label(), "java-only");
+        assert_eq!(StarterTemplate::TypeScriptOnly.label(), "typescript-only");
         assert_eq!(StarterTemplate::Polyglot.label(), "polyglot");
         assert_eq!(ValidationSeverityFilter::Error.as_str(), "error");
         assert_eq!(ValidationSeverityFilter::Warning.as_str(), "warning");

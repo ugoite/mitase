@@ -30,6 +30,7 @@ whether you should scaffold a template or open one of the repository examples.
 | `generic` | Template only | the shortest neutral scaffold when you do not want language-specific starter copy yet | `syu init .` |
 | `go-only` | Template + example | Go-first repositories that want starter IDs, file names, a minimal `go.mod`, and small Go source/test files from the first scaffold | `syu init . --template go-only` or `examples/go-only` |
 | `java-only` | Template + example | Java-first repositories that want starter IDs, file names, a minimal `pom.xml`, and small Java source/test files from the first scaffold | `syu init . --template java-only` or `examples/java-only` |
+| `typescript-only` | Template + example | TypeScript-first repositories that want starter IDs, file names, a minimal `package.json`, checked-in Node runtime metadata, `tsconfig.json`, and small TypeScript source/test files from the first scaffold | `syu init . --template typescript-only` or `examples/typescript-only` |
 | `rust-only` | Template + example | Rust-first repositories that want starter IDs, file names, and copy tuned for Rust work | `syu init . --template rust-only` or `examples/rust-only` |
 | `python-only` | Template + example | Python-first repositories that want the same tuned starter shape for Python workflows | `syu init . --template python-only` or `examples/python-only` |
 | `polyglot` | Template + example | repositories that already expect multiple languages and want the starter text to say that from the first commit | `syu init . --template polyglot` or `examples/polyglot` |
@@ -65,7 +66,7 @@ scaffold wholesale.
 
 1. **Fastest path into your own repository**: run `syu init .`, then switch to a
    language-specific template only if the generic starter feels too abstract.
-2. **I already know the repo is docs-first / Rust-first / Python-first / Go-first / Java-first / polyglot**: start
+2. **I already know the repo is docs-first / Rust-first / Python-first / Go-first / Java-first / TypeScript-first / polyglot**: start
    with the matching template, then compare against the matching example when
    you want a fuller repository story.
 3. **I want a staged C# adoption path instead of tracing every C# file on day one**:
@@ -77,7 +78,10 @@ scaffold wholesale.
 5. **I am Java-first and want to inspect native Java tracing before I scaffold
    anything**: open `examples/java-only` first, then copy the shape you need into
    your own repository.
-6. **I am still deciding whether `syu` fits my repo**: read the example first so
+6. **I am TypeScript-first and want to inspect native TypeScript tracing before I scaffold
+   anything**: open `examples/typescript-only` first, then copy the shape you need into
+   your own repository.
+7. **I am still deciding whether `syu` fits my repo**: read the example first so
    you can inspect a working shape without creating files locally yet.
 
 ## Continue with these pages

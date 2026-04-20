@@ -155,7 +155,7 @@ syu init . --id-prefix store
 ```
 
 Need a closer starting point for a repository that is already docs-first,
-Rust-first, Python-first, Go-first, Java-first, or polyglot?
+Rust-first, Python-first, Go-first, Java-first, TypeScript-first, or polyglot?
 
 ```bash
 syu templates
@@ -163,6 +163,7 @@ syu init . --template docs-first
 syu init . --template rust-only
 syu init . --template go-only
 syu init . --template java-only
+syu init . --template typescript-only
 ```
 
 Run `syu templates` first if you want the starter names, one-line descriptions,
@@ -511,6 +512,7 @@ The repository includes complete examples:
 - `examples/python-only`
 - `examples/go-only`
 - `examples/java-only`
+- `examples/typescript-only`
 - `examples/polyglot`
 
 If one of those examples is already close to your repository, use the matching
@@ -532,6 +534,10 @@ it scaffolds the same minimal spec plus `pom.xml`,
 `src/test/java/example/app/OrderSummaryTest.java`, while the checked-in example
 shows the same shape in a repository you can inspect before generating files
 locally.
+Use `syu init . --template typescript-only` when your repository is TypeScript-first today:
+it scaffolds the same minimal spec plus `package.json`, `tsconfig.json`,
+`src/app.ts`, and `src/app.test.ts`, while the checked-in example shows the same
+shape in a repository you can inspect before generating files locally.
 
 For a side-by-side decision table that explains which paths are template-backed,
 example-backed, or both, see the

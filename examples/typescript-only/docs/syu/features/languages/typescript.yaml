@@ -1,0 +1,15 @@
+category: TypeScript Features
+version: 1
+
+features:
+  - id: FEAT-TS-001
+    title: Bootstrap the example TypeScript spec workspace
+    summary: Provide a TypeScript-oriented starter structure with one traced implementation symbol.
+    status: implemented
+    linked_requirements:
+      - REQ-TS-001
+    implementations:
+      typescript:
+        - file: src/app.ts
+          symbols:
+            - typescriptFeature

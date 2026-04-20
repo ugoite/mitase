@@ -42,6 +42,11 @@ fn templates_command_lists_all_supported_templates_in_text_output() {
             "java-only\ttemplate-and-example\texamples/java-only\tStarter for Java-first repos with Java-oriented IDs plus a minimal pom.xml, source, and test files."
         )
     );
+    assert!(
+        stdout.contains(
+            "typescript-only\ttemplate-and-example\texamples/typescript-only\tStarter for TypeScript-first repos with TypeScript-oriented IDs plus a minimal package.json, source, and test files."
+        )
+    );
     assert!(stdout.contains(
         "polyglot\ttemplate-and-example\texamples/polyglot\tStarter for mixed-language repos"
     ));
@@ -67,7 +72,7 @@ fn templates_command_supports_json_output() {
     let templates = json["templates"]
         .as_array()
         .expect("templates should be an array");
-    assert_eq!(templates.len(), 7);
+    assert_eq!(templates.len(), 8);
     assert_eq!(templates[0]["name"], "generic");
     assert_eq!(templates[0]["relationship"], "starter-only");
     assert_eq!(templates[1]["name"], "docs-first");
@@ -78,5 +83,7 @@ fn templates_command_supports_json_output() {
     assert_eq!(templates[4]["related_example"], "examples/go-only");
     assert_eq!(templates[5]["name"], "java-only");
     assert_eq!(templates[5]["related_example"], "examples/java-only");
-    assert_eq!(templates[6]["name"], "polyglot");
+    assert_eq!(templates[6]["name"], "typescript-only");
+    assert_eq!(templates[6]["related_example"], "examples/typescript-only");
+    assert_eq!(templates[7]["name"], "polyglot");
 }
