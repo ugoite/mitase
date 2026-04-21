@@ -15,6 +15,13 @@ history.
 The commands below answer those questions with `show`/`relate`, `trace`, and
 `log`.
 
+If you review from the terminal often, generate shell completions once so spec
+IDs and subcommands stay close at hand:
+
+```bash
+syu completion bash > ~/.local/share/bash-completion/completions/syu
+```
+
 ## Example review target
 
 This repository already ships a good self-hosted example in the validation
@@ -138,6 +145,10 @@ when the review is anchored on one concrete requirement or feature and you want
 the output filtered down to that item after the full workspace validation run.
 It is a review-focused view over the collected result, not a smaller or faster
 validation scope.
+
+When review only needs the YAML-side graph and document consistency, use
+`syu validate . --spec-only` to skip traced source enforcement until you are
+ready to bring code and test evidence back into scope.
 
 ## Fast reviewer playbook
 

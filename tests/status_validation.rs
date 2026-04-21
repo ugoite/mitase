@@ -133,6 +133,42 @@ fn validate_rejects_implemented_entries_without_traces() {
 
 #[test]
 // REQ-CORE-001
+fn validate_spec_only_accepts_implemented_entries_without_traces() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    write_workspace(
+        tempdir.path(),
+        true,
+        "implemented",
+        "implemented",
+        false,
+        false,
+    );
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args(["validate", "--spec-only"])
+        .arg(tempdir.path())
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        output.status.success(),
+        "spec-only validation should skip trace enforcement\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.contains("SYU-delivery-implemented-001"));
+    assert!(stdout.contains(
+        "traceability: skipped (--spec-only disables requirement and feature trace enforcement)"
+    ));
+    assert!(!stdout.contains(
+        "traceability: requirements=0/0 traces validated; features=0/0 traces validated"
+    ));
+}
+
+#[test]
+// REQ-CORE-001
 fn validate_rejects_planned_entries_with_traces() {
     let tempdir = tempdir().expect("tempdir should exist");
     write_workspace(tempdir.path(), true, "planned", "planned", true, true);

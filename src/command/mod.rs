@@ -7,6 +7,7 @@ pub mod app;
 pub mod audit;
 pub mod browse;
 pub mod check;
+pub mod completion;
 pub mod doctor;
 pub mod init;
 mod issue_text;
