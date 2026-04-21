@@ -47,6 +47,9 @@ Pick the newcomer path that matches what you need next:
   [`docs/guide/vscode-extension.md`](docs/guide/vscode-extension.md) when you
   want diagnostics, spec navigation, and trace lookups inside VS Code before
   you memorize the CLI or browser flows.
+- **Direct LSP path**: open [`docs/guide/lsp.md`](docs/guide/lsp.md) when you
+  want the `syu lsp` stdio contract, current hover-only capability set, or a
+  non-VS Code editor starting point.
 - **Migration / upgrade**: open [`docs/guide/migration.md`](docs/guide/migration.md)
   when you already have a `syu` workspace and want the release-specific steps
   for moving between alpha versions safely.
@@ -85,6 +88,7 @@ Keep the detailed guides close:
 - [`docs/guide/app.md`](docs/guide/app.md)
 - [`docs/guide/reviewer-workflow.md`](docs/guide/reviewer-workflow.md)
 - [`docs/guide/node-workflow.md`](docs/guide/node-workflow.md)
+- [`docs/guide/lsp.md`](docs/guide/lsp.md)
 - [`docs/guide/trace-adapter-support.md`](docs/guide/trace-adapter-support.md)
 - [`docs/guide/configuration.md`](docs/guide/configuration.md)
 - [`docs/guide/spec-antipatterns.md`](docs/guide/spec-antipatterns.md)

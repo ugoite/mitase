@@ -383,6 +383,7 @@ fn repository_declares_documentation_guides() {
     let merge_queue_playbook = read_file("docs/guide/merge-queue-playbook.md");
     let getting_started = read_file("docs/guide/getting-started.md");
     let node_workflow = read_file("docs/guide/node-workflow.md");
+    let lsp_guide = read_file("docs/guide/lsp.md");
     let command_card = read_file("docs/guide/command-card.md");
     let trace_adapter_support = read_file("docs/guide/trace-adapter-support.md");
     let vscode_guide = read_file("docs/guide/vscode-extension.md");
@@ -420,6 +421,7 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("docs/guide/app.md"));
     assert!(readme.contains("docs/guide/reviewer-workflow.md"));
     assert!(readme.contains("docs/guide/node-workflow.md"));
+    assert!(readme.contains("docs/guide/lsp.md"));
     assert!(readme.contains("docs/guide/troubleshooting.md"));
     assert!(readme.contains("docs/guide/spec-antipatterns.md"));
     assert!(readme.contains("docs/guide/vscode-extension.md"));
@@ -616,6 +618,13 @@ fn repository_declares_documentation_guides() {
     assert!(command_card.contains("syu validate . --id FEAT-CHECK-001"));
     assert!(command_card.contains("syu app ."));
     assert!(command_card.contains("[reviewer workflow](./reviewer-workflow.md)"));
+    assert!(command_card.contains("[LSP guide](./lsp.md)"));
+    assert!(command_card.contains("`syu lsp`"));
+    assert!(lsp_guide.contains("JSON-RPC 2.0 over stdio"));
+    assert!(lsp_guide.contains("textDocument/hover"));
+    assert!(lsp_guide.contains("workspaceFolders"));
+    assert!(lsp_guide.contains("rootPath"));
+    assert!(lsp_guide.contains("[VS Code extension guide](./vscode-extension.md)"));
     assert!(command_card.contains("[configuration](./configuration.md)"));
     assert!(vscode_guide.contains("syu Context"));
     assert!(vscode_guide.contains("syu validate . --format json"));
