@@ -127,6 +127,21 @@ pub(crate) const fn starter_template_catalog() -> &'static [StarterTemplateCatal
     &STARTER_TEMPLATE_CATALOG
 }
 
+pub(crate) fn starter_template_names() -> Vec<&'static str> {
+    starter_template_catalog()
+        .iter()
+        .map(|entry| entry.name)
+        .collect()
+}
+
+pub(crate) fn starter_template_example_commands() -> Vec<String> {
+    starter_template_catalog()
+        .iter()
+        .filter(|entry| entry.template != StarterTemplate::Generic)
+        .map(|entry| format!("syu init . --template {}", entry.name))
+        .collect()
+}
+
 impl StarterIdPrefixes {
     fn philosophy_id(&self) -> String {
         format!("{}-001", self.philosophy)

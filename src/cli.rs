@@ -20,7 +20,9 @@
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, builder::BoolishValueParser};
 use clap_complete::Shell;
-use std::{num::NonZeroU8, path::PathBuf};
+use std::{num::NonZeroU8, path::PathBuf, sync::OnceLock};
+
+use crate::command::init::{starter_template_example_commands, starter_template_names};
 
 const ROOT_AFTER_HELP: &str = "\
 New here?
@@ -44,19 +46,6 @@ Examples:
 Use this before local contributor checks when you want one summary of the current
 Rust toolchain, Node/npm expectations, optional package-surface dependency state,
 and Playwright browser readiness.";
-
-const INIT_AFTER_HELP: &str = "\
-Use `syu templates` first when you want to compare starter layouts before you scaffold.
-
-Examples:
-  syu templates
-  syu init .
-  syu init . --interactive
-  syu init . --id-prefix store
-  syu init . --template docs-first
-  syu init . --template polyglot
-  syu init . --spec-root docs/spec
-  syu init path/to/workspace --name my-project --spec-root spec/contracts --template polyglot --id-prefix store";
 
 // FEAT-INIT-006
 const TEMPLATES_AFTER_HELP: &str = "\
@@ -156,6 +145,37 @@ Examples:
   syu trace --range main..HEAD
   syu trace --range origin/main...HEAD --format json";
 
+fn init_after_help() -> &'static str {
+    static INIT_AFTER_HELP: OnceLock<String> = OnceLock::new();
+
+    INIT_AFTER_HELP
+        .get_or_init(|| {
+            let starter_examples = starter_template_example_commands()
+                .into_iter()
+                .map(|example| format!("  {example}"))
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            format!(
+                "Use `syu templates` first when you want to compare starter layouts before you scaffold.\n\nExamples:\n  syu templates\n  syu init .\n  syu init . --interactive\n  syu init . --id-prefix store\n{starter_examples}\n  syu init . --spec-root docs/spec\n  syu init path/to/workspace --name my-project --spec-root spec/contracts --template polyglot --id-prefix store"
+            )
+        })
+        .as_str()
+}
+
+fn init_template_help() -> &'static str {
+    static INIT_TEMPLATE_HELP: OnceLock<String> = OnceLock::new();
+
+    INIT_TEMPLATE_HELP
+        .get_or_init(|| {
+            format!(
+                "Starter layout to scaffold (`syu templates` shows the shared catalog: {})",
+                starter_template_names().join(", ")
+            )
+        })
+        .as_str()
+}
+
 #[derive(Debug, Parser)]
 #[command(
     name = "syu",
@@ -233,7 +253,7 @@ pub enum Commands {
     Report(ReportArgs),
     #[command(
         about = "Scaffold a version-matched syu workspace",
-        after_help = INIT_AFTER_HELP
+        after_help = init_after_help()
     )]
     Init(InitArgs),
     #[command(
@@ -650,9 +670,7 @@ pub struct InitArgs {
     #[arg(long)]
     pub spec_root: Option<PathBuf>,
 
-    #[arg(
-        help = "Starter layout to scaffold; run `syu templates` to compare the full starter catalog"
-    )]
+    #[arg(help = init_template_help())]
     #[arg(long, value_enum, default_value_t = StarterTemplate::Generic)]
     pub template: StarterTemplate,
 
@@ -816,6 +834,7 @@ mod tests {
         Cli, CompletionArgs, LookupKind, StarterTemplate, ValidationGenreFilter,
         ValidationSeverityFilter,
     };
+    use crate::command::init::{starter_template_example_commands, starter_template_names};
     use clap::Parser;
     use clap_complete::Shell;
 
@@ -883,6 +902,30 @@ mod tests {
         let rendered = format!("{cli:?}");
         assert!(rendered.contains("command: Some(Init("));
         assert!(rendered.contains("template: RustOnly"));
+    }
+
+    #[test]
+    fn init_after_help_lists_every_non_generic_template_example() {
+        let help = super::init_after_help();
+
+        for example in starter_template_example_commands() {
+            assert!(
+                help.contains(&example),
+                "missing `{example}` from init after-help"
+            );
+        }
+    }
+
+    #[test]
+    fn init_template_help_tracks_shared_catalog_names() {
+        let help = super::init_template_help();
+
+        for name in starter_template_names() {
+            assert!(
+                help.contains(name),
+                "missing `{name}` from init template help"
+            );
+        }
     }
 
     #[test]

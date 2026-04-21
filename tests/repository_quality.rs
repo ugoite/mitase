@@ -1,6 +1,8 @@
 use std::{collections::HashSet, fs, path::PathBuf};
 
+use assert_cmd::cargo::CommandCargoExt;
 use serde_json::Value;
+use std::process::Command;
 
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -12,6 +14,36 @@ fn read_file(path: &str) -> String {
 
 fn read_json(path: &str) -> Value {
     serde_json::from_str(&read_file(path)).expect("repository JSON should parse")
+}
+
+fn assert_newcomer_template_examples(document: &str) {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args(["templates", "--format", "json"])
+        .output()
+        .expect("templates command should run");
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json: Value = serde_json::from_slice(&output.stdout).expect("output should be valid JSON");
+    let templates = json["templates"]
+        .as_array()
+        .expect("templates should be an array");
+
+    for command in templates
+        .iter()
+        .filter(|template| template["name"] != "generic")
+        .map(|template| format!("--template {}", template["name"].as_str().expect("name")))
+    {
+        assert!(
+            document.contains(&command),
+            "expected newcomer-facing docs to mention `{command}`"
+        );
+    }
 }
 
 fn checked_in_example_configs() -> Vec<PathBuf> {
@@ -449,11 +481,7 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("syu init ."));
     assert!(readme.contains("syu add"));
     assert!(readme.contains("--id-prefix"));
-    assert!(readme.contains("--template docs-first"));
-    assert!(readme.contains("--template rust-only"));
-    assert!(readme.contains("--template go-only"));
-    assert!(readme.contains("--template java-only"));
-    assert!(readme.contains("--template typescript-only"));
+    assert_newcomer_template_examples(&readme);
     assert!(readme.contains("syu templates"));
     assert!(readme.contains("starter-only"));
     assert!(readme.contains("syu validate"));
@@ -549,11 +577,7 @@ fn repository_declares_documentation_guides() {
     assert!(!getting_started.contains("$asset.sha256"));
     assert!(getting_started.contains("current checked-in release"));
     assert!(getting_started.contains("latest published alpha"));
-    assert!(getting_started.contains("--template docs-first"));
-    assert!(getting_started.contains("--template rust-only"));
-    assert!(getting_started.contains("--template go-only"));
-    assert!(getting_started.contains("--template java-only"));
-    assert!(getting_started.contains("--template typescript-only"));
+    assert_newcomer_template_examples(&getting_started);
     assert!(getting_started.contains("syu templates"));
     assert!(getting_started.contains("--id-prefix"));
     assert!(getting_started.contains("syu validate . --fix"));
