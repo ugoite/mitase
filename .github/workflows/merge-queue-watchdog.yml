@@ -1,0 +1,23 @@
+# FEAT-QUALITY-001
+name: merge-queue-watchdog
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
+jobs:
+  watchdog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check merge queue health
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci/check-merge-queue-health.sh

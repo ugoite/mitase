@@ -309,7 +309,8 @@ story validation pass.
 
 Maintainers triaging stuck merge-queue entries should use the
 [merge queue playbook](docs/guide/merge-queue-playbook.md) to inspect
-`merge_group` runs, queue state, and required workflow coverage.
+`merge_group` runs, queue state, required workflow coverage, and the scheduled
+merge-queue watchdog.
 
 When queue enrollment disappears for a clean PR, prefer the checked-in
 `scripts/ci/requeue-dropped-merge-queue-prs.sh` workflow path before manually
