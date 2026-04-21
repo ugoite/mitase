@@ -1163,6 +1163,8 @@ fn repository_ships_browser_app() {
     );
     assert!(build_script.contains("syu-app-dist"));
     assert!(build_script.contains("scripts/ci/pinned-npm.sh install app"));
+    assert!(build_script.contains("scripts/ci/pinned-npm.sh"));
+    assert!(build_script.contains(".arg(\"check\")"));
     assert!(build_script.contains("browser app dependencies are not ready"));
     assert!(build_script.contains("fresh clone or fresh worktree"));
     assert!(build_script.contains("Cargo intentionally does not run a networked npm install"));

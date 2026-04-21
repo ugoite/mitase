@@ -7,6 +7,8 @@ use std::{
     time::SystemTime,
 };
 
+use serde_json::Value;
+
 fn main() {
     let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("manifest dir"));
     let app_dir = manifest_dir.join("app");
@@ -30,9 +32,10 @@ fn main() {
     emit_watch_recursive(&shared_core_dir.join("src"));
 
     if let Err(error) = required_npm_version(&app_dir).and_then(|required_npm| {
-        ensure_app_dependencies(&app_dir, &required_npm)
-            .and_then(|_| rebuild_browser_wasm_bindings(&manifest_dir, &app_dir, &required_npm))
-            .and_then(|_| build_browser_bundle(&app_dir, &out_dir, &required_npm))
+        ensure_pinned_npm_ready(&manifest_dir, &app_dir)
+            .and_then(|_| ensure_app_dependencies(&app_dir, &required_npm))
+            .and_then(|_| rebuild_browser_wasm_bindings(&manifest_dir, &app_dir))
+            .and_then(|_| build_browser_bundle(&app_dir, &out_dir))
     }) {
         panic!("{error}");
     }
@@ -64,47 +67,48 @@ fn emit_watch_recursive(path: &Path) {
     }
 }
 
-fn npm_executable() -> &'static str {
-    if cfg!(windows) { "npm.cmd" } else { "npm" }
+fn pinned_npm_script(manifest_dir: &Path) -> PathBuf {
+    manifest_dir
+        .join("scripts")
+        .join("ci")
+        .join("pinned-npm.sh")
 }
 
-fn npx_executable() -> &'static str {
-    if cfg!(windows) { "npx.cmd" } else { "npx" }
+fn git_bash_executable() -> Option<PathBuf> {
+    [
+        env::var_os("ProgramW6432"),
+        env::var_os("ProgramFiles"),
+        env::var_os("ProgramFiles(x86)"),
+    ]
+    .into_iter()
+    .flatten()
+    .map(PathBuf::from)
+    .map(|root| root.join("Git").join("bin").join("bash.exe"))
+    .find(|path| path.is_file())
 }
 
-fn node_executable() -> &'static str {
-    "node"
+fn pinned_npm_command(script: &Path) -> Command {
+    if cfg!(windows) {
+        let mut command =
+            Command::new(git_bash_executable().unwrap_or_else(|| PathBuf::from("bash")));
+        command.arg(script);
+        command
+    } else {
+        Command::new(script)
+    }
 }
 
 fn package_manager_for(package_json: &Path) -> Result<String, String> {
-    let output = Command::new(node_executable())
-        .arg("-p")
-        .arg("JSON.parse(require('node:fs').readFileSync(process.argv[1], 'utf8')).packageManager ?? ''")
-        .arg(package_json)
-        .output()
+    let package = fs::read_to_string(package_json)
         .map_err(|error| format!("failed to read {}: {error}", package_json.display()))?;
+    let json: Value = serde_json::from_str(&package)
+        .map_err(|error| format!("failed to parse {}: {error}", package_json.display()))?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-        let detail = if stderr.is_empty() {
-            format!("exit status {}", output.status)
-        } else {
-            stderr
-        };
-        return Err(format!(
-            "failed to read {} packageManager: {detail}",
-            package_json.display()
-        ));
-    }
-
-    String::from_utf8(output.stdout)
-        .map_err(|error| {
-            format!(
-                "failed to decode {} packageManager: {error}",
-                package_json.display()
-            )
-        })
-        .map(|stdout| stdout.trim().to_owned())
+    Ok(json
+        .get("packageManager")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned())
 }
 
 fn required_npm_version(app_dir: &Path) -> Result<String, String> {
@@ -122,30 +126,38 @@ fn required_npm_version(app_dir: &Path) -> Result<String, String> {
         })
 }
 
-fn npm_version(app_dir: &Path) -> Result<String, String> {
-    let output = Command::new(npm_executable())
-        .arg("--version")
-        .current_dir(app_dir)
+fn ensure_pinned_npm_ready(manifest_dir: &Path, app_dir: &Path) -> Result<(), String> {
+    let app_arg = app_dir
+        .strip_prefix(manifest_dir)
+        .unwrap_or(app_dir)
+        .to_string_lossy()
+        .into_owned();
+    let script = pinned_npm_script(manifest_dir);
+    let output = pinned_npm_command(&script)
+        .arg("check")
+        .arg(&app_arg)
+        .current_dir(manifest_dir)
         .output()
-        .map_err(|error| format!("failed to read npm version: {error}"))?;
+        .map_err(|error| format!("failed to verify pinned npm for {app_arg}: {error}"))?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
-        let detail = if stderr.is_empty() {
-            format!("exit status {}", output.status)
-        } else {
-            stderr
-        };
-        return Err(format!("failed to read npm version: {detail}"));
+    if output.status.success() {
+        return Ok(());
     }
 
-    String::from_utf8(output.stdout)
-        .map_err(|error| format!("failed to decode npm version: {error}"))
-        .map(|stdout| stdout.trim().to_owned())
-}
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    let detail = if !stderr.is_empty() {
+        stderr
+    } else if !stdout.is_empty() {
+        stdout
+    } else {
+        format!("exit status {}", output.status)
+    };
 
-fn uses_required_npm(app_dir: &Path, required: &str) -> Result<bool, String> {
-    Ok(npm_version(app_dir)? == required)
+    Err(format!(
+        "failed to verify pinned npm for {app_arg} via `{}`: {detail}",
+        script.display()
+    ))
 }
 
 fn modified_time(path: &Path) -> Option<SystemTime> {
@@ -168,31 +180,22 @@ fn needs_npm_ci(app_dir: &Path) -> bool {
 }
 
 fn run_npm(
+    manifest_dir: &Path,
     app_dir: &Path,
-    required_npm: &str,
+    package_dir: &str,
     args: &[String],
     action: &str,
     extra_env: &[(&str, String)],
 ) -> Result<(), String> {
-    let mut command;
-    let command_display;
-    if uses_required_npm(app_dir, required_npm)? {
-        command = Command::new(npm_executable());
-        command.args(args);
-        command_display = format!("{} {}", npm_executable(), args.join(" "));
-    } else {
-        command = Command::new(npx_executable());
-        command
-            .arg("-y")
-            .arg(format!("npm@{required_npm}"))
-            .args(args);
-        command_display = format!(
-            "{} -y npm@{} {}",
-            npx_executable(),
-            required_npm,
-            args.join(" ")
-        );
-    }
+    let script = pinned_npm_script(manifest_dir);
+    let mut command = pinned_npm_command(&script);
+    command.arg("exec").arg(package_dir).arg("--").args(args);
+    let command_display = format!(
+        "{} exec {} -- {}",
+        script.display(),
+        package_dir,
+        args.join(" ")
+    );
 
     let status = command
         .current_dir(app_dir)
@@ -225,7 +228,7 @@ fn missing_app_dependencies_message(required_npm: &str) -> String {
             "Cargo intentionally does not run a networked npm install for you during embedded browser-app builds.\n\n",
             "From the repository root, run:\n",
             "  scripts/ci/pinned-npm.sh install app\n",
-            "  npm --prefix app ci\n\n",
+            "  scripts/ci/pinned-npm.sh exec app -- ci\n\n",
             "Then rerun the Cargo command. The pinned npm workflow expects npm {}."
         ),
         required_npm
@@ -240,11 +243,7 @@ fn remove_dir_if_exists(path: &Path, description: &str) -> Result<(), String> {
     fs::remove_dir_all(path).map_err(|error| format!("failed to clear {description}: {error}"))
 }
 
-fn rebuild_browser_wasm_bindings(
-    manifest_dir: &Path,
-    app_dir: &Path,
-    required_npm: &str,
-) -> Result<(), String> {
+fn rebuild_browser_wasm_bindings(manifest_dir: &Path, app_dir: &Path) -> Result<(), String> {
     remove_dir_if_exists(
         &app_dir.join("src").join("wasm"),
         "generated browser app Wasm bindings",
@@ -255,23 +254,25 @@ fn rebuild_browser_wasm_bindings(
         .into_owned();
 
     run_npm(
+        manifest_dir,
         app_dir,
-        required_npm,
+        "app",
         &[String::from("run"), String::from("build:wasm")],
         "generate the browser app Wasm bridge",
         &[("CARGO_TARGET_DIR", wasm_target_dir)],
     )
 }
 
-fn build_browser_bundle(app_dir: &Path, out_dir: &Path, required_npm: &str) -> Result<(), String> {
+fn build_browser_bundle(app_dir: &Path, out_dir: &Path) -> Result<(), String> {
     remove_dir_if_exists(out_dir, "generated browser bundle")?;
     fs::create_dir_all(out_dir)
         .map_err(|error| format!("failed to create browser bundle output directory: {error}"))?;
 
     let out_dir_arg = out_dir.to_string_lossy().into_owned();
     run_npm(
+        app_dir.parent().unwrap_or(app_dir),
         app_dir,
-        required_npm,
+        "app",
         &[
             String::from("run"),
             String::from("build"),
@@ -399,7 +400,15 @@ mod tests {
         assert!(message.contains("fresh clone or fresh worktree"));
         assert!(message.contains("Cargo intentionally does not run a networked npm install"));
         assert!(message.contains("scripts/ci/pinned-npm.sh install app"));
-        assert!(message.contains("npm --prefix app ci"));
+        assert!(message.contains("scripts/ci/pinned-npm.sh exec app -- ci"));
         assert!(message.contains("npm 11.8.0"));
+    }
+
+    #[test]
+    fn pinned_npm_script_uses_repo_ci_helper() {
+        assert_eq!(
+            super::pinned_npm_script(Path::new("/repo")),
+            Path::new("/repo/scripts/ci/pinned-npm.sh")
+        );
     }
 }
