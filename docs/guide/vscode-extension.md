@@ -19,7 +19,10 @@ This first cut stays deliberately small:
 - navigation reads the checked-in spec YAML directly from the workspace
 
 That means the extension works with today's CLI while leaving room for a shared
-editor protocol later.
+editor protocol later. The repository now also ships `syu lsp` as an
+editor-agnostic stdio server foundation; use the dedicated
+[LSP guide](./lsp.md) for direct transport details, current capabilities, and
+non-VS Code client setup.
 
 ## Run it from source
 

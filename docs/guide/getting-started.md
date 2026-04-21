@@ -31,6 +31,8 @@ Need a different level of guidance?
 - Start with the [VS Code extension guide](./vscode-extension.md) when you want
   diagnostics, spec navigation, and related-file lookups in the editor before
   you settle into the terminal or browser flows.
+- Open the [LSP guide](./lsp.md) when you are wiring `syu` into another editor
+  client or want the low-level stdio / JSON-RPC server contract directly.
 - Use the [trace adapter capability matrix](./trace-adapter-support.md) when
   you need to know which built-in languages support symbol validation only
   versus `doc_contains` and strict coverage.
