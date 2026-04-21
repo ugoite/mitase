@@ -192,6 +192,7 @@ mod tests {
                     bind: Some("127.0.0.1".to_string()),
                     port: Some(4173),
                     allow_remote: false,
+                    dev_server: false,
                 })),
             },
             true,

@@ -36,16 +36,22 @@ struct CoverageMap {
     wildcard_files: BTreeSet<PathBuf>,
 }
 
-type DiscoveryFn = fn(&SyuConfig, &Path) -> Result<Vec<CoverageTarget>, Box<Issue>>;
+type DiscoveryWithIssuesFn = fn(&SyuConfig, &Path) -> Result<DiscoveryOutput, Box<Issue>>;
+
+#[derive(Debug, Default)]
+struct DiscoveryOutput {
+    targets: Vec<CoverageTarget>,
+    issues: Vec<Issue>,
+}
 
 #[derive(Clone, Copy)]
 struct CoverageDiscoverers {
-    rust: DiscoveryFn,
-    python: DiscoveryFn,
-    go: DiscoveryFn,
-    java: DiscoveryFn,
-    csharp: DiscoveryFn,
-    typescript: DiscoveryFn,
+    rust: DiscoveryWithIssuesFn,
+    python: DiscoveryWithIssuesFn,
+    go: DiscoveryWithIssuesFn,
+    java: DiscoveryWithIssuesFn,
+    csharp: DiscoveryWithIssuesFn,
+    typescript: DiscoveryWithIssuesFn,
 }
 
 pub fn validate_symbol_trace_coverage(workspace: &Workspace, issues: &mut Vec<Issue>) {
@@ -53,12 +59,12 @@ pub fn validate_symbol_trace_coverage(workspace: &Workspace, issues: &mut Vec<Is
         workspace,
         issues,
         CoverageDiscoverers {
-            rust: discover_rust_targets,
-            python: discover_python_targets,
-            go: discover_go_targets,
-            java: discover_java_targets,
-            csharp: discover_csharp_targets,
-            typescript: discover_typescript_targets,
+            rust: discover_rust_targets_with_issues,
+            python: discover_python_targets_with_issues,
+            go: discover_go_targets_with_issues,
+            java: discover_java_targets_with_issues,
+            csharp: discover_csharp_targets_with_issues,
+            typescript: discover_typescript_targets_with_issues,
         },
     );
 }
@@ -73,7 +79,10 @@ fn validate_symbol_trace_coverage_with(
     }
 
     let mut targets = match (discoverers.rust)(&workspace.config, &workspace.root) {
-        Ok(targets) => targets,
+        Ok(output) => {
+            issues.extend(output.issues);
+            output.targets
+        }
         Err(issue) => {
             issues.push(*issue);
             return;
@@ -81,7 +90,10 @@ fn validate_symbol_trace_coverage_with(
     };
 
     match (discoverers.python)(&workspace.config, &workspace.root) {
-        Ok(python_targets) => targets.extend(python_targets),
+        Ok(output) => {
+            issues.extend(output.issues);
+            targets.extend(output.targets);
+        }
         Err(issue) => {
             issues.push(*issue);
             return;
@@ -89,7 +101,10 @@ fn validate_symbol_trace_coverage_with(
     }
 
     match (discoverers.go)(&workspace.config, &workspace.root) {
-        Ok(go_targets) => targets.extend(go_targets),
+        Ok(output) => {
+            issues.extend(output.issues);
+            targets.extend(output.targets);
+        }
         Err(issue) => {
             issues.push(*issue);
             return;
@@ -97,7 +112,10 @@ fn validate_symbol_trace_coverage_with(
     }
 
     match (discoverers.java)(&workspace.config, &workspace.root) {
-        Ok(java_targets) => targets.extend(java_targets),
+        Ok(output) => {
+            issues.extend(output.issues);
+            targets.extend(output.targets);
+        }
         Err(issue) => {
             issues.push(*issue);
             return;
@@ -105,7 +123,10 @@ fn validate_symbol_trace_coverage_with(
     }
 
     match (discoverers.csharp)(&workspace.config, &workspace.root) {
-        Ok(csharp_targets) => targets.extend(csharp_targets),
+        Ok(output) => {
+            issues.extend(output.issues);
+            targets.extend(output.targets);
+        }
         Err(issue) => {
             issues.push(*issue);
             return;
@@ -113,7 +134,10 @@ fn validate_symbol_trace_coverage_with(
     }
 
     match (discoverers.typescript)(&workspace.config, &workspace.root) {
-        Ok(ts_targets) => targets.extend(ts_targets),
+        Ok(output) => {
+            issues.extend(output.issues);
+            targets.extend(output.targets);
+        }
         Err(issue) => {
             issues.push(*issue);
             return;
@@ -250,12 +274,21 @@ pub(crate) fn path_matches_ignored_generated_directory(
         .any(|ignored| normalized == *ignored || normalized.starts_with(ignored))
 }
 
+#[cfg(test)]
 fn discover_rust_targets(
     config: &SyuConfig,
     root: &Path,
 ) -> Result<Vec<CoverageTarget>, Box<Issue>> {
+    Ok(discover_rust_targets_with_issues(config, root)?.targets)
+}
+
+fn discover_rust_targets_with_issues(
+    config: &SyuConfig,
+    root: &Path,
+) -> Result<DiscoveryOutput, Box<Issue>> {
     let ignored_paths = normalized_symbol_trace_coverage_ignored_paths(config);
     let mut targets = Vec::new();
+    let mut issues = Vec::new();
     let mut files = rust_files_under(root, &root.join("src"), &ignored_paths)?;
     files.extend(rust_files_under(root, &root.join("tests"), &ignored_paths)?);
     files.sort();
@@ -281,11 +314,9 @@ fn discover_rust_targets(
             ))
         })?;
 
-        let relative = path
-            .strip_prefix(root)
-            .expect("scanned file should remain under the workspace root")
-            .to_path_buf();
-        collect_rust_targets(&file.items, &relative, false, &mut targets);
+        with_scanned_file_relative_to_workspace(root, &path, &mut issues, |relative| {
+            collect_rust_targets(&file.items, &relative, false, &mut targets);
+        });
     }
 
     targets.sort_by(|left, right| {
@@ -308,7 +339,7 @@ fn discover_rust_targets(
     });
     targets.dedup();
 
-    Ok(targets)
+    Ok(DiscoveryOutput { targets, issues })
 }
 
 fn collect_rust_targets(
@@ -435,10 +466,18 @@ fn rust_files_under(
     Ok(files)
 }
 
+#[cfg(test)]
 fn discover_python_targets(
     config: &SyuConfig,
     root: &Path,
 ) -> Result<Vec<CoverageTarget>, Box<Issue>> {
+    Ok(discover_python_targets_with_issues(config, root)?.targets)
+}
+
+fn discover_python_targets_with_issues(
+    config: &SyuConfig,
+    root: &Path,
+) -> Result<DiscoveryOutput, Box<Issue>> {
     let src_dir = root.join("src");
     let tests_dir = root.join("tests");
     let ignored_paths = normalized_symbol_trace_coverage_ignored_paths(config);
@@ -447,29 +486,28 @@ fn discover_python_targets(
     let test_files = python_files_under(root, &tests_dir, &ignored_paths)?;
 
     if src_files.is_empty() && test_files.is_empty() {
-        return Ok(Vec::new());
+        return Ok(DiscoveryOutput::default());
     }
 
     let mut targets = Vec::new();
+    let mut issues = Vec::new();
 
     for path in &src_files {
         let symbols = match inspect_python_file(config, path) {
             Ok(symbols) => symbols,
             Err(_) => continue,
         };
-        let relative = path
-            .strip_prefix(root)
-            .expect("scanned file should remain under the workspace root")
-            .to_path_buf();
-        for symbol in symbols {
-            if !symbol.name.starts_with('_') {
-                targets.push(CoverageTarget {
-                    file: relative.clone(),
-                    symbol: symbol.name,
-                    kind: CoverageTargetKind::PublicSymbol,
-                });
+        with_scanned_file_relative_to_workspace(root, path, &mut issues, |relative| {
+            for symbol in symbols {
+                if !symbol.name.starts_with('_') {
+                    targets.push(CoverageTarget {
+                        file: relative.clone(),
+                        symbol: symbol.name,
+                        kind: CoverageTargetKind::PublicSymbol,
+                    });
+                }
             }
-        }
+        });
     }
 
     for path in &test_files {
@@ -477,19 +515,17 @@ fn discover_python_targets(
             Ok(symbols) => symbols,
             Err(_) => continue,
         };
-        let relative = path
-            .strip_prefix(root)
-            .expect("scanned file should remain under the workspace root")
-            .to_path_buf();
-        for symbol in symbols {
-            if symbol.name.starts_with("test_") || symbol.name.starts_with("Test") {
-                targets.push(CoverageTarget {
-                    file: relative.clone(),
-                    symbol: symbol.name,
-                    kind: CoverageTargetKind::TestSymbol,
-                });
+        with_scanned_file_relative_to_workspace(root, path, &mut issues, |relative| {
+            for symbol in symbols {
+                if symbol.name.starts_with("test_") || symbol.name.starts_with("Test") {
+                    targets.push(CoverageTarget {
+                        file: relative.clone(),
+                        symbol: symbol.name,
+                        kind: CoverageTargetKind::TestSymbol,
+                    });
+                }
             }
-        }
+        });
     }
 
     targets.sort_by(|left, right| {
@@ -512,7 +548,7 @@ fn discover_python_targets(
     });
     targets.dedup();
 
-    Ok(targets)
+    Ok(DiscoveryOutput { targets, issues })
 }
 
 fn python_files_under(
@@ -547,10 +583,18 @@ fn collect_rust_files_recursive(
     collect_files_recursive_by_extension(workspace_root, directory, "rs", ignored_paths, files)
 }
 
+#[cfg(test)]
 fn discover_typescript_targets(
     config: &SyuConfig,
     root: &Path,
 ) -> Result<Vec<CoverageTarget>, Box<Issue>> {
+    Ok(discover_typescript_targets_with_issues(config, root)?.targets)
+}
+
+fn discover_typescript_targets_with_issues(
+    config: &SyuConfig,
+    root: &Path,
+) -> Result<DiscoveryOutput, Box<Issue>> {
     const TS_EXTENSIONS: &[&str] = &["ts", "tsx", "js", "jsx"];
 
     let src_dir = root.join("src");
@@ -568,10 +612,11 @@ fn discover_typescript_targets(
     }
 
     if src_files.is_empty() && test_files.is_empty() {
-        return Ok(Vec::new());
+        return Ok(DiscoveryOutput::default());
     }
 
     let mut targets = Vec::new();
+    let mut issues = Vec::new();
 
     for path in &src_files {
         let contents = match fs::read_to_string(path) {
@@ -579,19 +624,17 @@ fn discover_typescript_targets(
             Err(_) => continue,
         };
         let symbols = inspect_typescript_file(path, &contents).unwrap_or_default();
-        let relative = path
-            .strip_prefix(root)
-            .expect("scanned file should remain under the workspace root")
-            .to_path_buf();
-        for symbol in symbols {
-            if symbol.is_exported {
-                targets.push(CoverageTarget {
-                    file: relative.clone(),
-                    symbol: symbol.name,
-                    kind: CoverageTargetKind::PublicSymbol,
-                });
+        with_scanned_file_relative_to_workspace(root, path, &mut issues, |relative| {
+            for symbol in symbols {
+                if symbol.is_exported {
+                    targets.push(CoverageTarget {
+                        file: relative.clone(),
+                        symbol: symbol.name,
+                        kind: CoverageTargetKind::PublicSymbol,
+                    });
+                }
             }
-        }
+        });
     }
 
     for path in &test_files {
@@ -600,19 +643,17 @@ fn discover_typescript_targets(
             Err(_) => continue,
         };
         let symbols = inspect_typescript_file(path, &contents).unwrap_or_default();
-        let relative = path
-            .strip_prefix(root)
-            .expect("scanned file should remain under the workspace root")
-            .to_path_buf();
-        for symbol in symbols {
-            if symbol.name.starts_with("test") || symbol.name.starts_with("Test") {
-                targets.push(CoverageTarget {
-                    file: relative.clone(),
-                    symbol: symbol.name,
-                    kind: CoverageTargetKind::TestSymbol,
-                });
+        with_scanned_file_relative_to_workspace(root, path, &mut issues, |relative| {
+            for symbol in symbols {
+                if symbol.name.starts_with("test") || symbol.name.starts_with("Test") {
+                    targets.push(CoverageTarget {
+                        file: relative.clone(),
+                        symbol: symbol.name,
+                        kind: CoverageTargetKind::TestSymbol,
+                    });
+                }
             }
-        }
+        });
     }
 
     targets.sort_by(|left, right| {
@@ -635,20 +676,29 @@ fn discover_typescript_targets(
     });
     targets.dedup();
 
-    Ok(targets)
+    Ok(DiscoveryOutput { targets, issues })
 }
 
+#[cfg(test)]
 fn discover_go_targets(config: &SyuConfig, root: &Path) -> Result<Vec<CoverageTarget>, Box<Issue>> {
+    Ok(discover_go_targets_with_issues(config, root)?.targets)
+}
+
+fn discover_go_targets_with_issues(
+    config: &SyuConfig,
+    root: &Path,
+) -> Result<DiscoveryOutput, Box<Issue>> {
     let ignored_paths = normalized_symbol_trace_coverage_ignored_paths(config);
     let mut files = go_files_under(root, &root.join("src"), &ignored_paths)?;
     files.extend(go_files_under(root, &root.join("tests"), &ignored_paths)?);
     files.sort();
 
     if files.is_empty() {
-        return Ok(Vec::new());
+        return Ok(DiscoveryOutput::default());
     }
 
     let mut targets = Vec::new();
+    let mut issues = Vec::new();
     for path in files {
         let contents = fs::read_to_string(&path).map_err(|error| {
             Box::new(Issue::error(
@@ -663,29 +713,25 @@ fn discover_go_targets(config: &SyuConfig, root: &Path) -> Result<Vec<CoverageTa
             ))
         })?;
 
-        let relative = path
-            .strip_prefix(root)
-            .expect("scanned file should remain under the workspace root")
-            .to_path_buf();
-
-        if is_go_test_file(&path) {
-            for symbol in collect_go_test_symbols(&contents) {
-                targets.push(CoverageTarget {
-                    file: relative.clone(),
-                    symbol,
-                    kind: CoverageTargetKind::TestSymbol,
-                });
+        with_scanned_file_relative_to_workspace(root, &path, &mut issues, |relative| {
+            if is_go_test_file(&path) {
+                for symbol in collect_go_test_symbols(&contents) {
+                    targets.push(CoverageTarget {
+                        file: relative.clone(),
+                        symbol,
+                        kind: CoverageTargetKind::TestSymbol,
+                    });
+                }
+            } else {
+                for symbol in collect_go_public_symbols(&contents) {
+                    targets.push(CoverageTarget {
+                        file: relative.clone(),
+                        symbol,
+                        kind: CoverageTargetKind::PublicSymbol,
+                    });
+                }
             }
-            continue;
-        }
-
-        for symbol in collect_go_public_symbols(&contents) {
-            targets.push(CoverageTarget {
-                file: relative.clone(),
-                symbol,
-                kind: CoverageTargetKind::PublicSymbol,
-            });
-        }
+        });
     }
 
     targets.sort_by(|left, right| {
@@ -708,7 +754,7 @@ fn discover_go_targets(config: &SyuConfig, root: &Path) -> Result<Vec<CoverageTa
     });
     targets.dedup();
 
-    Ok(targets)
+    Ok(DiscoveryOutput { targets, issues })
 }
 
 fn collect_go_public_symbols(contents: &str) -> Vec<String> {
@@ -818,49 +864,54 @@ fn is_csharp_test_file(path: &Path) -> bool {
             .any(|component| component.as_os_str().eq_ignore_ascii_case("tests"))
 }
 
+#[cfg(test)]
 fn discover_java_targets(
     config: &SyuConfig,
     root: &Path,
 ) -> Result<Vec<CoverageTarget>, Box<Issue>> {
+    Ok(discover_java_targets_with_issues(config, root)?.targets)
+}
+
+fn discover_java_targets_with_issues(
+    config: &SyuConfig,
+    root: &Path,
+) -> Result<DiscoveryOutput, Box<Issue>> {
     let ignored_paths = normalized_symbol_trace_coverage_ignored_paths(config);
     let mut files = java_files_under(root, &root.join("src"), &ignored_paths)?;
     files.extend(java_files_under(root, &root.join("tests"), &ignored_paths)?);
     files.sort();
 
     if files.is_empty() {
-        return Ok(Vec::new());
+        return Ok(DiscoveryOutput::default());
     }
 
     let mut targets = Vec::new();
+    let mut issues = Vec::new();
     for path in files {
         let contents = match fs::read_to_string(&path) {
             Ok(contents) => contents,
             Err(_) => continue,
         };
 
-        let relative = path
-            .strip_prefix(root)
-            .expect("scanned file should remain under the workspace root")
-            .to_path_buf();
-
-        if is_java_test_file(&path, &contents) {
-            for symbol in collect_java_test_symbols(&contents) {
-                targets.push(CoverageTarget {
-                    file: relative.clone(),
-                    symbol,
-                    kind: CoverageTargetKind::TestSymbol,
-                });
+        with_scanned_file_relative_to_workspace(root, &path, &mut issues, |relative| {
+            if is_java_test_file(&path, &contents) {
+                for symbol in collect_java_test_symbols(&contents) {
+                    targets.push(CoverageTarget {
+                        file: relative.clone(),
+                        symbol,
+                        kind: CoverageTargetKind::TestSymbol,
+                    });
+                }
+            } else {
+                for symbol in collect_java_public_symbols(&contents) {
+                    targets.push(CoverageTarget {
+                        file: relative.clone(),
+                        symbol,
+                        kind: CoverageTargetKind::PublicSymbol,
+                    });
+                }
             }
-            continue;
-        }
-
-        for symbol in collect_java_public_symbols(&contents) {
-            targets.push(CoverageTarget {
-                file: relative.clone(),
-                symbol,
-                kind: CoverageTargetKind::PublicSymbol,
-            });
-        }
+        });
     }
 
     targets.sort_by(|left, right| {
@@ -883,13 +934,21 @@ fn discover_java_targets(
     });
     targets.dedup();
 
-    Ok(targets)
+    Ok(DiscoveryOutput { targets, issues })
 }
 
+#[cfg(test)]
 fn discover_csharp_targets(
     config: &SyuConfig,
     root: &Path,
 ) -> Result<Vec<CoverageTarget>, Box<Issue>> {
+    Ok(discover_csharp_targets_with_issues(config, root)?.targets)
+}
+
+fn discover_csharp_targets_with_issues(
+    config: &SyuConfig,
+    root: &Path,
+) -> Result<DiscoveryOutput, Box<Issue>> {
     let ignored_paths = normalized_symbol_trace_coverage_ignored_paths(config);
     let mut files = csharp_files_under(root, &root.join("src"), &ignored_paths)?;
     let test_files = csharp_files_under(root, &root.join("tests"), &ignored_paths)?;
@@ -897,39 +956,36 @@ fn discover_csharp_targets(
     files.sort();
 
     if files.is_empty() {
-        return Ok(Vec::new());
+        return Ok(DiscoveryOutput::default());
     }
 
     let mut targets = Vec::new();
+    let mut issues = Vec::new();
     for path in files {
         let contents = match fs::read_to_string(&path) {
             Ok(contents) => contents,
             Err(_) => continue,
         };
 
-        let relative = path
-            .strip_prefix(root)
-            .expect("scanned file should remain under the workspace root")
-            .to_path_buf();
-
-        if is_csharp_test_file(&path) {
-            for symbol in collect_csharp_test_symbols(&contents) {
-                targets.push(CoverageTarget {
-                    file: relative.clone(),
-                    symbol,
-                    kind: CoverageTargetKind::TestSymbol,
-                });
+        with_scanned_file_relative_to_workspace(root, &path, &mut issues, |relative| {
+            if is_csharp_test_file(&path) {
+                for symbol in collect_csharp_test_symbols(&contents) {
+                    targets.push(CoverageTarget {
+                        file: relative.clone(),
+                        symbol,
+                        kind: CoverageTargetKind::TestSymbol,
+                    });
+                }
+            } else {
+                for symbol in collect_csharp_public_symbols(&contents) {
+                    targets.push(CoverageTarget {
+                        file: relative.clone(),
+                        symbol,
+                        kind: CoverageTargetKind::PublicSymbol,
+                    });
+                }
             }
-            continue;
-        }
-
-        for symbol in collect_csharp_public_symbols(&contents) {
-            targets.push(CoverageTarget {
-                file: relative.clone(),
-                symbol,
-                kind: CoverageTargetKind::PublicSymbol,
-            });
-        }
+        });
     }
 
     targets.sort_by(|left, right| {
@@ -952,7 +1008,7 @@ fn discover_csharp_targets(
     });
     targets.dedup();
 
-    Ok(targets)
+    Ok(DiscoveryOutput { targets, issues })
 }
 
 fn collect_java_public_symbols(contents: &str) -> Vec<String> {
@@ -1352,6 +1408,49 @@ fn should_skip_generated_directory(
         .is_some_and(|relative| path_matches_ignored_generated_directory(relative, ignored_paths))
 }
 
+fn scanned_file_relative_to_workspace(root: &Path, path: &Path) -> Result<PathBuf, Box<Issue>> {
+    path.strip_prefix(root)
+        .map(Path::to_path_buf)
+        .map_err(|_| {
+            Box::new(Issue::error(
+                "SYU-coverage-path-001",
+                "trace coverage inventory",
+                Some(path.display().to_string()),
+                format!(
+                    "Scanned file `{}` escaped workspace root `{}` while building trace coverage inventory.",
+                    path.display(),
+                    root.display()
+                ),
+                Some("Fix the directory layout or disable `validate.require_symbol_trace_coverage` until the workspace can be scanned.".to_string()),
+            ))
+        })
+}
+
+fn record_scanned_file_relative_to_workspace(
+    root: &Path,
+    path: &Path,
+    issues: &mut Vec<Issue>,
+) -> Option<PathBuf> {
+    match scanned_file_relative_to_workspace(root, path) {
+        Ok(relative) => Some(relative),
+        Err(issue) => {
+            issues.push(*issue);
+            None
+        }
+    }
+}
+
+fn with_scanned_file_relative_to_workspace(
+    root: &Path,
+    path: &Path,
+    issues: &mut Vec<Issue>,
+    on_relative: impl FnOnce(PathBuf),
+) {
+    if let Some(relative) = record_scanned_file_relative_to_workspace(root, path, issues) {
+        on_relative(relative);
+    }
+}
+
 pub(crate) fn normalize_relative_path(path: &Path) -> PathBuf {
     let mut normalized = PathBuf::new();
     for component in path.components() {
@@ -1422,16 +1521,18 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{
-        CoverageDiscoverers, CoverageTargetKind, collect_csharp_public_symbols,
+        CoverageDiscoverers, CoverageTargetKind, DiscoveryOutput, collect_csharp_public_symbols,
         collect_csharp_test_symbols, collect_feature_coverage,
         collect_files_recursive_by_extension, collect_go_public_symbols, collect_go_test_symbols,
         collect_java_public_symbols, collect_java_test_symbols, collect_requirement_coverage,
         csharp_files_under, discover_csharp_targets, discover_go_targets, discover_java_targets,
-        discover_python_targets, discover_rust_targets, discover_typescript_targets,
-        go_files_under, java_files_under, normalize_relative_path,
-        normalized_symbol_trace_coverage_ignored_paths, path_matches_ignored_generated_directory,
-        python_files_under, rust_files_under, typescript_files_under,
-        validate_symbol_trace_coverage, validate_symbol_trace_coverage_with,
+        discover_java_targets_with_issues, discover_python_targets, discover_rust_targets,
+        discover_typescript_targets, discover_typescript_targets_with_issues, go_files_under,
+        java_files_under, normalize_relative_path, normalized_symbol_trace_coverage_ignored_paths,
+        path_matches_ignored_generated_directory, python_files_under,
+        record_scanned_file_relative_to_workspace, rust_files_under,
+        scanned_file_relative_to_workspace, typescript_files_under, validate_symbol_trace_coverage,
+        validate_symbol_trace_coverage_with,
     };
     use crate::{
         config::SyuConfig,
@@ -1439,18 +1540,12 @@ mod tests {
         workspace::Workspace,
     };
 
-    fn no_targets(
-        _config: &SyuConfig,
-        _root: &Path,
-    ) -> Result<Vec<super::CoverageTarget>, Box<Issue>> {
-        Ok(Vec::new())
+    fn no_targets(_config: &SyuConfig, _root: &Path) -> Result<DiscoveryOutput, Box<Issue>> {
+        Ok(DiscoveryOutput::default())
     }
 
-    fn no_java_targets(
-        _config: &SyuConfig,
-        _root: &Path,
-    ) -> Result<Vec<super::CoverageTarget>, Box<Issue>> {
-        Ok(Vec::new())
+    fn no_java_targets(_config: &SyuConfig, _root: &Path) -> Result<DiscoveryOutput, Box<Issue>> {
+        Ok(DiscoveryOutput::default())
     }
 
     #[test]
@@ -1555,6 +1650,84 @@ mod tests {
                 .iter()
                 .any(|target| target.symbol == "hidden_in_test")
         );
+    }
+
+    #[test]
+    fn scanned_file_relative_to_workspace_reports_out_of_root_paths() {
+        let tempdir = tempdir().expect("tempdir");
+        let outside = tempdir.path().parent().expect("parent").join("outside.rs");
+        let outside_display = outside.display().to_string();
+
+        let issue = scanned_file_relative_to_workspace(tempdir.path(), &outside)
+            .expect_err("out-of-root files should fail");
+
+        assert_eq!(issue.code, "SYU-coverage-path-001");
+        assert!(issue.message.contains("escaped workspace root"));
+        assert_eq!(issue.location.as_deref(), Some(outside_display.as_str()));
+    }
+
+    #[test]
+    fn record_scanned_file_relative_to_workspace_collects_issue_and_skips() {
+        let tempdir = tempdir().expect("tempdir");
+        let outside = tempdir.path().parent().expect("parent").join("outside.rs");
+        let mut issues = Vec::new();
+
+        let relative =
+            record_scanned_file_relative_to_workspace(tempdir.path(), &outside, &mut issues);
+
+        assert!(relative.is_none());
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].code, "SYU-coverage-path-001");
+    }
+
+    #[test]
+    fn validate_symbol_trace_coverage_keeps_scanning_after_discovery_issue() {
+        let tempdir = tempdir().expect("tempdir");
+        let mut config = SyuConfig::default();
+        config.validate.require_symbol_trace_coverage = true;
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("docs/syu"),
+            config,
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+
+        let mut issues = Vec::new();
+        validate_symbol_trace_coverage_with(
+            &workspace,
+            &mut issues,
+            CoverageDiscoverers {
+                rust: |_config, _root| {
+                    Ok(DiscoveryOutput {
+                        targets: vec![super::CoverageTarget {
+                            file: PathBuf::from("src/kept.rs"),
+                            symbol: "KeptApi".to_string(),
+                            kind: CoverageTargetKind::PublicSymbol,
+                        }],
+                        issues: vec![Issue::error(
+                            "SYU-coverage-path-001",
+                            "trace coverage inventory",
+                            Some("../escaped.rs".to_string()),
+                            "escaped workspace root".to_string(),
+                            None,
+                        )],
+                    })
+                },
+                python: no_targets,
+                go: no_targets,
+                java: no_java_targets,
+                csharp: no_targets,
+                typescript: no_targets,
+            },
+        );
+
+        assert_eq!(issues.len(), 2);
+        assert_eq!(issues[0].code, "SYU-coverage-path-001");
+        assert_eq!(issues[1].code, "SYU-coverage-public-001");
+        assert!(issues[1].message.contains("KeptApi"));
     }
 
     #[test]
@@ -2553,7 +2726,7 @@ mod tests {
                 go: no_targets,
                 java: no_java_targets,
                 csharp: no_targets,
-                typescript: discover_typescript_targets,
+                typescript: discover_typescript_targets_with_issues,
             },
         );
 
@@ -2581,8 +2754,8 @@ mod tests {
             &workspace,
             &mut issues,
             CoverageDiscoverers {
-                rust: |_config, _root| Ok(Vec::new()),
-                python: |_config, _root| Ok(Vec::new()),
+                rust: no_targets,
+                python: no_targets,
                 go: |_config, _root| {
                     Err(Box::new(crate::model::Issue::error(
                         "SYU-coverage-walk-001",
@@ -2592,9 +2765,9 @@ mod tests {
                         None,
                     )))
                 },
-                java: discover_java_targets,
+                java: discover_java_targets_with_issues,
                 csharp: no_targets,
-                typescript: discover_typescript_targets,
+                typescript: discover_typescript_targets_with_issues,
             },
         );
 
@@ -2622,9 +2795,9 @@ mod tests {
             &workspace,
             &mut issues,
             CoverageDiscoverers {
-                rust: |_config, _root| Ok(Vec::new()),
-                python: |_config, _root| Ok(Vec::new()),
-                go: |_config, _root| Ok(Vec::new()),
+                rust: no_targets,
+                python: no_targets,
+                go: no_targets,
                 java: |_config, _root| {
                     Err(Box::new(crate::model::Issue::error(
                         "SYU-coverage-walk-001",
@@ -2635,7 +2808,7 @@ mod tests {
                     )))
                 },
                 csharp: no_targets,
-                typescript: discover_typescript_targets,
+                typescript: discover_typescript_targets_with_issues,
             },
         );
 
@@ -2676,7 +2849,7 @@ mod tests {
                         None,
                     )))
                 },
-                typescript: discover_typescript_targets,
+                typescript: discover_typescript_targets_with_issues,
             },
         );
 
