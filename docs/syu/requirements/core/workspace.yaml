@@ -416,3 +416,42 @@ requirements:
         - file: src/command/log.rs
           symbols:
             - '*'
+  - id: REQ-CORE-026
+    title: Provide a local contributor readiness doctor command
+    description: |
+      The CLI MUST provide a `doctor` command that reports the current local
+      readiness state before contributors run repository checks. The command MUST
+      resolve the workspace root from the current directory or any child path,
+      MUST report whether `syu.yaml` is present, MUST summarize the available
+      Rust/Cargo toolchain, and SHOULD compare the current runtime versions
+      against checked-in expectations such as `Cargo.toml`, `.nvmrc`, and
+      `package.json#packageManager` where those files exist. For repository
+      surfaces that carry optional local setup state, such as the browser app,
+      docs site, or Playwright browser cache, the command SHOULD report whether
+      the local install looks missing or stale and SHOULD print the next command a
+      contributor should run to fix it. The command SHOULD offer JSON output for
+      automation and SHOULD keep working outside a fully valid workspace so long
+      as the starting path exists.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-002
+      - POL-004
+      - POL-006
+    linked_features:
+      - FEAT-DOCTOR-001
+    tests:
+      rust:
+        - file: tests/doctor_command.rs
+          symbols:
+            - '*'
+        - file: tests/help_command.rs
+          symbols:
+            - doctor_help_mentions_local_readiness_and_json_output
+        - file: src/lib.rs
+          symbols:
+            - run_dispatch
+            - dispatch
+        - file: src/command/doctor.rs
+          symbols:
+            - '*'

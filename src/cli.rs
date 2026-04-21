@@ -15,6 +15,7 @@
 // FEAT-TRACE-001
 // FEAT-REPORT-001
 // FEAT-INIT-002
+// FEAT-DOCTOR-001
 // REQ-CORE-001
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, builder::BoolishValueParser};
@@ -33,6 +34,15 @@ const APP_AFTER_HELP: &str = concat!(
     "Use GET /health for readiness checks once the app is serving.\n",
     "Press Ctrl-C to stop the local app server."
 );
+
+const DOCTOR_AFTER_HELP: &str = "\
+Examples:
+  syu doctor .
+  syu doctor . --format json
+
+Use this before local contributor checks when you want one summary of the current
+Rust toolchain, Node/npm expectations, optional package-surface dependency state,
+and Playwright browser readiness.";
 
 const INIT_AFTER_HELP: &str = "\
 Use `syu templates` first when you want to compare starter layouts before you scaffold.
@@ -183,6 +193,11 @@ pub enum Commands {
         after_help = APP_AFTER_HELP
     )]
     App(AppArgs),
+    #[command(
+        about = "Inspect local contributor-tooling readiness for this workspace",
+        after_help = DOCTOR_AFTER_HELP
+    )]
+    Doctor(DoctorArgs),
     #[command(
         visible_alias = "check",
         about = "Validate the layered graph, traces, and optional autofixes"
@@ -432,6 +447,17 @@ pub struct AppArgs {
     #[arg(help = "Allow syu app to bind to a non-loopback address such as 0.0.0.0")]
     #[arg(long, action = ArgAction::SetTrue)]
     pub allow_remote: bool,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct DoctorArgs {
+    #[arg(help = WORKSPACE_HELP)]
+    #[arg(default_value = ".")]
+    pub workspace: PathBuf,
+
+    #[arg(help = "Output format for doctor results")]
+    #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
 }
 
 #[derive(Debug, Clone, Args)]
