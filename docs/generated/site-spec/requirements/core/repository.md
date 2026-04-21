@@ -162,6 +162,7 @@ description: "Generated reference for docs/syu/requirements/core/repository.yaml
   - **linked_features**:
     - FEAT-CONTRIB-002
     - FEAT-CONTRIB-003
+    - FEAT-CONTRIB-004
   - **tests**:
     - **rust**:
       - **file**: tests/repository_quality.rs
@@ -170,6 +171,9 @@ description: "Generated reference for docs/syu/requirements/core/repository.yaml
       - **file**: tests/install_precommit_script.rs
         - **symbols**:
           - install_precommit_reports_lookup_paths_when_hook_bootstrap_fails
+      - **file**: tests/bootstrap_contributor_tooling_script.rs
+        - **symbols**:
+          - *
 - **id**: REQ-CORE-014
   - **title**: Keep dependency hygiene and CI execution current
   - **description**:
@@ -338,6 +342,7 @@ requirements:
     linked_features:
       - FEAT-CONTRIB-002
       - FEAT-CONTRIB-003
+      - FEAT-CONTRIB-004
     tests:
       rust:
         - file: tests/repository_quality.rs
@@ -346,6 +351,9 @@ requirements:
         - file: tests/install_precommit_script.rs
           symbols:
             - install_precommit_reports_lookup_paths_when_hook_bootstrap_fails
+        - file: tests/bootstrap_contributor_tooling_script.rs
+          symbols:
+            - '*'
   - id: REQ-CORE-014
     title: Keep dependency hygiene and CI execution current
     description: |

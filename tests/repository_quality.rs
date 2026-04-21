@@ -36,6 +36,7 @@ fn repository_declares_precommit_and_quality_gates() {
     let validate_app_script = read_file("scripts/ci/validate-app.sh");
     let validate_website_script = read_file("scripts/ci/validate-website.sh");
     let install_docs_site_deps_script = read_file("scripts/ci/install-docs-site-deps.sh");
+    let contributor_bootstrap_script = read_file("scripts/ci/bootstrap-contributor-tooling.sh");
     let ci_workflow = read_file(".github/workflows/ci.yml");
     let contributing = read_file("CONTRIBUTING.md");
     let repo_config = read_file("syu.yaml");
@@ -63,6 +64,16 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(validate_website_script.contains("scripts/ci/quality-gates.sh"));
     assert!(validate_website_script.contains("install-docs-site-deps.sh"));
     assert!(validate_website_script.contains("npm --prefix website run build"));
+    assert!(contributor_bootstrap_script.contains("FEAT-CONTRIB-004"));
+    assert!(contributor_bootstrap_script.contains("scripts/ci/pinned-npm.sh install app"));
+    assert!(contributor_bootstrap_script.contains("scripts/ci/pinned-npm.sh install website"));
+    assert!(contributor_bootstrap_script.contains("bash scripts/ci/install-docs-site-deps.sh"));
+    assert!(contributor_bootstrap_script.contains("npm --prefix editors/vscode ci"));
+    assert!(contributor_bootstrap_script.contains("playwright install --with-deps chromium"));
+    assert!(contributor_bootstrap_script.contains("current shell's Node major"));
+    assert!(contributor_bootstrap_script.contains("app/.nvmrc"));
+    assert!(contributor_bootstrap_script.contains("website/.nvmrc"));
+    assert!(contributor_bootstrap_script.contains("--all"));
     assert!(install_docs_site_deps_script.contains("Branch switches can leave behind"));
     assert!(install_docs_site_deps_script.contains("website/node_modules"));
     assert!(install_docs_site_deps_script.contains("shutil.rmtree"));
@@ -935,6 +946,11 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(contributing.contains("docs/generated/"));
     assert!(contributing.contains("scripts/ci/check-browser-app-freshness.sh"));
     assert!(contributing.contains("scripts/ci/pinned-npm.sh install app"));
+    assert!(contributing.contains("scripts/ci/bootstrap-contributor-tooling.sh"));
+    assert!(contributing.contains("matches the current shell major"));
+    assert!(contributing.contains("--vscode"));
+    assert!(contributing.contains("--playwright"));
+    assert!(contributing.contains("--all"));
     assert!(contributing.contains("GitHub uses the PR title as the squash commit headline"));
     assert!(contributing.contains("requirement/feature coverage summary"));
     assert!(contributing.contains("Linked issue or specification"));

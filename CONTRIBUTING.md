@@ -46,6 +46,21 @@ checkout.
 Run branch 1 for every change. Then add any later branches below that also
 match your change:
 
+If you want one entrypoint that prepares the optional local Node surfaces first,
+run:
+
+```bash
+scripts/ci/bootstrap-contributor-tooling.sh
+```
+
+Without flags, the script installs only the surfaces whose checked-in `.nvmrc`
+matches the current shell major. In this repository that means Node 25 selects
+the browser app, while Node 20 selects the docs site plus the VS Code
+extension. Add `--vscode` when you are working on `editors/vscode/`,
+`--playwright` when you want local end-to-end browser coverage, or `--all`
+when you intentionally want every checked-in optional npm surface ready at
+once.
+
 <!-- FEAT-DOCTOR-001 -->
 
 Before you choose a branch below, run `syu doctor .` when you want one quick
@@ -96,10 +111,16 @@ dependency installs, and Playwright browser readiness for this checkout.
    Outside the devcontainer, or when you only need the raw follow-up steps,
    install the browser app dependencies with:
 
-   ```bash
-   scripts/ci/pinned-npm.sh install app
-   npm --prefix app ci
-   ```
+    ```bash
+    scripts/ci/pinned-npm.sh install app
+    npm --prefix app ci
+    ```
+
+    Or prepare the same app dependencies together with the docs site through:
+
+    ```bash
+    scripts/ci/bootstrap-contributor-tooling.sh --app
+    ```
 
 Normal Cargo-driven builds no longer run that install step for you. If you are
 in a fresh clone or fresh worktree and the embedded browser app dependencies are
@@ -150,9 +171,15 @@ tree.
    then runs the docs-site install/build sequence below. Install the docs-site
    dependencies first when you need the raw follow-up steps only:
 
-   ```bash
-   bash scripts/ci/install-docs-site-deps.sh
-   ```
+    ```bash
+    bash scripts/ci/install-docs-site-deps.sh
+    ```
+
+    Or prepare the docs site together with the browser-app defaults through:
+
+    ```bash
+    scripts/ci/bootstrap-contributor-tooling.sh --website
+    ```
 
    The script removes `website/node_modules` before reinstalling so repeated
    runs stay deterministic across branch switches and reused worktrees. The raw
