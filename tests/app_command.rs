@@ -133,7 +133,7 @@ fn shutdown_child_with_output(child: Child) -> Output {
     output
 }
 
-fn dev_server_test_lock() -> &'static Mutex<()> {
+fn app_command_test_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
 }
@@ -170,6 +170,9 @@ fn wait_for_output_fragment(path: &Path, fragment: &str) {
 // REQ-CORE-017
 #[test]
 fn app_command_serves_browser_ui_and_payload() {
+    let _guard = app_command_test_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let port = reserve_port();
     let mut child = Command::cargo_bin("syu")
         .expect("binary should build")
@@ -221,6 +224,9 @@ fn app_command_serves_browser_ui_and_payload() {
 
 #[test]
 fn app_command_startup_message_explains_browser_and_stop_flow() {
+    let _guard = app_command_test_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let port = reserve_port();
     let (_workspace_tempdir, workspace) = configured_workspace("127.0.0.1", port);
     let nested_workspace = workspace.join("frontend");
@@ -305,6 +311,9 @@ fn app_command_rejects_non_loopback_binds_without_explicit_opt_in() {
 
 #[test]
 fn app_command_warns_on_non_loopback_binds_after_explicit_opt_in() {
+    let _guard = app_command_test_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let port = reserve_port();
     let child = Command::cargo_bin("syu")
         .expect("binary should build")
@@ -345,7 +354,7 @@ fn app_command_warns_on_non_loopback_binds_after_explicit_opt_in() {
 
 #[test]
 fn app_command_can_serve_a_dev_server_shell() {
-    let _guard = dev_server_test_lock()
+    let _guard = app_command_test_lock()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let port = reserve_port();
@@ -382,7 +391,7 @@ fn app_command_can_serve_a_dev_server_shell() {
 
 #[test]
 fn app_command_requires_a_running_dev_server_for_dev_mode() {
-    let _guard = dev_server_test_lock()
+    let _guard = app_command_test_lock()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let port = reserve_port();
@@ -412,6 +421,9 @@ fn app_command_requires_a_running_dev_server_for_dev_mode() {
 
 #[test]
 fn app_command_uses_configured_bind_and_port_defaults() {
+    let _guard = app_command_test_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let port = reserve_port();
     let (_tempdir, workspace) = configured_workspace("127.0.0.1", port);
 
@@ -496,6 +508,9 @@ fn app_command_explains_how_to_recover_from_port_binding_failures() {
 
 #[test]
 fn app_command_cli_flags_override_configured_bind_and_port() {
+    let _guard = app_command_test_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let override_port = reserve_port();
     let (_tempdir, workspace) = configured_workspace("definitely-not-an-ip", 39999);
 

@@ -23,7 +23,7 @@ use axum::{
 };
 use include_dir::{Dir, include_dir};
 use syu_core::{
-    AppPayload, DefinitionCounts, ReferencedRule, SectionKind, Severity, SourceDocument,
+    AppPayload, AppServer, DefinitionCounts, ReferencedRule, SectionKind, Severity, SourceDocument,
     TraceCount, TraceSummary, ValidationIssue, ValidationSnapshot,
 };
 
@@ -54,6 +54,7 @@ const APP_DEV_SERVER_ORIGIN: &str = "http://127.0.0.1:4173";
 struct AppState {
     workspace_root: PathBuf,
     config: SyuConfig,
+    app_server: AppServer,
     current: Arc<RwLock<CurrentAppState>>,
     dev_server_origin: Option<String>,
 }
@@ -66,15 +67,21 @@ struct CurrentAppData {
 
 #[derive(Debug, Clone)]
 enum CurrentAppState {
-    Ready(CurrentAppData),
+    Ready(Box<CurrentAppData>),
     Error(String),
 }
 
 impl AppState {
-    fn new(workspace_root: PathBuf, config: SyuConfig, dev_server_origin: Option<String>) -> Self {
+    fn new(
+        workspace_root: PathBuf,
+        config: SyuConfig,
+        app_server: AppServer,
+        dev_server_origin: Option<String>,
+    ) -> Self {
         Self {
             workspace_root,
             config,
+            app_server,
             current: Arc::new(RwLock::new(CurrentAppState::Error(
                 "app data refresh failed".to_string(),
             ))),
@@ -89,7 +96,7 @@ impl AppState {
             .map_err(|_| anyhow!("app refresh state lock poisoned"))?
             .clone()
         {
-            CurrentAppState::Ready(data) => Ok(data),
+            CurrentAppState::Ready(data) => Ok(*data),
             CurrentAppState::Error(message) => Err(anyhow!(message)),
         }
     }
@@ -122,7 +129,7 @@ impl AppState {
     fn refresh_current(&self) -> Result<()> {
         self.refresh_current_with(
             || load_current_snapshot(&self.workspace_root, &self.config),
-            || load_current_payload(&self.workspace_root, &self.config),
+            || load_current_payload(&self.workspace_root, &self.config, &self.app_server),
         )
     }
 
@@ -143,7 +150,9 @@ impl AppState {
                 }
 
                 match load_payload() {
-                    Ok(payload) => CurrentAppState::Ready(CurrentAppData { snapshot, payload }),
+                    Ok(payload) => {
+                        CurrentAppState::Ready(Box::new(CurrentAppData { snapshot, payload }))
+                    }
                     Err(error) => CurrentAppState::Error(format!("{error:#}")),
                 }
             }
@@ -213,20 +222,12 @@ pub fn run_app_command(args: &AppArgs) -> Result<i32> {
     require_remote_bind_opt_in(bind, args.allow_remote)?;
     build_app_payload_from_config(&workspace_root, &loaded.config)?;
     println!("workspace: {}", workspace_root.display());
-    let state = AppState::new(
-        workspace_root.clone(),
-        loaded.config,
-        dev_server_origin.clone(),
-    );
-    let _ = state.refresh_current();
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .context("failed to create runtime for `syu app`")?;
 
     runtime.block_on(async move {
-        let router = app_router(state.clone());
-        let refresher = tokio::spawn(refresh_current_until_shutdown(state.clone()));
         let listener = tokio::net::TcpListener::bind((bind, settings.port))
             .await
             .map_err(|error| {
@@ -240,6 +241,15 @@ pub fn run_app_command(args: &AppArgs) -> Result<i32> {
         let local_addr = listener
             .local_addr()
             .context("failed to inspect bind address")?;
+        let state = AppState::new(
+            workspace_root.clone(),
+            loaded.config,
+            app_server(local_addr),
+            dev_server_origin.clone(),
+        );
+        let _ = state.refresh_current();
+        let router = app_router(state.clone());
+        let refresher = tokio::spawn(refresh_current_until_shutdown(state.clone()));
         let server = tokio::spawn(async move {
             axum::serve(listener, router)
                 .with_graceful_shutdown(shutdown_signal())
@@ -378,8 +388,15 @@ fn refresh_current_once(state: &AppState) {
     }
 }
 
-fn load_current_payload(workspace_root: &Path, config: &SyuConfig) -> Result<AppPayload> {
-    build_app_payload_from_config(workspace_root, config)
+fn load_current_payload(
+    workspace_root: &Path,
+    config: &SyuConfig,
+    app_server: &AppServer,
+) -> Result<AppPayload> {
+    build_app_payload_from_config(workspace_root, config).map(|mut payload| {
+        payload.app_server = app_server.clone();
+        payload
+    })
 }
 
 fn load_current_snapshot(workspace_root: &Path, config: &SyuConfig) -> Result<String> {
@@ -890,9 +907,18 @@ fn build_app_payload_from_config(workspace_root: &Path, config: &SyuConfig) -> R
     Ok(AppPayload {
         workspace_root: workspace_label,
         spec_root: spec_label,
+        app_server: AppServer::default(),
         source_documents,
         validation: validation_snapshot(collect_check_result(workspace_root)),
     })
+}
+
+fn app_server(local_addr: SocketAddr) -> AppServer {
+    AppServer {
+        bind: local_addr.ip().to_string(),
+        port: local_addr.port(),
+        remotely_reachable: !local_addr.ip().is_loopback(),
+    }
 }
 
 fn browser_root_labels(workspace_root: &Path, spec_root: &Path) -> (String, String) {
@@ -1156,16 +1182,16 @@ mod tests {
 
     use super::{
         APP_DEV_SERVER_ORIGIN, AppPayload, AppServerSettings, AppState, AppVersion, SectionKind,
-        Severity, SnapshotDependency, app_dev_server_origin, app_router, bind_failure_message,
-        browser_root_labels, build_app_payload, canonical_workspace_root, collect_feature_sources,
-        collect_snapshot_files_with_extensions, collect_yaml_sources_recursive,
-        content_type_for_path, dev_server_probe_request_sent, dev_server_probe_succeeds,
-        is_asset_like, load_current_snapshot, non_loopback_warning_lines, normalized_asset_path,
-        normalized_trace_snapshot_path, readiness_probe_request_sent, readiness_probe_succeeds,
-        redacted_relative_label, redacted_root_label, refresh_current_once, relative_display,
-        require_remote_bind_opt_in, resolve_app_server_settings, spec_snapshot, startup_lines,
-        trailing_path_components_label, validation_snapshot, wait_for_dev_server_with_retry,
-        wait_for_ready_with_retry,
+        Severity, SnapshotDependency, app_dev_server_origin, app_router, app_server,
+        bind_failure_message, browser_root_labels, build_app_payload, canonical_workspace_root,
+        collect_feature_sources, collect_snapshot_files_with_extensions,
+        collect_yaml_sources_recursive, content_type_for_path, dev_server_probe_request_sent,
+        dev_server_probe_succeeds, is_asset_like, load_current_snapshot,
+        non_loopback_warning_lines, normalized_asset_path, normalized_trace_snapshot_path,
+        readiness_probe_request_sent, readiness_probe_succeeds, redacted_relative_label,
+        redacted_root_label, refresh_current_once, relative_display, require_remote_bind_opt_in,
+        resolve_app_server_settings, spec_snapshot, startup_lines, trailing_path_components_label,
+        validation_snapshot, wait_for_dev_server_with_retry, wait_for_ready_with_retry,
     };
 
     fn fixture_root(name: &str) -> PathBuf {
@@ -1200,7 +1226,12 @@ mod tests {
 
     fn app_state(root: &Path) -> AppState {
         let config = load_config(root).expect("config should load").config;
-        let state = AppState::new(root.to_path_buf(), config, None);
+        let state = AppState::new(
+            root.to_path_buf(),
+            config,
+            app_server("127.0.0.1:3000".parse().expect("socket addr")),
+            None,
+        );
         let _ = state.refresh_current();
         state
     }
@@ -1454,6 +1485,14 @@ mod tests {
     }
 
     #[test]
+    fn app_server_marks_non_loopback_sessions_as_remotely_reachable() {
+        let server = app_server("0.0.0.0:4312".parse().expect("valid socket addr"));
+        assert_eq!(server.bind, "0.0.0.0");
+        assert_eq!(server.port, 4312);
+        assert!(server.remotely_reachable);
+    }
+
+    #[test]
     fn require_remote_bind_opt_in_allows_loopback_without_flag() {
         require_remote_bind_opt_in("127.0.0.1".parse().expect("valid ip"), false)
             .expect("loopback should stay allowed");
@@ -1534,6 +1573,9 @@ mod tests {
             "./tests/fixtures/workspaces/passing"
         );
         assert_eq!(payload.spec_root, "docs/syu");
+        assert_eq!(payload.app_server.bind, "");
+        assert_eq!(payload.app_server.port, 0);
+        assert!(!payload.app_server.remotely_reachable);
         assert!(
             payload
                 .source_documents
@@ -2283,6 +2325,7 @@ mod tests {
             load_config(tempdir.path())
                 .expect("config should load")
                 .config,
+            app_server("127.0.0.1:3000".parse().expect("socket addr")),
             None,
         );
         let payload_loads = AtomicUsize::new(0);
@@ -2321,6 +2364,7 @@ mod tests {
             load_config(tempdir.path())
                 .expect("config should load")
                 .config,
+            app_server("127.0.0.1:3000".parse().expect("socket addr")),
             None,
         );
 

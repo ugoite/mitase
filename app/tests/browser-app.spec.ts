@@ -210,6 +210,34 @@ test("scopes welcome-banner dismissal to the current workspace root", async ({ p
   await expect(page.getByText("Welcome to syu.")).toBeVisible();
 });
 
+test("renders remote-access warnings with bracketed IPv6 host literals", async ({ page }) => {
+  await page.route("**/api/app-data.json", async (route) => {
+    const response = await route.fetch();
+    const payload = (await response.json()) as AppDataPayload & {
+      app_server?: { bind: string; port: number; remotely_reachable: boolean };
+    };
+
+    await route.fulfill({
+      response,
+      body: JSON.stringify({
+        ...payload,
+        app_server: {
+          ...(payload.app_server ?? { bind: "::1", port: 3000, remotely_reachable: true }),
+          bind: "::1",
+          port: 3000,
+          remotely_reachable: true,
+        },
+      }),
+    });
+  });
+
+  await page.goto("/");
+
+  const banner = page.getByRole("alert");
+  await expect(banner).toContainText("Remote access is enabled for this session.");
+  await expect(banner).toContainText("http://[::1]:3000");
+});
+
 test("loads deep links and supports keyboard search navigation", async ({ page }) => {
   await page.goto("/#/requirements/REQ-CORE-001");
 

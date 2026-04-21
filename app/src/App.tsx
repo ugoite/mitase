@@ -771,6 +771,27 @@ function App() {
             Refreshing workspace data...
           </div>
         )}
+        {workspace.app_server.remotely_reachable && (
+          <div
+            role="alert"
+            className="md:col-span-2 rounded-3xl border border-amber-400/40 bg-amber-400/10 px-5 py-4 text-sm text-amber-50 shadow-2xl shadow-amber-950/10"
+          >
+            <p className="font-semibold">Remote access is enabled for this session.</p>
+            <p className="mt-2 leading-7 text-amber-100">
+              This browser UI is reachable at{" "}
+              <span className="font-mono text-amber-50">
+                {formatAppServerUrl(workspace.app_server.bind, workspace.app_server.port)}
+              </span>{" "}
+              because <code className="rounded bg-black/20 px-1 py-0.5">--allow-remote</code> was
+              used intentionally when{" "}
+              <code className="rounded bg-black/20 px-1 py-0.5">syu app</code> started.
+            </p>
+            <p className="mt-2 text-xs text-amber-200/90">
+              Use <code className="rounded bg-black/20 px-1 py-0.5">--bind 127.0.0.1</code> next
+              time to keep the workspace view local to this machine.
+            </p>
+          </div>
+        )}
         {showOnboarding && (
           <div className="md:col-span-2 flex items-start justify-between gap-4 rounded-3xl border border-sky-400/30 bg-sky-400/10 px-5 py-4 text-sm leading-7 text-sky-100 shadow-2xl shadow-sky-950/15">
             <p>
@@ -1380,6 +1401,11 @@ function truncatePath(fullPath: string): string {
   const parts = fullPath.replace(/\\/g, "/").split("/").filter(Boolean);
   if (parts.length <= 2) return fullPath;
   return `…/${parts.slice(-2).join("/")}`;
+}
+
+function formatAppServerUrl(bind: string, port: number): string {
+  const host = bind.includes(":") && !bind.startsWith("[") ? `[${bind}]` : bind;
+  return `http://${host}:${port}`;
 }
 
 function errorMessage(error: unknown, fallback: string): string {
