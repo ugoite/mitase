@@ -19,7 +19,51 @@ This first cut stays deliberately small:
 - navigation reads the checked-in spec YAML directly from the workspace
 
 That means the extension works with today's CLI while leaving room for a shared
-editor protocol later.
+editor protocol later. The repository now also ships `syu lsp` as an
+editor-agnostic stdio server foundation; use the dedicated
+[LSP guide](./lsp.md) for direct transport details, current capabilities, and
+non-VS Code client setup.
+
+## How this relates to `syu lsp`
+
+The repository now also ships `syu lsp`, but the VS Code extension is still
+**CLI-backed first** today rather than LSP-backed first.
+
+Current split:
+
+- **Still uses the CLI directly**: validation diagnostics come from
+  `syu validate . --format json`
+- **Still reads checked-in YAML directly**: the tree view, spec-ID lookups, and
+  related-file navigation read the workspace files without a language server in
+  the middle
+- **LSP server exists as a shared editor foundation**: `syu lsp` already gives
+  editor clients a stdio transport plus hover for spec IDs, but it does not yet
+  replace the extension's current diagnostics and navigation pipeline
+
+If you want the server contract itself, start from the dedicated
+[LSP guide](./lsp.md). Use `syu lsp --help` for the current CLI surface and
+transport flags.
+
+## Short-term contributor roadmap
+
+For now, extension contributors should treat the architecture like this:
+
+1. keep the current CLI / YAML integration as the production path for
+   diagnostics and navigation
+2. treat `syu lsp` as the place to grow editor-agnostic capabilities that
+   multiple clients could share
+3. move features from extension-only logic to LSP only when the server can
+   preserve the current UX instead of regressing it
+
+In practical terms, that means:
+
+- diagnostics still belong to the CLI-backed flow today
+- workspace graph reads and file-opening flows still belong to the extension's
+  checked-in YAML model today
+- hover is the first capability that can already be shared through `syu lsp`
+
+That keeps the current extension dependable while making room for a cleaner
+cross-editor story later.
 
 ## Run it from source
 

@@ -259,7 +259,7 @@ fn trace_command_reports_empty_git_ranges_as_json() {
     assert!(output.status.success(), "empty trace range should succeed");
     let json: Value = serde_json::from_slice(&output.stdout).expect("json output");
     assert_eq!(json["range"], "HEAD..HEAD");
-    assert_eq!(json["summary"]["total_files"], 0);
+    assert_eq!(json["summary"]["inspected_files"], 0);
     assert!(json["files"].as_array().expect("files array").is_empty());
 }
 
@@ -291,7 +291,7 @@ fn trace_command_supports_git_range_json_output() {
 
     assert!(output.status.success(), "trace range should succeed");
     let json: Value = serde_json::from_slice(&output.stdout).expect("json output");
-    assert_eq!(json["summary"]["total_files"], 2);
+    assert_eq!(json["summary"]["inspected_files"], 2);
     assert_eq!(json["summary"]["owned_files"], 1);
     assert_eq!(json["summary"]["unowned_files"], 1);
 }
@@ -354,7 +354,7 @@ fn trace_command_skips_invalid_git_diff_paths() {
         "range should ignore invalid diff paths"
     );
     let json: Value = serde_json::from_slice(&output.stdout).expect("json output");
-    assert_eq!(json["summary"]["total_files"], 1);
+    assert_eq!(json["summary"]["inspected_files"], 1);
     assert_eq!(json["files"][0]["file"], "src/rust_feature.rs");
 }
 
