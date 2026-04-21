@@ -27,6 +27,8 @@ description: "Generated reference for docs/syu/features/features.yaml"
   - **file**: cli/relate.yaml
 - **kind**: search
   - **file**: cli/search.yaml
+- **kind**: audit
+  - **file**: cli/audit.yaml
 - **kind**: log
   - **file**: cli/log.yaml
 - **kind**: trace
@@ -73,6 +75,8 @@ files:
     file: cli/relate.yaml
   - kind: search
     file: cli/search.yaml
+  - kind: audit
+    file: cli/audit.yaml
   - kind: log
     file: cli/log.yaml
   - kind: trace
