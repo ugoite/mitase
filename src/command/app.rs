@@ -605,9 +605,25 @@ fn is_asset_like(path: &str) -> bool {
 
 fn asset_response(path: &str, bytes: &'static [u8]) -> Response {
     let mut response = Response::new(Body::from(bytes.to_vec()));
-    response.headers_mut().insert(
+    let headers = response.headers_mut();
+    headers.insert(
         header::CONTENT_TYPE,
         HeaderValue::from_static(content_type_for_path(path)),
+    );
+    headers.insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static(
+            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
+        ),
+    );
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(header::X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
+    headers.insert(
+        header::REFERRER_POLICY,
+        HeaderValue::from_static("no-referrer"),
     );
     response
 }
@@ -2203,8 +2219,27 @@ mod tests {
             root.headers().get(header::CONTENT_TYPE),
             Some(&HeaderValue::from_static("text/html; charset=utf-8"))
         );
+        assert_eq!(
+            root.headers().get(header::CONTENT_SECURITY_POLICY),
+            Some(&HeaderValue::from_static(
+                "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+            ))
+        );
+        assert_eq!(
+            root.headers().get(header::X_CONTENT_TYPE_OPTIONS),
+            Some(&HeaderValue::from_static("nosniff"))
+        );
+        assert_eq!(
+            root.headers().get(header::X_FRAME_OPTIONS),
+            Some(&HeaderValue::from_static("DENY"))
+        );
+        assert_eq!(
+            root.headers().get(header::REFERRER_POLICY),
+            Some(&HeaderValue::from_static("no-referrer"))
+        );
 
         let nested = router
+            .clone()
             .oneshot(
                 Request::builder()
                     .uri("/requirements/REQ-CORE-017")
@@ -2214,6 +2249,31 @@ mod tests {
             .await
             .expect("response");
         assert_eq!(nested.status(), StatusCode::OK);
+
+        let favicon = router
+            .oneshot(
+                Request::builder()
+                    .uri("/favicon.svg")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(favicon.status(), StatusCode::OK);
+        assert_eq!(
+            favicon.headers().get(header::CONTENT_TYPE),
+            Some(&HeaderValue::from_static("image/svg+xml"))
+        );
+        assert_eq!(
+            favicon.headers().get(header::CONTENT_SECURITY_POLICY),
+            Some(&HeaderValue::from_static(
+                "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+            ))
+        );
+        assert_eq!(
+            favicon.headers().get(header::X_CONTENT_TYPE_OPTIONS),
+            Some(&HeaderValue::from_static("nosniff"))
+        );
     }
 
     #[tokio::test]
