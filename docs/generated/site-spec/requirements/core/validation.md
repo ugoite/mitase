@@ -31,7 +31,9 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       state, and surface rule codes with human-readable titles and explanations
       in validation output. It MUST also support optional filtered views by
       severity, rule genre, and exact rule code for both text and JSON output
-      without changing the underlying validation result, and `syu.yaml` MUST be
+      without changing the underlying validation result, MUST support a
+      reviewer-friendly `--spec-only` mode that skips traced source checks while
+      still validating the layered specification itself, and `syu.yaml` MUST be
       able to disable reciprocal-link enforcement without disabling missing-
       reference validation. `check` MAY remain as a compatibility alias, but
       `validate` is the canonical command name.
@@ -72,6 +74,9 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       - **file**: tests/workspace_discovery_command.rs
         - **symbols**:
           - validate_command_discovers_workspace_from_nested_current_directory
+      - **file**: tests/help_command.rs
+        - **symbols**:
+          - validate_help_mentions_spec_only_mode
       - **file**: src/command/check.rs
         - **symbols**:
           - *
@@ -257,7 +262,9 @@ requirements:
       state, and surface rule codes with human-readable titles and explanations
       in validation output. It MUST also support optional filtered views by
       severity, rule genre, and exact rule code for both text and JSON output
-      without changing the underlying validation result, and `syu.yaml` MUST be
+      without changing the underlying validation result, MUST support a
+      reviewer-friendly `--spec-only` mode that skips traced source checks while
+      still validating the layered specification itself, and `syu.yaml` MUST be
       able to disable reciprocal-link enforcement without disabling missing-
       reference validation. `check` MAY remain as a compatibility alias, but
       `validate` is the canonical command name.
@@ -298,6 +305,9 @@ requirements:
         - file: tests/workspace_discovery_command.rs
           symbols:
             - validate_command_discovers_workspace_from_nested_current_directory
+        - file: tests/help_command.rs
+          symbols:
+            - validate_help_mentions_spec_only_mode
         - file: src/command/check.rs
           symbols:
             - '*'

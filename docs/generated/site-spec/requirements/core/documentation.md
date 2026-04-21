@@ -25,8 +25,9 @@ description: "Generated reference for docs/syu/requirements/core/documentation.y
       features in English, describe why each layer exists, document how to
       define them, explain `planned` / `implemented` delivery states, show how
       to use `init`, `browse`, `validate`, `report`, config, and autofix, orient
-      first-time users with actionable root CLI help, and publish the checked-in
-      `docs/` tree through a Docusaurus site.
+      first-time users with actionable root CLI help, offer shell-completion
+      setup for supported shells, and publish the checked-in `docs/` tree
+      through a Docusaurus site.
   - **priority**: medium
   - **status**: implemented
   - **linked_policies**:
@@ -44,6 +45,7 @@ description: "Generated reference for docs/syu/requirements/core/documentation.y
           - init_help_lists_starter_templates
           - init_help_mentions_custom_spec_roots
           - init_help_mentions_id_prefix_options
+          - completion_command_emits_shell_scripts
           - validate_help_lists_temporary_config_overrides
           - validate_help_mentions_warning_exit_code_for_automation
       - **file**: tests/repository_quality.rs
@@ -89,8 +91,9 @@ requirements:
       features in English, describe why each layer exists, document how to
       define them, explain `planned` / `implemented` delivery states, show how
       to use `init`, `browse`, `validate`, `report`, config, and autofix, orient
-      first-time users with actionable root CLI help, and publish the checked-in
-      `docs/` tree through a Docusaurus site.
+      first-time users with actionable root CLI help, offer shell-completion
+      setup for supported shells, and publish the checked-in `docs/` tree
+      through a Docusaurus site.
     priority: medium
     status: implemented
     linked_policies:
@@ -108,6 +111,7 @@ requirements:
             - init_help_lists_starter_templates
             - init_help_mentions_custom_spec_roots
             - init_help_mentions_id_prefix_options
+            - completion_command_emits_shell_scripts
             - validate_help_lists_temporary_config_overrides
             - validate_help_mentions_warning_exit_code_for_automation
         - file: tests/repository_quality.rs

@@ -1625,6 +1625,7 @@ mod tests {
             genre: Vec::new(),
             rule: Vec::new(),
             id: Vec::new(),
+            spec_only: false,
             fix: false,
             no_fix: false,
             allow_planned: None,
