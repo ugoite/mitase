@@ -182,10 +182,12 @@ Rust-first, Python-first, Ruby-first, Go-first, Java-first, TypeScript-first, or
 syu templates
 syu init . --template docs-first
 syu init . --template rust-only
+syu init . --template python-only
 syu init . --template ruby-only
 syu init . --template go-only
 syu init . --template java-only
 syu init . --template typescript-only
+syu init . --template polyglot
 ```
 
 Run `syu templates` first if you want the starter names, one-line descriptions,
