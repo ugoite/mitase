@@ -780,7 +780,7 @@ function App() {
             <p className="mt-2 leading-7 text-amber-100">
               This browser UI is reachable at{" "}
               <span className="font-mono text-amber-50">
-                http://{workspace.app_server.bind}:{workspace.app_server.port}
+                {formatAppServerUrl(workspace.app_server.bind, workspace.app_server.port)}
               </span>{" "}
               because <code className="rounded bg-black/20 px-1 py-0.5">--allow-remote</code> was
               used intentionally when{" "}
@@ -1401,6 +1401,11 @@ function truncatePath(fullPath: string): string {
   const parts = fullPath.replace(/\\/g, "/").split("/").filter(Boolean);
   if (parts.length <= 2) return fullPath;
   return `…/${parts.slice(-2).join("/")}`;
+}
+
+function formatAppServerUrl(bind: string, port: number): string {
+  const host = bind.includes(":") && !bind.startsWith("[") ? `[${bind}]` : bind;
+  return `http://${host}:${port}`;
 }
 
 function errorMessage(error: unknown, fallback: string): string {
