@@ -255,6 +255,21 @@ non-loopback address such as `0.0.0.0`, you must also pass `--allow-remote`
 when starting `syu app`. See the [configuration guide](./configuration.md#appbind)
 for the full reference.
 
+### Frontend dev-server mode
+
+When you are iterating on `app/src/` itself, keep the normal `syu app` backend
+API on port 3000 and opt into the Vite dev server shell:
+
+```bash
+npm --prefix app run dev
+syu app . --dev-server
+```
+
+In this mode, `syu app` still serves `/api/*`, `/health`, and the workspace
+snapshot from the Rust process, but the browser HTML points module loading at
+the Vite dev server on `http://127.0.0.1:4173`. That keeps the data model local
+to `syu app` while giving frontend work the faster Vite feedback loop.
+
 ---
 
 ## Health checks and readiness
