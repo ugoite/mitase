@@ -5,6 +5,8 @@
 // REQ-CORE-023
 // REQ-CORE-024
 // REQ-CORE-025
+// REQ-CORE-026
+// REQ-CORE-027
 
 use assert_cmd::cargo::CommandCargoExt;
 use std::process::Command;
@@ -52,7 +54,7 @@ fn app_help_mentions_remote_bind_opt_in() {
 fn workspace_help_uses_current_directory_default_consistently() {
     for command in [
         "browse", "show", "search", "trace", "app", "doctor", "validate", "check", "report", "add",
-        "relate", "log", "audit",
+        "relate", "log", "audit", "explain",
     ] {
         let output = Command::cargo_bin("syu")
             .expect("binary should build")
@@ -133,6 +135,23 @@ fn relate_help_mentions_ids_paths_symbols_and_json_output() {
     assert!(stdout.contains("syu relate REQ-CORE-018"));
     assert!(stdout.contains("syu relate src/command/search.rs"));
     assert!(stdout.contains("syu relate run_search_command"));
+}
+
+#[test]
+fn explain_help_mentions_ids_paths_symbols_and_json_output() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args(["explain", "--help"])
+        .output()
+        .expect("help should render");
+
+    assert!(output.status.success(), "explain help should succeed");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--format"));
+    assert!(stdout.contains("syu explain REQ-CORE-018"));
+    assert!(stdout.contains("syu explain src/command/search.rs"));
+    assert!(stdout.contains("syu explain run_search_command"));
 }
 
 #[test]
