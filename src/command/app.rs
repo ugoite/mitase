@@ -1182,16 +1182,16 @@ mod tests {
 
     use super::{
         APP_DEV_SERVER_ORIGIN, AppPayload, AppServerSettings, AppState, AppVersion, SectionKind,
-        Severity, SnapshotDependency, app_dev_server_origin, app_router, bind_failure_message,
-        browser_root_labels, build_app_payload, canonical_workspace_root, collect_feature_sources,
-        collect_snapshot_files_with_extensions, collect_yaml_sources_recursive,
-        content_type_for_path, dev_server_probe_request_sent, dev_server_probe_succeeds,
-        is_asset_like, load_current_snapshot, non_loopback_warning_lines, normalized_asset_path,
-        normalized_trace_snapshot_path, readiness_probe_request_sent, readiness_probe_succeeds,
-        redacted_relative_label, redacted_root_label, refresh_current_once, relative_display,
-        require_remote_bind_opt_in, resolve_app_server_settings, spec_snapshot, startup_lines,
-        trailing_path_components_label, validation_snapshot, wait_for_dev_server_with_retry,
-        wait_for_ready_with_retry, app_server,
+        Severity, SnapshotDependency, app_dev_server_origin, app_router, app_server,
+        bind_failure_message, browser_root_labels, build_app_payload, canonical_workspace_root,
+        collect_feature_sources, collect_snapshot_files_with_extensions,
+        collect_yaml_sources_recursive, content_type_for_path, dev_server_probe_request_sent,
+        dev_server_probe_succeeds, is_asset_like, load_current_snapshot,
+        non_loopback_warning_lines, normalized_asset_path, normalized_trace_snapshot_path,
+        readiness_probe_request_sent, readiness_probe_succeeds, redacted_relative_label,
+        redacted_root_label, refresh_current_once, relative_display, require_remote_bind_opt_in,
+        resolve_app_server_settings, spec_snapshot, startup_lines, trailing_path_components_label,
+        validation_snapshot, wait_for_dev_server_with_retry, wait_for_ready_with_retry,
     };
 
     fn fixture_root(name: &str) -> PathBuf {
