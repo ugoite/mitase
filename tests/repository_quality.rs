@@ -618,6 +618,10 @@ fn repository_declares_documentation_guides() {
     assert!(command_card.contains("syu validate . --id FEAT-CHECK-001"));
     assert!(command_card.contains("syu app ."));
     assert!(command_card.contains("[reviewer workflow](./reviewer-workflow.md)"));
+    assert!(vscode_guide.contains("CLI-backed first"));
+    assert!(vscode_guide.contains("Still uses the CLI directly"));
+    assert!(vscode_guide.contains("Still reads checked-in YAML directly"));
+    assert!(vscode_guide.contains("hover is the first capability"));
     assert!(command_card.contains("[LSP guide](./lsp.md)"));
     assert!(command_card.contains("`syu lsp`"));
     assert!(lsp_guide.contains("JSON-RPC 2.0 over stdio"));
