@@ -77,6 +77,25 @@ because `symbols: ["*"]` does not point to one inspectable symbol.
 Unsupported adapters such as `kotlin` still raise `SYU-trace-language-001`.
 Keep those repositories connected through the spec layers first, and only add
 language-specific code traces once adapter support lands.
+If you are adopting `syu` in a mixed-language repository today, use this staged
+path instead of waiting for perfect adapter coverage:
+
+1. keep the philosophy, policy, requirement, and feature documents checked in so
+   the unsupported-language area is still part of the same layered spec story
+2. leave `validate.require_symbol_trace_coverage: false` until the supported
+   traces in the repository are stable
+3. keep direct code traces only in languages that already have adapters, plus
+   lightweight supporting files such as shell scripts, YAML, Markdown, or JSON
+4. treat the unsupported-language implementation traces as future work and use
+   `show`, `relate`, `log`, and `validate --id ...` to keep the higher-level
+   design connected in the meantime
+
+When you need a concrete fallback shape, start from the closest checked-in
+example instead of inventing a migration path from scratch. For Kotlin/JVM
+repositories, start from `examples/java-only` when you need a repository shape
+that already demonstrates JVM package layout and explicit symbol ownership, then
+keep the Kotlin source connected through philosophy, policy, requirement, and
+feature layers until Kotlin adapter support lands.
 If you need a Go-first starting point today, study the
 [`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
 or scaffold `syu init . --template go-only`. Both keep real Go files in the
@@ -97,3 +116,15 @@ If you want a concrete staged C# adoption shape today, study the
 It keeps real C# files in the repository while validating supported shell and
 markdown evidence around them before you decide how aggressively to trace the
 rest of the C# codebase.
+
+When the unsupported language matters enough that the staged fallback is no
+longer sufficient, open a feature request with:
+
+- the language name and the trace style you need (`symbols`, `doc_contains`,
+  strict inventory coverage, or all three)
+- one or two representative source snippets that show what the adapter would
+  need to inspect
+- the closest current fallback example you had to use instead
+
+That gives contributors enough context to judge whether the next step should be
+better documentation, a lighter adapter, or full trace support.
