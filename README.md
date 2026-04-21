@@ -440,6 +440,7 @@ Use this quick chooser when you know the task but not yet the subcommand:
 | scan for overlap or policy drift before reviewing a bigger spec change | `syu audit` | summarizes heuristic overlap, tension, and orphaned-policy candidates |
 | start from code or a test file and walk back to the owning spec item | `syu trace path/to/file --symbol name` | begins from traced implementation or test evidence instead of from YAML |
 | inspect everything connected to one ID, symbol, or file | `syu relate TARGET` | expands upstream/downstream links plus traced files and symbols for review |
+| explain whether one ID, file, or symbol still fits the connected chain | `syu explain TARGET` | turns the graph into a focused assessment with traces and obvious gaps |
 | review what changed for one spec item in Git history | `syu log ID` | projects the traced definition and implementation paths onto checked-in commits |
 | prefer a browser-first view for demos or visual navigation | `syu app .` | serves the same workspace graph in the local browser UI |
 
@@ -535,6 +536,22 @@ syu relate FEAT-SEARCH-001 --format json
 requirement, and feature links, includes traced files and symbols for connected
 requirements and features, and calls out sparse or suspicious gaps such as
 missing adjacent links or missing evidence.
+
+### `syu explain`
+
+Turn one definition, repository path, or traced symbol into a focused review
+summary:
+
+```bash
+syu explain REQ-001
+syu explain src/command/search.rs
+syu explain run_search_command
+```
+
+`syu explain` uses the same selector flexibility as `syu relate`, but reshapes
+the result into a guided assessment: the connected philosophy/policy/
+requirement/feature chain, the traces in scope, and any obvious gaps that still
+need review.
 
 ### `syu trace`
 

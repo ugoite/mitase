@@ -136,6 +136,12 @@ Examples:
   syu log REQ-CORE-024 --include-related --merge-base-ref origin/main
   syu log REQ-CORE-019 --format json";
 
+const EXPLAIN_AFTER_HELP: &str = "\
+Examples:
+  syu explain REQ-CORE-018
+  syu explain src/command/search.rs
+  syu explain run_search_command";
+
 const RELATE_AFTER_HELP: &str = "\
 Examples:
   syu relate REQ-CORE-018
@@ -196,6 +202,11 @@ pub enum Commands {
         after_help = LOG_AFTER_HELP
     )]
     Log(LogArgs),
+    #[command(
+        about = "Explain how one ID, file, or symbol fits the connected spec chain",
+        after_help = EXPLAIN_AFTER_HELP
+    )]
+    Explain(ExplainArgs),
     #[command(
         about = "Inspect the connected graph around one ID, path, or source symbol",
         after_help = RELATE_AFTER_HELP
@@ -442,6 +453,20 @@ pub struct TraceArgs {
     pub range: Option<String>,
 
     #[arg(help = "Output format for trace lookup results")]
+    #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct ExplainArgs {
+    #[arg(help = "Definition ID, repository-relative path, or traced source symbol to explain")]
+    pub selector: String,
+
+    #[arg(help = WORKSPACE_HELP)]
+    #[arg(default_value = ".")]
+    pub workspace: PathBuf,
+
+    #[arg(help = "Output format for the explanation")]
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
     pub format: OutputFormat,
 }

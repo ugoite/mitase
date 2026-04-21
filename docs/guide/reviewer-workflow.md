@@ -12,8 +12,8 @@ history.
 2. **Which files and symbols currently claim that work?**
 3. **What changed recently in those traced paths?**
 
-The commands below answer those questions with `show`/`relate`, `trace`, and
-`log`.
+The commands below answer those questions with `show`/`relate`, `trace`,
+`explain`, and `log`.
 
 If you review from the terminal often, generate shell completions once so spec
 IDs and subcommands stay close at hand:
@@ -73,6 +73,11 @@ syu relate FEAT-CHECK-001
 Use this output to decide whether the PR still matches the connected policy and
 requirement context, or whether it is changing the behavior in a way that
 should have updated adjacent YAML too.
+
+When you want the same selector flexibility but a more opinionated summary, run
+`syu explain TARGET`. It keeps the ID/path/symbol entry points from `syu
+relate`, then turns the result into a focused assessment with the connected
+chain, traces in scope, and obvious gaps that still need review.
 
 For bigger spec edits or cleanup PRs, add a quick heuristic audit pass:
 
