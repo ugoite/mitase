@@ -109,6 +109,31 @@ description: "Generated reference for docs/syu/features/repository/contributor.y
           - install_precommit
           - install_hooks
           - main
+- **id**: FEAT-CONTRIB-004
+  - **title**: Optional contributor tooling bootstrap
+  - **summary**: Prepare optional browser-app, docs-site, and editor npm surfaces from one checked-in entrypoint while keeping heavyweight extras opt-in.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-013
+  - **implementations**:
+    - **shell**:
+      - **file**: scripts/ci/bootstrap-contributor-tooling.sh
+        - **symbols**:
+          - FEAT-CONTRIB-004
+          - usage
+          - install_app_deps
+          - install_website_deps
+          - install_vscode_deps
+          - install_playwright_browser
+          - print_next_steps
+          - main
+    - **markdown**:
+      - **file**: CONTRIBUTING.md
+        - **symbols**:
+          - scripts/ci/bootstrap-contributor-tooling.sh
+          - --vscode
+          - --playwright
+          - --all
 
 ## Source YAML
 
@@ -211,4 +236,30 @@ features:
             - install_precommit
             - install_hooks
             - main
+
+  - id: FEAT-CONTRIB-004
+    title: Optional contributor tooling bootstrap
+    summary: Prepare optional browser-app, docs-site, and editor npm surfaces from one checked-in entrypoint while keeping heavyweight extras opt-in.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-013
+    implementations:
+      shell:
+        - file: scripts/ci/bootstrap-contributor-tooling.sh
+          symbols:
+            - FEAT-CONTRIB-004
+            - usage
+            - install_app_deps
+            - install_website_deps
+            - install_vscode_deps
+            - install_playwright_browser
+            - print_next_steps
+            - main
+      markdown:
+        - file: CONTRIBUTING.md
+          symbols:
+            - scripts/ci/bootstrap-contributor-tooling.sh
+            - --vscode
+            - --playwright
+            - --all
 ```
