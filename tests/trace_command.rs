@@ -239,6 +239,8 @@ fn trace_command_reports_git_range_summary_for_changed_files() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Git range: HEAD~1..HEAD"));
     assert!(stdout.contains("Changed files: 2"));
+    assert!(stdout.contains("Inspected files: 2"));
+    assert!(stdout.contains("Skipped files: 0"));
     assert!(stdout.contains("Coverage: 1 owned, 0 partial, 1 unowned"));
     assert!(stdout.contains("feature FEAT-TRACE-001:"));
     assert!(stdout.contains("UNOWNED:"));
@@ -259,8 +261,16 @@ fn trace_command_reports_empty_git_ranges_as_json() {
     assert!(output.status.success(), "empty trace range should succeed");
     let json: Value = serde_json::from_slice(&output.stdout).expect("json output");
     assert_eq!(json["range"], "HEAD..HEAD");
+    assert_eq!(json["summary"]["changed_files_total"], 0);
     assert_eq!(json["summary"]["inspected_files"], 0);
+    assert_eq!(json["summary"]["skipped_files"], 0);
     assert!(json["files"].as_array().expect("files array").is_empty());
+    assert!(
+        json["skipped_files"]
+            .as_array()
+            .expect("skipped files array")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -291,9 +301,17 @@ fn trace_command_supports_git_range_json_output() {
 
     assert!(output.status.success(), "trace range should succeed");
     let json: Value = serde_json::from_slice(&output.stdout).expect("json output");
+    assert_eq!(json["summary"]["changed_files_total"], 2);
     assert_eq!(json["summary"]["inspected_files"], 2);
+    assert_eq!(json["summary"]["skipped_files"], 0);
     assert_eq!(json["summary"]["owned_files"], 1);
     assert_eq!(json["summary"]["unowned_files"], 1);
+    assert!(
+        json["skipped_files"]
+            .as_array()
+            .expect("skipped files array")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -354,8 +372,17 @@ fn trace_command_skips_invalid_git_diff_paths() {
         "range should ignore invalid diff paths"
     );
     let json: Value = serde_json::from_slice(&output.stdout).expect("json output");
+    assert_eq!(json["summary"]["changed_files_total"], 2);
     assert_eq!(json["summary"]["inspected_files"], 1);
+    assert_eq!(json["summary"]["skipped_files"], 1);
     assert_eq!(json["files"][0]["file"], "src/rust_feature.rs");
+    assert_eq!(json["skipped_files"][0]["file"], "../outside.rs");
+    assert!(
+        json["skipped_files"][0]["reason"]
+            .as_str()
+            .expect("skip reason")
+            .contains("must stay under workspace")
+    );
 }
 
 #[test]
