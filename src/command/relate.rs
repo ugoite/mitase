@@ -22,7 +22,7 @@ use super::{
     lookup::{EntitySummary, WorkspaceEntity, WorkspaceLookup},
 };
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub(crate) struct JsonRelateOutput {
     pub(crate) selection: SelectionSummary,
     pub(crate) direct_matches: DirectMatches,
@@ -262,7 +262,6 @@ fn collect_related_ids_for_changed_files(
 
     combined_ids
 }
-
 pub(crate) fn build_relation_report(
     workspace: &Workspace,
     selector: &str,

@@ -69,6 +69,7 @@ enum Dispatch {
     Search(cli::SearchArgs),
     Audit(cli::AuditArgs),
     Log(cli::LogArgs),
+    Explain(cli::ExplainArgs),
     Relate(cli::RelateArgs),
     Trace(cli::TraceArgs),
     App(cli::AppArgs),
@@ -91,6 +92,7 @@ fn dispatch(cli: cli::Cli, stdin_is_terminal: bool, stdout_is_terminal: bool) ->
         Some(cli::Commands::Search(args)) => Dispatch::Search(args),
         Some(cli::Commands::Audit(args)) => Dispatch::Audit(args),
         Some(cli::Commands::Log(args)) => Dispatch::Log(args),
+        Some(cli::Commands::Explain(args)) => Dispatch::Explain(args),
         Some(cli::Commands::Relate(args)) => Dispatch::Relate(args),
         Some(cli::Commands::Trace(args)) => Dispatch::Trace(args),
         Some(cli::Commands::App(args)) => Dispatch::App(args),
@@ -117,6 +119,7 @@ fn run_dispatch(dispatch: Dispatch) -> Result<i32> {
         Dispatch::Search(args) => command::search::run_search_command(&args),
         Dispatch::Audit(args) => command::audit::run_audit_command(&args),
         Dispatch::Log(args) => command::log::run_log_command(&args),
+        Dispatch::Explain(args) => command::explain::run_explain_command(&args),
         Dispatch::Relate(args) => command::relate::run_relate_command(&args),
         Dispatch::Trace(args) => command::trace::run_trace_command(&args),
         Dispatch::App(args) => command::app::run_app_command(&args),
@@ -154,8 +157,9 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use crate::cli::{
-        AddArgs, AppArgs, AuditArgs, Cli, Commands, CompletionArgs, HistoryKind, ListArgs, LogArgs,
-        LookupKind, OutputFormat, RelateArgs, SearchArgs, ShowArgs, TemplatesArgs, TraceArgs,
+        AddArgs, AppArgs, AuditArgs, Cli, Commands, CompletionArgs, ExplainArgs, HistoryKind,
+        ListArgs, LogArgs, LookupKind, OutputFormat, RelateArgs, SearchArgs, ShowArgs,
+        TemplatesArgs, TraceArgs,
     };
     use clap_complete::Shell;
 
@@ -240,6 +244,25 @@ mod tests {
                 if id == "REQ-CORE-018"
                     && workspace == Path::new("workspace")
                     && format == OutputFormat::Text
+        ));
+
+        let explain = super::dispatch(
+            Cli {
+                command: Some(Commands::Explain(ExplainArgs {
+                    selector: "REQ-CORE-018".to_string(),
+                    workspace: PathBuf::from("workspace"),
+                    format: OutputFormat::Json,
+                })),
+            },
+            true,
+            true,
+        );
+        assert!(matches!(
+            explain,
+            super::Dispatch::Explain(crate::cli::ExplainArgs { selector, workspace, format })
+                if selector == "REQ-CORE-018"
+                    && workspace == Path::new("workspace")
+                    && format == OutputFormat::Json
         ));
 
         let templates = super::dispatch(

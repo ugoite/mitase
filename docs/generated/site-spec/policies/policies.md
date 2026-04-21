@@ -94,6 +94,7 @@ description: "Generated reference for docs/syu/policies/policies.yaml"
     - REQ-CORE-022
     - REQ-CORE-021
     - REQ-CORE-024
+    - REQ-CORE-027
 - **id**: POL-004
   - **title**: Starting, browsing, and configuring syu should stay low ceremony
   - **summary**: Setup and exploration should be quick enough that teams do not resent the tool.
@@ -120,6 +121,7 @@ description: "Generated reference for docs/syu/policies/policies.yaml"
     - REQ-CORE-024
     - REQ-CORE-025
     - REQ-CORE-026
+    - REQ-CORE-027
 - **id**: POL-005
   - **title**: Documentation and examples must lower adoption friction
   - **summary**: Guides, reports, sites, and examples are part of the product surface.
@@ -274,6 +276,7 @@ policies:
       - REQ-CORE-022
       - REQ-CORE-021
       - REQ-CORE-024
+      - REQ-CORE-027
 
   - id: POL-004
     title: Starting, browsing, and configuring syu should stay low ceremony
@@ -300,6 +303,7 @@ policies:
       - REQ-CORE-024
       - REQ-CORE-025
       - REQ-CORE-026
+      - REQ-CORE-027
 
   - id: POL-005
     title: Documentation and examples must lower adoption friction
