@@ -51,8 +51,15 @@ export interface ValidationSnapshot {
 export interface AppPayload {
   workspace_root: string;
   spec_root: string;
+  app_server: AppServer;
   source_documents: SourceDocument[];
   validation: ValidationSnapshot;
+}
+
+export interface AppServer {
+  bind: string;
+  port: number;
+  remotely_reachable: boolean;
 }
 
 export interface BrowserTraceReference {
@@ -110,6 +117,7 @@ export interface BrowserIndexEntry {
 export interface BrowserWorkspace {
   workspace_root: string;
   spec_root: string;
+  app_server: AppServer;
   sections: BrowserSection[];
   item_index: Map<string, BrowserIndexEntry>;
   validation: ValidationSnapshot;
