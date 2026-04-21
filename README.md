@@ -61,6 +61,10 @@ Pick the newcomer path that matches what you need next:
   [`docs/guide/node-workflow.md`](docs/guide/node-workflow.md) when you are
   contributing to this repository and need one place to see which Node major
   the browser app, docs site, and VS Code extension expect today.
+<!-- FEAT-DOCTOR-001 -->
+- **Local readiness check**: run `syu doctor .` when you want one CLI summary of
+  the current Rust toolchain, Node/npm expectations, optional dependency
+  installs, and Playwright browser readiness before the contributor checks.
 - **Trace adapter matrix**: open
   [`docs/guide/trace-adapter-support.md`](docs/guide/trace-adapter-support.md)
   when you already have a workspace and need a capability reference for which
