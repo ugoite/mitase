@@ -89,14 +89,23 @@ pub struct ValidationSnapshot {
 pub struct AppPayload {
     pub workspace_root: String,
     pub spec_root: String,
+    pub app_server: AppServer,
     pub source_documents: Vec<SourceDocument>,
     pub validation: ValidationSnapshot,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AppServer {
+    pub bind: String,
+    pub port: u16,
+    pub remotely_reachable: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BrowserWorkspace {
     pub workspace_root: String,
     pub spec_root: String,
+    pub app_server: AppServer,
     pub sections: Vec<BrowserSection>,
     pub item_index: BTreeMap<String, BrowserIndexEntry>,
     pub validation: ValidationSnapshot,
@@ -307,6 +316,7 @@ pub fn build_browser_workspace(payload: AppPayload) -> BrowserWorkspace {
     BrowserWorkspace {
         workspace_root: payload.workspace_root,
         spec_root: payload.spec_root,
+        app_server: payload.app_server,
         sections,
         item_index,
         validation: payload.validation,
@@ -534,8 +544,9 @@ fn folder_segments(path: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        AppPayload, DefinitionCounts, ReferencedRule, SectionKind, Severity, SourceDocument,
-        TraceCount, TraceSummary, ValidationIssue, ValidationSnapshot, build_browser_workspace,
+        AppPayload, AppServer, DefinitionCounts, ReferencedRule, SectionKind, Severity,
+        SourceDocument, TraceCount, TraceSummary, ValidationIssue, ValidationSnapshot,
+        build_browser_workspace,
     };
 
     fn sample_validation() -> ValidationSnapshot {
@@ -580,6 +591,11 @@ mod tests {
         let workspace = build_browser_workspace(AppPayload {
             workspace_root: "/repo".to_string(),
             spec_root: "/repo/docs/syu".to_string(),
+            app_server: AppServer {
+                bind: "127.0.0.1".to_string(),
+                port: 3000,
+                remotely_reachable: false,
+            },
             source_documents: vec![
                 SourceDocument {
                     section: SectionKind::Philosophy,
@@ -606,6 +622,7 @@ mod tests {
         });
 
         assert_eq!(workspace.sections.len(), 4);
+        assert_eq!(workspace.app_server.bind, "127.0.0.1");
         assert_eq!(workspace.sections[0].documents[0].items[0].id, "PHIL-001");
         assert_eq!(
             workspace.sections[1].documents[0].folder_segments,
@@ -626,6 +643,11 @@ mod tests {
         let workspace = build_browser_workspace(AppPayload {
             workspace_root: "/repo".to_string(),
             spec_root: "/repo/docs/syu".to_string(),
+            app_server: AppServer {
+                bind: "127.0.0.1".to_string(),
+                port: 3000,
+                remotely_reachable: false,
+            },
             source_documents: vec![SourceDocument {
                 section: SectionKind::Features,
                 path: "broken.yaml".to_string(),
