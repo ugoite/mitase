@@ -105,12 +105,15 @@ struct TraceLookupOutput {
 struct TraceRangeOutput {
     range: String,
     files: Vec<TraceLookupOutput>,
+    skipped_files: Vec<TraceSkippedFile>,
     summary: TraceRangeSummary,
 }
 
 #[derive(Debug, Clone, Serialize)]
 struct TraceRangeSummary {
+    changed_files_total: usize,
     inspected_files: usize,
+    skipped_files: usize,
     owned_files: usize,
     partial_files: usize,
     unowned_files: usize,
@@ -120,7 +123,7 @@ struct TraceRangeSummary {
     total_philosophies: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 struct TraceSkippedFile {
     file: String,
     reason: String,
@@ -186,8 +189,11 @@ fn run_trace_range(workspace: &Workspace, range: &str, format: OutputFormat) -> 
                     serde_json::to_string_pretty(&TraceRangeOutput {
                         range: range.to_string(),
                         files: Vec::new(),
+                        skipped_files: Vec::new(),
                         summary: TraceRangeSummary {
+                            changed_files_total: 0,
                             inspected_files: 0,
+                            skipped_files: 0,
                             owned_files: 0,
                             partial_files: 0,
                             unowned_files: 0,
@@ -206,18 +212,16 @@ fn run_trace_range(workspace: &Workspace, range: &str, format: OutputFormat) -> 
 
     let (results, skipped) = collect_trace_range_outputs(workspace, &changed_files);
 
-    let summary = compute_range_summary(&results);
+    let summary = compute_range_summary(changed_files.len(), &results, &skipped);
 
     match format {
-        OutputFormat::Text => print!(
-            "{}",
-            render_range_text(range, changed_files.len(), &results, &summary, &skipped)
-        ),
+        OutputFormat::Text => print!("{}", render_range_text(range, &results, &skipped, &summary)),
         OutputFormat::Json => println!(
             "{}",
             serde_json::to_string_pretty(&TraceRangeOutput {
                 range: range.to_string(),
                 files: results,
+                skipped_files: skipped,
                 summary,
             })
             .expect("serializing trace range output to JSON should succeed")
@@ -227,7 +231,11 @@ fn run_trace_range(workspace: &Workspace, range: &str, format: OutputFormat) -> 
     Ok(0)
 }
 
-fn compute_range_summary(results: &[TraceLookupOutput]) -> TraceRangeSummary {
+fn compute_range_summary(
+    changed_files_total: usize,
+    results: &[TraceLookupOutput],
+    skipped: &[TraceSkippedFile],
+) -> TraceRangeSummary {
     let mut requirements = std::collections::BTreeSet::new();
     let mut features = std::collections::BTreeSet::new();
     let mut policies = std::collections::BTreeSet::new();
@@ -259,7 +267,9 @@ fn compute_range_summary(results: &[TraceLookupOutput]) -> TraceRangeSummary {
     }
 
     TraceRangeSummary {
+        changed_files_total,
         inspected_files: results.len(),
+        skipped_files: skipped.len(),
         owned_files: owned,
         partial_files: partial,
         unowned_files: unowned,
@@ -295,14 +305,15 @@ fn collect_trace_range_outputs(
 
 fn render_range_text(
     range: &str,
-    changed_files_total: usize,
     results: &[TraceLookupOutput],
-    summary: &TraceRangeSummary,
     skipped: &[TraceSkippedFile],
+    summary: &TraceRangeSummary,
 ) -> String {
     let mut output = String::new();
     writeln!(output, "Git range: {range}").unwrap();
-    writeln!(output, "Changed files: {changed_files_total}").unwrap();
+    writeln!(output, "Changed files: {}", summary.changed_files_total).unwrap();
+    writeln!(output, "Inspected files: {}", summary.inspected_files).unwrap();
+    writeln!(output, "Skipped files: {}", summary.skipped_files).unwrap();
     writeln!(
         output,
         "Coverage: {} owned, {} partial, {} unowned\n",
@@ -341,7 +352,7 @@ fn render_range_text(
     }
 
     if !skipped.is_empty() {
-        writeln!(output, "Skipped files:").unwrap();
+        writeln!(output, "Skipped file details:").unwrap();
         for skipped_file in skipped {
             writeln!(
                 output,
@@ -1194,59 +1205,68 @@ mod tests {
 
     #[test]
     fn compute_range_summary_counts_partial_results() {
-        let summary = super::compute_range_summary(&[
-            TraceLookupOutput {
-                file: "owned.rs".to_string(),
-                symbol: None,
-                status: TraceLookupStatus::Owned,
-                matched_owners: Vec::new(),
-                file_only_owners: Vec::new(),
-                requirements: vec![EntitySummary {
-                    id: "REQ-1".to_string(),
-                    title: "Req".to_string(),
-                    document_path: None,
-                }],
-                features: Vec::new(),
-                policies: Vec::new(),
-                philosophies: Vec::new(),
-            },
-            TraceLookupOutput {
-                file: "partial.rs".to_string(),
-                symbol: None,
-                status: TraceLookupStatus::Partial,
-                matched_owners: Vec::new(),
-                file_only_owners: Vec::new(),
-                requirements: Vec::new(),
-                features: vec![EntitySummary {
-                    id: "FEAT-1".to_string(),
-                    title: "Feat".to_string(),
-                    document_path: None,
-                }],
-                policies: Vec::new(),
-                philosophies: Vec::new(),
-            },
-            TraceLookupOutput {
-                file: "unowned.rs".to_string(),
-                symbol: None,
-                status: TraceLookupStatus::Unowned,
-                matched_owners: Vec::new(),
-                file_only_owners: Vec::new(),
-                requirements: Vec::new(),
-                features: Vec::new(),
-                policies: vec![EntitySummary {
-                    id: "POL-1".to_string(),
-                    title: "Pol".to_string(),
-                    document_path: None,
-                }],
-                philosophies: vec![EntitySummary {
-                    id: "PHIL-1".to_string(),
-                    title: "Phil".to_string(),
-                    document_path: None,
-                }],
-            },
-        ]);
+        let summary = super::compute_range_summary(
+            4,
+            &[
+                TraceLookupOutput {
+                    file: "owned.rs".to_string(),
+                    symbol: None,
+                    status: TraceLookupStatus::Owned,
+                    matched_owners: Vec::new(),
+                    file_only_owners: Vec::new(),
+                    requirements: vec![EntitySummary {
+                        id: "REQ-1".to_string(),
+                        title: "Req".to_string(),
+                        document_path: None,
+                    }],
+                    features: Vec::new(),
+                    policies: Vec::new(),
+                    philosophies: Vec::new(),
+                },
+                TraceLookupOutput {
+                    file: "partial.rs".to_string(),
+                    symbol: None,
+                    status: TraceLookupStatus::Partial,
+                    matched_owners: Vec::new(),
+                    file_only_owners: Vec::new(),
+                    requirements: Vec::new(),
+                    features: vec![EntitySummary {
+                        id: "FEAT-1".to_string(),
+                        title: "Feat".to_string(),
+                        document_path: None,
+                    }],
+                    policies: Vec::new(),
+                    philosophies: Vec::new(),
+                },
+                TraceLookupOutput {
+                    file: "unowned.rs".to_string(),
+                    symbol: None,
+                    status: TraceLookupStatus::Unowned,
+                    matched_owners: Vec::new(),
+                    file_only_owners: Vec::new(),
+                    requirements: Vec::new(),
+                    features: Vec::new(),
+                    policies: vec![EntitySummary {
+                        id: "POL-1".to_string(),
+                        title: "Pol".to_string(),
+                        document_path: None,
+                    }],
+                    philosophies: vec![EntitySummary {
+                        id: "PHIL-1".to_string(),
+                        title: "Phil".to_string(),
+                        document_path: None,
+                    }],
+                },
+            ],
+            &[super::TraceSkippedFile {
+                file: "../outside.rs".to_string(),
+                reason: "must stay under workspace".to_string(),
+            }],
+        );
 
+        assert_eq!(summary.changed_files_total, 4);
         assert_eq!(summary.inspected_files, 3);
+        assert_eq!(summary.skipped_files, 1);
         assert_eq!(summary.owned_files, 1);
         assert_eq!(summary.partial_files, 1);
         assert_eq!(summary.unowned_files, 1);
@@ -1260,7 +1280,6 @@ mod tests {
     fn render_range_text_groups_file_only_and_unowned_results() {
         let rendered = super::render_range_text(
             "HEAD~1..HEAD",
-            2,
             &[
                 TraceLookupOutput {
                     file: "file-only.rs".to_string(),
@@ -1295,8 +1314,11 @@ mod tests {
                     philosophies: Vec::new(),
                 },
             ],
+            &[],
             &super::TraceRangeSummary {
+                changed_files_total: 2,
                 inspected_files: 2,
+                skipped_files: 0,
                 owned_files: 1,
                 partial_files: 0,
                 unowned_files: 1,
@@ -1305,22 +1327,28 @@ mod tests {
                 total_policies: 0,
                 total_philosophies: 0,
             },
-            &[],
         );
 
         assert!(rendered.contains("feature FEAT-1:"));
         assert!(rendered.contains("UNOWNED:"));
+        assert!(rendered.contains("Inspected files: 2"));
+        assert!(rendered.contains("Skipped files: 0"));
         assert!(rendered.contains("Features: 1"));
     }
 
     #[test]
-    fn render_range_text_reports_skipped_files() {
+    fn render_range_text_reports_skipped_file_details() {
         let rendered = super::render_range_text(
             "HEAD~1..HEAD",
-            1,
             &[],
+            &[super::TraceSkippedFile {
+                file: "../outside.rs".to_string(),
+                reason: "must stay under workspace".to_string(),
+            }],
             &super::TraceRangeSummary {
+                changed_files_total: 1,
                 inspected_files: 0,
+                skipped_files: 1,
                 owned_files: 0,
                 partial_files: 0,
                 unowned_files: 0,
@@ -1329,15 +1357,12 @@ mod tests {
                 total_policies: 0,
                 total_philosophies: 0,
             },
-            &[super::TraceSkippedFile {
-                file: "../outside.rs".to_string(),
-                reason: "path escapes workspace".to_string(),
-            }],
         );
 
-        assert!(rendered.contains("Skipped files:"));
+        assert!(rendered.contains("Skipped files: 1"));
+        assert!(rendered.contains("Skipped file details:"));
         assert!(rendered.contains("../outside.rs"));
-        assert!(rendered.contains("path escapes workspace"));
+        assert!(rendered.contains("must stay under workspace"));
     }
 
     #[test]
