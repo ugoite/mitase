@@ -4,6 +4,7 @@ use std::path::Path;
 
 pub mod add;
 pub mod app;
+pub mod audit;
 pub mod browse;
 pub mod check;
 pub mod doctor;
