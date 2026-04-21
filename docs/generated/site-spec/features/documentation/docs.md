@@ -19,7 +19,7 @@ description: "Generated reference for docs/syu/features/documentation/docs.yaml"
 
 - **id**: FEAT-DOCS-001
   - **title**: English concepts and workflow documentation
-  - **summary**: Explain the four-layer model, delivery states, configuration, command workflow, and first-run CLI guidance in English.
+  - **summary**: Explain the four-layer model, delivery states, configuration, command workflow, first-run CLI guidance, and shell-completion setup in English.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-010
@@ -28,6 +28,9 @@ description: "Generated reference for docs/syu/features/documentation/docs.yaml"
       - **file**: src/cli.rs
         - **symbols**:
           - ROOT_AFTER_HELP
+      - **file**: src/command/completion.rs
+        - **symbols**:
+          - run_completion_command
     - **markdown**:
       - **file**: README.md
         - **symbols**:
@@ -105,7 +108,7 @@ version: 1
 features:
   - id: FEAT-DOCS-001
     title: English concepts and workflow documentation
-    summary: Explain the four-layer model, delivery states, configuration, command workflow, and first-run CLI guidance in English.
+    summary: Explain the four-layer model, delivery states, configuration, command workflow, first-run CLI guidance, and shell-completion setup in English.
     status: implemented
     linked_requirements:
       - REQ-CORE-010
@@ -114,6 +117,9 @@ features:
         - file: src/cli.rs
           symbols:
             - ROOT_AFTER_HELP
+        - file: src/command/completion.rs
+          symbols:
+            - run_completion_command
       markdown:
         - file: README.md
           symbols:

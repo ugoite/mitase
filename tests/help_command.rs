@@ -242,6 +242,21 @@ fn validate_help_mentions_warning_exit_code_for_automation() {
 }
 
 #[test]
+fn validate_help_mentions_spec_only_mode() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args(["validate", "--help"])
+        .output()
+        .expect("help should render");
+
+    assert!(output.status.success(), "validate help should succeed");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--spec-only"));
+    assert!(stdout.contains("skipping traced source checks"));
+}
+
+#[test]
 fn init_help_lists_starter_templates() {
     let output = Command::cargo_bin("syu")
         .expect("binary should build")
@@ -313,6 +328,21 @@ fn templates_help_mentions_json_and_init_follow_up() {
     assert!(stdout.contains("syu templates --format json"));
     assert!(stdout.contains("syu init --template"));
     assert!(stdout.contains("related checked-in examples"));
+}
+
+#[test]
+fn completion_command_emits_shell_scripts() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args(["completion", "bash"])
+        .output()
+        .expect("completion should render");
+
+    assert!(output.status.success(), "completion command should succeed");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("_syu()"));
+    assert!(stdout.contains("complete -F _syu -o bashdefault -o default syu"));
 }
 
 #[test]

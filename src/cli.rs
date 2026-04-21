@@ -19,6 +19,7 @@
 // REQ-CORE-001
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, builder::BoolishValueParser};
+use clap_complete::Shell;
 use std::{num::NonZeroU8, path::PathBuf};
 
 const ROOT_AFTER_HELP: &str = "\
@@ -68,6 +69,12 @@ Use `syu init --template ...` when you are ready to generate files.
 Examples:
   syu templates
   syu templates --format json";
+
+const COMPLETION_AFTER_HELP: &str = "\
+Examples:
+  syu completion bash > ~/.local/share/bash-completion/completions/syu
+  syu completion zsh > ~/.zfunc/_syu
+  syu completion fish > ~/.config/fish/completions/syu.fish";
 
 const ADD_AFTER_HELP: &str = "\
 After writing a stub, `syu add` prints the reciprocal-link follow-up and matching scaffold suggestions needed before `syu validate` will pass cleanly.
@@ -226,6 +233,11 @@ pub enum Commands {
         after_help = TEMPLATES_AFTER_HELP
     )]
     Templates(TemplatesArgs),
+    #[command(
+        about = "Generate shell completion scripts for the syu CLI",
+        after_help = COMPLETION_AFTER_HELP
+    )]
+    Completion(CompletionArgs),
     #[command(
         about = "Scaffold a new philosophy, policy, requirement, or feature stub",
         after_help = ADD_AFTER_HELP
@@ -508,6 +520,12 @@ pub struct ValidateArgs {
     #[arg(long, value_delimiter = ',')]
     pub id: Vec<String>,
 
+    #[arg(
+        help = "Validate only the spec graph and document consistency, skipping traced source checks"
+    )]
+    #[arg(long, action = ArgAction::SetTrue)]
+    pub spec_only: bool,
+
     #[arg(help = "Apply conservative documentation autofixes")]
     #[arg(long, action = ArgAction::SetTrue)]
     pub fix: bool,
@@ -653,6 +671,12 @@ pub struct TemplatesArgs {
 }
 
 #[derive(Debug, Clone, Args)]
+pub struct CompletionArgs {
+    #[arg(help = "Shell to generate completions for")]
+    pub shell: Shell,
+}
+
+#[derive(Debug, Clone, Args)]
 pub struct AddArgs {
     #[arg(help = "Layer kind to scaffold (philosophy, policy, requirement, or feature)")]
     pub layer: LookupKind,
@@ -763,9 +787,11 @@ impl ValidationGenreFilter {
 #[cfg(test)]
 mod tests {
     use super::{
-        Cli, LookupKind, StarterTemplate, ValidationGenreFilter, ValidationSeverityFilter,
+        Cli, CompletionArgs, LookupKind, StarterTemplate, ValidationGenreFilter,
+        ValidationSeverityFilter,
     };
     use clap::Parser;
+    use clap_complete::Shell;
 
     #[test]
     fn cli_enums_expose_expected_labels() {
@@ -797,6 +823,7 @@ mod tests {
             "syu",
             "validate",
             ".",
+            "--spec-only",
             "--allow-planned=false",
             "--require-non-orphaned-items=false",
             "--require-reciprocal-links",
@@ -806,6 +833,7 @@ mod tests {
 
         let rendered = format!("{cli:?}");
         assert!(rendered.contains("command: Some(Validate("));
+        assert!(rendered.contains("spec_only: true"));
         assert!(rendered.contains("allow_planned: Some(false)"));
         assert!(rendered.contains("require_non_orphaned_items: Some(false)"));
         assert!(rendered.contains("require_reciprocal_links: Some(true)"));
@@ -847,6 +875,18 @@ mod tests {
         let rendered = format!("{cli:?}");
         assert!(rendered.contains("command: Some(Templates("));
         assert!(rendered.contains("format: Text"));
+    }
+
+    #[test]
+    fn completion_args_parse_shell_names() {
+        let cli = Cli::try_parse_from(["syu", "completion", "zsh"])
+            .expect("completion args should parse");
+        assert!(matches!(
+            cli.command,
+            Some(super::Commands::Completion(CompletionArgs {
+                shell: Shell::Zsh
+            }))
+        ));
     }
 
     #[test]
