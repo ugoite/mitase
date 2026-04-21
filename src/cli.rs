@@ -53,11 +53,8 @@ Examples:
   syu init .
   syu init . --interactive
   syu init . --id-prefix store
-  syu init . --template rust-only
-  syu init . --template ruby-only
-  syu init . --template typescript-only
-  syu init . --template go-only
-  syu init . --template java-only
+  syu init . --template docs-first
+  syu init . --template polyglot
   syu init . --spec-root docs/spec
   syu init path/to/workspace --name my-project --spec-root spec/contracts --template polyglot --id-prefix store";
 
@@ -650,7 +647,7 @@ pub struct InitArgs {
     pub spec_root: Option<PathBuf>,
 
     #[arg(
-        help = "Starter layout to scaffold (generic, docs-first, rust-only, python-only, ruby-only, go-only, java-only, or polyglot)"
+        help = "Starter layout to scaffold; run `syu templates` to compare the full starter catalog"
     )]
     #[arg(long, value_enum, default_value_t = StarterTemplate::Generic)]
     pub template: StarterTemplate,

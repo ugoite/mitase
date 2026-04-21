@@ -289,13 +289,8 @@ fn init_help_lists_starter_templates() {
     assert!(stdout.contains("syu templates"));
     assert!(stdout.contains("--template"));
     assert!(stdout.contains("docs-first"));
-    assert!(stdout.contains("rust-only"));
-    assert!(stdout.contains("python-only"));
-    assert!(stdout.contains("go-only"));
-    assert!(stdout.contains("java-only"));
-    assert!(stdout.contains("typescript-only"));
     assert!(stdout.contains("polyglot"));
-    assert!(stdout.contains("syu init . --template typescript-only"));
+    assert!(stdout.contains("syu init . --template docs-first"));
 }
 
 #[test]
