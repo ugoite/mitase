@@ -503,6 +503,10 @@ pub struct AppArgs {
     #[arg(help = "Allow syu app to bind to a non-loopback address such as 0.0.0.0")]
     #[arg(long, action = ArgAction::SetTrue)]
     pub allow_remote: bool,
+
+    #[arg(help = "Load frontend assets from the local app dev server at http://127.0.0.1:4173")]
+    #[arg(long, action = ArgAction::SetTrue)]
+    pub dev_server: bool,
 }
 
 #[derive(Debug, Clone, Args)]

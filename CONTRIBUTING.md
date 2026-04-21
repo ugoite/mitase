@@ -96,11 +96,19 @@ dependency installs, and Playwright browser readiness for this checkout.
 
    For the CI-aligned happy path, run:
 
-   ```bash
-   scripts/ci/validate-app.sh
-   ```
+    ```bash
+    scripts/ci/validate-app.sh
+    ```
 
-   `scripts/ci/validate-app.sh` starts with the shared repository gates and then
+    For the fastest UI iteration loop, keep the Vite dev server running and
+    point `syu app` at it explicitly:
+
+    ```bash
+    npm --prefix app run dev
+    cargo run -- app . --dev-server
+    ```
+
+    `scripts/ci/validate-app.sh` starts with the shared repository gates and then
    runs the browser-specific checks below. In the devcontainer or Codespaces,
    install the browser tooling first with:
 
