@@ -163,6 +163,24 @@ If `ci` and `codeql` both completed successfully for that queue branch but the
 PR still shows `mergeQueueEntry.state = AWAITING_CHECKS`, treat that as a merge
 queue incident rather than a contributor error.
 
+## Use the merge queue watchdog before you start poking at PRs
+
+The repository now ships a watchdog that checks for the exact incident pattern
+from issue #328: queue entries that are still `AWAITING_CHECKS` even though the
+latest required `merge_group` workflows already succeeded.
+
+- Scheduled automation: `.github/workflows/merge-queue-watchdog.yml`
+- Manual local check: `scripts/ci/check-merge-queue-health.sh`
+
+To run the same query locally:
+
+```bash
+GH_TOKEN="$(gh auth token)" bash scripts/ci/check-merge-queue-health.sh
+```
+
+When the watchdog fails, treat that as proof that GitHub lost track of queue
+progress rather than as evidence that contributor code is still broken.
+
 ## Useful recovery checks
 
 1. Confirm both required workflows still include `merge_group:`.
