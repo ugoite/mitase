@@ -29,6 +29,7 @@ If a pull request already exists, pair this page with the
 | Review traced history | `syu log FEAT-CHECK-001 --kind implementation --path src/command` | inspect recent git history for the currently traced surface |
 | Browse in the terminal | `syu browse .` | explore the graph interactively without leaving the shell |
 | Browse in the browser | `syu app .` | use the local browser UI for visual navigation, tabs, and validation context |
+| Start the editor protocol server | `syu lsp` | connect an editor client over stdio when you want the current hover-only LSP surface |
 
 ## Common command bundles
 
@@ -62,6 +63,8 @@ syu report .
 - Use [getting started](./getting-started.md) for the narrated install-to-validate flow.
 - Use [examples and templates](./examples-and-templates.md) when you want the
   checked-in starter and example matrix.
+- Use [LSP guide](./lsp.md) when you are connecting `syu` to an editor client
+  over stdio instead of using the checked-in VS Code extension directly.
 - Use [configuration](./configuration.md) when you need validation and runtime
   switches instead of the default workflow.
 - Use [troubleshooting](./troubleshooting.md) when validation already fails and
