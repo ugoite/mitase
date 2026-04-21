@@ -116,6 +116,12 @@ Examples:
   syu search traceability --kind requirement
   syu search FEAT-CHECK-001 --format json";
 
+const AUDIT_AFTER_HELP: &str = "\
+Examples:
+  syu audit
+  syu audit path/to/workspace
+  syu audit . --format json";
+
 const LOG_AFTER_HELP: &str = "\
 Examples:
   syu log REQ-CORE-002
@@ -173,6 +179,11 @@ pub enum Commands {
         after_help = SEARCH_AFTER_HELP
     )]
     Search(SearchArgs),
+    #[command(
+        about = "Audit the layered spec for overlap, tension, and orphaned-policy candidates",
+        after_help = AUDIT_AFTER_HELP
+    )]
+    Audit(AuditArgs),
     #[command(
         about = "Show git history for one traced requirement or feature",
         after_help = LOG_AFTER_HELP
@@ -324,6 +335,17 @@ pub struct SearchArgs {
     pub kind: Option<LookupKind>,
 
     #[arg(help = "Output format for matched items")]
+    #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct AuditArgs {
+    #[arg(help = WORKSPACE_HELP)]
+    #[arg(default_value = ".")]
+    pub workspace: PathBuf,
+
+    #[arg(help = "Output format for audit findings")]
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
     pub format: OutputFormat,
 }

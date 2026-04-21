@@ -3,6 +3,7 @@
 // REQ-CORE-015
 // REQ-CORE-018
 // REQ-CORE-019
+// REQ-CORE-025
 
 use assert_cmd::cargo::CommandCargoExt;
 use std::{
@@ -165,6 +166,26 @@ fn search_command_discovers_workspace_from_child_directory() {
         String::from_utf8_lossy(&output.stdout)
             .contains("FEAT-TRACE-002\tfeature\tPython implementation trace")
     );
+}
+
+#[test]
+fn audit_command_discovers_workspace_from_child_directory() {
+    let (_tempdir, workspace) = configured_workspace();
+    let nested = workspace.join("frontend");
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("audit")
+        .arg(&nested)
+        .output()
+        .expect("command should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("audit workspace:"));
 }
 
 #[test]

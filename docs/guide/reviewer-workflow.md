@@ -67,6 +67,15 @@ Use this output to decide whether the PR still matches the connected policy and
 requirement context, or whether it is changing the behavior in a way that
 should have updated adjacent YAML too.
 
+For bigger spec edits or cleanup PRs, add a quick heuristic audit pass:
+
+```bash
+syu audit .
+```
+
+That summary is useful when you want review notes about likely overlap,
+policy drift, or policy text that no longer turns into concrete requirements.
+
 ## 3. Jump from code back to the owning spec
 
 When review starts in a file diff instead of a spec ID, reverse the direction:

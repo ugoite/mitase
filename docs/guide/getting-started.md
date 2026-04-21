@@ -464,6 +464,7 @@ If you only remember the task and not the command name yet, use this chooser:
 | render one layer or emit machine-friendly lists | `syu list ...` | keeps the output list-shaped and scriptable |
 | open one exact definition by ID | `syu show ID` | jumps directly to the matched philosophy, policy, requirement, or feature |
 | search when you only know a keyword or partial ID | `syu search QUERY` | searches titles, summaries, descriptions, and IDs across the spec |
+| audit a larger spec edit for overlap or drift candidates | `syu audit` | highlights likely requirement overlap, policy tension, and orphaned policies without failing validation |
 | start from a traced file or symbol during review | `syu trace path --symbol name` | works code-first instead of spec-first |
 | inspect everything connected to one ID, file, or symbol | `syu relate TARGET` | expands nearby links, traced files, and symbols to show the surrounding context |
 | review change history for one requirement or feature | `syu log ID` | follows the checked-in definition plus traced evidence through Git history |

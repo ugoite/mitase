@@ -42,6 +42,7 @@ description: "Generated reference for docs/syu/policies/policies.yaml"
     - REQ-CORE-020
     - REQ-CORE-021
     - REQ-CORE-023
+    - REQ-CORE-025
 - **id**: POL-002
   - **title**: Validation should explain the current state instead of only failing
   - **summary**: Errors, reports, and browsing should make the layered model legible even when the workspace is broken.
@@ -67,6 +68,7 @@ description: "Generated reference for docs/syu/policies/policies.yaml"
     - REQ-CORE-021
     - REQ-CORE-023
     - REQ-CORE-024
+    - REQ-CORE-025
     - REQ-CORE-026
 - **id**: POL-003
   - **title**: Traceability should prove ownership from specification to code and tests
@@ -116,6 +118,7 @@ description: "Generated reference for docs/syu/policies/policies.yaml"
     - REQ-CORE-021
     - REQ-CORE-023
     - REQ-CORE-024
+    - REQ-CORE-025
     - REQ-CORE-026
 - **id**: POL-005
   - **title**: Documentation and examples must lower adoption friction
@@ -136,6 +139,7 @@ description: "Generated reference for docs/syu/policies/policies.yaml"
     - REQ-CORE-016
     - REQ-CORE-017
     - REQ-CORE-022
+    - REQ-CORE-025
 - **id**: POL-006
   - **title**: The self-hosted repository should demonstrate polyglot, contributor-friendly use
   - **summary**: `syu` should prove that its model works in the kind of mixed repositories it claims to support.
@@ -218,6 +222,7 @@ policies:
       - REQ-CORE-020
       - REQ-CORE-021
       - REQ-CORE-023
+      - REQ-CORE-025
 
   - id: POL-002
     title: Validation should explain the current state instead of only failing
@@ -243,6 +248,7 @@ policies:
       - REQ-CORE-021
       - REQ-CORE-023
       - REQ-CORE-024
+      - REQ-CORE-025
       - REQ-CORE-026
 
   - id: POL-003
@@ -292,6 +298,7 @@ policies:
       - REQ-CORE-021
       - REQ-CORE-023
       - REQ-CORE-024
+      - REQ-CORE-025
       - REQ-CORE-026
 
   - id: POL-005
@@ -312,6 +319,7 @@ policies:
       - REQ-CORE-016
       - REQ-CORE-017
       - REQ-CORE-022
+      - REQ-CORE-025
 
   - id: POL-006
     title: The self-hosted repository should demonstrate polyglot, contributor-friendly use

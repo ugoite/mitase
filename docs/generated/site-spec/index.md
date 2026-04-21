@@ -15,6 +15,7 @@ This section is generated from the YAML source under `docs/syu/`.
 - [Configuration / Validate](config/validate)
 - [Browser App / App](features/browser/app)
 - [Authoring Add CLI / Add](features/cli/add)
+- [Audit CLI / Audit](features/cli/audit)
 - [Interactive CLI / Browse](features/cli/browse)
 - [Validate Command / Check](features/cli/check)
 - [Doctor Command / Doctor](features/cli/doctor)

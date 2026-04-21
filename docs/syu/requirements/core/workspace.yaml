@@ -416,6 +416,44 @@ requirements:
         - file: src/command/log.rs
           symbols:
             - '*'
+  - id: REQ-CORE-025
+    title: Provide a heuristic audit command for cross-layer overlap and tension review
+    description: |
+      The CLI MUST provide an `audit` command that loads the checked-in
+      philosophy, policy, requirement, and feature graph and emits review-ready
+      candidates for semantic overlap or tension without turning that heuristic
+      analysis into a hard validation failure. The command MUST summarize likely
+      overlapping requirements, SHOULD highlight features whose wording appears
+      to pull against linked policy or philosophy language, SHOULD call out
+      policies that no longer produce concrete downstream requirements, and
+      SHOULD offer JSON output so pull requests or release automation can record
+      the same audit summary.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-001
+      - POL-002
+      - POL-004
+      - POL-005
+    linked_features:
+      - FEAT-AUDIT-001
+    tests:
+      rust:
+        - file: tests/audit_command.rs
+          symbols:
+            - '*'
+        - file: tests/workspace_discovery_command.rs
+          symbols:
+            - audit_command_discovers_workspace_from_child_directory
+        - file: tests/help_command.rs
+          symbols:
+            - audit_help_mentions_overlap_tension_and_json_output
+        - file: src/lib.rs
+          symbols:
+            - dispatches_audit_subcommands_without_rewriting_them
+        - file: src/command/audit.rs
+          symbols:
+            - '*'
   - id: REQ-CORE-026
     title: Provide a local contributor readiness doctor command
     description: |
