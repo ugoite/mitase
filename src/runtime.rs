@@ -43,7 +43,7 @@ pub fn resolve_runtime_command(config: &SyuConfig, kind: RuntimeKind) -> Option<
     }
 }
 
-fn command_exists(command: &str) -> bool {
+pub(crate) fn command_exists(command: &str) -> bool {
     command_exists_in_path(command, env::var_os("PATH"), env::var_os("PATHEXT"))
 }
 

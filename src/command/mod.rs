@@ -6,6 +6,7 @@ pub mod add;
 pub mod app;
 pub mod browse;
 pub mod check;
+pub mod doctor;
 pub mod init;
 mod issue_text;
 pub mod list;

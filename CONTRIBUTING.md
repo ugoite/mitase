@@ -46,6 +46,12 @@ checkout.
 Run branch 1 for every change. Then add any later branches below that also
 match your change:
 
+<!-- FEAT-DOCTOR-001 -->
+
+Before you choose a branch below, run `syu doctor .` when you want one quick
+summary of the current Rust toolchain, Node/npm expectations, optional
+dependency installs, and Playwright browser readiness for this checkout.
+
 1. **Every change**
 
    ```bash
