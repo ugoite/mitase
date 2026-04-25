@@ -50,7 +50,9 @@ site-local route into `syu validate .`. This section deliberately skips the
 longer installer discussion in [Before you begin](#before-you-begin).
 
 ```bash
+# x-release-please-start-version
 RELEASE=v0.0.1-alpha.8
+# x-release-please-end
 curl -fsSL "https://github.com/ugoite/syu/releases/download/${RELEASE}/install-syu.sh" | env SYU_VERSION=alpha bash
 syu init .
 syu validate .

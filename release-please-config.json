@@ -5,7 +5,73 @@
       "release-type": "rust",
       "package-name": "syu",
       "include-v-in-tag": true,
-      "changelog-type": "github"
+      "changelog-type": "github",
+      "extra-files": [
+        {
+          "type": "generic",
+          "file": "README.md",
+          "replacers": [
+            {
+              "search": "# x-release-please-start-version\nRELEASE=v(?<version>.*)\n# x-release-please-end",
+              "replace": "# x-release-please-start-version\nRELEASE=v{{version}}\n# x-release-please-end"
+            },
+            {
+              "search": "# x-release-please-start-version\n\\$release = 'v(?<version>.*)'\n# x-release-please-end",
+              "replace": "# x-release-please-start-version\n$release = 'v{{version}}'\n# x-release-please-end"
+            }
+          ]
+        },
+        {
+          "type": "generic",
+          "file": "docs/guide/getting-started.md",
+          "replacers": [
+            {
+              "search": "# x-release-please-start-version\nRELEASE=v(?<version>.*)\n# x-release-please-end",
+              "replace": "# x-release-please-start-version\nRELEASE=v{{version}}\n# x-release-please-end"
+            }
+          ]
+        },
+        {
+          "type": "generic",
+          "file": "docs/guide/configuration.md",
+          "replacers": [
+            {
+              "search": "# x-release-please-start-version\nversion: (?<version>.*)\n# x-release-please-end",
+              "replace": "# x-release-please-start-version\nversion: {{version}}\n# x-release-please-end"
+            }
+          ]
+        },
+        {
+          "type": "generic",
+          "file": "docs/guide/existing-repository.md",
+          "replacers": [
+            {
+              "search": "# x-release-please-start-version\nversion: (?<version>.*)\n# x-release-please-end",
+              "replace": "# x-release-please-start-version\nversion: {{version}}\n# x-release-please-end"
+            }
+          ]
+        },
+        {
+          "type": "generic",
+          "file": "docs/guide/app.md",
+          "replacers": [
+            {
+              "search": "# x-release-please-start-version\n{\"status\":\"ok\",\"version\":\"(?<version>.*)\"}",
+              "replace": "# x-release-please-start-version\n{\"status\":\"ok\",\"version\":\"{{version}}\"}"
+            }
+          ]
+        },
+        {
+          "type": "generic",
+          "file": "docs/syu/features/features.yaml",
+          "replacers": [
+            {
+              "search": "# x-release-please-start-version\nversion: \"(?<version>.*)\"\n# x-release-please-end",
+              "replace": "# x-release-please-start-version\nversion: \"{{version}}\"\n# x-release-please-end"
+            }
+          ]
+        }
+      ]
     }
   }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "syu"
-version = "0.0.1-alpha.8"
+version = "0.0.1-alpha.9"
 edition = "2024"
 rust-version = "1.88"
 build = "build.rs"

@@ -1263,7 +1263,7 @@ mod tests {
         .expect("requirement");
         fs::write(
             spec_root.join("features/features.yaml"),
-            "version: \"0.0.1-alpha.8\"\nupdated: \"2026-04\"\n\nfiles:\n  - kind: core\n    file: core.yaml\n",
+            format!("version: \"{}\"\nupdated: \"2026-04\"\n\nfiles:\n  - kind: core\n    file: core.yaml\n", env!("CARGO_PKG_VERSION")),
         )
         .expect("feature registry");
         fs::write(

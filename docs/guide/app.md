@@ -277,7 +277,9 @@ to `syu app` while giving frontend work the faster Vite feedback loop.
 Once the app has loaded the workspace successfully, `GET /health` returns:
 
 ```json
+# x-release-please-start-version
 {"status":"ok","version":"0.0.1-alpha.8"}
+# x-release-please-end
 ```
 
 The startup log also prints a distinct ready line:
