@@ -1,6 +1,6 @@
 // FEAT-APP-001
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AppDataErrorResponse,
   AppPayload,
@@ -35,6 +35,7 @@ type SearchResult = {
 };
 
 type SearchFilter = "all" | SectionKind;
+type RefreshState = "current" | "refreshing" | "stale";
 
 const SECTION_ORDER: SectionKind[] = ["philosophy", "policies", "requirements", "features"];
 const SEARCH_RESULTS_LIST_ID = "spec-search-results-list";
@@ -82,6 +83,10 @@ function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [lastSuccessfulRefreshAt, setLastSuccessfulRefreshAt] = useState<string | null>(null);
+  const [refreshAnnouncement, setRefreshAnnouncement] = useState("");
+  const activeLoadControllerRef = useRef<AbortController | null>(null);
+  const activeLoadRequestIdRef = useRef(0);
+  const activeVersionPollControllerRef = useRef<AbortController | null>(null);
 
   const applyWorkspace = useCallback((browserWorkspace: BrowserWorkspace) => {
     setWorkspace(browserWorkspace);
@@ -131,6 +136,11 @@ function App() {
   const loadWorkspace = useCallback(
     async (mode: "initial" | "refresh" = "initial") => {
       const refreshing = mode === "refresh";
+      const requestId = activeLoadRequestIdRef.current + 1;
+      activeLoadRequestIdRef.current = requestId;
+      activeLoadControllerRef.current?.abort();
+      const controller = new AbortController();
+      activeLoadControllerRef.current = controller;
       if (refreshing) {
         setIsRefreshing(true);
       }
@@ -138,7 +148,7 @@ function App() {
       try {
         const [wasmModule, dataResponse] = await Promise.all([
           import("./wasm/syu_app_wasm.js") as Promise<WasmModule>,
-          fetch("/api/app-data.json", { cache: "no-store" }),
+          fetch("/api/app-data.json", { cache: "no-store", signal: controller.signal }),
         ]);
 
         if (!dataResponse.ok) {
@@ -151,6 +161,9 @@ function App() {
 
         const payload = (await dataResponse.json()) as AppPayload;
         await wasmModule.default();
+        if (controller.signal.aborted || activeLoadRequestIdRef.current !== requestId) {
+          return;
+        }
         const browserWorkspace = wasmModule.build_browser_workspace_from_js(payload);
 
         setError(null);
@@ -159,6 +172,13 @@ function App() {
         setLastSuccessfulRefreshAt(new Date().toISOString());
         applyWorkspace(browserWorkspace);
       } catch (loadError) {
+        if (
+          controller.signal.aborted ||
+          activeLoadRequestIdRef.current !== requestId ||
+          isAbortError(loadError)
+        ) {
+          return;
+        }
         if (refreshing) {
           // eslint-disable-next-line no-console
           console.error("Failed to refresh syu app workspace", loadError);
@@ -167,9 +187,14 @@ function App() {
           setError(errorMessage(loadError, "Failed to load syu app"));
         }
       } finally {
-        setLoading(false);
-        if (refreshing) {
-          setIsRefreshing(false);
+        if (activeLoadControllerRef.current === controller) {
+          activeLoadControllerRef.current = null;
+        }
+        if (!controller.signal.aborted && activeLoadRequestIdRef.current === requestId) {
+          setLoading(false);
+          if (refreshing) {
+            setIsRefreshing(false);
+          }
         }
       }
     },
@@ -181,6 +206,15 @@ function App() {
   }, [loadWorkspace]);
 
   useEffect(() => {
+    return () => {
+      activeLoadControllerRef.current?.abort();
+      activeLoadControllerRef.current = null;
+      activeVersionPollControllerRef.current?.abort();
+      activeVersionPollControllerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
     if (snapshotVersion == null) {
       return;
     }
@@ -188,6 +222,11 @@ function App() {
     let cancelled = false;
     let stablePollCount = 0;
     let timeoutId: number | null = null;
+
+    const abortVersionPoll = () => {
+      activeVersionPollControllerRef.current?.abort();
+      activeVersionPollControllerRef.current = null;
+    };
 
     const currentDelay = () =>
       Math.min(REFRESH_POLL_MAX_MS, REFRESH_POLL_MIN_MS * 2 ** stablePollCount);
@@ -213,16 +252,29 @@ function App() {
         return;
       }
 
+      abortVersionPoll();
+      const controller = new AbortController();
+      activeVersionPollControllerRef.current = controller;
+
       try {
-        const response = await fetch("/api/version", { cache: "no-store" });
+        const response = await fetch("/api/version", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
         if (!response.ok) {
           throw new Error(`Failed to poll app version: ${response.status} ${response.statusText}`);
         }
         const nextVersion = (await response.json()) as VersionPayload;
-        if (!cancelled) {
-          setRefreshError(null);
+        if (
+          controller.signal.aborted ||
+          cancelled ||
+          activeVersionPollControllerRef.current !== controller
+        ) {
+          return;
         }
-        if (!cancelled && nextVersion.snapshot !== snapshotVersion) {
+        activeVersionPollControllerRef.current = null;
+        setRefreshError(null);
+        if (nextVersion.snapshot !== snapshotVersion) {
           stablePollCount = 0;
           await loadWorkspace("refresh");
           schedulePoll(REFRESH_POLL_MIN_MS);
@@ -232,12 +284,19 @@ function App() {
         stablePollCount = Math.min(stablePollCount + 1, 3);
         schedulePoll(currentDelay());
       } catch (pollError) {
-        stablePollCount = 0;
-        if (!cancelled) {
-          // eslint-disable-next-line no-console
-          console.error("Failed to poll app version for refresh", pollError);
-          setRefreshError(formatRefreshFailure("check for workspace updates", pollError));
+        if (
+          controller.signal.aborted ||
+          cancelled ||
+          activeVersionPollControllerRef.current !== controller ||
+          isAbortError(pollError)
+        ) {
+          return;
         }
+        activeVersionPollControllerRef.current = null;
+        stablePollCount = 0;
+        // eslint-disable-next-line no-console
+        console.error("Failed to poll app version for refresh", pollError);
+        setRefreshError(formatRefreshFailure("check for workspace updates", pollError));
         schedulePoll(REFRESH_POLL_MIN_MS);
       }
     };
@@ -262,6 +321,7 @@ function App() {
         window.clearTimeout(timeoutId);
         timeoutId = null;
       }
+      abortVersionPoll();
     };
   }, [isRefreshing, loadWorkspace, snapshotVersion]);
 
@@ -322,7 +382,11 @@ function App() {
     );
   }, [currentDocument, selectedItemId]);
 
-  const refreshState = refreshError ? "stale" : isRefreshing ? "refreshing" : "current";
+  const refreshState: RefreshState = refreshError
+    ? "stale"
+    : isRefreshing
+      ? "refreshing"
+      : "current";
   const refreshStateClasses =
     refreshState === "stale"
       ? "border-rose-400/40 bg-rose-400/10 text-rose-100"
@@ -335,7 +399,26 @@ function App() {
       : refreshState === "refreshing"
         ? "Refreshing…"
         : "Current";
+  const refreshAnnouncementState: RefreshState = isRefreshing
+    ? "refreshing"
+    : refreshError
+      ? "stale"
+      : "current";
+  const refreshAnnouncementLabel = formatRefreshAnnouncement(
+    refreshAnnouncementState,
+    refreshError,
+  );
   const lastRefreshLabel = formatRefreshTimestamp(lastSuccessfulRefreshAt);
+
+  useEffect(() => {
+    if (loading) {
+      return;
+    }
+
+    setRefreshAnnouncement((current) =>
+      current === refreshAnnouncementLabel ? current : refreshAnnouncementLabel,
+    );
+  }, [loading, refreshAnnouncementLabel]);
 
   const documentGroups = useMemo(() => {
     if (!currentSection) {
@@ -625,6 +708,15 @@ function App() {
 
   return (
     <div className="app-shell text-slate-100">
+      <p
+        aria-atomic="true"
+        aria-live="polite"
+        className="sr-only"
+        data-refresh-live-region="true"
+        role="status"
+      >
+        {refreshAnnouncement}
+      </p>
       <header className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/90 backdrop-blur-2xl">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 md:flex-row md:items-center md:justify-between md:px-8">
           <div className="flex items-center justify-between gap-4 md:min-w-0">
@@ -1411,23 +1503,28 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
 function formatRefreshFailure(action: string, error: unknown): string {
   return `Could not ${action}: ${errorMessage(error, "Unexpected refresh failure")}`;
 }
 
 async function describeAppDataRefreshFailure(response: Response): Promise<string> {
-  const fallback = `Failed to load app data: ${response.status} ${response.statusText}`;
-  const contentType = response.headers.get("content-type") ?? "";
-  const body = await response.text();
+  const fallback = `Failed to refresh app data: ${response.status} ${response.statusText}`;
 
   try {
-    if (!contentType.includes("application/json") && !body.trim().startsWith("{")) {
-      return fallback;
+    const payload = (await response.json()) as AppDataErrorResponse;
+    const summary = payload.error?.summary?.trim();
+    const guidance = payload.error?.guidance?.trim();
+
+    if (summary && guidance) {
+      return `${summary} ${guidance}`;
     }
 
-    const payload = JSON.parse(body) as unknown;
-    if (isAppDataErrorResponse(payload)) {
-      return `${payload.error.summary} ${payload.error.guidance}`;
+    if (summary) {
+      return summary;
     }
   } catch {
     return fallback;
@@ -1436,22 +1533,18 @@ async function describeAppDataRefreshFailure(response: Response): Promise<string
   return fallback;
 }
 
-function isAppDataErrorResponse(value: unknown): value is AppDataErrorResponse {
-  if (!value || typeof value !== "object") {
-    return false;
+function formatRefreshAnnouncement(state: RefreshState, refreshError: string | null): string {
+  if (state === "stale") {
+    return refreshError
+      ? `Workspace snapshot is stale. ${refreshError}`
+      : "Workspace snapshot is stale.";
   }
 
-  const error = (value as { error?: unknown }).error;
-  if (!error || typeof error !== "object") {
-    return false;
+  if (state === "refreshing") {
+    return "Refreshing workspace snapshot.";
   }
 
-  const candidate = error as Partial<AppDataErrorResponse["error"]>;
-  return (
-    (candidate.code === "workspace-invalid" || candidate.code === "server-unavailable") &&
-    typeof candidate.summary === "string" &&
-    typeof candidate.guidance === "string"
-  );
+  return "Workspace snapshot is current.";
 }
 
 function formatRefreshTimestamp(iso: string | null): string {
