@@ -20,6 +20,7 @@ If a pull request already exists, pair this page with the
 | Check the workspace | `syu validate .` | run the full graph, trace, and coverage validation pass |
 | Focus one validation view | `syu validate . --id FEAT-CHECK-001` | keep the visible output anchored on one requirement or feature after the normal validation run |
 | Focus trace failures first | `syu validate . --genre trace` | inspect trace-specific problems before reading the full validation output |
+| Audit a review target | `syu audit .` | scan for likely overlap, drift, and other review notes before you decide whether `validate` should fail |
 | Generate the Markdown report | `syu report .` | save the current validation result as a shareable report |
 | Inspect one spec item | `syu show FEAT-CHECK-001` | read the title, links, traces, and status for one philosophy, policy, requirement, or feature |
 | Expand the nearby graph | `syu relate FEAT-CHECK-001` | see linked policies, requirements, features, files, and symbols around one selector |
