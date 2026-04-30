@@ -35,6 +35,7 @@ type SearchResult = {
 };
 
 type SearchFilter = "all" | SectionKind;
+type RefreshState = "current" | "refreshing" | "stale";
 
 const SECTION_ORDER: SectionKind[] = ["philosophy", "policies", "requirements", "features"];
 const SEARCH_RESULTS_LIST_ID = "spec-search-results-list";
@@ -82,6 +83,7 @@ function App() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [lastSuccessfulRefreshAt, setLastSuccessfulRefreshAt] = useState<string | null>(null);
+  const [refreshAnnouncement, setRefreshAnnouncement] = useState("");
   const activeLoadControllerRef = useRef<AbortController | null>(null);
   const activeLoadRequestIdRef = useRef(0);
   const activeVersionPollControllerRef = useRef<AbortController | null>(null);
@@ -380,7 +382,11 @@ function App() {
     );
   }, [currentDocument, selectedItemId]);
 
-  const refreshState = refreshError ? "stale" : isRefreshing ? "refreshing" : "current";
+  const refreshState: RefreshState = refreshError
+    ? "stale"
+    : isRefreshing
+      ? "refreshing"
+      : "current";
   const refreshStateClasses =
     refreshState === "stale"
       ? "border-rose-400/40 bg-rose-400/10 text-rose-100"
@@ -393,7 +399,26 @@ function App() {
       : refreshState === "refreshing"
         ? "Refreshing…"
         : "Current";
+  const refreshAnnouncementState: RefreshState = isRefreshing
+    ? "refreshing"
+    : refreshError
+      ? "stale"
+      : "current";
+  const refreshAnnouncementLabel = formatRefreshAnnouncement(
+    refreshAnnouncementState,
+    refreshError,
+  );
   const lastRefreshLabel = formatRefreshTimestamp(lastSuccessfulRefreshAt);
+
+  useEffect(() => {
+    if (loading) {
+      return;
+    }
+
+    setRefreshAnnouncement((current) =>
+      current === refreshAnnouncementLabel ? current : refreshAnnouncementLabel,
+    );
+  }, [loading, refreshAnnouncementLabel]);
 
   const documentGroups = useMemo(() => {
     if (!currentSection) {
@@ -683,6 +708,15 @@ function App() {
 
   return (
     <div className="app-shell text-slate-100">
+      <p
+        aria-atomic="true"
+        aria-live="polite"
+        className="sr-only"
+        data-refresh-live-region="true"
+        role="status"
+      >
+        {refreshAnnouncement}
+      </p>
       <header className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/90 backdrop-blur-2xl">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 md:flex-row md:items-center md:justify-between md:px-8">
           <div className="flex items-center justify-between gap-4 md:min-w-0">
@@ -1478,18 +1512,19 @@ function formatRefreshFailure(action: string, error: unknown): string {
 }
 
 async function describeAppDataRefreshFailure(response: Response): Promise<string> {
-  const fallback = `Failed to load app data: ${response.status} ${response.statusText}`;
-  const contentType = response.headers.get("content-type") ?? "";
-  const body = await response.text();
+  const fallback = `Failed to refresh app data: ${response.status} ${response.statusText}`;
 
   try {
-    if (!contentType.includes("application/json") && !body.trim().startsWith("{")) {
-      return fallback;
+    const payload = (await response.json()) as AppDataErrorResponse;
+    const summary = payload.error?.summary?.trim();
+    const guidance = payload.error?.guidance?.trim();
+
+    if (summary && guidance) {
+      return `${summary} ${guidance}`;
     }
 
-    const payload = JSON.parse(body) as unknown;
-    if (isAppDataErrorResponse(payload)) {
-      return `${payload.error.summary} ${payload.error.guidance}`;
+    if (summary) {
+      return summary;
     }
   } catch {
     return fallback;
@@ -1498,22 +1533,18 @@ async function describeAppDataRefreshFailure(response: Response): Promise<string
   return fallback;
 }
 
-function isAppDataErrorResponse(value: unknown): value is AppDataErrorResponse {
-  if (!value || typeof value !== "object") {
-    return false;
+function formatRefreshAnnouncement(state: RefreshState, refreshError: string | null): string {
+  if (state === "stale") {
+    return refreshError
+      ? `Workspace snapshot is stale. ${refreshError}`
+      : "Workspace snapshot is stale.";
   }
 
-  const error = (value as { error?: unknown }).error;
-  if (!error || typeof error !== "object") {
-    return false;
+  if (state === "refreshing") {
+    return "Refreshing workspace snapshot.";
   }
 
-  const candidate = error as Partial<AppDataErrorResponse["error"]>;
-  return (
-    (candidate.code === "workspace-invalid" || candidate.code === "server-unavailable") &&
-    typeof candidate.summary === "string" &&
-    typeof candidate.guidance === "string"
-  );
+  return "Workspace snapshot is current.";
 }
 
 function formatRefreshTimestamp(iso: string | null): string {
