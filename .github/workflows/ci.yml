@@ -58,6 +58,14 @@ jobs:
           cache: pip
           cache-dependency-path: .pre-commit-config.yaml
 
+      - name: Cache pre-commit hooks
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+          restore-keys: |
+            pre-commit-${{ runner.os }}-
+
       - name: Install pre-commit
         run: python -m pip install --upgrade pip pre-commit
 
