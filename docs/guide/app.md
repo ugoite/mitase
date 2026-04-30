@@ -139,7 +139,10 @@ when you return to the tab after spec changes. If a later refresh fails, the UI
 keeps the last successfully loaded snapshot visible and shows a banner so you
 know the data is stale until refresh recovers. The header and workspace card
 also show the last successful refresh timestamp plus a `Refresh now` action so
-you can force a reload without waiting for the next poll.
+you can force a reload without waiting for the next poll. When `/api/app-data.json`
+rejects a refresh, the banner now uses a bounded safe explanation that
+distinguishes workspace-file/config problems from broader `syu app` server
+trouble without exposing internal stack traces in the browser.
 
 Each row shows:
 
