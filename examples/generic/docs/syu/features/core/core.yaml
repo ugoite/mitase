@@ -1,0 +1,11 @@
+category: Core Features
+version: 1
+
+features:
+  - id: FEAT-001
+    title: Bootstrap the generic spec workspace
+    summary: Provide a starter structure that contributors can extend.
+    status: planned
+    linked_requirements:
+      - REQ-001
+    implementations: {}
