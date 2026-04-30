@@ -266,7 +266,7 @@ fn repository_declares_release_automation() {
     let readme = read_file("README.md");
 
     assert!(release_please.contains("FEAT-RELEASE-001"));
-    assert!(release_please.contains("googleapis/release-please-action@v4.4.1"));
+    assert!(release_please.contains("googleapis/release-please-action@v5.0.0"));
     assert!(release_please.contains("release-please:"));
     assert!(release_please.contains("target-branch: main"));
     assert!(release_please.contains("release-please skipped"));
