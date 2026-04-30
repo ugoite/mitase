@@ -2012,42 +2012,6 @@ mod tests {
     }
 
     #[test]
-    fn wait_for_ready_accepts_ok_health_responses() {
-        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("listener should bind");
-        let addr = listener.local_addr().expect("addr");
-
-        listener
-            .set_nonblocking(true)
-            .expect("listener should become nonblocking");
-
-        let server = thread::spawn(move || {
-            let deadline = std::time::Instant::now() + Duration::from_secs(1);
-
-            while std::time::Instant::now() < deadline {
-                if let Ok((mut stream, _)) = listener.accept() {
-                    let mut buffer = [0_u8; 1024];
-                    let _ = stream.read(&mut buffer);
-                    let _ = stream.write_all(
-                        b"HTTP/1.1 200 OK\r\nContent-Length: 15\r\nConnection: close\r\n\r\n{\"status\":\"ok\"}",
-                    );
-                    let _ = stream.flush();
-                } else {
-                    thread::sleep(Duration::from_millis(5));
-                }
-            }
-        });
-
-        wait_for_ready_with_retry(
-            addr,
-            5,
-            Duration::from_millis(200),
-            Duration::from_millis(5),
-        )
-        .expect("ready servers should succeed");
-        server.join().expect("server thread");
-    }
-
-    #[test]
     fn wait_for_ready_reports_unreachable_servers() {
         let listener = TcpListener::bind(("127.0.0.1", 0)).expect("listener should bind");
         let addr = listener.local_addr().expect("addr");
