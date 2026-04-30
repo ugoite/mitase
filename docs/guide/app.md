@@ -194,6 +194,30 @@ needs attention without losing the broader workspace context.
 
 ---
 
+## Accessibility checklist for app changes
+
+When you change `app/src/`, review the browser flow with this checklist before
+you open a pull request:
+
+1. **Keyboard-only search and navigation**: confirm you can move through search
+   results, open an item, go back, and activate section/document controls
+   without needing a pointer.
+2. **Refresh and error announcements**: make sure refresh-state updates and
+   failing-refresh banners still expose the right `aria-live` / alert semantics
+   so screen-reader users hear stale, refreshing, and recovered states.
+3. **Focus continuity after in-app navigation**: after clicking links, issue
+   rows, search results, or the back button, check that focus stays in a place
+   where the next keyboard action still feels predictable.
+4. **Semantic status patterns**: use polite live regions for routine status
+   changes, keep alert semantics for errors that need immediate attention, and
+   avoid announcing the same state twice from multiple competing elements.
+
+For contributor validation in this repository, pair that checklist with
+`scripts/ci/validate-app.sh --e2e` so the shipped Playwright coverage keeps the
+same keyboard and refresh flows under test.
+
+---
+
 ## Common workflows
 
 ### I want to see which requirements still need tests
