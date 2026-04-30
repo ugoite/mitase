@@ -1449,6 +1449,28 @@ function formatRefreshFailure(action: string, error: unknown): string {
   return `Could not ${action}: ${errorMessage(error, "Unexpected refresh failure")}`;
 }
 
+async function describeAppDataRefreshFailure(response: Response): Promise<string> {
+  const fallback = `Failed to refresh app data: ${response.status} ${response.statusText}`;
+
+  try {
+    const payload = (await response.json()) as AppDataErrorResponse;
+    const summary = payload.error?.summary?.trim();
+    const guidance = payload.error?.guidance?.trim();
+
+    if (summary && guidance) {
+      return `${summary} ${guidance}`;
+    }
+
+    if (summary) {
+      return summary;
+    }
+  } catch {
+    return fallback;
+  }
+
+  return fallback;
+}
+
 function formatRefreshAnnouncement(state: RefreshState, refreshError: string | null): string {
   if (state === "stale") {
     return refreshError
