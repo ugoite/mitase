@@ -63,7 +63,9 @@ description: "Generated reference for docs/syu/features/features.yaml"
 ## Source YAML
 
 ```yaml
+# x-release-please-start-version
 version: "0.0.1-alpha.8"
+# x-release-please-end
 updated: "2026-04"
 
 files:
