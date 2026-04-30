@@ -85,6 +85,9 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
           - tool: cargo-audit
           - Set up Python with pip cache
           - cache-dependency-path: app/package-lock.json
+          - Cache pre-commit hooks
+          - actions/cache@v4
+          - ~/.cache/pre-commit
           - scripts/ci/pinned-npm.sh install app
           - scripts/ci/pinned-npm.sh install website
           - Build browser app bundle
@@ -197,6 +200,9 @@ features:
             - "tool: cargo-audit"
             - Set up Python with pip cache
             - "cache-dependency-path: app/package-lock.json"
+            - Cache pre-commit hooks
+            - actions/cache@v4
+            - "~/.cache/pre-commit"
             - scripts/ci/pinned-npm.sh install app
             - scripts/ci/pinned-npm.sh install website
             - Build browser app bundle
