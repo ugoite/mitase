@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
+  AppDataErrorResponse,
   AppPayload,
   BrowserDocument,
   BrowserTraceGroup,
@@ -143,9 +144,7 @@ function App() {
         ]);
 
         if (!dataResponse.ok) {
-          throw new Error(
-            `Failed to load app data: ${dataResponse.status} ${dataResponse.statusText}`,
-          );
+          throw new Error(await describeAppDataRefreshFailure(dataResponse));
         }
         const snapshot = dataResponse.headers.get("x-syu-snapshot");
         if (!snapshot) {

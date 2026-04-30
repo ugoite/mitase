@@ -531,8 +531,15 @@ test("shows a visible banner when a workspace refresh reload fails after the ini
     refreshLoads += 1;
     await route.fulfill({
       status: 500,
-      contentType: "text/plain",
-      body: "app data refresh failed",
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: {
+          code: "workspace-invalid",
+          summary: "The workspace snapshot could not be rebuilt safely.",
+          guidance:
+            "Review recent workspace or syu.yaml changes, fix any broken files, then refresh again.",
+        },
+      }),
     });
   });
 
@@ -541,7 +548,7 @@ test("shows a visible banner when a workspace refresh reload fails after the ini
   const alert = page.getByRole("alert");
   await expect(alert).toContainText("Live refresh needs attention.");
   await expect(alert).toContainText(
-    "Could not reload the workspace snapshot: Failed to load app data: 500 Internal Server Error",
+    "Could not reload the workspace snapshot: The workspace snapshot could not be rebuilt safely. Review recent workspace or syu.yaml changes, fix any broken files, then refresh again.",
   );
   await expect(page.getByRole("heading", { level: 1, name: /^syu\b/i })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Workspace could not load" })).toHaveCount(0);
