@@ -112,7 +112,9 @@ Each release publishes a `checksums.sha256` file alongside the installer.
 Download both files, verify the checksum, then run the local copy:
 
 ```bash
+# x-release-please-start-version
 RELEASE=v0.0.1-alpha.8
+# x-release-please-end
 curl -fsSL "https://github.com/ugoite/syu/releases/download/${RELEASE}/install-syu.sh" -o install-syu.sh
 curl -fsSL "https://github.com/ugoite/syu/releases/download/${RELEASE}/checksums.sha256" -o checksums.sha256
 sha256sum --ignore-missing -c checksums.sha256
@@ -128,7 +130,9 @@ and download the Windows archive directly. This avoids requiring Git Bash or
 WSL just to install `syu`.
 
 ```powershell
+# x-release-please-start-version
 $release = 'v0.0.1-alpha.8'
+# x-release-please-end
 $asset = 'syu-x86_64-pc-windows-msvc.zip'
 $checksums = 'checksums.sha256'
 Invoke-WebRequest "https://github.com/ugoite/syu/releases/download/$release/$asset" -OutFile $asset
