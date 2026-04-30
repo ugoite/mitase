@@ -36,6 +36,9 @@ Need a different level of guidance?
 - Use the [trace adapter capability matrix](./trace-adapter-support.md) when
   you need to know which built-in languages support symbol validation only
   versus `doc_contains` and strict coverage.
+- Follow the [dedicated `doc_contains` adoption guide](./doc-contains.md) when
+  you want a newcomer-friendly path for adding comment-level evidence one symbol
+  at a time.
 - Jump to [troubleshooting](./troubleshooting.md) when validation or linking is
   already failing and you need to unblock a workspace.
 
