@@ -593,3 +593,47 @@ test("allows a manual refresh and updates the last refresh timestamp after a sta
   await expect(alert).toHaveCount(0);
   await expect(refreshTimestamp).not.toHaveAttribute("datetime", initialTimestamp ?? "");
 });
+
+test("announces refresh state changes through a polite live region", async ({ page }) => {
+  await page.goto("/");
+
+  const liveRegion = page.locator('[data-refresh-live-region="true"]');
+  await expect(liveRegion).toHaveAttribute("role", "status");
+  await expect(liveRegion).toHaveAttribute("aria-live", "polite");
+  await expect(liveRegion).toHaveAttribute("aria-atomic", "true");
+  await expect(liveRegion).toHaveText("Workspace snapshot is current.");
+
+  let pollAttempts = 0;
+  await page.route("**/api/version", async (route) => {
+    pollAttempts += 1;
+    await route.fulfill({
+      status: 500,
+      contentType: "text/plain",
+      body: "app data refresh failed",
+    });
+  });
+
+  await expect.poll(() => pollAttempts, { timeout: 10000 }).toBeGreaterThan(0);
+  await expect(liveRegion).toContainText("Workspace snapshot is stale.");
+  await expect(liveRegion).toContainText("Could not check for workspace updates");
+
+  let releaseRefresh: (() => void) | undefined;
+  const refreshGate = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  let manualRefreshLoads = 0;
+
+  await page.route("**/api/app-data.json", async (route) => {
+    manualRefreshLoads += 1;
+    await refreshGate;
+    await route.continue();
+  });
+
+  await page.getByRole("button", { name: "Refresh now" }).first().click();
+  await expect.poll(() => manualRefreshLoads, { timeout: 10000 }).toBeGreaterThan(0);
+  await expect(liveRegion).toHaveText("Refreshing workspace snapshot.");
+
+  releaseRefresh?.();
+
+  await expect(liveRegion).toHaveText("Workspace snapshot is current.");
+});
