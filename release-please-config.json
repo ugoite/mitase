@@ -56,8 +56,8 @@
           "file": "docs/guide/app.md",
           "replacers": [
             {
-              "search": "# x-release-please-start-version\n{\"status\":\"ok\",\"version\":\"(?<version>.*)\"}",
-              "replace": "# x-release-please-start-version\n{\"status\":\"ok\",\"version\":\"{{version}}\"}"
+              "search": "<!-- x-release-please-start-version -->\n```json\n{\"status\":\"ok\",\"version\":\"(?<version>.*)\"}\n```\n<!-- x-release-please-end -->",
+              "replace": "<!-- x-release-please-start-version -->\n```json\n{\"status\":\"ok\",\"version\":\"{{version}}\"}\n```\n<!-- x-release-please-end -->"
             }
           ]
         },
