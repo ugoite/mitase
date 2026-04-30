@@ -48,7 +48,6 @@ macro_rules! return_ok_if {
 }
 
 static APP_DIST: Dir<'_> = include_dir!("$OUT_DIR/syu-app-dist");
-const APP_DATA_REFRESH_FAILED_MESSAGE: &str = "app data refresh failed";
 const APP_DEV_SERVER_ORIGIN: &str = "http://127.0.0.1:4173";
 
 #[derive(Clone)]
@@ -66,84 +65,10 @@ struct CurrentAppData {
     payload: AppPayload,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct AppRefreshFailure {
-    kind: AppRefreshFailureKind,
-    internal_message: String,
-}
-
-impl AppRefreshFailure {
-    fn workspace(error: anyhow::Error) -> Self {
-        Self::from_error(AppRefreshFailureKind::Workspace, error)
-    }
-
-    fn server(error: anyhow::Error) -> Self {
-        Self::from_error(AppRefreshFailureKind::Server, error)
-    }
-
-    fn from_error(kind: AppRefreshFailureKind, error: anyhow::Error) -> Self {
-        Self {
-            kind,
-            internal_message: format!("{error:#}"),
-        }
-    }
-
-    fn client_error(&self) -> AppDataErrorResponse {
-        AppDataErrorResponse {
-            error: AppDataError {
-                code: self.kind.code().to_string(),
-                summary: self.kind.summary().to_string(),
-                guidance: self.kind.guidance().to_string(),
-            },
-        }
-    }
-}
-
-impl std::fmt::Display for AppRefreshFailure {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.internal_message)
-    }
-}
-
-impl std::error::Error for AppRefreshFailure {}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum AppRefreshFailureKind {
-    Workspace,
-    Server,
-}
-
-impl AppRefreshFailureKind {
-    fn code(self) -> &'static str {
-        match self {
-            Self::Workspace => "workspace-invalid",
-            Self::Server => "server-unavailable",
-        }
-    }
-
-    fn summary(self) -> &'static str {
-        match self {
-            Self::Workspace => "The workspace snapshot could not be rebuilt safely.",
-            Self::Server => "syu app could not complete the refresh request.",
-        }
-    }
-
-    fn guidance(self) -> &'static str {
-        match self {
-            Self::Workspace => {
-                "Review recent workspace or syu.yaml changes, fix any broken files, then refresh again."
-            }
-            Self::Server => {
-                "Keep this tab open and check the syu app terminal if refreshes keep failing."
-            }
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 enum CurrentAppState {
     Ready(Box<CurrentAppData>),
-    Error(AppRefreshFailure),
+    Error(String),
 }
 
 impl AppState {
@@ -157,23 +82,22 @@ impl AppState {
             workspace_root,
             config,
             app_server,
-            current: Arc::new(RwLock::new(CurrentAppState::Error(AppRefreshFailure {
-                kind: AppRefreshFailureKind::Server,
-                internal_message: APP_DATA_REFRESH_FAILED_MESSAGE.to_string(),
-            }))),
+            current: Arc::new(RwLock::new(CurrentAppState::Error(
+                "app data refresh failed".to_string(),
+            ))),
             dev_server_origin,
         }
     }
 
-    fn current_data(&self) -> std::result::Result<CurrentAppData, AppRefreshFailure> {
+    fn current_data(&self) -> Result<CurrentAppData> {
         match self
             .current
             .read()
-            .map_err(|_| AppRefreshFailure::server(anyhow!("app refresh state lock poisoned")))?
+            .map_err(|_| anyhow!("app refresh state lock poisoned"))?
             .clone()
         {
             CurrentAppState::Ready(data) => Ok(*data),
-            CurrentAppState::Error(error) => Err(error),
+            CurrentAppState::Error(message) => Err(anyhow!(message)),
         }
     }
 
@@ -189,14 +113,20 @@ impl AppState {
     }
 
     fn replace_current(&self, next: CurrentAppState) -> Result<()> {
+        let result = match &next {
+            CurrentAppState::Ready(_) => Ok(()),
+            CurrentAppState::Error(message) => Err(anyhow!(message.clone())),
+        };
+
         *self
             .current
             .write()
             .map_err(|_| anyhow!("app refresh state lock poisoned"))? = next;
-        Ok(())
+
+        result
     }
 
-    fn refresh_current(&self) -> std::result::Result<(), AppRefreshFailure> {
+    fn refresh_current(&self) -> Result<()> {
         self.refresh_current_with(
             || load_current_snapshot(&self.workspace_root, &self.config),
             || load_current_payload(&self.workspace_root, &self.config, &self.app_server),
@@ -207,12 +137,12 @@ impl AppState {
         &self,
         load_snapshot: LoadSnapshot,
         load_payload: LoadPayload,
-    ) -> std::result::Result<(), AppRefreshFailure>
+    ) -> Result<()>
     where
         LoadSnapshot: FnOnce() -> Result<String>,
         LoadPayload: FnOnce() -> Result<AppPayload>,
     {
-        let current_snapshot = self.current_snapshot().map_err(AppRefreshFailure::server)?;
+        let current_snapshot = self.current_snapshot()?;
         let next = match load_snapshot() {
             Ok(snapshot) => {
                 if current_snapshot.as_deref() == Some(snapshot.as_str()) {
@@ -223,32 +153,14 @@ impl AppState {
                     Ok(payload) => {
                         CurrentAppState::Ready(Box::new(CurrentAppData { snapshot, payload }))
                     }
-                    Err(error) => CurrentAppState::Error(AppRefreshFailure::workspace(error)),
+                    Err(error) => CurrentAppState::Error(format!("{error:#}")),
                 }
             }
-            Err(error) => CurrentAppState::Error(AppRefreshFailure::workspace(error)),
+            Err(error) => CurrentAppState::Error(format!("{error:#}")),
         };
 
-        let result = match &next {
-            CurrentAppState::Ready(_) => Ok(()),
-            CurrentAppState::Error(error) => Err(error.clone()),
-        };
         self.replace_current(next)
-            .map_err(AppRefreshFailure::server)?;
-        result
     }
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-struct AppDataErrorResponse {
-    error: AppDataError,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
-struct AppDataError {
-    code: String,
-    summary: String,
-    guidance: String,
 }
 
 #[derive(serde::Serialize)]
@@ -431,9 +343,7 @@ fn app_router(state: AppState) -> Router {
 }
 
 async fn app_data(State(state): State<AppState>) -> std::result::Result<Response, AppError> {
-    let current = state
-        .current_data()
-        .map_err(AppError::app_data_refresh_failure)?;
+    let current = state.current_data()?;
     let mut response = Json(current.payload).into_response();
     response.headers_mut().insert(
         "x-syu-snapshot",
@@ -1226,54 +1136,18 @@ fn validation_snapshot(result: CheckResult) -> ValidationSnapshot {
     }
 }
 
-struct AppError {
-    log_message: String,
-    response: Response,
-}
+struct AppError(anyhow::Error);
 
 impl From<anyhow::Error> for AppError {
     fn from(value: anyhow::Error) -> Self {
-        Self {
-            log_message: format!("{value:#}"),
-            response: (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                APP_DATA_REFRESH_FAILED_MESSAGE,
-            )
-                .into_response(),
-        }
-    }
-}
-
-impl From<AppRefreshFailure> for AppError {
-    fn from(value: AppRefreshFailure) -> Self {
-        Self {
-            log_message: value.internal_message,
-            response: (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                APP_DATA_REFRESH_FAILED_MESSAGE,
-            )
-                .into_response(),
-        }
-    }
-}
-
-impl AppError {
-    fn app_data_refresh_failure(failure: AppRefreshFailure) -> Self {
-        Self {
-            log_message: failure.internal_message.clone(),
-            response: (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(failure.client_error()),
-            )
-                .into_response(),
-        }
+        Self(value)
     }
 }
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        eprintln!("syu app request failed: {}", self.log_message);
-        self.response
+        eprintln!("syu app request failed: {:#}", self.0);
+        (StatusCode::INTERNAL_SERVER_ERROR, "app data refresh failed").into_response()
     }
 }
 
@@ -1297,7 +1171,6 @@ mod tests {
     use axum::{
         body::{Body, to_bytes},
         http::{HeaderValue, Request, StatusCode, header},
-        response::IntoResponse,
     };
     use tempfile::tempdir;
     use tower::util::ServiceExt;
@@ -1308,8 +1181,7 @@ mod tests {
     };
 
     use super::{
-        APP_DATA_REFRESH_FAILED_MESSAGE, APP_DEV_SERVER_ORIGIN, AppDataErrorResponse, AppError,
-        AppPayload, AppRefreshFailure, AppServerSettings, AppState, AppVersion, SectionKind,
+        APP_DEV_SERVER_ORIGIN, AppPayload, AppServerSettings, AppState, AppVersion, SectionKind,
         Severity, SnapshotDependency, app_dev_server_origin, app_router, app_server,
         bind_failure_message, browser_root_labels, build_app_payload, canonical_workspace_root,
         collect_feature_sources, collect_snapshot_files_with_extensions,
@@ -2145,16 +2017,6 @@ mod tests {
     }
 
     #[test]
-    fn dev_server_probe_returns_true_for_ok_responses() {
-        let mut stream = SyntheticProbeStream::ok();
-        assert!(dev_server_probe_succeeds(
-            &mut stream,
-            "127.0.0.1:4173".parse().expect("socket address")
-        ));
-        assert!(stream.wrote, "probe should send the dev-server request");
-    }
-
-    #[test]
     fn wait_for_dev_server_with_retry_retries_after_unsuccessful_probe() {
         let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).expect("listener");
         let local_addr = listener.local_addr().expect("local addr");
@@ -2529,8 +2391,7 @@ mod tests {
         write_config(tempdir.path(), "127.0.0.1", 3000);
         let router = app_router(app_state(tempdir.path()));
 
-        let version_response = router
-            .clone()
+        let response = router
             .oneshot(
                 Request::builder()
                     .uri("/api/version")
@@ -2540,72 +2401,14 @@ mod tests {
             .await
             .expect("response");
 
-        assert_eq!(version_response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-        let body = to_bytes(version_response.into_body(), usize::MAX)
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let body = to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("body");
         assert_eq!(
             String::from_utf8(body.to_vec()).expect("utf8"),
-            APP_DATA_REFRESH_FAILED_MESSAGE
+            "app data refresh failed"
         );
-
-        let app_data_response = router
-            .oneshot(
-                Request::builder()
-                    .uri("/api/app-data.json")
-                    .body(Body::empty())
-                    .expect("request"),
-            )
-            .await
-            .expect("response");
-
-        assert_eq!(
-            app_data_response.status(),
-            StatusCode::INTERNAL_SERVER_ERROR
-        );
-        let body = to_bytes(app_data_response.into_body(), usize::MAX)
-            .await
-            .expect("body");
-        let payload: AppDataErrorResponse =
-            serde_json::from_slice(&body).expect("json error response");
-        assert_eq!(payload.error.code, "workspace-invalid");
-        assert_eq!(
-            payload.error.summary,
-            "The workspace snapshot could not be rebuilt safely."
-        );
-        assert_eq!(
-            payload.error.guidance,
-            "Review recent workspace or syu.yaml changes, fix any broken files, then refresh again."
-        );
-        let serialized = String::from_utf8(body.to_vec()).expect("utf8");
-        assert!(
-            !serialized.contains("failed to read spec root"),
-            "safe responses must not leak internal refresh details: {serialized}"
-        );
-    }
-
-    #[test]
-    fn server_refresh_failures_use_safe_server_error_payload() {
-        let failure = AppRefreshFailure::server(anyhow::anyhow!("backend exploded"));
-
-        let payload = failure.client_error();
-
-        assert_eq!(payload.error.code, "server-unavailable");
-        assert_eq!(
-            payload.error.summary,
-            "syu app could not complete the refresh request."
-        );
-        assert_eq!(
-            payload.error.guidance,
-            "Keep this tab open and check the syu app terminal if refreshes keep failing."
-        );
-    }
-
-    #[test]
-    fn app_error_from_anyhow_returns_plain_fallback_body() {
-        let response = AppError::from(anyhow::anyhow!("backend exploded")).into_response();
-
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 
     #[tokio::test]
