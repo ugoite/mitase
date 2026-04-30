@@ -22,7 +22,7 @@ fn write_doctor_workspace() -> tempfile::TempDir {
 
     fs::write(
         tempdir.path().join("syu.yaml"),
-        "version: 0.0.1-alpha.8\nspec:\n  root: docs/syu\nvalidate:\n  default_fix: false\n  allow_planned: true\n  require_non_orphaned_items: true\n  require_reciprocal_links: true\n  require_symbol_trace_coverage: false\nruntimes:\n  python:\n    command: auto\n  node:\n    command: auto\n",
+        format!("version: {}\nspec:\n  root: docs/syu\nvalidate:\n  default_fix: false\n  allow_planned: true\n  require_non_orphaned_items: true\n  require_reciprocal_links: true\n  require_symbol_trace_coverage: false\nruntimes:\n  python:\n    command: auto\n  node:\n    command: auto\n", env!("CARGO_PKG_VERSION")),
     )
     .expect("syu config");
     fs::write(
