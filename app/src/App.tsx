@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
+  AppDataErrorResponse,
   AppPayload,
   BrowserDocument,
   BrowserTraceGroup,
@@ -141,9 +142,7 @@ function App() {
         ]);
 
         if (!dataResponse.ok) {
-          throw new Error(
-            `Failed to load app data: ${dataResponse.status} ${dataResponse.statusText}`,
-          );
+          throw new Error(await describeAppDataRefreshFailure(dataResponse));
         }
         const snapshot = dataResponse.headers.get("x-syu-snapshot");
         if (!snapshot) {
@@ -1414,6 +1413,45 @@ function errorMessage(error: unknown, fallback: string): string {
 
 function formatRefreshFailure(action: string, error: unknown): string {
   return `Could not ${action}: ${errorMessage(error, "Unexpected refresh failure")}`;
+}
+
+async function describeAppDataRefreshFailure(response: Response): Promise<string> {
+  const fallback = `Failed to load app data: ${response.status} ${response.statusText}`;
+  const contentType = response.headers.get("content-type") ?? "";
+  const body = await response.text();
+
+  try {
+    if (!contentType.includes("application/json") && !body.trim().startsWith("{")) {
+      return fallback;
+    }
+
+    const payload = JSON.parse(body) as unknown;
+    if (isAppDataErrorResponse(payload)) {
+      return `${payload.error.summary} ${payload.error.guidance}`;
+    }
+  } catch {
+    return fallback;
+  }
+
+  return fallback;
+}
+
+function isAppDataErrorResponse(value: unknown): value is AppDataErrorResponse {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const error = (value as { error?: unknown }).error;
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as Partial<AppDataErrorResponse["error"]>;
+  return (
+    (candidate.code === "workspace-invalid" || candidate.code === "server-unavailable") &&
+    typeof candidate.summary === "string" &&
+    typeof candidate.guidance === "string"
+  );
 }
 
 function formatRefreshTimestamp(iso: string | null): string {
