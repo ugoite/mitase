@@ -147,6 +147,10 @@ test("renders top tabs and linked spec content", async ({ page }) => {
     /^features\b/i,
   ]);
   await expect(page.getByText("Welcome to syu.")).toBeVisible();
+  await expect(page.getByText("Starter templates")).toBeVisible();
+  await expect(page.getByText("Checked-in examples")).toBeVisible();
+  await expect(page.getByText("docs-first")).toBeVisible();
+  await expect(page.getByText("browser-ui")).toBeVisible();
 
   await page.getByRole("button", { name: "Dismiss welcome banner" }).click();
   await expect(page.getByText("Welcome to syu.")).toHaveCount(0);
