@@ -15,6 +15,11 @@ cleanup() {
 resolve_target_triple() {
   local os_name arch_name
 
+  if [[ -n "${SYU_INSTALL_SMOKE_TARGET:-}" ]]; then
+    printf '%s\n' "$SYU_INSTALL_SMOKE_TARGET"
+    return 0
+  fi
+
   os_name="$(uname -s)"
   arch_name="$(uname -m)"
 
@@ -29,7 +34,13 @@ resolve_target_triple() {
 
   case "$os_name" in
     Darwin) printf '%s\n' "${arch_name}-apple-darwin" ;;
-    Linux) printf '%s\n' "${arch_name}-unknown-linux-gnu" ;;
+    Linux)
+      if [[ "$arch_name" == "aarch64" ]]; then
+        printf '%s\n' "x86_64-unknown-linux-gnu"
+      else
+        printf '%s\n' "${arch_name}-unknown-linux-gnu"
+      fi
+      ;;
     MINGW* | MSYS* | CYGWIN*) printf '%s\n' "${arch_name}-pc-windows-msvc" ;;
     *)
       echo "unsupported operating system: $os_name" >&2
@@ -85,6 +96,7 @@ run_install_case() {
   local target="$4"
   local binary_name="$5"
   local temp_root port install_dir installed_binary server_log
+  local selector_env=()
 
   temp_root="$(mktemp -d)"
   server_log="${temp_root}/registry.log"
@@ -94,12 +106,16 @@ run_install_case() {
   install_dir="${temp_root}/bin"
   installed_binary="${install_dir}/${binary_name}"
 
+  if [[ -n "$selector" ]]; then
+    selector_env=(SYU_VERSION="$selector")
+  fi
+
   env \
     SYU_PACKAGE_SCHEME="http" \
     SYU_PACKAGE_HOST="127.0.0.1:${port}" \
     SYU_PACKAGE_REPOSITORY="test/syu" \
     SYU_INSTALL_DIR="$install_dir" \
-    SYU_VERSION="$selector" \
+    "${selector_env[@]}" \
     bash "$repo_root/scripts/install-syu.sh"
 
   grep -F "mock syu ${expected_version} ${target}" "$installed_binary" >/dev/null
@@ -112,16 +128,20 @@ run_install_case() {
 
 main() {
   local target binary_name
+  local repo_version default_version
 
   trap cleanup EXIT
 
   target="$(resolve_target_triple)"
   binary_name="$(resolve_binary_name "$target")"
+  repo_version="$(awk -F'"' '/^version = "/ {print $2; exit}' "$repo_root/Cargo.toml")"
+  default_version="v${repo_version}"
 
   run_install_case "prerelease" "latest" "v0.0.2-beta.1" "$target" "$binary_name"
   run_install_case "prerelease" "alpha" "v0.0.1-alpha.3" "$target" "$binary_name"
   run_install_case "prerelease" "v0.0.1-alpha.2" "v0.0.1-alpha.2" "$target" "$binary_name"
   run_install_case "mixed" "stable" "v0.0.2" "$target" "$binary_name"
+  run_install_case "mixed" "" "$default_version" "$target" "$binary_name"
 }
 
 main "$@"
