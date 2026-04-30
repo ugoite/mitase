@@ -139,7 +139,10 @@ when you return to the tab after spec changes. If a later refresh fails, the UI
 keeps the last successfully loaded snapshot visible and shows a banner so you
 know the data is stale until refresh recovers. The header and workspace card
 also show the last successful refresh timestamp plus a `Refresh now` action so
-you can force a reload without waiting for the next poll.
+you can force a reload without waiting for the next poll. When `/api/app-data.json`
+rejects a refresh, the banner now uses a bounded safe explanation that
+distinguishes workspace-file/config problems from broader `syu app` server
+trouble without exposing internal stack traces in the browser.
 
 Each row shows:
 
@@ -188,6 +191,30 @@ becomes a recovery checklist instead of a passive summary:
 
 That workflow lets you move from a red validation state to the exact item that
 needs attention without losing the broader workspace context.
+
+---
+
+## Accessibility checklist for app changes
+
+When you change `app/src/`, review the browser flow with this checklist before
+you open a pull request:
+
+1. **Keyboard-only search and navigation**: confirm you can move through search
+   results, open an item, go back, and activate section/document controls
+   without needing a pointer.
+2. **Refresh and error announcements**: make sure refresh-state updates and
+   failing-refresh banners still expose the right `aria-live` / alert semantics
+   so screen-reader users hear stale, refreshing, and recovered states.
+3. **Focus continuity after in-app navigation**: after clicking links, issue
+   rows, search results, or the back button, check that focus stays in a place
+   where the next keyboard action still feels predictable.
+4. **Semantic status patterns**: use polite live regions for routine status
+   changes, keep alert semantics for errors that need immediate attention, and
+   avoid announcing the same state twice from multiple competing elements.
+
+For contributor validation in this repository, pair that checklist with
+`scripts/ci/validate-app.sh --e2e` so the shipped Playwright coverage keeps the
+same keyboard and refresh flows under test.
 
 ---
 

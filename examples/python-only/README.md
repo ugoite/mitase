@@ -7,6 +7,12 @@ all mutually linked and traced to a Python test file.
 It is the checked-in reference workspace that matches
 `syu init . --template python-only` exactly.
 
+It is also the best **starter-level `doc_contains` example** in this repository:
+the workspace stays small enough for a newcomer to read end-to-end while still
+showing both a requirement trace and a feature trace with real Python
+docstrings. If you are adopting `doc_contains` for the first time, pair this
+example with the [dedicated adoption guide](https://github.com/ugoite/syu/blob/main/docs/guide/doc-contains.md).
+
 ## Files
 
 | Path | What it defines |
@@ -45,5 +51,8 @@ traceability: requirements=2/2 features=2/2
 - **Docstring format** — `doc_contains: ["requirement doc line"]` means the
   string `"requirement doc line"` must appear somewhere in the function's
   docstring. Open `python/test_traceability.py` to see a working example.
+- **Best first copy target** — if your repository already has Python tests or
+  scripts, this is the smallest example to copy before you widen `doc_contains`
+  usage across more files.
 - **Reciprocal links** — `REQ-PY-001` and `FEAT-PY-001` must each reference
   the other; syu checks both directions.

@@ -546,8 +546,15 @@ test("shows a visible banner when a workspace refresh reload fails after the ini
     refreshLoads += 1;
     await route.fulfill({
       status: 500,
-      contentType: "text/plain",
-      body: "app data refresh failed",
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: {
+          code: "workspace-invalid",
+          summary: "The workspace snapshot could not be rebuilt safely.",
+          guidance:
+            "Review recent workspace or syu.yaml changes, fix any broken files, then refresh again.",
+        },
+      }),
     });
   });
 
@@ -556,7 +563,7 @@ test("shows a visible banner when a workspace refresh reload fails after the ini
   const alert = page.getByRole("alert");
   await expect(alert).toContainText("Live refresh needs attention.");
   await expect(alert).toContainText(
-    "Could not reload the workspace snapshot: Failed to load app data: 500 Internal Server Error",
+    "Could not reload the workspace snapshot: The workspace snapshot could not be rebuilt safely. Review recent workspace or syu.yaml changes, fix any broken files, then refresh again.",
   );
   await expect(page.getByRole("heading", { level: 1, name: /^syu\b/i })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Workspace could not load" })).toHaveCount(0);
@@ -600,4 +607,48 @@ test("allows a manual refresh and updates the last refresh timestamp after a sta
   await expect.poll(() => manualRefreshLoads, { timeout: 10000 }).toBeGreaterThan(0);
   await expect(alert).toHaveCount(0);
   await expect(refreshTimestamp).not.toHaveAttribute("datetime", initialTimestamp ?? "");
+});
+
+test("announces refresh state changes through a polite live region", async ({ page }) => {
+  await page.goto("/");
+
+  const liveRegion = page.locator('[data-refresh-live-region="true"]');
+  await expect(liveRegion).toHaveAttribute("role", "status");
+  await expect(liveRegion).toHaveAttribute("aria-live", "polite");
+  await expect(liveRegion).toHaveAttribute("aria-atomic", "true");
+  await expect(liveRegion).toHaveText("Workspace snapshot is current.");
+
+  let pollAttempts = 0;
+  await page.route("**/api/version", async (route) => {
+    pollAttempts += 1;
+    await route.fulfill({
+      status: 500,
+      contentType: "text/plain",
+      body: "app data refresh failed",
+    });
+  });
+
+  await expect.poll(() => pollAttempts, { timeout: 10000 }).toBeGreaterThan(0);
+  await expect(liveRegion).toContainText("Workspace snapshot is stale.");
+  await expect(liveRegion).toContainText("Could not check for workspace updates");
+
+  let releaseRefresh: (() => void) | undefined;
+  const refreshGate = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  let manualRefreshLoads = 0;
+
+  await page.route("**/api/app-data.json", async (route) => {
+    manualRefreshLoads += 1;
+    await refreshGate;
+    await route.continue();
+  });
+
+  await page.getByRole("button", { name: "Refresh now" }).first().click();
+  await expect.poll(() => manualRefreshLoads, { timeout: 10000 }).toBeGreaterThan(0);
+  await expect(liveRegion).toHaveText("Refreshing workspace snapshot.");
+
+  releaseRefresh?.();
+
+  await expect(liveRegion).toHaveText("Workspace snapshot is current.");
 });

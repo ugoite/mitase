@@ -57,7 +57,9 @@ they do **not** participate in the repository-wide strict ownership scan.
 
 ## How to choose the right promises
 
-- Need `doc_contains`? Rust, Python, Go, and TypeScript / JavaScript traces all support it today.
+- Need `doc_contains`? Rust, Python, Go, and TypeScript / JavaScript traces all
+  support it today. For a staged rollout, starter examples, and "when should I
+  add this?" guidance, use the [dedicated `doc_contains` adoption guide](./doc-contains.md).
 - Need strict ownership coverage? Rust, Python, Go, Java, C#, and
   TypeScript / JavaScript all participate today.
 - Using Ruby, Shell, YAML, JSON, Markdown, or Gitignore traces? Keep the mapping to
