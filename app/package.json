@@ -17,15 +17,15 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
-    "@tailwindcss/vite": "^4.2.2",
+    "@tailwindcss/vite": "^4.2.4",
     "@types/node": "^25.6.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
     "tailwindcss": "^4.2.2",
     "typescript": "^6.0.3",
-    "vite": "^8.0.9",
-    "vite-plus": "^0.1.18"
+    "vite": "^8.0.10",
+    "vite-plus": "^0.1.19"
   },
   "engines": {
     "node": ">=25 <26"
