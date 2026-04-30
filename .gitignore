@@ -2,7 +2,7 @@
 .tooling
 .DS_Store
 __pycache__/
-*.pyc
+*.py[cod]
 # FEAT-CONTRIB-002: keep contributor-local helper worktrees out of routine status output
 /.worktrees/
 website/.docusaurus
