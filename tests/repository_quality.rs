@@ -464,6 +464,7 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("**Visual explorer**"));
     assert!(readme.contains("**Reviewer workflow**"));
     assert!(readme.contains("**Contributor runtime setup**"));
+    assert!(readme.contains("guided `doctor → init → validate → browse` path"));
     assert!(readme.contains("new to `syu`"));
     assert!(readme.contains("already have a workspace"));
     assert!(readme.contains("10-15 minutes"));
@@ -487,6 +488,7 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("syu validate"));
     assert!(readme.contains("syu browse"));
     assert!(readme.contains("syu list"));
+    assert!(readme.contains("syu doctor ."));
     assert!(readme.contains("### Command chooser"));
     assert!(readme.contains("check whether your workspace currently validates"));
     assert!(readme.contains("syu validate ."));
@@ -579,9 +581,11 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("latest published alpha"));
     assert_newcomer_template_examples(&getting_started);
     assert!(getting_started.contains("syu templates"));
+    assert!(getting_started.contains("syu doctor ."));
     assert!(getting_started.contains("--id-prefix"));
     assert!(getting_started.contains("syu validate . --fix"));
     assert!(getting_started.contains("syu browse ."));
+    assert!(getting_started.contains("doctor → init → validate → browse"));
     assert!(getting_started.contains("If you only remember the task and not the command name yet"));
     assert!(
         getting_started
@@ -642,6 +646,7 @@ fn repository_declares_documentation_guides() {
     assert!(command_card.contains("# syu command card"));
     assert!(command_card.contains("| Task | Command | Choose it when |"));
     assert!(command_card.contains("syu templates"));
+    assert!(command_card.contains("syu doctor ."));
     assert!(command_card.contains("syu validate . --id FEAT-CHECK-001"));
     assert!(command_card.contains("syu audit ."));
     assert!(command_card.contains("syu report ."));
