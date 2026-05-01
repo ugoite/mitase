@@ -1059,6 +1059,8 @@ fn repository_declares_contribution_workflow_assets() {
 
     assert!(gitignore.contains("FEAT-CONTRIB-002"));
     assert!(gitignore.contains("/.worktrees/"));
+    assert!(gitignore.contains("__pycache__/"));
+    assert!(gitignore.contains("*.py[cod]"));
 }
 
 #[test]
