@@ -34,6 +34,15 @@ If a pull request already exists, pair this page with the
 | Browse in the browser | `syu app .` | use the local browser UI for visual navigation, tabs, and validation context |
 | Start the editor protocol server | `syu lsp` | connect an editor client over stdio when you want the current hover-only LSP surface |
 
+## Reviewer loop
+
+| Task | Command | Choose it when |
+| --- | --- | --- |
+| Audit a review target | `syu audit .` | scan for overlap, tension, and orphaned-policy candidates before you hand findings back |
+| Share the validation state | `syu report .` | render a Markdown snapshot the author can use to fix and re-run validation |
+
+Use `syu audit .` before `syu report .` when you want the review handoff to read as one short loop instead of a loose list of checks.
+
 ## Common command bundles
 
 ### First workspace pass
