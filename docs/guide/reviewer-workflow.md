@@ -12,8 +12,8 @@ history.
 2. **Which files and symbols currently claim that work?**
 3. **What changed recently in those traced paths?**
 
-The commands below answer those questions with `show`/`relate`, `trace`,
-`audit`, `report`, `explain`, and `log`.
+The commands below answer those questions with `show`/`relate`, `review`
+(`trace --range`), `trace`, `audit`, `report`, `explain`, and `log`.
 
 If you review from the terminal often, generate shell completions once so spec
 IDs and subcommands stay close at hand:
@@ -73,6 +73,18 @@ syu relate FEAT-CHECK-001
 Use this output to decide whether the PR still matches the connected policy and
 requirement context, or whether it is changing the behavior in a way that
 should have updated adjacent YAML too.
+
+When you already have a PR range and want one command that reads like a review
+summary, use the reviewer alias:
+
+```bash
+syu review --range origin/main...HEAD
+```
+
+`syu review` is a friendly entry point for the same range tracing logic. It
+summarizes changed files, surfaces unowned or skipped paths inline, and keeps
+the follow-up `show`, `relate`, `log`, and `validate --id` commands close at
+hand.
 
 When you want the same selector flexibility but a more opinionated summary, run
 `syu explain TARGET`. It keeps the ID/path/symbol entry points from `syu
