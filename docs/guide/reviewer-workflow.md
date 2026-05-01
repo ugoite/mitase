@@ -13,7 +13,7 @@ history.
 3. **What changed recently in those traced paths?**
 
 The commands below answer those questions with `show`/`relate`, `trace`,
-`explain`, and `log`.
+`audit`, `report`, `explain`, and `log`.
 
 If you review from the terminal often, generate shell completions once so spec
 IDs and subcommands stay close at hand:
@@ -79,14 +79,25 @@ When you want the same selector flexibility but a more opinionated summary, run
 relate`, then turns the result into a focused assessment with the connected
 chain, traces in scope, and obvious gaps that still need review.
 
-For bigger spec edits or cleanup PRs, add a quick heuristic audit pass:
+For bigger spec edits or cleanup PRs, add a quick heuristic audit pass before
+you decide whether the PR really belongs in `validate`:
 
 ```bash
 syu audit .
 ```
 
-That summary is useful when you want review notes about likely overlap,
-policy drift, or policy text that no longer turns into concrete requirements.
+`syu audit` is the fast reviewer lens: it highlights likely overlap, policy
+drift, and spec text that no longer turns into concrete requirements. When the
+audit points at something you need to share with the author, turn it into a
+report:
+
+```bash
+syu report .
+```
+
+`syu report` gives you a shareable snapshot of the current validation state.
+Use it to hand off findings, then return to `syu validate .` once the fixes are
+in place.
 
 ## 3. Jump from code back to the owning spec
 
