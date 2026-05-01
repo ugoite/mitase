@@ -50,6 +50,8 @@ syu relate FEAT-CHECK-001
 syu trace src/command/check.rs --symbol run_check_command
 syu log FEAT-CHECK-001 --kind implementation --path src/command
 syu validate . --id FEAT-CHECK-001
+syu audit .
+syu report .
 ```
 
 ### Share the current state

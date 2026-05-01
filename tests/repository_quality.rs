@@ -644,6 +644,7 @@ fn repository_declares_documentation_guides() {
     assert!(command_card.contains("syu templates"));
     assert!(command_card.contains("syu validate . --id FEAT-CHECK-001"));
     assert!(command_card.contains("syu audit ."));
+    assert!(command_card.contains("syu report ."));
     assert!(command_card.contains("scan for likely overlap"));
     assert!(command_card.contains("syu app ."));
     assert!(command_card.contains("[reviewer workflow](./reviewer-workflow.md)"));
