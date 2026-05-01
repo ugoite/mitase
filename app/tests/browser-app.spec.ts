@@ -359,6 +359,23 @@ test("loads deep links and supports keyboard search navigation", async ({ page }
   ).toBeVisible();
   await expect(page).toHaveURL(/#features\/FEAT-CHECK-001$/);
 
+  await searchInput.fill("REQ-CORE");
+  const repeatedSearchResults = searchResults.getByRole("option");
+  await expect(repeatedSearchResults.nth(3)).toBeVisible();
+  const hoveredSearchResult = repeatedSearchResults.nth(2);
+  const hoveredSearchResultId = await hoveredSearchResult.getAttribute("id");
+  expect(hoveredSearchResultId).toBeTruthy();
+  await hoveredSearchResult.hover();
+  await expect(searchInput).toHaveAttribute("aria-activedescendant", hoveredSearchResultId!);
+  await hoveredSearchResult.click();
+  await expect(page).toHaveURL(/#requirements\/REQ-CORE-00\d+$/);
+  await searchInput.fill("REQ-CORE");
+  await expect(searchInput).toHaveAttribute("aria-activedescendant", hoveredSearchResultId!);
+  await searchInput.press("ArrowDown");
+  const nextSearchResultId = await repeatedSearchResults.nth(3).getAttribute("id");
+  expect(nextSearchResultId).toBeTruthy();
+  await expect(searchInput).toHaveAttribute("aria-activedescendant", nextSearchResultId!);
+
   await searchInput.fill("no-such-result");
   await expect(searchInput).toHaveAttribute("aria-expanded", "false");
   await expect(searchInput).not.toHaveAttribute("aria-controls", "spec-search-results-list");
@@ -370,9 +387,7 @@ test("loads deep links and supports keyboard search navigation", async ({ page }
   await expect(searchInput).toHaveValue("");
   await expect(searchInput).toHaveAttribute("aria-expanded", "false");
   await expect(page.getByRole("listbox", { name: "Search results" })).toHaveCount(0);
-  await expect(
-    page.getByRole("heading", { name: /FEAT-CHECK-001 .* Unified validation command/i }),
-  ).toBeVisible();
+  await expect(page).toHaveURL(/#requirements\/REQ-CORE-00\d+$/);
 });
 
 test("explains requirement and feature trace metrics", async ({ page }) => {
