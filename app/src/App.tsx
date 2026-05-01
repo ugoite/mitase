@@ -34,6 +34,11 @@ type SearchResult = {
   kind: SectionKind;
 };
 
+type StarterGalleryEntry = {
+  name: string;
+  summary: string;
+};
+
 type SearchFilter = "all" | SectionKind;
 type RefreshState = "current" | "refreshing" | "stale";
 
@@ -42,6 +47,24 @@ const SEARCH_RESULTS_LIST_ID = "spec-search-results-list";
 const SEARCH_FILTER_GROUP_ID = "spec-search-filter-group";
 const REFRESH_POLL_MIN_MS = 2_000;
 const REFRESH_POLL_MAX_MS = 10_000;
+const STARTER_TEMPLATES: StarterGalleryEntry[] = [
+  { name: "docs-first", summary: "Documentation-heavy repos that want a gentle starter scaffold." },
+  { name: "rust-only", summary: "Rust-first workspaces with built-in traceable source and tests." },
+  { name: "go-only", summary: "Go-first repos that want a minimal language-shaped starter." },
+  { name: "typescript-only", summary: "TypeScript-first repos with checked-in Node metadata." },
+  { name: "polyglot", summary: "Teams that know they will mix multiple languages from the start." },
+];
+const STARTER_EXAMPLES: StarterGalleryEntry[] = [
+  { name: "browser-ui", summary: "A traced React/TypeScript UI example for frontend-heavy teams." },
+  {
+    name: "csharp-fallback",
+    summary: "A staged C# adoption path that keeps the first traces lighter.",
+  },
+  {
+    name: "team-scale",
+    summary: "A larger workspace showing how a bigger repo can be split by area.",
+  },
+];
 
 const SECTION_COPY: Record<SectionKind, string> = {
   philosophy: "Project intent and enduring values.",
@@ -76,7 +99,7 @@ function App() {
   const [selectedIssueKey, setSelectedIssueKey] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchFilter, setSearchFilter] = useState<SearchFilter>("all");
-  const [focusedResultIndex, setFocusedResultIndex] = useState(-1);
+  const [focusedResultId, setFocusedResultId] = useState<string | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(() => shouldShowOnboarding());
   const [navigationHistory, setNavigationHistory] = useState<string[]>([]);
   const [snapshotVersion, setSnapshotVersion] = useState<string | null>(null);
@@ -325,10 +348,6 @@ function App() {
     };
   }, [isRefreshing, loadWorkspace, snapshotVersion]);
 
-  useEffect(() => {
-    setFocusedResultIndex(-1);
-  }, [workspace, searchFilter, searchQuery]);
-
   const triggerRefresh = useCallback(() => {
     void loadWorkspace("refresh");
   }, [loadWorkspace]);
@@ -532,6 +551,13 @@ function App() {
     };
   }, [searchFilter, workspace, searchQuery]);
   const searchResults = searchState.results;
+  const focusedResultIndex = useMemo(() => {
+    if (!focusedResultId) {
+      return -1;
+    }
+
+    return searchResults.findIndex((result) => result.id === focusedResultId);
+  }, [focusedResultId, searchResults]);
   const activeSearchResultId = useMemo(() => {
     if (focusedResultIndex < 0 || focusedResultIndex >= searchResults.length) {
       return undefined;
@@ -676,6 +702,7 @@ function App() {
   };
 
   const handleSearchSelect = (id: string) => {
+    setFocusedResultId(id);
     setSearchQuery("");
     jumpToItem(id);
   };
@@ -884,21 +911,61 @@ function App() {
           </div>
         )}
         {showOnboarding && (
-          <div className="md:col-span-2 flex items-start justify-between gap-4 rounded-3xl border border-sky-400/30 bg-sky-400/10 px-5 py-4 text-sm leading-7 text-sky-100 shadow-2xl shadow-sky-950/15">
-            <p>
-              <span className="font-semibold">Welcome to syu.</span> Browse your specification
-              across four layers:{" "}
-              <span className="text-sky-300">Philosophy → Policies → Requirements → Features</span>.
-              Click any item to explore its traces and validation status.
-            </p>
-            <button
-              type="button"
-              onClick={dismissOnboarding}
-              aria-label="Dismiss welcome banner"
-              className="shrink-0 rounded-full border border-sky-400/30 bg-sky-400/10 px-2 py-1 text-sky-300 transition hover:bg-sky-400/20"
-            >
-              ×
-            </button>
+          <div className="md:col-span-2 rounded-3xl border border-sky-400/30 bg-sky-400/10 px-5 py-4 text-sm leading-7 text-sky-100 shadow-2xl shadow-sky-950/15">
+            <div className="flex items-start justify-between gap-4">
+              <p>
+                <span className="font-semibold">Welcome to syu.</span> Browse your specification
+                across four layers:{" "}
+                <span className="text-sky-300">
+                  Philosophy → Policies → Requirements → Features
+                </span>
+                . Click any item to explore its traces and validation status.
+              </p>
+              <button
+                type="button"
+                onClick={dismissOnboarding}
+                aria-label="Dismiss welcome banner"
+                className="shrink-0 rounded-full border border-sky-400/30 bg-sky-400/10 px-2 py-1 text-sky-300 transition hover:bg-sky-400/20"
+              >
+                ×
+              </button>
+            </div>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <section className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                <p className="text-xs uppercase tracking-[0.3em] text-sky-200/70">
+                  Starter templates
+                </p>
+                <p className="mt-2 text-slate-200">
+                  Use these when you want a fresh scaffold and the first validation win to be
+                  obvious.
+                </p>
+                <ul className="mt-3 space-y-2 text-slate-300">
+                  {STARTER_TEMPLATES.map((entry) => (
+                    <li key={entry.name}>
+                      <span className="font-medium text-sky-200">{entry.name}</span> —{" "}
+                      {entry.summary}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+              <section className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                <p className="text-xs uppercase tracking-[0.3em] text-sky-200/70">
+                  Checked-in examples
+                </p>
+                <p className="mt-2 text-slate-200">
+                  Open these when you want a working workspace to compare against before you
+                  scaffold your own repo.
+                </p>
+                <ul className="mt-3 space-y-2 text-slate-300">
+                  {STARTER_EXAMPLES.map((entry) => (
+                    <li key={entry.name}>
+                      <span className="font-medium text-sky-200">{entry.name}</span> —{" "}
+                      {entry.summary}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            </div>
           </div>
         )}
         <aside className="space-y-5">
@@ -997,7 +1064,6 @@ function App() {
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
-                  setFocusedResultIndex(-1);
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "ArrowDown") {
@@ -1005,13 +1071,22 @@ function App() {
                       return;
                     }
                     e.preventDefault();
-                    setFocusedResultIndex((prev) => Math.min(prev + 1, searchResults.length - 1));
+                    const nextFocusedIndex =
+                      focusedResultIndex >= 0
+                        ? Math.min(focusedResultIndex + 1, searchResults.length - 1)
+                        : 0;
+                    setFocusedResultId(searchResults[nextFocusedIndex].id);
                   } else if (e.key === "ArrowUp") {
                     if (searchResults.length === 0) {
                       return;
                     }
                     e.preventDefault();
-                    setFocusedResultIndex((prev) => Math.max(prev - 1, -1));
+                    if (focusedResultIndex <= 0) {
+                      setFocusedResultId(null);
+                      return;
+                    }
+
+                    setFocusedResultId(searchResults[focusedResultIndex - 1].id);
                   } else if (e.key === "Enter") {
                     const focusedResult =
                       focusedResultIndex >= 0 && focusedResultIndex < searchResults.length
@@ -1026,7 +1101,7 @@ function App() {
                   } else if (e.key === "Escape") {
                     setSearchQuery("");
                     setSearchFilter("all");
-                    setFocusedResultIndex(-1);
+                    setFocusedResultId(null);
                   }
                 }}
                 className="w-full rounded-2xl border border-white/10 bg-slate-900/60 py-2 pl-9 pr-4 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-400/60 focus:outline-none focus:ring-1 focus:ring-sky-400/40"
@@ -1077,7 +1152,6 @@ function App() {
                     aria-pressed={active}
                     onClick={() => {
                       setSearchFilter(option.value);
-                      setFocusedResultIndex(-1);
                     }}
                     className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
                       active
@@ -1109,7 +1183,7 @@ function App() {
                         id={searchResultOptionId(result.id, index)}
                         role="option"
                         onMouseDown={(e) => e.preventDefault()}
-                        onMouseEnter={() => setFocusedResultIndex(index)}
+                        onMouseEnter={() => setFocusedResultId(result.id)}
                         onClick={() => handleSearchSelect(result.id)}
                         className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2 text-left transition hover:border-sky-400/40 hover:bg-sky-400/10 ${
                           index === focusedResultIndex
