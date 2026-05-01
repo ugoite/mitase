@@ -27,10 +27,11 @@ use crate::command::init::{starter_template_example_commands, starter_template_n
 const ROOT_AFTER_HELP: &str = "\
 New here?
   1. syu templates   compare starter layouts before you scaffold
-  2. syu init .      scaffold a workspace in the current directory
-  3. syu validate .  check the layered spec and traceability
-  4. syu browse .    explore the spec in your terminal
-  5. syu app .       start the local browser UI server";
+  2. syu doctor .    check local contributor-tooling readiness
+  3. syu init .      scaffold a workspace in the current directory
+  4. syu validate .  check the layered spec and traceability
+  5. syu browse .    explore the spec in your terminal
+  6. syu app .       start the local browser UI server";
 
 const APP_AFTER_HELP: &str = concat!(
     "After startup, open the printed URL in your browser.\n",
@@ -142,6 +143,7 @@ Examples:
   syu trace src/rust_feature.rs
   syu trace src/rust_feature.rs --symbol feature_trace_rust
   syu trace src/rust_feature.rs path/to/workspace --format json
+  syu review --range origin/main...HEAD
   syu trace --range main..HEAD
   syu trace --range origin/main...HEAD --format json";
 
@@ -230,6 +232,7 @@ pub enum Commands {
     )]
     Relate(RelateArgs),
     #[command(
+        visible_alias = "review",
         about = "Resolve linked requirements, features, policies, and philosophies from a traced file or symbol",
         after_help = TRACE_AFTER_HELP
     )]

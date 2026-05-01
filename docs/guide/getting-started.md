@@ -18,7 +18,7 @@ Need a different level of guidance?
   when you want the shortest install-to-validate path and are happy with a
   compact command card.
 - Open the [command card](./command-card.md) when you already understand the
-  model and want one docs-site page that keeps the core install / init /
+  model and want one docs-site page that keeps the core install / doctor / init /
   validate / report / browse / app / review commands close at hand.
 - Follow [existing repository adoption](./existing-repository.md) when the
   repository already has code and history and you want to add `syu` without
@@ -57,15 +57,19 @@ longer installer discussion in [Before you begin](#before-you-begin).
 RELEASE=v0.0.1-alpha.8
 # x-release-please-end
 curl -fsSL "https://github.com/ugoite/syu/releases/download/${RELEASE}/install-syu.sh" | env SYU_VERSION=alpha bash
+syu doctor .
 syu init .
 syu validate .
+syu browse .
 ```
 
 If `syu` is already installed, skip the installer line and start with
-`syu init .`. Need the verified-download, Windows, or source-build variants
+`syu doctor .`. Need the verified-download, Windows, or source-build variants
 instead? Use [Before you begin](#before-you-begin). Want the narrated version
 of the same flow? Continue with
 [Is syu right for this repository?](#is-syu-right-for-this-repository).
+
+That first pass is intentionally short: `doctor → init → validate → browse`.
 
 ## Is syu right for this repository?
 
@@ -197,7 +201,9 @@ syu init . --template polyglot
 ```
 
 Run `syu templates` first if you want the starter names, one-line descriptions,
-and matching checked-in example paths before choosing a scaffold.
+and matching checked-in example paths before choosing a scaffold. Start with
+`examples/generic` when you want to inspect the default starter shape without
+writing into your own repository yet.
 
 You can also combine both flags:
 
