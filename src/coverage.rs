@@ -1718,7 +1718,7 @@ mod tests {
         discover_rust_targets, discover_typescript_targets,
         discover_typescript_targets_with_issues, go_files_under, java_files_under,
         normalize_relative_path, normalized_symbol_trace_coverage_ignored_paths,
-        path_matches_ignored_generated_directory, python_files_under,
+        path_matches_ignored_generated_directory, python_files_under, kotlin_files_under,
         record_scanned_file_relative_to_workspace, rust_files_under,
         scanned_file_relative_to_workspace, typescript_files_under, validate_symbol_trace_coverage,
         validate_symbol_trace_coverage_with,
@@ -1918,6 +1918,53 @@ mod tests {
         assert_eq!(issues[0].code, "SYU-coverage-path-001");
         assert_eq!(issues[1].code, "SYU-coverage-public-001");
         assert!(issues[1].message.contains("KeptApi"));
+    }
+
+    #[test]
+    fn validate_symbol_trace_coverage_keeps_scanning_after_kotlin_discovery_issue() {
+        let tempdir = tempdir().expect("tempdir");
+        let mut config = SyuConfig::default();
+        config.validate.require_symbol_trace_coverage = true;
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("docs/syu"),
+            config,
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+
+        let mut issues = Vec::new();
+        validate_symbol_trace_coverage_with(
+            &workspace,
+            &mut issues,
+            CoverageDiscoverers {
+                rust: no_targets,
+                python: no_targets,
+                go: no_targets,
+                java: no_java_targets,
+                csharp: no_targets,
+                kotlin: |_config, _root| {
+                    Err(Box::new(Issue::error(
+                        "SYU-coverage-walk-001",
+                        "trace coverage inventory",
+                        Some("src".to_string()),
+                        "Failed to walk `src` while building trace coverage inventory: not a directory"
+                            .to_string(),
+                        Some(
+                            "Fix the directory layout or disable `validate.require_symbol_trace_coverage` until the workspace can be scanned."
+                                .to_string(),
+                        ),
+                    )))
+                },
+                typescript: no_targets,
+            },
+        );
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].code, "SYU-coverage-walk-001");
+        assert!(issues[0].message.contains("trace coverage inventory"));
     }
 
     #[test]
@@ -2123,6 +2170,56 @@ mod tests {
                 && target.kind == CoverageTargetKind::TestSymbol
         }));
         assert!(!targets.iter().any(|target| target.symbol == "helper"));
+    }
+
+    #[test]
+    fn discover_kotlin_targets_skips_unreadable_kotlin_files() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tempdir = tempdir().expect("tempdir");
+        let src_dir = tempdir.path().join("src");
+        fs::create_dir_all(&src_dir).expect("src dir");
+        let readable = src_dir.join("Owned.kt");
+        let unreadable = src_dir.join("Hidden.kt");
+        fs::write(&readable, "class Owned\n").expect("readable kotlin file");
+        fs::write(&unreadable, "class Hidden\n").expect("unreadable kotlin file");
+
+        let mut perm = fs::metadata(&unreadable).expect("meta").permissions();
+        let mode = perm.mode();
+        perm.set_mode(0o000);
+        fs::set_permissions(&unreadable, perm).expect("set unreadable");
+
+        let targets = discover_kotlin_targets(&SyuConfig::default(), tempdir.path())
+            .expect("targets");
+
+        let mut restore = fs::metadata(&unreadable).expect("meta").permissions();
+        restore.set_mode(mode);
+        fs::set_permissions(&unreadable, restore).expect("restore");
+
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("src/Owned.kt")
+                && target.symbol == "Owned"
+                && target.kind == CoverageTargetKind::PublicSymbol
+        }));
+        assert!(
+            !targets
+                .iter()
+                .any(|target| target.file == Path::new("src/Hidden.kt"))
+        );
+    }
+
+    #[test]
+    fn kotlin_files_under_reports_directory_errors() {
+        let tempdir = tempdir().expect("tempdir");
+        let file_root = tempdir.path().join("Trace.kt");
+        let file_root_display = file_root.display().to_string();
+        fs::write(&file_root, "class Trace\n").expect("file");
+        let err = kotlin_files_under(tempdir.path(), &file_root, &BTreeSet::new())
+            .expect_err("file roots should fail");
+
+        assert_eq!(err.code, "SYU-coverage-walk-001");
+        assert_eq!(err.location.as_deref(), Some(file_root_display.as_str()));
+        assert!(err.message.contains("Trace.kt"));
     }
 
     #[test]

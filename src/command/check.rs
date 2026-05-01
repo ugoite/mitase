@@ -4893,7 +4893,7 @@ mod tests {
             root,
             &SyuConfig::default(),
             "REQ-1",
-            "kotlin",
+            "brainfuck",
             &TraceReference {
                 file: PathBuf::from("Trace.kt"),
                 symbols: vec!["expected".to_string()],
