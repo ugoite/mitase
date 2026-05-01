@@ -109,7 +109,8 @@ then verify the platform archive separately before installation with
 Use the canonical
 [README shortcut installer entrypoint](https://github.com/ugoite/syu/blob/main/README.md#shortcut-run-the-installer-directly)
 when you already trust the release source and want the shortest path. That
-section keeps the checked-in release tag aligned in one place while
+section keeps the checked-in release tag aligned in one place, and the installer
+defaults to that same release tag unless `SYU_VERSION` overrides it.
 `SYU_VERSION=alpha` still points the installer at the latest published alpha
 package after it starts. The installer places `syu` in `~/.local/bin`; add that
 directory to your `PATH` if it is not already there.
