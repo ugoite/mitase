@@ -53,8 +53,8 @@ fn app_help_mentions_remote_bind_opt_in() {
 #[test]
 fn workspace_help_uses_current_directory_default_consistently() {
     for command in [
-        "browse", "show", "search", "trace", "app", "doctor", "validate", "check", "report", "add",
-        "relate", "log", "audit", "explain",
+        "browse", "show", "search", "trace", "review", "app", "doctor", "validate", "check",
+        "report", "add", "relate", "log", "audit", "explain",
     ] {
         let output = Command::cargo_bin("syu")
             .expect("binary should build")

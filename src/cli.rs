@@ -142,6 +142,7 @@ Examples:
   syu trace src/rust_feature.rs
   syu trace src/rust_feature.rs --symbol feature_trace_rust
   syu trace src/rust_feature.rs path/to/workspace --format json
+  syu review --range origin/main...HEAD
   syu trace --range main..HEAD
   syu trace --range origin/main...HEAD --format json";
 
@@ -230,6 +231,7 @@ pub enum Commands {
     )]
     Relate(RelateArgs),
     #[command(
+        visible_alias = "review",
         about = "Resolve linked requirements, features, policies, and philosophies from a traced file or symbol",
         after_help = TRACE_AFTER_HELP
     )]
