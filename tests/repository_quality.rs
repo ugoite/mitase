@@ -356,6 +356,7 @@ fn repository_declares_installer_contract() {
     assert!(installer.contains("resolve_package_tag"));
     assert!(installer.contains("download_package_archive"));
     assert!(installer.contains("install_syu"));
+    assert!(installer.contains("DEFAULT_VERSION_SELECTOR"));
     assert!(installer.contains("SYU_REPOSITORY"));
     assert!(installer.contains("SYU_INSTALL_DIR"));
     assert!(installer.contains("SYU_PACKAGE_REPOSITORY"));
@@ -394,6 +395,7 @@ fn repository_declares_installer_contract() {
     assert!(readme.contains(&format!("RELEASE=v{current_version}")));
     assert!(readme.contains("checked-in"));
     assert!(readme.contains("package track"));
+    assert!(readme.contains("same release tag"));
     assert!(readme.contains("verifies the installer script itself"));
     assert!(readme.contains("the platform archive that the installer downloads"));
     assert!(
@@ -578,6 +580,7 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("If you are inside WSL"));
     assert!(!getting_started.contains("$asset.sha256"));
     assert!(getting_started.contains("current checked-in release"));
+    assert!(getting_started.contains("defaults to that same release tag"));
     assert!(getting_started.contains("latest published alpha"));
     assert_newcomer_template_examples(&getting_started);
     assert!(getting_started.contains("syu templates"));
