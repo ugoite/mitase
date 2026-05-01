@@ -69,6 +69,8 @@ instead? Use [Before you begin](#before-you-begin). Want the narrated version
 of the same flow? Continue with
 [Is syu right for this repository?](#is-syu-right-for-this-repository).
 
+That first pass is intentionally short: `doctor → init → validate → browse`.
+
 ## Is syu right for this repository?
 
 Use the canonical fit check in the
