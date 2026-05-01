@@ -27,10 +27,11 @@ use crate::command::init::{starter_template_example_commands, starter_template_n
 const ROOT_AFTER_HELP: &str = "\
 New here?
   1. syu templates   compare starter layouts before you scaffold
-  2. syu init .      scaffold a workspace in the current directory
-  3. syu validate .  check the layered spec and traceability
-  4. syu browse .    explore the spec in your terminal
-  5. syu app .       start the local browser UI server";
+  2. syu doctor .    check local contributor-tooling readiness
+  3. syu init .      scaffold a workspace in the current directory
+  4. syu validate .  check the layered spec and traceability
+  5. syu browse .    explore the spec in your terminal
+  6. syu app .       start the local browser UI server";
 
 const APP_AFTER_HELP: &str = concat!(
     "After startup, open the printed URL in your browser.\n",
