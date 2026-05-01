@@ -1589,22 +1589,42 @@ async function describeAppDataRefreshFailure(response: Response): Promise<string
   const fallback = `Failed to refresh app data: ${response.status} ${response.statusText}`;
 
   try {
-    const payload = (await response.json()) as AppDataErrorResponse;
-    const summary = payload.error?.summary?.trim();
-    const guidance = payload.error?.guidance?.trim();
+    const body = await response.text();
+    const contentType = response.headers.get("content-type") ?? "";
 
-    if (summary && guidance) {
-      return `${summary} ${guidance}`;
+    if (!contentType.includes("application/json") && !body.trim().startsWith("{")) {
+      return fallback;
     }
 
-    if (summary) {
-      return summary;
+    const payload = JSON.parse(body) as unknown;
+    if (!isAppDataErrorResponse(payload)) {
+      return fallback;
     }
+
+    const summary = payload.error.summary.trim();
+    const guidance = payload.error.guidance.trim();
+    return summary && guidance ? `${summary} ${guidance}` : summary || guidance || fallback;
   } catch {
     return fallback;
   }
+}
 
-  return fallback;
+function isAppDataErrorResponse(value: unknown): value is AppDataErrorResponse {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const error = (value as { error?: unknown }).error;
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const candidate = error as Partial<AppDataErrorResponse["error"]>;
+  return (
+    (candidate.code === "workspace-invalid" || candidate.code === "server-unavailable") &&
+    typeof candidate.summary === "string" &&
+    typeof candidate.guidance === "string"
+  );
 }
 
 function formatRefreshAnnouncement(state: RefreshState, refreshError: string | null): string {
