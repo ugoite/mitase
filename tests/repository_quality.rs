@@ -377,7 +377,7 @@ fn repository_declares_installer_contract() {
     assert!(readme.contains("install-syu.sh"));
     assert!(readme.contains("ugoite/syu"));
     assert!(readme.contains("SYU_VERSION"));
-    assert!(readme.contains(&format!("RELEASE=v{current_version}")));
+    assert!(readme.contains("gh release view --json tagName -q .tagName --repo ugoite/syu"));
     assert!(readme.contains("GitHub Packages"));
     assert!(readme.contains("security-sensitive environments"));
     assert!(readme.contains("checksums.sha256"));
@@ -731,7 +731,7 @@ fn repository_declares_documentation_guides() {
     assert!(configuration.contains("validate.allow_planned"));
     assert!(configuration.contains("Rust, Python, Go, Java, C#, and TypeScript/JavaScript"));
     assert!(configuration.contains("--spec-root"));
-    assert!(configuration.contains(&format!("version: {current_version}")));
+    assert!(configuration.contains("version: \"<cli-version>\""));
     assert!(configuration.contains("docs/syu/config/overview.yaml"));
     assert!(configuration.contains("docs/syu/config/validate.yaml"));
     assert!(config_overview.contains("syu.yaml"));
