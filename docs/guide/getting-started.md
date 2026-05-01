@@ -380,7 +380,7 @@ an explicit registry because implementation claims should stay deliberate and
 reviewable. That registry is a short YAML list of feature documents:
 
 ```yaml
-version: 0.0.1-alpha.8
+version: "<cli-version>"
 files:
   - kind: core
     file: core/core.yaml

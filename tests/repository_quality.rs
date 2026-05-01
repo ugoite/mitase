@@ -336,7 +336,6 @@ fn repository_declares_release_automation() {
 #[test]
 // REQ-CORE-008
 fn repository_declares_installer_contract() {
-    let current_version = env!("CARGO_PKG_VERSION");
     let installer = read_file("scripts/install-syu.sh");
     let installer_smoke = read_file("scripts/ci/installer-smoke.sh");
     let installed_binary_smoke = read_file("scripts/ci/installed-binary-smoke.sh");
@@ -392,7 +391,9 @@ fn repository_declares_installer_contract() {
     assert!(readme.contains("If you are inside WSL"));
     assert!(!readme.contains("$asset.sha256"));
     assert!(readme.contains("syu.exe"));
-    assert!(readme.contains(&format!("RELEASE=v{current_version}")));
+    assert!(
+        readme.contains("RELEASE=\"$(gh release view --json tagName -q .tagName --repo ugoite/syu)\"")
+    );
     assert!(readme.contains("checked-in"));
     assert!(readme.contains("package track"));
     assert!(readme.contains("same release tag"));
@@ -408,7 +409,6 @@ fn repository_declares_installer_contract() {
 #[test]
 // REQ-CORE-010
 fn repository_declares_documentation_guides() {
-    let current_version = env!("CARGO_PKG_VERSION");
     let readme = read_file("README.md");
     let concepts = read_file("docs/guide/concepts.md");
     let anti_patterns = read_file("docs/guide/spec-antipatterns.md");
@@ -607,7 +607,7 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("--spec-root"));
     assert!(getting_started.contains("Requirements are discovered"));
     assert!(getting_started.contains("implementation claims should stay deliberate"));
-    assert!(getting_started.contains(&format!("version: {current_version}")));
+    assert!(getting_started.contains("version: \"<cli-version>\""));
     assert!(getting_started.contains("kind: core"));
     assert!(getting_started.contains("freshly initialized project will not have them yet"));
     assert!(generated_docs_freshness.contains("write_sha256"));
