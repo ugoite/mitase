@@ -21,7 +21,7 @@ fn templates_command_lists_all_supported_templates_in_text_output() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.starts_with("name\trelationship\trelated_example\tdescription\n"));
     assert!(stdout.contains(
-        "generic\tstarter-only\t-\tStarter with minimal four-layer files, neutral IDs, and core file names."
+        "generic\ttemplate-and-example\texamples/generic\tStarter with minimal four-layer files, neutral IDs, and core file names."
     ));
     assert!(stdout.contains(
         "docs-first\ttemplate-and-example\texamples/docs-first\tStarter for documentation-heavy repos with markdown acceptance anchors, a shell trace, and a wildcard-owned YAML file."
@@ -79,7 +79,8 @@ fn templates_command_supports_json_output() {
         .expect("templates should be an array");
     assert_eq!(templates.len(), 9);
     assert_eq!(templates[0]["name"], "generic");
-    assert_eq!(templates[0]["relationship"], "starter-only");
+    assert_eq!(templates[0]["relationship"], "template-and-example");
+    assert_eq!(templates[0]["related_example"], "examples/generic");
     assert_eq!(templates[1]["name"], "docs-first");
     assert_eq!(templates[1]["related_example"], "examples/docs-first");
     assert_eq!(templates[2]["name"], "rust-only");

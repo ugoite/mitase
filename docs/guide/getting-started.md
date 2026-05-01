@@ -196,7 +196,9 @@ syu init . --template polyglot
 ```
 
 Run `syu templates` first if you want the starter names, one-line descriptions,
-and matching checked-in example paths before choosing a scaffold.
+and matching checked-in example paths before choosing a scaffold. Start with
+`examples/generic` when you want to inspect the default starter shape without
+writing into your own repository yet.
 
 You can also combine both flags:
 
