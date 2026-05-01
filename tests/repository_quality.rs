@@ -392,7 +392,9 @@ fn repository_declares_installer_contract() {
     assert!(!readme.contains("$asset.sha256"));
     assert!(readme.contains("syu.exe"));
     assert!(
-        readme.contains("RELEASE=\"$(gh release view --json tagName -q .tagName --repo ugoite/syu)\"")
+        readme.contains(
+            "RELEASE=\"$(gh release view --json tagName -q .tagName --repo ugoite/syu)\""
+        )
     );
     assert!(readme.contains("checked-in"));
     assert!(readme.contains("package track"));
