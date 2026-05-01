@@ -643,6 +643,9 @@ fn repository_declares_documentation_guides() {
     assert!(command_card.contains("| Task | Command | Choose it when |"));
     assert!(command_card.contains("syu templates"));
     assert!(command_card.contains("syu validate . --id FEAT-CHECK-001"));
+    assert!(command_card.contains("syu audit ."));
+    assert!(command_card.contains("syu report ."));
+    assert!(command_card.contains("scan for likely overlap"));
     assert!(command_card.contains("syu app ."));
     assert!(command_card.contains("[reviewer workflow](./reviewer-workflow.md)"));
     assert!(vscode_guide.contains("CLI-backed first"));
@@ -676,6 +679,8 @@ fn repository_declares_documentation_guides() {
     let reviewer_workflow = read_file("docs/guide/reviewer-workflow.md");
     assert!(reviewer_workflow.contains("[command card](./command-card.md)"));
     assert!(reviewer_workflow.contains("currently traced"));
+    assert!(reviewer_workflow.contains("audit"));
+    assert!(reviewer_workflow.contains("syu report"));
     assert!(reviewer_workflow.contains("the whole PR diff is covered"));
     assert!(reviewer_workflow.contains("too-small log result with the PR diff"));
     assert!(reviewer_workflow.contains("filtered down to that item"));
