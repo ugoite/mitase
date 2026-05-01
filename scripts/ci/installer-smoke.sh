@@ -128,27 +128,17 @@ run_install_case() {
 
 main() {
   local target binary_name
-  local default_version
 
   trap cleanup EXIT
 
   target="$(resolve_target_triple)"
   binary_name="$(resolve_binary_name "$target")"
-  default_version="$(python3 - "$repo_root/scripts/ci/mock_package_registry.py" <<'PY'
-from pathlib import Path
-import runpy
-import sys
-
-module = runpy.run_path(Path(sys.argv[1]))
-print(module["DEFAULT_TAG"])
-PY
-)"
 
   run_install_case "prerelease" "latest" "v0.0.2-beta.1" "$target" "$binary_name"
   run_install_case "prerelease" "alpha" "v0.0.1-alpha.3" "$target" "$binary_name"
   run_install_case "prerelease" "v0.0.1-alpha.2" "v0.0.1-alpha.2" "$target" "$binary_name"
   run_install_case "mixed" "stable" "v0.0.2" "$target" "$binary_name"
-  run_install_case "mixed" "" "$default_version" "$target" "$binary_name"
+  run_install_case "mixed" "" "v0.0.1-alpha.8" "$target" "$binary_name"
 }
 
 main "$@"

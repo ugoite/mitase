@@ -232,7 +232,7 @@ For a genuinely mixed-language repository, keep the first adoption step small:
 - keep unsupported implementation-language areas connected through the spec
   layers until adapter support lands
 - turn stricter symbol coverage on later for the supported implementation
-  languages you are tracing (Rust, Python, Go, Java, C#, or
+  languages you are tracing (Rust, Python, Go, Java, C#, Kotlin, or
   TypeScript/JavaScript) once those traces are stable
 
 That keeps the repository connected to the spec from day one without forcing a
@@ -244,16 +244,11 @@ until you are ready to declare real tests and implementation traces.
 
 ### Unsupported implementation languages can still adopt the spec layers first
 
-`syu` can validate code-level traces today in Rust, Python, Go, Java, C#, and
-TypeScript/JavaScript, plus lighter file/symbol ownership in `shell`, `yaml`,
-`json`, `markdown`, and `gitignore`. Repositories that still contain other
+`syu` can validate code-level traces today in Rust, Python, Go, Java, C#, Kotlin, and TypeScript/JavaScript, plus lighter file/symbol ownership in `shell`, `yaml`, `json`, `markdown`, and `gitignore`. Repositories that still contain other
 unsupported implementation languages can still adopt `syu` today, but they
 should treat code-level mappings for those files as future work.
 
-Go, Java, and C# already participate in strict
-`validate.require_symbol_trace_coverage` inventory. Go now supports
-`doc_contains` checks as well, while Java and C# still stop at symbol
-validation. The [trace adapter capability matrix](./trace-adapter-support.md)
+Go, Java, C#, and Kotlin already participate in strict `validate.require_symbol_trace_coverage` inventory. Go now supports `doc_contains` checks as well, while Java, C#, and Kotlin still stop at symbol validation. The [trace adapter capability matrix](./trace-adapter-support.md)
 summarizes that language-by-language support.
 
 Today you can still:
