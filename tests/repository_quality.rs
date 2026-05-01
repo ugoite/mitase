@@ -1102,6 +1102,8 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(ci_workflow.contains("~/.cache/pre-commit"));
     assert!(ci_workflow.contains("cache-dependency-path: app/package-lock.json"));
     assert!(ci_workflow.contains("Set up Rust for quality gates"));
+    assert!(ci_workflow.contains("Install browser app dependencies"));
+    assert!(ci_workflow.contains("npm --prefix app ci"));
     assert!(browser_app_freshness.contains("npm ci"));
     assert!(ci_workflow.contains("docs-site:"));
     assert!(ci_workflow.contains("./.github/actions/build-docs-site"));

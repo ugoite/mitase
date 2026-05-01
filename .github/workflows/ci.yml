@@ -87,6 +87,12 @@ jobs:
         with:
           components: rustfmt,clippy
 
+      - name: Install browser app dependencies
+        shell: bash
+        run: |
+          scripts/ci/pinned-npm.sh install app
+          npm --prefix app ci
+
       - name: Run quality gates
         run: scripts/ci/quality-gates.sh
 
