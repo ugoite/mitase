@@ -612,6 +612,7 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("Keep exploring"));
     assert!(getting_started.contains("[reviewer workflow guide](./reviewer-workflow.md)"));
     assert!(getting_started.contains("examples/rust-only"));
+    assert!(getting_started.contains("examples/generic"));
     assert!(getting_started.contains("examples/python-only"));
     assert!(getting_started.contains("examples/csharp-fallback"));
     assert!(getting_started.contains("examples/go-only"));
@@ -686,6 +687,7 @@ fn repository_declares_documentation_guides() {
     assert!(trace_adapter_support.contains("| Go | `go`, `golang`, `gotest` / `.go` |"));
     assert!(examples_and_templates.contains("starter templates"));
     assert!(examples_and_templates.contains("checked-in examples"));
+    assert!(examples_and_templates.contains("examples/generic"));
     assert!(examples_and_templates.contains("examples/csharp-fallback"));
     assert!(examples_and_templates.contains("examples/docs-first"));
     assert!(examples_and_templates.contains("`syu init . --template docs-first`"));
