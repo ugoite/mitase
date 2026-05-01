@@ -142,9 +142,7 @@ of editing `syu.yaml`.
 
 ### `validate.require_symbol_trace_coverage`
 
-When `true`, `syu` scans Rust, Python, Go, Java, C#, and TypeScript/JavaScript
-source and test files to confirm that every public symbol belongs to some
-feature and every test belongs to some requirement.
+When `true`, `syu` scans Rust, Python, Go, Java, C#, Kotlin, and TypeScript/JavaScript source and test files to confirm that every public symbol belongs to some feature and every test belongs to some requirement.
 
 - `false`: only declared traces are verified
 - `true`: undeclared public APIs and tests become validation errors

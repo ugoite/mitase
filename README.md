@@ -60,7 +60,8 @@ Pick the newcomer path that matches what you need next:
 - **Reviewer workflow**: open
   [`docs/guide/reviewer-workflow.md`](docs/guide/reviewer-workflow.md) when a
   PR already exists and you want one concrete loop for moving between spec IDs,
-  traced code, and recent Git history.
+  traced code, recent Git history, and the reviewer-focused `audit` / `report`
+  handoff.
 - **Contributor runtime setup**: open
   [`docs/guide/node-workflow.md`](docs/guide/node-workflow.md) when you are
   contributing to this repository and need one place to see which Node major
@@ -671,7 +672,7 @@ Key behaviors:
 - `validate.allow_planned` controls whether `planned` requirements and features are allowed at all
 - `validate.require_non_orphaned_items` turns isolated layered definitions into validation errors
 - `validate.require_reciprocal_links` keeps adjacent-layer backlinks mandatory by default while still allowing phased migration when disabled
-- `validate.require_symbol_trace_coverage` opt-in checks that public Rust, Python, Go, Java, C#, and TypeScript/JavaScript symbols belong to features and tests belong to requirements, while still skipping configured repository-relative generated paths
+- `validate.require_symbol_trace_coverage` opt-in checks that public Rust, Python, Go, Java, C#, Kotlin, and TypeScript/JavaScript symbols belong to features and tests belong to requirements, while still skipping configured repository-relative generated paths
 - `report.output` sets the default `syu report` destination while `--output` still takes precedence
 - `app.bind` and `app.port` define the default local browser-app address and port unless `--bind` / `--port` override them
 - `report.output` sets the default `syu report` destination while `--output` still takes precedence

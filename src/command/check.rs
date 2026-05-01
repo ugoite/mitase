@@ -3741,9 +3741,9 @@ mod tests {
         let mut entry = requirement("REQ-1");
         entry.status = "proposed".to_string();
         entry.tests.insert(
-            "kotlin".to_string(),
+            "swift".to_string(),
             vec![TraceReference {
-                file: PathBuf::from("Trace.kt"),
+                file: PathBuf::from("Trace.swift"),
                 symbols: vec!["trace".to_string()],
                 doc_contains: Vec::new(),
             }],
@@ -3924,7 +3924,7 @@ mod tests {
     #[test]
     fn verify_trace_reference_reports_unsupported_languages() {
         let reference = TraceReference {
-            file: PathBuf::from("Trace.kt"),
+            file: PathBuf::from("Trace.swift"),
             symbols: vec!["main".to_string()],
             doc_contains: Vec::new(),
         };
@@ -3934,7 +3934,7 @@ mod tests {
             &SyuConfig::default(),
             "REQ-1",
             TraceRole::RequirementTest,
-            "kotlin",
+            "swift",
             &reference,
             &mut issues,
         ));

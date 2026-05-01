@@ -3,8 +3,8 @@
 <!-- FEAT-DOCS-001 -->
 
 Use this guide when a pull request already exists and you want one concrete
-review loop that connects specification intent, traced code, and recent Git
-history.
+review loop that connects specification intent, traced code, recent Git
+history, and the reviewer-facing `audit` / `report` commands.
 
 `syu`'s reviewer flow works best when you keep three questions in order:
 
@@ -35,7 +35,9 @@ You can follow the same flow in any repository by swapping in your own spec ID,
 file path, and symbol name.
 
 If you only need the short-form command reminder while you review, keep the
-[command card](./command-card.md) open alongside this guide.
+[command card](./command-card.md) open alongside this guide. That page keeps
+`audit` and `report` beside the other review commands so the handoff stays in
+one place.
 
 ## 1. Start from the spec item under review
 

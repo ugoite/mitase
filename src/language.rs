@@ -55,6 +55,9 @@ struct JavaAdapter;
 struct CSharpAdapter;
 
 #[derive(Debug)]
+struct KotlinAdapter;
+
+#[derive(Debug)]
 struct ShellAdapter;
 
 #[derive(Debug)]
@@ -76,6 +79,7 @@ static TYPESCRIPT_ADAPTER: TypeScriptAdapter = TypeScriptAdapter;
 static GO_ADAPTER: GoAdapter = GoAdapter;
 static JAVA_ADAPTER: JavaAdapter = JavaAdapter;
 static CSHARP_ADAPTER: CSharpAdapter = CSharpAdapter;
+static KOTLIN_ADAPTER: KotlinAdapter = KotlinAdapter;
 static SHELL_ADAPTER: ShellAdapter = ShellAdapter;
 static YAML_ADAPTER: YamlAdapter = YamlAdapter;
 static JSON_ADAPTER: JsonAdapter = JsonAdapter;
@@ -268,6 +272,37 @@ impl LanguageAdapter for CSharpAdapter {
     }
 }
 
+impl LanguageAdapter for KotlinAdapter {
+    fn canonical_name(&self) -> &'static str {
+        "kotlin"
+    }
+
+    fn aliases(&self) -> &'static [&'static str] {
+        &["kotlin", "kt"]
+    }
+
+    fn extensions(&self) -> &'static [&'static str] {
+        &["kt"]
+    }
+
+    fn patterns(&self, symbol: &str) -> Vec<String> {
+        let escaped = regex::escape(symbol);
+        vec![
+            format!(
+                r"(?m)\b(?:public\s+|internal\s+|protected\s+|private\s+)?(?:abstract\s+|final\s+|sealed\s+|data\s+|enum\s+|annotation\s+)?(?:class|interface|object)\s+{escaped}\b"
+            ),
+            format!(
+                r"(?m)\b(?:public\s+|internal\s+|protected\s+|private\s+)?(?:suspend\s+)?fun\s+{escaped}\b"
+            ),
+            format!(
+                r"(?m)\b(?:public\s+|internal\s+|protected\s+|private\s+)?(?:const\s+)?(?:val|var)\s+{escaped}\b"
+            ),
+            format!(r"(?m)\btypealias\s+{escaped}\b"),
+            format!(r"(?m)\b{escaped}\b"),
+        ]
+    }
+}
+
 impl LanguageAdapter for ShellAdapter {
     fn canonical_name(&self) -> &'static str {
         "shell"
@@ -385,6 +420,7 @@ pub fn adapter_for_language(language: &str) -> Option<&'static dyn LanguageAdapt
         &GO_ADAPTER as &dyn LanguageAdapter,
         &JAVA_ADAPTER as &dyn LanguageAdapter,
         &CSHARP_ADAPTER as &dyn LanguageAdapter,
+        &KOTLIN_ADAPTER as &dyn LanguageAdapter,
         &SHELL_ADAPTER as &dyn LanguageAdapter,
         &YAML_ADAPTER as &dyn LanguageAdapter,
         &JSON_ADAPTER as &dyn LanguageAdapter,
@@ -454,6 +490,10 @@ mod tests {
             adapter_for_language("mstest").map(LanguageAdapter::canonical_name),
             Some("csharp")
         );
+        assert_eq!(
+            adapter_for_language("kt").map(LanguageAdapter::canonical_name),
+            Some("kotlin")
+        );
         assert!(adapter_for_language("unknown").is_none());
     }
 
@@ -468,6 +508,7 @@ mod tests {
         let markdown = adapter_for_language("markdown").expect("markdown adapter should exist");
         let gitignore = adapter_for_language("gitignore").expect("gitignore adapter should exist");
         let csharp = adapter_for_language("csharp").expect("csharp adapter should exist");
+        let kotlin = adapter_for_language("kotlin").expect("kotlin adapter should exist");
 
         assert!(rust.supports_path(Path::new("src/lib.rs")));
         assert!(go.supports_path(Path::new("go/app.go")));
@@ -480,6 +521,7 @@ mod tests {
         assert!(gitignore.supports_path(Path::new(".gitignore")));
         assert!(gitignore.supports_path(Path::new("app/.gitignore")));
         assert!(csharp.supports_path(Path::new("src/FeatureTrace.cs")));
+        assert!(kotlin.supports_path(Path::new("src/FeatureTrace.kt")));
         assert_eq!(gitignore.extensions(), &["gitignore"]);
         assert!(!yaml.supports_path(Path::new("README.md")));
         assert!(!gitignore.supports_path(Path::new("README.md")));
@@ -499,6 +541,7 @@ mod tests {
         let markdown = adapter_for_language("markdown").expect("markdown adapter should exist");
         let gitignore = adapter_for_language("gitignore").expect("gitignore adapter should exist");
         let csharp = adapter_for_language("csharp").expect("csharp adapter should exist");
+        let kotlin = adapter_for_language("kotlin").expect("kotlin adapter should exist");
 
         assert!(rust.symbol_exists("pub fn hello_world() {}", "hello_world"));
         assert!(python.symbol_exists("def test_trace():\n    return True\n", "test_trace"));
@@ -555,6 +598,10 @@ mod tests {
         assert!(csharp.symbol_exists(
             "public class FeatureTraceService {\n    private const string HiddenTraceLabel = \"ok\";\n}\n",
             "HiddenTraceLabel"
+        ));
+        assert!(kotlin.symbol_exists(
+            "class FeatureTraceService {\n    fun featureTraceKotlin(): String = \"ok\"\n}\n",
+            "featureTraceKotlin"
         ));
     }
 
