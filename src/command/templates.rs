@@ -50,34 +50,47 @@ fn template_catalog_entries() -> Vec<TemplateCatalogEntry> {
         .map(|template| TemplateCatalogEntry {
             name: template.name,
             description: template.description,
-            relationship: match template.related_example {
-                Some(_) => TemplateRelationship::TemplateAndExample,
-                None => TemplateRelationship::StarterOnly,
-            },
+            relationship: template_relationship(template.related_example),
             related_example: template.related_example,
         })
         .collect()
 }
 
+fn template_relationship(related_example: Option<&'static str>) -> TemplateRelationship {
+    match related_example {
+        Some(_) => TemplateRelationship::TemplateAndExample,
+        None => TemplateRelationship::StarterOnly,
+    }
+}
+
 fn print_text_catalog(templates: &[TemplateCatalogEntry]) {
-    println!("name\trelationship\trelated_example\tdescription");
+    print!("{}", render_text_catalog(templates));
+}
+
+fn render_text_catalog(templates: &[TemplateCatalogEntry]) -> String {
+    let mut output = String::from("name\trelationship\trelated_example\tdescription\n");
     for template in templates {
         match template.related_example {
-            Some(example) => println!(
-                "{}\t{}\t{}\t{}",
-                template.name,
-                template.relationship_label(),
-                example,
-                template.description
-            ),
-            None => println!(
-                "{}\t{}\t-\t{}",
-                template.name,
-                template.relationship_label(),
-                template.description
-            ),
+            Some(example) => {
+                output.push_str(&format!(
+                    "{}\t{}\t{}\t{}\n",
+                    template.name,
+                    template.relationship_label(),
+                    example,
+                    template.description
+                ));
+            }
+            None => {
+                output.push_str(&format!(
+                    "{}\t{}\t-\t{}\n",
+                    template.name,
+                    template.relationship_label(),
+                    template.description
+                ));
+            }
         }
     }
+    output
 }
 
 impl TemplateCatalogEntry {
@@ -92,6 +105,9 @@ impl TemplateCatalogEntry {
 #[cfg(test)]
 mod tests {
     use super::template_catalog_entries;
+    use super::{
+        TemplateCatalogEntry, TemplateRelationship, render_text_catalog, template_relationship,
+    };
 
     #[test]
     fn starter_template_catalog_lists_every_supported_template() {
@@ -111,9 +127,9 @@ mod tests {
     #[test]
     fn starter_template_catalog_marks_example_backed_templates() {
         let templates = template_catalog_entries();
-        assert_eq!(templates[0].relationship_label(), "starter-only");
+        assert_eq!(templates[0].relationship_label(), "template-and-example");
         assert_eq!(templates[1].relationship_label(), "template-and-example");
-        assert_eq!(templates[0].related_example, None);
+        assert_eq!(templates[0].related_example, Some("examples/generic"));
         assert_eq!(templates[1].related_example, Some("examples/docs-first"));
         assert_eq!(templates[2].related_example, Some("examples/rust-only"));
         assert_eq!(templates[3].related_example, Some("examples/python-only"));
@@ -125,5 +141,30 @@ mod tests {
             Some("examples/typescript-only")
         );
         assert_eq!(templates[8].related_example, Some("examples/polyglot"));
+    }
+
+    #[test]
+    fn starter_only_template_catalog_renders_without_example() {
+        let output = render_text_catalog(&[TemplateCatalogEntry {
+            name: "starter",
+            description: "starter description",
+            relationship: TemplateRelationship::StarterOnly,
+            related_example: None,
+        }]);
+
+        assert!(output.contains("starter-only"));
+        assert!(output.contains("\t-\t"));
+    }
+
+    #[test]
+    fn template_relationship_distinguishes_example_backed_templates() {
+        assert!(matches!(
+            template_relationship(None),
+            TemplateRelationship::StarterOnly
+        ));
+        assert!(matches!(
+            template_relationship(Some("examples/generic")),
+            TemplateRelationship::TemplateAndExample
+        ));
     }
 }

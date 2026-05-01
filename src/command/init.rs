@@ -71,7 +71,7 @@ const STARTER_TEMPLATE_CATALOG: [StarterTemplateCatalogEntry; 9] = [
         template: StarterTemplate::Generic,
         name: "generic",
         description: "Starter with minimal four-layer files, neutral IDs, and core file names.",
-        related_example: None,
+        related_example: Some("examples/generic"),
     },
     StarterTemplateCatalogEntry {
         template: StarterTemplate::DocsFirst,
