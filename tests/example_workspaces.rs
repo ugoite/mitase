@@ -266,6 +266,6 @@ fn generic_example_validates() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("definitions: philosophies=1 policies=1 requirements=1 features=1"));
     assert!(stdout.contains(
-        "traceability: requirements=0/0 traces validated; features=0/0 traces validated"
+        "traceability: requirements=1/1 traces validated; features=1/1 traces validated"
     ));
 }

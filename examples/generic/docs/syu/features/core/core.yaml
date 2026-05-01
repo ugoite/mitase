@@ -5,7 +5,11 @@ features:
   - id: FEAT-001
     title: Bootstrap the generic spec workspace
     summary: Provide a starter structure that contributors can extend.
-    status: planned
+    status: implemented
     linked_requirements:
       - REQ-001
-    implementations: {}
+    implementations:
+      shell:
+        - file: scripts/bootstrap-generic.sh
+          symbols:
+            - bootstrap_generic_workspace
