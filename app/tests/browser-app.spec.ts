@@ -147,6 +147,10 @@ test("renders top tabs and linked spec content", async ({ page }) => {
     /^features\b/i,
   ]);
   await expect(page.getByText("Welcome to syu.")).toBeVisible();
+  await expect(page.getByText("Starter templates")).toBeVisible();
+  await expect(page.getByText("Checked-in examples")).toBeVisible();
+  await expect(page.getByText("docs-first")).toBeVisible();
+  await expect(page.getByText("browser-ui")).toBeVisible();
 
   await page.getByRole("button", { name: "Dismiss welcome banner" }).click();
   await expect(page.getByText("Welcome to syu.")).toHaveCount(0);
@@ -355,6 +359,23 @@ test("loads deep links and supports keyboard search navigation", async ({ page }
   ).toBeVisible();
   await expect(page).toHaveURL(/#features\/FEAT-CHECK-001$/);
 
+  await searchInput.fill("REQ-CORE");
+  const repeatedSearchResults = searchResults.getByRole("option");
+  await expect(repeatedSearchResults.nth(3)).toBeVisible();
+  const hoveredSearchResult = repeatedSearchResults.nth(2);
+  const hoveredSearchResultId = await hoveredSearchResult.getAttribute("id");
+  expect(hoveredSearchResultId).toBeTruthy();
+  await hoveredSearchResult.hover();
+  await expect(searchInput).toHaveAttribute("aria-activedescendant", hoveredSearchResultId!);
+  await hoveredSearchResult.click();
+  await expect(page).toHaveURL(/#requirements\/REQ-CORE-00\d+$/);
+  await searchInput.fill("REQ-CORE");
+  await expect(searchInput).toHaveAttribute("aria-activedescendant", hoveredSearchResultId!);
+  await searchInput.press("ArrowDown");
+  const nextSearchResultId = await repeatedSearchResults.nth(3).getAttribute("id");
+  expect(nextSearchResultId).toBeTruthy();
+  await expect(searchInput).toHaveAttribute("aria-activedescendant", nextSearchResultId!);
+
   await searchInput.fill("no-such-result");
   await expect(searchInput).toHaveAttribute("aria-expanded", "false");
   await expect(searchInput).not.toHaveAttribute("aria-controls", "spec-search-results-list");
@@ -366,9 +387,7 @@ test("loads deep links and supports keyboard search navigation", async ({ page }
   await expect(searchInput).toHaveValue("");
   await expect(searchInput).toHaveAttribute("aria-expanded", "false");
   await expect(page.getByRole("listbox", { name: "Search results" })).toHaveCount(0);
-  await expect(
-    page.getByRole("heading", { name: /FEAT-CHECK-001 .* Unified validation command/i }),
-  ).toBeVisible();
+  await expect(page).toHaveURL(/#requirements\/REQ-CORE-00\d+$/);
 });
 
 test("explains requirement and feature trace metrics", async ({ page }) => {
@@ -592,4 +611,48 @@ test("allows a manual refresh and updates the last refresh timestamp after a sta
   await expect.poll(() => manualRefreshLoads, { timeout: 10000 }).toBeGreaterThan(0);
   await expect(alert).toHaveCount(0);
   await expect(refreshTimestamp).not.toHaveAttribute("datetime", initialTimestamp ?? "");
+});
+
+test("announces refresh state changes through a polite live region", async ({ page }) => {
+  await page.goto("/");
+
+  const liveRegion = page.locator('[data-refresh-live-region="true"]');
+  await expect(liveRegion).toHaveAttribute("role", "status");
+  await expect(liveRegion).toHaveAttribute("aria-live", "polite");
+  await expect(liveRegion).toHaveAttribute("aria-atomic", "true");
+  await expect(liveRegion).toHaveText("Workspace snapshot is current.");
+
+  let pollAttempts = 0;
+  await page.route("**/api/version", async (route) => {
+    pollAttempts += 1;
+    await route.fulfill({
+      status: 500,
+      contentType: "text/plain",
+      body: "app data refresh failed",
+    });
+  });
+
+  await expect.poll(() => pollAttempts, { timeout: 10000 }).toBeGreaterThan(0);
+  await expect(liveRegion).toContainText("Workspace snapshot is stale.");
+  await expect(liveRegion).toContainText("Could not check for workspace updates");
+
+  let releaseRefresh: (() => void) | undefined;
+  const refreshGate = new Promise<void>((resolve) => {
+    releaseRefresh = resolve;
+  });
+  let manualRefreshLoads = 0;
+
+  await page.route("**/api/app-data.json", async (route) => {
+    manualRefreshLoads += 1;
+    await refreshGate;
+    await route.continue();
+  });
+
+  await page.getByRole("button", { name: "Refresh now" }).first().click();
+  await expect.poll(() => manualRefreshLoads, { timeout: 10000 }).toBeGreaterThan(0);
+  await expect(liveRegion).toHaveText("Refreshing workspace snapshot.");
+
+  releaseRefresh?.();
+
+  await expect(liveRegion).toHaveText("Workspace snapshot is current.");
 });

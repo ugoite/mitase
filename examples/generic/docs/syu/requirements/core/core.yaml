@@ -1,0 +1,20 @@
+category: Core Requirements
+prefix: REQ
+
+requirements:
+  - id: REQ-001
+    title: Bootstrap generic with a four-layer specification
+    description: |
+      The project should keep philosophy, policy, requirements, and features in
+      YAML so contributors can evolve behavior deliberately.
+    priority: high
+    status: implemented
+    linked_policies:
+      - POL-001
+    linked_features:
+      - FEAT-001
+    tests:
+      markdown:
+        - file: README.md
+          symbols:
+            - GenericAcceptanceChecklist

@@ -25,6 +25,7 @@ fn root_help_includes_start_here_guidance() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("New here?"));
     assert!(stdout.contains("syu templates"));
+    assert!(stdout.contains("syu doctor ."));
     assert!(stdout.contains("syu init ."));
     assert!(stdout.contains("syu validate ."));
     assert!(stdout.contains("syu browse ."));
@@ -53,8 +54,8 @@ fn app_help_mentions_remote_bind_opt_in() {
 #[test]
 fn workspace_help_uses_current_directory_default_consistently() {
     for command in [
-        "browse", "show", "search", "trace", "app", "doctor", "validate", "check", "report", "add",
-        "relate", "log", "audit", "explain",
+        "browse", "show", "search", "trace", "review", "app", "doctor", "validate", "check",
+        "report", "add", "relate", "log", "audit", "explain",
     ] {
         let output = Command::cargo_bin("syu")
             .expect("binary should build")

@@ -1,6 +1,6 @@
 // FEAT-APP-001
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AppDataErrorResponse,
   AppPayload,
@@ -34,13 +34,37 @@ type SearchResult = {
   kind: SectionKind;
 };
 
+type StarterGalleryEntry = {
+  name: string;
+  summary: string;
+};
+
 type SearchFilter = "all" | SectionKind;
+type RefreshState = "current" | "refreshing" | "stale";
 
 const SECTION_ORDER: SectionKind[] = ["philosophy", "policies", "requirements", "features"];
 const SEARCH_RESULTS_LIST_ID = "spec-search-results-list";
 const SEARCH_FILTER_GROUP_ID = "spec-search-filter-group";
 const REFRESH_POLL_MIN_MS = 2_000;
 const REFRESH_POLL_MAX_MS = 10_000;
+const STARTER_TEMPLATES: StarterGalleryEntry[] = [
+  { name: "docs-first", summary: "Documentation-heavy repos that want a gentle starter scaffold." },
+  { name: "rust-only", summary: "Rust-first workspaces with built-in traceable source and tests." },
+  { name: "go-only", summary: "Go-first repos that want a minimal language-shaped starter." },
+  { name: "typescript-only", summary: "TypeScript-first repos with checked-in Node metadata." },
+  { name: "polyglot", summary: "Teams that know they will mix multiple languages from the start." },
+];
+const STARTER_EXAMPLES: StarterGalleryEntry[] = [
+  { name: "browser-ui", summary: "A traced React/TypeScript UI example for frontend-heavy teams." },
+  {
+    name: "csharp-fallback",
+    summary: "A staged C# adoption path that keeps the first traces lighter.",
+  },
+  {
+    name: "team-scale",
+    summary: "A larger workspace showing how a bigger repo can be split by area.",
+  },
+];
 
 const SECTION_COPY: Record<SectionKind, string> = {
   philosophy: "Project intent and enduring values.",
@@ -75,13 +99,17 @@ function App() {
   const [selectedIssueKey, setSelectedIssueKey] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchFilter, setSearchFilter] = useState<SearchFilter>("all");
-  const [focusedResultIndex, setFocusedResultIndex] = useState(-1);
+  const [focusedResultId, setFocusedResultId] = useState<string | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(() => shouldShowOnboarding());
   const [navigationHistory, setNavigationHistory] = useState<string[]>([]);
   const [snapshotVersion, setSnapshotVersion] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [lastSuccessfulRefreshAt, setLastSuccessfulRefreshAt] = useState<string | null>(null);
+  const [refreshAnnouncement, setRefreshAnnouncement] = useState("");
+  const activeLoadControllerRef = useRef<AbortController | null>(null);
+  const activeLoadRequestIdRef = useRef(0);
+  const activeVersionPollControllerRef = useRef<AbortController | null>(null);
 
   const applyWorkspace = useCallback((browserWorkspace: BrowserWorkspace) => {
     setWorkspace(browserWorkspace);
@@ -131,6 +159,11 @@ function App() {
   const loadWorkspace = useCallback(
     async (mode: "initial" | "refresh" = "initial") => {
       const refreshing = mode === "refresh";
+      const requestId = activeLoadRequestIdRef.current + 1;
+      activeLoadRequestIdRef.current = requestId;
+      activeLoadControllerRef.current?.abort();
+      const controller = new AbortController();
+      activeLoadControllerRef.current = controller;
       if (refreshing) {
         setIsRefreshing(true);
       }
@@ -138,7 +171,7 @@ function App() {
       try {
         const [wasmModule, dataResponse] = await Promise.all([
           import("./wasm/syu_app_wasm.js") as Promise<WasmModule>,
-          fetch("/api/app-data.json", { cache: "no-store" }),
+          fetch("/api/app-data.json", { cache: "no-store", signal: controller.signal }),
         ]);
 
         if (!dataResponse.ok) {
@@ -151,6 +184,9 @@ function App() {
 
         const payload = (await dataResponse.json()) as AppPayload;
         await wasmModule.default();
+        if (controller.signal.aborted || activeLoadRequestIdRef.current !== requestId) {
+          return;
+        }
         const browserWorkspace = wasmModule.build_browser_workspace_from_js(payload);
 
         setError(null);
@@ -159,6 +195,13 @@ function App() {
         setLastSuccessfulRefreshAt(new Date().toISOString());
         applyWorkspace(browserWorkspace);
       } catch (loadError) {
+        if (
+          controller.signal.aborted ||
+          activeLoadRequestIdRef.current !== requestId ||
+          isAbortError(loadError)
+        ) {
+          return;
+        }
         if (refreshing) {
           // eslint-disable-next-line no-console
           console.error("Failed to refresh syu app workspace", loadError);
@@ -167,9 +210,14 @@ function App() {
           setError(errorMessage(loadError, "Failed to load syu app"));
         }
       } finally {
-        setLoading(false);
-        if (refreshing) {
-          setIsRefreshing(false);
+        if (activeLoadControllerRef.current === controller) {
+          activeLoadControllerRef.current = null;
+        }
+        if (!controller.signal.aborted && activeLoadRequestIdRef.current === requestId) {
+          setLoading(false);
+          if (refreshing) {
+            setIsRefreshing(false);
+          }
         }
       }
     },
@@ -181,6 +229,15 @@ function App() {
   }, [loadWorkspace]);
 
   useEffect(() => {
+    return () => {
+      activeLoadControllerRef.current?.abort();
+      activeLoadControllerRef.current = null;
+      activeVersionPollControllerRef.current?.abort();
+      activeVersionPollControllerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
     if (snapshotVersion == null) {
       return;
     }
@@ -188,6 +245,11 @@ function App() {
     let cancelled = false;
     let stablePollCount = 0;
     let timeoutId: number | null = null;
+
+    const abortVersionPoll = () => {
+      activeVersionPollControllerRef.current?.abort();
+      activeVersionPollControllerRef.current = null;
+    };
 
     const currentDelay = () =>
       Math.min(REFRESH_POLL_MAX_MS, REFRESH_POLL_MIN_MS * 2 ** stablePollCount);
@@ -213,16 +275,29 @@ function App() {
         return;
       }
 
+      abortVersionPoll();
+      const controller = new AbortController();
+      activeVersionPollControllerRef.current = controller;
+
       try {
-        const response = await fetch("/api/version", { cache: "no-store" });
+        const response = await fetch("/api/version", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
         if (!response.ok) {
           throw new Error(`Failed to poll app version: ${response.status} ${response.statusText}`);
         }
         const nextVersion = (await response.json()) as VersionPayload;
-        if (!cancelled) {
-          setRefreshError(null);
+        if (
+          controller.signal.aborted ||
+          cancelled ||
+          activeVersionPollControllerRef.current !== controller
+        ) {
+          return;
         }
-        if (!cancelled && nextVersion.snapshot !== snapshotVersion) {
+        activeVersionPollControllerRef.current = null;
+        setRefreshError(null);
+        if (nextVersion.snapshot !== snapshotVersion) {
           stablePollCount = 0;
           await loadWorkspace("refresh");
           schedulePoll(REFRESH_POLL_MIN_MS);
@@ -232,12 +307,19 @@ function App() {
         stablePollCount = Math.min(stablePollCount + 1, 3);
         schedulePoll(currentDelay());
       } catch (pollError) {
-        stablePollCount = 0;
-        if (!cancelled) {
-          // eslint-disable-next-line no-console
-          console.error("Failed to poll app version for refresh", pollError);
-          setRefreshError(formatRefreshFailure("check for workspace updates", pollError));
+        if (
+          controller.signal.aborted ||
+          cancelled ||
+          activeVersionPollControllerRef.current !== controller ||
+          isAbortError(pollError)
+        ) {
+          return;
         }
+        activeVersionPollControllerRef.current = null;
+        stablePollCount = 0;
+        // eslint-disable-next-line no-console
+        console.error("Failed to poll app version for refresh", pollError);
+        setRefreshError(formatRefreshFailure("check for workspace updates", pollError));
         schedulePoll(REFRESH_POLL_MIN_MS);
       }
     };
@@ -262,12 +344,9 @@ function App() {
         window.clearTimeout(timeoutId);
         timeoutId = null;
       }
+      abortVersionPoll();
     };
   }, [isRefreshing, loadWorkspace, snapshotVersion]);
-
-  useEffect(() => {
-    setFocusedResultIndex(-1);
-  }, [workspace, searchFilter, searchQuery]);
 
   const triggerRefresh = useCallback(() => {
     void loadWorkspace("refresh");
@@ -322,7 +401,11 @@ function App() {
     );
   }, [currentDocument, selectedItemId]);
 
-  const refreshState = refreshError ? "stale" : isRefreshing ? "refreshing" : "current";
+  const refreshState: RefreshState = refreshError
+    ? "stale"
+    : isRefreshing
+      ? "refreshing"
+      : "current";
   const refreshStateClasses =
     refreshState === "stale"
       ? "border-rose-400/40 bg-rose-400/10 text-rose-100"
@@ -335,7 +418,26 @@ function App() {
       : refreshState === "refreshing"
         ? "Refreshing…"
         : "Current";
+  const refreshAnnouncementState: RefreshState = isRefreshing
+    ? "refreshing"
+    : refreshError
+      ? "stale"
+      : "current";
+  const refreshAnnouncementLabel = formatRefreshAnnouncement(
+    refreshAnnouncementState,
+    refreshError,
+  );
   const lastRefreshLabel = formatRefreshTimestamp(lastSuccessfulRefreshAt);
+
+  useEffect(() => {
+    if (loading) {
+      return;
+    }
+
+    setRefreshAnnouncement((current) =>
+      current === refreshAnnouncementLabel ? current : refreshAnnouncementLabel,
+    );
+  }, [loading, refreshAnnouncementLabel]);
 
   const documentGroups = useMemo(() => {
     if (!currentSection) {
@@ -449,6 +551,13 @@ function App() {
     };
   }, [searchFilter, workspace, searchQuery]);
   const searchResults = searchState.results;
+  const focusedResultIndex = useMemo(() => {
+    if (!focusedResultId) {
+      return -1;
+    }
+
+    return searchResults.findIndex((result) => result.id === focusedResultId);
+  }, [focusedResultId, searchResults]);
   const activeSearchResultId = useMemo(() => {
     if (focusedResultIndex < 0 || focusedResultIndex >= searchResults.length) {
       return undefined;
@@ -593,6 +702,7 @@ function App() {
   };
 
   const handleSearchSelect = (id: string) => {
+    setFocusedResultId(id);
     setSearchQuery("");
     jumpToItem(id);
   };
@@ -625,6 +735,15 @@ function App() {
 
   return (
     <div className="app-shell text-slate-100">
+      <p
+        aria-atomic="true"
+        aria-live="polite"
+        className="sr-only"
+        data-refresh-live-region="true"
+        role="status"
+      >
+        {refreshAnnouncement}
+      </p>
       <header className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/90 backdrop-blur-2xl">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 md:flex-row md:items-center md:justify-between md:px-8">
           <div className="flex items-center justify-between gap-4 md:min-w-0">
@@ -792,21 +911,61 @@ function App() {
           </div>
         )}
         {showOnboarding && (
-          <div className="md:col-span-2 flex items-start justify-between gap-4 rounded-3xl border border-sky-400/30 bg-sky-400/10 px-5 py-4 text-sm leading-7 text-sky-100 shadow-2xl shadow-sky-950/15">
-            <p>
-              <span className="font-semibold">Welcome to syu.</span> Browse your specification
-              across four layers:{" "}
-              <span className="text-sky-300">Philosophy → Policies → Requirements → Features</span>.
-              Click any item to explore its traces and validation status.
-            </p>
-            <button
-              type="button"
-              onClick={dismissOnboarding}
-              aria-label="Dismiss welcome banner"
-              className="shrink-0 rounded-full border border-sky-400/30 bg-sky-400/10 px-2 py-1 text-sky-300 transition hover:bg-sky-400/20"
-            >
-              ×
-            </button>
+          <div className="md:col-span-2 rounded-3xl border border-sky-400/30 bg-sky-400/10 px-5 py-4 text-sm leading-7 text-sky-100 shadow-2xl shadow-sky-950/15">
+            <div className="flex items-start justify-between gap-4">
+              <p>
+                <span className="font-semibold">Welcome to syu.</span> Browse your specification
+                across four layers:{" "}
+                <span className="text-sky-300">
+                  Philosophy → Policies → Requirements → Features
+                </span>
+                . Click any item to explore its traces and validation status.
+              </p>
+              <button
+                type="button"
+                onClick={dismissOnboarding}
+                aria-label="Dismiss welcome banner"
+                className="shrink-0 rounded-full border border-sky-400/30 bg-sky-400/10 px-2 py-1 text-sky-300 transition hover:bg-sky-400/20"
+              >
+                ×
+              </button>
+            </div>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <section className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                <p className="text-xs uppercase tracking-[0.3em] text-sky-200/70">
+                  Starter templates
+                </p>
+                <p className="mt-2 text-slate-200">
+                  Use these when you want a fresh scaffold and the first validation win to be
+                  obvious.
+                </p>
+                <ul className="mt-3 space-y-2 text-slate-300">
+                  {STARTER_TEMPLATES.map((entry) => (
+                    <li key={entry.name}>
+                      <span className="font-medium text-sky-200">{entry.name}</span> —{" "}
+                      {entry.summary}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+              <section className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                <p className="text-xs uppercase tracking-[0.3em] text-sky-200/70">
+                  Checked-in examples
+                </p>
+                <p className="mt-2 text-slate-200">
+                  Open these when you want a working workspace to compare against before you
+                  scaffold your own repo.
+                </p>
+                <ul className="mt-3 space-y-2 text-slate-300">
+                  {STARTER_EXAMPLES.map((entry) => (
+                    <li key={entry.name}>
+                      <span className="font-medium text-sky-200">{entry.name}</span> —{" "}
+                      {entry.summary}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            </div>
           </div>
         )}
         <aside className="space-y-5">
@@ -905,7 +1064,6 @@ function App() {
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
-                  setFocusedResultIndex(-1);
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "ArrowDown") {
@@ -913,13 +1071,22 @@ function App() {
                       return;
                     }
                     e.preventDefault();
-                    setFocusedResultIndex((prev) => Math.min(prev + 1, searchResults.length - 1));
+                    const nextFocusedIndex =
+                      focusedResultIndex >= 0
+                        ? Math.min(focusedResultIndex + 1, searchResults.length - 1)
+                        : 0;
+                    setFocusedResultId(searchResults[nextFocusedIndex].id);
                   } else if (e.key === "ArrowUp") {
                     if (searchResults.length === 0) {
                       return;
                     }
                     e.preventDefault();
-                    setFocusedResultIndex((prev) => Math.max(prev - 1, -1));
+                    if (focusedResultIndex <= 0) {
+                      setFocusedResultId(null);
+                      return;
+                    }
+
+                    setFocusedResultId(searchResults[focusedResultIndex - 1].id);
                   } else if (e.key === "Enter") {
                     const focusedResult =
                       focusedResultIndex >= 0 && focusedResultIndex < searchResults.length
@@ -934,7 +1101,7 @@ function App() {
                   } else if (e.key === "Escape") {
                     setSearchQuery("");
                     setSearchFilter("all");
-                    setFocusedResultIndex(-1);
+                    setFocusedResultId(null);
                   }
                 }}
                 className="w-full rounded-2xl border border-white/10 bg-slate-900/60 py-2 pl-9 pr-4 text-sm text-slate-100 placeholder-slate-500 focus:border-sky-400/60 focus:outline-none focus:ring-1 focus:ring-sky-400/40"
@@ -985,7 +1152,6 @@ function App() {
                     aria-pressed={active}
                     onClick={() => {
                       setSearchFilter(option.value);
-                      setFocusedResultIndex(-1);
                     }}
                     className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
                       active
@@ -1017,7 +1183,7 @@ function App() {
                         id={searchResultOptionId(result.id, index)}
                         role="option"
                         onMouseDown={(e) => e.preventDefault()}
-                        onMouseEnter={() => setFocusedResultIndex(index)}
+                        onMouseEnter={() => setFocusedResultId(result.id)}
                         onClick={() => handleSearchSelect(result.id)}
                         className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2 text-left transition hover:border-sky-400/40 hover:bg-sky-400/10 ${
                           index === focusedResultIndex
@@ -1411,29 +1577,36 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
 function formatRefreshFailure(action: string, error: unknown): string {
   return `Could not ${action}: ${errorMessage(error, "Unexpected refresh failure")}`;
 }
 
 async function describeAppDataRefreshFailure(response: Response): Promise<string> {
-  const fallback = `Failed to load app data: ${response.status} ${response.statusText}`;
-  const contentType = response.headers.get("content-type") ?? "";
-  const body = await response.text();
+  const fallback = `Failed to refresh app data: ${response.status} ${response.statusText}`;
 
   try {
+    const body = await response.text();
+    const contentType = response.headers.get("content-type") ?? "";
+
     if (!contentType.includes("application/json") && !body.trim().startsWith("{")) {
       return fallback;
     }
 
     const payload = JSON.parse(body) as unknown;
-    if (isAppDataErrorResponse(payload)) {
-      return `${payload.error.summary} ${payload.error.guidance}`;
+    if (!isAppDataErrorResponse(payload)) {
+      return fallback;
     }
+
+    const summary = payload.error.summary.trim();
+    const guidance = payload.error.guidance.trim();
+    return summary && guidance ? `${summary} ${guidance}` : summary || guidance || fallback;
   } catch {
     return fallback;
   }
-
-  return fallback;
 }
 
 function isAppDataErrorResponse(value: unknown): value is AppDataErrorResponse {
@@ -1452,6 +1625,20 @@ function isAppDataErrorResponse(value: unknown): value is AppDataErrorResponse {
     typeof candidate.summary === "string" &&
     typeof candidate.guidance === "string"
   );
+}
+
+function formatRefreshAnnouncement(state: RefreshState, refreshError: string | null): string {
+  if (state === "stale") {
+    return refreshError
+      ? `Workspace snapshot is stale. ${refreshError}`
+      : "Workspace snapshot is stale.";
+  }
+
+  if (state === "refreshing") {
+    return "Refreshing workspace snapshot.";
+  }
+
+  return "Workspace snapshot is current.";
 }
 
 function formatRefreshTimestamp(iso: string | null): string {

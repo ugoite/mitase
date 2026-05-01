@@ -266,7 +266,7 @@ fn repository_declares_release_automation() {
     let readme = read_file("README.md");
 
     assert!(release_please.contains("FEAT-RELEASE-001"));
-    assert!(release_please.contains("googleapis/release-please-action@v4.4.1"));
+    assert!(release_please.contains("googleapis/release-please-action@v5.0.0"));
     assert!(release_please.contains("release-please:"));
     assert!(release_please.contains("target-branch: main"));
     assert!(release_please.contains("release-please skipped"));
@@ -464,6 +464,7 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("**Visual explorer**"));
     assert!(readme.contains("**Reviewer workflow**"));
     assert!(readme.contains("**Contributor runtime setup**"));
+    assert!(readme.contains("guided `doctor → init → validate → browse` path"));
     assert!(readme.contains("new to `syu`"));
     assert!(readme.contains("already have a workspace"));
     assert!(readme.contains("10-15 minutes"));
@@ -487,6 +488,7 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("syu validate"));
     assert!(readme.contains("syu browse"));
     assert!(readme.contains("syu list"));
+    assert!(readme.contains("syu doctor ."));
     assert!(readme.contains("### Command chooser"));
     assert!(readme.contains("check whether your workspace currently validates"));
     assert!(readme.contains("syu validate ."));
@@ -579,9 +581,11 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("latest published alpha"));
     assert_newcomer_template_examples(&getting_started);
     assert!(getting_started.contains("syu templates"));
+    assert!(getting_started.contains("syu doctor ."));
     assert!(getting_started.contains("--id-prefix"));
     assert!(getting_started.contains("syu validate . --fix"));
     assert!(getting_started.contains("syu browse ."));
+    assert!(getting_started.contains("doctor → init → validate → browse"));
     assert!(getting_started.contains("If you only remember the task and not the command name yet"));
     assert!(
         getting_started
@@ -612,6 +616,7 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("Keep exploring"));
     assert!(getting_started.contains("[reviewer workflow guide](./reviewer-workflow.md)"));
     assert!(getting_started.contains("examples/rust-only"));
+    assert!(getting_started.contains("examples/generic"));
     assert!(getting_started.contains("examples/python-only"));
     assert!(getting_started.contains("examples/csharp-fallback"));
     assert!(getting_started.contains("examples/go-only"));
@@ -641,7 +646,12 @@ fn repository_declares_documentation_guides() {
     assert!(command_card.contains("# syu command card"));
     assert!(command_card.contains("| Task | Command | Choose it when |"));
     assert!(command_card.contains("syu templates"));
+    assert!(command_card.contains("syu doctor ."));
     assert!(command_card.contains("syu validate . --id FEAT-CHECK-001"));
+    assert!(command_card.contains("syu audit ."));
+    assert!(command_card.contains("syu report ."));
+    assert!(command_card.contains("syu review --range origin/main...HEAD"));
+    assert!(command_card.contains("scan for likely overlap"));
     assert!(command_card.contains("syu app ."));
     assert!(command_card.contains("[reviewer workflow](./reviewer-workflow.md)"));
     assert!(vscode_guide.contains("CLI-backed first"));
@@ -675,6 +685,9 @@ fn repository_declares_documentation_guides() {
     let reviewer_workflow = read_file("docs/guide/reviewer-workflow.md");
     assert!(reviewer_workflow.contains("[command card](./command-card.md)"));
     assert!(reviewer_workflow.contains("currently traced"));
+    assert!(reviewer_workflow.contains("audit"));
+    assert!(reviewer_workflow.contains("syu report"));
+    assert!(reviewer_workflow.contains("syu review --range origin/main...HEAD"));
     assert!(reviewer_workflow.contains("the whole PR diff is covered"));
     assert!(reviewer_workflow.contains("too-small log result with the PR diff"));
     assert!(reviewer_workflow.contains("filtered down to that item"));
@@ -686,6 +699,7 @@ fn repository_declares_documentation_guides() {
     assert!(trace_adapter_support.contains("| Go | `go`, `golang`, `gotest` / `.go` |"));
     assert!(examples_and_templates.contains("starter templates"));
     assert!(examples_and_templates.contains("checked-in examples"));
+    assert!(examples_and_templates.contains("examples/generic"));
     assert!(examples_and_templates.contains("examples/csharp-fallback"));
     assert!(examples_and_templates.contains("examples/docs-first"));
     assert!(examples_and_templates.contains("`syu init . --template docs-first`"));
@@ -1059,6 +1073,8 @@ fn repository_declares_contribution_workflow_assets() {
 
     assert!(gitignore.contains("FEAT-CONTRIB-002"));
     assert!(gitignore.contains("/.worktrees/"));
+    assert!(gitignore.contains("__pycache__/"));
+    assert!(gitignore.contains("*.py[cod]"));
 }
 
 #[test]
@@ -1097,7 +1113,13 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(ci_workflow.contains("Set up Python with pip cache"));
     assert!(ci_workflow.contains("cache: pip"));
     assert!(ci_workflow.contains("cache-dependency-path: .pre-commit-config.yaml"));
+    assert!(ci_workflow.contains("Cache pre-commit hooks"));
+    assert!(ci_workflow.contains("actions/cache@v4"));
+    assert!(ci_workflow.contains("~/.cache/pre-commit"));
     assert!(ci_workflow.contains("cache-dependency-path: app/package-lock.json"));
+    assert!(ci_workflow.contains("Set up Rust for quality gates"));
+    assert!(ci_workflow.contains("Install browser app dependencies"));
+    assert!(ci_workflow.contains("npm --prefix app ci"));
     assert!(browser_app_freshness.contains("npm ci"));
     assert!(ci_workflow.contains("docs-site:"));
     assert!(ci_workflow.contains("./.github/actions/build-docs-site"));
