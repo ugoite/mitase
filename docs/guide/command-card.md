@@ -15,6 +15,7 @@ If a pull request already exists, pair this page with the
 | --- | --- | --- |
 | Install or verify the CLI | `syu --version` | confirm the installed binary is on your `PATH` before you start editing a workspace |
 | Compare starter layouts | `syu templates` | choose between docs-first, language-first, or polyglot scaffolds before `init` |
+| Check local readiness | `syu doctor .` | confirm the Rust, Node, and browser-app dependencies are ready before you scaffold or validate |
 | Scaffold a workspace | `syu init .` | create the default four-layer tree in the current directory |
 | Scaffold with another starter | `syu init . --template rust-only` | begin from a language-shaped or docs-first layout instead of the generic starter |
 | Check the workspace | `syu validate .` | run the full graph, trace, and coverage validation pass |
@@ -37,6 +38,7 @@ If a pull request already exists, pair this page with the
 ### First workspace pass
 
 ```bash
+syu doctor .
 syu init .
 syu validate .
 syu browse .

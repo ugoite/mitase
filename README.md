@@ -33,7 +33,8 @@ Pick the newcomer path that matches what you need next:
 
 - **Getting started**: choose this if you are new to `syu`, want a guided first
   run, and do **not** already know the four-layer model. Expect the most
-  hand-holding and roughly 10-15 minutes for the first workspace setup.
+  hand-holding and roughly 10-15 minutes for the first workspace setup, with a
+  guided `doctor → init → validate → browse` path.
 - **Quick start**: stay in this README when you want a compact, self-contained
   reference card, are happy with a short layer refresher, and want the fastest
   install-to-`syu validate .` path in about 5 minutes.
