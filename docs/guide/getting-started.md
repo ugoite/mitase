@@ -54,7 +54,7 @@ longer installer discussion in [Before you begin](#before-you-begin).
 
 ```bash
 # x-release-please-start-version
-RELEASE=v0.0.1-alpha.8
+RELEASE="$(gh release view --json tagName -q .tagName --repo ugoite/syu)"
 # x-release-please-end
 curl -fsSL "https://github.com/ugoite/syu/releases/download/${RELEASE}/install-syu.sh" | env SYU_VERSION=alpha bash
 syu doctor .

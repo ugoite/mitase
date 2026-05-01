@@ -305,7 +305,7 @@ Once the app has loaded the workspace successfully, `GET /health` returns:
 
 ```json
 <!-- x-release-please-start-version -->
-{"status":"ok","version":"0.0.1-alpha.8"}
+{"status":"ok","version":"<cli-version>"}
 <!-- x-release-please-end -->
 ```
 
