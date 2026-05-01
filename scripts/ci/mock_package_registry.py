@@ -34,6 +34,7 @@ TAG_SETS = {
         "v0.0.2",
     ],
 }
+DEFAULT_TAG = TAG_SETS["mixed"][2]
 
 
 @dataclass(frozen=True)
