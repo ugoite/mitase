@@ -189,7 +189,7 @@ details for your own policy checks.
 If you already trust the release source and want the shortest path, use the
 one-line entrypoint:
 
-The download URL stays pinned to the installer shipped with this checked-in
+The installer stays pinned to the same release tag that shipped this checked-in
 documentation version. Use `SYU_VERSION=alpha`, `stable`, or an explicit
 version selector when you want that installer to fetch a different published
 package track after it starts.

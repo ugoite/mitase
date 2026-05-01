@@ -18,6 +18,7 @@ from typing import Dict
 
 TARGETS = {
     "x86_64-unknown-linux-gnu": "syu",
+    "aarch64-unknown-linux-gnu": "syu",
     "x86_64-apple-darwin": "syu",
     "aarch64-apple-darwin": "syu",
     "x86_64-pc-windows-msvc": "syu.exe",
@@ -25,8 +26,15 @@ TARGETS = {
 
 TAG_SETS = {
     "prerelease": ["v0.0.1-alpha.2", "v0.0.1-alpha.3", "v0.0.2-beta.1"],
-    "mixed": ["v0.0.1-alpha.2", "v0.0.1-alpha.3", "v0.0.2-beta.1", "v0.0.2"],
+    "mixed": [
+        "v0.0.1-alpha.2",
+        "v0.0.1-alpha.3",
+        "v0.0.1-alpha.8",
+        "v0.0.2-beta.1",
+        "v0.0.2",
+    ],
 }
+DEFAULT_TAG = TAG_SETS["mixed"][2]
 
 
 @dataclass(frozen=True)

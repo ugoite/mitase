@@ -9,6 +9,16 @@
       "extra-files": [
         {
           "type": "generic",
+          "file": "scripts/install-syu.sh",
+          "replacers": [
+            {
+              "search": "DEFAULT_VERSION_SELECTOR=\"v(?<version>.*)\"",
+              "replace": "DEFAULT_VERSION_SELECTOR=\"v{{version}}\""
+            }
+          ]
+        },
+        {
+          "type": "generic",
           "file": "README.md",
           "replacers": [
             {
