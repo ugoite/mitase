@@ -16,6 +16,12 @@ fn main() {
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR")).join("syu-app-dist");
 
     println!("cargo:rerun-if-changed=build.rs");
+    if manifest_dir.join(".git").exists() {
+        println!(
+            "cargo:rerun-if-changed={}",
+            manifest_dir.join(".git").display()
+        );
+    }
     emit_watch(&manifest_dir.join("Cargo.lock"));
     emit_watch(&app_dir.join("index.html"));
     emit_watch(&app_dir.join("package.json"));
@@ -31,13 +37,18 @@ fn main() {
     emit_watch(&shared_core_dir.join("Cargo.toml"));
     emit_watch_recursive(&shared_core_dir.join("src"));
 
-    if let Err(error) = required_npm_version(&app_dir).and_then(|required_npm| {
-        ensure_pinned_npm_ready(&manifest_dir, &app_dir)
-            .and_then(|_| ensure_app_dependencies(&app_dir, &required_npm))
-            .and_then(|_| rebuild_browser_wasm_bindings(&manifest_dir, &app_dir))
-            .and_then(|_| build_browser_bundle(&app_dir, &out_dir))
-    }) {
-        panic!("{error}");
+    emit_build_version();
+
+    let skip_browser_app_build = env::var_os("SYU_SKIP_BROWSER_APP_BUILD").is_some();
+    if !skip_browser_app_build {
+        if let Err(error) = required_npm_version(&app_dir).and_then(|required_npm| {
+            ensure_pinned_npm_ready(&manifest_dir, &app_dir)
+                .and_then(|_| ensure_app_dependencies(&app_dir, &required_npm))
+                .and_then(|_| rebuild_browser_wasm_bindings(&manifest_dir, &app_dir))
+                .and_then(|_| build_browser_bundle(&app_dir, &out_dir))
+        }) {
+            panic!("{error}");
+        }
     }
 }
 
@@ -65,6 +76,27 @@ fn emit_watch_recursive(path: &Path) {
             emit_watch(&child);
         }
     }
+}
+
+fn emit_build_version() {
+    let version = git_tag_version().unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string());
+    println!("cargo:rustc-env=SYU_GIT_VERSION={version}");
+}
+
+fn git_tag_version() -> Option<String> {
+    Command::new("git")
+        .args(["describe", "--tags", "--exact-match"])
+        .output()
+        .ok()
+        .and_then(|output| {
+            if output.status.success() {
+                String::from_utf8(output.stdout).ok()
+            } else {
+                None
+            }
+        })
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
 }
 
 fn pinned_npm_script(manifest_dir: &Path) -> PathBuf {
