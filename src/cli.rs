@@ -24,6 +24,8 @@ use std::{num::NonZeroU8, path::PathBuf, sync::OnceLock};
 
 use crate::command::init::{starter_template_example_commands, starter_template_names};
 
+const CLI_VERSION: &str = env!("SYU_GIT_VERSION");
+
 const ROOT_AFTER_HELP: &str = "\
 New here?
   1. syu templates   compare starter layouts before you scaffold
@@ -181,7 +183,7 @@ fn init_template_help() -> &'static str {
 #[derive(Debug, Parser)]
 #[command(
     name = "syu",
-    version,
+    version = CLI_VERSION,
     about = "Specification-driven development for real repositories",
     after_help = ROOT_AFTER_HELP,
     subcommand_required = false,
