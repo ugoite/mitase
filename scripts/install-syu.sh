@@ -6,7 +6,7 @@ set -euo pipefail
 DEFAULT_REPOSITORY="ugoite/syu"
 DEFAULT_PACKAGE_HOST="ghcr.io"
 DEFAULT_PACKAGE_SCHEME="https"
-DEFAULT_VERSION_SELECTOR="v0.0.1-alpha.8"
+DEFAULT_VERSION_SELECTOR="alpha"
 tmp_dir=""
 
 cleanup_tmp_dir() {
