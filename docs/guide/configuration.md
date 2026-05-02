@@ -57,7 +57,7 @@ coverage behavior.
 
 ```yaml
 # x-release-please-start-version
-version: 0.0.1-alpha.8
+version: "<cli-version>"
 # x-release-please-end
 spec:
   root: docs/syu
