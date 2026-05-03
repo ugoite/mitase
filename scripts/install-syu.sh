@@ -6,7 +6,7 @@ set -euo pipefail
 DEFAULT_REPOSITORY="ugoite/syu"
 DEFAULT_PACKAGE_HOST="ghcr.io"
 DEFAULT_PACKAGE_SCHEME="https"
-DEFAULT_RELEASE_TAG="__SYU_RELEASE_TAG__"
+DEFAULT_VERSION_SELECTOR="__SYU_RELEASE_TAG__"
 tmp_dir=""
 
 cleanup_tmp_dir() {
@@ -90,8 +90,8 @@ normalize_version_selector() {
 resolve_default_release_tag() {
   local script_dir repo_cargo_toml version
 
-  if [[ "$DEFAULT_RELEASE_TAG" != "__SYU_RELEASE_TAG__" ]]; then
-    printf '%s\n' "$DEFAULT_RELEASE_TAG"
+  if [[ "$DEFAULT_VERSION_SELECTOR" != "__SYU_RELEASE_TAG__" ]]; then
+    printf '%s\n' "$DEFAULT_VERSION_SELECTOR"
     return 0
   fi
 
