@@ -2216,6 +2216,16 @@ mod tests {
     }
 
     #[test]
+    fn discover_kotlin_targets_returns_empty_without_kotlin_files() {
+        let tempdir = tempdir().expect("tempdir");
+
+        let targets = discover_kotlin_targets(&SyuConfig::default(), tempdir.path())
+            .expect("targets");
+
+        assert!(targets.is_empty());
+    }
+
+    #[test]
     fn kotlin_files_under_reports_directory_errors() {
         let tempdir = tempdir().expect("tempdir");
         let file_root = tempdir.path().join("Trace.kt");
