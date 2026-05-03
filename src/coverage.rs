@@ -1058,7 +1058,7 @@ fn discover_kotlin_targets_with_issues(
         };
 
         with_scanned_file_relative_to_workspace(root, &path, &mut issues, |relative| {
-            if is_kotlin_test_file(&path) {
+            if is_kotlin_test_file(&path, &contents) {
                 for symbol in collect_kotlin_test_symbols(&contents) {
                     targets.push(CoverageTarget {
                         file: relative.clone(),
@@ -1147,19 +1147,19 @@ fn collect_java_public_symbols(contents: &str) -> Vec<String> {
 
 fn collect_kotlin_public_symbols(contents: &str) -> Vec<String> {
     let type_regex = Regex::new(
-        r"(?m)^\s*(?:public\s+)?(?:abstract\s+|final\s+|sealed\s+|data\s+|enum\s+|annotation\s+)?(?:class|interface|object)\s+(?P<name>[A-Z][A-Za-z0-9_]*)\b",
+        r"(?m)^[ \t]{0,4}(?:public\s+)?(?:abstract\s+|final\s+|sealed\s+|data\s+|enum\s+|annotation\s+)?(?:class|interface|object)\s+(?P<name>[A-Z][A-Za-z0-9_]*)\b",
     )
     .expect("Kotlin type regex should compile");
     let function_regex = Regex::new(
-        r"(?m)^\s*(?:public\s+)?(?:suspend\s+)?fun\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\b",
+        r"(?m)^[ \t]{0,4}(?:public\s+)?(?:suspend\s+)?fun\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\b",
     )
     .expect("Kotlin function regex should compile");
     let property_regex = Regex::new(
-        r"(?m)^\s*(?:public\s+)?(?:const\s+)?(?:val|var)\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\b",
+        r"(?m)^[ \t]{0,4}(?:public\s+)?(?:const\s+)?(?:val|var)\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\b",
     )
     .expect("Kotlin property regex should compile");
     let typealias_regex =
-        Regex::new(r"(?m)^\s*(?:public\s+)?typealias\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\b")
+        Regex::new(r"(?m)^[ \t]{0,4}(?:public\s+)?typealias\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\b")
             .expect("Kotlin typealias regex should compile");
 
     let mut symbols = BTreeSet::new();
@@ -1517,10 +1517,16 @@ fn is_java_test_file(path: &Path, contents: &str) -> bool {
         || contents.contains("extends TestCase")
 }
 
-fn is_kotlin_test_file(path: &Path) -> bool {
+fn is_kotlin_test_file(path: &Path, contents: &str) -> bool {
+    let junit_annotation_regex = Regex::new(r"@(?:[\w.]+\.)?(?:Test|RepeatedTest|ParameterizedTest|TestFactory|TestTemplate)\b")
+        .expect("Kotlin test annotation regex should compile");
     path.file_name()
         .and_then(|name| name.to_str())
         .is_some_and(|name| name.ends_with("Test.kt") || name.ends_with("Tests.kt"))
+        || path
+            .components()
+            .any(|component| matches!(component.as_os_str().to_str(), Some("test" | "tests")))
+        || junit_annotation_regex.is_match(contents)
 }
 
 fn typescript_files_under(
@@ -1717,6 +1723,7 @@ mod tests {
         discover_java_targets_with_issues, discover_kotlin_targets, discover_python_targets,
         discover_rust_targets, discover_typescript_targets,
         discover_typescript_targets_with_issues, go_files_under, java_files_under,
+        is_kotlin_test_file,
         normalize_relative_path, normalized_symbol_trace_coverage_ignored_paths,
         path_matches_ignored_generated_directory, python_files_under, kotlin_files_under,
         record_scanned_file_relative_to_workspace, rust_files_under,
@@ -2323,6 +2330,15 @@ mod tests {
     }
 
     #[test]
+    fn collect_kotlin_public_symbols_skips_locals_inside_functions() {
+        let symbols = collect_kotlin_public_symbols(
+            "class FeatureTraceService {\n    fun featureTraceKotlin() {\n        val temp = 1\n    }\n\n    val TRACE_LABEL = \"ok\"\n}\n",
+        );
+
+        assert_eq!(symbols, vec!["FeatureTraceService", "TRACE_LABEL", "featureTraceKotlin"]);
+    }
+
+    #[test]
     fn collect_kotlin_test_symbols_covers_annotations_and_test_prefixes() {
         let symbols = collect_kotlin_test_symbols(
             "import org.junit.jupiter.api.Test\nimport org.junit.jupiter.api.RepeatedTest\n\nclass TraceabilityTests {\n    @Test\n    fun reqTraceKotlinTest() {}\n\n    @RepeatedTest(2)\n    fun reqTraceKotlinRepeat() {}\n\n    fun testLegacyTrace() {}\n}\n",
@@ -2336,6 +2352,22 @@ mod tests {
                 "testLegacyTrace",
             ]
         );
+    }
+
+    #[test]
+    fn kotlin_test_file_detection_uses_paths_and_annotations() {
+        assert!(is_kotlin_test_file(
+            Path::new("src/test/kotlin/TraceCoverage.kt"),
+            "class TraceCoverage {}\n"
+        ));
+        assert!(is_kotlin_test_file(
+            Path::new("src/TraceCoverage.kt"),
+            "import org.junit.jupiter.api.Test\n\nclass TraceCoverage {\n    @Test\n    fun reqTraceKotlinTest() {}\n}\n"
+        ));
+        assert!(!is_kotlin_test_file(
+            Path::new("src/TraceCoverage.kt"),
+            "class TraceCoverage {\n    fun helper() {}\n}\n"
+        ));
     }
 
     #[test]
