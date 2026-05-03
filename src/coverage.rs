@@ -1515,8 +1515,10 @@ fn is_java_test_file(path: &Path, contents: &str) -> bool {
 }
 
 fn is_kotlin_test_file(path: &Path, contents: &str) -> bool {
-    let junit_annotation_regex = Regex::new(r"@(?:[\w.]+\.)?(?:Test|RepeatedTest|ParameterizedTest|TestFactory|TestTemplate)\b")
-        .expect("Kotlin test annotation regex should compile");
+    let junit_annotation_regex = Regex::new(
+        r"@(?:[\w.]+\.)?(?:Test|RepeatedTest|ParameterizedTest|TestFactory|TestTemplate)\b",
+    )
+    .expect("Kotlin test annotation regex should compile");
     path.file_name()
         .and_then(|name| name.to_str())
         .is_some_and(|name| name.ends_with("Test.kt") || name.ends_with("Tests.kt"))
@@ -1719,11 +1721,10 @@ mod tests {
         discover_csharp_targets, discover_go_targets, discover_java_targets,
         discover_java_targets_with_issues, discover_kotlin_targets, discover_python_targets,
         discover_rust_targets, discover_typescript_targets,
-        discover_typescript_targets_with_issues, go_files_under, java_files_under,
-        is_kotlin_test_file,
-        normalize_relative_path, normalized_symbol_trace_coverage_ignored_paths,
-        path_matches_ignored_generated_directory, python_files_under, kotlin_files_under,
-        record_scanned_file_relative_to_workspace, rust_files_under,
+        discover_typescript_targets_with_issues, go_files_under, is_kotlin_test_file,
+        java_files_under, kotlin_files_under, normalize_relative_path,
+        normalized_symbol_trace_coverage_ignored_paths, path_matches_ignored_generated_directory,
+        python_files_under, record_scanned_file_relative_to_workspace, rust_files_under,
         scanned_file_relative_to_workspace, typescript_files_under, validate_symbol_trace_coverage,
         validate_symbol_trace_coverage_with,
     };
@@ -2193,8 +2194,8 @@ mod tests {
         perm.set_mode(0o000);
         fs::set_permissions(&unreadable, perm).expect("set unreadable");
 
-        let targets = discover_kotlin_targets(&SyuConfig::default(), tempdir.path())
-            .expect("targets");
+        let targets =
+            discover_kotlin_targets(&SyuConfig::default(), tempdir.path()).expect("targets");
 
         let mut restore = fs::metadata(&unreadable).expect("meta").permissions();
         restore.set_mode(mode);
@@ -2216,8 +2217,8 @@ mod tests {
     fn discover_kotlin_targets_returns_empty_without_kotlin_files() {
         let tempdir = tempdir().expect("tempdir");
 
-        let targets = discover_kotlin_targets(&SyuConfig::default(), tempdir.path())
-            .expect("targets");
+        let targets =
+            discover_kotlin_targets(&SyuConfig::default(), tempdir.path()).expect("targets");
 
         assert!(targets.is_empty());
     }
@@ -2342,7 +2343,10 @@ mod tests {
             "class FeatureTraceService {\n    fun featureTraceKotlin() {\n        val temp = 1\n    }\n\n    val TRACE_LABEL = \"ok\"\n}\n",
         );
 
-        assert_eq!(symbols, vec!["FeatureTraceService", "TRACE_LABEL", "featureTraceKotlin"]);
+        assert_eq!(
+            symbols,
+            vec!["FeatureTraceService", "TRACE_LABEL", "featureTraceKotlin"]
+        );
     }
 
     #[test]
