@@ -150,7 +150,14 @@ jobs:
       - name: Include release installer
         if: matrix.target == 'x86_64-unknown-linux-gnu'
         shell: bash
-        run: cp scripts/install-syu.sh release-artifacts/install-syu.sh
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source = Path('scripts/install-syu.sh').read_text(encoding='utf-8')
+          rendered = source.replace('__SYU_RELEASE_TAG__', '${{ env.RELEASE_TAG }}')
+          Path('release-artifacts/install-syu.sh').write_text(rendered, encoding='utf-8')
+          PY
 
       - name: Generate SHA-256 checksums
         shell: bash

@@ -6,7 +6,7 @@ set -euo pipefail
 DEFAULT_REPOSITORY="ugoite/syu"
 DEFAULT_PACKAGE_HOST="ghcr.io"
 DEFAULT_PACKAGE_SCHEME="https"
-DEFAULT_VERSION_SELECTOR="alpha"
+DEFAULT_RELEASE_TAG="__SYU_RELEASE_TAG__"
 tmp_dir=""
 
 cleanup_tmp_dir() {
@@ -72,7 +72,7 @@ resolve_package_repository() {
 }
 
 normalize_version_selector() {
-  local version="${SYU_VERSION:-$DEFAULT_VERSION_SELECTOR}"
+  local version="${SYU_VERSION:-$(resolve_default_release_tag)}"
 
   case "$version" in
     latest | alpha | beta | stable)
@@ -85,6 +85,36 @@ normalize_version_selector() {
       printf 'v%s\n' "$version"
       ;;
   esac
+}
+
+resolve_default_release_tag() {
+  local script_dir repo_cargo_toml version
+
+  if [[ "$DEFAULT_RELEASE_TAG" != "__SYU_RELEASE_TAG__" ]]; then
+    printf '%s\n' "$DEFAULT_RELEASE_TAG"
+    return 0
+  fi
+
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  repo_cargo_toml="$(cd "$script_dir/.." && pwd)/Cargo.toml"
+  if [[ -f "$repo_cargo_toml" ]]; then
+    version="$(python3 - "$repo_cargo_toml" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+contents = Path(sys.argv[1]).read_text(encoding="utf-8")
+match = re.search(r'^version\s*=\s*"([^"]+)"\s*$', contents, re.MULTILINE)
+if not match:
+    raise SystemExit("failed to resolve version from Cargo.toml")
+print(f"v{match.group(1)}")
+PY
+)"
+    printf '%s\n' "$version"
+    return 0
+  fi
+
+  printf '%s\n' latest
 }
 
 resolve_target_triple() {

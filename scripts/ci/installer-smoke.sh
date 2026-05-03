@@ -12,6 +12,20 @@ cleanup() {
   fi
 }
 
+resolve_repo_release_tag() {
+  python3 - "$repo_root/Cargo.toml" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+contents = Path(sys.argv[1]).read_text(encoding="utf-8")
+match = re.search(r'^version\s*=\s*"([^"]+)"\s*$', contents, re.MULTILINE)
+if not match:
+    raise SystemExit("failed to resolve version from Cargo.toml")
+print(f"v{match.group(1)}")
+PY
+}
+
 resolve_target_triple() {
   local os_name arch_name
 
@@ -62,12 +76,14 @@ start_registry() {
   local mode="$1"
   local port="$2"
   local target="$3"
-  local server_log="$4"
+  local default_version="$4"
+  local server_log="$5"
 
   python3 -u "$repo_root/scripts/ci/mock_package_registry.py" \
     --mode "$mode" \
     --port "$port" \
     --target "$target" \
+    --default-version "$default_version" \
     --package-repository "test/syu" \
     >"$server_log" 2>&1 &
   mock_server_pid="$!"
@@ -102,7 +118,7 @@ run_install_case() {
   server_log="${temp_root}/registry.log"
   port="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
 
-  start_registry "$mode" "$port" "$target" "$server_log"
+  start_registry "$mode" "$port" "$target" "$expected_version" "$server_log"
   install_dir="${temp_root}/bin"
   installed_binary="${install_dir}/${binary_name}"
 
@@ -134,15 +150,7 @@ main() {
 
   target="$(resolve_target_triple)"
   binary_name="$(resolve_binary_name "$target")"
-  default_version="$(python3 - "$repo_root/scripts/ci/mock_package_registry.py" <<'PY'
-from pathlib import Path
-import runpy
-import sys
-
-module = runpy.run_path(Path(sys.argv[1]))
-print(module["DEFAULT_TAG"])
-PY
-)"
+  default_version="$(resolve_repo_release_tag)"
 
   run_install_case "prerelease" "latest" "v0.0.2-beta.1" "$target" "$binary_name"
   run_install_case "prerelease" "alpha" "v0.0.1-alpha.3" "$target" "$binary_name"
