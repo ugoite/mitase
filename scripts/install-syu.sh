@@ -120,6 +120,11 @@ PY
 resolve_target_triple() {
   local os_name arch_name
 
+  if [[ -n "${SYU_TARGET_TRIPLE:-}" ]]; then
+    printf '%s\n' "$SYU_TARGET_TRIPLE"
+    return 0
+  fi
+
   os_name="$(uname -s)"
   arch_name="$(uname -m)"
 

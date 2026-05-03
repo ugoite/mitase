@@ -131,6 +131,7 @@ run_install_case() {
     SYU_PACKAGE_HOST="127.0.0.1:${port}" \
     SYU_PACKAGE_REPOSITORY="test/syu" \
     SYU_INSTALL_DIR="$install_dir" \
+    SYU_TARGET_TRIPLE="$target" \
     "${selector_env[@]}" \
     bash "$repo_root/scripts/install-syu.sh"
 
