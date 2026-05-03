@@ -37,15 +37,15 @@ fn main() {
     fs::create_dir_all(&out_dir).expect("browser app dist directory should be creatable");
 
     let skip_browser_app_build = env::var_os("SYU_SKIP_BROWSER_APP_BUILD").is_some();
-    if !skip_browser_app_build {
-        if let Err(error) = required_npm_version(&app_dir).and_then(|required_npm| {
+    if !skip_browser_app_build
+        && let Err(error) = required_npm_version(&app_dir).and_then(|required_npm| {
             ensure_pinned_npm_ready(&manifest_dir, &app_dir)
                 .and_then(|_| ensure_app_dependencies(&app_dir, &required_npm))
                 .and_then(|_| rebuild_browser_wasm_bindings(&manifest_dir, &app_dir))
                 .and_then(|_| build_browser_bundle(&app_dir, &out_dir))
-        }) {
-            panic!("{error}");
-        }
+        })
+    {
+        panic!("{error}");
     }
 }
 
@@ -84,10 +84,10 @@ fn emit_git_watchers(manifest_dir: &Path) {
         watch_git_metadata(path, &mut watched);
     }
 
-    if let Some(path) = git_common_dir.as_deref() {
-        if Some(path) != git_dir.as_deref() {
-            watch_git_metadata(path, &mut watched);
-        }
+    if let Some(path) = git_common_dir.as_deref()
+        && Some(path) != git_dir.as_deref()
+    {
+        watch_git_metadata(path, &mut watched);
     }
 }
 
