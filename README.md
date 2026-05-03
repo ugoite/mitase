@@ -60,7 +60,8 @@ Pick the newcomer path that matches what you need next:
 - **Reviewer workflow**: open
   [`docs/guide/reviewer-workflow.md`](docs/guide/reviewer-workflow.md) when a
   PR already exists and you want one concrete loop for moving between spec IDs,
-  traced code, and recent Git history.
+  traced code, recent Git history, and the reviewer-focused `audit` / `report`
+  handoff.
 - **Contributor runtime setup**: open
   [`docs/guide/node-workflow.md`](docs/guide/node-workflow.md) when you are
   contributing to this repository and need one place to see which Node major
