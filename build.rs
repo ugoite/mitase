@@ -1,6 +1,7 @@
 // FEAT-APP-001
 
 use std::{
+    collections::BTreeSet,
     env, fs,
     path::{Path, PathBuf},
     process::Command,
@@ -16,12 +17,7 @@ fn main() {
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR")).join("syu-app-dist");
 
     println!("cargo:rerun-if-changed=build.rs");
-    if manifest_dir.join(".git").exists() {
-        println!(
-            "cargo:rerun-if-changed={}",
-            manifest_dir.join(".git").display()
-        );
-    }
+    emit_git_watchers(&manifest_dir);
     emit_watch(&manifest_dir.join("Cargo.lock"));
     emit_watch(&app_dir.join("index.html"));
     emit_watch(&app_dir.join("package.json"));
@@ -38,6 +34,7 @@ fn main() {
     emit_watch_recursive(&shared_core_dir.join("src"));
 
     emit_build_version();
+    fs::create_dir_all(&out_dir).expect("browser app dist directory should be creatable");
 
     let skip_browser_app_build = env::var_os("SYU_SKIP_BROWSER_APP_BUILD").is_some();
     if !skip_browser_app_build {
@@ -75,6 +72,35 @@ fn emit_watch_recursive(path: &Path) {
         } else {
             emit_watch(&child);
         }
+    }
+}
+
+fn emit_git_watchers(manifest_dir: &Path) {
+    let git_dir = git_dir(manifest_dir);
+    let git_common_dir = git_common_dir(manifest_dir);
+    let mut watched = BTreeSet::new();
+
+    if let Some(path) = git_dir.as_deref() {
+        watch_git_metadata(path, &mut watched);
+    }
+
+    if let Some(path) = git_common_dir.as_deref() {
+        if Some(path) != git_dir.as_deref() {
+            watch_git_metadata(path, &mut watched);
+        }
+    }
+}
+
+fn watch_git_metadata(path: &Path, watched: &mut BTreeSet<PathBuf>) {
+    for candidate in [path.join("HEAD"), path.join("packed-refs")] {
+        if watched.insert(candidate.clone()) {
+            emit_watch(&candidate);
+        }
+    }
+
+    let refs_dir = path.join("refs");
+    if watched.insert(refs_dir.clone()) {
+        emit_watch_recursive(&refs_dir);
     }
 }
 
@@ -360,6 +386,25 @@ fn default_wasm_target_dir_from_common_dir(
 fn git_common_dir(manifest_dir: &Path) -> Option<PathBuf> {
     let output = Command::new("git")
         .args(["rev-parse", "--git-common-dir"])
+        .current_dir(manifest_dir)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let raw = String::from_utf8(output.stdout).ok()?;
+    let path = PathBuf::from(raw.trim());
+    Some(if path.is_absolute() {
+        path
+    } else {
+        manifest_dir.join(path)
+    })
+}
+
+fn git_dir(manifest_dir: &Path) -> Option<PathBuf> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--git-dir"])
         .current_dir(manifest_dir)
         .output()
         .ok()?;
