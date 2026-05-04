@@ -51,6 +51,7 @@ struct CoverageDiscoverers {
     go: DiscoveryWithIssuesFn,
     java: DiscoveryWithIssuesFn,
     csharp: DiscoveryWithIssuesFn,
+    kotlin: DiscoveryWithIssuesFn,
     typescript: DiscoveryWithIssuesFn,
 }
 
@@ -64,6 +65,7 @@ pub fn validate_symbol_trace_coverage(workspace: &Workspace, issues: &mut Vec<Is
             go: discover_go_targets_with_issues,
             java: discover_java_targets_with_issues,
             csharp: discover_csharp_targets_with_issues,
+            kotlin: discover_kotlin_targets_with_issues,
             typescript: discover_typescript_targets_with_issues,
         },
     );
@@ -123,6 +125,17 @@ fn validate_symbol_trace_coverage_with(
     }
 
     match (discoverers.csharp)(&workspace.config, &workspace.root) {
+        Ok(output) => {
+            issues.extend(output.issues);
+            targets.extend(output.targets);
+        }
+        Err(issue) => {
+            issues.push(*issue);
+            return;
+        }
+    }
+
+    match (discoverers.kotlin)(&workspace.config, &workspace.root) {
         Ok(output) => {
             issues.extend(output.issues);
             targets.extend(output.targets);
@@ -1011,6 +1024,80 @@ fn discover_csharp_targets_with_issues(
     Ok(DiscoveryOutput { targets, issues })
 }
 
+#[cfg(test)]
+fn discover_kotlin_targets(
+    config: &SyuConfig,
+    root: &Path,
+) -> Result<Vec<CoverageTarget>, Box<Issue>> {
+    Ok(discover_kotlin_targets_with_issues(config, root)?.targets)
+}
+
+fn discover_kotlin_targets_with_issues(
+    config: &SyuConfig,
+    root: &Path,
+) -> Result<DiscoveryOutput, Box<Issue>> {
+    let ignored_paths = normalized_symbol_trace_coverage_ignored_paths(config);
+    let mut files = kotlin_files_under(root, &root.join("src"), &ignored_paths)?;
+    let test_files = kotlin_files_under(root, &root.join("tests"), &ignored_paths)?;
+    files.extend(test_files);
+    files.sort();
+
+    if files.is_empty() {
+        return Ok(DiscoveryOutput::default());
+    }
+
+    let mut targets = Vec::new();
+    let mut issues = Vec::new();
+    for path in files {
+        let contents = match fs::read_to_string(&path) {
+            Ok(contents) => contents,
+            Err(_) => continue,
+        };
+
+        with_scanned_file_relative_to_workspace(root, &path, &mut issues, |relative| {
+            if is_kotlin_test_file(&path, &contents) {
+                for symbol in collect_kotlin_test_symbols(&contents) {
+                    targets.push(CoverageTarget {
+                        file: relative.clone(),
+                        symbol,
+                        kind: CoverageTargetKind::TestSymbol,
+                    });
+                }
+            } else {
+                for symbol in collect_kotlin_public_symbols(&contents) {
+                    targets.push(CoverageTarget {
+                        file: relative.clone(),
+                        symbol,
+                        kind: CoverageTargetKind::PublicSymbol,
+                    });
+                }
+            }
+        });
+    }
+
+    targets.sort_by(|left, right| {
+        (
+            left.file.as_os_str(),
+            left.symbol.as_str(),
+            match left.kind {
+                CoverageTargetKind::PublicSymbol => 0,
+                CoverageTargetKind::TestSymbol => 1,
+            },
+        )
+            .cmp(&(
+                right.file.as_os_str(),
+                right.symbol.as_str(),
+                match right.kind {
+                    CoverageTargetKind::PublicSymbol => 0,
+                    CoverageTargetKind::TestSymbol => 1,
+                },
+            ))
+    });
+    targets.dedup();
+
+    Ok(DiscoveryOutput { targets, issues })
+}
+
 fn collect_java_public_symbols(contents: &str) -> Vec<String> {
     let type_regex = Regex::new(
         r"(?m)^\s*public\s+(?:static\s+)?(?:sealed\s+|non-sealed\s+|abstract\s+|final\s+)?(?:class|interface|enum|record)\s+(?P<name>[A-Z][A-Za-z0-9_]*)\b",
@@ -1055,6 +1142,47 @@ fn collect_java_public_symbols(contents: &str) -> Vec<String> {
     symbols.into_iter().collect()
 }
 
+fn collect_kotlin_public_symbols(contents: &str) -> Vec<String> {
+    let type_regex = Regex::new(
+        r"(?m)^[ \t]{0,4}(?:public\s+)?(?:abstract\s+|final\s+|sealed\s+|data\s+|enum\s+|annotation\s+)?(?:class|interface|object)\s+(?P<name>[A-Z][A-Za-z0-9_]*)\b",
+    )
+    .expect("Kotlin type regex should compile");
+    let function_regex = Regex::new(
+        r"(?m)^[ \t]{0,4}(?:public\s+)?(?:suspend\s+)?fun\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\b",
+    )
+    .expect("Kotlin function regex should compile");
+    let property_regex = Regex::new(
+        r"(?m)^[ \t]{0,4}(?:public\s+)?(?:const\s+)?(?:val|var)\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\b",
+    )
+    .expect("Kotlin property regex should compile");
+    let typealias_regex =
+        Regex::new(r"(?m)^[ \t]{0,4}(?:public\s+)?typealias\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\b")
+            .expect("Kotlin typealias regex should compile");
+
+    let mut symbols = BTreeSet::new();
+    for captures in type_regex.captures_iter(contents) {
+        if let Some(name) = captures.name("name") {
+            symbols.insert(name.as_str().to_string());
+        }
+    }
+    for captures in function_regex.captures_iter(contents) {
+        if let Some(name) = captures.name("name") {
+            symbols.insert(name.as_str().to_string());
+        }
+    }
+    for captures in property_regex.captures_iter(contents) {
+        if let Some(name) = captures.name("name") {
+            symbols.insert(name.as_str().to_string());
+        }
+    }
+    for captures in typealias_regex.captures_iter(contents) {
+        if let Some(name) = captures.name("name") {
+            symbols.insert(name.as_str().to_string());
+        }
+    }
+    symbols.into_iter().collect()
+}
+
 fn collect_java_test_symbols(contents: &str) -> Vec<String> {
     let annotation_regex = Regex::new(
         r"(?ms)@(?:[\w.]+\.)?Test(?:\s*\([^)]*\))?\s*(?:(?:\r?\n\s*)*@[\w.]+(?:\s*\([^)]*\))?\s*)*(?:\r?\n\s*)*(?:public|protected|private)?\s*(?:static\s+)?(?:final\s+)?(?:<[^>{}]+>\s*)?(?:void|[\w\[\]<>?,]+)\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(",
@@ -1070,6 +1198,30 @@ fn collect_java_test_symbols(contents: &str) -> Vec<String> {
         }
     }
     for captures in legacy_regex.captures_iter(contents) {
+        if let Some(name) = captures.name("name") {
+            symbols.insert(name.as_str().to_string());
+        }
+    }
+    symbols.into_iter().collect()
+}
+
+fn collect_kotlin_test_symbols(contents: &str) -> Vec<String> {
+    let annotation_regex = Regex::new(
+        r"(?ms)@(?:[\w.]+\.)?(?:Test|RepeatedTest|ParameterizedTest|TestFactory)(?:\s*\([^)]*\))?\s*(?:(?:\r?\n\s*)*@[\w.]+(?:\s*\([^)]*\))?\s*)*(?:\r?\n\s*)*(?:public\s+)?(?:suspend\s+)?fun\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(",
+    )
+    .expect("Kotlin test annotation regex should compile");
+    let file_name_regex = Regex::new(
+        r"(?m)^\s*(?:public\s+)?(?:suspend\s+)?fun\s+(?P<name>(?:test|Test)[A-Za-z0-9_]*)\s*\(",
+    )
+    .expect("Kotlin test function regex should compile");
+
+    let mut symbols = BTreeSet::new();
+    for captures in annotation_regex.captures_iter(contents) {
+        if let Some(name) = captures.name("name") {
+            symbols.insert(name.as_str().to_string());
+        }
+    }
+    for captures in file_name_regex.captures_iter(contents) {
         if let Some(name) = captures.name("name") {
             symbols.insert(name.as_str().to_string());
         }
@@ -1322,6 +1474,32 @@ fn csharp_files_under(
                 ),
                 Some("Fix the directory layout or disable `validate.require_symbol_trace_coverage` until the workspace can be scanned.".to_string()),
             ))
+    })?;
+    Ok(files)
+}
+
+fn kotlin_files_under(
+    workspace_root: &Path,
+    root: &Path,
+    ignored_paths: &BTreeSet<PathBuf>,
+) -> Result<Vec<PathBuf>, Box<Issue>> {
+    if !root.exists() {
+        return Ok(Vec::new());
+    }
+
+    let mut files = Vec::new();
+    collect_files_recursive_by_extension(workspace_root, root, "kt", ignored_paths, &mut files)
+        .map_err(|error| {
+            Box::new(Issue::error(
+                "SYU-coverage-walk-001",
+                "trace coverage inventory",
+                Some(root.display().to_string()),
+                format!(
+                    "Failed to walk `{}` while building trace coverage inventory: {error}",
+                    root.display()
+                ),
+                Some("Fix the directory layout or disable `validate.require_symbol_trace_coverage` until the workspace can be scanned.".to_string()),
+            ))
         })?;
     Ok(files)
 }
@@ -1334,6 +1512,20 @@ fn is_java_test_file(path: &Path, contents: &str) -> bool {
         .is_some_and(|name| name.ends_with("Test.java") || name.ends_with("Tests.java"))
         || junit_annotation_regex.is_match(contents)
         || contents.contains("extends TestCase")
+}
+
+fn is_kotlin_test_file(path: &Path, contents: &str) -> bool {
+    let junit_annotation_regex = Regex::new(
+        r"@(?:[\w.]+\.)?(?:Test|RepeatedTest|ParameterizedTest|TestFactory|TestTemplate)\b",
+    )
+    .expect("Kotlin test annotation regex should compile");
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.ends_with("Test.kt") || name.ends_with("Tests.kt"))
+        || path
+            .components()
+            .any(|component| matches!(component.as_os_str().to_str(), Some("test" | "tests")))
+        || junit_annotation_regex.is_match(contents)
 }
 
 fn typescript_files_under(
@@ -1524,13 +1716,15 @@ mod tests {
         CoverageDiscoverers, CoverageTargetKind, DiscoveryOutput, collect_csharp_public_symbols,
         collect_csharp_test_symbols, collect_feature_coverage,
         collect_files_recursive_by_extension, collect_go_public_symbols, collect_go_test_symbols,
-        collect_java_public_symbols, collect_java_test_symbols, collect_requirement_coverage,
-        csharp_files_under, discover_csharp_targets, discover_go_targets, discover_java_targets,
-        discover_java_targets_with_issues, discover_python_targets, discover_rust_targets,
-        discover_typescript_targets, discover_typescript_targets_with_issues, go_files_under,
-        java_files_under, normalize_relative_path, normalized_symbol_trace_coverage_ignored_paths,
-        path_matches_ignored_generated_directory, python_files_under,
-        record_scanned_file_relative_to_workspace, rust_files_under,
+        collect_java_public_symbols, collect_java_test_symbols, collect_kotlin_public_symbols,
+        collect_kotlin_test_symbols, collect_requirement_coverage, csharp_files_under,
+        discover_csharp_targets, discover_go_targets, discover_java_targets,
+        discover_java_targets_with_issues, discover_kotlin_targets, discover_python_targets,
+        discover_rust_targets, discover_typescript_targets,
+        discover_typescript_targets_with_issues, go_files_under, is_kotlin_test_file,
+        java_files_under, kotlin_files_under, normalize_relative_path,
+        normalized_symbol_trace_coverage_ignored_paths, path_matches_ignored_generated_directory,
+        python_files_under, record_scanned_file_relative_to_workspace, rust_files_under,
         scanned_file_relative_to_workspace, typescript_files_under, validate_symbol_trace_coverage,
         validate_symbol_trace_coverage_with,
     };
@@ -1720,6 +1914,7 @@ mod tests {
                 go: no_targets,
                 java: no_java_targets,
                 csharp: no_targets,
+                kotlin: no_targets,
                 typescript: no_targets,
             },
         );
@@ -1728,6 +1923,53 @@ mod tests {
         assert_eq!(issues[0].code, "SYU-coverage-path-001");
         assert_eq!(issues[1].code, "SYU-coverage-public-001");
         assert!(issues[1].message.contains("KeptApi"));
+    }
+
+    #[test]
+    fn validate_symbol_trace_coverage_keeps_scanning_after_kotlin_discovery_issue() {
+        let tempdir = tempdir().expect("tempdir");
+        let mut config = SyuConfig::default();
+        config.validate.require_symbol_trace_coverage = true;
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("docs/syu"),
+            config,
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+
+        let mut issues = Vec::new();
+        validate_symbol_trace_coverage_with(
+            &workspace,
+            &mut issues,
+            CoverageDiscoverers {
+                rust: no_targets,
+                python: no_targets,
+                go: no_targets,
+                java: no_java_targets,
+                csharp: no_targets,
+                kotlin: |_config, _root| {
+                    Err(Box::new(Issue::error(
+                        "SYU-coverage-walk-001",
+                        "trace coverage inventory",
+                        Some("src".to_string()),
+                        "Failed to walk `src` while building trace coverage inventory: not a directory"
+                            .to_string(),
+                        Some(
+                            "Fix the directory layout or disable `validate.require_symbol_trace_coverage` until the workspace can be scanned."
+                                .to_string(),
+                        ),
+                    )))
+                },
+                typescript: no_targets,
+            },
+        );
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].code, "SYU-coverage-walk-001");
+        assert!(issues[0].message.contains("trace coverage inventory"));
     }
 
     #[test]
@@ -1865,6 +2107,137 @@ mod tests {
     }
 
     #[test]
+    fn discover_kotlin_targets_collects_public_symbols_and_tests() {
+        let tempdir = tempdir().expect("tempdir");
+        fs::create_dir_all(tempdir.path().join("src")).expect("src");
+        fs::create_dir_all(tempdir.path().join("tests")).expect("tests");
+        fs::write(
+            tempdir.path().join("src/FeatureTrace.kt"),
+            "package trace\n\nclass FeatureTraceService\ninterface FeatureTraceApi\nobject FeatureTraceRegistry\ndata class FeatureTraceRecord(val value: String)\ntypealias FeatureTraceAlias = String\nfun featureTraceKotlin() = \"ok\"\nval TRACE_LABEL = \"ok\"\n",
+        )
+        .expect("kotlin source");
+        fs::write(
+            tempdir.path().join("src/FeatureTraceTest.kt"),
+            "import org.junit.jupiter.api.Test\n\nclass FeatureTraceTest {\n    @Test\n    fun reqTraceKotlinTest() {}\n}\n",
+        )
+        .expect("kotlin src test");
+        fs::write(
+            tempdir.path().join("tests/TraceabilityTests.kt"),
+            "import org.junit.jupiter.api.Test\n\nclass TraceabilityTests {\n    @Test\n    fun reqTraceKotlinIntegration() {}\n\n    fun helper() {}\n}\n",
+        )
+        .expect("kotlin tests");
+
+        let targets =
+            discover_kotlin_targets(&SyuConfig::default(), tempdir.path()).expect("targets");
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("src/FeatureTrace.kt")
+                && target.symbol == "FeatureTraceService"
+                && target.kind == CoverageTargetKind::PublicSymbol
+        }));
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("src/FeatureTrace.kt")
+                && target.symbol == "FeatureTraceApi"
+                && target.kind == CoverageTargetKind::PublicSymbol
+        }));
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("src/FeatureTrace.kt")
+                && target.symbol == "FeatureTraceRegistry"
+                && target.kind == CoverageTargetKind::PublicSymbol
+        }));
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("src/FeatureTrace.kt")
+                && target.symbol == "FeatureTraceRecord"
+                && target.kind == CoverageTargetKind::PublicSymbol
+        }));
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("src/FeatureTrace.kt")
+                && target.symbol == "FeatureTraceAlias"
+                && target.kind == CoverageTargetKind::PublicSymbol
+        }));
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("src/FeatureTrace.kt")
+                && target.symbol == "featureTraceKotlin"
+                && target.kind == CoverageTargetKind::PublicSymbol
+        }));
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("src/FeatureTrace.kt")
+                && target.symbol == "TRACE_LABEL"
+                && target.kind == CoverageTargetKind::PublicSymbol
+        }));
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("src/FeatureTraceTest.kt")
+                && target.symbol == "reqTraceKotlinTest"
+                && target.kind == CoverageTargetKind::TestSymbol
+        }));
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("tests/TraceabilityTests.kt")
+                && target.symbol == "reqTraceKotlinIntegration"
+                && target.kind == CoverageTargetKind::TestSymbol
+        }));
+        assert!(!targets.iter().any(|target| target.symbol == "helper"));
+    }
+
+    #[test]
+    fn discover_kotlin_targets_skips_unreadable_kotlin_files() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tempdir = tempdir().expect("tempdir");
+        let src_dir = tempdir.path().join("src");
+        fs::create_dir_all(&src_dir).expect("src dir");
+        let readable = src_dir.join("Owned.kt");
+        let unreadable = src_dir.join("Hidden.kt");
+        fs::write(&readable, "class Owned\n").expect("readable kotlin file");
+        fs::write(&unreadable, "class Hidden\n").expect("unreadable kotlin file");
+
+        let mut perm = fs::metadata(&unreadable).expect("meta").permissions();
+        let mode = perm.mode();
+        perm.set_mode(0o000);
+        fs::set_permissions(&unreadable, perm).expect("set unreadable");
+
+        let targets =
+            discover_kotlin_targets(&SyuConfig::default(), tempdir.path()).expect("targets");
+
+        let mut restore = fs::metadata(&unreadable).expect("meta").permissions();
+        restore.set_mode(mode);
+        fs::set_permissions(&unreadable, restore).expect("restore");
+
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("src/Owned.kt")
+                && target.symbol == "Owned"
+                && target.kind == CoverageTargetKind::PublicSymbol
+        }));
+        assert!(
+            !targets
+                .iter()
+                .any(|target| target.file == Path::new("src/Hidden.kt"))
+        );
+    }
+
+    #[test]
+    fn discover_kotlin_targets_returns_empty_without_kotlin_files() {
+        let tempdir = tempdir().expect("tempdir");
+
+        let targets =
+            discover_kotlin_targets(&SyuConfig::default(), tempdir.path()).expect("targets");
+
+        assert!(targets.is_empty());
+    }
+
+    #[test]
+    fn kotlin_files_under_reports_directory_errors() {
+        let tempdir = tempdir().expect("tempdir");
+        let file_root = tempdir.path().join("Trace.kt");
+        let file_root_display = file_root.display().to_string();
+        fs::write(&file_root, "class Trace\n").expect("file");
+        let err = kotlin_files_under(tempdir.path(), &file_root, &BTreeSet::new())
+            .expect_err("file roots should fail");
+
+        assert_eq!(err.code, "SYU-coverage-walk-001");
+        assert_eq!(err.location.as_deref(), Some(file_root_display.as_str()));
+        assert!(err.message.contains("Trace.kt"));
+    }
+
+    #[test]
     fn discover_java_targets_skips_unreadable_java_files() {
         use std::os::unix::fs::PermissionsExt;
 
@@ -1942,6 +2315,70 @@ mod tests {
         );
 
         assert_eq!(symbols, vec!["qualifiedTest"]);
+    }
+
+    #[test]
+    fn collect_kotlin_public_symbols_covers_top_level_kinds() {
+        let symbols = collect_kotlin_public_symbols(
+            "package trace\n\nclass FeatureTraceService\ninterface FeatureTraceApi\nobject FeatureTraceRegistry\ndata class FeatureTraceRecord(val value: String)\ntypealias FeatureTraceAlias = String\nfun featureTraceKotlin() = \"ok\"\nval TRACE_LABEL = \"ok\"\n",
+        );
+
+        assert_eq!(
+            symbols,
+            vec![
+                "FeatureTraceAlias",
+                "FeatureTraceApi",
+                "FeatureTraceRecord",
+                "FeatureTraceRegistry",
+                "FeatureTraceService",
+                "TRACE_LABEL",
+                "featureTraceKotlin",
+            ]
+        );
+    }
+
+    #[test]
+    fn collect_kotlin_public_symbols_skips_locals_inside_functions() {
+        let symbols = collect_kotlin_public_symbols(
+            "class FeatureTraceService {\n    fun featureTraceKotlin() {\n        val temp = 1\n    }\n\n    val TRACE_LABEL = \"ok\"\n}\n",
+        );
+
+        assert_eq!(
+            symbols,
+            vec!["FeatureTraceService", "TRACE_LABEL", "featureTraceKotlin"]
+        );
+    }
+
+    #[test]
+    fn collect_kotlin_test_symbols_covers_annotations_and_test_prefixes() {
+        let symbols = collect_kotlin_test_symbols(
+            "import org.junit.jupiter.api.Test\nimport org.junit.jupiter.api.RepeatedTest\n\nclass TraceabilityTests {\n    @Test\n    fun reqTraceKotlinTest() {}\n\n    @RepeatedTest(2)\n    fun reqTraceKotlinRepeat() {}\n\n    fun testLegacyTrace() {}\n}\n",
+        );
+
+        assert_eq!(
+            symbols,
+            vec![
+                "reqTraceKotlinRepeat",
+                "reqTraceKotlinTest",
+                "testLegacyTrace",
+            ]
+        );
+    }
+
+    #[test]
+    fn kotlin_test_file_detection_uses_paths_and_annotations() {
+        assert!(is_kotlin_test_file(
+            Path::new("src/test/kotlin/TraceCoverage.kt"),
+            "class TraceCoverage {}\n"
+        ));
+        assert!(is_kotlin_test_file(
+            Path::new("src/TraceCoverage.kt"),
+            "import org.junit.jupiter.api.Test\n\nclass TraceCoverage {\n    @Test\n    fun reqTraceKotlinTest() {}\n}\n"
+        ));
+        assert!(!is_kotlin_test_file(
+            Path::new("src/TraceCoverage.kt"),
+            "class TraceCoverage {\n    fun helper() {}\n}\n"
+        ));
     }
 
     #[test]
@@ -2726,6 +3163,7 @@ mod tests {
                 go: no_targets,
                 java: no_java_targets,
                 csharp: no_targets,
+                kotlin: no_targets,
                 typescript: discover_typescript_targets_with_issues,
             },
         );
@@ -2767,6 +3205,7 @@ mod tests {
                 },
                 java: discover_java_targets_with_issues,
                 csharp: no_targets,
+                kotlin: no_targets,
                 typescript: discover_typescript_targets_with_issues,
             },
         );
@@ -2808,6 +3247,7 @@ mod tests {
                     )))
                 },
                 csharp: no_targets,
+                kotlin: no_targets,
                 typescript: discover_typescript_targets_with_issues,
             },
         );
@@ -2849,6 +3289,7 @@ mod tests {
                         None,
                     )))
                 },
+                kotlin: no_targets,
                 typescript: discover_typescript_targets_with_issues,
             },
         );
@@ -2882,6 +3323,7 @@ mod tests {
                 go: no_targets,
                 java: no_java_targets,
                 csharp: no_targets,
+                kotlin: no_targets,
                 typescript: |_config, _root| {
                     Err(Box::new(crate::model::Issue::error(
                         "SYU-coverage-walk-001",
