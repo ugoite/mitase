@@ -238,8 +238,8 @@ current name.
 ### `SYU-trace-language-001` — unsupported trace adapter
 
 **What it means:** The `lang:` key does not match any built-in adapter. Today
-`syu` ships Rust, Python, Go, Java, C#, TypeScript / JavaScript, Shell, YAML,
-JSON, Markdown, and Gitignore adapters.
+`syu` ships Rust, Python, Go, Java, C#, Kotlin, TypeScript / JavaScript, Shell,
+YAML, JSON, Markdown, and Gitignore adapters.
 
 **Fix:** Change the trace to one of those built-in language aliases, or check
 the [trace adapter capability matrix](./trace-adapter-support.md) before you

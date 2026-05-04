@@ -24,6 +24,7 @@ enable strict coverage in a mixed-language repository.
 | Go | `go`, `golang`, `gotest` / `.go` | ✅ Rich doc-comment inspection plus pattern fallback | ✅ | ✅ |
 | Java | `java`, `junit` / `.java` | ✅ Pattern-based symbol matching | ❌ | ✅ |
 | C# | `csharp`, `cs`, `dotnet`, `xunit`, `nunit`, `mstest` / `.cs` | ✅ Pattern-based symbol matching | ❌ | ✅ |
+| Kotlin | `kotlin`, `kt` / `.kt` | ✅ Pattern-based symbol matching | ❌ | ✅ |
 | TypeScript / JavaScript | `typescript`, `ts`, `tsx`, `javascript`, `js`, `jsx`, `vitest`, `bun`, `bun-test` / `.ts`, `.tsx`, `.js`, `.jsx` | ✅ Rich symbol inspection plus pattern fallback | ✅ | ✅ |
 | Shell | `shell`, `sh`, `bash`, `zsh` / `.sh`, `.bash`, `.zsh` | ✅ Pattern-based symbol matching | ❌ | ❌ |
 | YAML | `yaml`, `yml` / `.yaml`, `.yml` | ✅ Pattern-based symbol matching | ❌ | ❌ |
@@ -60,7 +61,7 @@ they do **not** participate in the repository-wide strict ownership scan.
 - Need `doc_contains`? Rust, Python, Go, and TypeScript / JavaScript traces all
   support it today. For a staged rollout, starter examples, and "when should I
   add this?" guidance, use the [dedicated `doc_contains` adoption guide](./doc-contains.md).
-- Need strict ownership coverage? Rust, Python, Go, Java, C#, and
+- Need strict ownership coverage? Rust, Python, Go, Java, C#, Kotlin, and
   TypeScript / JavaScript all participate today.
 - Using Ruby, Shell, YAML, JSON, Markdown, or Gitignore traces? Keep the mapping to
   `file` + `symbols` (or `symbols: ["*"]` when one file intentionally belongs
@@ -76,7 +77,7 @@ because `symbols: ["*"]` does not point to one inspectable symbol.
 
 ## What about unsupported languages?
 
-Unsupported adapters such as `kotlin` still raise `SYU-trace-language-001`.
+Unsupported adapters still raise `SYU-trace-language-001`.
 Keep those repositories connected through the spec layers first, and only add
 language-specific code traces once adapter support lands.
 If you are adopting `syu` in a mixed-language repository today, use this staged
@@ -94,10 +95,9 @@ path instead of waiting for perfect adapter coverage:
 
 When you need a concrete fallback shape, start from the closest checked-in
 example instead of inventing a migration path from scratch. For Kotlin/JVM
-repositories, start from `examples/java-only` when you need a repository shape
-that already demonstrates JVM package layout and explicit symbol ownership, then
-keep the Kotlin source connected through philosophy, policy, requirement, and
-feature layers until Kotlin adapter support lands.
+repositories, start from `examples/java-only` when you want a JVM-shaped
+repository layout, then trace Kotlin source directly with the `kotlin` / `.kt`
+adapter alongside the philosophy, policy, requirement, and feature layers.
 If you need a Go-first starting point today, study the
 [`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
 or scaffold `syu init . --template go-only`. Both keep real Go files in the
