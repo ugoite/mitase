@@ -26,13 +26,7 @@ TARGETS = {
 
 TAG_SETS = {
     "prerelease": ["v0.0.1-alpha.2", "v0.0.1-alpha.3", "v0.0.2-beta.1"],
-    "mixed": [
-        "v0.0.1-alpha.2",
-        "v0.0.1-alpha.3",
-        "v0.0.1-alpha.8",
-        "v0.0.2-beta.1",
-        "v0.0.2",
-    ],
+    "mixed": ["v0.0.1-alpha.2", "v0.0.1-alpha.3", "v0.0.2-beta.1", "v0.0.2"],
 }
 DEFAULT_TAG = TAG_SETS["mixed"][2]
 
@@ -67,10 +61,17 @@ def sha256_digest(content: bytes) -> str:
 
 
 def build_artifacts(
-    package_repository: str, mode: str, target_filter: str | None
+    package_repository: str,
+    mode: str,
+    target_filter: str | None,
+    default_version: str | None,
 ) -> Dict[str, Artifact]:
     artifacts: Dict[str, Artifact] = {}
-    for version in TAG_SETS[mode]:
+    versions = list(TAG_SETS[mode])
+    if default_version is not None and default_version not in versions:
+        versions.append(default_version)
+
+    for version in versions:
         for target, binary_name in TARGETS.items():
             if target_filter is not None and target != target_filter:
                 continue
@@ -123,7 +124,12 @@ def build_artifacts(
     return artifacts
 
 
-def build_handler(package_repository: str, mode: str, target_filter: str | None):
+def build_handler(
+    package_repository: str,
+    mode: str,
+    target_filter: str | None,
+    default_version: str | None,
+):
     repository_prefix = f"/v2/{package_repository}"
     artifacts: Dict[str, Artifact] | None = None
     artifact_lock = threading.Lock()
@@ -133,7 +139,9 @@ def build_handler(package_repository: str, mode: str, target_filter: str | None)
         if artifacts is None:
             with artifact_lock:
                 if artifacts is None:
-                    artifacts = build_artifacts(package_repository, mode, target_filter)
+                    artifacts = build_artifacts(
+                        package_repository, mode, target_filter, default_version
+                    )
         return artifacts
 
     class RegistryHandler(BaseHTTPRequestHandler):
@@ -196,9 +204,15 @@ def main() -> None:
     parser.add_argument("--mode", choices=sorted(TAG_SETS), default="mixed")
     parser.add_argument("--port", type=int)
     parser.add_argument("--target")
+    parser.add_argument("--default-version")
     args = parser.parse_args()
 
-    handler = build_handler(args.package_repository, args.mode, args.target)
+    handler = build_handler(
+        args.package_repository,
+        args.mode,
+        args.target,
+        args.default_version,
+    )
     server = ThreadingHTTPServer(("127.0.0.1", args.port or 0), handler)
 
     try:
