@@ -86,7 +86,7 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
           - Set up Python with pip cache
           - cache-dependency-path: app/package-lock.json
           - Cache pre-commit hooks
-          - actions/cache@v4
+          - actions/cache@v5
           - ~/.cache/pre-commit
           - scripts/ci/pinned-npm.sh install app
           - scripts/ci/pinned-npm.sh install website
@@ -201,7 +201,7 @@ features:
             - Set up Python with pip cache
             - "cache-dependency-path: app/package-lock.json"
             - Cache pre-commit hooks
-            - actions/cache@v4
+            - actions/cache@v5
             - "~/.cache/pre-commit"
             - scripts/ci/pinned-npm.sh install app
             - scripts/ci/pinned-npm.sh install website

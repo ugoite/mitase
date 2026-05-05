@@ -1123,7 +1123,7 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(ci_workflow.contains("cache: pip"));
     assert!(ci_workflow.contains("cache-dependency-path: .pre-commit-config.yaml"));
     assert!(ci_workflow.contains("Cache pre-commit hooks"));
-    assert!(ci_workflow.contains("actions/cache@v4"));
+    assert!(ci_workflow.contains("actions/cache@v5"));
     assert!(ci_workflow.contains("~/.cache/pre-commit"));
     assert!(ci_workflow.contains("cache-dependency-path: app/package-lock.json"));
     assert!(ci_workflow.contains("Set up Rust for quality gates"));
