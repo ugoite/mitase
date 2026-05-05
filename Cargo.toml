@@ -14,7 +14,7 @@ categories = ["command-line-utilities", "development-tools"]
 anyhow = "1.0.100"
 axum = "0.8.9"
 clap = { version = "4.6.1", features = ["derive"] }
-clap_complete = "4.5.60"
+clap_complete = "4.6.3"
 include_dir = "0.7.4"
 regex = "1.12.2"
 serde = { version = "1.0.228", features = ["derive"] }
