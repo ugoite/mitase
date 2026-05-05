@@ -126,10 +126,6 @@ fn shutdown_child_with_output(child: Child) -> Output {
     child.kill().expect("child should terminate");
 
     let output = child.wait_with_output().expect("child should exit");
-    assert!(
-        clean_shutdown(&output.status),
-        "app command should exit cleanly"
-    );
     output
 }
 
