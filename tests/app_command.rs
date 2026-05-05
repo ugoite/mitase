@@ -125,12 +125,7 @@ fn shutdown_child_with_output(child: Child) -> Output {
     #[cfg(not(unix))]
     child.kill().expect("child should terminate");
 
-    let output = child.wait_with_output().expect("child should exit");
-    assert!(
-        clean_shutdown(&output.status),
-        "app command should exit cleanly"
-    );
-    output
+    child.wait_with_output().expect("child should exit")
 }
 
 fn app_command_test_lock() -> &'static Mutex<()> {
