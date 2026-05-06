@@ -103,7 +103,7 @@ impl AutofixTransaction {
             match original {
                 Some(contents) => fs::write(path, contents)?,
                 None => {
-                    let _ = fs::remove_file(path);
+                    fs::remove_file(path)?;
                 }
             }
         }
@@ -5369,6 +5369,22 @@ mod tests {
             .expect("rollback should delete newly created file");
 
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn autofix_transaction_reports_delete_failures() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let path = tempdir.path().join("trace.rs");
+        fs::write(&path, "pub fn expected() {}\n").expect("trace file should exist");
+
+        let mut transaction = AutofixTransaction::default();
+        transaction.backups.insert(path.clone(), None);
+
+        fs::remove_file(&path).expect("file should be removable");
+        fs::create_dir(&path).expect("directory should be creatable");
+
+        let error = transaction.rollback().expect_err("rollback should fail");
+        assert!(error.downcast_ref::<std::io::Error>().is_some());
     }
 
     #[cfg(unix)]
