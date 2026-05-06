@@ -8,7 +8,7 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::Serialize;
 
 use crate::{
@@ -733,13 +733,7 @@ fn apply_autofix(workspace: &Workspace) -> Result<AutofixSummary> {
             &mut summary,
             &mut transaction,
         ) {
-            if transaction.committed_writes() > 0 {
-                transaction.rollback().with_context(|| {
-                    format!("failed to roll back autofix changes after {error}")
-                })?;
-                return Err(error).context("autofix rolled back partial changes");
-            }
-            return Err(error).context("autofix failed before applying changes");
+            return Err(finalize_autofix_error(&transaction, error));
         }
     }
 
@@ -755,17 +749,24 @@ fn apply_autofix(workspace: &Workspace) -> Result<AutofixSummary> {
             &mut summary,
             &mut transaction,
         ) {
-            if transaction.committed_writes() > 0 {
-                transaction.rollback().with_context(|| {
-                    format!("failed to roll back autofix changes after {error}")
-                })?;
-                return Err(error).context("autofix rolled back partial changes");
-            }
-            return Err(error).context("autofix failed before applying changes");
+            return Err(finalize_autofix_error(&transaction, error));
         }
     }
 
     Ok(summary)
+}
+
+fn finalize_autofix_error(transaction: &AutofixTransaction, error: anyhow::Error) -> anyhow::Error {
+    if transaction.committed_writes() > 0 {
+        match transaction.rollback() {
+            Ok(()) => anyhow::anyhow!("autofix rolled back partial changes: {error}"),
+            Err(rollback_error) => anyhow::anyhow!(
+                "failed to roll back autofix changes after {error}: {rollback_error}"
+            ),
+        }
+    } else {
+        anyhow::anyhow!("autofix failed before applying changes: {error}")
+    }
 }
 
 #[allow(clippy::question_mark, dead_code)]
@@ -2792,16 +2793,17 @@ mod tests {
     };
 
     use super::{
-        FilteredIssueView, IssueFilters, ORPHAN_RULE_CODES, RECIPROCAL_RULE_CODES,
-        RequirementValidationIndex, TextReportSummary, TraceRole, ValidationResources,
-        apply_autofix, apply_autofix_for_reference, collect_check_result,
+        AutofixTransaction, FilteredIssueView, IssueFilters, ORPHAN_RULE_CODES,
+        RECIPROCAL_RULE_CODES, RequirementValidationIndex, TextReportSummary, TraceRole,
+        ValidationResources, apply_autofix, apply_autofix_for_reference, collect_check_result,
         collect_feature_yaml_paths, describe_trace_reference, entry_covers_symbols,
-        filter_check_result, format_reference_location, looks_like_feature_document,
-        merge_ownership_entry, ownership_symbols_hint, preferred_trace_file_path,
-        render_text_report, required_ownership_symbols, run_check_command,
-        validate_duplicate_links, validate_duplicate_trace_references, validate_feature,
-        validate_feature_registry_entries, validate_non_empty_field, validate_philosophy,
-        validate_policy, validate_requirement, validate_unique_ids, verify_trace_reference,
+        filter_check_result, finalize_autofix_error, format_reference_location,
+        looks_like_feature_document, merge_ownership_entry, ownership_symbols_hint,
+        preferred_trace_file_path, render_text_report, required_ownership_symbols,
+        run_check_command, validate_duplicate_links, validate_duplicate_trace_references,
+        validate_feature, validate_feature_registry_entries, validate_non_empty_field,
+        validate_philosophy, validate_policy, validate_requirement, validate_unique_ids,
+        verify_trace_reference,
     };
 
     fn philosophy(id: &str) -> Philosophy {
@@ -5350,6 +5352,73 @@ mod tests {
             error
                 .to_string()
                 .contains("autofix failed before applying changes")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn autofix_transaction_reports_backup_read_errors() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let path = tempdir.path().join("trace.rs");
+        fs::write(&path, "pub fn expected() {}\n").expect("trace file should exist");
+
+        let mut permissions = fs::metadata(&path).expect("metadata").permissions();
+        permissions.set_mode(0o000);
+        fs::set_permissions(&path, permissions).expect("permissions should update");
+
+        let mut transaction = AutofixTransaction::default();
+        let result = transaction.write(&path, "pub fn updated() {}\n");
+
+        let mut restore = fs::metadata(&path).expect("metadata").permissions();
+        restore.set_mode(0o644);
+        fs::set_permissions(&path, restore).expect("permissions should restore");
+
+        assert!(result.is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn autofix_transaction_rolls_back_deleted_files() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let path = tempdir.path().join("trace.rs");
+        fs::write(&path, "pub fn expected() {}\n").expect("trace file should exist");
+
+        let mut transaction = AutofixTransaction::default();
+        transaction.backups.insert(path.clone(), None);
+        transaction
+            .rollback()
+            .expect("rollback should delete newly created file");
+
+        assert!(!path.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn finalize_autofix_error_reports_rollback_failures() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let path = tempdir.path().join("trace.rs");
+        fs::write(&path, "pub fn expected() {}\n").expect("trace file should exist");
+
+        let mut permissions = fs::metadata(&path).expect("metadata").permissions();
+        permissions.set_mode(0o400);
+        fs::set_permissions(&path, permissions).expect("permissions should update");
+
+        let mut transaction = AutofixTransaction::default();
+        transaction
+            .backups
+            .insert(path.clone(), Some("pub fn updated() {}\n".to_string()));
+        transaction.writes_committed = 1;
+
+        let error = finalize_autofix_error(&transaction, anyhow::anyhow!("boom"));
+
+        let mut restore = fs::metadata(&path).expect("metadata").permissions();
+        restore.set_mode(0o644);
+        fs::set_permissions(&path, restore).expect("permissions should restore");
+
+        assert!(
+            error
+                .to_string()
+                .contains("failed to roll back autofix changes after boom")
         );
     }
 
