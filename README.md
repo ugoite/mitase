@@ -723,7 +723,9 @@ mechanically:
 - missing `doc_contains` snippets for Rust, Python, Go, and TypeScript symbols
 
 It does **not** attempt speculative edits like renaming symbols or inventing
-missing files.
+missing files. If a later write fails, `syu` rolls back earlier edits and tells
+you whether the run never started or was rolled back after partial changes, so a
+failed autofix should leave the workspace ready to review again.
 
 ## Example workspaces
 

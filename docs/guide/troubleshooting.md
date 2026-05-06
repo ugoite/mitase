@@ -360,7 +360,7 @@ if it is obsolete.
 | Adds missing `linked_*` graph links | ❌ No — only you know the correct links |
 | Creates new spec entries | ❌ No |
 
-Run `git diff` after `--fix` to review every change before committing.
+If a later write fails, `syu` rolls back earlier edits instead of leaving a half-applied change set behind. After a successful run, use `git diff` to review every change before committing; after a failed run, re-run `syu validate . --fix` once the underlying error is resolved.
 
 ---
 

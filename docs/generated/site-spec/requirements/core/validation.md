@@ -196,6 +196,11 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       `syu.yaml` MUST be able to configure default fix behavior, and `--no-fix`
       MUST disable it. Autofix MUST stay conservative and avoid speculative
       structural edits.
+      mechanical repairs for documentation-style trace gaps. `syu.yaml` MUST be
+      able to configure default fix behavior, and `--no-fix` MUST disable it.
+      Autofix MUST stay conservative, avoid speculative structural edits, and
+      roll back earlier writes if a later repair fails so the workspace is not
+      left half-updated.
   - **priority**: high
   - **status**: implemented
   - **linked_policies**:
@@ -429,6 +434,11 @@ requirements:
       `syu.yaml` MUST be able to configure default fix behavior, and `--no-fix`
       MUST disable it. Autofix MUST stay conservative and avoid speculative
       structural edits.
+      mechanical repairs for documentation-style trace gaps. `syu.yaml` MUST be
+      able to configure default fix behavior, and `--no-fix` MUST disable it.
+      Autofix MUST stay conservative, avoid speculative structural edits, and
+      roll back earlier writes if a later repair fails so the workspace is not
+      left half-updated.
     priority: high
     status: implemented
     linked_policies:

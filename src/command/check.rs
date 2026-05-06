@@ -90,6 +90,48 @@ struct AutofixRun {
     plan: Option<AutofixPlan>,
 }
 
+#[derive(Debug, Default)]
+struct AutofixTransaction {
+    backups: BTreeMap<PathBuf, Option<String>>,
+    writes_committed: usize,
+}
+
+impl AutofixTransaction {
+    fn write(&mut self, path: &Path, contents: &str) -> Result<()> {
+        if !self.backups.contains_key(path) {
+            self.backups.insert(
+                path.to_path_buf(),
+                match fs::read_to_string(path) {
+                    Ok(original) => Some(original),
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                    Err(error) => return Err(error.into()),
+                },
+            );
+        }
+
+        fs::write(path, contents).map_err(Into::into).inspect(|_| {
+            self.writes_committed += 1;
+        })
+    }
+
+    fn committed_writes(&self) -> usize {
+        self.writes_committed
+    }
+
+    fn rollback(&self) -> Result<()> {
+        for (path, original) in self.backups.iter().rev() {
+            match original {
+                Some(contents) => fs::write(path, contents)?,
+                None => {
+                    fs::remove_file(path)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum AutofixMode {
     Apply,
@@ -740,56 +782,89 @@ fn run_autofix(workspace: &Workspace, mode: AutofixMode) -> Result<AutofixRun> {
     if mode == AutofixMode::Plan {
         run.plan = Some(AutofixPlan::default());
     }
-
-    for requirement in &workspace.requirements {
-        if normalize_delivery_status(&requirement.status) != Some(DeliveryStatus::Implemented) {
-            continue;
+    let mut transaction = AutofixTransaction::default();
+    let result = (|| -> Result<()> {
+        for requirement in &workspace.requirements {
+            if normalize_delivery_status(&requirement.status) != Some(DeliveryStatus::Implemented) {
+                continue;
+            }
+            apply_autofix_for_trace_map_with_transaction(
+                &workspace.root,
+                &workspace.config,
+                &requirement.id,
+                &requirement.tests,
+                &mut run,
+                mode,
+                &mut transaction,
+            )?;
         }
-        apply_autofix_for_trace_map(
-            &workspace.root,
-            &workspace.config,
-            &requirement.id,
-            &requirement.tests,
-            &mut run,
-            mode,
-        )?;
-    }
 
-    for feature in &workspace.features {
-        if normalize_delivery_status(&feature.status) != Some(DeliveryStatus::Implemented) {
-            continue;
+        for feature in &workspace.features {
+            if normalize_delivery_status(&feature.status) != Some(DeliveryStatus::Implemented) {
+                continue;
+            }
+            apply_autofix_for_trace_map_with_transaction(
+                &workspace.root,
+                &workspace.config,
+                &feature.id,
+                &feature.implementations,
+                &mut run,
+                mode,
+                &mut transaction,
+            )?;
         }
-        apply_autofix_for_trace_map(
-            &workspace.root,
-            &workspace.config,
-            &feature.id,
-            &feature.implementations,
-            &mut run,
-            mode,
-        )?;
-    }
 
-    Ok(run)
+        Ok(())
+    })();
+
+    match result {
+        Ok(()) => Ok(run),
+        Err(error) if mode == AutofixMode::Apply => Err(finalize_autofix_error(&transaction, error)),
+        Err(error) => Err(error),
+    }
 }
 
-#[allow(clippy::question_mark)]
-fn apply_autofix_for_trace_map(
+fn finalize_autofix_error(transaction: &AutofixTransaction, error: anyhow::Error) -> anyhow::Error {
+    if transaction.committed_writes() > 0 {
+        match transaction.rollback() {
+            Ok(()) => anyhow::anyhow!("autofix rolled back partial changes: {error}"),
+            Err(rollback_error) => anyhow::anyhow!(
+                "failed to roll back autofix changes after {error}: {rollback_error}"
+            ),
+        }
+    } else {
+        anyhow::anyhow!("autofix failed before applying changes: {error}")
+    }
+}
+
+fn apply_autofix_for_trace_map_with_transaction(
     root: &Path,
     config: &SyuConfig,
     owner_id: &str,
     references_by_language: &BTreeMap<String, Vec<TraceReference>>,
     run: &mut AutofixRun,
     mode: AutofixMode,
+    transaction: &mut AutofixTransaction,
 ) -> Result<()> {
     for (language, references) in references_by_language {
         for reference in references {
-            apply_autofix_for_reference(root, config, owner_id, language, reference, run, mode)?;
+            apply_autofix_for_reference_with_transaction(
+                root,
+                config,
+                owner_id,
+                language,
+                reference,
+                run,
+                mode,
+                transaction,
+            )?;
         }
     }
 
     Ok(())
 }
 
+#[allow(dead_code)]
 fn apply_autofix_for_reference(
     root: &Path,
     config: &SyuConfig,
@@ -798,6 +873,29 @@ fn apply_autofix_for_reference(
     reference: &TraceReference,
     run: &mut AutofixRun,
     mode: AutofixMode,
+) -> Result<()> {
+    let mut transaction = AutofixTransaction::default();
+    apply_autofix_for_reference_with_transaction(
+        root,
+        config,
+        owner_id,
+        language,
+        reference,
+        run,
+        mode,
+        &mut transaction,
+    )
+}
+
+fn apply_autofix_for_reference_with_transaction(
+    root: &Path,
+    config: &SyuConfig,
+    owner_id: &str,
+    language: &str,
+    reference: &TraceReference,
+    run: &mut AutofixRun,
+    mode: AutofixMode,
+    transaction: &mut AutofixTransaction,
 ) -> Result<()> {
     let Some(adapter) = adapter_for_language(language) else {
         return Ok(());
@@ -820,7 +918,15 @@ fn apply_autofix_for_reference(
     let mut changed = false;
 
     if config.validate.trace_ownership_mode == TraceOwnershipMode::Sidecar {
-        ensure_sidecar_ownership_manifest(root, owner_id, &path, reference, run, mode)?;
+        ensure_sidecar_ownership_manifest(
+            root,
+            owner_id,
+            &path,
+            reference,
+            run,
+            mode,
+            transaction,
+        )?;
     }
 
     for symbol in reference
@@ -848,7 +954,7 @@ fn apply_autofix_for_reference(
 
         contents = updated;
         if mode == AutofixMode::Apply {
-            fs::write(&path, &contents)?;
+            transaction.write(&path, &contents)?;
         } else if let Some(plan) = run.plan.as_mut() {
             let mut rules = Vec::new();
             if !reference.doc_contains.is_empty() {
@@ -1675,6 +1781,7 @@ fn ensure_sidecar_ownership_manifest(
     reference: &TraceReference,
     run: &mut AutofixRun,
     mode: AutofixMode,
+    transaction: &mut AutofixTransaction,
 ) -> Result<()> {
     let manifest_path = ownership_manifest_path(traced_file);
     let mut manifest = if manifest_path.is_file() {
@@ -1694,7 +1801,7 @@ fn ensure_sidecar_ownership_manifest(
 
     let raw = serde_yaml::to_string(&manifest)?;
     if mode == AutofixMode::Apply {
-        fs::write(&manifest_path, raw)?;
+        transaction.write(&manifest_path, &raw)?;
     } else if let Some(plan) = run.plan.as_mut() {
         record_planned_change(
             plan,
@@ -2830,10 +2937,11 @@ mod tests {
     use super::{
         AutofixPlan, AutofixPlanChange, FilteredIssueView, IssueFilters, ORPHAN_RULE_CODES,
         RECIPROCAL_RULE_CODES, RequirementValidationIndex, TextReportSummary, TraceRole,
-        ValidationResources, apply_autofix, collect_check_result, collect_feature_yaml_paths,
-        describe_trace_reference, entry_covers_symbols, filter_check_result,
-        format_reference_location, looks_like_feature_document, merge_ownership_entry,
-        ownership_symbols_hint, preferred_trace_file_path, render_autofix_plan, render_text_report,
+        AutofixTransaction, ValidationResources, apply_autofix, collect_check_result,
+        collect_feature_yaml_paths, describe_trace_reference, entry_covers_symbols,
+        filter_check_result, finalize_autofix_error, format_reference_location,
+        looks_like_feature_document, merge_ownership_entry, ownership_symbols_hint,
+        preferred_trace_file_path, render_autofix_plan, render_text_report,
         required_ownership_symbols, run_check_command, validate_duplicate_links,
         validate_duplicate_trace_references, validate_feature, validate_feature_registry_entries,
         validate_non_empty_field, validate_philosophy, validate_policy, validate_requirement,
@@ -3070,7 +3178,11 @@ mod tests {
         })
         .expect_err("autofix failures should bubble up");
 
-        assert!(error.to_string().contains("Python inspector failed"));
+        assert!(
+            error
+                .to_string()
+                .contains("autofix failed before applying changes")
+        );
     }
 
     #[test]
@@ -5432,7 +5544,11 @@ mod tests {
 
         let error =
             apply_autofix(&workspace).expect_err("python inspection failure should bubble up");
-        assert!(error.to_string().contains("Python inspector failed"));
+        assert!(
+            error
+                .to_string()
+                .contains("autofix failed before applying changes")
+        );
     }
 
     #[cfg(unix)]
@@ -5473,7 +5589,159 @@ mod tests {
         restore.set_mode(0o644);
         fs::set_permissions(&feature_path, restore).expect("permissions should restore");
 
-        assert!(error.to_string().contains("Permission denied"));
+        assert!(
+            error
+                .to_string()
+                .contains("autofix failed before applying changes")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn autofix_transaction_reports_backup_read_errors() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let path = tempdir.path().join("trace.rs");
+        fs::write(&path, "pub fn expected() {}\n").expect("trace file should exist");
+
+        let mut permissions = fs::metadata(&path).expect("metadata").permissions();
+        permissions.set_mode(0o000);
+        fs::set_permissions(&path, permissions).expect("permissions should update");
+
+        let mut transaction = AutofixTransaction::default();
+        let result = transaction.write(&path, "pub fn updated() {}\n");
+
+        let mut restore = fs::metadata(&path).expect("metadata").permissions();
+        restore.set_mode(0o644);
+        fs::set_permissions(&path, restore).expect("permissions should restore");
+
+        assert!(result.is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn autofix_transaction_rolls_back_deleted_files() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let path = tempdir.path().join("trace.rs");
+        fs::write(&path, "pub fn expected() {}\n").expect("trace file should exist");
+
+        let mut transaction = AutofixTransaction::default();
+        transaction.backups.insert(path.clone(), None);
+        transaction
+            .rollback()
+            .expect("rollback should delete newly created file");
+
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn autofix_transaction_reports_delete_failures() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let path = tempdir.path().join("trace.rs");
+        fs::write(&path, "pub fn expected() {}\n").expect("trace file should exist");
+
+        let mut transaction = AutofixTransaction::default();
+        transaction.backups.insert(path.clone(), None);
+
+        fs::remove_file(&path).expect("file should be removable");
+        fs::create_dir(&path).expect("directory should be creatable");
+
+        let error = transaction.rollback().expect_err("rollback should fail");
+        assert!(error.downcast_ref::<std::io::Error>().is_some());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn finalize_autofix_error_reports_rollback_failures() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let path = tempdir.path().join("trace.rs");
+        fs::write(&path, "pub fn expected() {}\n").expect("trace file should exist");
+
+        let mut permissions = fs::metadata(&path).expect("metadata").permissions();
+        permissions.set_mode(0o400);
+        fs::set_permissions(&path, permissions).expect("permissions should update");
+
+        let mut transaction = AutofixTransaction::default();
+        transaction
+            .backups
+            .insert(path.clone(), Some("pub fn updated() {}\n".to_string()));
+        transaction.writes_committed = 1;
+
+        let error = finalize_autofix_error(&transaction, anyhow::anyhow!("boom"));
+
+        let mut restore = fs::metadata(&path).expect("metadata").permissions();
+        restore.set_mode(0o644);
+        fs::set_permissions(&path, restore).expect("permissions should restore");
+
+        assert!(
+            error
+                .to_string()
+                .contains("failed to roll back autofix changes after boom")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn apply_autofix_rolls_back_prior_writes_on_failure() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let root = tempdir.path().to_path_buf();
+
+        let go_path = root.join("first.go");
+        fs::write(&go_path, "func first() {}\n").expect("go file should exist");
+
+        let python_path = root.join("second.py");
+        fs::write(&python_path, "def second():\n    return 1\n").expect("python file should exist");
+
+        let mut req = requirement("REQ-1");
+        req.tests.insert(
+            "go".to_string(),
+            vec![TraceReference {
+                file: PathBuf::from("first.go"),
+                symbols: vec!["first".to_string()],
+                doc_contains: vec!["First docs".to_string()],
+            }],
+        );
+        req.tests.insert(
+            "python".to_string(),
+            vec![TraceReference {
+                file: PathBuf::from("second.py"),
+                symbols: vec!["second".to_string()],
+                doc_contains: vec!["Second docs".to_string()],
+            }],
+        );
+
+        let workspace = Workspace {
+            root,
+            spec_root: tempdir.path().join("docs/syu"),
+            config: SyuConfig {
+                runtimes: crate::config::RuntimeConfigSet {
+                    python: crate::config::RuntimeConfig {
+                        command: "false".to_string(),
+                    },
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: vec![req],
+            features: Vec::new(),
+        };
+
+        let error = apply_autofix(&workspace).expect_err("write failure should bubble up");
+
+        let mut go_restore = fs::metadata(&go_path).expect("metadata").permissions();
+        go_restore.set_mode(0o644);
+        fs::set_permissions(&go_path, go_restore).expect("permissions should restore");
+
+        assert!(
+            error
+                .to_string()
+                .contains("autofix rolled back partial changes")
+        );
+        assert_eq!(
+            fs::read_to_string(&go_path).expect("go contents"),
+            "func first() {}\n"
+        );
     }
 
     #[test]
