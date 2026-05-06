@@ -1194,13 +1194,13 @@ fn sync_feature_registry(
                 files,
             }))
         }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Some(
-            FeatureRegistryDocument {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Ok(Some(FeatureRegistryDocument {
                 version: env!("CARGO_PKG_VERSION").to_string(),
                 updated: None,
                 files,
-            },
-        )),
+            }))
+        }
         Err(error) => Err(error.into()),
     }
 }
@@ -3360,7 +3360,12 @@ mod tests {
         .expect("command should complete");
 
         assert_eq!(code, 0);
-        assert!(tempdir.path().join("docs/syu/features/features.yaml").is_file());
+        assert!(
+            tempdir
+                .path()
+                .join("docs/syu/features/features.yaml")
+                .is_file()
+        );
     }
 
     #[test]
@@ -3390,7 +3395,12 @@ mod tests {
         .expect("command should render load errors");
 
         assert_eq!(code, 1);
-        assert!(!tempdir.path().join("docs/syu/features/features.yaml").is_file());
+        assert!(
+            !tempdir
+                .path()
+                .join("docs/syu/features/features.yaml")
+                .is_file()
+        );
     }
 
     #[test]
@@ -3496,10 +3506,9 @@ mod tests {
         fs::remove_file(&registry_path).expect("feature registry should be removable");
         fs::create_dir(&registry_path).expect("directory registry path should be creatable");
 
-        let workspace = crate::workspace::load_workspace_allowing_missing_feature_registry(
-            tempdir.path(),
-        )
-        .expect("workspace should still load");
+        let workspace =
+            crate::workspace::load_workspace_allowing_missing_feature_registry(tempdir.path())
+                .expect("workspace should still load");
         let error = apply_autofix(&workspace).expect_err("registry read failure should bubble up");
 
         assert!(error.to_string().contains("Is a directory"));
@@ -5732,14 +5741,14 @@ mod tests {
         fs::remove_file(tempdir.path().join("docs/syu/features/features.yaml"))
             .expect("feature registry should be removable");
 
-        let workspace = crate::workspace::load_workspace_allowing_missing_feature_registry(
-            tempdir.path(),
-        )
-        .expect("workspace should still load");
+        let workspace =
+            crate::workspace::load_workspace_allowing_missing_feature_registry(tempdir.path())
+                .expect("workspace should still load");
         let summary = apply_autofix(&workspace).expect("autofix should succeed");
 
-        let registry_contents = fs::read_to_string(tempdir.path().join("docs/syu/features/features.yaml"))
-            .expect("feature registry should be written");
+        let registry_contents =
+            fs::read_to_string(tempdir.path().join("docs/syu/features/features.yaml"))
+                .expect("feature registry should be written");
         assert!(registry_contents.contains("version:"));
         assert!(registry_contents.contains("files:"));
         assert!(registry_contents.contains("core.yaml"));
