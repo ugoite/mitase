@@ -338,10 +338,6 @@ fn find_block_doc_block(
     }
 
     let end = skip_declaration_annotations(lines, declaration_line - 2)?;
-    if end >= lines.len() {
-        return None;
-    }
-
     if lines[end].trim().is_empty() || !lines[end].trim_end().ends_with("*/") {
         return None;
     }
@@ -1026,9 +1022,10 @@ mod tests {
     use crate::config::SyuConfig;
 
     use super::{
-        apply_symbol_doc_fix, find_jsdoc_block, find_rust_declaration_line,
-        inspect_python_file_with_runtime, inspect_rust_symbol, inspect_symbol, merged_doc_lines,
-        render_python_docstring, supports_rich_inspection,
+        DocCommentStyle, apply_symbol_doc_fix, find_doc_block, find_doc_insertion_line,
+        find_jsdoc_block, find_rust_declaration_line, inspect_python_file_with_runtime,
+        inspect_rust_symbol, inspect_symbol, merged_doc_lines, render_python_docstring,
+        skip_declaration_annotations, supports_rich_inspection,
     };
 
     #[test]
@@ -1668,6 +1665,54 @@ mod external;
         assert!(updated.contains("/**"));
         assert!(updated.contains(" * REQ-1"));
         assert!(updated.contains(" * Explain sample"));
+    }
+
+    #[test]
+    fn helper_functions_cover_annotation_and_noop_paths() {
+        let missing_symbol = apply_symbol_doc_fix(
+            "java",
+            &SyuConfig::default(),
+            std::path::Path::new("src/Sample.java"),
+            "public class Sample {}\n",
+            "Missing",
+            &["REQ-1".to_string()],
+        )
+        .expect("fix should succeed");
+        assert_eq!(missing_symbol, None);
+
+        let already_documented = apply_symbol_doc_fix(
+            "java",
+            &SyuConfig::default(),
+            std::path::Path::new("src/Sample.java"),
+            "/**\n * REQ-1\n */\npublic class Sample {}\n",
+            "Sample",
+            &["REQ-1".to_string()],
+        )
+        .expect("fix should succeed");
+        assert_eq!(already_documented, None);
+
+        let block_lines = [" */"];
+        assert!(find_doc_block(
+            &block_lines,
+            2,
+            DocCommentStyle::Block {
+                start_marker: "/**"
+            }
+        )
+        .is_none());
+
+        let line_lines = ["", "public class Sample {}"];
+        assert!(find_doc_block(
+            &line_lines,
+            2,
+            DocCommentStyle::Line { prefix: "///" }
+        )
+        .is_none());
+
+        let annotation_lines = vec!["@Test".to_string(), "public void sample() {}".to_string()];
+        assert_eq!(find_doc_insertion_line(&annotation_lines, 2), 1);
+        assert_eq!(skip_declaration_annotations(&["@Test"], 0), None);
+        assert_eq!(skip_declaration_annotations(&[], 0), None);
     }
 
     #[test]
