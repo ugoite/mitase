@@ -12,6 +12,7 @@ fn write_workspace_with_ownership_mode(root: &Path, default_fix: bool, trace_own
     fs::create_dir_all(root.join("docs/syu/policies")).expect("policies dir");
     fs::create_dir_all(root.join("docs/syu/requirements")).expect("requirements dir");
     fs::create_dir_all(root.join("docs/syu/features")).expect("features dir");
+    fs::create_dir_all(root.join("docs/syu/features/core")).expect("core features dir");
     fs::create_dir_all(root.join("src")).expect("src dir");
 
     fs::write(
@@ -59,6 +60,69 @@ fn write_workspace_with_ownership_mode(root: &Path, default_fix: bool, trace_own
     .expect("feature");
 
     fs::write(root.join("src/trace.rs"), "pub fn req_trace() {}\n").expect("rust trace");
+}
+
+fn write_graph_workspace(root: &Path) {
+    fs::create_dir_all(root.join("docs/syu/philosophy")).expect("philosophy dir");
+    fs::create_dir_all(root.join("docs/syu/policies")).expect("policies dir");
+    fs::create_dir_all(root.join("docs/syu/requirements")).expect("requirements dir");
+    fs::create_dir_all(root.join("docs/syu/features")).expect("features dir");
+    fs::create_dir_all(root.join("docs/syu/features/core")).expect("core features dir");
+    fs::create_dir_all(root.join("docs/syu/features/extra")).expect("extra features dir");
+
+    fs::write(
+        root.join("syu.yaml"),
+        format!(
+            "version: {version}\nspec:\n  root: docs/syu\nvalidate:\n  default_fix: false\n  allow_planned: true\n  require_non_orphaned_items: true\n  require_reciprocal_links: true\n  trace_ownership_mode: mapping\nruntimes:\n  python:\n    command: auto\n  node:\n    command: auto\n",
+            version = env!("CARGO_PKG_VERSION")
+        ),
+    )
+    .expect("config");
+
+    fs::write(
+        root.join("docs/syu/philosophy/foundation.yaml"),
+        "category: Philosophy\nversion: 1\nlanguage: en\n\nphilosophies:\n  - id: PHIL-001\n    title: Executable agreement\n    product_design_principle: Keep change traceable.\n    coding_guideline: Prefer explicit links.\n    linked_policies:\n      - POL-001\n      - POL-001\n",
+    )
+    .expect("philosophy");
+
+    fs::write(
+        root.join("docs/syu/policies/policies.yaml"),
+        "category: Policies\nversion: 1\nlanguage: en\n\npolicies:\n  - id: POL-001\n    title: Keep symbols documented\n    summary: Requirements and features should remain explainable.\n    description: Every trace should point to a documented symbol.\n    linked_philosophies: []\n    linked_requirements:\n      - REQ-001\n      - REQ-001\n",
+    )
+    .expect("policy");
+
+    fs::write(
+        root.join("docs/syu/requirements/core.yaml"),
+        "category: Core Requirements\nprefix: REQ\n\nrequirements:\n  - id: REQ-001\n    title: Validate documented features\n    description: Requirements should point at the shipped feature evidence.\n    priority: high\n    status: planned\n    linked_policies: []\n    linked_features:\n      - FEAT-CORE-001\n      - FEAT-EXTRA-001\n      - FEAT-EXTRA-001\n    tests: {}\n",
+    )
+    .expect("requirement");
+
+    fs::write(
+        root.join("docs/syu/features/features.yaml"),
+        format!(
+            "version: \"{}\"\nfiles:\n  - kind: core\n    file: core.yaml\n",
+            env!("CARGO_PKG_VERSION")
+        ),
+    )
+    .expect("feature registry");
+
+    fs::write(
+        root.join("docs/syu/features/core.yaml"),
+        "category: Core Features\nversion: 1\n\nfeatures:\n  - id: FEAT-CORE-001\n    title: Core feature\n    summary: Keep the core feature available.\n    status: planned\n    linked_requirements: []\n    implementations: {}\n",
+    )
+    .expect("core feature");
+
+    fs::write(
+        root.join("docs/syu/features/extra/extra.yaml"),
+        "category: Extra Features\nversion: 1\n\nfeatures:\n  - id: FEAT-EXTRA-001\n    title: Extra feature\n    summary: Keep the extra feature available.\n    status: planned\n    linked_requirements:\n      - REQ-001\n      - REQ-001\n    implementations: {}\n",
+    )
+    .expect("extra feature");
+
+    fs::write(
+        root.join("docs/syu/features/notes.yaml"),
+        "category: Notes\nversion: 1\nnotes:\n  - this file should be ignored by the registry sync\n",
+    )
+    .expect("notes");
 }
 
 #[test]
@@ -351,4 +415,56 @@ fn validate_fix_writes_sidecar_ownership_manifests_when_configured() {
     assert!(manifest.contains("id: FEAT-001"));
     assert!(manifest.contains("id: REQ-001"));
     assert!(manifest.contains("- req_trace"));
+}
+
+#[test]
+// REQ-CORE-003
+fn validate_fix_repairs_graph_links_and_feature_registry_drift() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    write_graph_workspace(tempdir.path());
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(tempdir.path())
+        .arg("--fix")
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("syu validate passed"));
+
+    let philosophy = fs::read_to_string(tempdir.path().join("docs/syu/philosophy/foundation.yaml"))
+        .expect("philosophy");
+    assert_eq!(philosophy.matches("POL-001").count(), 1);
+
+    let policy =
+        fs::read_to_string(tempdir.path().join("docs/syu/policies/policies.yaml")).expect("policy");
+    assert_eq!(policy.matches("REQ-001").count(), 1);
+    assert!(policy.contains("PHIL-001"));
+
+    let requirement = fs::read_to_string(tempdir.path().join("docs/syu/requirements/core.yaml"))
+        .expect("requirement");
+    assert_eq!(requirement.matches("FEAT-EXTRA-001").count(), 1);
+    assert_eq!(requirement.matches("FEAT-CORE-001").count(), 1);
+    assert!(requirement.contains("POL-001"));
+
+    let core_feature = fs::read_to_string(tempdir.path().join("docs/syu/features/core.yaml"))
+        .expect("core feature");
+    assert!(core_feature.contains("REQ-001"));
+
+    let extra_feature =
+        fs::read_to_string(tempdir.path().join("docs/syu/features/extra/extra.yaml"))
+            .expect("extra feature");
+    assert_eq!(extra_feature.matches("REQ-001").count(), 1);
+
+    let registry = fs::read_to_string(tempdir.path().join("docs/syu/features/features.yaml"))
+        .expect("registry");
+    assert!(registry.contains("file: core.yaml"));
+    assert!(registry.contains("file: extra/extra.yaml"));
 }

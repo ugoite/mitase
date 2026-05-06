@@ -721,6 +721,9 @@ mechanically:
 
 - missing requirement / feature IDs in symbol documentation
 - missing `doc_contains` snippets for Rust, Python, Go, and TypeScript symbols
+- exact duplicate graph links in philosophy / policy / requirement / feature files
+- missing reciprocal graph links when the opposite side is already declared
+- drift between checked-in feature documents and `features/features.yaml`
 
 It does **not** attempt speculative edits like renaming symbols or inventing
 missing files. If a later write fails, `syu` rolls back earlier edits and tells
