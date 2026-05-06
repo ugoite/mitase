@@ -52,7 +52,7 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             binary: syu
-          - os: ubuntu-latest
+          - os: ubuntu-22.04
             target: aarch64-unknown-linux-gnu
             binary: syu
             cross_compile: true
@@ -113,6 +113,24 @@ jobs:
         env:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.linker }}
         run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Verify Linux glibc compatibility baseline
+        if: matrix.cross_compile == true
+        shell: bash
+        run: |
+          binary="target/${{ matrix.target }}/release/${{ matrix.binary }}"
+          required_glibc="$(readelf --version-info "$binary" | grep -oE 'GLIBC_[0-9]+(\.[0-9]+)*' | sort -V | tail -1)"
+          baseline_glibc="GLIBC_2.36"
+
+          if [[ -z "$required_glibc" ]]; then
+            echo "Failed to determine the GLIBC baseline for $binary" >&2
+            exit 1
+          fi
+
+          if [[ "$(printf '%s\n%s\n' "$baseline_glibc" "$required_glibc" | sort -V | tail -1)" != "$baseline_glibc" ]]; then
+            echo "aarch64 release binary requires $required_glibc, which is newer than Debian 12's $baseline_glibc" >&2
+            exit 1
+          fi
 
       - name: Build release binary
         if: matrix.cross_compile != true
