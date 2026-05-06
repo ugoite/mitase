@@ -6,7 +6,7 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use crate::rules::ReferencedRule;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PhilosophyDocument {
     pub category: String,
@@ -26,7 +26,7 @@ pub struct Philosophy {
     pub linked_policies: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PolicyDocument {
     pub category: String,
@@ -48,7 +48,7 @@ pub struct Policy {
     pub linked_requirements: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RequirementDocument {
     pub category: String,
@@ -72,7 +72,7 @@ pub struct Requirement {
     pub tests: BTreeMap<String, Vec<TraceReference>>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct FeatureRegistryDocument {
     pub version: String,
@@ -80,14 +80,14 @@ pub struct FeatureRegistryDocument {
     pub files: Vec<FeatureRegistryEntry>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct FeatureRegistryEntry {
     pub kind: String,
     pub file: PathBuf,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct FeatureDocument {
     pub category: String,

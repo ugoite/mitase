@@ -352,11 +352,15 @@ if it is obsolete.
 | What `--fix` does | Safe? |
 |---|---|
 | Inserts required `doc_contains` snippets using language-appropriate comment or doc-comment syntax | ✅ Yes |
+| Removes exact duplicate graph links or restores an already-declared reciprocal link | ✅ Yes |
+| Resynchronizes `features/features.yaml` with checked-in feature documents | ✅ Yes |
 | Rewrites or deletes symbols | ❌ No — `--fix` never does this |
 | Adds missing `linked_*` graph links | ❌ No — only you know the correct links |
 | Creates new spec entries | ❌ No |
 
-Run `git diff` after `--fix` to review every change before committing.
+Run `git diff` after `--fix` to review every change before committing. If the
+run fails, `syu` rolls back earlier writes instead of leaving a partial graph or
+registry update behind.
 
 ---
 
