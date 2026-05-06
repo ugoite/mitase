@@ -1692,22 +1692,19 @@ mod external;
         assert_eq!(already_documented, None);
 
         let block_lines = [" */"];
-        assert!(find_doc_block(
-            &block_lines,
-            2,
-            DocCommentStyle::Block {
-                start_marker: "/**"
-            }
-        )
-        .is_none());
+        assert!(
+            find_doc_block(
+                &block_lines,
+                2,
+                DocCommentStyle::Block {
+                    start_marker: "/**"
+                }
+            )
+            .is_none()
+        );
 
         let line_lines = ["", "public class Sample {}"];
-        assert!(find_doc_block(
-            &line_lines,
-            2,
-            DocCommentStyle::Line { prefix: "///" }
-        )
-        .is_none());
+        assert!(find_doc_block(&line_lines, 2, DocCommentStyle::Line { prefix: "///" }).is_none());
 
         let annotation_lines = vec!["@Test".to_string(), "public void sample() {}".to_string()];
         assert_eq!(find_doc_insertion_line(&annotation_lines, 2), 1);
