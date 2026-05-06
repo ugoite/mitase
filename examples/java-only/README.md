@@ -6,7 +6,8 @@ Java trace adapter.
 It contains one philosophy, one policy, one requirement, and one feature, plus
 one `pom.xml`, one Java source file, and one Java test file. The example uses
 pattern-based symbol matching for the real `.java` files, so `syu validate .`
-proves the Java-backed links directly.
+proves the Java-backed links directly, and the checked-in Javadocs now also
+show how `doc_contains` can stay attached to Java traces.
 
 This workspace now matches the built-in `syu init --template java-only`
 starter, so you can either inspect the checked-in example first or generate the
@@ -51,8 +52,8 @@ traceability: requirements=1/1 traces validated; features=1/1 traces validated
   symbol for `REQ-JAVA-001`.
 - `JavaFeatureImpl` lives in `src/main/java/example/app/OrderSummary.java` and
   is the validated implementation symbol for `FEAT-JAVA-001`.
-- The Java adapter currently supports pattern-based symbol validation and
-  strict ownership coverage, but not `doc_contains` checks.
+- The Java adapter supports pattern-based symbol validation, `doc_contains`
+  checks, and strict ownership coverage.
 
 ## Key things to notice
 
@@ -60,5 +61,6 @@ traceability: requirements=1/1 traces validated; features=1/1 traces validated
   real `.java` files instead of a markdown workaround.
 - **The example stays small** — one source file and one test file are enough to
   demonstrate Java-backed requirement and feature ownership.
-- **`doc_contains` is still out of scope** — keep Java traces to `file` plus
-  `symbols` today, then add richer evidence only after adapter support grows.
+- **`doc_contains` keeps the trace readable** — the Javadocs in the example show
+  how to attach comment-level evidence to a Java symbol without changing the
+  ownership shape.

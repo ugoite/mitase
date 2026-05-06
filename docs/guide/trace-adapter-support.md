@@ -22,9 +22,9 @@ enable strict coverage in a mixed-language repository.
 | Python | `python`, `py`, `pytest`, `unittest` / `.py` | ✅ Rich symbol inspection plus pattern fallback | ✅ | ✅ |
 | Ruby | `ruby`, `rb`, `minitest`, `rspec` / `.rb` | ✅ Pattern-based symbol matching | ❌ | ❌ |
 | Go | `go`, `golang`, `gotest` / `.go` | ✅ Rich doc-comment inspection plus pattern fallback | ✅ | ✅ |
-| Java | `java`, `junit` / `.java` | ✅ Pattern-based symbol matching | ❌ | ✅ |
-| C# | `csharp`, `cs`, `dotnet`, `xunit`, `nunit`, `mstest` / `.cs` | ✅ Pattern-based symbol matching | ❌ | ✅ |
-| Kotlin | `kotlin`, `kt` / `.kt` | ✅ Pattern-based symbol matching | ❌ | ✅ |
+| Java | `java`, `junit` / `.java` | ✅ Pattern-based symbol matching plus declaration-adjacent Javadoc inspection | ✅ | ✅ |
+| C# | `csharp`, `cs`, `dotnet`, `xunit`, `nunit`, `mstest` / `.cs` | ✅ Pattern-based symbol matching plus declaration-adjacent XML doc inspection | ✅ | ✅ |
+| Kotlin | `kotlin`, `kt` / `.kt` | ✅ Pattern-based symbol matching plus declaration-adjacent KDoc inspection | ✅ | ✅ |
 | TypeScript / JavaScript | `typescript`, `ts`, `tsx`, `javascript`, `js`, `jsx`, `vitest`, `bun`, `bun-test` / `.ts`, `.tsx`, `.js`, `.jsx` | ✅ Rich symbol inspection plus pattern fallback | ✅ | ✅ |
 | Shell | `shell`, `sh`, `bash`, `zsh` / `.sh`, `.bash`, `.zsh` | ✅ Pattern-based symbol matching | ❌ | ❌ |
 | YAML | `yaml`, `yml` / `.yaml`, `.yml` | ✅ Pattern-based symbol matching | ❌ | ❌ |
@@ -58,7 +58,8 @@ they do **not** participate in the repository-wide strict ownership scan.
 
 ## How to choose the right promises
 
-- Need `doc_contains`? Rust, Python, Go, and TypeScript / JavaScript traces all
+- Need `doc_contains`? Rust, Python, Go, Java, C#, Kotlin, and TypeScript /
+  JavaScript traces all
   support it today. For a staged rollout, starter examples, and "when should I
   add this?" guidance, use the [dedicated `doc_contains` adoption guide](./doc-contains.md).
 - Need strict ownership coverage? Rust, Python, Go, Java, C#, Kotlin, and
@@ -97,7 +98,9 @@ When you need a concrete fallback shape, start from the closest checked-in
 example instead of inventing a migration path from scratch. For Kotlin/JVM
 repositories, start from `examples/java-only` when you want a JVM-shaped
 repository layout, then trace Kotlin source directly with the `kotlin` / `.kt`
-adapter alongside the philosophy, policy, requirement, and feature layers.
+adapter alongside the philosophy, policy, requirement, and feature layers. You
+can now also add `doc_contains` to those Kotlin traces when the KDoc stays next
+to the symbol.
 If you need a Go-first starting point today, study the
 [`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
 or scaffold `syu init . --template go-only`. Both keep real Go files in the
@@ -106,8 +109,8 @@ repository while validating explicit symbol mappings, and Go traces can now add
 If you need a Java-first starting point today, study the
 [`examples/java-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/java-only)
 or scaffold `syu init . --template java-only`. Both keep real Java files in the
-repository while validating explicit symbol mappings, but Java traces should
-still stay with `file` plus `symbols` because `doc_contains` is not supported yet.
+repository while validating explicit symbol mappings, and Java traces can now
+add `doc_contains` when the Javadoc stays adjacent to the symbol.
 If you need a Ruby-first starting point today, study the
 [`examples/ruby-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/ruby-only)
 or scaffold `syu init . --template ruby-only`. Both keep real Ruby files in the
@@ -117,7 +120,8 @@ If you want a concrete staged C# adoption shape today, study the
 [`examples/csharp-fallback` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/csharp-fallback).
 It keeps real C# files in the repository while validating supported shell and
 markdown evidence around them before you decide how aggressively to trace the
-rest of the C# codebase.
+rest of the C# codebase. C# traces can now also add `doc_contains` when the XML
+docs stay adjacent to the symbol.
 
 When the unsupported language matters enough that the staged fallback is no
 longer sufficient, open a feature request with:
