@@ -3455,7 +3455,8 @@ mod tests {
         required_ownership_symbols, run_check_command, validate_duplicate_links,
         validate_duplicate_trace_references, validate_feature, validate_feature_registry_entries,
         validate_non_empty_field, validate_philosophy, validate_policy, validate_requirement,
-        validate_unique_ids, verify_trace_reference, AutofixPlan, AutofixPlanChange,
+        validate_unique_ids, verify_trace_reference, sync_feature_registry, AutofixPlan,
+        AutofixPlanChange,
         AutofixTransaction, FilteredIssueView, IssueFilters, ItemLocation,
         MutableLoadedDocument, ORPHAN_RULE_CODES, RECIPROCAL_RULE_CODES,
         RequirementValidationIndex, TextReportSummary, TraceRole, ValidationResources,
@@ -3811,6 +3812,18 @@ mod tests {
                 .expect("workspace should still load");
         let error = apply_autofix(&workspace).expect_err("registry read failure should bubble up");
 
+        assert!(error.to_string().contains("Is a directory"));
+    }
+
+    #[test]
+    fn sync_feature_registry_reports_read_errors() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let feature_root = tempdir.path().join("docs/syu/features");
+        fs::create_dir_all(&feature_root).expect("feature root should exist");
+        fs::create_dir(feature_root.join("features.yaml"))
+            .expect("registry path should be creatable as a directory");
+
+        let error = sync_feature_registry(&feature_root, &[]).expect_err("read failure should bubble up");
         assert!(error.to_string().contains("Is a directory"));
     }
 
