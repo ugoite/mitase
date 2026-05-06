@@ -103,9 +103,7 @@ impl AutofixTransaction {
             match original {
                 Some(contents) => fs::write(path, contents)?,
                 None => {
-                    if path.exists() {
-                        fs::remove_file(path)?;
-                    }
+                    let _ = fs::remove_file(path);
                 }
             }
         }
@@ -767,25 +765,6 @@ fn finalize_autofix_error(transaction: &AutofixTransaction, error: anyhow::Error
     } else {
         anyhow::anyhow!("autofix failed before applying changes: {error}")
     }
-}
-
-#[allow(clippy::question_mark, dead_code)]
-fn apply_autofix_for_trace_map(
-    root: &Path,
-    config: &SyuConfig,
-    owner_id: &str,
-    references_by_language: &BTreeMap<String, Vec<TraceReference>>,
-    summary: &mut AutofixSummary,
-) -> Result<()> {
-    let mut transaction = AutofixTransaction::default();
-    apply_autofix_for_trace_map_with_transaction(
-        root,
-        config,
-        owner_id,
-        references_by_language,
-        summary,
-        &mut transaction,
-    )
 }
 
 fn apply_autofix_for_trace_map_with_transaction(
