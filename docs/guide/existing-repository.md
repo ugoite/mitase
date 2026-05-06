@@ -170,9 +170,10 @@ For already-shipped behavior, mark the requirement and feature as
 implementation symbols truthfully. If a spec item is accepted but you are not
 ready to claim traces yet, leave it `planned`.
 
-Use `syu validate . --fix` only after you have decided the owning IDs. Autofix
-is good at inserting required doc-comment snippets; it does not choose the right
-graph links for you.
+Use `syu validate . --fix --dry-run` when you want to preview the autofix plan
+before changing files. Once you have decided the owning IDs, `syu validate .
+--fix` is good at inserting required doc-comment snippets; it does not choose
+the right graph links for you.
 
 If one small file is intentionally owned by one requirement or feature, you can
 use `symbols: ['*']` instead of enumerating every public symbol by hand.

@@ -70,6 +70,32 @@ struct AutofixSummary {
     symbol_updates: usize,
 }
 
+#[derive(Debug, Default, Clone, Serialize)]
+struct AutofixPlan {
+    planned_updates: usize,
+    updated_files: BTreeSet<PathBuf>,
+    changes: Vec<AutofixPlanChange>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct AutofixPlanChange {
+    path: PathBuf,
+    rules: Vec<&'static str>,
+    summary: String,
+}
+
+#[derive(Debug, Default)]
+struct AutofixRun {
+    summary: AutofixSummary,
+    plan: Option<AutofixPlan>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AutofixMode {
+    Apply,
+    Plan,
+}
+
 #[derive(Debug, Clone)]
 enum OwnershipDeclaration {
     Satisfied,
@@ -111,6 +137,8 @@ struct JsonCheckOutput<'a> {
     result: &'a CheckResult,
     #[serde(skip_serializing_if = "Option::is_none")]
     filtered_view: Option<&'a FilteredIssueView>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    autofix_plan: Option<&'a AutofixPlan>,
 }
 
 #[derive(Debug, Clone)]
@@ -346,11 +374,15 @@ fn workspace_item_count(definition_counts: &DefinitionCounts) -> usize {
 
 // FEAT-CHECK-001
 pub fn run_check_command(args: &CheckArgs) -> Result<i32> {
-    let (result, fix_summary, text_summary) = match load_workspace(&args.workspace) {
+    let (result, autofix_run, text_summary) = match load_workspace(&args.workspace) {
         Ok(workspace) => {
             let should_fix = effective_fix(args, &workspace.config);
-            let fix_summary = if should_fix {
-                Some(apply_autofix(&workspace)?)
+            let autofix_run = if should_fix {
+                Some(if args.dry_run {
+                    plan_autofix(&workspace)?
+                } else {
+                    apply_autofix_run(&workspace)?
+                })
             } else {
                 None
             };
@@ -364,7 +396,7 @@ pub fn run_check_command(args: &CheckArgs) -> Result<i32> {
             apply_cli_override_issue_guidance(&mut result, args);
             let text_summary =
                 TextReportSummary::from_config(&workspace.config, &result.definition_counts);
-            (result, fix_summary, Some(text_summary))
+            (result, autofix_run, Some(text_summary))
         }
         Err(error) => (
             CheckResult::from_load_error(args.workspace.to_path_buf(), error.to_string()),
@@ -383,14 +415,25 @@ pub fn run_check_command(args: &CheckArgs) -> Result<i32> {
 
     match args.format {
         OutputFormat::Text => {
-            if let Some(summary) = fix_summary
-                && !summary.updated_files.is_empty()
-            {
-                println!(
-                    "applied {} autofix updates across {} files",
-                    summary.symbol_updates,
-                    summary.updated_files.len()
-                );
+            if let Some(run) = autofix_run.as_ref() {
+                if args.dry_run {
+                    if let Some(plan) = run.plan.as_ref()
+                        && !plan.updated_files.is_empty()
+                    {
+                        println!(
+                            "planned {} autofix updates across {} files (dry run; no files changed)",
+                            plan.planned_updates,
+                            plan.updated_files.len()
+                        );
+                        print!("{}", render_autofix_plan(plan));
+                    }
+                } else if !run.summary.updated_files.is_empty() {
+                    println!(
+                        "applied {} autofix updates across {} files",
+                        run.summary.symbol_updates,
+                        run.summary.updated_files.len()
+                    );
+                }
             }
             print!(
                 "{}",
@@ -409,6 +452,7 @@ pub fn run_check_command(args: &CheckArgs) -> Result<i32> {
             let output = JsonCheckOutput {
                 result: &result,
                 filtered_view: filtered_view.as_ref(),
+                autofix_plan: autofix_run.as_ref().and_then(|run| run.plan.as_ref()),
             };
             println!(
                 "{}",
@@ -672,41 +716,55 @@ fn apply_cli_override_issue_guidance(result: &mut CheckResult, args: &CheckArgs)
     }
 }
 
+#[cfg(test)]
 #[allow(clippy::question_mark)]
 fn apply_autofix(workspace: &Workspace) -> Result<AutofixSummary> {
-    let mut summary = AutofixSummary::default();
+    Ok(apply_autofix_run(workspace)?.summary)
+}
+
+fn apply_autofix_run(workspace: &Workspace) -> Result<AutofixRun> {
+    run_autofix(workspace, AutofixMode::Apply)
+}
+
+fn plan_autofix(workspace: &Workspace) -> Result<AutofixRun> {
+    run_autofix(workspace, AutofixMode::Plan)
+}
+
+fn run_autofix(workspace: &Workspace, mode: AutofixMode) -> Result<AutofixRun> {
+    let mut run = AutofixRun::default();
+    if mode == AutofixMode::Plan {
+        run.plan = Some(AutofixPlan::default());
+    }
 
     for requirement in &workspace.requirements {
         if normalize_delivery_status(&requirement.status) != Some(DeliveryStatus::Implemented) {
             continue;
         }
-        if let Err(error) = apply_autofix_for_trace_map(
+        apply_autofix_for_trace_map(
             &workspace.root,
             &workspace.config,
             &requirement.id,
             &requirement.tests,
-            &mut summary,
-        ) {
-            return Err(error);
-        }
+            &mut run,
+            mode,
+        )?;
     }
 
     for feature in &workspace.features {
         if normalize_delivery_status(&feature.status) != Some(DeliveryStatus::Implemented) {
             continue;
         }
-        if let Err(error) = apply_autofix_for_trace_map(
+        apply_autofix_for_trace_map(
             &workspace.root,
             &workspace.config,
             &feature.id,
             &feature.implementations,
-            &mut summary,
-        ) {
-            return Err(error);
-        }
+            &mut run,
+            mode,
+        )?;
     }
 
-    Ok(summary)
+    Ok(run)
 }
 
 #[allow(clippy::question_mark)]
@@ -715,15 +773,12 @@ fn apply_autofix_for_trace_map(
     config: &SyuConfig,
     owner_id: &str,
     references_by_language: &BTreeMap<String, Vec<TraceReference>>,
-    summary: &mut AutofixSummary,
+    run: &mut AutofixRun,
+    mode: AutofixMode,
 ) -> Result<()> {
     for (language, references) in references_by_language {
         for reference in references {
-            if let Err(error) =
-                apply_autofix_for_reference(root, config, owner_id, language, reference, summary)
-            {
-                return Err(error);
-            }
+            apply_autofix_for_reference(root, config, owner_id, language, reference, run, mode)?;
         }
     }
 
@@ -736,7 +791,8 @@ fn apply_autofix_for_reference(
     owner_id: &str,
     language: &str,
     reference: &TraceReference,
-    summary: &mut AutofixSummary,
+    run: &mut AutofixRun,
+    mode: AutofixMode,
 ) -> Result<()> {
     let Some(adapter) = adapter_for_language(language) else {
         return Ok(());
@@ -755,11 +811,11 @@ fn apply_autofix_for_reference(
         Ok(contents) => contents,
         Err(_) => return Ok(()),
     };
-    let mut changed = false;
     let mut updated_symbols = 0;
+    let mut changed = false;
 
     if config.validate.trace_ownership_mode == TraceOwnershipMode::Sidecar {
-        ensure_sidecar_ownership_manifest(root, owner_id, &path, reference, summary)?;
+        ensure_sidecar_ownership_manifest(root, owner_id, &path, reference, run, mode)?;
     }
 
     for symbol in reference
@@ -769,8 +825,9 @@ fn apply_autofix_for_reference(
         .filter(|symbol| !symbol.is_empty() && *symbol != "*")
     {
         let mut required = reference.doc_contains.clone();
-        if config.validate.trace_ownership_mode == TraceOwnershipMode::Inline
-            && !contents.contains(owner_id)
+        let needs_inline_owner = config.validate.trace_ownership_mode == TraceOwnershipMode::Inline
+            && !contents.contains(owner_id);
+        if config.validate.trace_ownership_mode == TraceOwnershipMode::Inline && needs_inline_owner
         {
             required.push(owner_id.to_string());
         }
@@ -779,23 +836,37 @@ fn apply_autofix_for_reference(
         }
 
         let updated =
-            match apply_symbol_doc_fix(language, config, &path, &contents, symbol, &required) {
-                Ok(Some(updated)) => updated,
-                Ok(None) => continue,
-                Err(error) => return Err(error),
+            match apply_symbol_doc_fix(language, config, &path, &contents, symbol, &required)? {
+                Some(updated) => updated,
+                None => continue,
             };
 
         contents = updated;
-        if let Err(error) = fs::write(&path, &contents) {
-            return Err(error.into());
+        if mode == AutofixMode::Apply {
+            fs::write(&path, &contents)?;
+        } else if let Some(plan) = run.plan.as_mut() {
+            let mut rules = Vec::new();
+            if !reference.doc_contains.is_empty() {
+                rules.push("SYU-trace-doc-001");
+            }
+            if needs_inline_owner {
+                rules.push("SYU-trace-id-001");
+            }
+            record_planned_change(
+                plan,
+                root,
+                &path,
+                rules,
+                format!("update `{symbol}` in `{}` for `{owner_id}`", path.display()),
+            );
         }
         changed = true;
         updated_symbols += 1;
     }
 
     if changed {
-        record_updated_file(summary, root, &path);
-        summary.symbol_updates += updated_symbols;
+        record_updated_file(&mut run.summary, root, &path);
+        run.summary.symbol_updates += updated_symbols;
     }
 
     Ok(())
@@ -807,6 +878,55 @@ fn record_updated_file(summary: &mut AutofixSummary, root: &Path, path: &Path) {
             .map(Path::to_path_buf)
             .unwrap_or_else(|_| path.to_path_buf()),
     );
+}
+
+fn record_planned_change(
+    plan: &mut AutofixPlan,
+    root: &Path,
+    path: &Path,
+    rules: Vec<&'static str>,
+    summary: String,
+) {
+    plan.planned_updates += 1;
+    plan.updated_files.insert(
+        path.strip_prefix(root)
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|_| path.to_path_buf()),
+    );
+    plan.changes.push(AutofixPlanChange {
+        path: path
+            .strip_prefix(root)
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|_| path.to_path_buf()),
+        rules,
+        summary,
+    });
+}
+
+fn render_autofix_plan(plan: &AutofixPlan) -> String {
+    let mut output = String::new();
+    if plan.changes.is_empty() {
+        return output;
+    }
+
+    writeln!(&mut output, "planned fixes:").expect("writing to String must succeed");
+    for change in &plan.changes {
+        let rules = if change.rules.is_empty() {
+            String::from("no direct rule match")
+        } else {
+            change.rules.join(", ")
+        };
+        writeln!(
+            &mut output,
+            "- {} [{}]: {}",
+            change.path.display(),
+            rules,
+            change.summary
+        )
+        .expect("writing to String must succeed");
+    }
+
+    output
 }
 
 fn render_text_report(
@@ -1548,7 +1668,8 @@ fn ensure_sidecar_ownership_manifest(
     owner_id: &str,
     traced_file: &Path,
     reference: &TraceReference,
-    summary: &mut AutofixSummary,
+    run: &mut AutofixRun,
+    mode: AutofixMode,
 ) -> Result<()> {
     let manifest_path = ownership_manifest_path(traced_file);
     let mut manifest = if manifest_path.is_file() {
@@ -1567,9 +1688,22 @@ fn ensure_sidecar_ownership_manifest(
     }
 
     let raw = serde_yaml::to_string(&manifest)?;
-    fs::write(&manifest_path, raw)?;
-    record_updated_file(summary, root, &manifest_path);
-    summary.symbol_updates += 1;
+    if mode == AutofixMode::Apply {
+        fs::write(&manifest_path, raw)?;
+    } else if let Some(plan) = run.plan.as_mut() {
+        record_planned_change(
+            plan,
+            root,
+            &manifest_path,
+            vec!["SYU-trace-id-001"],
+            format!(
+                "update sidecar ownership for `{owner_id}` in `{}`",
+                manifest_path.display()
+            ),
+        );
+    }
+    record_updated_file(&mut run.summary, root, &manifest_path);
+    run.summary.symbol_updates += 1;
     Ok(())
 }
 
@@ -2691,14 +2825,14 @@ mod tests {
     use super::{
         FilteredIssueView, IssueFilters, ORPHAN_RULE_CODES, RECIPROCAL_RULE_CODES,
         RequirementValidationIndex, TextReportSummary, TraceRole, ValidationResources,
-        apply_autofix, apply_autofix_for_reference, collect_check_result,
-        collect_feature_yaml_paths, describe_trace_reference, entry_covers_symbols,
-        filter_check_result, format_reference_location, looks_like_feature_document,
-        merge_ownership_entry, ownership_symbols_hint, preferred_trace_file_path,
-        render_text_report, required_ownership_symbols, run_check_command,
-        validate_duplicate_links, validate_duplicate_trace_references, validate_feature,
-        validate_feature_registry_entries, validate_non_empty_field, validate_philosophy,
-        validate_policy, validate_requirement, validate_unique_ids, verify_trace_reference,
+        apply_autofix, collect_check_result, collect_feature_yaml_paths, describe_trace_reference,
+        entry_covers_symbols, filter_check_result, format_reference_location,
+        looks_like_feature_document, merge_ownership_entry, ownership_symbols_hint,
+        preferred_trace_file_path, render_text_report, required_ownership_symbols,
+        run_check_command, validate_duplicate_links, validate_duplicate_trace_references,
+        validate_feature, validate_feature_registry_entries, validate_non_empty_field,
+        validate_philosophy, validate_policy, validate_requirement, validate_unique_ids,
+        verify_trace_reference,
     };
 
     fn philosophy(id: &str) -> Philosophy {
@@ -2764,6 +2898,31 @@ mod tests {
         }
     }
 
+    fn apply_autofix_for_reference(
+        root: &Path,
+        config: &SyuConfig,
+        owner_id: &str,
+        language: &str,
+        reference: &TraceReference,
+        summary: &mut super::AutofixSummary,
+    ) -> anyhow::Result<()> {
+        let mut run = super::AutofixRun {
+            summary: std::mem::take(summary),
+            plan: None,
+        };
+        super::apply_autofix_for_reference(
+            root,
+            config,
+            owner_id,
+            language,
+            reference,
+            &mut run,
+            super::AutofixMode::Apply,
+        )?;
+        *summary = run.summary;
+        Ok(())
+    }
+
     fn write_valid_planned_workspace(root: &Path) {
         fs::create_dir_all(root.join("docs/syu/philosophy")).expect("philosophy dir");
         fs::create_dir_all(root.join("docs/syu/policies")).expect("policies dir");
@@ -2826,6 +2985,7 @@ mod tests {
             id: Vec::new(),
             spec_only: false,
             fix: false,
+            dry_run: false,
             no_fix: false,
             allow_planned: None,
             require_non_orphaned_items: None,
@@ -2894,6 +3054,7 @@ mod tests {
             id: Vec::new(),
             spec_only: false,
             fix: true,
+            dry_run: false,
             no_fix: false,
             allow_planned: None,
             require_non_orphaned_items: None,
@@ -2921,6 +3082,7 @@ mod tests {
             id: Vec::new(),
             spec_only: false,
             fix: true,
+            dry_run: false,
             no_fix: false,
             allow_planned: Some(false),
             require_non_orphaned_items: None,
@@ -4704,6 +4866,7 @@ mod tests {
         let mut config = SyuConfig::default();
         config.validate.trace_ownership_mode = TraceOwnershipMode::Sidecar;
 
+        let mut summary = super::AutofixSummary::default();
         let error = apply_autofix_for_reference(
             root,
             &config,
@@ -4714,7 +4877,7 @@ mod tests {
                 symbols: vec!["expected".to_string()],
                 doc_contains: Vec::new(),
             },
-            &mut super::AutofixSummary::default(),
+            &mut summary,
         )
         .expect_err("invalid sidecar manifests should fail autofix");
         assert!(error.to_string().contains("failed to load"));
@@ -4736,6 +4899,7 @@ mod tests {
         let mut config = SyuConfig::default();
         config.validate.trace_ownership_mode = TraceOwnershipMode::Sidecar;
 
+        let mut summary = super::AutofixSummary::default();
         let error = apply_autofix_for_reference(
             root,
             &config,
@@ -4746,7 +4910,7 @@ mod tests {
                 symbols: vec!["expected".to_string()],
                 doc_contains: Vec::new(),
             },
-            &mut super::AutofixSummary::default(),
+            &mut summary,
         )
         .expect_err("duplicate owner manifests should fail autofix");
         assert!(error.to_string().contains("failed to load"));
