@@ -377,6 +377,11 @@ pub fn run_check_command(args: &CheckArgs) -> Result<i32> {
     let (result, autofix_run, text_summary) = match load_workspace(&args.workspace) {
         Ok(workspace) => {
             let should_fix = effective_fix(args, &workspace.config);
+            if args.dry_run && !should_fix {
+                return Err(anyhow::anyhow!(
+                    "`--dry-run` requires an effective autofix path; pass `--fix` or remove `--no-fix`."
+                ));
+            }
             let autofix_run = if should_fix {
                 Some(if args.dry_run {
                     plan_autofix(&workspace)?
@@ -3094,6 +3099,38 @@ mod tests {
         .expect("command should complete");
 
         assert_eq!(code, 1);
+    }
+
+    #[test]
+    fn run_check_command_rejects_dry_run_without_an_effective_fix_path() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        write_valid_planned_workspace(tempdir.path());
+
+        let error = run_check_command(&crate::cli::CheckArgs {
+            workspace: tempdir.path().to_path_buf(),
+            format: crate::cli::OutputFormat::Text,
+            severity: Vec::new(),
+            genre: Vec::new(),
+            rule: Vec::new(),
+            id: Vec::new(),
+            spec_only: false,
+            fix: false,
+            dry_run: true,
+            no_fix: false,
+            allow_planned: None,
+            require_non_orphaned_items: None,
+            require_reciprocal_links: None,
+            require_symbol_trace_coverage: None,
+            warning_exit_code: None,
+            quiet: false,
+        })
+        .expect_err("dry-run without fix should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("requires an effective autofix path")
+        );
     }
 
     #[test]
