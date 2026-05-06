@@ -819,7 +819,9 @@ fn run_autofix(workspace: &Workspace, mode: AutofixMode) -> Result<AutofixRun> {
 
     match result {
         Ok(()) => Ok(run),
-        Err(error) if mode == AutofixMode::Apply => Err(finalize_autofix_error(&transaction, error)),
+        Err(error) if mode == AutofixMode::Apply => {
+            Err(finalize_autofix_error(&transaction, error))
+        }
         Err(error) => Err(error),
     }
 }
@@ -2935,9 +2937,9 @@ mod tests {
     };
 
     use super::{
-        AutofixPlan, AutofixPlanChange, FilteredIssueView, IssueFilters, ORPHAN_RULE_CODES,
-        RECIPROCAL_RULE_CODES, RequirementValidationIndex, TextReportSummary, TraceRole,
-        AutofixTransaction, ValidationResources, apply_autofix, collect_check_result,
+        AutofixPlan, AutofixPlanChange, AutofixTransaction, FilteredIssueView, IssueFilters,
+        ORPHAN_RULE_CODES, RECIPROCAL_RULE_CODES, RequirementValidationIndex, TextReportSummary,
+        TraceRole, ValidationResources, apply_autofix, collect_check_result,
         collect_feature_yaml_paths, describe_trace_reference, entry_covers_symbols,
         filter_check_result, finalize_autofix_error, format_reference_location,
         looks_like_feature_document, merge_ownership_entry, ownership_symbols_hint,
