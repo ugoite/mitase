@@ -463,8 +463,8 @@ mod tests {
     }
 
     #[test]
-    fn load_workspace_allowing_missing_feature_registry_reports_missing_registry_when_no_feature_docs_exist(
-    ) {
+    fn load_workspace_allowing_missing_feature_registry_reports_missing_registry_when_no_feature_docs_exist()
+     {
         let tempdir = tempdir().expect("tempdir should exist");
         let spec_root = tempdir.path().join("docs/syu");
         fs::create_dir_all(spec_root.join("philosophy")).expect("dir");
@@ -472,8 +472,11 @@ mod tests {
         fs::create_dir_all(spec_root.join("requirements")).expect("dir");
         fs::create_dir_all(spec_root.join("features")).expect("dir");
 
-        fs::write(tempdir.path().join("syu.yaml"), "version: 1\nspec:\n  root: docs/syu\n")
-            .expect("config");
+        fs::write(
+            tempdir.path().join("syu.yaml"),
+            "version: 1\nspec:\n  root: docs/syu\n",
+        )
+        .expect("config");
         fs::write(
             spec_root.join("philosophy/foundation.yaml"),
             "category: Philosophy\nversion: 1\nphilosophies:\n  - id: PHIL-1\n    title: T\n    product_design_principle: A\n    coding_guideline: B\n    linked_policies:\n      - POL-1\n",
@@ -494,7 +497,7 @@ mod tests {
             spec_root.join("features/extra/features.yaml"),
             "category: Notes\nsummary: S\n",
         )
-            .expect("write");
+        .expect("write");
 
         let error = load_workspace_allowing_missing_feature_registry(tempdir.path())
             .expect_err("missing feature docs should fail");
@@ -510,8 +513,11 @@ mod tests {
         fs::create_dir_all(spec_root.join("requirements")).expect("dir");
         fs::create_dir_all(spec_root.join("features")).expect("dir");
 
-        fs::write(tempdir.path().join("syu.yaml"), "version: 1\nspec:\n  root: docs/syu\n")
-            .expect("config");
+        fs::write(
+            tempdir.path().join("syu.yaml"),
+            "version: 1\nspec:\n  root: docs/syu\n",
+        )
+        .expect("config");
         fs::write(
             spec_root.join("philosophy/foundation.yaml"),
             "category: Philosophy\nversion: 1\nphilosophies:\n  - id: PHIL-1\n    title: T\n    product_design_principle: A\n    coding_guideline: B\n    linked_policies:\n      - POL-1\n",
@@ -532,8 +538,11 @@ mod tests {
             "category: Core Features\nversion: 1\nfeatures: []\n",
         )
         .expect("write");
-        fs::write(spec_root.join("features/notes.yaml"), "category: Notes\nsummary: S\n")
-            .expect("write");
+        fs::write(
+            spec_root.join("features/notes.yaml"),
+            "category: Notes\nsummary: S\n",
+        )
+        .expect("write");
 
         let error = load_workspace_allowing_missing_feature_registry(tempdir.path())
             .expect_err("empty feature sets should fail");

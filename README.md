@@ -718,7 +718,9 @@ documentation-style trace gaps that can be updated mechanically:
 - drift between checked-in feature documents and `features/features.yaml`
 
 It does **not** attempt speculative edits like renaming symbols or inventing
-missing files.
+missing files. If a later write fails, `syu` rolls back earlier edits and tells
+you whether the run never started or was rolled back after partial changes, so a
+failed autofix should leave the workspace ready to review again.
 
 ## Example workspaces
 

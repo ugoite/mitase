@@ -358,9 +358,9 @@ if it is obsolete.
 | Adds missing `linked_*` graph links | ❌ No — only you know the correct links |
 | Creates new spec entries | ❌ No |
 
-Run `git diff` after `--fix` to review every change before committing. If the
-run fails, `syu` rolls back earlier writes instead of leaving a partial graph or
-registry update behind.
+Run `git diff` after `--fix` to review every change before committing. If a
+later write fails, `syu` rolls back earlier edits instead of leaving a
+half-applied change set behind.
 
 ---
 
