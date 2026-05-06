@@ -170,6 +170,35 @@ fn validate_fix_dry_run_reports_planned_changes_without_writing_files() {
 
 #[test]
 // REQ-CORE-003
+fn validate_fix_dry_run_reports_inline_owner_changes_without_writing_files() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    write_workspace_with_ownership_mode(tempdir.path(), false, "inline");
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(tempdir.path())
+        .arg("--fix")
+        .arg("--dry-run")
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        !output.status.success(),
+        "dry run should not mutate the workspace"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("src/trace.rs"));
+    assert!(stdout.contains("SYU-trace-doc-001"));
+    assert!(stdout.contains("SYU-trace-id-001"));
+
+    let source = fs::read_to_string(tempdir.path().join("src/trace.rs")).expect("source");
+    assert_eq!(source, "pub fn req_trace() {}\n");
+}
+
+#[test]
+// REQ-CORE-003
 fn validate_fix_dry_run_exposes_machine_readable_plan() {
     let tempdir = tempdir().expect("tempdir should exist");
     write_workspace_with_ownership_mode(tempdir.path(), false, "sidecar");

@@ -2823,16 +2823,16 @@ mod tests {
     };
 
     use super::{
-        FilteredIssueView, IssueFilters, ORPHAN_RULE_CODES, RECIPROCAL_RULE_CODES,
-        RequirementValidationIndex, TextReportSummary, TraceRole, ValidationResources,
-        apply_autofix, collect_check_result, collect_feature_yaml_paths, describe_trace_reference,
-        entry_covers_symbols, filter_check_result, format_reference_location,
-        looks_like_feature_document, merge_ownership_entry, ownership_symbols_hint,
-        preferred_trace_file_path, render_text_report, required_ownership_symbols,
-        run_check_command, validate_duplicate_links, validate_duplicate_trace_references,
-        validate_feature, validate_feature_registry_entries, validate_non_empty_field,
-        validate_philosophy, validate_policy, validate_requirement, validate_unique_ids,
-        verify_trace_reference,
+        AutofixPlan, AutofixPlanChange, FilteredIssueView, IssueFilters, ORPHAN_RULE_CODES,
+        RECIPROCAL_RULE_CODES, RequirementValidationIndex, TextReportSummary, TraceRole,
+        ValidationResources, apply_autofix, collect_check_result, collect_feature_yaml_paths,
+        describe_trace_reference, entry_covers_symbols, filter_check_result,
+        format_reference_location, looks_like_feature_document, merge_ownership_entry,
+        ownership_symbols_hint, preferred_trace_file_path, render_autofix_plan, render_text_report,
+        required_ownership_symbols, run_check_command, validate_duplicate_links,
+        validate_duplicate_trace_references, validate_feature, validate_feature_registry_entries,
+        validate_non_empty_field, validate_philosophy, validate_policy, validate_requirement,
+        validate_unique_ids, verify_trace_reference,
     };
 
     fn philosophy(id: &str) -> Philosophy {
@@ -5514,5 +5514,24 @@ mod tests {
             format_reference_location("rust", &reference),
             "rust:src/lib.rs"
         );
+    }
+
+    #[test]
+    fn render_autofix_plan_returns_empty_output_for_empty_plan() {
+        assert!(render_autofix_plan(&AutofixPlan::default()).is_empty());
+    }
+
+    #[test]
+    fn render_autofix_plan_labels_changes_without_rule_matches() {
+        let mut plan = AutofixPlan::default();
+        plan.changes.push(AutofixPlanChange {
+            path: PathBuf::from("trace.rs"),
+            rules: Vec::new(),
+            summary: "update trace.rs".to_string(),
+        });
+
+        let rendered = render_autofix_plan(&plan);
+        assert!(rendered.contains("no direct rule match"));
+        assert!(rendered.contains("trace.rs"));
     }
 }
