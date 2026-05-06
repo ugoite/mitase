@@ -3148,24 +3148,27 @@ mod tests {
         cli::{ValidationGenreFilter, ValidationSeverityFilter},
         config::{SyuConfig, TraceOwnershipMode},
         model::{
-            DefinitionCounts, Feature, Issue, OwnershipEntry, OwnershipManifest, Philosophy,
-            Policy, Requirement, TraceReference,
+            DefinitionCounts, Feature, FeatureDocument, Issue, OwnershipEntry, OwnershipManifest,
+            Philosophy, PhilosophyDocument, Policy, PolicyDocument, Requirement,
+            RequirementDocument, TraceReference,
         },
         rules::{all_rules, referenced_rules},
         workspace::Workspace,
     };
 
     use super::{
-        FilteredIssueView, IssueFilters, ORPHAN_RULE_CODES, RECIPROCAL_RULE_CODES,
-        RequirementValidationIndex, TextReportSummary, TraceRole, ValidationResources,
-        apply_autofix, apply_autofix_for_reference, collect_check_result,
-        collect_feature_yaml_paths, describe_trace_reference, entry_covers_symbols,
-        filter_check_result, format_reference_location, looks_like_feature_document,
-        merge_ownership_entry, ownership_symbols_hint, preferred_trace_file_path,
-        render_text_report, required_ownership_symbols, run_check_command,
-        validate_duplicate_links, validate_duplicate_trace_references, validate_feature,
-        validate_feature_registry_entries, validate_non_empty_field, validate_philosophy,
-        validate_policy, validate_requirement, validate_unique_ids, verify_trace_reference,
+        FilteredIssueView, IssueFilters, MutableLoadedDocument, ORPHAN_RULE_CODES,
+        RECIPROCAL_RULE_CODES, RequirementValidationIndex, TextReportSummary, TraceRole,
+        ValidationResources, apply_autofix, apply_autofix_for_reference, apply_feature_reciprocals,
+        apply_philosophy_reciprocals, apply_policy_reciprocals, apply_requirement_reciprocals,
+        collect_check_result, collect_feature_yaml_paths, describe_trace_reference,
+        entry_covers_symbols, filter_check_result, format_reference_location,
+        looks_like_feature_document, merge_ownership_entry, ownership_symbols_hint,
+        preferred_trace_file_path, render_text_report, required_ownership_symbols,
+        run_check_command, validate_duplicate_links, validate_duplicate_trace_references,
+        validate_feature, validate_feature_registry_entries, validate_non_empty_field,
+        validate_philosophy, validate_policy, validate_requirement, validate_unique_ids,
+        verify_trace_reference,
     };
 
     fn philosophy(id: &str) -> Philosophy {
@@ -5817,5 +5820,93 @@ mod tests {
             format_reference_location("rust", &reference),
             "rust:src/lib.rs"
         );
+    }
+
+    #[test]
+    fn graph_autofix_skips_missing_targets_without_changes() {
+        let philosophies = vec![MutableLoadedDocument {
+            path: PathBuf::from("philosophy.yaml"),
+            document: PhilosophyDocument {
+                category: "Philosophy".to_string(),
+                version: 1,
+                language: Some("en".to_string()),
+                philosophies: vec![Philosophy {
+                    id: "PHIL-1".to_string(),
+                    title: "Title".to_string(),
+                    product_design_principle: "Principle".to_string(),
+                    coding_guideline: "Guideline".to_string(),
+                    linked_policies: vec!["POL-missing".to_string()],
+                }],
+            },
+            changed: false,
+        }];
+        let mut policies = vec![MutableLoadedDocument {
+            path: PathBuf::from("policy.yaml"),
+            document: PolicyDocument {
+                category: "Policies".to_string(),
+                version: 1,
+                language: Some("en".to_string()),
+                policies: vec![Policy {
+                    id: "POL-1".to_string(),
+                    title: "Title".to_string(),
+                    summary: "Summary".to_string(),
+                    description: "Description".to_string(),
+                    linked_philosophies: vec!["PHIL-missing".to_string()],
+                    linked_requirements: vec!["REQ-missing".to_string()],
+                }],
+            },
+            changed: false,
+        }];
+        let mut requirements = vec![MutableLoadedDocument {
+            path: PathBuf::from("requirement.yaml"),
+            document: RequirementDocument {
+                category: "Core Requirements".to_string(),
+                prefix: "REQ".to_string(),
+                requirements: vec![Requirement {
+                    id: "REQ-1".to_string(),
+                    title: "Title".to_string(),
+                    description: "Description".to_string(),
+                    priority: "high".to_string(),
+                    status: "planned".to_string(),
+                    linked_policies: vec!["POL-missing".to_string()],
+                    linked_features: vec!["FEAT-missing".to_string()],
+                    tests: BTreeMap::new(),
+                }],
+            },
+            changed: false,
+        }];
+        let mut features = vec![MutableLoadedDocument {
+            path: PathBuf::from("feature.yaml"),
+            document: FeatureDocument {
+                category: "Core Features".to_string(),
+                version: 1,
+                features: vec![Feature {
+                    id: "FEAT-1".to_string(),
+                    title: "Title".to_string(),
+                    summary: "Summary".to_string(),
+                    status: "planned".to_string(),
+                    linked_requirements: vec!["REQ-missing".to_string()],
+                    implementations: BTreeMap::new(),
+                }],
+            },
+            changed: false,
+        }];
+
+        let empty = HashMap::new();
+        let mut empty_philosophies: Vec<MutableLoadedDocument<PhilosophyDocument>> = Vec::new();
+        apply_philosophy_reciprocals(&philosophies, &mut policies, &empty);
+        apply_policy_reciprocals(
+            &policies,
+            &mut empty_philosophies,
+            &empty,
+            &mut requirements,
+            &empty,
+        );
+        apply_requirement_reciprocals(&requirements, &mut features, &empty);
+        apply_feature_reciprocals(&features, &mut requirements, &empty);
+
+        assert!(!policies[0].changed);
+        assert!(!requirements[0].changed);
+        assert!(!features[0].changed);
     }
 }

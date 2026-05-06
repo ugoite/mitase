@@ -11,6 +11,7 @@ fn write_workspace_with_ownership_mode(root: &Path, default_fix: bool, trace_own
     fs::create_dir_all(root.join("docs/syu/policies")).expect("policies dir");
     fs::create_dir_all(root.join("docs/syu/requirements")).expect("requirements dir");
     fs::create_dir_all(root.join("docs/syu/features")).expect("features dir");
+    fs::create_dir_all(root.join("docs/syu/features/core")).expect("core features dir");
     fs::create_dir_all(root.join("src")).expect("src dir");
 
     fs::write(
@@ -65,6 +66,8 @@ fn write_graph_workspace(root: &Path) {
     fs::create_dir_all(root.join("docs/syu/policies")).expect("policies dir");
     fs::create_dir_all(root.join("docs/syu/requirements")).expect("requirements dir");
     fs::create_dir_all(root.join("docs/syu/features")).expect("features dir");
+    fs::create_dir_all(root.join("docs/syu/features/core")).expect("core features dir");
+    fs::create_dir_all(root.join("docs/syu/features/extra")).expect("extra features dir");
 
     fs::write(
         root.join("syu.yaml"),
@@ -109,10 +112,16 @@ fn write_graph_workspace(root: &Path) {
     .expect("core feature");
 
     fs::write(
-        root.join("docs/syu/features/extra.yaml"),
+        root.join("docs/syu/features/extra/extra.yaml"),
         "category: Extra Features\nversion: 1\n\nfeatures:\n  - id: FEAT-EXTRA-001\n    title: Extra feature\n    summary: Keep the extra feature available.\n    status: planned\n    linked_requirements:\n      - REQ-001\n      - REQ-001\n    implementations: {}\n",
     )
     .expect("extra feature");
+
+    fs::write(
+        root.join("docs/syu/features/notes.yaml"),
+        "category: Notes\nversion: 1\nnotes:\n  - this file should be ignored by the registry sync\n",
+    )
+    .expect("notes");
 }
 
 #[test]
@@ -263,12 +272,13 @@ fn validate_fix_repairs_graph_links_and_feature_registry_drift() {
         .expect("core feature");
     assert!(core_feature.contains("REQ-001"));
 
-    let extra_feature = fs::read_to_string(tempdir.path().join("docs/syu/features/extra.yaml"))
-        .expect("extra feature");
+    let extra_feature =
+        fs::read_to_string(tempdir.path().join("docs/syu/features/extra/extra.yaml"))
+            .expect("extra feature");
     assert_eq!(extra_feature.matches("REQ-001").count(), 1);
 
     let registry = fs::read_to_string(tempdir.path().join("docs/syu/features/features.yaml"))
         .expect("registry");
     assert!(registry.contains("file: core.yaml"));
-    assert!(registry.contains("file: extra.yaml"));
+    assert!(registry.contains("file: extra/extra.yaml"));
 }
