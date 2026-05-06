@@ -581,6 +581,10 @@ pub struct ValidateArgs {
     #[arg(long, action = ArgAction::SetTrue)]
     pub fix: bool,
 
+    #[arg(help = "Preview autofixes without writing files")]
+    #[arg(long, action = ArgAction::SetTrue)]
+    pub dry_run: bool,
+
     #[arg(help = "Disable autofix even when syu.yaml enables it by default")]
     #[arg(long, action = ArgAction::SetTrue)]
     pub no_fix: bool,

@@ -77,6 +77,7 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       - **file**: tests/help_command.rs
         - **symbols**:
           - validate_help_mentions_spec_only_mode
+          - validate_help_mentions_dry_run_mode
       - **file**: src/command/check.rs
         - **symbols**:
           - *
@@ -185,16 +186,24 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
         - **symbols**:
           - *
 - **id**: REQ-CORE-003
-  - **title**: Support conservative autofix and config-driven default_fix
+  - **title**: Support conservative autofix, dry-run planning, and config-driven default_fix
   - **description**:
     - |
       The `validate` command MUST provide a `--fix` mode that performs safe,
+      mechanical repairs for documentation-style trace gaps. It MUST also
+      provide a dry-run planning mode that previews the same fix set without
+      writing files, with both machine-readable and reviewer-friendly output.
+      `syu.yaml` MUST be able to configure default fix behavior, and `--no-fix`
+      MUST disable it. Autofix MUST stay conservative and avoid speculative
+      structural edits.
       mechanical repairs for documentation-style trace gaps. `syu.yaml` MUST be
       able to configure default fix behavior, and `--no-fix` MUST disable it.
       Autofix MUST stay conservative and avoid speculative structural edits.
       It MAY also remove exact duplicate graph links, restore already-declared
       reciprocal links, and resynchronize the feature registry with checked-in
-      feature documents when one safe correction is obvious.
+      feature documents when one safe correction is obvious. If a later write
+      fails, it MUST roll back earlier writes so the workspace is not left
+      half-updated.
   - **priority**: high
   - **status**: implemented
   - **linked_policies**:
@@ -311,6 +320,7 @@ requirements:
         - file: tests/help_command.rs
           symbols:
             - validate_help_mentions_spec_only_mode
+            - validate_help_mentions_dry_run_mode
         - file: src/command/check.rs
           symbols:
             - '*'
@@ -418,15 +428,23 @@ requirements:
           symbols:
             - '*'
   - id: REQ-CORE-003
-    title: Support conservative autofix and config-driven default_fix
+    title: Support conservative autofix, dry-run planning, and config-driven default_fix
     description: |
       The `validate` command MUST provide a `--fix` mode that performs safe,
+      mechanical repairs for documentation-style trace gaps. It MUST also
+      provide a dry-run planning mode that previews the same fix set without
+      writing files, with both machine-readable and reviewer-friendly output.
+      `syu.yaml` MUST be able to configure default fix behavior, and `--no-fix`
+      MUST disable it. Autofix MUST stay conservative and avoid speculative
+      structural edits.
       mechanical repairs for documentation-style trace gaps. `syu.yaml` MUST be
       able to configure default fix behavior, and `--no-fix` MUST disable it.
       Autofix MUST stay conservative and avoid speculative structural edits.
       It MAY also remove exact duplicate graph links, restore already-declared
       reciprocal links, and resynchronize the feature registry with checked-in
-      feature documents when one safe correction is obvious.
+      feature documents when one safe correction is obvious. If a later write
+      fails, it MUST roll back earlier writes so the workspace is not left
+      half-updated.
     priority: high
     status: implemented
     linked_policies:
