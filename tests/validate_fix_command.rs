@@ -199,6 +199,69 @@ fn validate_fix_dry_run_reports_inline_owner_changes_without_writing_files() {
 
 #[test]
 // REQ-CORE-003
+fn validate_fix_dry_run_propagates_autofix_errors() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    let workspace = tempdir.path().join("workspace");
+    fs::create_dir_all(workspace.join("docs/syu/philosophy")).expect("philosophy dir");
+    fs::create_dir_all(workspace.join("docs/syu/policies")).expect("policies dir");
+    fs::create_dir_all(workspace.join("docs/syu/requirements")).expect("requirements dir");
+    fs::create_dir_all(workspace.join("docs/syu/features")).expect("features dir");
+
+    fs::write(
+        workspace.join("syu.yaml"),
+        "version: 1\nruntimes:\n  python:\n    command: false\n",
+    )
+    .expect("config should exist");
+    fs::write(
+        workspace.join("docs/syu/philosophy/foundation.yaml"),
+        "category: Foundations\nversion: 1\n\nphilosophies:\n  - id: PHIL-1\n    title: Foundation\n    product_design_principle: Keep it clear.\n    coding_guideline: Keep it explicit.\n    linked_policies:\n      - POL-1\n",
+    )
+    .expect("philosophy should exist");
+    fs::write(
+        workspace.join("docs/syu/policies/policies.yaml"),
+        "category: Policies\nversion: 1\n\npolicies:\n  - id: POL-1\n    title: Policy\n    summary: Rule summary.\n    description: Rule description.\n    linked_philosophies:\n      - PHIL-1\n    linked_requirements:\n      - REQ-1\n",
+    )
+    .expect("policy should exist");
+    fs::write(
+        workspace.join("docs/syu/requirements/core.yaml"),
+        "category: Core Requirements\nprefix: REQ\n\nrequirements:\n  - id: REQ-1\n    title: Requirement\n    description: Requirement description.\n    priority: high\n    status: implemented\n    linked_policies:\n      - POL-1\n    linked_features:\n      - FEAT-1\n    tests:\n      python:\n        - file: tests/test_sample.py\n          symbols:\n            - requirement_test\n          doc_contains:\n            - Requirement docs\n",
+    )
+    .expect("requirement should exist");
+    fs::write(
+        workspace.join("docs/syu/features/features.yaml"),
+        "version: 1\nfiles:\n  - kind: core\n    file: core.yaml\n",
+    )
+    .expect("feature registry should exist");
+    fs::write(
+        workspace.join("docs/syu/features/core.yaml"),
+        "category: Core Features\nversion: 1\n\nfeatures:\n  - id: FEAT-1\n    title: Feature\n    summary: Feature summary.\n    status: implemented\n    linked_requirements:\n      - REQ-1\n    implementations: {}\n",
+    )
+    .expect("feature should exist");
+    fs::create_dir_all(workspace.join("tests")).expect("tests dir");
+    fs::write(
+        workspace.join("tests/test_sample.py"),
+        "def requirement_test():\n    return 1\n",
+    )
+    .expect("python test should exist");
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(&workspace)
+        .arg("--fix")
+        .arg("--dry-run")
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        !output.status.success(),
+        "dry-run autofix errors should bubble up"
+    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Python inspector failed"));
+}
+
+#[test]
+// REQ-CORE-003
 fn validate_fix_dry_run_exposes_machine_readable_plan() {
     let tempdir = tempdir().expect("tempdir should exist");
     write_workspace_with_ownership_mode(tempdir.path(), false, "sidecar");

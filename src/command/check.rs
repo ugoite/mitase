@@ -958,7 +958,11 @@ fn apply_autofix_for_reference_with_transaction(
         contents = updated;
         if mode == AutofixMode::Apply {
             transaction.write(&path, &contents)?;
-        } else if let Some(plan) = run.plan.as_mut() {
+        } else {
+            let plan = run
+                .plan
+                .as_mut()
+                .expect("plan mode should initialize a plan");
             let mut rules = Vec::new();
             if !reference.doc_contains.is_empty() {
                 rules.push("SYU-trace-doc-001");
