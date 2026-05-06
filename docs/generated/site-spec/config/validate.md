@@ -47,7 +47,9 @@ description: "Generated reference for docs/syu/config/validate.yaml"
   - **description**:
     - |
       When `true`, `syu validate` behaves as if `--fix` was passed unless the
-      user explicitly disables fixes with `--no-fix`.
+      user explicitly disables fixes with `--no-fix`. Autofix is rollback-safe:
+      if a later write fails, earlier edits are restored and the run reports
+      whether it never started or was rolled back after partial changes.
 - **key**: validate.allow_planned
   - **type**: boolean
   - **default**: True
@@ -168,7 +170,9 @@ items:
     summary: Enables conservative autofix by default.
     description: |
       When `true`, `syu validate` behaves as if `--fix` was passed unless the
-      user explicitly disables fixes with `--no-fix`.
+      user explicitly disables fixes with `--no-fix`. Autofix is rollback-safe:
+      if a later write fails, earlier edits are restored and the run reports
+      whether it never started or was rolled back after partial changes.
   - key: validate.allow_planned
     type: boolean
     default: true
