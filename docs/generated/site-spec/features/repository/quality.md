@@ -75,7 +75,7 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
       - **file**: .github/workflows/ci.yml
         - **symbols**:
           - merge_group
-          - precommit
+          - file-hygiene
           - quality
           - coverage
           - actionlint
@@ -190,7 +190,7 @@ features:
         - file: .github/workflows/ci.yml
           symbols:
             - merge_group
-            - precommit
+            - file-hygiene
             - quality
             - coverage
             - actionlint
