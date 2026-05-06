@@ -1642,6 +1642,7 @@ mod tests {
             id: Vec::new(),
             spec_only: false,
             fix: false,
+            dry_run: false,
             no_fix: false,
             allow_planned: None,
             require_non_orphaned_items: None,

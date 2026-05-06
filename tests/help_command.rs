@@ -84,6 +84,22 @@ fn workspace_help_uses_current_directory_default_consistently() {
 }
 
 #[test]
+// REQ-CORE-003
+fn validate_help_mentions_dry_run_mode() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args(["validate", "--help"])
+        .output()
+        .expect("help should render");
+
+    assert!(output.status.success(), "validate help should succeed");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--dry-run"));
+    assert!(stdout.contains("Preview autofixes without writing files"));
+}
+
+#[test]
 fn doctor_help_mentions_local_readiness_and_json_output() {
     let output = Command::cargo_bin("syu")
         .expect("binary should build")

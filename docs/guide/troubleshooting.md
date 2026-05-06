@@ -205,6 +205,10 @@ implementations:
         - authenticate_user
 ```
 
+If you want to preview the doc-comment repair path before it writes files, run
+`syu validate . --fix --dry-run`. The dry run prints the plan in text or JSON
+but leaves the workspace unchanged.
+
 ---
 
 ## Trace errors
