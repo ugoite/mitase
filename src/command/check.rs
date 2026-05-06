@@ -889,6 +889,7 @@ fn apply_autofix_for_reference(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn apply_autofix_for_reference_with_transaction(
     root: &Path,
     config: &SyuConfig,
