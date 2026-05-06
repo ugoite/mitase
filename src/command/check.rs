@@ -22,12 +22,17 @@ use crate::{
     inspect::{apply_symbol_doc_fix, inspect_symbol, supports_rich_inspection},
     language::adapter_for_language,
     model::{
-        CheckResult, DefinitionCounts, Feature, FeatureRegistryDocument, Issue, OwnershipEntry,
-        OwnershipManifest, Philosophy, Policy, Requirement, Severity, TraceCount, TraceReference,
-        TraceSummary,
+        CheckResult, DefinitionCounts, Feature, FeatureDocument, FeatureRegistryDocument,
+        FeatureRegistryEntry, Issue, OwnershipEntry, OwnershipManifest, Philosophy,
+        PhilosophyDocument, Policy, PolicyDocument, Requirement, RequirementDocument, Severity,
+        TraceCount, TraceReference, TraceSummary,
     },
     rules::{all_rules, attach_referenced_rules, referenced_rules, rule_genre},
-    workspace::{Workspace, load_workspace},
+    workspace::{
+        Workspace, load_philosophy_documents_with_paths, load_policy_documents_with_paths,
+        load_requirement_documents_with_paths, load_workspace,
+        load_workspace_allowing_missing_feature_registry,
+    },
 };
 
 use super::issue_text::{TextIssueFormat, format_text_issue};
@@ -68,6 +73,13 @@ struct RequirementValidationIndex<'a> {
 struct AutofixSummary {
     updated_files: BTreeSet<PathBuf>,
     symbol_updates: usize,
+}
+
+#[derive(Debug)]
+struct MutableLoadedDocument<T> {
+    path: PathBuf,
+    document: T,
+    changed: bool,
 }
 
 #[derive(Debug, Default, Clone, Serialize)]
@@ -416,7 +428,20 @@ fn workspace_item_count(definition_counts: &DefinitionCounts) -> usize {
 
 // FEAT-CHECK-001
 pub fn run_check_command(args: &CheckArgs) -> Result<i32> {
-    let (result, autofix_run, text_summary) = match load_workspace(&args.workspace) {
+    let workspace_result = load_workspace(&args.workspace).or_else(|error| {
+        if !error.to_string().contains("feature registry") {
+            return Err(error);
+        }
+
+        let workspace = load_workspace_allowing_missing_feature_registry(&args.workspace)?;
+        if effective_fix(args, &workspace.config) {
+            Ok(workspace)
+        } else {
+            Err(error)
+        }
+    });
+
+    let (result, autofix_run, text_summary) = match workspace_result {
         Ok(workspace) => {
             let should_fix = effective_fix(args, &workspace.config);
             if args.dry_run && !should_fix {
@@ -433,7 +458,7 @@ pub fn run_check_command(args: &CheckArgs) -> Result<i32> {
             } else {
                 None
             };
-            let workspace = if should_fix {
+            let workspace = if should_fix && !args.dry_run {
                 with_validate_overrides(load_workspace(&args.workspace)?, args)
             } else {
                 with_validate_overrides(workspace, args)
@@ -814,6 +839,10 @@ fn run_autofix(workspace: &Workspace, mode: AutofixMode) -> Result<AutofixRun> {
             )?;
         }
 
+        if mode == AutofixMode::Apply {
+            apply_graph_autofix(workspace, &mut run.summary, &mut transaction)?;
+        }
+
         Ok(())
     })();
 
@@ -824,6 +853,102 @@ fn run_autofix(workspace: &Workspace, mode: AutofixMode) -> Result<AutofixRun> {
         }
         Err(error) => Err(error),
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ItemLocation {
+    doc_index: usize,
+    item_index: usize,
+}
+
+fn apply_graph_autofix(
+    workspace: &Workspace,
+    summary: &mut AutofixSummary,
+    transaction: &mut AutofixTransaction,
+) -> Result<()> {
+    let philosophy_root = workspace.spec_root.join("philosophy");
+    let policy_root = workspace.spec_root.join("policies");
+    let requirement_root = workspace.spec_root.join("requirements");
+    let feature_root = workspace.spec_root.join("features");
+
+    let mut philosophy_docs = if philosophy_root.is_dir() {
+        load_philosophy_documents_with_paths(&philosophy_root)?
+            .into_iter()
+            .map(|loaded| MutableLoadedDocument {
+                path: loaded.path,
+                document: loaded.document,
+                changed: false,
+            })
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+    let mut policy_docs = if policy_root.is_dir() {
+        load_policy_documents_with_paths(&policy_root)?
+            .into_iter()
+            .map(|loaded| MutableLoadedDocument {
+                path: loaded.path,
+                document: loaded.document,
+                changed: false,
+            })
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+    let mut requirement_docs = if requirement_root.is_dir() {
+        load_requirement_documents_with_paths(&requirement_root)?
+            .into_iter()
+            .map(|loaded| MutableLoadedDocument {
+                path: loaded.path,
+                document: loaded.document,
+                changed: false,
+            })
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+    let mut feature_docs = if feature_root.is_dir() {
+        load_feature_documents_for_autofix(&feature_root)?
+    } else {
+        Vec::new()
+    };
+
+    dedupe_philosophy_links(&mut philosophy_docs);
+    dedupe_policy_links(&mut policy_docs);
+    dedupe_requirement_links(&mut requirement_docs);
+    dedupe_feature_links(&mut feature_docs);
+
+    let philosophy_index = index_philosophies(&philosophy_docs);
+    let policy_index = index_policies(&policy_docs);
+    let requirement_index = index_requirements(&requirement_docs);
+    let feature_index = index_features(&feature_docs);
+
+    apply_philosophy_reciprocals(&philosophy_docs, &mut policy_docs, &policy_index);
+    apply_policy_reciprocals(
+        &policy_docs,
+        &mut philosophy_docs,
+        &philosophy_index,
+        &mut requirement_docs,
+        &requirement_index,
+    );
+    apply_requirement_reciprocals(&requirement_docs, &mut feature_docs, &feature_index);
+    apply_feature_reciprocals(&feature_docs, &mut requirement_docs, &requirement_index);
+
+    if feature_root.is_dir()
+        && let Some(updated_registry) = sync_feature_registry(&feature_root, &feature_docs)?
+    {
+        let registry_path = feature_root.join("features.yaml");
+        transaction.write(&registry_path, &serde_yaml::to_string(&updated_registry)?)?;
+        record_updated_file(summary, &workspace.root, &registry_path);
+        summary.symbol_updates += 1;
+    }
+
+    write_modified_documents(&philosophy_docs, summary, &workspace.root, transaction)?;
+    write_modified_documents(&policy_docs, summary, &workspace.root, transaction)?;
+    write_modified_documents(&requirement_docs, summary, &workspace.root, transaction)?;
+    write_modified_documents(&feature_docs, summary, &workspace.root, transaction)?;
+
+    Ok(())
 }
 
 fn finalize_autofix_error(transaction: &AutofixTransaction, error: anyhow::Error) -> anyhow::Error {
@@ -863,6 +988,384 @@ fn apply_autofix_for_trace_map_with_transaction(
         }
     }
 
+    Ok(())
+}
+
+fn load_feature_documents_for_autofix(
+    feature_root: &Path,
+) -> Result<Vec<MutableLoadedDocument<FeatureDocument>>> {
+    let registry_path = feature_root.join("features.yaml");
+    if registry_path.exists() {
+        let raw = fs::read_to_string(&registry_path)?;
+        let _registry: FeatureRegistryDocument = serde_yaml::from_str(&raw)?;
+    }
+
+    let mut discovered_paths = Vec::new();
+    collect_feature_yaml_paths(feature_root, &mut discovered_paths)?;
+    discovered_paths.sort();
+
+    let mut documents = Vec::new();
+    for path in discovered_paths {
+        if path == registry_path {
+            continue;
+        }
+        if !looks_like_feature_document(&path)? {
+            continue;
+        }
+        let raw = fs::read_to_string(&path)?;
+        let document: FeatureDocument = serde_yaml::from_str(&raw)?;
+        documents.push(MutableLoadedDocument {
+            path,
+            document,
+            changed: false,
+        });
+    }
+
+    Ok(documents)
+}
+
+fn dedupe_philosophy_links(documents: &mut [MutableLoadedDocument<PhilosophyDocument>]) {
+    for document in documents {
+        for philosophy in &mut document.document.philosophies {
+            if dedupe_unique_values(&mut philosophy.linked_policies) {
+                document.changed = true;
+            }
+        }
+    }
+}
+
+fn dedupe_policy_links(documents: &mut [MutableLoadedDocument<PolicyDocument>]) {
+    for document in documents {
+        for policy in &mut document.document.policies {
+            let changed_philosophies = dedupe_unique_values(&mut policy.linked_philosophies);
+            let changed_requirements = dedupe_unique_values(&mut policy.linked_requirements);
+            if changed_philosophies || changed_requirements {
+                document.changed = true;
+            }
+        }
+    }
+}
+
+fn dedupe_requirement_links(documents: &mut [MutableLoadedDocument<RequirementDocument>]) {
+    for document in documents {
+        for requirement in &mut document.document.requirements {
+            let changed_policies = dedupe_unique_values(&mut requirement.linked_policies);
+            let changed_features = dedupe_unique_values(&mut requirement.linked_features);
+            if changed_policies || changed_features {
+                document.changed = true;
+            }
+        }
+    }
+}
+
+fn dedupe_feature_links(documents: &mut [MutableLoadedDocument<FeatureDocument>]) {
+    for document in documents {
+        for feature in &mut document.document.features {
+            if dedupe_unique_values(&mut feature.linked_requirements) {
+                document.changed = true;
+            }
+        }
+    }
+}
+
+fn dedupe_unique_values(values: &mut Vec<String>) -> bool {
+    let before = values.len();
+    let mut seen = HashSet::new();
+    values.retain(|value| seen.insert(value.clone()));
+    values.len() != before
+}
+
+fn index_philosophies(
+    documents: &[MutableLoadedDocument<PhilosophyDocument>],
+) -> HashMap<String, ItemLocation> {
+    let mut index = HashMap::new();
+    for (doc_index, document) in documents.iter().enumerate() {
+        for (item_index, philosophy) in document.document.philosophies.iter().enumerate() {
+            index.insert(
+                philosophy.id.clone(),
+                ItemLocation {
+                    doc_index,
+                    item_index,
+                },
+            );
+        }
+    }
+    index
+}
+
+fn index_policies(
+    documents: &[MutableLoadedDocument<PolicyDocument>],
+) -> HashMap<String, ItemLocation> {
+    let mut index = HashMap::new();
+    for (doc_index, document) in documents.iter().enumerate() {
+        for (item_index, policy) in document.document.policies.iter().enumerate() {
+            index.insert(
+                policy.id.clone(),
+                ItemLocation {
+                    doc_index,
+                    item_index,
+                },
+            );
+        }
+    }
+    index
+}
+
+fn index_requirements(
+    documents: &[MutableLoadedDocument<RequirementDocument>],
+) -> HashMap<String, ItemLocation> {
+    let mut index = HashMap::new();
+    for (doc_index, document) in documents.iter().enumerate() {
+        for (item_index, requirement) in document.document.requirements.iter().enumerate() {
+            index.insert(
+                requirement.id.clone(),
+                ItemLocation {
+                    doc_index,
+                    item_index,
+                },
+            );
+        }
+    }
+    index
+}
+
+fn index_features(
+    documents: &[MutableLoadedDocument<FeatureDocument>],
+) -> HashMap<String, ItemLocation> {
+    let mut index = HashMap::new();
+    for (doc_index, document) in documents.iter().enumerate() {
+        for (item_index, feature) in document.document.features.iter().enumerate() {
+            index.insert(
+                feature.id.clone(),
+                ItemLocation {
+                    doc_index,
+                    item_index,
+                },
+            );
+        }
+    }
+    index
+}
+
+fn apply_philosophy_reciprocals(
+    philosophies: &[MutableLoadedDocument<PhilosophyDocument>],
+    policies: &mut [MutableLoadedDocument<PolicyDocument>],
+    policy_index: &HashMap<String, ItemLocation>,
+) {
+    for document in philosophies {
+        for philosophy in &document.document.philosophies {
+            for policy_id in &philosophy.linked_policies {
+                let Some(location) = policy_index.get(policy_id) else {
+                    continue;
+                };
+                if insert_unique_value(
+                    &mut policies[location.doc_index].document.policies[location.item_index]
+                        .linked_philosophies,
+                    &philosophy.id,
+                ) {
+                    policies[location.doc_index].changed = true;
+                }
+            }
+        }
+    }
+}
+
+fn apply_policy_reciprocals(
+    policies: &[MutableLoadedDocument<PolicyDocument>],
+    philosophies: &mut [MutableLoadedDocument<PhilosophyDocument>],
+    philosophy_index: &HashMap<String, ItemLocation>,
+    requirements: &mut [MutableLoadedDocument<RequirementDocument>],
+    requirement_index: &HashMap<String, ItemLocation>,
+) {
+    for document in policies {
+        for policy in &document.document.policies {
+            for philosophy_id in &policy.linked_philosophies {
+                let Some(location) = philosophy_index.get(philosophy_id) else {
+                    continue;
+                };
+                if insert_unique_value(
+                    &mut philosophies[location.doc_index].document.philosophies
+                        [location.item_index]
+                        .linked_policies,
+                    &policy.id,
+                ) {
+                    philosophies[location.doc_index].changed = true;
+                }
+            }
+
+            for requirement_id in &policy.linked_requirements {
+                let Some(location) = requirement_index.get(requirement_id) else {
+                    continue;
+                };
+                if insert_unique_value(
+                    &mut requirements[location.doc_index].document.requirements
+                        [location.item_index]
+                        .linked_policies,
+                    &policy.id,
+                ) {
+                    requirements[location.doc_index].changed = true;
+                }
+            }
+        }
+    }
+}
+
+fn apply_requirement_reciprocals(
+    requirements: &[MutableLoadedDocument<RequirementDocument>],
+    features: &mut [MutableLoadedDocument<FeatureDocument>],
+    feature_index: &HashMap<String, ItemLocation>,
+) {
+    for document in requirements {
+        for requirement in &document.document.requirements {
+            for feature_id in &requirement.linked_features {
+                let Some(location) = feature_index.get(feature_id) else {
+                    continue;
+                };
+                if insert_unique_value(
+                    &mut features[location.doc_index].document.features[location.item_index]
+                        .linked_requirements,
+                    &requirement.id,
+                ) {
+                    features[location.doc_index].changed = true;
+                }
+            }
+        }
+    }
+}
+
+fn apply_feature_reciprocals(
+    features: &[MutableLoadedDocument<FeatureDocument>],
+    requirements: &mut [MutableLoadedDocument<RequirementDocument>],
+    requirement_index: &HashMap<String, ItemLocation>,
+) {
+    for document in features {
+        for feature in &document.document.features {
+            for requirement_id in &feature.linked_requirements {
+                let Some(location) = requirement_index.get(requirement_id) else {
+                    continue;
+                };
+                if insert_unique_value(
+                    &mut requirements[location.doc_index].document.requirements
+                        [location.item_index]
+                        .linked_features,
+                    &feature.id,
+                ) {
+                    requirements[location.doc_index].changed = true;
+                }
+            }
+        }
+    }
+}
+
+fn insert_unique_value(values: &mut Vec<String>, value: &str) -> bool {
+    if values.iter().any(|existing| existing == value) {
+        return false;
+    }
+    values.push(value.to_string());
+    true
+}
+
+fn feature_registry_kind(feature_root: &Path, path: &Path) -> String {
+    let relative = path.strip_prefix(feature_root).unwrap_or(path);
+    if let Some(parent) = relative.parent()
+        && let Some(component) = parent.components().find_map(|component| match component {
+            Component::Normal(part) => Some(part.to_string_lossy().into_owned()),
+            _ => None,
+        })
+    {
+        return component;
+    }
+    relative
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| "feature".to_string())
+}
+
+fn feature_registry_entries_for_documents(
+    feature_root: &Path,
+    documents: &[MutableLoadedDocument<FeatureDocument>],
+) -> Vec<FeatureRegistryEntry> {
+    let mut entries = documents
+        .iter()
+        .map(|document| {
+            let relative = normalize_relative_path(
+                document
+                    .path
+                    .strip_prefix(feature_root)
+                    .unwrap_or(&document.path),
+            );
+            FeatureRegistryEntry {
+                kind: feature_registry_kind(feature_root, &document.path),
+                file: relative,
+            }
+        })
+        .collect::<Vec<_>>();
+    entries.sort_by(|left, right| left.kind.cmp(&right.kind).then(left.file.cmp(&right.file)));
+    entries
+}
+
+fn feature_registry_entries_match(
+    left: &[FeatureRegistryEntry],
+    right: &[FeatureRegistryEntry],
+) -> bool {
+    let mut left = left
+        .iter()
+        .map(|entry| (entry.kind.clone(), entry.file.clone()))
+        .collect::<Vec<_>>();
+    let mut right = right
+        .iter()
+        .map(|entry| (entry.kind.clone(), entry.file.clone()))
+        .collect::<Vec<_>>();
+    left.sort();
+    right.sort();
+    left == right
+}
+
+fn sync_feature_registry(
+    feature_root: &Path,
+    documents: &[MutableLoadedDocument<FeatureDocument>],
+) -> Result<Option<FeatureRegistryDocument>> {
+    let registry_path = feature_root.join("features.yaml");
+    let files = feature_registry_entries_for_documents(feature_root, documents);
+    match fs::read_to_string(&registry_path) {
+        Ok(raw) => {
+            let registry: FeatureRegistryDocument = serde_yaml::from_str(&raw)?;
+            if feature_registry_entries_match(&registry.files, &files) {
+                return Ok(None);
+            }
+
+            Ok(Some(FeatureRegistryDocument {
+                version: registry.version,
+                updated: registry.updated,
+                files,
+            }))
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Ok(Some(FeatureRegistryDocument {
+                version: env!("CARGO_PKG_VERSION").to_string(),
+                updated: None,
+                files,
+            }))
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn write_modified_documents<T: serde::Serialize>(
+    documents: &[MutableLoadedDocument<T>],
+    summary: &mut AutofixSummary,
+    root: &Path,
+    transaction: &mut AutofixTransaction,
+) -> Result<()> {
+    for document in documents {
+        if !document.changed {
+            continue;
+        }
+        transaction.write(&document.path, &serde_yaml::to_string(&document.document)?)?;
+        record_updated_file(summary, root, &document.path);
+        summary.symbol_updates += 1;
+    }
     Ok(())
 }
 
@@ -2934,8 +3437,9 @@ mod tests {
         cli::{ValidationGenreFilter, ValidationSeverityFilter},
         config::{SyuConfig, TraceOwnershipMode},
         model::{
-            DefinitionCounts, Feature, Issue, OwnershipEntry, OwnershipManifest, Philosophy,
-            Policy, Requirement, TraceReference,
+            DefinitionCounts, Feature, FeatureDocument, Issue, OwnershipEntry, OwnershipManifest,
+            Philosophy, PhilosophyDocument, Policy, PolicyDocument, Requirement,
+            RequirementDocument, TraceReference,
         },
         rules::{all_rules, referenced_rules},
         workspace::Workspace,
@@ -2943,16 +3447,18 @@ mod tests {
 
     use super::{
         AutofixPlan, AutofixPlanChange, AutofixTransaction, FilteredIssueView, IssueFilters,
-        ORPHAN_RULE_CODES, RECIPROCAL_RULE_CODES, RequirementValidationIndex, TextReportSummary,
-        TraceRole, ValidationResources, apply_autofix, collect_check_result,
+        ItemLocation, MutableLoadedDocument, ORPHAN_RULE_CODES, RECIPROCAL_RULE_CODES,
+        RequirementValidationIndex, TextReportSummary, TraceRole, ValidationResources,
+        apply_autofix, apply_feature_reciprocals, apply_philosophy_reciprocals,
+        apply_policy_reciprocals, apply_requirement_reciprocals, collect_check_result,
         collect_feature_yaml_paths, describe_trace_reference, entry_covers_symbols,
-        filter_check_result, finalize_autofix_error, format_reference_location,
-        looks_like_feature_document, merge_ownership_entry, ownership_symbols_hint,
-        preferred_trace_file_path, render_autofix_plan, render_text_report,
-        required_ownership_symbols, run_check_command, validate_duplicate_links,
-        validate_duplicate_trace_references, validate_feature, validate_feature_registry_entries,
-        validate_non_empty_field, validate_philosophy, validate_policy, validate_requirement,
-        validate_unique_ids, verify_trace_reference,
+        feature_registry_kind, filter_check_result, finalize_autofix_error,
+        format_reference_location, looks_like_feature_document, merge_ownership_entry,
+        ownership_symbols_hint, preferred_trace_file_path, render_autofix_plan, render_text_report,
+        required_ownership_symbols, run_check_command, sync_feature_registry,
+        validate_duplicate_links, validate_duplicate_trace_references, validate_feature,
+        validate_feature_registry_entries, validate_non_empty_field, validate_philosophy,
+        validate_policy, validate_requirement, validate_unique_ids, verify_trace_reference,
     };
 
     fn philosophy(id: &str) -> Philosophy {
@@ -3120,6 +3626,78 @@ mod tests {
     }
 
     #[test]
+    fn run_check_command_bootstraps_missing_registry_when_fixing() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        write_valid_planned_workspace(tempdir.path());
+        fs::remove_file(tempdir.path().join("docs/syu/features/features.yaml"))
+            .expect("feature registry should be removable");
+
+        let code = run_check_command(&crate::cli::CheckArgs {
+            workspace: tempdir.path().to_path_buf(),
+            format: crate::cli::OutputFormat::Json,
+            severity: Vec::new(),
+            genre: Vec::new(),
+            rule: Vec::new(),
+            id: Vec::new(),
+            spec_only: false,
+            fix: true,
+            dry_run: false,
+            no_fix: false,
+            allow_planned: None,
+            require_non_orphaned_items: None,
+            require_reciprocal_links: None,
+            require_symbol_trace_coverage: None,
+            warning_exit_code: None,
+            quiet: false,
+        })
+        .expect("command should complete");
+
+        assert_eq!(code, 0);
+        assert!(
+            tempdir
+                .path()
+                .join("docs/syu/features/features.yaml")
+                .is_file()
+        );
+    }
+
+    #[test]
+    fn run_check_command_reports_missing_registry_without_fixing() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        write_valid_planned_workspace(tempdir.path());
+        fs::remove_file(tempdir.path().join("docs/syu/features/features.yaml"))
+            .expect("feature registry should be removable");
+
+        let code = run_check_command(&crate::cli::CheckArgs {
+            workspace: tempdir.path().to_path_buf(),
+            format: crate::cli::OutputFormat::Json,
+            severity: Vec::new(),
+            genre: Vec::new(),
+            rule: Vec::new(),
+            id: Vec::new(),
+            spec_only: false,
+            fix: false,
+            dry_run: false,
+            no_fix: false,
+            allow_planned: None,
+            require_non_orphaned_items: None,
+            require_reciprocal_links: None,
+            require_symbol_trace_coverage: None,
+            warning_exit_code: None,
+            quiet: false,
+        })
+        .expect("command should render load errors");
+
+        assert_eq!(code, 1);
+        assert!(
+            !tempdir
+                .path()
+                .join("docs/syu/features/features.yaml")
+                .is_file()
+        );
+    }
+
+    #[test]
     fn run_check_command_propagates_autofix_errors() {
         let tempdir = tempdir().expect("tempdir should exist");
         let workspace = tempdir.path().join("workspace");
@@ -3218,6 +3796,35 @@ mod tests {
         .expect("command should complete");
 
         assert_eq!(code, 1);
+    }
+
+    #[test]
+    fn apply_autofix_reports_registry_read_errors() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        write_valid_planned_workspace(tempdir.path());
+        let registry_path = tempdir.path().join("docs/syu/features/features.yaml");
+        fs::remove_file(&registry_path).expect("feature registry should be removable");
+        fs::create_dir(&registry_path).expect("directory registry path should be creatable");
+
+        let workspace =
+            crate::workspace::load_workspace_allowing_missing_feature_registry(tempdir.path())
+                .expect("workspace should still load");
+        let error = apply_autofix(&workspace).expect_err("registry read failure should bubble up");
+
+        assert!(error.to_string().contains("Is a directory"));
+    }
+
+    #[test]
+    fn sync_feature_registry_reports_read_errors() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let feature_root = tempdir.path().join("docs/syu/features");
+        fs::create_dir_all(&feature_root).expect("feature root should exist");
+        fs::create_dir(feature_root.join("features.yaml"))
+            .expect("registry path should be creatable as a directory");
+
+        let error =
+            sync_feature_registry(&feature_root, &[]).expect_err("read failure should bubble up");
+        assert!(error.to_string().contains("Is a directory"));
     }
 
     #[test]
@@ -5512,6 +6119,32 @@ mod tests {
     }
 
     #[test]
+    fn apply_autofix_bootstraps_missing_feature_registry() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        write_valid_planned_workspace(tempdir.path());
+        fs::remove_file(tempdir.path().join("docs/syu/features/features.yaml"))
+            .expect("feature registry should be removable");
+
+        let workspace =
+            crate::workspace::load_workspace_allowing_missing_feature_registry(tempdir.path())
+                .expect("workspace should still load");
+        let summary = apply_autofix(&workspace).expect("autofix should succeed");
+
+        let registry_contents =
+            fs::read_to_string(tempdir.path().join("docs/syu/features/features.yaml"))
+                .expect("feature registry should be written");
+        assert!(registry_contents.contains("version:"));
+        assert!(registry_contents.contains("files:"));
+        assert!(registry_contents.contains("core.yaml"));
+        assert_eq!(summary.symbol_updates, 1);
+        assert!(
+            summary
+                .updated_files
+                .contains(Path::new("docs/syu/features/features.yaml"))
+        );
+    }
+
+    #[test]
     fn apply_autofix_propagates_requirement_inspection_errors() {
         let tempdir = tempdir().expect("tempdir should exist");
         let root = tempdir.path().to_path_buf();
@@ -5862,6 +6495,204 @@ mod tests {
         assert_eq!(
             format_reference_location("rust", &reference),
             "rust:src/lib.rs"
+        );
+    }
+
+    #[test]
+    fn graph_autofix_skips_missing_targets_without_changes() {
+        let philosophies = vec![MutableLoadedDocument {
+            path: PathBuf::from("philosophy.yaml"),
+            document: PhilosophyDocument {
+                category: "Philosophy".to_string(),
+                version: 1,
+                language: Some("en".to_string()),
+                philosophies: vec![Philosophy {
+                    id: "PHIL-1".to_string(),
+                    title: "Title".to_string(),
+                    product_design_principle: "Principle".to_string(),
+                    coding_guideline: "Guideline".to_string(),
+                    linked_policies: vec!["POL-missing".to_string()],
+                }],
+            },
+            changed: false,
+        }];
+        let mut policies = vec![MutableLoadedDocument {
+            path: PathBuf::from("policy.yaml"),
+            document: PolicyDocument {
+                category: "Policies".to_string(),
+                version: 1,
+                language: Some("en".to_string()),
+                policies: vec![Policy {
+                    id: "POL-1".to_string(),
+                    title: "Title".to_string(),
+                    summary: "Summary".to_string(),
+                    description: "Description".to_string(),
+                    linked_philosophies: vec!["PHIL-missing".to_string()],
+                    linked_requirements: vec!["REQ-missing".to_string()],
+                }],
+            },
+            changed: false,
+        }];
+        let mut requirements = vec![MutableLoadedDocument {
+            path: PathBuf::from("requirement.yaml"),
+            document: RequirementDocument {
+                category: "Core Requirements".to_string(),
+                prefix: "REQ".to_string(),
+                requirements: vec![Requirement {
+                    id: "REQ-1".to_string(),
+                    title: "Title".to_string(),
+                    description: "Description".to_string(),
+                    priority: "high".to_string(),
+                    status: "planned".to_string(),
+                    linked_policies: vec!["POL-missing".to_string()],
+                    linked_features: vec!["FEAT-missing".to_string()],
+                    tests: BTreeMap::new(),
+                }],
+            },
+            changed: false,
+        }];
+        let mut features = vec![MutableLoadedDocument {
+            path: PathBuf::from("feature.yaml"),
+            document: FeatureDocument {
+                category: "Core Features".to_string(),
+                version: 1,
+                features: vec![Feature {
+                    id: "FEAT-1".to_string(),
+                    title: "Title".to_string(),
+                    summary: "Summary".to_string(),
+                    status: "planned".to_string(),
+                    linked_requirements: vec!["REQ-missing".to_string()],
+                    implementations: BTreeMap::new(),
+                }],
+            },
+            changed: false,
+        }];
+
+        let empty = HashMap::new();
+        let mut empty_philosophies: Vec<MutableLoadedDocument<PhilosophyDocument>> = Vec::new();
+        apply_philosophy_reciprocals(&philosophies, &mut policies, &empty);
+        apply_policy_reciprocals(
+            &policies,
+            &mut empty_philosophies,
+            &empty,
+            &mut requirements,
+            &empty,
+        );
+        apply_requirement_reciprocals(&requirements, &mut features, &empty);
+        apply_feature_reciprocals(&features, &mut requirements, &empty);
+
+        assert!(!policies[0].changed);
+        assert!(!requirements[0].changed);
+        assert!(!features[0].changed);
+    }
+
+    #[test]
+    fn graph_autofix_adds_missing_reciprocals_and_falls_back_for_registry_kind() {
+        let mut philosophies = vec![MutableLoadedDocument {
+            path: PathBuf::from("philosophy.yaml"),
+            document: PhilosophyDocument {
+                category: "Philosophy".to_string(),
+                version: 1,
+                language: Some("en".to_string()),
+                philosophies: vec![Philosophy {
+                    id: "PHIL-1".to_string(),
+                    title: "Title".to_string(),
+                    product_design_principle: "Principle".to_string(),
+                    coding_guideline: "Guideline".to_string(),
+                    linked_policies: Vec::new(),
+                }],
+            },
+            changed: false,
+        }];
+        let policies = vec![MutableLoadedDocument {
+            path: PathBuf::from("policy.yaml"),
+            document: PolicyDocument {
+                category: "Policies".to_string(),
+                version: 1,
+                language: Some("en".to_string()),
+                policies: vec![Policy {
+                    id: "POL-1".to_string(),
+                    title: "Title".to_string(),
+                    summary: "Summary".to_string(),
+                    description: "Description".to_string(),
+                    linked_philosophies: vec!["PHIL-1".to_string()],
+                    linked_requirements: Vec::new(),
+                }],
+            },
+            changed: false,
+        }];
+        let mut requirements = vec![MutableLoadedDocument {
+            path: PathBuf::from("requirement.yaml"),
+            document: RequirementDocument {
+                category: "Core Requirements".to_string(),
+                prefix: "REQ".to_string(),
+                requirements: vec![Requirement {
+                    id: "REQ-1".to_string(),
+                    title: "Title".to_string(),
+                    description: "Description".to_string(),
+                    priority: "high".to_string(),
+                    status: "planned".to_string(),
+                    linked_policies: Vec::new(),
+                    linked_features: Vec::new(),
+                    tests: BTreeMap::new(),
+                }],
+            },
+            changed: false,
+        }];
+        let features = vec![MutableLoadedDocument {
+            path: PathBuf::from("feature.yaml"),
+            document: FeatureDocument {
+                category: "Core Features".to_string(),
+                version: 1,
+                features: vec![Feature {
+                    id: "FEAT-1".to_string(),
+                    title: "Title".to_string(),
+                    summary: "Summary".to_string(),
+                    status: "planned".to_string(),
+                    linked_requirements: vec!["REQ-1".to_string()],
+                    implementations: BTreeMap::new(),
+                }],
+            },
+            changed: false,
+        }];
+
+        let philosophy_index = HashMap::from([(
+            "PHIL-1".to_string(),
+            ItemLocation {
+                doc_index: 0,
+                item_index: 0,
+            },
+        )]);
+        let requirement_index = HashMap::from([(
+            "REQ-1".to_string(),
+            ItemLocation {
+                doc_index: 0,
+                item_index: 0,
+            },
+        )]);
+
+        apply_policy_reciprocals(
+            &policies,
+            &mut philosophies,
+            &philosophy_index,
+            &mut requirements,
+            &requirement_index,
+        );
+        apply_feature_reciprocals(&features, &mut requirements, &requirement_index);
+
+        assert!(philosophies[0].changed);
+        assert!(requirements[0].changed);
+        assert_eq!(
+            philosophies[0].document.philosophies[0].linked_policies,
+            vec!["POL-1"]
+        );
+        assert_eq!(
+            requirements[0].document.requirements[0].linked_features,
+            vec!["FEAT-1"]
+        );
+        assert_eq!(
+            feature_registry_kind(Path::new("features"), Path::new("features/../core.yaml")),
+            "core"
         );
     }
 
