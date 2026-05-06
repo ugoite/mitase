@@ -31,6 +31,7 @@ use crate::{
     workspace::{
         Workspace, load_philosophy_documents_with_paths, load_policy_documents_with_paths,
         load_requirement_documents_with_paths, load_workspace,
+        load_workspace_allowing_missing_feature_registry,
     },
 };
 
@@ -357,7 +358,20 @@ fn workspace_item_count(definition_counts: &DefinitionCounts) -> usize {
 
 // FEAT-CHECK-001
 pub fn run_check_command(args: &CheckArgs) -> Result<i32> {
-    let (result, fix_summary, text_summary) = match load_workspace(&args.workspace) {
+    let workspace_result = load_workspace(&args.workspace).or_else(|error| {
+        if !error.to_string().contains("feature registry") {
+            return Err(error);
+        }
+
+        let workspace = load_workspace_allowing_missing_feature_registry(&args.workspace)?;
+        if effective_fix(args, &workspace.config) {
+            Ok(workspace)
+        } else {
+            Err(error)
+        }
+    });
+
+    let (result, fix_summary, text_summary) = match workspace_result {
         Ok(workspace) => {
             let should_fix = effective_fix(args, &workspace.config);
             let fix_summary = if should_fix {
@@ -3320,6 +3334,66 @@ mod tests {
     }
 
     #[test]
+    fn run_check_command_bootstraps_missing_registry_when_fixing() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        write_valid_planned_workspace(tempdir.path());
+        fs::remove_file(tempdir.path().join("docs/syu/features/features.yaml"))
+            .expect("feature registry should be removable");
+
+        let code = run_check_command(&crate::cli::CheckArgs {
+            workspace: tempdir.path().to_path_buf(),
+            format: crate::cli::OutputFormat::Json,
+            severity: Vec::new(),
+            genre: Vec::new(),
+            rule: Vec::new(),
+            id: Vec::new(),
+            spec_only: false,
+            fix: true,
+            no_fix: false,
+            allow_planned: None,
+            require_non_orphaned_items: None,
+            require_reciprocal_links: None,
+            require_symbol_trace_coverage: None,
+            warning_exit_code: None,
+            quiet: false,
+        })
+        .expect("command should complete");
+
+        assert_eq!(code, 0);
+        assert!(tempdir.path().join("docs/syu/features/features.yaml").is_file());
+    }
+
+    #[test]
+    fn run_check_command_reports_missing_registry_without_fixing() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        write_valid_planned_workspace(tempdir.path());
+        fs::remove_file(tempdir.path().join("docs/syu/features/features.yaml"))
+            .expect("feature registry should be removable");
+
+        let code = run_check_command(&crate::cli::CheckArgs {
+            workspace: tempdir.path().to_path_buf(),
+            format: crate::cli::OutputFormat::Json,
+            severity: Vec::new(),
+            genre: Vec::new(),
+            rule: Vec::new(),
+            id: Vec::new(),
+            spec_only: false,
+            fix: false,
+            no_fix: false,
+            allow_planned: None,
+            require_non_orphaned_items: None,
+            require_reciprocal_links: None,
+            require_symbol_trace_coverage: None,
+            warning_exit_code: None,
+            quiet: false,
+        })
+        .expect("command should render load errors");
+
+        assert_eq!(code, 1);
+        assert!(!tempdir.path().join("docs/syu/features/features.yaml").is_file());
+    }
+
+    #[test]
     fn run_check_command_propagates_autofix_errors() {
         let tempdir = tempdir().expect("tempdir should exist");
         let workspace = tempdir.path().join("workspace");
@@ -3412,6 +3486,23 @@ mod tests {
         .expect("command should complete");
 
         assert_eq!(code, 1);
+    }
+
+    #[test]
+    fn apply_autofix_reports_registry_read_errors() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        write_valid_planned_workspace(tempdir.path());
+        let registry_path = tempdir.path().join("docs/syu/features/features.yaml");
+        fs::remove_file(&registry_path).expect("feature registry should be removable");
+        fs::create_dir(&registry_path).expect("directory registry path should be creatable");
+
+        let workspace = crate::workspace::load_workspace_allowing_missing_feature_registry(
+            tempdir.path(),
+        )
+        .expect("workspace should still load");
+        let error = apply_autofix(&workspace).expect_err("registry read failure should bubble up");
+
+        assert!(error.to_string().contains("Is a directory"));
     }
 
     #[test]
@@ -5641,8 +5732,10 @@ mod tests {
         fs::remove_file(tempdir.path().join("docs/syu/features/features.yaml"))
             .expect("feature registry should be removable");
 
-        let workspace =
-            crate::workspace::load_workspace(tempdir.path()).expect("workspace should still load");
+        let workspace = crate::workspace::load_workspace_allowing_missing_feature_registry(
+            tempdir.path(),
+        )
+        .expect("workspace should still load");
         let summary = apply_autofix(&workspace).expect("autofix should succeed");
 
         let registry_contents = fs::read_to_string(tempdir.path().join("docs/syu/features/features.yaml"))

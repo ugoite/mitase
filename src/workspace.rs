@@ -164,24 +164,33 @@ pub(crate) fn load_feature_documents_with_paths(
     feature_root: &Path,
 ) -> Result<Vec<LoadedDocument<FeatureDocument>>> {
     let registry_path = feature_root.join("features.yaml");
-    if registry_path.is_file() {
-        let registry = load_feature_registry(&registry_path)?;
-        if registry.files.is_empty() {
-            bail!(
-                "feature registry `{}` does not declare any feature files",
-                registry_path.display()
-            );
-        }
-
-        let mut documents = Vec::new();
-        for file in registry.files {
-            let path = resolve_feature_document_path(feature_root, &file.file)?;
-            let document = load_feature_document(&path, &file.kind)?;
-            documents.push(LoadedDocument { path, document });
-        }
-        return Ok(documents);
+    let registry = load_feature_registry(&registry_path)?;
+    if registry.files.is_empty() {
+        bail!(
+            "feature registry `{}` does not declare any feature files",
+            registry_path.display()
+        );
     }
 
+    let mut documents = Vec::new();
+    for file in registry.files {
+        let path = resolve_feature_document_path(feature_root, &file.file)?;
+        let document = load_feature_document(&path, &file.kind)?;
+        documents.push(LoadedDocument { path, document });
+    }
+    Ok(documents)
+}
+
+fn load_feature_document(path: &Path, kind: &str) -> Result<FeatureDocument> {
+    let label = format!("feature document `{}` ({kind})", path.display());
+    let raw = read_yaml_text(path, &label)?;
+    serde_yaml::from_str(&raw)
+        .with_context(|| format!("failed to parse {label} from `{}`", path.display()))
+}
+
+pub(crate) fn load_feature_documents_without_registry(
+    feature_root: &Path,
+) -> Result<Vec<LoadedDocument<FeatureDocument>>> {
     let mut documents = Vec::new();
     for path in yaml_file_paths_recursive(feature_root)? {
         if path.file_name().and_then(|name| name.to_str()) == Some("features.yaml") {
@@ -197,18 +206,11 @@ pub(crate) fn load_feature_documents_with_paths(
     if documents.is_empty() {
         bail!(
             "missing feature registry `{}`",
-            registry_path.display()
+            feature_root.join("features.yaml").display()
         );
     }
 
     Ok(documents)
-}
-
-fn load_feature_document(path: &Path, kind: &str) -> Result<FeatureDocument> {
-    let label = format!("feature document `{}` ({kind})", path.display());
-    let raw = read_yaml_text(path, &label)?;
-    serde_yaml::from_str(&raw)
-        .with_context(|| format!("failed to parse {label} from `{}`", path.display()))
 }
 
 fn looks_like_feature_document(path: &Path) -> Result<bool> {
@@ -218,6 +220,55 @@ fn looks_like_feature_document(path: &Path) -> Result<bool> {
     Ok(value.as_mapping().is_some_and(|mapping| {
         mapping.contains_key(serde_yaml::Value::String("features".to_string()))
     }))
+}
+
+pub(crate) fn load_workspace_allowing_missing_feature_registry(root: &Path) -> Result<Workspace> {
+    let root = resolve_workspace_root(root)?;
+    let loaded_config = load_config(&root)?;
+    let spec_root = resolve_spec_root(&root, &loaded_config.config);
+    let philosophy_docs = load_philosophy_documents_with_paths(&spec_root.join("philosophy"))?;
+    let policy_docs = load_policy_documents_with_paths(&spec_root.join("policies"))?;
+    let requirement_docs = load_requirement_documents_with_paths(&spec_root.join("requirements"))?;
+    let feature_root = spec_root.join("features");
+    let feature_docs = if feature_root.join("features.yaml").is_file() {
+        load_feature_documents_with_paths(&feature_root)?
+    } else {
+        load_feature_documents_without_registry(&feature_root)?
+    };
+
+    let philosophies = philosophy_docs
+        .into_iter()
+        .flat_map(|loaded| loaded.document.philosophies)
+        .collect();
+    let policies = policy_docs
+        .into_iter()
+        .flat_map(|loaded| loaded.document.policies)
+        .collect();
+    let requirements = requirement_docs
+        .into_iter()
+        .flat_map(|loaded| loaded.document.requirements)
+        .collect();
+    let features = feature_docs
+        .into_iter()
+        .flat_map(|loaded| loaded.document.features)
+        .collect::<Vec<_>>();
+
+    if features.is_empty() {
+        bail!(
+            "no feature definitions were found under `{}`",
+            spec_root.join("features").display()
+        );
+    }
+
+    Ok(Workspace {
+        root,
+        spec_root,
+        config: loaded_config.config,
+        philosophies,
+        policies,
+        requirements,
+        features,
+    })
 }
 
 fn ensure_yaml_directory(directory: &Path, label: &str) -> Result<Vec<PathBuf>> {
@@ -342,7 +393,8 @@ mod tests {
         ensure_yaml_directory, ensure_yaml_directory_recursive, load_feature_document,
         load_feature_registry, load_philosophy_documents_with_paths,
         load_policy_documents_with_paths, load_requirement_documents_with_paths, load_workspace,
-        read_yaml_text, resolve_feature_document_path, resolve_workspace_root, yaml_file_paths,
+        load_workspace_allowing_missing_feature_registry, read_yaml_text,
+        resolve_feature_document_path, resolve_workspace_root, yaml_file_paths,
         yaml_file_paths_recursive,
     };
 
@@ -358,6 +410,13 @@ mod tests {
         assert_eq!(workspace.philosophies.len(), 1);
         assert_eq!(workspace.policies.len(), 2);
         assert_eq!(workspace.requirements.len(), 6);
+        assert_eq!(workspace.features.len(), 6);
+    }
+
+    #[test]
+    fn load_workspace_allowing_missing_feature_registry_reads_existing_registry() {
+        let workspace = load_workspace_allowing_missing_feature_registry(&fixture_root("passing"))
+            .expect("fixture should load");
         assert_eq!(workspace.features.len(), 6);
     }
 
@@ -401,6 +460,84 @@ mod tests {
         assert_eq!(workspace.features.len(), 1);
         assert_eq!(workspace.requirements[0].id, "REQ-1");
         assert_eq!(workspace.features[0].id, "FEAT-1");
+    }
+
+    #[test]
+    fn load_workspace_allowing_missing_feature_registry_reports_missing_registry_when_no_feature_docs_exist(
+    ) {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let spec_root = tempdir.path().join("docs/syu");
+        fs::create_dir_all(spec_root.join("philosophy")).expect("dir");
+        fs::create_dir_all(spec_root.join("policies")).expect("dir");
+        fs::create_dir_all(spec_root.join("requirements")).expect("dir");
+        fs::create_dir_all(spec_root.join("features")).expect("dir");
+
+        fs::write(tempdir.path().join("syu.yaml"), "version: 1\nspec:\n  root: docs/syu\n")
+            .expect("config");
+        fs::write(
+            spec_root.join("philosophy/foundation.yaml"),
+            "category: Philosophy\nversion: 1\nphilosophies:\n  - id: PHIL-1\n    title: T\n    product_design_principle: A\n    coding_guideline: B\n    linked_policies:\n      - POL-1\n",
+        )
+        .expect("write");
+        fs::write(
+            spec_root.join("policies/policies.yaml"),
+            "category: Policies\nversion: 1\npolicies:\n  - id: POL-1\n    title: T\n    summary: S\n    description: D\n    linked_philosophies:\n      - PHIL-1\n    linked_requirements:\n      - REQ-1\n",
+        )
+        .expect("write");
+        fs::write(
+            spec_root.join("requirements/core.yaml"),
+            "category: Core\nprefix: REQ\nrequirements:\n  - id: REQ-1\n    title: T\n    description: D\n    priority: high\n    status: planned\n    linked_policies:\n      - POL-1\n    linked_features:\n      - FEAT-1\n    tests: {}\n",
+        )
+        .expect("write");
+        fs::create_dir_all(spec_root.join("features/extra")).expect("dir");
+        fs::write(
+            spec_root.join("features/extra/features.yaml"),
+            "category: Notes\nsummary: S\n",
+        )
+            .expect("write");
+
+        let error = load_workspace_allowing_missing_feature_registry(tempdir.path())
+            .expect_err("missing feature docs should fail");
+        assert!(error.to_string().contains("missing feature registry"));
+    }
+
+    #[test]
+    fn load_workspace_allowing_missing_feature_registry_reports_empty_feature_sets() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let spec_root = tempdir.path().join("docs/syu");
+        fs::create_dir_all(spec_root.join("philosophy")).expect("dir");
+        fs::create_dir_all(spec_root.join("policies")).expect("dir");
+        fs::create_dir_all(spec_root.join("requirements")).expect("dir");
+        fs::create_dir_all(spec_root.join("features")).expect("dir");
+
+        fs::write(tempdir.path().join("syu.yaml"), "version: 1\nspec:\n  root: docs/syu\n")
+            .expect("config");
+        fs::write(
+            spec_root.join("philosophy/foundation.yaml"),
+            "category: Philosophy\nversion: 1\nphilosophies:\n  - id: PHIL-1\n    title: T\n    product_design_principle: A\n    coding_guideline: B\n    linked_policies:\n      - POL-1\n",
+        )
+        .expect("write");
+        fs::write(
+            spec_root.join("policies/policies.yaml"),
+            "category: Policies\nversion: 1\npolicies:\n  - id: POL-1\n    title: T\n    summary: S\n    description: D\n    linked_philosophies:\n      - PHIL-1\n    linked_requirements:\n      - REQ-1\n",
+        )
+        .expect("write");
+        fs::write(
+            spec_root.join("requirements/core.yaml"),
+            "category: Core\nprefix: REQ\nrequirements:\n  - id: REQ-1\n    title: T\n    description: D\n    priority: high\n    status: planned\n    linked_policies:\n      - POL-1\n    linked_features:\n      - FEAT-1\n    tests: {}\n",
+        )
+        .expect("write");
+        fs::write(
+            spec_root.join("features/empty.yaml"),
+            "category: Core Features\nversion: 1\nfeatures: []\n",
+        )
+        .expect("write");
+        fs::write(spec_root.join("features/notes.yaml"), "category: Notes\nsummary: S\n")
+            .expect("write");
+
+        let error = load_workspace_allowing_missing_feature_registry(tempdir.path())
+            .expect_err("empty feature sets should fail");
+        assert!(error.to_string().contains("no feature definitions"));
     }
 
     #[test]
