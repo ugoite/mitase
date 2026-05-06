@@ -423,6 +423,7 @@ fn repository_declares_documentation_guides() {
     let examples_and_templates = read_file("docs/guide/examples-and-templates.md");
     let merge_queue_playbook = read_file("docs/guide/merge-queue-playbook.md");
     let getting_started = read_file("docs/guide/getting-started.md");
+    let existing_repository = read_file("docs/guide/existing-repository.md");
     let node_workflow = read_file("docs/guide/node-workflow.md");
     let lsp_guide = read_file("docs/guide/lsp.md");
     let command_card = read_file("docs/guide/command-card.md");
@@ -442,6 +443,8 @@ fn repository_declares_documentation_guides() {
     let generated_site_index = read_file("docs/generated/site-spec/index.md");
     let generated_validation =
         read_file("docs/generated/site-spec/features/validation/validation.md");
+    let generated_validation_requirement =
+        read_file("docs/generated/site-spec/requirements/core/validation.md");
     let generated_docs_freshness = read_file("scripts/ci/check-generated-docs-freshness.sh");
     let ci_workflow = read_file(".github/workflows/ci.yml");
     let docs_deploy_workflow = read_file(".github/workflows/deploy-pages.yml");
@@ -495,6 +498,7 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("syu templates"));
     assert!(readme.contains("starter-only"));
     assert!(readme.contains("syu validate"));
+    assert!(readme.contains("--dry-run"));
     assert!(readme.contains("syu browse"));
     assert!(readme.contains("syu list"));
     assert!(readme.contains("syu doctor ."));
@@ -594,6 +598,7 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("syu doctor ."));
     assert!(getting_started.contains("--id-prefix"));
     assert!(getting_started.contains("syu validate . --fix"));
+    assert!(getting_started.contains("--dry-run"));
     assert!(getting_started.contains("syu browse ."));
     assert!(getting_started.contains("doctor → init → validate → browse"));
     assert!(getting_started.contains("If you only remember the task and not the command name yet"));
@@ -771,6 +776,7 @@ fn repository_declares_documentation_guides() {
     assert!(generated_validation.contains(
         "Rust, Python, Go, Java, C#, Kotlin, and TypeScript/JavaScript source and test files"
     ));
+    assert!(generated_validation_requirement.contains("dry-run planning mode"));
     assert!(generated_docs_freshness.contains("FEAT-QUALITY-001"));
     assert!(generated_docs_freshness.contains("check_generated_docs_freshness"));
     assert!(generated_docs_freshness.contains("python3 scripts/generate-site-docs.py"));
@@ -822,6 +828,8 @@ fn repository_declares_documentation_guides() {
         troubleshooting.contains("[trace adapter capability matrix](./trace-adapter-support.md)")
     );
     assert!(troubleshooting.contains("[spec anti-patterns guide](./spec-antipatterns.md)"));
+    assert!(troubleshooting.contains("--dry-run"));
+    assert!(existing_repository.contains("--dry-run"));
 }
 
 #[test]

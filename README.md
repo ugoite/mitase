@@ -708,8 +708,16 @@ The `syu` repository itself enables `validate.require_non_orphaned_items`,
 
 ## Safe autofix
 
-`syu validate --fix` is intentionally conservative. Today it only repairs
-documentation-style trace gaps that can be updated mechanically:
+`syu validate --fix` is intentionally conservative. Use `--dry-run` when you
+want to preview the same fix set without writing files:
+
+```bash
+syu validate . --fix --dry-run
+syu validate . --format json --fix --dry-run
+```
+
+Today autofix only repairs documentation-style trace gaps that can be updated
+mechanically:
 
 - missing requirement / feature IDs in symbol documentation
 - missing `doc_contains` snippets for Rust, Python, Go, and TypeScript symbols

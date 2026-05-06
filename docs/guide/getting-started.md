@@ -535,6 +535,8 @@ syu validate . --fix
 
 Autofix is conservative. It currently repairs documentation-style trace gaps
 for Rust, Python, Go, and TypeScript without guessing at larger structural changes.
+If you want to preview the same fix set without writing files, use
+`syu validate . --fix --dry-run` and review the printed plan instead.
 
 ## 6. Generate a report
 
