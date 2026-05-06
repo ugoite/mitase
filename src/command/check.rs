@@ -3446,20 +3446,19 @@ mod tests {
     };
 
     use super::{
+        AutofixPlan, AutofixPlanChange, AutofixTransaction, FilteredIssueView, IssueFilters,
+        ItemLocation, MutableLoadedDocument, ORPHAN_RULE_CODES, RECIPROCAL_RULE_CODES,
+        RequirementValidationIndex, TextReportSummary, TraceRole, ValidationResources,
         apply_autofix, apply_feature_reciprocals, apply_philosophy_reciprocals,
         apply_policy_reciprocals, apply_requirement_reciprocals, collect_check_result,
         collect_feature_yaml_paths, describe_trace_reference, entry_covers_symbols,
         feature_registry_kind, filter_check_result, finalize_autofix_error,
         format_reference_location, looks_like_feature_document, merge_ownership_entry,
         ownership_symbols_hint, preferred_trace_file_path, render_autofix_plan, render_text_report,
-        required_ownership_symbols, run_check_command, validate_duplicate_links,
-        validate_duplicate_trace_references, validate_feature, validate_feature_registry_entries,
-        validate_non_empty_field, validate_philosophy, validate_policy, validate_requirement,
-        validate_unique_ids, verify_trace_reference, sync_feature_registry, AutofixPlan,
-        AutofixPlanChange,
-        AutofixTransaction, FilteredIssueView, IssueFilters, ItemLocation,
-        MutableLoadedDocument, ORPHAN_RULE_CODES, RECIPROCAL_RULE_CODES,
-        RequirementValidationIndex, TextReportSummary, TraceRole, ValidationResources,
+        required_ownership_symbols, run_check_command, sync_feature_registry,
+        validate_duplicate_links, validate_duplicate_trace_references, validate_feature,
+        validate_feature_registry_entries, validate_non_empty_field, validate_philosophy,
+        validate_policy, validate_requirement, validate_unique_ids, verify_trace_reference,
     };
 
     fn philosophy(id: &str) -> Philosophy {
@@ -3823,7 +3822,8 @@ mod tests {
         fs::create_dir(feature_root.join("features.yaml"))
             .expect("registry path should be creatable as a directory");
 
-        let error = sync_feature_registry(&feature_root, &[]).expect_err("read failure should bubble up");
+        let error =
+            sync_feature_registry(&feature_root, &[]).expect_err("read failure should bubble up");
         assert!(error.to_string().contains("Is a directory"));
     }
 
