@@ -839,6 +839,10 @@ fn run_autofix(workspace: &Workspace, mode: AutofixMode) -> Result<AutofixRun> {
             )?;
         }
 
+        if mode == AutofixMode::Apply {
+            apply_graph_autofix(workspace, &mut run.summary, &mut transaction)?;
+        }
+
         Ok(())
     })();
 
@@ -990,11 +994,16 @@ fn apply_autofix_for_trace_map_with_transaction(
 fn load_feature_documents_for_autofix(
     feature_root: &Path,
 ) -> Result<Vec<MutableLoadedDocument<FeatureDocument>>> {
+    let registry_path = feature_root.join("features.yaml");
+    if registry_path.exists() {
+        let raw = fs::read_to_string(&registry_path)?;
+        let _registry: FeatureRegistryDocument = serde_yaml::from_str(&raw)?;
+    }
+
     let mut discovered_paths = Vec::new();
     collect_feature_yaml_paths(feature_root, &mut discovered_paths)?;
     discovered_paths.sort();
 
-    let registry_path = feature_root.join("features.yaml");
     let mut documents = Vec::new();
     for path in discovered_paths {
         if path == registry_path {
