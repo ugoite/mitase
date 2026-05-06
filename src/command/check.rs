@@ -999,7 +999,6 @@ fn load_feature_documents_for_autofix(
         let raw = fs::read_to_string(&registry_path)?;
         let _registry: FeatureRegistryDocument = serde_yaml::from_str(&raw)?;
     }
-
     let mut discovered_paths = Vec::new();
     collect_feature_yaml_paths(feature_root, &mut discovered_paths)?;
     discovered_paths.sort();
@@ -6695,7 +6694,6 @@ mod tests {
             "core"
         );
     }
-
     #[test]
     fn render_autofix_plan_returns_empty_output_for_empty_plan() {
         assert!(render_autofix_plan(&AutofixPlan::default()).is_empty());
