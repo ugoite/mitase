@@ -120,7 +120,10 @@ fn repository_declares_precommit_and_quality_gates() {
 
     assert!(ci_workflow.contains("FEAT-QUALITY-001"));
     assert!(ci_workflow.contains("file-hygiene:"));
-    assert!(ci_workflow.contains("pre-commit run --all-files trailing-whitespace end-of-file-fixer check-yaml check-json check-toml mixed-line-ending check-merge-conflict shellcheck"));
+    assert!(ci_workflow.contains("shell: bash"));
+    assert!(ci_workflow.contains("hooks=("));
+    assert!(ci_workflow.contains("check-merge-conflict"));
+    assert!(ci_workflow.contains("pre-commit run --all-files \"$hook\""));
     assert!(ci_workflow.contains("quality:"));
     assert!(ci_workflow.contains("actionlint:"));
     assert!(ci_workflow.contains("dependency-audit:"));
@@ -129,7 +132,9 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(ci_workflow.contains("spec-linkage:"));
     assert!(ci_workflow.contains("installer-smoke:"));
     assert!(ci_workflow.contains("installed-binary-smoke:"));
-    assert!(ci_workflow.contains("pre-commit run --all-files trailing-whitespace end-of-file-fixer check-yaml check-json check-toml mixed-line-ending check-merge-conflict shellcheck"));
+    assert!(ci_workflow.contains("shell: bash"));
+    assert!(ci_workflow.contains("hooks=("));
+    assert!(ci_workflow.contains("pre-commit run --all-files \"$hook\""));
     assert!(ci_workflow.contains("scripts/ci/quality-gates.sh"));
     assert!(ci_workflow.contains("cargo audit"));
     assert!(ci_workflow.contains("schedule:"));

@@ -48,7 +48,22 @@ jobs:
         run: python -m pip install --upgrade pip pre-commit
 
       - name: Run file hygiene hooks
-        run: pre-commit run --all-files trailing-whitespace end-of-file-fixer check-yaml check-json check-toml mixed-line-ending check-merge-conflict shellcheck
+        shell: bash
+        run: |
+          hooks=(
+            trailing-whitespace
+            end-of-file-fixer
+            check-yaml
+            check-json
+            check-toml
+            mixed-line-ending
+            check-merge-conflict
+            shellcheck
+          )
+
+          for hook in "${hooks[@]}"; do
+            pre-commit run --all-files "$hook"
+          done
 
   quality:
     if: github.event_name != 'schedule'
