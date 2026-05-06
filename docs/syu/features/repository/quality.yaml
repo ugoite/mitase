@@ -60,7 +60,7 @@ features:
         - file: .github/workflows/ci.yml
           symbols:
             - merge_group
-            - precommit
+            - file-hygiene
             - quality
             - coverage
             - actionlint
