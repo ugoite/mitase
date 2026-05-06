@@ -5240,6 +5240,43 @@ mod tests {
     }
 
     #[test]
+    fn apply_autofix_for_reference_records_planned_changes() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let root = tempdir.path();
+        let source_path = root.join("trace.rs");
+        fs::write(&source_path, "pub fn expected() {}\n").expect("trace file should exist");
+
+        let mut summary = super::AutofixRun {
+            summary: Default::default(),
+            plan: Some(Default::default()),
+        };
+        super::apply_autofix_for_reference(
+            root,
+            &SyuConfig::default(),
+            "REQ-1",
+            "rust",
+            &TraceReference {
+                file: PathBuf::from("trace.rs"),
+                symbols: vec!["expected".to_string()],
+                doc_contains: vec!["Explain expected".to_string()],
+            },
+            &mut summary,
+            super::AutofixMode::Plan,
+        )
+        .expect("plan mode should succeed");
+
+        assert_eq!(summary.summary.symbol_updates, 1);
+        let plan = summary.plan.as_ref().expect("plan should exist");
+        assert_eq!(plan.planned_updates, 1);
+        assert!(plan.updated_files.contains(Path::new("trace.rs")));
+        assert!(source_path.exists());
+        assert_eq!(
+            fs::read_to_string(&source_path).expect("source contents"),
+            "pub fn expected() {}\n"
+        );
+    }
+
+    #[test]
     fn apply_autofix_updates_requirement_and_feature_traces() {
         let tempdir = tempdir().expect("tempdir should exist");
         let root = tempdir.path().to_path_buf();
