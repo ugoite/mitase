@@ -1,4 +1,5 @@
 use assert_cmd::cargo::CommandCargoExt;
+use serde_json::Value;
 use std::{fs, path::Path, process::Command};
 use tempfile::tempdir;
 
@@ -191,6 +192,191 @@ fn validate_uses_config_default_fix_and_no_fix_disables_it() {
         String::from_utf8_lossy(&default_fix.stderr)
     );
     assert!(String::from_utf8_lossy(&default_fix.stdout).contains("applied 2 autofix updates"));
+}
+
+#[test]
+// REQ-CORE-003
+fn validate_fix_dry_run_reports_planned_changes_without_writing_files() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    write_workspace_with_ownership_mode(tempdir.path(), false, "sidecar");
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(tempdir.path())
+        .arg("--fix")
+        .arg("--dry-run")
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        !output.status.success(),
+        "dry run should not mutate the workspace"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("planned 4 autofix updates across 2 files"));
+    assert!(stdout.contains("dry run; no files changed"));
+    assert!(stdout.contains("planned fixes:"));
+    assert!(stdout.contains("src/trace.rs.syu-ownership.yaml"));
+    assert!(stdout.contains("SYU-trace-doc-001"));
+    assert!(stdout.contains("SYU-trace-id-001"));
+
+    let source = fs::read_to_string(tempdir.path().join("src/trace.rs")).expect("source");
+    assert_eq!(source, "pub fn req_trace() {}\n");
+    assert!(
+        !tempdir
+            .path()
+            .join("src/trace.rs.syu-ownership.yaml")
+            .exists()
+    );
+}
+
+#[test]
+// REQ-CORE-003
+fn validate_fix_dry_run_reports_inline_owner_changes_without_writing_files() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    write_workspace_with_ownership_mode(tempdir.path(), false, "inline");
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(tempdir.path())
+        .arg("--fix")
+        .arg("--dry-run")
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        !output.status.success(),
+        "dry run should not mutate the workspace"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("src/trace.rs"));
+    assert!(stdout.contains("SYU-trace-doc-001"));
+    assert!(stdout.contains("SYU-trace-id-001"));
+
+    let source = fs::read_to_string(tempdir.path().join("src/trace.rs")).expect("source");
+    assert_eq!(source, "pub fn req_trace() {}\n");
+}
+
+#[test]
+// REQ-CORE-003
+fn validate_fix_dry_run_propagates_autofix_errors() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    let workspace = tempdir.path().join("workspace");
+    fs::create_dir_all(workspace.join("docs/syu/philosophy")).expect("philosophy dir");
+    fs::create_dir_all(workspace.join("docs/syu/policies")).expect("policies dir");
+    fs::create_dir_all(workspace.join("docs/syu/requirements")).expect("requirements dir");
+    fs::create_dir_all(workspace.join("docs/syu/features")).expect("features dir");
+
+    fs::write(
+        workspace.join("syu.yaml"),
+        "version: 1\nruntimes:\n  python:\n    command: false\n",
+    )
+    .expect("config should exist");
+    fs::write(
+        workspace.join("docs/syu/philosophy/foundation.yaml"),
+        "category: Foundations\nversion: 1\n\nphilosophies:\n  - id: PHIL-1\n    title: Foundation\n    product_design_principle: Keep it clear.\n    coding_guideline: Keep it explicit.\n    linked_policies:\n      - POL-1\n",
+    )
+    .expect("philosophy should exist");
+    fs::write(
+        workspace.join("docs/syu/policies/policies.yaml"),
+        "category: Policies\nversion: 1\n\npolicies:\n  - id: POL-1\n    title: Policy\n    summary: Rule summary.\n    description: Rule description.\n    linked_philosophies:\n      - PHIL-1\n    linked_requirements:\n      - REQ-1\n",
+    )
+    .expect("policy should exist");
+    fs::write(
+        workspace.join("docs/syu/requirements/core.yaml"),
+        "category: Core Requirements\nprefix: REQ\n\nrequirements:\n  - id: REQ-1\n    title: Requirement\n    description: Requirement description.\n    priority: high\n    status: implemented\n    linked_policies:\n      - POL-1\n    linked_features:\n      - FEAT-1\n    tests:\n      python:\n        - file: tests/test_sample.py\n          symbols:\n            - requirement_test\n          doc_contains:\n            - Requirement docs\n",
+    )
+    .expect("requirement should exist");
+    fs::write(
+        workspace.join("docs/syu/features/features.yaml"),
+        "version: 1\nfiles:\n  - kind: core\n    file: core.yaml\n",
+    )
+    .expect("feature registry should exist");
+    fs::write(
+        workspace.join("docs/syu/features/core.yaml"),
+        "category: Core Features\nversion: 1\n\nfeatures:\n  - id: FEAT-1\n    title: Feature\n    summary: Feature summary.\n    status: implemented\n    linked_requirements:\n      - REQ-1\n    implementations: {}\n",
+    )
+    .expect("feature should exist");
+    fs::create_dir_all(workspace.join("tests")).expect("tests dir");
+    fs::write(
+        workspace.join("tests/test_sample.py"),
+        "def requirement_test():\n    return 1\n",
+    )
+    .expect("python test should exist");
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(&workspace)
+        .arg("--fix")
+        .arg("--dry-run")
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        !output.status.success(),
+        "dry-run autofix errors should bubble up"
+    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Python inspector failed"));
+}
+
+#[test]
+// REQ-CORE-003
+fn validate_fix_dry_run_exposes_machine_readable_plan() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    write_workspace_with_ownership_mode(tempdir.path(), false, "sidecar");
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(tempdir.path())
+        .arg("--fix")
+        .arg("--dry-run")
+        .arg("--format")
+        .arg("json")
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        !output.status.success(),
+        "dry run should still preserve files"
+    );
+
+    let json: Value = serde_json::from_slice(&output.stdout).expect("output should be valid JSON");
+    let plan = json["autofix_plan"].as_object().expect("plan should exist");
+    assert_eq!(plan["planned_updates"].as_u64(), Some(4));
+    assert_eq!(
+        plan["updated_files"]
+            .as_array()
+            .expect("updated files should be an array")
+            .len(),
+        2
+    );
+
+    let changes = plan["changes"]
+        .as_array()
+        .expect("changes should be an array");
+    assert_eq!(changes.len(), 4);
+    assert!(changes.iter().any(|change| {
+        change["path"]
+            .as_str()
+            .is_some_and(|path| path.ends_with("src/trace.rs"))
+            && change["rules"]
+                .as_array()
+                .is_some_and(|rules| rules.iter().any(|rule| rule == "SYU-trace-doc-001"))
+    }));
+    assert!(changes.iter().any(|change| {
+        change["path"]
+            .as_str()
+            .is_some_and(|path| path.ends_with("src/trace.rs.syu-ownership.yaml"))
+            && change["rules"]
+                .as_array()
+                .is_some_and(|rules| rules.iter().any(|rule| rule == "SYU-trace-id-001"))
+    }));
 }
 
 #[test]
