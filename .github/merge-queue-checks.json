@@ -1,7 +1,7 @@
 {
   "version": 1,
   "required_checks": [
-    { "context": "precommit", "workflow": "ci", "job_id": "precommit" },
+    { "context": "file-hygiene", "workflow": "ci", "job_id": "file-hygiene" },
     { "context": "quality", "workflow": "ci", "job_id": "quality" },
     { "context": "coverage", "workflow": "ci", "job_id": "coverage" },
     { "context": "actionlint", "workflow": "ci", "job_id": "actionlint" },
