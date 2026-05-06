@@ -164,20 +164,43 @@ pub(crate) fn load_feature_documents_with_paths(
     feature_root: &Path,
 ) -> Result<Vec<LoadedDocument<FeatureDocument>>> {
     let registry_path = feature_root.join("features.yaml");
-    let registry = load_feature_registry(&registry_path)?;
-    if registry.files.is_empty() {
+    if registry_path.is_file() {
+        let registry = load_feature_registry(&registry_path)?;
+        if registry.files.is_empty() {
+            bail!(
+                "feature registry `{}` does not declare any feature files",
+                registry_path.display()
+            );
+        }
+
+        let mut documents = Vec::new();
+        for file in registry.files {
+            let path = resolve_feature_document_path(feature_root, &file.file)?;
+            let document = load_feature_document(&path, &file.kind)?;
+            documents.push(LoadedDocument { path, document });
+        }
+        return Ok(documents);
+    }
+
+    let mut documents = Vec::new();
+    for path in yaml_file_paths_recursive(feature_root)? {
+        if path.file_name().and_then(|name| name.to_str()) == Some("features.yaml") {
+            continue;
+        }
+        if !looks_like_feature_document(&path)? {
+            continue;
+        }
+        let document = load_feature_document(&path, "feature")?;
+        documents.push(LoadedDocument { path, document });
+    }
+
+    if documents.is_empty() {
         bail!(
-            "feature registry `{}` does not declare any feature files",
+            "missing feature registry `{}`",
             registry_path.display()
         );
     }
 
-    let mut documents = Vec::new();
-    for file in registry.files {
-        let path = resolve_feature_document_path(feature_root, &file.file)?;
-        let document = load_feature_document(&path, &file.kind)?;
-        documents.push(LoadedDocument { path, document });
-    }
     Ok(documents)
 }
 
@@ -186,6 +209,15 @@ fn load_feature_document(path: &Path, kind: &str) -> Result<FeatureDocument> {
     let raw = read_yaml_text(path, &label)?;
     serde_yaml::from_str(&raw)
         .with_context(|| format!("failed to parse {label} from `{}`", path.display()))
+}
+
+fn looks_like_feature_document(path: &Path) -> Result<bool> {
+    let raw = read_yaml_text(path, "feature candidate")?;
+    let value: serde_yaml::Value = serde_yaml::from_str(&raw)
+        .with_context(|| format!("failed to inspect feature candidate `{}`", path.display()))?;
+    Ok(value.as_mapping().is_some_and(|mapping| {
+        mapping.contains_key(serde_yaml::Value::String("features".to_string()))
+    }))
 }
 
 fn ensure_yaml_directory(directory: &Path, label: &str) -> Result<Vec<PathBuf>> {

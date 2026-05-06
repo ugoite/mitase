@@ -76,6 +76,7 @@ pub struct Requirement {
 #[serde(deny_unknown_fields)]
 pub struct FeatureRegistryDocument {
     pub version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub updated: Option<String>,
     pub files: Vec<FeatureRegistryEntry>,
 }

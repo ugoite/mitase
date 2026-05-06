@@ -1166,19 +1166,29 @@ fn sync_feature_registry(
     documents: &[MutableLoadedDocument<FeatureDocument>],
 ) -> Result<Option<FeatureRegistryDocument>> {
     let registry_path = feature_root.join("features.yaml");
-    let raw = fs::read_to_string(&registry_path)?;
-    let registry: FeatureRegistryDocument = serde_yaml::from_str(&raw)?;
     let files = feature_registry_entries_for_documents(feature_root, documents);
+    match fs::read_to_string(&registry_path) {
+        Ok(raw) => {
+            let registry: FeatureRegistryDocument = serde_yaml::from_str(&raw)?;
+            if feature_registry_entries_match(&registry.files, &files) {
+                return Ok(None);
+            }
 
-    if feature_registry_entries_match(&registry.files, &files) {
-        return Ok(None);
+            Ok(Some(FeatureRegistryDocument {
+                version: registry.version,
+                updated: registry.updated,
+                files,
+            }))
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Some(
+            FeatureRegistryDocument {
+                version: env!("CARGO_PKG_VERSION").to_string(),
+                updated: None,
+                files,
+            },
+        )),
+        Err(error) => Err(error.into()),
     }
-
-    Ok(Some(FeatureRegistryDocument {
-        version: registry.version,
-        updated: registry.updated,
-        files,
-    }))
 }
 
 fn write_modified_documents<T: serde::Serialize>(
@@ -5621,6 +5631,30 @@ mod tests {
         assert_eq!(
             fs::read_to_string(root.join("feature.rs")).expect("feature contents"),
             "pub fn feature_impl() {}\n"
+        );
+    }
+
+    #[test]
+    fn apply_autofix_bootstraps_missing_feature_registry() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        write_valid_planned_workspace(tempdir.path());
+        fs::remove_file(tempdir.path().join("docs/syu/features/features.yaml"))
+            .expect("feature registry should be removable");
+
+        let workspace =
+            crate::workspace::load_workspace(tempdir.path()).expect("workspace should still load");
+        let summary = apply_autofix(&workspace).expect("autofix should succeed");
+
+        let registry_contents = fs::read_to_string(tempdir.path().join("docs/syu/features/features.yaml"))
+            .expect("feature registry should be written");
+        assert!(registry_contents.contains("version:"));
+        assert!(registry_contents.contains("files:"));
+        assert!(registry_contents.contains("core.yaml"));
+        assert_eq!(summary.symbol_updates, 1);
+        assert!(
+            summary
+                .updated_files
+                .contains(Path::new("docs/syu/features/features.yaml"))
         );
     }
 
