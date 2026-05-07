@@ -158,8 +158,9 @@ If you want a gradual C# rollout, borrow the lighter starter shape from the
 That example keeps the higher-layer spec and surrounding automation explicit
 without requiring every checked-in C# file to be traced immediately. Use
 [`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
-or `syu init . --template go-only` as a reminder that Go now supports
-symbol checks, coverage ownership, and `doc_contains`.
+or `syu init . --template go-only` as a reminder that Go now supports symbol
+checks, coverage ownership, and `doc_contains`, and that Java, C#, and Kotlin do
+too.
 
 ### `validate.trace_ownership_mode`
 

@@ -34,8 +34,8 @@ Need a different level of guidance?
 - Open the [LSP guide](./lsp.md) when you are wiring `syu` into another editor
   client or want the low-level stdio / JSON-RPC server contract directly.
 - Use the [trace adapter capability matrix](./trace-adapter-support.md) when
-  you need to know which built-in languages support symbol validation only
-  versus `doc_contains` and strict coverage.
+  you need to know which built-in languages support `doc_contains` and strict
+  coverage.
 - Follow the [dedicated `doc_contains` adoption guide](./doc-contains.md) when
   you want a newcomer-friendly path for adding comment-level evidence one symbol
   at a time.
@@ -248,7 +248,7 @@ until you are ready to declare real tests and implementation traces.
 unsupported implementation languages can still adopt `syu` today, but they
 should treat code-level mappings for those files as future work.
 
-Go, Java, C#, and Kotlin already participate in strict `validate.require_symbol_trace_coverage` inventory. Go now supports `doc_contains` checks as well, while Java, C#, and Kotlin still stop at symbol validation. The [trace adapter capability matrix](./trace-adapter-support.md)
+Go, Java, C#, and Kotlin already participate in strict `validate.require_symbol_trace_coverage` inventory. Go, Java, C#, and Kotlin now support `doc_contains` checks as well. The [trace adapter capability matrix](./trace-adapter-support.md)
 summarizes that language-by-language support.
 
 Today you can still:

@@ -41,14 +41,17 @@ the few symbols where comment-level evidence genuinely helps.
 - **Rust**
 - **Python**
 - **Go**
+- **Java**
+- **C#**
+- **Kotlin**
 - **TypeScript / JavaScript**
 
 For the full matrix, including strict ownership coverage and symbol-only
 adapters, use the [trace adapter capability matrix](./trace-adapter-support.md).
 
-Languages such as Java, C#, Ruby, Shell, YAML, JSON, Markdown, and Gitignore
-can still use explicit `file` + `symbols` traces, but they do not validate
-`doc_contains` yet.
+Languages such as Ruby, Shell, YAML, JSON, Markdown, and Gitignore can still use
+explicit `file` + `symbols` traces, but they do not validate `doc_contains`
+yet.
 
 ## Starter-level examples to copy from
 
@@ -59,6 +62,7 @@ scratch:
 | --- | --- |
 | [`examples/python-only`](https://github.com/ugoite/syu/tree/main/examples/python-only) | Smallest newcomer-friendly `doc_contains` story with Python docstrings in both tests and implementation. |
 | [`examples/rust-only`](https://github.com/ugoite/syu/tree/main/examples/rust-only) | Minimal Rust `///` comment example when your repository is Rust-first. |
+| [`examples/java-only`](https://github.com/ugoite/syu/tree/main/examples/java-only) | JVM-first `doc_contains` example with Javadoc around both the Java test and implementation symbols. |
 | [`examples/browser-ui`](https://github.com/ugoite/syu/tree/main/examples/browser-ui) | Frontend-oriented TypeScript example showing `doc_contains` in a UI component flow. |
 
 If you want the gentlest first adoption path, start with

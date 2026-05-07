@@ -16,3 +16,5 @@ requirements:
         - file: src/test/java/example/app/OrderSummaryTest.java
           symbols:
             - JavaRequirementTest
+          doc_contains:
+            - JavaRequirementTest keeps the Java requirement trace readable
