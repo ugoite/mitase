@@ -78,6 +78,12 @@ pub struct SymbolInspection {
     pub line: usize,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum DocCommentStyle {
+    Block { start_marker: &'static str },
+    Line { prefix: &'static str },
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct PythonSymbolInspection {
     pub(crate) name: String,
@@ -123,7 +129,7 @@ struct PythonSymbolRecord {
 pub fn supports_rich_inspection(language: &str) -> bool {
     matches!(
         adapter_for_language(language).map(LanguageAdapter::canonical_name),
-        Some("rust" | "python" | "typescript" | "go")
+        Some("rust" | "python" | "typescript" | "go" | "java" | "csharp" | "kotlin")
     )
 }
 
@@ -162,6 +168,28 @@ pub fn inspect_symbol(
                 line: item.line,
             }),
         ),
+        Some("java") => Ok(inspect_language_symbol(
+            adapter_for_language(language).expect("java adapter should exist"),
+            contents,
+            symbol,
+            DocCommentStyle::Block {
+                start_marker: "/**",
+            },
+        )),
+        Some("csharp") => Ok(inspect_language_symbol(
+            adapter_for_language(language).expect("csharp adapter should exist"),
+            contents,
+            symbol,
+            DocCommentStyle::Line { prefix: "///" },
+        )),
+        Some("kotlin") => Ok(inspect_language_symbol(
+            adapter_for_language(language).expect("kotlin adapter should exist"),
+            contents,
+            symbol,
+            DocCommentStyle::Block {
+                start_marker: "/**",
+            },
+        )),
         _ => Ok(None),
     }
 }
@@ -185,7 +213,262 @@ pub fn apply_symbol_doc_fix(
         Some("python") => fix_python_symbol_docs(config, path, contents, symbol, &required),
         Some("typescript") => fix_typescript_symbol_docs(path, contents, symbol, &required),
         Some("go") => fix_go_symbol_docs(contents, symbol, &required),
+        Some("java") => fix_language_symbol_docs(
+            adapter_for_language(language).expect("java adapter should exist"),
+            contents,
+            symbol,
+            &required,
+            DocCommentStyle::Block {
+                start_marker: "/**",
+            },
+        ),
+        Some("csharp") => fix_language_symbol_docs(
+            adapter_for_language(language).expect("csharp adapter should exist"),
+            contents,
+            symbol,
+            &required,
+            DocCommentStyle::Line { prefix: "///" },
+        ),
+        Some("kotlin") => fix_language_symbol_docs(
+            adapter_for_language(language).expect("kotlin adapter should exist"),
+            contents,
+            symbol,
+            &required,
+            DocCommentStyle::Block {
+                start_marker: "/**",
+            },
+        ),
         _ => Ok(None),
+    }
+}
+
+fn inspect_language_symbol(
+    adapter: &dyn LanguageAdapter,
+    contents: &str,
+    symbol: &str,
+    style: DocCommentStyle,
+) -> Option<SymbolInspection> {
+    find_declaration_line(adapter, contents, symbol).map(|line| SymbolInspection {
+        docs: collect_doc_comments(contents, line, style),
+        line,
+    })
+}
+
+fn fix_language_symbol_docs(
+    adapter: &dyn LanguageAdapter,
+    contents: &str,
+    symbol: &str,
+    required: &[String],
+    style: DocCommentStyle,
+) -> Result<Option<String>> {
+    let Some(existing_line) = find_declaration_line(adapter, contents, symbol) else {
+        return Ok(None);
+    };
+    let existing_docs = collect_doc_comments(contents, existing_line, style);
+    let missing = missing_doc_snippets(&existing_docs, required);
+    if missing.is_empty() {
+        return Ok(None);
+    }
+
+    let mut lines = to_lines(contents);
+    let indent = line_indentation(&lines[existing_line - 1]);
+    let line_refs = lines.iter().map(String::as_str).collect::<Vec<_>>();
+    if let Some(block) = find_doc_block(&line_refs, existing_line, style) {
+        let inserts = render_missing_doc_lines(&indent, &missing, style);
+        lines.splice(block.end_line - 1..block.end_line - 1, inserts);
+    } else {
+        let inserts = render_new_doc_block(&indent, &missing, style);
+        let insertion_line = find_doc_insertion_line(&lines, existing_line);
+        lines.splice(insertion_line - 1..insertion_line - 1, inserts);
+    }
+
+    Ok(Some(join_lines(lines, contents.ends_with('\n'))))
+}
+
+fn find_declaration_line(
+    adapter: &dyn LanguageAdapter,
+    contents: &str,
+    symbol: &str,
+) -> Option<usize> {
+    let patterns = declaration_patterns(adapter, symbol);
+    find_line_by_patterns(contents, &patterns)
+}
+
+fn declaration_patterns(adapter: &dyn LanguageAdapter, symbol: &str) -> Vec<String> {
+    let mut patterns = adapter.patterns(symbol);
+    if patterns.len() > 1 {
+        patterns.pop();
+    }
+    patterns
+}
+
+fn collect_doc_comments(contents: &str, declaration_line: usize, style: DocCommentStyle) -> String {
+    let lines = contents.lines().collect::<Vec<_>>();
+    find_doc_block(&lines, declaration_line, style)
+        .map(|block| block.text)
+        .unwrap_or_default()
+}
+
+#[derive(Debug, Clone)]
+struct DocBlock {
+    end_line: usize,
+    text: String,
+}
+
+fn find_doc_block(
+    lines: &[&str],
+    declaration_line: usize,
+    style: DocCommentStyle,
+) -> Option<DocBlock> {
+    match style {
+        DocCommentStyle::Block { start_marker } => {
+            find_block_doc_block(lines, declaration_line, start_marker)
+        }
+        DocCommentStyle::Line { prefix } => find_line_doc_block(lines, declaration_line, prefix),
+    }
+}
+
+fn find_block_doc_block(
+    lines: &[&str],
+    declaration_line: usize,
+    start_marker: &str,
+) -> Option<DocBlock> {
+    if declaration_line <= 1 {
+        return None;
+    }
+
+    let end = skip_declaration_annotations(lines, declaration_line - 2)?;
+    if lines[end].trim().is_empty() || !lines[end].trim_end().ends_with("*/") {
+        return None;
+    }
+
+    let mut start = end;
+    while start > 0 && !lines[start].trim_start().starts_with(start_marker) {
+        start -= 1;
+    }
+
+    if !lines[start].trim_start().starts_with(start_marker) {
+        return None;
+    }
+
+    let text = lines[start..=end]
+        .iter()
+        .map(|line| {
+            line.trim()
+                .trim_start_matches(start_marker)
+                .trim_end_matches("*/")
+                .trim_start_matches('*')
+                .trim()
+                .to_string()
+        })
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    Some(DocBlock {
+        end_line: end + 1,
+        text,
+    })
+}
+
+fn find_line_doc_block(lines: &[&str], declaration_line: usize, prefix: &str) -> Option<DocBlock> {
+    if declaration_line <= 1 {
+        return None;
+    }
+
+    let end = skip_declaration_annotations(lines, declaration_line - 2)?;
+    if end >= lines.len() || lines[end].trim().is_empty() {
+        return None;
+    }
+
+    if !lines[end].trim_start().starts_with(prefix) {
+        return None;
+    }
+
+    let mut start = end;
+    while start > 0 && lines[start - 1].trim_start().starts_with(prefix) {
+        start -= 1;
+    }
+
+    let text = lines[start..=end]
+        .iter()
+        .map(|line| {
+            line.trim_start()
+                .trim_start_matches(prefix)
+                .trim()
+                .to_string()
+        })
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    Some(DocBlock {
+        end_line: end + 1,
+        text,
+    })
+}
+
+fn find_doc_insertion_line(lines: &[String], declaration_line: usize) -> usize {
+    if declaration_line <= 1 {
+        return 1;
+    }
+
+    let mut insertion_line = declaration_line;
+    while insertion_line > 1 && is_annotation_or_attribute_line(&lines[insertion_line - 2]) {
+        insertion_line -= 1;
+    }
+
+    insertion_line
+}
+
+fn skip_declaration_annotations(lines: &[&str], mut index: usize) -> Option<usize> {
+    if index >= lines.len() {
+        return None;
+    }
+
+    while is_annotation_or_attribute_line(lines[index]) {
+        if index == 0 {
+            return None;
+        }
+        index -= 1;
+    }
+
+    Some(index)
+}
+
+fn is_annotation_or_attribute_line(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    trimmed.starts_with('@')
+        || trimmed.starts_with("#[")
+        || (trimmed.starts_with('[') && trimmed.ends_with(']'))
+}
+
+fn render_missing_doc_lines(
+    indent: &str,
+    missing: &[String],
+    style: DocCommentStyle,
+) -> Vec<String> {
+    match style {
+        DocCommentStyle::Block { .. } => missing
+            .iter()
+            .map(|snippet| format!("{indent} * {snippet}"))
+            .collect(),
+        DocCommentStyle::Line { prefix } => missing
+            .iter()
+            .map(|snippet| format!("{indent}{prefix} {snippet}"))
+            .collect(),
+    }
+}
+
+fn render_new_doc_block(indent: &str, missing: &[String], style: DocCommentStyle) -> Vec<String> {
+    match style {
+        DocCommentStyle::Block { .. } => {
+            let mut block = vec![format!("{indent}/**")];
+            block.extend(render_missing_doc_lines(indent, missing, style));
+            block.push(format!("{indent} */"));
+            block
+        }
+        DocCommentStyle::Line { .. } => render_missing_doc_lines(indent, missing, style),
     }
 }
 
@@ -739,9 +1022,10 @@ mod tests {
     use crate::config::SyuConfig;
 
     use super::{
-        apply_symbol_doc_fix, find_jsdoc_block, find_rust_declaration_line,
-        inspect_python_file_with_runtime, inspect_rust_symbol, inspect_symbol, merged_doc_lines,
-        render_python_docstring, supports_rich_inspection,
+        DocCommentStyle, apply_symbol_doc_fix, find_doc_block, find_doc_insertion_line,
+        find_jsdoc_block, find_rust_declaration_line, inspect_python_file_with_runtime,
+        inspect_rust_symbol, inspect_symbol, merged_doc_lines, render_python_docstring,
+        skip_declaration_annotations, supports_rich_inspection,
     };
 
     #[test]
@@ -750,6 +1034,9 @@ mod tests {
         assert!(supports_rich_inspection("python"));
         assert!(supports_rich_inspection("typescript"));
         assert!(supports_rich_inspection("go"));
+        assert!(supports_rich_inspection("java"));
+        assert!(supports_rich_inspection("csharp"));
+        assert!(supports_rich_inspection("kotlin"));
         assert!(!supports_rich_inspection("shell"));
     }
 
@@ -1123,6 +1410,57 @@ mod external;
     }
 
     #[test]
+    fn java_inspection_reads_javadocs() {
+        let source = "/**\n * REQ-1\n * stable docs\n */\npublic class Sample {}\n";
+        let inspected = inspect_symbol(
+            "java",
+            &SyuConfig::default(),
+            std::path::Path::new("src/Sample.java"),
+            source,
+            "Sample",
+        )
+        .expect("inspection should succeed")
+        .expect("symbol should exist");
+        assert!(inspected.docs.contains("REQ-1"));
+        assert!(inspected.docs.contains("stable docs"));
+        assert_eq!(inspected.line, 5);
+    }
+
+    #[test]
+    fn csharp_inspection_reads_xml_docs() {
+        let source = "/// REQ-1\n/// stable docs\npublic class Sample {}\n";
+        let inspected = inspect_symbol(
+            "csharp",
+            &SyuConfig::default(),
+            std::path::Path::new("src/Sample.cs"),
+            source,
+            "Sample",
+        )
+        .expect("inspection should succeed")
+        .expect("symbol should exist");
+        assert!(inspected.docs.contains("REQ-1"));
+        assert!(inspected.docs.contains("stable docs"));
+        assert_eq!(inspected.line, 3);
+    }
+
+    #[test]
+    fn kotlin_inspection_reads_kdoc() {
+        let source = "/**\n * REQ-1\n * stable docs\n */\nfun sample(): Int = 1\n";
+        let inspected = inspect_symbol(
+            "kotlin",
+            &SyuConfig::default(),
+            std::path::Path::new("src/sample.kt"),
+            source,
+            "sample",
+        )
+        .expect("inspection should succeed")
+        .expect("symbol should exist");
+        assert!(inspected.docs.contains("REQ-1"));
+        assert!(inspected.docs.contains("stable docs"));
+        assert_eq!(inspected.line, 5);
+    }
+
+    #[test]
     fn go_inspection_reads_line_and_block_comments() {
         let line_comment_source =
             "// REQ-1\n// stable docs\nfunc sample() string {\n\treturn \"ok\"\n}\n";
@@ -1271,6 +1609,107 @@ mod external;
             .expect("fix should succeed"),
             None
         );
+    }
+
+    #[test]
+    fn java_fix_inserts_missing_javadoc_lines() {
+        let source = "public class Sample {}\n";
+        let updated = apply_symbol_doc_fix(
+            "java",
+            &SyuConfig::default(),
+            std::path::Path::new("src/Sample.java"),
+            source,
+            "Sample",
+            &["REQ-1".to_string(), "Explain sample".to_string()],
+        )
+        .expect("fix should succeed")
+        .expect("fix should update source");
+
+        assert!(updated.contains("/**"));
+        assert!(updated.contains(" * REQ-1"));
+        assert!(updated.contains(" * Explain sample"));
+    }
+
+    #[test]
+    fn csharp_fix_inserts_missing_xml_doc_lines() {
+        let source = "public class Sample {}\n";
+        let updated = apply_symbol_doc_fix(
+            "csharp",
+            &SyuConfig::default(),
+            std::path::Path::new("src/Sample.cs"),
+            source,
+            "Sample",
+            &["REQ-1".to_string(), "Explain sample".to_string()],
+        )
+        .expect("fix should succeed")
+        .expect("fix should update source");
+
+        assert!(updated.contains("/// REQ-1"));
+        assert!(updated.contains("/// Explain sample"));
+    }
+
+    #[test]
+    fn kotlin_fix_inserts_missing_kdoc_lines() {
+        let source = "fun sample(): Int = 1\n";
+        let updated = apply_symbol_doc_fix(
+            "kotlin",
+            &SyuConfig::default(),
+            std::path::Path::new("src/sample.kt"),
+            source,
+            "sample",
+            &["REQ-1".to_string(), "Explain sample".to_string()],
+        )
+        .expect("fix should succeed")
+        .expect("fix should update source");
+
+        assert!(updated.contains("/**"));
+        assert!(updated.contains(" * REQ-1"));
+        assert!(updated.contains(" * Explain sample"));
+    }
+
+    #[test]
+    fn helper_functions_cover_annotation_and_noop_paths() {
+        let missing_symbol = apply_symbol_doc_fix(
+            "java",
+            &SyuConfig::default(),
+            std::path::Path::new("src/Sample.java"),
+            "public class Sample {}\n",
+            "Missing",
+            &["REQ-1".to_string()],
+        )
+        .expect("fix should succeed");
+        assert_eq!(missing_symbol, None);
+
+        let already_documented = apply_symbol_doc_fix(
+            "java",
+            &SyuConfig::default(),
+            std::path::Path::new("src/Sample.java"),
+            "/**\n * REQ-1\n */\npublic class Sample {}\n",
+            "Sample",
+            &["REQ-1".to_string()],
+        )
+        .expect("fix should succeed");
+        assert_eq!(already_documented, None);
+
+        let block_lines = [" */"];
+        assert!(
+            find_doc_block(
+                &block_lines,
+                2,
+                DocCommentStyle::Block {
+                    start_marker: "/**"
+                }
+            )
+            .is_none()
+        );
+
+        let line_lines = ["", "public class Sample {}"];
+        assert!(find_doc_block(&line_lines, 2, DocCommentStyle::Line { prefix: "///" }).is_none());
+
+        let annotation_lines = vec!["@Test".to_string(), "public void sample() {}".to_string()];
+        assert_eq!(find_doc_insertion_line(&annotation_lines, 2), 1);
+        assert_eq!(skip_declaration_annotations(&["@Test"], 0), None);
+        assert_eq!(skip_declaration_annotations(&[], 0), None);
     }
 
     #[test]
