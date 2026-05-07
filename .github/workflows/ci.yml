@@ -67,6 +67,7 @@ jobs:
 
   quality:
     if: github.event_name != 'schedule'
+    # Keep this on the larger runner; it exceeds ubuntu-slim's time budget.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -87,6 +88,7 @@ jobs:
 
   coverage:
     if: github.event_name != 'schedule'
+    # Keep this on the larger runner; it exceeds ubuntu-slim's time budget.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -133,7 +135,7 @@ jobs:
         uses: rhysd/actionlint@v1.7.12
 
   dependency-audit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@v6
 
@@ -149,7 +151,7 @@ jobs:
         run: cargo audit
 
   npm-audit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@v6
 
@@ -185,7 +187,7 @@ jobs:
 
   dependency-review:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     permissions:
       contents: read
       pull-requests: read
@@ -212,7 +214,7 @@ jobs:
 
   spec-linkage:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     permissions:
       contents: read
       pull-requests: read
@@ -227,7 +229,7 @@ jobs:
 
   squash-history-spec-ids:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     permissions:
       contents: read
       pull-requests: read
@@ -246,7 +248,7 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-latest
+          - ubuntu-slim
           - macos-15-intel
           - macos-14
           - windows-latest
@@ -271,7 +273,7 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-latest
+          - ubuntu-slim
           - macos-15-intel
           - macos-14
           - windows-latest
@@ -361,7 +363,7 @@ jobs:
   check-msrv:
     name: MSRV check (1.88)
     if: github.event_name != 'schedule'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@v6
 
