@@ -540,6 +540,7 @@ mod tests {
         let json = adapter_for_language("json").expect("json adapter should exist");
         let markdown = adapter_for_language("markdown").expect("markdown adapter should exist");
         let gitignore = adapter_for_language("gitignore").expect("gitignore adapter should exist");
+        let java = adapter_for_language("java").expect("java adapter should exist");
         let csharp = adapter_for_language("csharp").expect("csharp adapter should exist");
         let kotlin = adapter_for_language("kotlin").expect("kotlin adapter should exist");
 
@@ -575,6 +576,16 @@ mod tests {
         assert!(gitignore.symbol_exists("# FEAT-CONTRIB-002\n/.worktrees/\n", "FEAT-CONTRIB-002"));
         assert!(gitignore.symbol_exists("# FEAT-CONTRIB-002\n/.worktrees/\n", "/.worktrees/"));
         assert!(gitignore.symbol_exists("worktree_helper\n", "worktree_helper"));
+        assert!(java.symbol_exists(
+            "public class FeatureTraceService {}\n",
+            "FeatureTraceService"
+        ));
+        assert!(java.symbol_exists("public void featureTraceJava() {}\n", "featureTraceJava"));
+        assert!(java.symbol_exists(
+            "public static final String FEATURE_TRACE = \"ok\";\n",
+            "FEATURE_TRACE"
+        ));
+        assert!(java.symbol_exists("FeatureTraceFallback\n", "FeatureTraceFallback"));
         assert!(csharp.symbol_exists(
             "public record FeatureTrace(string Value);\npublic async Task featureTraceCSharpAsync() => Task.CompletedTask;\n",
             "FeatureTrace"
