@@ -274,13 +274,14 @@ fn fix_language_symbol_docs(
     let indent = line_indentation(&lines[existing_line - 1]);
     let line_refs = lines.iter().map(String::as_str).collect::<Vec<_>>();
     if let Some(block) = find_doc_block(&line_refs, existing_line, style) {
-        let merged = merged_doc_lines(&existing_docs, &missing);
+        let start = block.start_line - 1;
+        let end = block.end_line - 1;
         if matches!(style, DocCommentStyle::Block { .. }) && block.start_line == block.end_line {
-            let inserts = render_new_doc_block(&indent, &merged, style);
-            lines.splice(block.start_line - 1..block.end_line, inserts);
+            let replacement = render_rebuilt_block(&indent, &block.text, &missing);
+            lines.splice(start..=end, replacement);
         } else {
             let inserts = render_missing_doc_lines(&indent, &missing, style);
-            lines.splice(block.end_line - 1..block.end_line - 1, inserts);
+            lines.splice(end..end, inserts);
         }
     } else {
         let inserts = render_new_doc_block(&indent, &missing, style);
@@ -301,11 +302,32 @@ fn find_declaration_line(
 }
 
 fn declaration_patterns(adapter: &dyn LanguageAdapter, symbol: &str) -> Vec<String> {
+    if adapter.canonical_name() == "java" {
+        return java_declaration_patterns(symbol);
+    }
+
     let mut patterns = adapter.patterns(symbol);
     if patterns.len() > 1 {
         patterns.pop();
     }
     patterns
+}
+
+fn java_declaration_patterns(symbol: &str) -> Vec<String> {
+    let escaped = regex::escape(symbol);
+    let visibility = r"(?:public|protected|private)";
+    let modifiers = r"(?:static|final|abstract|synchronized|native|strictfp)";
+    vec![
+        format!(
+            r"(?m)^\s*(?:{visibility}\s+)?(?:{modifiers}\s+)*(?:class|interface|enum|record)\s+{escaped}\b"
+        ),
+        format!(
+            r"(?m)^\s*(?:{visibility}\s+)?(?:{modifiers}\s+)*(?:[\w<>\[\],?.]+\s+)+{escaped}\s*\("
+        ),
+        format!(
+            r"(?m)^\s*(?:{visibility}\s+)?(?:{modifiers}\s+)*(?:[\w<>\[\],?.]+\s+)+{escaped}\s*(?:=|;)"
+        ),
+    ]
 }
 
 fn collect_doc_comments(contents: &str, declaration_line: usize, style: DocCommentStyle) -> String {
@@ -415,6 +437,21 @@ fn find_line_doc_block(lines: &[&str], declaration_line: usize, prefix: &str) ->
         end_line: end + 1,
         text,
     })
+}
+
+fn render_rebuilt_block(indent: &str, existing_text: &str, missing: &[String]) -> Vec<String> {
+    let mut docs = existing_text
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    docs.extend(missing.iter().cloned());
+
+    let mut block = vec![format!("{indent}/**")];
+    block.extend(docs.iter().map(|snippet| format!("{indent} * {snippet}")));
+    block.push(format!("{indent} */"));
+    block
 }
 
 fn find_doc_insertion_line(lines: &[String], declaration_line: usize) -> usize {
@@ -1671,6 +1708,32 @@ mod external;
     }
 
     #[test]
+    fn java_fix_prefers_the_declaration_over_an_earlier_call_site() {
+        let source = r#"public class Sample {
+    void helper() {
+        trace_symbol();
+    }
+
+    public void trace_symbol() {}
+}
+"#;
+
+        let updated = apply_symbol_doc_fix(
+            "java",
+            &SyuConfig::default(),
+            std::path::Path::new("src/Sample.java"),
+            source,
+            "trace_symbol",
+            &["REQ-1".to_string()],
+        )
+        .expect("fix should succeed")
+        .expect("fix should update source");
+
+        assert!(updated.contains("void helper() {\n        trace_symbol();\n    }\n\n    /**\n     * REQ-1\n     */\n    public void trace_symbol() {}"));
+        assert!(!updated.contains("trace_symbol();\n    /**"));
+    }
+
+    #[test]
     fn java_fix_expands_single_line_javadocs() {
         let source = "/** REQ-1 */\npublic class Sample {}\n";
         let updated = apply_symbol_doc_fix(
@@ -1685,6 +1748,26 @@ mod external;
         .expect("fix should update source");
 
         assert!(updated.contains("/**\n * REQ-1\n * Explain sample\n */"));
+    }
+
+    #[test]
+    fn java_fix_rewrites_inline_javadocs_before_inserting_missing_lines() {
+        let source = "/** REQ-1 */\npublic class Sample {}\n";
+        let updated = apply_symbol_doc_fix(
+            "java",
+            &SyuConfig::default(),
+            std::path::Path::new("src/Sample.java"),
+            source,
+            "Sample",
+            &["Explain sample".to_string()],
+        )
+        .expect("fix should succeed")
+        .expect("fix should update source");
+
+        assert_eq!(
+            updated,
+            "/**\n * REQ-1\n * Explain sample\n */\npublic class Sample {}\n"
+        );
     }
 
     #[test]
