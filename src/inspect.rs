@@ -959,17 +959,14 @@ fn fix_ruby_symbol_docs(
     symbol: &str,
     required: &[String],
 ) -> Result<Option<String>> {
-    let Some(existing) = inspect_ruby_symbol(contents, symbol) else {
+    let Some(line) = find_ruby_declaration_line(contents, symbol) else {
         return Ok(None);
     };
+    let existing = collect_doc_comments(contents, line, DocCommentStyle::Line { prefix: "#" });
     let missing = missing_doc_snippets(&existing, required);
     if missing.is_empty() {
         return Ok(None);
     }
-
-    let Some(line) = find_ruby_declaration_line(contents, symbol) else {
-        return Ok(None);
-    };
 
     let mut lines = to_lines(contents);
     let indent = line_indentation(&lines[line - 1]);
@@ -1178,6 +1175,49 @@ mod tests {
         assert_eq!(
             find_ruby_declaration_line(source, "ruby_feature_impl"),
             Some(4)
+        );
+    }
+
+    #[test]
+    fn ruby_inspection_returns_none_for_missing_symbols_and_fix_noops() {
+        let source = "class OrderSummary\n  # REQ-1\n  def ruby_feature_impl\n  end\nend\n";
+
+        assert_eq!(
+            inspect_symbol(
+                "ruby",
+                &SyuConfig::default(),
+                std::path::Path::new("lib/order_summary.rb"),
+                source,
+                "missing",
+            )
+            .expect("inspection should succeed"),
+            None
+        );
+
+        assert_eq!(
+            apply_symbol_doc_fix(
+                "ruby",
+                &SyuConfig::default(),
+                std::path::Path::new("lib/order_summary.rb"),
+                source,
+                "missing",
+                &["REQ-1".to_string()],
+            )
+            .expect("fix should succeed"),
+            None
+        );
+
+        assert_eq!(
+            apply_symbol_doc_fix(
+                "ruby",
+                &SyuConfig::default(),
+                std::path::Path::new("lib/order_summary.rb"),
+                source,
+                "ruby_feature_impl",
+                &["REQ-1".to_string()],
+            )
+            .expect("fix should succeed"),
+            None
         );
     }
 

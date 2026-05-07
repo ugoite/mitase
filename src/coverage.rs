@@ -1874,6 +1874,8 @@ mod tests {
     };
 
     #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+    #[cfg(unix)]
     use std::os::unix::fs::symlink;
 
     use tempfile::tempdir;
@@ -1890,9 +1892,9 @@ mod tests {
         discover_typescript_targets_with_issues, go_files_under, is_kotlin_test_file,
         java_files_under, kotlin_files_under, normalize_relative_path,
         normalized_symbol_trace_coverage_ignored_paths, path_matches_ignored_generated_directory,
-        python_files_under, record_scanned_file_relative_to_workspace, rust_files_under,
-        scanned_file_relative_to_workspace, typescript_files_under, validate_symbol_trace_coverage,
-        validate_symbol_trace_coverage_with,
+        python_files_under, record_scanned_file_relative_to_workspace, ruby_files_under,
+        rust_files_under, scanned_file_relative_to_workspace, typescript_files_under,
+        validate_symbol_trace_coverage, validate_symbol_trace_coverage_with,
     };
     use crate::{
         config::SyuConfig,
@@ -1973,7 +1975,7 @@ mod tests {
 
         fs::write(
             root.join("lib/order_summary.rb"),
-            "class OrderSummary\n  def ruby_feature_impl\n    \"ok\"\n  end\nend\n\nclass UncoveredService\n  def uncovered_api\n    \"missing\"\n  end\nend\n",
+            "VERSION = \"1.0\"\n\nclass OrderSummary\n  def ruby_feature_impl\n    \"ok\"\n  end\nend\n\nclass UncoveredService\n  def uncovered_api\n    \"missing\"\n  end\nend\n",
         )
         .expect("ruby source");
         fs::write(
@@ -2096,6 +2098,11 @@ mod tests {
             discover_ruby_targets(&SyuConfig::default(), tempdir.path()).expect("targets");
         assert!(targets.iter().any(|target| {
             target.file == Path::new("lib/order_summary.rb")
+                && target.symbol == "VERSION"
+                && target.kind == CoverageTargetKind::PublicSymbol
+        }));
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("lib/order_summary.rb")
                 && target.symbol == "OrderSummary"
                 && target.kind == CoverageTargetKind::PublicSymbol
         }));
@@ -2117,6 +2124,125 @@ mod tests {
         assert!(targets.iter().any(|target| {
             target.file == Path::new("test/order_summary_test.rb")
                 && target.symbol == "test_uncovered_case"
+                && target.kind == CoverageTargetKind::TestSymbol
+        }));
+    }
+
+    #[test]
+    fn ruby_files_under_reports_walk_errors() {
+        let tempdir_walk = tempdir().expect("tempdir");
+        let lib_path = tempdir_walk.path().join("lib");
+        fs::write(&lib_path, "not a directory").expect("lib file");
+        let issue = ruby_files_under(tempdir_walk.path(), &lib_path, &BTreeSet::new())
+            .expect_err("walk failure should surface");
+        assert_eq!(issue.code, "SYU-coverage-walk-001");
+    }
+
+    #[test]
+    fn validate_symbol_trace_coverage_keeps_scanning_after_ruby_discovery_issue() {
+        let tempdir_walk = tempdir().expect("tempdir");
+        let mut config = SyuConfig::default();
+        config.validate.require_symbol_trace_coverage = true;
+        let workspace = Workspace {
+            root: tempdir_walk.path().to_path_buf(),
+            spec_root: tempdir_walk.path().join("docs/syu"),
+            config,
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+        let mut issues = Vec::new();
+        validate_symbol_trace_coverage_with(
+            &workspace,
+            &mut issues,
+            CoverageDiscoverers {
+                rust: no_targets,
+                python: no_targets,
+                ruby: |_config, _root| {
+                    Err(Box::new(Issue::error(
+                        "SYU-coverage-walk-001",
+                        "trace coverage inventory",
+                        Some("lib".to_string()),
+                        "Failed to walk `lib` while building trace coverage inventory: not a directory"
+                            .to_string(),
+                        Some(
+                            "Fix the directory layout or disable `validate.require_symbol_trace_coverage` until the workspace can be scanned."
+                                .to_string(),
+                        ),
+                    )))
+                },
+                go: no_targets,
+                java: no_java_targets,
+                csharp: no_targets,
+                kotlin: no_targets,
+                typescript: no_targets,
+            },
+        );
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].code, "SYU-coverage-walk-001");
+
+        let tempdir2 = tempdir().expect("tempdir");
+        write_ruby_workspace(tempdir2.path(), false);
+        let unreadable_src = tempdir2.path().join("lib/unreadable.rb");
+        let unreadable_test = tempdir2.path().join("test/unreadable_test.rb");
+        fs::write(&unreadable_src, "class UnreadableSource; end\n").expect("source");
+        fs::write(&unreadable_test, "class UnreadableTest; end\n").expect("test");
+
+        #[cfg(unix)]
+        {
+            let mut permissions = fs::metadata(&unreadable_src)
+                .expect("metadata")
+                .permissions();
+            permissions.set_mode(0o000);
+            fs::set_permissions(&unreadable_src, permissions).expect("permissions");
+
+            let mut permissions = fs::metadata(&unreadable_test)
+                .expect("metadata")
+                .permissions();
+            permissions.set_mode(0o000);
+            fs::set_permissions(&unreadable_test, permissions).expect("permissions");
+        }
+
+        let targets = discover_ruby_targets(&SyuConfig::default(), tempdir2.path())
+            .expect("unreadable files should be skipped");
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("lib/order_summary.rb")
+                && target.symbol == "ruby_feature_impl"
+                && target.kind == CoverageTargetKind::PublicSymbol
+        }));
+        assert!(
+            targets
+                .iter()
+                .all(|target| target.symbol != "UnreadableSource")
+        );
+        assert!(
+            targets
+                .iter()
+                .all(|target| target.symbol != "UnreadableTest")
+        );
+    }
+
+    #[test]
+    fn ruby_coverage_fixtures_support_cover_everything_mode() {
+        let tempdir = tempdir().expect("tempdir");
+        write_ruby_workspace(tempdir.path(), true);
+        let targets =
+            discover_ruby_targets(&SyuConfig::default(), tempdir.path()).expect("targets");
+
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("lib/order_summary.rb")
+                && target.symbol == "VERSION"
+                && target.kind == CoverageTargetKind::PublicSymbol
+        }));
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("lib/order_summary.rb")
+                && target.symbol == "ruby_feature_impl"
+                && target.kind == CoverageTargetKind::PublicSymbol
+        }));
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("test/order_summary_test.rb")
+                && target.symbol == "test_ruby_requirement"
                 && target.kind == CoverageTargetKind::TestSymbol
         }));
     }
