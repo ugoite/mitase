@@ -1677,6 +1677,37 @@ mod external;
     }
 
     #[test]
+    fn java_fix_prefers_declaration_over_call_site() {
+        let source = r#"public class Sample {
+    void run() {
+        sample();
+    }
+
+    void sample() {}
+}
+"#;
+
+        let updated = apply_symbol_doc_fix(
+            "java",
+            &SyuConfig::default(),
+            std::path::Path::new("src/Sample.java"),
+            source,
+            "sample",
+            &["REQ-1".to_string()],
+        )
+        .expect("fix should succeed")
+        .expect("fix should update source");
+
+        let doc_pos = updated.find("/**").expect("doc block should be inserted");
+        let call_pos = updated.find("sample();").expect("call site should remain");
+        let decl_pos = updated
+            .find("void sample()")
+            .expect("declaration should remain");
+        assert!(call_pos < doc_pos);
+        assert!(doc_pos < decl_pos);
+    }
+
+    #[test]
     fn java_fix_prefers_the_declaration_over_an_earlier_call_site() {
         let source = r#"public class Sample {
     void helper() {
@@ -1686,6 +1717,7 @@ mod external;
     public void trace_symbol() {}
 }
 "#;
+
         let updated = apply_symbol_doc_fix(
             "java",
             &SyuConfig::default(),
@@ -1699,6 +1731,23 @@ mod external;
 
         assert!(updated.contains("void helper() {\n        trace_symbol();\n    }\n\n    /**\n     * REQ-1\n     */\n    public void trace_symbol() {}"));
         assert!(!updated.contains("trace_symbol();\n    /**"));
+    }
+
+    #[test]
+    fn java_fix_expands_single_line_javadocs() {
+        let source = "/** REQ-1 */\npublic class Sample {}\n";
+        let updated = apply_symbol_doc_fix(
+            "java",
+            &SyuConfig::default(),
+            std::path::Path::new("src/Sample.java"),
+            source,
+            "Sample",
+            &["REQ-1".to_string(), "Explain sample".to_string()],
+        )
+        .expect("fix should succeed")
+        .expect("fix should update source");
+
+        assert!(updated.contains("/**\n * REQ-1\n * Explain sample\n */"));
     }
 
     #[test]
@@ -1756,6 +1805,23 @@ mod external;
         assert!(updated.contains("/**"));
         assert!(updated.contains(" * REQ-1"));
         assert!(updated.contains(" * Explain sample"));
+    }
+
+    #[test]
+    fn kotlin_fix_expands_single_line_kdocs() {
+        let source = "/** REQ-1 */\nfun sample(): Int = 1\n";
+        let updated = apply_symbol_doc_fix(
+            "kotlin",
+            &SyuConfig::default(),
+            std::path::Path::new("src/sample.kt"),
+            source,
+            "sample",
+            &["REQ-1".to_string(), "Explain sample".to_string()],
+        )
+        .expect("fix should succeed")
+        .expect("fix should update source");
+
+        assert!(updated.contains("/**\n * REQ-1\n * Explain sample\n */"));
     }
 
     #[test]
