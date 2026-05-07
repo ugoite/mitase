@@ -14,6 +14,9 @@ fn write_workspace_with_ownership_mode(root: &Path, default_fix: bool, trace_own
     fs::create_dir_all(root.join("docs/syu/features")).expect("features dir");
     fs::create_dir_all(root.join("docs/syu/features/core")).expect("core features dir");
     fs::create_dir_all(root.join("src")).expect("src dir");
+    fs::create_dir_all(root.join("lib")).expect("lib dir");
+    fs::create_dir_all(root.join("test")).expect("test dir");
+    fs::create_dir_all(root.join("spec")).expect("spec dir");
 
     fs::write(
         root.join("syu.yaml"),
@@ -73,6 +76,9 @@ fn write_doc_contains_workspace(
     fs::create_dir_all(root.join("docs/syu/requirements")).expect("requirements dir");
     fs::create_dir_all(root.join("docs/syu/features")).expect("features dir");
     fs::create_dir_all(root.join("src")).expect("src dir");
+    fs::create_dir_all(root.join("lib")).expect("lib dir");
+    fs::create_dir_all(root.join("test")).expect("test dir");
+    fs::create_dir_all(root.join("spec")).expect("spec dir");
 
     fs::write(
         root.join("syu.yaml"),
@@ -279,6 +285,37 @@ fn validate_fix_repairs_missing_trace_docs_for_csharp_sources() {
     let source = fs::read_to_string(tempdir.path().join("src/Sample.cs")).expect("source");
     assert!(source.contains("/// requirement doc line"));
     assert!(source.contains("/// feature doc line"));
+}
+
+#[test]
+// REQ-CORE-003
+fn validate_fix_repairs_missing_trace_docs_for_ruby_sources() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    write_doc_contains_workspace(
+        tempdir.path(),
+        "ruby",
+        "lib/order_summary.rb",
+        "class OrderSummary\n  def trace_symbol\n    true\n  end\nend\n",
+    );
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(tempdir.path())
+        .arg("--fix")
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let source = fs::read_to_string(tempdir.path().join("lib/order_summary.rb")).expect("source");
+    assert!(source.contains("# requirement doc line"));
+    assert!(source.contains("# feature doc line"));
 }
 
 #[test]

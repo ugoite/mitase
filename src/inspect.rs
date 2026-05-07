@@ -129,7 +129,7 @@ struct PythonSymbolRecord {
 pub fn supports_rich_inspection(language: &str) -> bool {
     matches!(
         adapter_for_language(language).map(LanguageAdapter::canonical_name),
-        Some("rust" | "python" | "typescript" | "go" | "java" | "csharp" | "kotlin")
+        Some("rust" | "python" | "ruby" | "typescript" | "go" | "java" | "csharp" | "kotlin")
     )
 }
 
@@ -156,6 +156,10 @@ pub fn inspect_symbol(
                 }),
             )
         }
+        Some("ruby") => Ok(inspect_ruby_symbol(contents, symbol).map(|docs| SymbolInspection {
+            docs,
+            line: find_ruby_declaration_line(contents, symbol).unwrap_or(1),
+        })),
         Some("typescript") => Ok(
             inspect_typescript_symbol(path, contents, symbol)?.map(|item| SymbolInspection {
                 docs: item.docs,
@@ -211,6 +215,7 @@ pub fn apply_symbol_doc_fix(
     match adapter_for_language(language).map(LanguageAdapter::canonical_name) {
         Some("rust") => fix_rust_symbol_docs(contents, symbol, &required),
         Some("python") => fix_python_symbol_docs(config, path, contents, symbol, &required),
+        Some("ruby") => fix_ruby_symbol_docs(contents, symbol, &required),
         Some("typescript") => fix_typescript_symbol_docs(path, contents, symbol, &required),
         Some("go") => fix_go_symbol_docs(contents, symbol, &required),
         Some("java") => fix_language_symbol_docs(
@@ -928,6 +933,53 @@ fn fix_go_symbol_docs(contents: &str, symbol: &str, required: &[String]) -> Resu
     Ok(Some(join_lines(lines, contents.ends_with('\n'))))
 }
 
+fn find_ruby_declaration_line(contents: &str, symbol: &str) -> Option<usize> {
+    let escaped = regex::escape(symbol);
+    let patterns = [
+        format!(r"^\s*(?:class|module)\s+{escaped}\b"),
+        format!(r"^\s*def\s+(?:self\.)?{escaped}\b"),
+        format!(r"^\s*{escaped}\s*="),
+    ];
+    find_line_by_patterns(contents, &patterns)
+}
+
+fn inspect_ruby_symbol(contents: &str, symbol: &str) -> Option<String> {
+    let line = find_ruby_declaration_line(contents, symbol)?;
+    Some(collect_doc_comments(
+        contents,
+        line,
+        DocCommentStyle::Line { prefix: "#" },
+    ))
+}
+
+fn fix_ruby_symbol_docs(
+    contents: &str,
+    symbol: &str,
+    required: &[String],
+) -> Result<Option<String>> {
+    let Some(existing) = inspect_ruby_symbol(contents, symbol) else {
+        return Ok(None);
+    };
+    let missing = missing_doc_snippets(&existing, required);
+    if missing.is_empty() {
+        return Ok(None);
+    }
+
+    let Some(line) = find_ruby_declaration_line(contents, symbol) else {
+        return Ok(None);
+    };
+
+    let mut lines = to_lines(contents);
+    let indent = line_indentation(&lines[line - 1]);
+    let inserts = missing
+        .into_iter()
+        .map(|snippet| format!("{indent}# {snippet}"))
+        .collect::<Vec<_>>();
+    lines.splice(line - 1..line - 1, inserts);
+
+    Ok(Some(join_lines(lines, contents.ends_with('\n'))))
+}
+
 fn find_rust_declaration_line(contents: &str, symbol: &str) -> Option<usize> {
     let escaped = regex::escape(symbol);
     let patterns = [
@@ -1078,6 +1130,7 @@ mod tests {
     fn rich_inspection_supports_primary_languages() {
         assert!(supports_rich_inspection("rust"));
         assert!(supports_rich_inspection("python"));
+        assert!(supports_rich_inspection("ruby"));
         assert!(supports_rich_inspection("typescript"));
         assert!(supports_rich_inspection("go"));
         assert!(supports_rich_inspection("java"));
@@ -1102,6 +1155,24 @@ mod tests {
         assert!(inspected.docs.contains("REQ-1"));
         assert_eq!(inspected.line, 3);
         assert_eq!(find_rust_declaration_line(source, "example"), Some(3));
+    }
+
+    #[test]
+    fn ruby_inspection_reads_line_comments() {
+        let source = "# REQ-1\n# stable docs\nclass OrderSummary\n  def ruby_feature_impl\n  end\nend\n";
+        let inspected = inspect_symbol(
+            "ruby",
+            &SyuConfig::default(),
+            std::path::Path::new("lib/order_summary.rb"),
+            source,
+            "ruby_feature_impl",
+        )
+        .expect("inspection should succeed")
+        .expect("symbol should exist");
+
+        assert!(inspected.docs.contains("REQ-1"));
+        assert_eq!(inspected.line, 4);
+        assert_eq!(find_ruby_declaration_line(source, "ruby_feature_impl"), Some(4));
     }
 
     #[test]

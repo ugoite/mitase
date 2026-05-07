@@ -85,21 +85,25 @@ requirements:
       trace is valid only when the file exists, the symbol exists, the trace
       path uses canonical repository-relative form, and any `doc_contains`
       snippets are present in the symbol documentation when the declared
-      language supports rich inspection. The checked-in trace mapping itself
-      MUST remain enough to audit ownership without requiring inline
-      requirement or feature IDs in implementation files by default.
+      language supports rich inspection. Ruby now uses the same
+      declaration-adjacent line-comment inspection and ownership inventory as
+      the richer adapters when the symbol shape is stable. The checked-in trace
+      mapping itself MUST remain enough to audit ownership without requiring
+      inline requirement or feature IDs in implementation files by default.
       Repositories that want an extra repository-native ownership breadcrumb
       MUST be able to opt into either inline IDs in traced artifacts or
       checked-in sidecar ownership manifests. Validation MUST also reject
       duplicate trace mappings inside a single language list, support wildcard
       file ownership, and provide an optional mode that requires every public
       symbol (non-underscore-prefixed for Python, exported identifiers for Go,
-      public Java types and members, public C# types and members, `pub` for
-      Rust, exported for TypeScript/JavaScript) and every test symbol
+      public Ruby classes, modules, and methods, public Java types and
+      members, public C# types and members, `pub` for Rust, exported for
+      TypeScript/JavaScript) and every test symbol
       (`test_*` functions for Python, `Test*`, `Benchmark*`, `Fuzz*`, and
-      `Example*` functions in Go `_test.go` files, JUnit `@Test` methods or
-      legacy `test*` methods for Java, xUnit/NUnit/MSTest-attributed methods
-      for C#, `#[test]` for Rust, `test*`-prefixed functions for
+      `Example*` functions in Go `_test.go` files, Ruby `test*` methods in
+      `test/`, `tests/`, and `spec/`, JUnit `@Test` methods or legacy `test*`
+      methods for Java, xUnit/NUnit/MSTest-attributed methods for C#,
+      `#[test]` for Rust, `test*`-prefixed functions for
       TypeScript/JavaScript) in repository source and test roots to belong to
       some feature or requirement respectively. That inventory MUST ignore
       configured repository-relative generated paths, defaulting to common
