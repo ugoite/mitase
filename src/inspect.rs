@@ -274,8 +274,14 @@ fn fix_language_symbol_docs(
     let indent = line_indentation(&lines[existing_line - 1]);
     let line_refs = lines.iter().map(String::as_str).collect::<Vec<_>>();
     if let Some(block) = find_doc_block(&line_refs, existing_line, style) {
-        let inserts = render_missing_doc_lines(&indent, &missing, style);
-        lines.splice(block.end_line - 1..block.end_line - 1, inserts);
+        let merged = merged_doc_lines(&existing_docs, &missing);
+        if matches!(style, DocCommentStyle::Block { .. }) && block.start_line == block.end_line {
+            let inserts = render_new_doc_block(&indent, &merged, style);
+            lines.splice(block.start_line - 1..block.end_line, inserts);
+        } else {
+            let inserts = render_missing_doc_lines(&indent, &missing, style);
+            lines.splice(block.end_line - 1..block.end_line - 1, inserts);
+        }
     } else {
         let inserts = render_new_doc_block(&indent, &missing, style);
         let insertion_line = find_doc_insertion_line(&lines, existing_line);
@@ -311,6 +317,7 @@ fn collect_doc_comments(contents: &str, declaration_line: usize, style: DocComme
 
 #[derive(Debug, Clone)]
 struct DocBlock {
+    start_line: usize,
     end_line: usize,
     text: String,
 }
@@ -366,6 +373,7 @@ fn find_block_doc_block(
         .join("\n");
 
     Some(DocBlock {
+        start_line: start + 1,
         end_line: end + 1,
         text,
     })
@@ -403,6 +411,7 @@ fn find_line_doc_block(lines: &[&str], declaration_line: usize, prefix: &str) ->
         .join("\n");
 
     Some(DocBlock {
+        start_line: start + 1,
         end_line: end + 1,
         text,
     })
@@ -1631,6 +1640,54 @@ mod external;
     }
 
     #[test]
+    fn java_fix_prefers_declaration_over_call_site() {
+        let source = r#"public class Sample {
+    void run() {
+        sample();
+    }
+
+    void sample() {}
+}
+"#;
+
+        let updated = apply_symbol_doc_fix(
+            "java",
+            &SyuConfig::default(),
+            std::path::Path::new("src/Sample.java"),
+            source,
+            "sample",
+            &["REQ-1".to_string()],
+        )
+        .expect("fix should succeed")
+        .expect("fix should update source");
+
+        let doc_pos = updated.find("/**").expect("doc block should be inserted");
+        let call_pos = updated.find("sample();").expect("call site should remain");
+        let decl_pos = updated
+            .find("void sample()")
+            .expect("declaration should remain");
+        assert!(call_pos < doc_pos);
+        assert!(doc_pos < decl_pos);
+    }
+
+    #[test]
+    fn java_fix_expands_single_line_javadocs() {
+        let source = "/** REQ-1 */\npublic class Sample {}\n";
+        let updated = apply_symbol_doc_fix(
+            "java",
+            &SyuConfig::default(),
+            std::path::Path::new("src/Sample.java"),
+            source,
+            "Sample",
+            &["REQ-1".to_string(), "Explain sample".to_string()],
+        )
+        .expect("fix should succeed")
+        .expect("fix should update source");
+
+        assert!(updated.contains("/**\n * REQ-1\n * Explain sample\n */"));
+    }
+
+    #[test]
     fn csharp_fix_inserts_missing_xml_doc_lines() {
         let source = "public class Sample {}\n";
         let updated = apply_symbol_doc_fix(
@@ -1665,6 +1722,23 @@ mod external;
         assert!(updated.contains("/**"));
         assert!(updated.contains(" * REQ-1"));
         assert!(updated.contains(" * Explain sample"));
+    }
+
+    #[test]
+    fn kotlin_fix_expands_single_line_kdocs() {
+        let source = "/** REQ-1 */\nfun sample(): Int = 1\n";
+        let updated = apply_symbol_doc_fix(
+            "kotlin",
+            &SyuConfig::default(),
+            std::path::Path::new("src/sample.kt"),
+            source,
+            "sample",
+            &["REQ-1".to_string(), "Explain sample".to_string()],
+        )
+        .expect("fix should succeed")
+        .expect("fix should update source");
+
+        assert!(updated.contains("/**\n * REQ-1\n * Explain sample\n */"));
     }
 
     #[test]

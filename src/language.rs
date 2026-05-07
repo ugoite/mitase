@@ -230,10 +230,16 @@ impl LanguageAdapter for JavaAdapter {
     fn patterns(&self, symbol: &str) -> Vec<String> {
         let escaped = regex::escape(symbol);
         vec![
-            format!(r"(?m)\b(?:class|interface|enum|record)\s+{escaped}\b"),
-            format!(r"(?m)\b{escaped}\s*\("),
-            format!(r"(?m)\b{escaped}\s*(?:=|;)"),
-            format!(r"(?m)\b{escaped}\b"),
+            format!(r"(?m)^\s*(?:class|interface|enum|record)\s+{escaped}\b"),
+            format!(
+                r"(?m)^\s*(?:(?:public|protected|private)\s+)?(?:static\s+|final\s+|abstract\s+|synchronized\s+|default\s+|native\s+|strictfp\s+)*(?:<[^>]+>\s*)?(?:[\w<>\[\],?.]+\s+)+{escaped}\s*\([^;{{]*\)\s*(?:throws\b[^\n]*)?(?:\{{|;)"
+            ),
+            format!(
+                r"(?m)^\s*(?:(?:public|protected|private)\s+)?(?:static\s+)?(?:[\w<>\[\],?.]+\s+)+{escaped}\s*(?:\{{|=>|;)"
+            ),
+            format!(
+                r"(?m)^\s*(?:(?:public|protected|private)\s+)?(?:readonly\s+|const\s+)?(?:[\w<>\[\],?.]+\s+)+{escaped}\s*(?:=|;)"
+            ),
         ]
     }
 }
