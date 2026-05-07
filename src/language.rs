@@ -240,6 +240,7 @@ impl LanguageAdapter for JavaAdapter {
             format!(
                 r"(?m)^\s*(?:(?:public|protected|private)\s+)?(?:readonly\s+|const\s+)?(?:[\w<>\[\],?.]+\s+)+{escaped}\s*(?:=|;)"
             ),
+            format!(r"(?m)\b{escaped}\b"),
         ]
     }
 }
