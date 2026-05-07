@@ -285,8 +285,8 @@ implementations:
 What you should avoid for unsupported-language files today is adding
 language-specific `tests:` or `implementations:` entries before the adapter
 exists at all. If you need code-level tracing with `doc_contains`, stay with
-Rust, Python, Go, or TypeScript/JavaScript for now. For Go-first repositories,
-For Ruby-first repositories, use
+Rust, Python, Go, Java, C#, Kotlin, or TypeScript/JavaScript for now. For
+Ruby-first repositories, use
 [`examples/ruby-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/ruby-only)
 or `syu init . --template ruby-only`: both use real Ruby files plus symbol-level
 trace mappings that validate today.
@@ -297,8 +297,8 @@ trace mappings that validate today.
 For Java-first repositories, use
 [`examples/java-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/java-only)
 or `syu init . --template java-only`: both use real Java files plus
-symbol-level trace mappings that validate today, even though `doc_contains`
-is still out of scope for Java.
+symbol-level trace mappings that validate today, and Java traces can now add
+`doc_contains` when the Javadoc stays adjacent to the symbol.
 For C#-first repositories that want a staged rollout, use the
 [`examples/csharp-fallback` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/csharp-fallback)
 to study the lighter adoption pattern before tracing every C# file directly.
@@ -420,7 +420,7 @@ you can omit `doc_contains` entirely and keep source files free of spec-ID
 bookkeeping.
 
 That richer `doc_contains` inspection is currently available for Rust, Python,
-Go, and TypeScript / JavaScript traces. The same built-in matrix also tells you which
+Go, Java, C#, Kotlin, and TypeScript / JavaScript traces. The same built-in matrix also tells you which
 languages participate in strict `validate.require_symbol_trace_coverage`
 inventory and which ones stop at symbol-existence checks: see the [trace
 adapter capability matrix](./trace-adapter-support.md).
