@@ -277,7 +277,7 @@ fn fix_language_symbol_docs(
         let start = block.start_line - 1;
         let end = block.end_line - 1;
         if matches!(style, DocCommentStyle::Block { .. }) && block.start_line == block.end_line {
-            let replacement = render_rebuilt_block(&indent, &block.text, &missing, style);
+            let replacement = render_rebuilt_block(&indent, &block.text, &missing);
             lines.splice(start..=end, replacement);
         } else {
             let inserts = render_missing_doc_lines(&indent, &missing, style);
@@ -439,12 +439,7 @@ fn find_line_doc_block(lines: &[&str], declaration_line: usize, prefix: &str) ->
     })
 }
 
-fn render_rebuilt_block(
-    indent: &str,
-    existing_text: &str,
-    missing: &[String],
-    style: DocCommentStyle,
-) -> Vec<String> {
+fn render_rebuilt_block(indent: &str, existing_text: &str, missing: &[String]) -> Vec<String> {
     let mut docs = existing_text
         .lines()
         .map(str::trim)
@@ -453,18 +448,10 @@ fn render_rebuilt_block(
         .collect::<Vec<_>>();
     docs.extend(missing.iter().cloned());
 
-    match style {
-        DocCommentStyle::Block { .. } => {
-            let mut block = vec![format!("{indent}/**")];
-            block.extend(docs.iter().map(|snippet| format!("{indent} * {snippet}")));
-            block.push(format!("{indent} */"));
-            block
-        }
-        DocCommentStyle::Line { prefix } => docs
-            .iter()
-            .map(|snippet| format!("{indent}{prefix} {snippet}"))
-            .collect(),
-    }
+    let mut block = vec![format!("{indent}/**")];
+    block.extend(docs.iter().map(|snippet| format!("{indent} * {snippet}")));
+    block.push(format!("{indent} */"));
+    block
 }
 
 fn find_doc_insertion_line(lines: &[String], declaration_line: usize) -> usize {
