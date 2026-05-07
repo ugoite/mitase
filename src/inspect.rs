@@ -156,10 +156,12 @@ pub fn inspect_symbol(
                 }),
             )
         }
-        Some("ruby") => Ok(inspect_ruby_symbol(contents, symbol).map(|docs| SymbolInspection {
-            docs,
-            line: find_ruby_declaration_line(contents, symbol).unwrap_or(1),
-        })),
+        Some("ruby") => Ok(
+            inspect_ruby_symbol(contents, symbol).map(|docs| SymbolInspection {
+                docs,
+                line: find_ruby_declaration_line(contents, symbol).unwrap_or(1),
+            }),
+        ),
         Some("typescript") => Ok(
             inspect_typescript_symbol(path, contents, symbol)?.map(|item| SymbolInspection {
                 docs: item.docs,
@@ -1121,9 +1123,9 @@ mod tests {
 
     use super::{
         DocCommentStyle, apply_symbol_doc_fix, find_doc_block, find_doc_insertion_line,
-        find_jsdoc_block, find_rust_declaration_line, inspect_python_file_with_runtime,
-        inspect_rust_symbol, inspect_symbol, merged_doc_lines, render_python_docstring,
-        skip_declaration_annotations, supports_rich_inspection,
+        find_jsdoc_block, find_ruby_declaration_line, find_rust_declaration_line,
+        inspect_python_file_with_runtime, inspect_rust_symbol, inspect_symbol, merged_doc_lines,
+        render_python_docstring, skip_declaration_annotations, supports_rich_inspection,
     };
 
     #[test]
@@ -1159,7 +1161,8 @@ mod tests {
 
     #[test]
     fn ruby_inspection_reads_line_comments() {
-        let source = "# REQ-1\n# stable docs\nclass OrderSummary\n  def ruby_feature_impl\n  end\nend\n";
+        let source =
+            "class OrderSummary\n  # REQ-1\n  # stable docs\n  def ruby_feature_impl\n  end\nend\n";
         let inspected = inspect_symbol(
             "ruby",
             &SyuConfig::default(),
@@ -1172,7 +1175,10 @@ mod tests {
 
         assert!(inspected.docs.contains("REQ-1"));
         assert_eq!(inspected.line, 4);
-        assert_eq!(find_ruby_declaration_line(source, "ruby_feature_impl"), Some(4));
+        assert_eq!(
+            find_ruby_declaration_line(source, "ruby_feature_impl"),
+            Some(4)
+        );
     }
 
     #[test]
