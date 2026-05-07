@@ -13,3 +13,5 @@ features:
         - file: src/main/java/example/app/OrderSummary.java
           symbols:
             - JavaFeatureImpl
+          doc_contains:
+            - JavaFeatureImpl implements FEAT-JAVA-001 in the example workspace

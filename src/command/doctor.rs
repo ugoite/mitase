@@ -1268,6 +1268,7 @@ mod tests {
             let mut permissions = fs::metadata(&path).expect("metadata").permissions();
             permissions.set_mode(0o755);
             fs::set_permissions(&path, permissions).expect("permissions");
+            std::thread::sleep(Duration::from_millis(10));
         }
         #[cfg(windows)]
         {
