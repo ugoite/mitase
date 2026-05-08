@@ -1415,6 +1415,7 @@ fn write_modified_documents<T: serde::Serialize>(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn write_or_plan_autofix_change(
     root: &Path,
     path: &Path,
