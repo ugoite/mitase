@@ -34,8 +34,8 @@ Need a different level of guidance?
 - Open the [LSP guide](./lsp.md) when you are wiring `syu` into another editor
   client or want the low-level stdio / JSON-RPC server contract directly.
 - Use the [trace adapter capability matrix](./trace-adapter-support.md) when
-  you need to know which built-in languages support symbol validation only
-  versus `doc_contains` and strict coverage.
+  you need to know which built-in languages support `doc_contains` and strict
+  coverage.
 - Follow the [dedicated `doc_contains` adoption guide](./doc-contains.md) when
   you want a newcomer-friendly path for adding comment-level evidence one symbol
   at a time.
@@ -248,7 +248,7 @@ until you are ready to declare real tests and implementation traces.
 unsupported implementation languages can still adopt `syu` today, but they
 should treat code-level mappings for those files as future work.
 
-Go, Java, C#, and Kotlin already participate in strict `validate.require_symbol_trace_coverage` inventory. Go now supports `doc_contains` checks as well, while Java, C#, and Kotlin still stop at symbol validation. The [trace adapter capability matrix](./trace-adapter-support.md)
+Go, Java, C#, and Kotlin already participate in strict `validate.require_symbol_trace_coverage` inventory. Go, Java, C#, and Kotlin now support `doc_contains` checks as well. The [trace adapter capability matrix](./trace-adapter-support.md)
 summarizes that language-by-language support.
 
 Today you can still:
@@ -285,8 +285,8 @@ implementations:
 What you should avoid for unsupported-language files today is adding
 language-specific `tests:` or `implementations:` entries before the adapter
 exists at all. If you need code-level tracing with `doc_contains`, stay with
-Rust, Python, Go, or TypeScript/JavaScript for now. For Go-first repositories,
-For Ruby-first repositories, use
+Rust, Python, Go, Java, C#, Kotlin, or TypeScript/JavaScript for now. For
+Ruby-first repositories, use
 [`examples/ruby-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/ruby-only)
 or `syu init . --template ruby-only`: both use real Ruby files plus symbol-level
 trace mappings that validate today.
@@ -297,8 +297,8 @@ trace mappings that validate today.
 For Java-first repositories, use
 [`examples/java-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/java-only)
 or `syu init . --template java-only`: both use real Java files plus
-symbol-level trace mappings that validate today, even though `doc_contains`
-is still out of scope for Java.
+symbol-level trace mappings that validate today, and Java traces can now add
+`doc_contains` when the Javadoc stays adjacent to the symbol.
 For C#-first repositories that want a staged rollout, use the
 [`examples/csharp-fallback` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/csharp-fallback)
 to study the lighter adoption pattern before tracing every C# file directly.
@@ -420,7 +420,7 @@ you can omit `doc_contains` entirely and keep source files free of spec-ID
 bookkeeping.
 
 That richer `doc_contains` inspection is currently available for Rust, Python,
-Go, and TypeScript / JavaScript traces. The same built-in matrix also tells you which
+Go, Java, C#, Kotlin, and TypeScript / JavaScript traces. The same built-in matrix also tells you which
 languages participate in strict `validate.require_symbol_trace_coverage`
 inventory and which ones stop at symbol-existence checks: see the [trace
 adapter capability matrix](./trace-adapter-support.md).

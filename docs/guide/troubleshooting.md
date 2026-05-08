@@ -363,7 +363,7 @@ if it is obsolete.
 | Creates new spec entries | ❌ No |
 
 Run `git diff` after `--fix` to review every change before committing. If a
-later write fails, `syu` rolls back earlier edits instead of leaving a
+later write fails, `syu` rolls back earlier writes instead of leaving a
 half-applied change set behind.
 
 ---
