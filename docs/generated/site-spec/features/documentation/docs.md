@@ -65,6 +65,20 @@ description: "Generated reference for docs/syu/features/documentation/docs.yaml"
           - app.port
           - report.output
           - runtimes.python.command
+      - **file**: docs/guide/implementation-planning.md
+        - **symbols**:
+          - FEAT-DOCS-001
+          - syu show
+          - syu relate
+          - syu add
+          - syu validate
+      - **file**: docs/guide/request-artifact-format.md
+        - **symbols**:
+          - FEAT-DOCS-001
+          - request artifact
+          - repository_constraints
+          - linked_ids
+          - syu task workflows
 - **id**: FEAT-DOCS-002
   - **title**: Docusaurus documentation site
   - **summary**: Render and publish the checked-in docs tree as a documentation site without maintaining a separate content source.
@@ -154,6 +168,20 @@ features:
             - app.port
             - report.output
             - runtimes.python.command
+        - file: docs/guide/implementation-planning.md
+          symbols:
+            - FEAT-DOCS-001
+            - syu show
+            - syu relate
+            - syu add
+            - syu validate
+        - file: docs/guide/request-artifact-format.md
+          symbols:
+            - FEAT-DOCS-001
+            - request artifact
+            - repository_constraints
+            - linked_ids
+            - syu task workflows
 
   - id: FEAT-DOCS-002
     title: Docusaurus documentation site
