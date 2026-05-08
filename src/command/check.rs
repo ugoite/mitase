@@ -869,6 +869,8 @@ fn apply_graph_autofix(
     let policy_root = workspace.spec_root.join("policies");
     let requirement_root = workspace.spec_root.join("requirements");
     let feature_root = workspace.spec_root.join("features");
+    let root = &workspace.root;
+    let description = "synchronize graph links";
 
     let mut philosophy_docs = if philosophy_root.is_dir() {
         load_philosophy_documents_with_paths(&philosophy_root)?
@@ -937,53 +939,26 @@ fn apply_graph_autofix(
         && let Some(updated_registry) = sync_feature_registry(&feature_root, &feature_docs)?
     {
         let registry_path = feature_root.join("features.yaml");
-        write_or_plan_autofix_change(
-            &workspace.root,
-            &registry_path,
+        let change = AutofixChangeRequest {
+            root: &workspace.root,
+            path: &registry_path,
             transaction,
             run,
             mode,
-            Vec::new(),
-            format!(
+            rules: Vec::new(),
+            summary_text: format!(
                 "sync feature registry entries in `{}`",
                 registry_path.display()
             ),
-            Some(serde_yaml::to_string(&updated_registry)?),
-        )?;
+            contents: Some(serde_yaml::to_string(&updated_registry)?),
+        };
+        write_or_plan_autofix_change(change)?;
     }
 
-    write_modified_documents(
-        &philosophy_docs,
-        &workspace.root,
-        transaction,
-        run,
-        mode,
-        "synchronize graph links",
-    )?;
-    write_modified_documents(
-        &policy_docs,
-        &workspace.root,
-        transaction,
-        run,
-        mode,
-        "synchronize graph links",
-    )?;
-    write_modified_documents(
-        &requirement_docs,
-        &workspace.root,
-        transaction,
-        run,
-        mode,
-        "synchronize graph links",
-    )?;
-    write_modified_documents(
-        &feature_docs,
-        &workspace.root,
-        transaction,
-        run,
-        mode,
-        "synchronize graph links",
-    )?;
+    write_modified_documents(&philosophy_docs, root, transaction, run, mode, description)?;
+    write_modified_documents(&policy_docs, root, transaction, run, mode, description)?;
+    write_modified_documents(&requirement_docs, root, transaction, run, mode, description)?;
+    write_modified_documents(&feature_docs, root, transaction, run, mode, description)?;
 
     Ok(())
 }
@@ -1401,31 +1376,43 @@ fn write_modified_documents<T: serde::Serialize>(
         if !document.changed {
             continue;
         }
-        write_or_plan_autofix_change(
+        let change = AutofixChangeRequest {
             root,
-            &document.path,
+            path: &document.path,
             transaction,
             run,
             mode,
-            Vec::new(),
-            format!("{description} in `{}`", document.path.display()),
-            Some(serde_yaml::to_string(&document.document)?),
-        )?;
+            rules: Vec::new(),
+            summary_text: format!("{description} in `{}`", document.path.display()),
+            contents: Some(serde_yaml::to_string(&document.document)?),
+        };
+        write_or_plan_autofix_change(change)?;
     }
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
-fn write_or_plan_autofix_change(
-    root: &Path,
-    path: &Path,
-    transaction: &mut AutofixTransaction,
-    run: &mut AutofixRun,
+struct AutofixChangeRequest<'a> {
+    root: &'a Path,
+    path: &'a Path,
+    transaction: &'a mut AutofixTransaction,
+    run: &'a mut AutofixRun,
     mode: AutofixMode,
     rules: Vec<&'static str>,
     summary_text: String,
     contents: Option<String>,
-) -> Result<()> {
+}
+
+fn write_or_plan_autofix_change(request: AutofixChangeRequest<'_>) -> Result<()> {
+    let AutofixChangeRequest {
+        root,
+        path,
+        transaction,
+        run,
+        mode,
+        rules,
+        summary_text,
+        contents,
+    } = request;
     let summary = &mut run.summary;
     if mode == AutofixMode::Apply {
         let contents = contents.expect("apply mode requires contents");
