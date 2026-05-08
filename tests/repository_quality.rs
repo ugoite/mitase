@@ -310,6 +310,19 @@ fn repository_declares_release_automation() {
     assert!(!release_config.contains("\"skip-changelog\": true"));
     assert!(release_config.contains("\"changelog-type\": \"github\""));
     assert!(!release_config.contains("\"initial-version\""));
+    assert!(release_config.contains("\"file\": \"app/package.json\""));
+    assert!(release_config.contains("\"file\": \"website/package.json\""));
+    assert!(release_config.contains("\"file\": \"editors/vscode/package.json\""));
+    assert!(release_config.contains("\"file\": \"crates/syu-core/Cargo.toml\""));
+    assert!(release_config.contains("\"file\": \"app/wasm/Cargo.toml\""));
+    assert!(release_config.contains("\"file\": \"examples/rust-only/syu.yaml\""));
+    assert!(release_config.contains("\"file\": \"examples/polyglot/syu.yaml\""));
+    assert!(release_config.contains(
+        "\"file\": \"tests/fixtures/workspaces/passing/docs/syu/features/features.yaml\""
+    ));
+    assert!(release_config.contains(
+        "\"file\": \"tests/fixtures/workspaces/failing/docs/syu/features/features.yaml\""
+    ));
     assert!(manifest.contains("\".\": \"0.0.0\""));
     assert!(readme.contains("gh attestation verify"));
     assert!(readme.contains("--repo ugoite/syu"));
