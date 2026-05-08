@@ -624,3 +624,41 @@ fn validate_fix_repairs_graph_links_and_feature_registry_drift() {
     assert!(registry.contains("file: core.yaml"));
     assert!(registry.contains("file: extra/extra.yaml"));
 }
+
+#[test]
+// REQ-CORE-003
+fn validate_fix_dry_run_reports_graph_registry_changes_without_writing_files() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    write_graph_workspace(tempdir.path());
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(tempdir.path())
+        .arg("--fix")
+        .arg("--dry-run")
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        !output.status.success(),
+        "dry run should not mutate the workspace"
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("planned fixes:"));
+    assert!(stdout.contains("docs/syu/philosophy/foundation.yaml"));
+    assert!(stdout.contains("docs/syu/policies/policies.yaml"));
+    assert!(stdout.contains("docs/syu/requirements/core.yaml"));
+    assert!(stdout.contains("docs/syu/features/core.yaml"));
+    assert!(stdout.contains("docs/syu/features/extra/extra.yaml"));
+    assert!(stdout.contains("docs/syu/features/features.yaml"));
+
+    let philosophy = fs::read_to_string(tempdir.path().join("docs/syu/philosophy/foundation.yaml"))
+        .expect("philosophy");
+    assert_eq!(philosophy.matches("POL-001").count(), 2);
+
+    let registry = fs::read_to_string(tempdir.path().join("docs/syu/features/features.yaml"))
+        .expect("registry");
+    assert!(!registry.contains("file: extra/extra.yaml"));
+}
