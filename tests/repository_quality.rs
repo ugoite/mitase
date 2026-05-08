@@ -422,8 +422,10 @@ fn repository_declares_documentation_guides() {
     let app_guide = read_file("docs/guide/app.md");
     let examples_and_templates = read_file("docs/guide/examples-and-templates.md");
     let merge_queue_playbook = read_file("docs/guide/merge-queue-playbook.md");
+    let implementation_planning = read_file("docs/guide/implementation-planning.md");
     let getting_started = read_file("docs/guide/getting-started.md");
     let existing_repository = read_file("docs/guide/existing-repository.md");
+    let request_artifact_format = read_file("docs/guide/request-artifact-format.md");
     let node_workflow = read_file("docs/guide/node-workflow.md");
     let lsp_guide = read_file("docs/guide/lsp.md");
     let command_card = read_file("docs/guide/command-card.md");
@@ -559,6 +561,8 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("New to `syu`?"));
     assert!(getting_started.contains("Need a different level of guidance?"));
     assert!(getting_started.contains("[command card](./command-card.md)"));
+    assert!(getting_started.contains("implementation planning"));
+    assert!(getting_started.contains("request artifact format"));
     assert!(getting_started.contains("README quick start"));
     assert!(getting_started.contains("## Quick start path"));
     assert!(getting_started.contains("site-local route into `syu validate .`"));
@@ -630,6 +634,8 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("status: implemented"));
     assert!(getting_started.contains("Keep exploring"));
     assert!(getting_started.contains("[reviewer workflow guide](./reviewer-workflow.md)"));
+    assert!(getting_started.contains("[implementation planning](./implementation-planning.md)"));
+    assert!(getting_started.contains("[request artifact format](./request-artifact-format.md)"));
     assert!(getting_started.contains("examples/rust-only"));
     assert!(getting_started.contains("examples/generic"));
     assert!(getting_started.contains("examples/python-only"));
@@ -690,6 +696,16 @@ fn repository_declares_documentation_guides() {
     assert!(vscode_guide.contains("[repository Node workflow guide](./node-workflow.md)"));
     assert!(vscode_guide.contains("scripts/ci/pinned-npm.sh install editors/vscode"));
     assert!(vscode_guide.contains("npm --prefix editors/vscode ci"));
+    assert!(implementation_planning.contains("# Implementation planning with syu"));
+    assert!(implementation_planning.contains("syu add requirement REQ-PLANNING-001"));
+    assert!(implementation_planning.contains("When to use it"));
+    assert!(implementation_planning.contains("When not to use it"));
+    assert!(implementation_planning.contains("create, expand, or delete"));
+    assert!(request_artifact_format.contains("# Request artifact format for syu task workflows"));
+    assert!(request_artifact_format.contains("version: 1"));
+    assert!(request_artifact_format.contains("repository_constraints"));
+    assert!(request_artifact_format.contains("When to use it"));
+    assert!(request_artifact_format.contains("When not to use it"));
     let tutorial = read_file("docs/guide/tutorial.md");
     assert!(tutorial.contains("Want a different entry point?"));
     assert!(tutorial.contains("[getting started](./getting-started.md)"));
