@@ -316,6 +316,16 @@ fn repository_declares_release_automation() {
     assert!(release_config.contains("\"file\": \"crates/syu-core/Cargo.toml\""));
     assert!(release_config.contains("\"file\": \"app/wasm/Cargo.toml\""));
     assert!(release_config.contains("\"file\": \"examples/rust-only/syu.yaml\""));
+    assert!(release_config.contains("\"file\": \"examples/browser-ui/syu.yaml\""));
+    assert!(release_config.contains("\"file\": \"examples/csharp-fallback/syu.yaml\""));
+    assert!(release_config.contains("\"file\": \"examples/generic/syu.yaml\""));
+    assert!(release_config.contains("\"file\": \"examples/team-scale/syu.yaml\""));
+    assert!(release_config.contains("\"file\": \"examples/typescript-only/syu.yaml\""));
+    assert!(release_config.contains("\"file\": \"examples/go-only/syu.yaml\""));
+    assert!(release_config.contains("\"file\": \"examples/python-only/syu.yaml\""));
+    assert!(release_config.contains("\"file\": \"examples/java-only/syu.yaml\""));
+    assert!(release_config.contains("\"file\": \"examples/ruby-only/syu.yaml\""));
+    assert!(release_config.contains("\"file\": \"examples/docs-first/syu.yaml\""));
     assert!(release_config.contains("\"file\": \"examples/polyglot/syu.yaml\""));
     assert!(release_config.contains(
         "\"file\": \"tests/fixtures/workspaces/passing/docs/syu/features/features.yaml\""
