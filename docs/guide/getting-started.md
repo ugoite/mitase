@@ -23,6 +23,11 @@ Need a different level of guidance?
 - Follow [existing repository adoption](./existing-repository.md) when the
   repository already has code and history and you want to add `syu` without
   treating it like a blank workspace.
+- Use [implementation planning](./implementation-planning.md) when a request
+  still needs to become planned requirements and features before the code work
+  starts.
+- Use [request artifact format](./request-artifact-format.md) when you want a
+  small, repeatable request record before you touch the spec tree.
 - Stay on this page when you want the first workspace setup explained step by
   step, including why the manual YAML edits matter before validation and how the
   same commands fit together as one guided story.
