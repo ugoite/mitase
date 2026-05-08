@@ -50,6 +50,14 @@ features:
             - app.port
             - report.output
             - runtimes.python.command
+        - file: docs/guide/request-artifact-format.md
+          symbols:
+            - FEAT-DOCS-001
+            - When to use it
+            - When not to use it
+            - repository_constraints
+            - linked_ids
+            - Expand syu validate --fix
 
   - id: FEAT-DOCS-002
     title: Docusaurus documentation site

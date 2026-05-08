@@ -424,6 +424,7 @@ fn repository_declares_documentation_guides() {
     let merge_queue_playbook = read_file("docs/guide/merge-queue-playbook.md");
     let getting_started = read_file("docs/guide/getting-started.md");
     let existing_repository = read_file("docs/guide/existing-repository.md");
+    let request_artifact_format = read_file("docs/guide/request-artifact-format.md");
     let node_workflow = read_file("docs/guide/node-workflow.md");
     let lsp_guide = read_file("docs/guide/lsp.md");
     let command_card = read_file("docs/guide/command-card.md");
@@ -559,6 +560,7 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("New to `syu`?"));
     assert!(getting_started.contains("Need a different level of guidance?"));
     assert!(getting_started.contains("[command card](./command-card.md)"));
+    assert!(getting_started.contains("request artifact format"));
     assert!(getting_started.contains("README quick start"));
     assert!(getting_started.contains("## Quick start path"));
     assert!(getting_started.contains("site-local route into `syu validate .`"));
@@ -638,6 +640,7 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("examples/java-only"));
     assert!(getting_started.contains("examples/typescript-only"));
     assert!(getting_started.contains("examples/polyglot"));
+    assert!(getting_started.contains("[request artifact format](./request-artifact-format.md)"));
     assert!(
         getting_started.contains("[examples and templates guide](./examples-and-templates.md)")
     );
@@ -703,10 +706,17 @@ fn repository_declares_documentation_guides() {
     assert!(reviewer_workflow.contains("audit"));
     assert!(reviewer_workflow.contains("syu report"));
     assert!(reviewer_workflow.contains("syu review --range origin/main...HEAD"));
+    assert!(reviewer_workflow.contains("request artifact format"));
     assert!(reviewer_workflow.contains("the whole PR diff is covered"));
     assert!(reviewer_workflow.contains("too-small log result with the PR diff"));
     assert!(reviewer_workflow.contains("filtered down to that item"));
     assert!(reviewer_workflow.contains("not a smaller or faster"));
+    assert!(request_artifact_format.contains("# Request artifact format for syu task workflows"));
+    assert!(request_artifact_format.contains("When to use it"));
+    assert!(request_artifact_format.contains("When not to use it"));
+    assert!(request_artifact_format.contains("repository_constraints"));
+    assert!(request_artifact_format.contains("linked_ids"));
+    assert!(request_artifact_format.contains("Expand syu validate --fix"));
     assert!(trace_adapter_support.contains("# Trace adapter capability matrix"));
     assert!(trace_adapter_support.contains("validate.require_symbol_trace_coverage"));
     assert!(trace_adapter_support.contains("TypeScript / JavaScript"));
