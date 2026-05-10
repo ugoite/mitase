@@ -3584,9 +3584,44 @@ fn validate_openapi_trace_reference(
         }
     };
 
-    let Some(paths) = document
-        .as_mapping()
-        .and_then(|mapping| mapping.get(serde_yaml::Value::String("paths".to_string())))
+    let Some(document_map) = document.as_mapping() else {
+        issues.push(Issue::error(
+            "SYU-trace-openapi-002",
+            subject.clone(),
+            location.clone(),
+            format!(
+                "OpenAPI document `{}` is not a mapping.",
+                display_path.display()
+            ),
+            Some(format!(
+                "Fix `{}` so the OpenAPI selector for `{owner_id}` can be validated.",
+                display_path.display()
+            )),
+        ));
+        return false;
+    };
+
+    let is_openapi = document_map.contains_key(serde_yaml::Value::String("openapi".to_string()))
+        || document_map.contains_key(serde_yaml::Value::String("swagger".to_string()));
+    if !is_openapi {
+        issues.push(Issue::error(
+            "SYU-trace-openapi-002",
+            subject.clone(),
+            location.clone(),
+            format!(
+                "OpenAPI document `{}` does not declare an OpenAPI version field.",
+                display_path.display()
+            ),
+            Some(format!(
+                "Add `openapi` or `swagger` to `{}` or point `{owner_id}` at the correct OpenAPI document.",
+                display_path.display()
+            )),
+        ));
+        return false;
+    }
+
+    let Some(paths) = document_map
+        .get(serde_yaml::Value::String("paths".to_string()))
         .and_then(serde_yaml::Value::as_mapping)
     else {
         issues.push(Issue::error(
@@ -3622,7 +3657,9 @@ fn validate_openapi_trace_reference(
         return false;
     };
 
-    let Some(path_item_map) = path_item.as_mapping() else {
+    let Some(path_item_map) =
+        resolve_openapi_path_item(&document, path_item).and_then(serde_yaml::Value::as_mapping)
+    else {
         issues.push(Issue::error(
             "SYU-trace-openapi-002",
             subject.clone(),
@@ -3674,6 +3711,48 @@ fn validate_openapi_trace_reference(
     }
 
     success
+}
+
+fn resolve_openapi_path_item<'a>(
+    document: &'a serde_yaml::Value,
+    path_item: &'a serde_yaml::Value,
+) -> Option<&'a serde_yaml::Value> {
+    let mut current = path_item;
+
+    for _ in 0..8 {
+        let reference = current.as_mapping().and_then(|mapping| {
+            mapping
+                .get(serde_yaml::Value::String("$ref".to_string()))
+                .and_then(serde_yaml::Value::as_str)
+        });
+
+        let Some(reference) = reference else {
+            return Some(current);
+        };
+
+        let Some(pointer) = reference.strip_prefix("#/") else {
+            return None;
+        };
+
+        let mut next = document;
+        for segment in pointer.split('/') {
+            let segment = segment.replace("~1", "/").replace("~0", "~");
+            next = match next {
+                serde_yaml::Value::Mapping(mapping) => {
+                    mapping.get(serde_yaml::Value::String(segment))?
+                }
+                serde_yaml::Value::Sequence(sequence) => {
+                    let index = segment.parse::<usize>().ok()?;
+                    sequence.get(index)?
+                }
+                _ => return None,
+            };
+        }
+
+        current = next;
+    }
+
+    None
 }
 
 fn normalized_openapi_method(method: Option<&str>) -> Option<String> {
@@ -4648,6 +4727,13 @@ mod tests {
             method: Some("get".to_string()),
             path: Some("/pets/{petId}".to_string()),
         };
+        let openapi_reference = TraceReference {
+            file: PathBuf::from("api/openapi.yaml"),
+            symbols: Vec::new(),
+            doc_contains: Vec::new(),
+            method: Some("get".to_string()),
+            path: Some("/pets/{petId}".to_string()),
+        };
 
         let mut issues = Vec::new();
         assert!(!validate_openapi_trace_reference(
@@ -4761,6 +4847,21 @@ mod tests {
             TraceRole::FeatureImplementation,
             &display_path,
             &reference,
+            "paths:\n  /pets/{petId}:\n    get:\n      responses:\n        '200':\n          description: ok\n",
+            &mut issues,
+        ));
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "SYU-trace-openapi-002")
+        );
+
+        issues.clear();
+        assert!(!validate_openapi_trace_reference(
+            "FEAT-API-001",
+            TraceRole::FeatureImplementation,
+            &display_path,
+            &reference,
             "openapi: 3.0.3",
             &mut issues,
         ));
@@ -4829,6 +4930,17 @@ mod tests {
                 .iter()
                 .any(|issue| issue.code == "SYU-trace-openapi-002")
         );
+
+        issues.clear();
+        assert!(validate_openapi_trace_reference(
+            "FEAT-API-001",
+            TraceRole::FeatureImplementation,
+            &display_path,
+            &openapi_reference,
+            "openapi: 3.0.3\npaths:\n  /pets/{petId}:\n    $ref: '#/components/pathItems/Pets'\ncomponents:\n  pathItems:\n    Pets:\n      get:\n        responses:\n          '200':\n            description: ok\n",
+            &mut issues,
+        ));
+        assert!(issues.is_empty(), "resolved path-item refs should validate");
     }
 
     #[test]
