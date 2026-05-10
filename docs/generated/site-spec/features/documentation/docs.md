@@ -65,6 +65,13 @@ description: "Generated reference for docs/syu/features/documentation/docs.yaml"
           - app.port
           - report.output
           - runtimes.python.command
+      - **file**: docs/guide/implementation-planning.md
+        - **symbols**:
+          - FEAT-DOCS-001
+          - syu show
+          - syu relate
+          - syu add
+          - syu validate
       - **file**: docs/guide/request-artifact-format.md
         - **symbols**:
           - FEAT-DOCS-001
@@ -162,6 +169,13 @@ features:
             - app.port
             - report.output
             - runtimes.python.command
+        - file: docs/guide/implementation-planning.md
+          symbols:
+            - FEAT-DOCS-001
+            - syu show
+            - syu relate
+            - syu add
+            - syu validate
         - file: docs/guide/request-artifact-format.md
           symbols:
             - FEAT-DOCS-001
