@@ -2,14 +2,25 @@
 
 <!-- FEAT-DOCS-001 -->
 
-Use this guide when you want a small, repeatable request record before you start
-editing the spec tree. If the request is already a concrete diff, raw spec edits
-are usually enough.
+Use this guide when you want a small, repeatable request record before you edit
+the spec tree. If the change is already a concrete spec diff, raw spec edits are
+usually enough.
+
+## When to use it
+
+- A request needs to be handed around before the spec changes.
+- A later CLI or app flow should be able to load the same request again.
+- You want to keep the intake step separate from the planning step.
+
+## When not to use it
+
+- You already know the exact files and IDs that must change.
+- The change is tiny and one-off.
+- The request only needs to live inside a PR description.
 
 ## Recommended shape
 
-YAML keeps the request easy to read in the terminal and easy to reuse in later
-tooling:
+YAML keeps the artifact easy to read in the terminal and easy to reuse later:
 
 ```yaml
 version: 1
@@ -26,9 +37,9 @@ context:
     - FEAT-CHECK-001
 ```
 
-## What each field is for
+## Field meanings
 
-- **version**: keeps the artifact format explicit when the shape changes later.
+- **version**: keeps the format explicit when the shape changes later.
 - **request**: the short statement you would otherwise paste into chat or a
   ticket.
 - **context.affected_area**: the part of the repository most likely to change.
@@ -36,18 +47,6 @@ context:
   request is being planned.
 - **context.linked_ids**: the IDs already known to be in scope.
 
-## When to use it
-
-- When a request needs to be handed around before the spec is edited.
-- When a later CLI or app flow should be able to load the same request again.
-- When you want to keep the intake step separate from the spec rewrite step.
-
-## When not to use it
-
-- When you already know the exact files and IDs that need to change.
-- When the change is tiny and one-off.
-- When the request is only useful as an inline note inside the PR description.
-
-The request artifact is intentionally smaller than the spec itself. Once the
-request is understood, move the real work into planned requirements and features
-with the planning guide.
+The artifact is intentionally smaller than the spec itself. Once the request is
+understood, move the real work into planned requirements and features with the
+normal spec workflow.
