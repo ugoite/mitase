@@ -761,6 +761,13 @@ mod tests {
                     method: None,
                     path: None,
                 },
+                TraceReference {
+                    file: PathBuf::from("api/openapi.yaml"),
+                    symbols: Vec::new(),
+                    doc_contains: Vec::new(),
+                    method: Some("get".to_string()),
+                    path: Some("/pets/{petId}".to_string()),
+                },
             ],
         )]));
 
