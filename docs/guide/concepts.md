@@ -69,6 +69,11 @@ Features should describe *what the system now does*, not just *what file was
 edited*. A feature should link directly back to the requirements it satisfies
 and forward to the concrete implementation symbols that prove it exists.
 
+When the implementation evidence is an API contract rather than source code,
+use the OpenAPI selector shape instead of a generic YAML trace. That keeps the
+feature tied to one document, HTTP method, and path template without pretending
+the API spec is a function or class.
+
 Like requirements, features also carry delivery intent:
 
 - `status: planned` means implementation traces are intentionally absent

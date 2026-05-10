@@ -745,11 +745,15 @@ mod tests {
                     file: PathBuf::from("src/lib.rs"),
                     symbols: Vec::new(),
                     doc_contains: Vec::new(),
+                    method: None,
+                    path: None,
                 },
                 TraceReference {
                     file: PathBuf::from("src/main.rs"),
                     symbols: vec!["public_api".to_string()],
                     doc_contains: Vec::new(),
+                    method: None,
+                    path: None,
                 },
             ],
         )]));
