@@ -74,6 +74,8 @@ export interface BrowserTraceReference {
   file: string;
   symbols: string[];
   doc_contains: string[];
+  method: string | null;
+  path: string | null;
 }
 
 export interface BrowserTraceGroup {

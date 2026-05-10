@@ -92,6 +92,11 @@ summarizes changed files, surfaces unowned or skipped paths inline, and keeps
 the follow-up `show`, `relate`, `log`, and `validate --id` commands close at
 hand.
 
+When a changed file is a contract file with traced operations, the range
+summary keeps the owning requirements and features visible instead of reducing
+the file to a bare path. That makes OpenAPI edits easier to review alongside
+the rest of the spec graph.
+
 When you want the same selector flexibility but a more opinionated summary, run
 `syu explain TARGET`. It keeps the ID/path/symbol entry points from `syu
 relate`, then turns the result into a focused assessment with the connected

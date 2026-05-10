@@ -540,6 +540,12 @@ fn print_trace_summary(
                     item.symbols.join(", ")
                 }
             );
+            if let Some(method) = &item.method {
+                println!("    method: `{method}`");
+            }
+            if let Some(path) = &item.path {
+                println!("    path: `{path}`");
+            }
         }
     }
 }
@@ -754,6 +760,13 @@ mod tests {
                     doc_contains: Vec::new(),
                     method: None,
                     path: None,
+                },
+                TraceReference {
+                    file: PathBuf::from("api/openapi.yaml"),
+                    symbols: Vec::new(),
+                    doc_contains: Vec::new(),
+                    method: Some("get".to_string()),
+                    path: Some("/pets/{petId}".to_string()),
                 },
             ],
         )]));

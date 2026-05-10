@@ -1713,6 +1713,19 @@ function formatTraceSymbols(symbols: string[]): string {
   return normalized.join(", ");
 }
 
+function formatTraceOperation(method: string | null, path: string | null): string {
+  const parts: string[] = [];
+
+  if (method) {
+    parts.push(`method \`${method}\``);
+  }
+  if (path) {
+    parts.push(`path \`${path}\``);
+  }
+
+  return parts.join(" ");
+}
+
 function InfoHint({ label, description }: { label: string; description: string }) {
   return (
     <button
@@ -1965,6 +1978,16 @@ function TracePanel({ label, groups }: { label: string; groups: BrowserTraceGrou
                       ? reference.doc_contains.join(", ")
                       : "not declared"}
                   </p>
+                  {reference.method || reference.path ? (
+                    <>
+                      <p className="mt-3 text-xs uppercase tracking-[0.2em] text-slate-500">
+                        operation
+                      </p>
+                      <p className="mt-1 text-sm text-slate-300">
+                        {formatTraceOperation(reference.method, reference.path)}
+                      </p>
+                    </>
+                  ) : null}
                 </div>
               ))}
             </div>

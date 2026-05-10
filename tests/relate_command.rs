@@ -185,6 +185,20 @@ fn write_root_file_fixture_workspace() -> tempfile::TempDir {
     tempdir
 }
 
+fn write_openapi_fixture_workspace() -> tempfile::TempDir {
+    let tempdir = tempdir().expect("tempdir should exist");
+    let workspace = tempdir.path().join("workspace");
+    copy_dir_recursive(&fixture_path("passing"), &workspace);
+
+    fs::write(
+        workspace.join("docs/syu/features/traceability/core.yaml"),
+        "category: Multi-language Features\nversion: 1\n\nfeatures:\n  - id: FEAT-TRACE-001\n    title: OpenAPI implementation trace\n    summary: Feature links to an OpenAPI contract file.\n    status: implemented\n    linked_requirements:\n      - REQ-TRACE-001\n    implementations:\n      openapi:\n        - file: api/openapi.yaml\n          method: get\n          path: /pets/{petId}\n          symbols: []\n",
+    )
+    .expect("openapi feature file");
+
+    tempdir
+}
+
 #[test]
 fn relate_command_traverses_the_connected_graph_from_a_requirement() {
     let output = Command::cargo_bin("syu")
@@ -260,6 +274,30 @@ fn relate_command_matches_source_symbols() {
     assert!(stdout.contains("Selection: symbol feature_trace_rust"));
     assert!(stdout.contains("feature FEAT-TRACE-001 implementation rust\tsrc/rust_feature.rs"));
     assert!(stdout.contains("(direct match)"));
+}
+
+#[test]
+fn relate_command_renders_openapi_operation_details() {
+    let tempdir = write_openapi_fixture_workspace();
+    let workspace = tempdir.path().join("workspace");
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args([
+            "relate",
+            "api/openapi.yaml",
+            workspace.to_str().expect("utf8 path"),
+        ])
+        .output()
+        .expect("command should run");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Selection: path api/openapi.yaml"));
+    assert!(stdout.contains("method=`get`"));
+    assert!(stdout.contains("path=`/pets/{petId}`"));
+    assert!(stdout.contains("feature FEAT-TRACE-001"));
+    assert!(stdout.contains("requirement REQ-TRACE-001"));
 }
 
 #[test]
