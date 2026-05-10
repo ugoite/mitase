@@ -2142,6 +2142,8 @@ fn validate_duplicate_trace_references(
             reference.file.clone(),
             reference.symbols.clone(),
             reference.doc_contains.clone(),
+            reference.method.clone(),
+            reference.path.clone(),
         );
         if seen.insert(key) {
             continue;
@@ -2194,11 +2196,28 @@ fn describe_trace_reference(reference: &TraceReference) -> String {
         .map(|snippet| format!("`{snippet}`"))
         .collect::<Vec<_>>()
         .join(", ");
+    let mut parts = vec![
+        format!("file=`{}`", reference.file.display()),
+        format!("symbols=[{symbols}]"),
+        format!("doc_contains=[{doc_contains}]"),
+    ];
 
-    format!(
-        "file=`{}` symbols=[{symbols}] doc_contains=[{doc_contains}]",
-        reference.file.display()
-    )
+    if let Some(method) = reference
+        .method
+        .as_deref()
+        .filter(|method| !method.trim().is_empty())
+    {
+        parts.push(format!("method=`{method}`"));
+    }
+    if let Some(path) = reference
+        .path
+        .as_deref()
+        .filter(|path| !path.trim().is_empty())
+    {
+        parts.push(format!("path=`{path}`"));
+    }
+
+    parts.join(" ")
 }
 
 fn evaluate_trace_ownership(
@@ -3122,19 +3141,25 @@ fn verify_trace_reference(
     issues: &mut Vec<Issue>,
 ) -> bool {
     let subject = format!("{} {}", role.subject_kind(), owner_id);
-    let Some(adapter) = adapter_for_language(language) else {
-        issues.push(Issue::error(
-                "SYU-trace-language-001",
-                subject,
-                Some(format_reference_location(language, reference)),
-                format!(
-                    "Language `{language}` is not supported. Built-in adapters currently cover Rust, Python, Java, TypeScript, Shell, YAML, JSON, Markdown, and Gitignore."
-                ),
-                Some(format!(
-                    "Use a supported language alias such as `rust`, `python`, `java`, `typescript`, `shell`, `yaml`, `json`, `markdown`, or `gitignore` for `{owner_id}`."
-                )),
-            ));
-        return false;
+    let is_openapi = language == "openapi";
+    let adapter = if is_openapi {
+        None
+    } else {
+        let Some(adapter) = adapter_for_language(language) else {
+            issues.push(Issue::error(
+                    "SYU-trace-language-001",
+                    subject,
+                    Some(format_reference_location(language, reference)),
+                    format!(
+                        "Language `{language}` is not supported. Built-in adapters currently cover Rust, Python, Java, TypeScript, Shell, YAML, JSON, Markdown, and Gitignore."
+                    ),
+                    Some(format!(
+                        "Use a supported language alias such as `rust`, `python`, `java`, `typescript`, `shell`, `yaml`, `json`, `markdown`, or `gitignore` for `{owner_id}`."
+                    )),
+                ));
+            return false;
+        };
+        Some(adapter)
     };
 
     if reference.file.as_os_str().is_empty() {
@@ -3201,23 +3226,26 @@ fn verify_trace_reference(
     }
 
     let mut success = true;
-    if !adapter.supports_path(&path) {
-        issues.push(Issue::error(
-            "SYU-trace-extension-001",
-            subject.clone(),
-            Some(format_reference_location(language, reference)),
-            format!(
-                "File `{}` does not match the `{}` adapter extensions.",
-                display_path.display(),
-                adapter.canonical_name()
-            ),
-            Some(format!(
-                "Use a `{}` file extension or change the declared language for `{}`.",
-                adapter.canonical_name(),
-                display_path.display()
-            )),
-        ));
-        success = false;
+    if !is_openapi {
+        let adapter = adapter.expect("non-openapi traces always have an adapter");
+        if !adapter.supports_path(&path) {
+            issues.push(Issue::error(
+                "SYU-trace-extension-001",
+                subject.clone(),
+                Some(format_reference_location(language, reference)),
+                format!(
+                    "File `{}` does not match the `{}` adapter extensions.",
+                    display_path.display(),
+                    adapter.canonical_name()
+                ),
+                Some(format!(
+                    "Use a `{}` file extension or change the declared language for `{}`.",
+                    adapter.canonical_name(),
+                    display_path.display()
+                )),
+            ));
+            success = false;
+        }
     }
 
     let contents = match fs::read_to_string(&path) {
@@ -3314,6 +3342,20 @@ fn verify_trace_reference(
             }
         }
     }
+
+    if is_openapi {
+        return validate_openapi_trace_reference(
+            owner_id,
+            role,
+            display_path,
+            reference,
+            &contents,
+            issues,
+        ) && success;
+    }
+
+    let adapter = adapter.expect("non-openapi traces always have an adapter");
+
     if reference.symbols.is_empty() {
         issues.push(Issue::error(
             "SYU-trace-symbol-001",
@@ -3461,7 +3503,227 @@ fn verify_trace_reference(
     success
 }
 
+fn validate_openapi_trace_reference(
+    owner_id: &str,
+    role: TraceRole,
+    display_path: &Path,
+    reference: &TraceReference,
+    contents: &str,
+    issues: &mut Vec<Issue>,
+) -> bool {
+    let subject = format!("{} {}", role.subject_kind(), owner_id);
+    let location = Some(format_reference_location("openapi", reference));
+    let mut success = true;
+
+    if !reference.symbols.is_empty() || !reference.doc_contains.is_empty() {
+        issues.push(Issue::error(
+            "SYU-trace-openapi-001",
+            subject.clone(),
+            location.clone(),
+            format!(
+                "OpenAPI selectors in `{}` should only declare `file`, `method`, and `path` in this version.",
+                display_path.display()
+            ),
+            Some(
+                "Remove `symbols` and `doc_contains`, then keep the OpenAPI trace focused on one operation."
+                    .to_string(),
+            ),
+        ));
+        success = false;
+    }
+
+    let Some(method) = normalized_openapi_method(reference.method.as_deref()) else {
+        issues.push(Issue::error(
+            "SYU-trace-openapi-001",
+            subject.clone(),
+            location.clone(),
+            format!(
+                "OpenAPI selector in `{}` is missing an HTTP method.",
+                display_path.display()
+            ),
+            Some(format!(
+                "Add an HTTP method such as `get` or `post` to the OpenAPI trace for `{owner_id}`."
+            )),
+        ));
+        return false;
+    };
+
+    let Some(path_template) = normalized_openapi_path(reference.path.as_deref()) else {
+        issues.push(Issue::error(
+            "SYU-trace-openapi-001",
+            subject.clone(),
+            location.clone(),
+            format!(
+                "OpenAPI selector in `{}` is missing a path template.",
+                display_path.display()
+            ),
+            Some(format!(
+                "Add a path template such as `/pets/{{petId}}` to the OpenAPI trace for `{owner_id}`."
+            )),
+        ));
+        return false;
+    };
+
+    let document: serde_yaml::Value = match serde_yaml::from_str(contents) {
+        Ok(document) => document,
+        Err(error) => {
+            issues.push(Issue::error(
+                "SYU-trace-openapi-002",
+                subject,
+                location,
+                format!(
+                    "OpenAPI document `{}` could not be parsed as JSON or YAML: {error}",
+                    display_path.display()
+                ),
+                Some(format!(
+                    "Fix `{}` so the OpenAPI selector for `{owner_id}` can be validated.",
+                    display_path.display()
+                )),
+            ));
+            return false;
+        }
+    };
+
+    let Some(paths) = document
+        .as_mapping()
+        .and_then(|mapping| mapping.get(serde_yaml::Value::String("paths".to_string())))
+        .and_then(serde_yaml::Value::as_mapping)
+    else {
+        issues.push(Issue::error(
+            "SYU-trace-openapi-002",
+            subject.clone(),
+            location.clone(),
+            format!(
+                "OpenAPI document `{}` does not declare a `paths` object.",
+                display_path.display()
+            ),
+            Some(format!(
+                "Add a `paths` section to `{}` or point `{owner_id}` at the correct OpenAPI document.",
+                display_path.display()
+            )),
+        ));
+        return false;
+    };
+
+    let Some(path_item) = paths.get(serde_yaml::Value::String(path_template.clone())) else {
+        issues.push(Issue::error(
+            "SYU-trace-openapi-002",
+            subject.clone(),
+            location.clone(),
+            format!(
+                "OpenAPI path `{path_template}` was not found in `{}`.",
+                display_path.display()
+            ),
+            Some(format!(
+                "Add path `{path_template}` to `{}` or update the OpenAPI trace for `{owner_id}`.",
+                display_path.display()
+            )),
+        ));
+        return false;
+    };
+
+    let Some(path_item_map) = path_item.as_mapping() else {
+        issues.push(Issue::error(
+            "SYU-trace-openapi-002",
+            subject.clone(),
+            location.clone(),
+            format!(
+                "OpenAPI path `{path_template}` in `{}` is not a valid path item object.",
+                display_path.display()
+            ),
+            Some(format!(
+                "Fix path `{path_template}` in `{}` so the OpenAPI selector for `{owner_id}` can resolve an operation.",
+                display_path.display()
+            )),
+        ));
+        return false;
+    };
+
+    let Some(operation) = path_item_map.get(serde_yaml::Value::String(method.clone())) else {
+        issues.push(Issue::error(
+            "SYU-trace-openapi-002",
+            subject,
+            location,
+            format!(
+                "OpenAPI method `{method}` was not found for path `{path_template}` in `{}`.",
+                display_path.display()
+            ),
+            Some(format!(
+                "Add method `{method}` to path `{path_template}` in `{}` or update the OpenAPI trace for `{owner_id}`.",
+                display_path.display()
+            )),
+        ));
+        return false;
+    };
+
+    if !operation.is_mapping() {
+        issues.push(Issue::error(
+            "SYU-trace-openapi-002",
+            format!("{} {}", role.subject_kind(), owner_id),
+            Some(format_reference_location("openapi", reference)),
+            format!(
+                "OpenAPI operation `{method} {path_template}` in `{}` is not a valid operation object.",
+                display_path.display()
+            ),
+            Some(format!(
+                "Fix operation `{method} {path_template}` in `{}` so the selector can be validated.",
+                display_path.display()
+            )),
+        ));
+        return false;
+    }
+
+    success
+}
+
+fn normalized_openapi_method(method: Option<&str>) -> Option<String> {
+    let method = method?.trim();
+    if method.is_empty() {
+        return None;
+    }
+
+    let normalized = method.to_ascii_lowercase();
+    match normalized.as_str() {
+        "get" | "put" | "post" | "delete" | "options" | "head" | "patch" | "trace" => {
+            Some(normalized)
+        }
+        _ => None,
+    }
+}
+
+fn normalized_openapi_path(path: Option<&str>) -> Option<String> {
+    let path = path?.trim();
+    if path.is_empty() {
+        None
+    } else {
+        Some(path.to_string())
+    }
+}
+
 fn format_reference_location(language: &str, reference: &TraceReference) -> String {
+    if language == "openapi" {
+        let mut location = format!("{language}:{}", reference.file.display());
+        if let Some(method) = reference
+            .method
+            .as_deref()
+            .map(str::trim)
+            .filter(|method| !method.is_empty())
+        {
+            location.push('#');
+            location.push_str(&method.to_ascii_lowercase());
+            if let Some(path) = reference
+                .path
+                .as_deref()
+                .map(str::trim)
+                .filter(|path| !path.is_empty())
+            {
+                location.push(' ');
+                location.push_str(path);
+            }
+        }
+        return location;
+    }
+
     format!("{language}:{}", reference.file.display())
 }
 
@@ -4333,6 +4595,8 @@ mod tests {
             file: PathBuf::from("src/lib.rs"),
             symbols: vec!["trace_symbol".to_string()],
             doc_contains: vec!["REQ-1".to_string()],
+            method: None,
+            path: None,
         };
 
         validate_duplicate_trace_references(
@@ -4615,6 +4879,8 @@ mod tests {
                 file: PathBuf::from("src/lib.rs"),
                 symbols: vec!["trace".to_string()],
                 doc_contains: Vec::new(),
+                method: None,
+                path: None,
             }],
         );
 
@@ -4730,6 +4996,8 @@ mod tests {
                 file: PathBuf::from("Trace.swift"),
                 symbols: vec!["trace".to_string()],
                 doc_contains: Vec::new(),
+                method: None,
+                path: None,
             }],
         );
 
@@ -4911,6 +5179,8 @@ mod tests {
             file: PathBuf::from("Trace.swift"),
             symbols: vec!["main".to_string()],
             doc_contains: Vec::new(),
+            method: None,
+            path: None,
         };
         let mut issues = Vec::new();
         assert!(!verify_trace_reference(
@@ -4931,6 +5201,8 @@ mod tests {
             file: PathBuf::new(),
             symbols: vec!["main".to_string()],
             doc_contains: Vec::new(),
+            method: None,
+            path: None,
         };
         let mut issues = Vec::new();
         assert!(!verify_trace_reference(
@@ -4951,6 +5223,8 @@ mod tests {
             file: PathBuf::from("missing.rs"),
             symbols: vec!["main".to_string()],
             doc_contains: Vec::new(),
+            method: None,
+            path: None,
         };
         let mut issues = Vec::new();
         assert!(!verify_trace_reference(
@@ -4966,6 +5240,123 @@ mod tests {
     }
 
     #[test]
+    fn verify_trace_reference_accepts_valid_openapi_yaml_operation() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let path = tempdir.path().join("api/openapi.yaml");
+        fs::create_dir_all(path.parent().expect("api dir should exist")).expect("api dir");
+        fs::write(
+            &path,
+            "openapi: 3.0.3\npaths:\n  /pets/{petId}:\n    get:\n      responses:\n        '200':\n          description: ok\n",
+        )
+        .expect("openapi yaml should exist");
+
+        let reference = TraceReference {
+            file: PathBuf::from("api/openapi.yaml"),
+            symbols: Vec::new(),
+            doc_contains: Vec::new(),
+            method: Some("get".to_string()),
+            path: Some("/pets/{petId}".to_string()),
+        };
+        let mut issues = Vec::new();
+        assert!(verify_trace_reference(
+            tempdir.path(),
+            &SyuConfig::default(),
+            "FEAT-API-001",
+            TraceRole::FeatureImplementation,
+            "openapi",
+            &reference,
+            &mut issues,
+        ));
+        assert!(issues.is_empty(), "issues: {issues:#?}");
+    }
+
+    #[test]
+    fn verify_trace_reference_accepts_valid_openapi_json_operation() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let path = tempdir.path().join("api/openapi.json");
+        fs::create_dir_all(path.parent().expect("api dir should exist")).expect("api dir");
+        fs::write(
+            &path,
+            "{\n  \"openapi\": \"3.0.3\",\n  \"paths\": {\n    \"/pets/{petId}\": {\n      \"post\": {\n        \"responses\": {\n          \"200\": {\n            \"description\": \"ok\"\n          }\n        }\n      }\n    }\n  }\n}\n",
+        )
+        .expect("openapi json should exist");
+
+        let reference = TraceReference {
+            file: PathBuf::from("api/openapi.json"),
+            symbols: Vec::new(),
+            doc_contains: Vec::new(),
+            method: Some("post".to_string()),
+            path: Some("/pets/{petId}".to_string()),
+        };
+        let mut issues = Vec::new();
+        assert!(verify_trace_reference(
+            tempdir.path(),
+            &SyuConfig::default(),
+            "FEAT-API-001",
+            TraceRole::FeatureImplementation,
+            "openapi",
+            &reference,
+            &mut issues,
+        ));
+        assert!(issues.is_empty(), "issues: {issues:#?}");
+    }
+
+    #[test]
+    fn verify_trace_reference_reports_missing_openapi_method_or_path() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let path = tempdir.path().join("api/openapi.yaml");
+        fs::create_dir_all(path.parent().expect("api dir should exist")).expect("api dir");
+        fs::write(
+            &path,
+            "openapi: 3.0.3\npaths:\n  /pets/{petId}:\n    get:\n      responses:\n        '200':\n          description: ok\n",
+        )
+        .expect("openapi yaml should exist");
+
+        let missing_method = TraceReference {
+            file: PathBuf::from("api/openapi.yaml"),
+            symbols: Vec::new(),
+            doc_contains: Vec::new(),
+            method: None,
+            path: Some("/pets/{petId}".to_string()),
+        };
+        let missing_path = TraceReference {
+            file: PathBuf::from("api/openapi.yaml"),
+            symbols: Vec::new(),
+            doc_contains: Vec::new(),
+            method: Some("get".to_string()),
+            path: None,
+        };
+        let mut issues = Vec::new();
+
+        assert!(!verify_trace_reference(
+            tempdir.path(),
+            &SyuConfig::default(),
+            "FEAT-API-001",
+            TraceRole::FeatureImplementation,
+            "openapi",
+            &missing_method,
+            &mut issues,
+        ));
+        assert!(!verify_trace_reference(
+            tempdir.path(),
+            &SyuConfig::default(),
+            "FEAT-API-001",
+            TraceRole::FeatureImplementation,
+            "openapi",
+            &missing_path,
+            &mut issues,
+        ));
+
+        assert_eq!(
+            issues
+                .iter()
+                .filter(|issue| issue.code == "SYU-trace-openapi-001")
+                .count(),
+            2
+        );
+    }
+
+    #[test]
     fn verify_trace_reference_warns_for_non_canonical_relative_paths() {
         let tempdir = tempdir().expect("tempdir should exist");
         let source = tempdir.path().join("src");
@@ -4977,6 +5368,8 @@ mod tests {
             file: PathBuf::from("./src/../src/trace.rs"),
             symbols: vec!["expected".to_string()],
             doc_contains: Vec::new(),
+            method: None,
+            path: None,
         };
         let mut issues = Vec::new();
         assert!(verify_trace_reference(
@@ -5012,6 +5405,8 @@ mod tests {
             file: PathBuf::from(r"src\trace.rs"),
             symbols: vec!["expected".to_string()],
             doc_contains: Vec::new(),
+            method: None,
+            path: None,
         };
         let mut issues = Vec::new();
         assert!(verify_trace_reference(
@@ -5045,6 +5440,8 @@ mod tests {
             file: PathBuf::from("trace.txt"),
             symbols: vec![String::new()],
             doc_contains: Vec::new(),
+            method: None,
+            path: None,
         };
         let mut issues = Vec::new();
         assert!(!verify_trace_reference(
@@ -5087,6 +5484,8 @@ mod tests {
             file: PathBuf::from("trace.rs"),
             symbols: vec!["expected_symbol".to_string()],
             doc_contains: Vec::new(),
+            method: None,
+            path: None,
         };
         let mut issues = Vec::new();
         assert!(verify_trace_reference(
@@ -5111,6 +5510,8 @@ mod tests {
             file: PathBuf::from("trace.rs"),
             symbols: vec!["expected_symbol".to_string()],
             doc_contains: Vec::new(),
+            method: None,
+            path: None,
         };
         let mut config = SyuConfig::default();
         config.validate.trace_ownership_mode = TraceOwnershipMode::Inline;
@@ -5145,6 +5546,8 @@ mod tests {
             file: PathBuf::from("trace.rs"),
             symbols: vec!["expected_symbol".to_string()],
             doc_contains: Vec::new(),
+            method: None,
+            path: None,
         };
         let mut config = SyuConfig::default();
         config.validate.trace_ownership_mode = TraceOwnershipMode::Inline;
@@ -5176,6 +5579,8 @@ mod tests {
             file: PathBuf::from("app/dist/assets/generated.js"),
             symbols: vec!["generatedBundle".to_string()],
             doc_contains: Vec::new(),
+            method: None,
+            path: None,
         };
         let mut config = SyuConfig::default();
         config.validate.trace_ownership_mode = TraceOwnershipMode::Inline;
@@ -5211,6 +5616,8 @@ mod tests {
             file: PathBuf::from("app/dist/assets/generated.js"),
             symbols: vec!["generatedBundle".to_string()],
             doc_contains: Vec::new(),
+            method: None,
+            path: None,
         };
         let mut config = SyuConfig::default();
         config.validate.trace_ownership_mode = TraceOwnershipMode::Inline;
@@ -5242,6 +5649,8 @@ mod tests {
             file: PathBuf::from("trace.rs"),
             symbols: vec!["expected_symbol".to_string()],
             doc_contains: Vec::new(),
+            method: None,
+            path: None,
         };
         let mut issues = Vec::new();
         assert!(!verify_trace_reference(
@@ -5270,6 +5679,8 @@ mod tests {
             file: PathBuf::from("trace.rs"),
             symbols: Vec::new(),
             doc_contains: Vec::new(),
+            method: None,
+            path: None,
         };
         let mut issues = Vec::new();
         assert!(!verify_trace_reference(
@@ -5298,6 +5709,8 @@ mod tests {
             file: PathBuf::from("install.sh"),
             symbols: vec!["install_syu".to_string()],
             doc_contains: Vec::new(),
+            method: None,
+            path: None,
         };
         let mut issues = Vec::new();
         assert!(verify_trace_reference(
@@ -5326,6 +5739,8 @@ mod tests {
             file: PathBuf::from("TraceService.java"),
             symbols: vec!["featureTraceJava".to_string()],
             doc_contains: Vec::new(),
+            method: None,
+            path: None,
         };
         let mut issues = Vec::new();
         assert!(verify_trace_reference(
@@ -5350,6 +5765,8 @@ mod tests {
             file: PathBuf::from(".gitignore"),
             symbols: vec!["FEAT-CONTRIB-002".to_string(), "/.worktrees/".to_string()],
             doc_contains: Vec::new(),
+            method: None,
+            path: None,
         };
         let mut issues = Vec::new();
         assert!(verify_trace_reference(
@@ -5379,6 +5796,8 @@ mod tests {
             file: PathBuf::from("trace.rs"),
             symbols: vec!["expected".to_string()],
             doc_contains: Vec::new(),
+            method: None,
+            path: None,
         };
         let mut config = SyuConfig::default();
         config.validate.trace_ownership_mode = TraceOwnershipMode::Sidecar;
@@ -5421,6 +5840,8 @@ mod tests {
                 file: PathBuf::from("app/dist/assets/generated.js"),
                 symbols: vec!["generatedBundle".to_string()],
                 doc_contains: Vec::new(),
+                method: None,
+                path: None,
             },
             &mut issues,
         ));
@@ -5445,6 +5866,8 @@ mod tests {
             file: PathBuf::from("trace.rs"),
             symbols: vec!["*".to_string()],
             doc_contains: Vec::new(),
+            method: None,
+            path: None,
         };
         assert_eq!(required_ownership_symbols(&wildcard_reference), vec!["*"]);
 
@@ -5452,6 +5875,8 @@ mod tests {
             file: PathBuf::from("trace.rs"),
             symbols: Vec::new(),
             doc_contains: Vec::new(),
+            method: None,
+            path: None,
         };
         assert_eq!(
             ownership_symbols_hint(&empty_reference),
@@ -5474,6 +5899,8 @@ mod tests {
                 file: PathBuf::from("trace.rs"),
                 symbols: vec!["expected".to_string()],
                 doc_contains: Vec::new(),
+                method: None,
+                path: None,
             }
         ));
     }
@@ -5501,6 +5928,8 @@ mod tests {
                 file: PathBuf::from("trace.rs"),
                 symbols: vec!["added".to_string()],
                 doc_contains: Vec::new(),
+                method: None,
+                path: None,
             },
         ));
         assert_eq!(manifest.owners[0].id, "REQ-1");
@@ -5516,6 +5945,8 @@ mod tests {
                 file: PathBuf::from("trace.rs"),
                 symbols: vec!["*".to_string()],
                 doc_contains: Vec::new(),
+                method: None,
+                path: None,
             },
         ));
         assert_eq!(manifest.owners[1].symbols, vec!["*".to_string()]);
@@ -5546,6 +5977,8 @@ mod tests {
                 file: PathBuf::from("trace.rs"),
                 symbols: vec!["expected".to_string()],
                 doc_contains: Vec::new(),
+                method: None,
+                path: None,
             },
             &mut issues,
         ));
@@ -5582,6 +6015,8 @@ mod tests {
                 file: PathBuf::from("trace.rs"),
                 symbols: vec!["expected".to_string()],
                 doc_contains: Vec::new(),
+                method: None,
+                path: None,
             },
             &mut issues,
         ));
@@ -5628,6 +6063,8 @@ mod tests {
                 file: PathBuf::from("trace.rs"),
                 symbols: vec!["expected".to_string()],
                 doc_contains: Vec::new(),
+                method: None,
+                path: None,
             },
             &mut issues,
         ));
@@ -5664,6 +6101,8 @@ mod tests {
                 file: PathBuf::from("trace.rs"),
                 symbols: vec!["expected".to_string()],
                 doc_contains: Vec::new(),
+                method: None,
+                path: None,
             },
             &mut summary,
         )
@@ -5698,6 +6137,8 @@ mod tests {
                 file: PathBuf::from("trace.rs"),
                 symbols: vec!["expected".to_string()],
                 doc_contains: Vec::new(),
+                method: None,
+                path: None,
             },
             &mut summary,
         )
@@ -5731,6 +6172,8 @@ mod tests {
                 file: PathBuf::from("trace.rs"),
                 symbols: vec!["expected".to_string()],
                 doc_contains: Vec::new(),
+                method: None,
+                path: None,
             },
             &mut summary,
         )
@@ -5770,6 +6213,8 @@ mod tests {
                 file: PathBuf::from("trace.py"),
                 symbols: vec!["expected".to_string()],
                 doc_contains: Vec::new(),
+                method: None,
+                path: None,
             },
             &mut python_issues,
         ));
@@ -5792,6 +6237,8 @@ mod tests {
                 file: PathBuf::from("trace.rs"),
                 symbols: vec!["expected".to_string()],
                 doc_contains: vec!["   ".to_string(), "Explain expected".to_string()],
+                method: None,
+                path: None,
             },
             &mut rust_issues,
         ));
@@ -5817,6 +6264,8 @@ mod tests {
                 file: PathBuf::from("trace.go"),
                 symbols: vec!["expected".to_string()],
                 doc_contains: vec!["Explain expected".to_string()],
+                method: None,
+                path: None,
             },
             &mut go_issues,
         ));
@@ -5836,6 +6285,8 @@ mod tests {
                 file: PathBuf::from("trace.sh"),
                 symbols: vec!["expected".to_string()],
                 doc_contains: vec!["Explain expected".to_string()],
+                method: None,
+                path: None,
             },
             &mut shell_issues,
         ));
@@ -5859,6 +6310,8 @@ mod tests {
                 file: PathBuf::from("wildcard.rs"),
                 symbols: vec!["*".to_string()],
                 doc_contains: vec!["Explain expected".to_string()],
+                method: None,
+                path: None,
             },
             &mut wildcard_issues,
         ));
@@ -5884,6 +6337,8 @@ mod tests {
                 file: PathBuf::from("Trace.kt"),
                 symbols: vec!["expected".to_string()],
                 doc_contains: vec!["Explain expected".to_string()],
+                method: None,
+                path: None,
             },
             &mut summary,
         )
@@ -5898,6 +6353,8 @@ mod tests {
                 file: PathBuf::from("trace.rs"),
                 symbols: Vec::new(),
                 doc_contains: vec!["Explain expected".to_string()],
+                method: None,
+                path: None,
             },
             &mut summary,
         )
@@ -5912,6 +6369,8 @@ mod tests {
                 file: PathBuf::from("missing.rs"),
                 symbols: vec!["expected".to_string()],
                 doc_contains: vec!["Explain expected".to_string()],
+                method: None,
+                path: None,
             },
             &mut summary,
         )
@@ -5928,6 +6387,8 @@ mod tests {
                 file: PathBuf::from("nested"),
                 symbols: vec!["expected".to_string()],
                 doc_contains: vec!["Explain expected".to_string()],
+                method: None,
+                path: None,
             },
             &mut summary,
         )
@@ -5944,6 +6405,8 @@ mod tests {
                 file: PathBuf::from("trace.rs"),
                 symbols: vec!["expected".to_string()],
                 doc_contains: Vec::new(),
+                method: None,
+                path: None,
             },
             &mut summary,
         )
@@ -5973,6 +6436,8 @@ mod tests {
                 file: PathBuf::from("trace.rs"),
                 symbols: vec!["expected".to_string()],
                 doc_contains: Vec::new(),
+                method: None,
+                path: None,
             },
             &mut summary,
         )
@@ -6014,6 +6479,8 @@ mod tests {
                 file: PathBuf::from("trace.rs"),
                 symbols: vec!["expected".to_string()],
                 doc_contains: Vec::new(),
+                method: None,
+                path: None,
             },
             &mut summary,
         )
@@ -6044,6 +6511,8 @@ mod tests {
                 file: PathBuf::from("trace.rs"),
                 symbols: vec!["expected".to_string()],
                 doc_contains: vec!["Explain expected".to_string()],
+                method: None,
+                path: None,
             },
             &mut summary,
             super::AutofixMode::Plan,
@@ -6081,6 +6550,8 @@ mod tests {
                 file: PathBuf::from("requirement.rs"),
                 symbols: vec!["requirement_test".to_string()],
                 doc_contains: vec!["Requirement docs".to_string()],
+                method: None,
+                path: None,
             }],
         );
 
@@ -6091,6 +6562,8 @@ mod tests {
                 file: PathBuf::from("feature.rs"),
                 symbols: vec!["feature_impl".to_string()],
                 doc_contains: vec!["Feature docs".to_string()],
+                method: None,
+                path: None,
             }],
         );
 
@@ -6140,6 +6613,8 @@ mod tests {
                 file: PathBuf::from("requirement.rs"),
                 symbols: vec!["requirement_test".to_string()],
                 doc_contains: vec!["Requirement docs".to_string()],
+                method: None,
+                path: None,
             }],
         );
 
@@ -6151,6 +6626,8 @@ mod tests {
                 file: PathBuf::from("feature.rs"),
                 symbols: vec!["feature_impl".to_string()],
                 doc_contains: vec!["Feature docs".to_string()],
+                method: None,
+                path: None,
             }],
         );
 
@@ -6220,6 +6697,8 @@ mod tests {
                 file: PathBuf::from("requirement.py"),
                 symbols: vec!["requirement_test".to_string()],
                 doc_contains: vec!["Requirement docs".to_string()],
+                method: None,
+                path: None,
             }],
         );
 
@@ -6269,6 +6748,8 @@ mod tests {
                 file: PathBuf::from("feature.rs"),
                 symbols: vec!["feature_impl".to_string()],
                 doc_contains: vec!["Feature docs".to_string()],
+                method: None,
+                path: None,
             }],
         );
 
@@ -6397,6 +6878,8 @@ mod tests {
                 file: PathBuf::from("first.go"),
                 symbols: vec!["first".to_string()],
                 doc_contains: vec!["First docs".to_string()],
+                method: None,
+                path: None,
             }],
         );
         req.tests.insert(
@@ -6405,6 +6888,8 @@ mod tests {
                 file: PathBuf::from("second.py"),
                 symbols: vec!["second".to_string()],
                 doc_contains: vec!["Second docs".to_string()],
+                method: None,
+                path: None,
             }],
         );
 
@@ -6463,6 +6948,8 @@ mod tests {
                 file: PathBuf::from("trace.rs"),
                 symbols: vec!["expected".to_string()],
                 doc_contains: vec!["Explain expected".to_string()],
+                method: None,
+                path: None,
             },
             &mut summary,
         )
@@ -6493,6 +6980,8 @@ mod tests {
                 file: PathBuf::from("trace.rs"),
                 symbols: vec!["expected".to_string()],
                 doc_contains: vec!["Explain expected".to_string()],
+                method: None,
+                path: None,
             },
             &mut summary,
         );
@@ -6520,6 +7009,8 @@ mod tests {
             file: PathBuf::from("trace.rs"),
             symbols: vec!["expected".to_string()],
             doc_contains: Vec::new(),
+            method: None,
+            path: None,
         };
         let mut issues = Vec::new();
         let result = verify_trace_reference(
@@ -6550,6 +7041,8 @@ mod tests {
             file: PathBuf::from("src/lib.rs"),
             symbols: vec!["run".to_string()],
             doc_contains: Vec::new(),
+            method: None,
+            path: None,
         };
         assert_eq!(
             format_reference_location("rust", &reference),

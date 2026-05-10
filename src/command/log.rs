@@ -1114,6 +1114,8 @@ mod tests {
                 file: PathBuf::from("src/log.rs"),
                 symbols: vec!["run_log_command".to_string()],
                 doc_contains: Vec::new(),
+                method: None,
+                path: None,
             }],
         );
 
@@ -1839,6 +1841,8 @@ mod tests {
                 file: PathBuf::from(path),
                 symbols: vec![symbol.to_string()],
                 doc_contains: Vec::new(),
+                method: None,
+                path: None,
             }],
         );
         traces

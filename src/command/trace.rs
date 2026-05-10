@@ -982,6 +982,8 @@ mod tests {
                 file: PathBuf::from("src/lib.rs"),
                 symbols: vec!["*".to_string()],
                 doc_contains: Vec::new(),
+                method: None,
+                path: None,
             },
             MatchMode::Wildcard,
             None,
@@ -998,6 +1000,8 @@ mod tests {
                 file: PathBuf::from("src/lib.rs"),
                 symbols: vec!["*".to_string()],
                 doc_contains: Vec::new(),
+                method: None,
+                path: None,
             },
             Some("run"),
         );
