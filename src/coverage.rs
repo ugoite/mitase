@@ -1994,7 +1994,7 @@ mod tests {
 
         fs::write(
             root.join("lib/order_summary.rb"),
-            "VERSION = \"1.0\"\n\nclass OrderSummary\n  def ruby_feature_impl\n    \"ok\"\n  end\n\n  private\n\n  def internal_helper\n    \"secret\"\n  end\n\n  protected\n\n  def guarded_helper\n    \"guarded\"\n  end\nend\n\nclass UncoveredService\n  def uncovered_api\n    \"missing\"\n  end\nend\n",
+            "VERSION = \"1.0\"\n\nclass OrderSummary\n  def ruby_feature_impl\n    \"ok\"\n  end\n\n  private\n\n  def internal_helper\n    \"secret\"\n  end\n\n  protected\n\n  def guarded_helper\n    \"guarded\"\n  end\n\n  public\n\n  def reopened_helper\n    \"visible\"\n  end\nend\n\nclass UncoveredService\n  def uncovered_api\n    \"missing\"\n  end\nend\n",
         )
         .expect("ruby source");
         fs::write(
@@ -2138,6 +2138,11 @@ mod tests {
         );
         assert!(targets.iter().any(|target| {
             target.file == Path::new("lib/order_summary.rb")
+                && target.symbol == "reopened_helper"
+                && target.kind == CoverageTargetKind::PublicSymbol
+        }));
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("lib/order_summary.rb")
                 && target.symbol == "UncoveredService"
                 && target.kind == CoverageTargetKind::PublicSymbol
         }));
@@ -2258,6 +2263,11 @@ mod tests {
         assert!(targets.iter().any(|target| {
             target.file == Path::new("lib/order_summary.rb")
                 && target.symbol == "ruby_feature_impl"
+                && target.kind == CoverageTargetKind::PublicSymbol
+        }));
+        assert!(targets.iter().any(|target| {
+            target.file == Path::new("lib/order_summary.rb")
+                && target.symbol == "reopened_helper"
                 && target.kind == CoverageTargetKind::PublicSymbol
         }));
         assert!(targets.iter().all(|target| target.symbol != "VERSION"));
