@@ -242,8 +242,7 @@ fn write_trace_map(
                     .expect("writing to String must succeed");
             }
             if let Some(method) = &item.method {
-                writeln!(output, "    method: `{method}`")
-                    .expect("writing to String must succeed");
+                writeln!(output, "    method: `{method}`").expect("writing to String must succeed");
             }
             if let Some(path) = &item.path {
                 writeln!(output, "    path: `{path}`").expect("writing to String must succeed");

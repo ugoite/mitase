@@ -283,7 +283,11 @@ fn relate_command_renders_openapi_operation_details() {
 
     let output = Command::cargo_bin("syu")
         .expect("binary should build")
-        .args(["relate", "api/openapi.yaml", workspace.to_str().expect("utf8 path")])
+        .args([
+            "relate",
+            "api/openapi.yaml",
+            workspace.to_str().expect("utf8 path"),
+        ])
         .output()
         .expect("command should run");
 

@@ -654,7 +654,10 @@ mod tests {
                     .flat_map(|section| section.documents.iter())
                     .flat_map(|document| document.items.iter())
                     .find(|item| item.id == entry.id))
-                .and_then(|item| item.implementations.iter().find(|group| group.language == "openapi"))
+                .and_then(|item| item
+                    .implementations
+                    .iter()
+                    .find(|group| group.language == "openapi"))
                 .and_then(|group| group.references.first())
                 .and_then(|reference| reference.method.as_deref()),
             Some("get")
