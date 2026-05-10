@@ -273,7 +273,8 @@ remove the `doc_contains:` assertion from the trace if it no longer applies.
 ### `SYU-trace-docsupport-001` — language not supported for doc inspection
 
 **What it means:** `doc_contains:` is only supported for `rust`, `python`,
-`go`, and `typescript`. You declared it on a `lang:` that `syu` cannot inspect.
+`go`, `java`, `csharp`, `kotlin`, and `typescript`. You declared it on a
+`lang:` that `syu` cannot inspect.
 
 **Fix:** Remove the `doc_contains:` assertion from that mapping, or switch to a
 supported language for rich doc inspection.
@@ -297,7 +298,7 @@ implementations:
 ```
 
 Use that lighter mapping until the language gains richer inspection support.
-If the mapping uses an unsupported implementation language such as `kotlin`,
+If the mapping uses an unsupported implementation language such as `ruby`,
 removing `doc_contains` is not enough: those entries still raise
 `SYU-trace-language-001`. Keep the higher-layer spec link in place and wait for
 adapter support before adding the code-level trace.
