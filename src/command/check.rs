@@ -3730,9 +3730,7 @@ fn resolve_openapi_path_item<'a>(
             return Some(current);
         };
 
-        let Some(pointer) = reference.strip_prefix("#/") else {
-            return None;
-        };
+        let pointer = reference.strip_prefix("#/")?;
 
         let mut next = document;
         for segment in pointer.split('/') {
