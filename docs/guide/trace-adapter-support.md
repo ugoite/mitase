@@ -14,6 +14,10 @@ This page summarizes the built-in trace adapters that ship with this checked-in
 version of `syu`. Use it before you turn on `doc_contains` checks widely or
 enable strict coverage in a mixed-language repository.
 
+OpenAPI-backed feature traces are separate from these adapters. Use the OpenAPI
+selector shape when the feature is proved by an API contract document instead
+of a source symbol.
+
 ## Built-in adapter matrix
 
 | Built-in adapter | Accepted `lang:` aliases / files | Symbol existence validation | `doc_contains` validation | Strict `require_symbol_trace_coverage` inventory |

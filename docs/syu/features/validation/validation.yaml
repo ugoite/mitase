@@ -359,6 +359,32 @@ rules:
       doc-level checks to stay within languages with meaningful documentation
       inspection support.
 
+  - code: SYU-trace-openapi-001
+    genre: trace
+    severity: error
+    title: OpenAPI selectors must declare one operation
+    summary: An OpenAPI trace must name the document, HTTP method, and path template for one operation.
+    description: |
+      OpenAPI-backed feature traces are intentionally narrower than source-code
+      traces in their first version. They should point to one concrete API
+      operation using a repository-relative document path, an HTTP method, and
+      a path template, without trying to mix in symbol-level ownership details
+      yet. This rule keeps the new selector shape explicit while the feature
+      stays intentionally small.
+
+  - code: SYU-trace-openapi-002
+    genre: trace
+    severity: error
+    title: OpenAPI selectors must resolve to a real operation
+    summary: The referenced OpenAPI document, path, and method must all exist.
+    description: |
+      A feature trace only stays useful if the OpenAPI document can actually be
+      parsed and the requested operation exists inside it. This rule accepts
+      JSON or YAML OpenAPI documents, then fails loudly when the document is
+      unreadable, the `paths` section is missing, the path template is absent,
+      or the method is not defined for that path. The goal is to keep contract
+      traces honest instead of treating an API sketch as proof.
+
   - code: SYU-coverage-walk-001
     genre: coverage
     severity: error
