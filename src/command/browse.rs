@@ -540,6 +540,12 @@ fn print_trace_summary(
                     item.symbols.join(", ")
                 }
             );
+            if let Some(method) = &item.method {
+                println!("    method: `{method}`");
+            }
+            if let Some(path) = &item.path {
+                println!("    path: `{path}`");
+            }
         }
     }
 }

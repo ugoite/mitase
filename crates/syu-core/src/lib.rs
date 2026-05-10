@@ -167,6 +167,8 @@ pub struct BrowserTraceReference {
     pub file: String,
     pub symbols: Vec<String>,
     pub doc_contains: Vec<String>,
+    pub method: Option<String>,
+    pub path: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -268,6 +270,10 @@ struct TraceReference {
     symbols: Vec<String>,
     #[serde(default, alias = "docs", alias = "docstrings")]
     doc_contains: Vec<String>,
+    #[serde(default)]
+    method: Option<String>,
+    #[serde(default)]
+    path: Option<String>,
 }
 
 pub fn build_browser_workspace(payload: AppPayload) -> BrowserWorkspace {
@@ -529,6 +535,8 @@ fn browser_trace_groups(traces: BTreeMap<String, Vec<TraceReference>>) -> Vec<Br
                     file: reference.file,
                     symbols: reference.symbols,
                     doc_contains: reference.doc_contains,
+                    method: reference.method,
+                    path: reference.path,
                 })
                 .collect(),
         })
@@ -615,7 +623,7 @@ mod tests {
                 SourceDocument {
                     section: SectionKind::Features,
                     path: "browser/app.yaml".to_string(),
-                    content: "category: App\nversion: 1\nfeatures:\n  - id: FEAT-001\n    title: Browser app\n    summary: Explore layers in the browser.\n    status: implemented\n    linked_requirements:\n      - REQ-001\n    implementations:\n      rust:\n        - file: src/command/app.rs\n          symbols:\n            - run_app_command\n".to_string(),
+                    content: "category: App\nversion: 1\nfeatures:\n  - id: FEAT-001\n    title: Browser app\n    summary: Explore layers in the browser.\n    status: implemented\n    linked_requirements:\n      - REQ-001\n    implementations:\n      openapi:\n        - file: api/openapi.yaml\n          method: get\n          path: /pets/{petId}\n          symbols: []\n      rust:\n        - file: src/command/app.rs\n          symbols:\n            - run_app_command\n".to_string(),
                 },
             ],
             validation: sample_validation(),
@@ -636,6 +644,21 @@ mod tests {
             Some("browser/app.yaml")
         );
         assert_eq!(workspace.validation.issues.len(), 1);
+        assert_eq!(
+            workspace
+                .item_index
+                .get("FEAT-001")
+                .and_then(|entry| workspace
+                    .sections
+                    .iter()
+                    .flat_map(|section| section.documents.iter())
+                    .flat_map(|document| document.items.iter())
+                    .find(|item| item.id == entry.id))
+                .and_then(|item| item.implementations.iter().find(|group| group.language == "openapi"))
+                .and_then(|group| group.references.first())
+                .and_then(|reference| reference.method.as_deref()),
+            Some("get")
+        );
     }
 
     #[test]

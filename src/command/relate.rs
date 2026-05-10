@@ -83,6 +83,8 @@ pub(crate) struct RelatedTrace {
     pub(crate) language: String,
     pub(crate) file: String,
     pub(crate) symbols: Vec<String>,
+    pub(crate) method: Option<String>,
+    pub(crate) path: Option<String>,
     pub(crate) direct_match: bool,
 }
 
@@ -850,6 +852,12 @@ fn render_trace_line(trace: &RelatedTrace) -> String {
         )
         .expect("writing to String must succeed");
     }
+    if let Some(method) = &trace.method {
+        write!(rendered, "\tmethod=`{method}`").expect("writing to String must succeed");
+    }
+    if let Some(path) = &trace.path {
+        write!(rendered, "\tpath=`{path}`").expect("writing to String must succeed");
+    }
     if trace.direct_match {
         write!(rendered, " (direct match)").expect("writing to String must succeed");
     }
@@ -1002,6 +1010,8 @@ fn collect_owner_traces<T: TraceOwner>(
                 language: language.clone(),
                 file: reference.file.display().to_string(),
                 symbols: reference.symbols.clone(),
+                method: reference.method.clone(),
+                path: reference.path.clone(),
                 direct_match: true,
             });
         }
@@ -1025,6 +1035,8 @@ fn collect_all_owner_traces<T: TraceOwner>(
                 language: language.clone(),
                 file: reference.file.display().to_string(),
                 symbols: reference.symbols.clone(),
+                method: reference.method.clone(),
+                path: reference.path.clone(),
                 direct_match: trace_is_direct_match(
                     source,
                     owner_kind,
@@ -1475,6 +1487,8 @@ mod tests {
             language: "rust".to_string(),
             file: "src/feature.rs".to_string(),
             symbols: vec!["feature_symbol".to_string()],
+            method: None,
+            path: None,
             direct_match: true,
         });
 
@@ -1492,11 +1506,31 @@ mod tests {
             language: "rust".to_string(),
             file: "src/feature.rs".to_string(),
             symbols: Vec::new(),
+            method: None,
+            path: None,
             direct_match: false,
         });
 
         assert!(!rendered.contains('['));
         assert!(!rendered.contains("direct match"));
+    }
+
+    #[test]
+    fn render_trace_line_shows_openapi_operation_details() {
+        let rendered = render_trace_line(&RelatedTrace {
+            owner_kind: "feature",
+            owner_id: "FEAT-001".to_string(),
+            relation_kind: "implementation",
+            language: "openapi".to_string(),
+            file: "api/openapi.yaml".to_string(),
+            symbols: Vec::new(),
+            method: Some("get".to_string()),
+            path: Some("/pets/{petId}".to_string()),
+            direct_match: false,
+        });
+
+        assert!(rendered.contains("method=`get`"));
+        assert!(rendered.contains("path=`/pets/{petId}`"));
     }
 
     #[test]
@@ -1516,6 +1550,8 @@ mod tests {
             language: "rust".to_string(),
             file: "src/tests.rs".to_string(),
             symbols: vec!["req_test".to_string()],
+            method: None,
+            path: None,
             direct_match: false,
         };
         assert_eq!(trace.owner_lookup_kind(), LookupKind::Requirement);
@@ -1538,6 +1574,8 @@ mod tests {
             language: "rust".to_string(),
             file: "src/unknown.rs".to_string(),
             symbols: Vec::new(),
+            method: None,
+            path: None,
             direct_match: false,
         };
         assert!(std::panic::catch_unwind(|| invalid_trace.owner_lookup_kind()).is_err());

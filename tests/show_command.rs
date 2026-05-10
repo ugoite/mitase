@@ -29,7 +29,7 @@ fn write_show_fixture_workspace() -> tempfile::TempDir {
     .expect("policy file");
     fs::write(
         docs_root.join("requirements/core.yaml"),
-        "category: Core\nprefix: REQ\nrequirements:\n  - id: REQ-001\n    title: Doc-only requirement\n    description: Uses doc_contains without symbols.\n    priority: medium\n    status: implemented\n    linked_policies: []\n    linked_features: []\n    tests:\n      rust:\n        - file: src/doc_only.rs\n          doc_contains:\n            - REQ-001\n",
+        "category: Core\nprefix: REQ\nrequirements:\n  - id: REQ-001\n    title: Doc-only requirement\n    description: Uses doc_contains without symbols.\n    priority: medium\n    status: implemented\n    linked_policies: []\n    linked_features: []\n    tests:\n      rust:\n        - file: src/doc_only.rs\n          doc_contains:\n            - REQ-001\n          method: get\n          path: /pets/{petId}\n",
     )
     .expect("requirement file");
     fs::write(
@@ -245,6 +245,27 @@ fn show_command_handles_empty_links_and_doc_only_traces() {
     let requirement_stdout = String::from_utf8_lossy(&requirement.stdout);
     assert!(requirement_stdout.contains("symbols: -"));
     assert!(requirement_stdout.contains("doc_contains: REQ-001"));
+    assert!(requirement_stdout.contains("method: `get`"));
+    assert!(requirement_stdout.contains("path: `/pets/{petId}`"));
+}
+
+#[test]
+// REQ-CORE-018
+fn show_command_renders_openapi_operation_details_in_text_format() {
+    let tempdir = write_show_fixture_workspace();
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("show")
+        .arg("REQ-001")
+        .arg(tempdir.path())
+        .output()
+        .expect("command should run");
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("method: `get`"));
+    assert!(stdout.contains("path: `/pets/{petId}`"));
 }
 
 #[test]

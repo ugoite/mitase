@@ -182,6 +182,38 @@ test("renders top tabs and linked spec content", async ({ page }) => {
   await expect(page).toHaveURL(/#features\/FEAT-CHECK-001$/);
 });
 
+test("shows openapi operation details in the item panel", async ({ page }) => {
+  await page.route("**/api/app-data.json", async (route) => {
+    const response = await route.fetch();
+    const payload = (await response.json()) as AppDataPayload;
+
+    await route.fulfill({
+      response,
+      body: JSON.stringify({
+        ...payload,
+        source_documents: payload.source_documents.map((document) =>
+          document.path === "cli/trace.yaml"
+            ? {
+                ...document,
+                content: document.content.replace(
+                  "  - id: FEAT-TRACE-001\n    title: Source-first trace lookup\n    summary: Start from a repository file path and optional symbol, then resolve linked requirements, features, policies, and philosophies from trace ownership.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-021\n    implementations:\n      rust:\n        - file: src/cli.rs\n          symbols:\n            - TraceArgs\n        - file: src/command/trace.rs\n          symbols:\n            - \"*\"\n",
+                  "  - id: FEAT-TRACE-001\n    title: OpenAPI implementation trace\n    summary: Feature links to an OpenAPI contract file.\n    status: implemented\n    linked_requirements:\n      - REQ-TRACE-001\n    implementations:\n      openapi:\n        - file: api/openapi.yaml\n          method: get\n          path: /pets/{petId}\n          symbols: []\n      rust:\n        - file: src/rust_feature.rs\n          symbols:\n            - feature_trace_rust\n",
+                ),
+              }
+            : document,
+        ),
+      }),
+    });
+  });
+
+  await page.goto("/#features/FEAT-TRACE-001");
+  await expect(
+    page.getByRole("heading", { name: /FEAT-TRACE-001 .* OpenAPI implementation trace/i }),
+  ).toBeVisible();
+  await expect(page.getByText("operation", { exact: true })).toBeVisible();
+  await expect(page.getByText("method `get` path `/pets/{petId}`")).toBeVisible();
+});
+
 test("scopes welcome-banner dismissal to the current workspace root", async ({ page }) => {
   let appDataRequests = 0;
 

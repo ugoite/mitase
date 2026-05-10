@@ -241,6 +241,13 @@ fn write_trace_map(
                 writeln!(output, "    doc_contains: {}", item.doc_contains.join(", "))
                     .expect("writing to String must succeed");
             }
+            if let Some(method) = &item.method {
+                writeln!(output, "    method: `{method}`")
+                    .expect("writing to String must succeed");
+            }
+            if let Some(path) = &item.path {
+                writeln!(output, "    path: `{path}`").expect("writing to String must succeed");
+            }
         }
     }
 }
