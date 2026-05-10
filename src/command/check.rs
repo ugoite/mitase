@@ -839,9 +839,7 @@ fn run_autofix(workspace: &Workspace, mode: AutofixMode) -> Result<AutofixRun> {
             )?;
         }
 
-        if mode == AutofixMode::Apply {
-            apply_graph_autofix(workspace, &mut run.summary, &mut transaction)?;
-        }
+        apply_graph_autofix(workspace, &mut transaction, &mut run, mode)?;
 
         Ok(())
     })();
@@ -863,13 +861,16 @@ struct ItemLocation {
 
 fn apply_graph_autofix(
     workspace: &Workspace,
-    summary: &mut AutofixSummary,
     transaction: &mut AutofixTransaction,
+    run: &mut AutofixRun,
+    mode: AutofixMode,
 ) -> Result<()> {
     let philosophy_root = workspace.spec_root.join("philosophy");
     let policy_root = workspace.spec_root.join("policies");
     let requirement_root = workspace.spec_root.join("requirements");
     let feature_root = workspace.spec_root.join("features");
+    let root = &workspace.root;
+    let description = "synchronize graph links";
 
     let mut philosophy_docs = if philosophy_root.is_dir() {
         load_philosophy_documents_with_paths(&philosophy_root)?
@@ -938,15 +939,26 @@ fn apply_graph_autofix(
         && let Some(updated_registry) = sync_feature_registry(&feature_root, &feature_docs)?
     {
         let registry_path = feature_root.join("features.yaml");
-        transaction.write(&registry_path, &serde_yaml::to_string(&updated_registry)?)?;
-        record_updated_file(summary, &workspace.root, &registry_path);
-        summary.symbol_updates += 1;
+        let change = AutofixChangeRequest {
+            root: &workspace.root,
+            path: &registry_path,
+            transaction,
+            run,
+            mode,
+            rules: Vec::new(),
+            summary_text: format!(
+                "sync feature registry entries in `{}`",
+                registry_path.display()
+            ),
+            contents: Some(serde_yaml::to_string(&updated_registry)?),
+        };
+        write_or_plan_autofix_change(change)?;
     }
 
-    write_modified_documents(&philosophy_docs, summary, &workspace.root, transaction)?;
-    write_modified_documents(&policy_docs, summary, &workspace.root, transaction)?;
-    write_modified_documents(&requirement_docs, summary, &workspace.root, transaction)?;
-    write_modified_documents(&feature_docs, summary, &workspace.root, transaction)?;
+    write_modified_documents(&philosophy_docs, root, transaction, run, mode, description)?;
+    write_modified_documents(&policy_docs, root, transaction, run, mode, description)?;
+    write_modified_documents(&requirement_docs, root, transaction, run, mode, description)?;
+    write_modified_documents(&feature_docs, root, transaction, run, mode, description)?;
 
     Ok(())
 }
@@ -1353,18 +1365,66 @@ fn sync_feature_registry(
 
 fn write_modified_documents<T: serde::Serialize>(
     documents: &[MutableLoadedDocument<T>],
-    summary: &mut AutofixSummary,
     root: &Path,
     transaction: &mut AutofixTransaction,
+    run: &mut AutofixRun,
+    mode: AutofixMode,
+    description: &str,
 ) -> Result<()> {
     for document in documents {
         if !document.changed {
             continue;
         }
-        transaction.write(&document.path, &serde_yaml::to_string(&document.document)?)?;
-        record_updated_file(summary, root, &document.path);
-        summary.symbol_updates += 1;
+        let change = AutofixChangeRequest {
+            root,
+            path: &document.path,
+            transaction,
+            run,
+            mode,
+            rules: Vec::new(),
+            summary_text: format!("{description} in `{}`", document.path.display()),
+            contents: Some(serde_yaml::to_string(&document.document)?),
+        };
+        write_or_plan_autofix_change(change)?;
     }
+    Ok(())
+}
+
+struct AutofixChangeRequest<'a> {
+    root: &'a Path,
+    path: &'a Path,
+    transaction: &'a mut AutofixTransaction,
+    run: &'a mut AutofixRun,
+    mode: AutofixMode,
+    rules: Vec<&'static str>,
+    summary_text: String,
+    contents: Option<String>,
+}
+
+fn write_or_plan_autofix_change(request: AutofixChangeRequest<'_>) -> Result<()> {
+    let AutofixChangeRequest {
+        root,
+        path,
+        transaction,
+        run,
+        mode,
+        rules,
+        summary_text,
+        contents,
+    } = request;
+    let summary = &mut run.summary;
+    if mode == AutofixMode::Apply {
+        let contents = contents.expect("apply mode requires contents");
+        transaction.write(path, &contents)?;
+    } else {
+        let plan = run
+            .plan
+            .as_mut()
+            .expect("plan mode should initialize a plan");
+        record_planned_change(plan, root, path, rules, summary_text);
+    }
+    record_updated_file(summary, root, path);
+    summary.symbol_updates += 1;
     Ok(())
 }
 
