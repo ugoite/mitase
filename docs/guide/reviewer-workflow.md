@@ -15,10 +15,9 @@ history, and the reviewer-facing `audit` / `report` commands.
 The commands below answer those questions with `show`/`relate`, `review`
 (`trace --range`), `trace`, `audit`, `report`, `explain`, and `log`.
 
-If the work is still being shaped from a request into spec edits, start with
-[implementation planning](./implementation-planning.md). If you only need the
-request shape to stay consistent, use
-[request artifact format](./request-artifact-format.md).
+If the work starts as a request note instead of a concrete diff, use
+[request artifact format](./request-artifact-format.md) first so the intake
+stays small and predictable.
 
 If you review from the terminal often, generate shell completions once so spec
 IDs and subcommands stay close at hand:

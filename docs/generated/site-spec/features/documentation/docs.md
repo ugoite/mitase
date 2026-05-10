@@ -75,10 +75,11 @@ description: "Generated reference for docs/syu/features/documentation/docs.yaml"
       - **file**: docs/guide/request-artifact-format.md
         - **symbols**:
           - FEAT-DOCS-001
-          - request artifact
+          - When to use it
+          - When not to use it
           - repository_constraints
           - linked_ids
-          - syu task workflows
+          - Expand syu validate --fix
 - **id**: FEAT-DOCS-002
   - **title**: Docusaurus documentation site
   - **summary**: Render and publish the checked-in docs tree as a documentation site without maintaining a separate content source.
@@ -178,10 +179,11 @@ features:
         - file: docs/guide/request-artifact-format.md
           symbols:
             - FEAT-DOCS-001
-            - request artifact
+            - When to use it
+            - When not to use it
             - repository_constraints
             - linked_ids
-            - syu task workflows
+            - Expand syu validate --fix
 
   - id: FEAT-DOCS-002
     title: Docusaurus documentation site
