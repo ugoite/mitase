@@ -3853,9 +3853,9 @@ mod tests {
         feature_registry_kind, filter_check_result, finalize_autofix_error,
         format_reference_location, looks_like_feature_document, merge_ownership_entry,
         ownership_symbols_hint, preferred_trace_file_path, render_autofix_plan, render_text_report,
-        required_ownership_symbols, run_check_command, sync_feature_registry,
-        validate_duplicate_links, validate_duplicate_trace_references, validate_feature,
-        validate_feature_registry_entries, validate_non_empty_field,
+        required_ownership_symbols, resolve_openapi_path_item, run_check_command,
+        sync_feature_registry, validate_duplicate_links, validate_duplicate_trace_references,
+        validate_feature, validate_feature_registry_entries, validate_non_empty_field,
         validate_openapi_trace_reference, validate_philosophy, validate_policy,
         validate_requirement, validate_unique_ids, verify_trace_reference,
     };
@@ -4939,6 +4939,91 @@ mod tests {
             &mut issues,
         ));
         assert!(issues.is_empty(), "resolved path-item refs should validate");
+    }
+
+    #[test]
+    fn validate_openapi_trace_reference_rejects_non_mapping_documents() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let display_path = tempdir.path().join("api/openapi.yaml");
+        fs::create_dir_all(display_path.parent().expect("api dir should exist")).expect("api dir");
+
+        let reference = TraceReference {
+            file: PathBuf::from("api/openapi.yaml"),
+            symbols: Vec::new(),
+            doc_contains: Vec::new(),
+            method: Some("get".to_string()),
+            path: Some("/pets/{petId}".to_string()),
+        };
+
+        let mut issues = Vec::new();
+        assert!(!validate_openapi_trace_reference(
+            "FEAT-API-001",
+            TraceRole::FeatureImplementation,
+            &display_path,
+            &reference,
+            "[]",
+            &mut issues,
+        ));
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "SYU-trace-openapi-002")
+        );
+    }
+
+    #[test]
+    fn resolve_openapi_path_item_handles_nested_refs_and_invalid_targets() {
+        let document: serde_yaml::Value = serde_yaml::from_str(
+            "openapi: 3.0.3\ncomponents:\n  pathItems:\n    Loop:\n      $ref: '#/components/pathItems/Loop'\n    Valid:\n      get:\n        responses:\n          '200':\n            description: ok\n  sequences:\n    - first\n    - second\n  scalar: hello\n",
+        )
+        .expect("document should parse");
+
+        let document_map = document.as_mapping().expect("document should be a mapping");
+        let components = document_map
+            .get(serde_yaml::Value::String("components".to_string()))
+            .and_then(serde_yaml::Value::as_mapping)
+            .expect("components should be a mapping");
+        let path_items = components
+            .get(serde_yaml::Value::String("pathItems".to_string()))
+            .and_then(serde_yaml::Value::as_mapping)
+            .expect("pathItems should be a mapping");
+
+        let valid = path_items
+            .get(serde_yaml::Value::String("Valid".to_string()))
+            .expect("valid path item should exist");
+        let loop_ref = path_items
+            .get(serde_yaml::Value::String("Loop".to_string()))
+            .expect("loop path item should exist");
+
+        assert!(resolve_openapi_path_item(&document, valid).is_some());
+        assert!(resolve_openapi_path_item(&document, loop_ref).is_none());
+
+        let sequences = components
+            .get(serde_yaml::Value::String("sequences".to_string()))
+            .expect("sequence container should exist");
+        let sequence_ref =
+            serde_yaml::from_str::<serde_yaml::Value>("$ref: '#/components/sequences/1'\n")
+                .expect("sequence ref should parse");
+        assert!(resolve_openapi_path_item(&document, &sequence_ref).is_some());
+        assert!(
+            resolve_openapi_path_item(
+                &document,
+                &serde_yaml::from_str::<serde_yaml::Value>(
+                    "$ref: 'https://example.com/spec.yaml'\n"
+                )
+                .expect("external ref should parse"),
+            )
+            .is_none()
+        );
+        assert!(
+            resolve_openapi_path_item(
+                &document,
+                &serde_yaml::from_str::<serde_yaml::Value>("$ref: '#/components/scalar/0'\n")
+                    .expect("scalar ref should parse"),
+            )
+            .is_none()
+        );
+        assert!(sequences.is_sequence());
     }
 
     #[test]
