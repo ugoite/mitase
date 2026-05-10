@@ -117,6 +117,10 @@ pub struct TraceReference {
     pub symbols: Vec<String>,
     #[serde(default, alias = "docs", alias = "docstrings")]
     pub doc_contains: Vec<String>,
+    #[serde(default)]
+    pub method: Option<String>,
+    #[serde(default)]
+    pub path: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]

@@ -1122,6 +1122,8 @@ mod tests {
             file: PathBuf::from("src/command/relate.rs"),
             symbols: vec!["run_relate_command".to_string()],
             doc_contains: Vec::new(),
+            method: None,
+            path: None,
         };
 
         assert!(trace_is_direct_match(
@@ -1586,6 +1588,8 @@ mod tests {
                 file: PathBuf::from("src/requirement.rs"),
                 symbols: vec!["requirement_symbol".to_string()],
                 doc_contains: Vec::new(),
+                method: None,
+                path: None,
             }],
         );
 
@@ -1596,6 +1600,8 @@ mod tests {
                 file: PathBuf::from("src/feature.rs"),
                 symbols: vec!["feature_symbol".to_string()],
                 doc_contains: Vec::new(),
+                method: None,
+                path: None,
             }],
         );
 
