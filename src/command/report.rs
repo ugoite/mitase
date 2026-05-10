@@ -687,6 +687,8 @@ mod tests {
             file: absolute.clone(),
             symbols: vec![String::from("trace")],
             doc_contains: Vec::new(),
+            method: None,
+            path: None,
         }];
 
         assert_eq!(rust_trace_paths(&workspace, Some(&traces)), vec![absolute]);
