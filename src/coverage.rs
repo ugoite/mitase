@@ -871,12 +871,15 @@ fn collect_ruby_public_symbols(contents: &str) -> Vec<String> {
         }
 
         if let Some(captures) = visibility_regex.captures(line) {
-            visibility = match captures.name("visibility").map(|value| value.as_str()) {
-                Some("private") => RubyVisibility::Private,
-                Some("protected") => RubyVisibility::Protected,
-                Some("public") => RubyVisibility::Public,
-                _ => visibility,
-            };
+            if let Some("private") = captures.name("visibility").map(|value| value.as_str()) {
+                visibility = RubyVisibility::Private;
+            } else if let Some("protected") =
+                captures.name("visibility").map(|value| value.as_str())
+            {
+                visibility = RubyVisibility::Protected;
+            } else if let Some("public") = captures.name("visibility").map(|value| value.as_str()) {
+                visibility = RubyVisibility::Public;
+            }
             continue;
         }
 
