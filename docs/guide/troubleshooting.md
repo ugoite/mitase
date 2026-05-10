@@ -242,8 +242,8 @@ current name.
 ### `SYU-trace-language-001` — unsupported trace adapter
 
 **What it means:** The `lang:` key does not match any built-in adapter. Today
-`syu` ships Rust, Python, Go, Java, C#, Kotlin, TypeScript / JavaScript, Shell,
-YAML, JSON, Markdown, and Gitignore adapters.
+`syu` ships Rust, Python, Ruby, Go, Java, C#, Kotlin, TypeScript / JavaScript,
+Shell, YAML, JSON, Markdown, and Gitignore adapters.
 
 **Fix:** Change the trace to one of those built-in language aliases, or check
 the [trace adapter capability matrix](./trace-adapter-support.md) before you
@@ -273,7 +273,7 @@ remove the `doc_contains:` assertion from the trace if it no longer applies.
 ### `SYU-trace-docsupport-001` — language not supported for doc inspection
 
 **What it means:** `doc_contains:` is only supported for `rust`, `python`,
-`go`, `java`, `csharp`, `kotlin`, and `typescript`. You declared it on a
+`ruby`, `go`, `java`, `csharp`, `kotlin`, and `typescript`. You declared it on a
 `lang:` that `syu` cannot inspect.
 
 **Fix:** Remove the `doc_contains:` assertion from that mapping, or switch to a
@@ -298,7 +298,7 @@ implementations:
 ```
 
 Use that lighter mapping until the language gains richer inspection support.
-If the mapping uses an unsupported implementation language such as `ruby`,
+If the mapping uses an unsupported implementation language such as `shell`,
 removing `doc_contains` is not enough: those entries still raise
 `SYU-trace-language-001`. Keep the higher-layer spec link in place and wait for
 adapter support before adding the code-level trace.
@@ -322,7 +322,7 @@ which languages participate in strict inventory coverage.
 ### `SYU-coverage-public-001` — public symbol has no owning feature
 
 **What it means:** `validate.require_symbol_trace_coverage: true` is set and a
-public API symbol in Rust, Python, or TypeScript is not referenced by any
+public API symbol in Rust, Python, Ruby, or TypeScript is not referenced by any
 feature trace.
 
 **Fix:** Either add a trace to a feature that covers the symbol, or make the
@@ -331,6 +331,8 @@ symbol non-public if it is not part of the intended API.
 - **Rust:** reduce visibility (for example, change `pub` to `pub(crate)` or
   private).
 - **Python:** remove it from `__all__` or rename it to start with `_`.
+- **Ruby:** move the implementation under a non-public helper or add a feature
+  trace for the public class, module, method, or constant.
 - **TypeScript:** stop exporting it from the module.
 
 > **Strictness toggle:** Use `syu validate . --require-symbol-trace-coverage`
