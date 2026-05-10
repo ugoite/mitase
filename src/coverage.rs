@@ -856,26 +856,45 @@ fn collect_ruby_public_symbols(contents: &str) -> Vec<String> {
     let method_regex =
         Regex::new(r"(?m)^\s*def\s+(?:self\.)?(?P<name>[A-Za-z_][A-Za-z0-9_!?=]*)\b")
             .expect("Ruby method regex should compile");
-    let constant_regex = Regex::new(r"(?m)^\s*(?P<name>[A-Z][A-Za-z0-9_:]*)\s*=")
-        .expect("Ruby constant regex should compile");
+    let visibility_regex = Regex::new(r"^\s*(?P<visibility>public|private|protected)\b")
+        .expect("Ruby visibility regex should compile");
 
     let mut symbols = BTreeSet::new();
-    for captures in class_module_regex.captures_iter(contents) {
-        if let Some(name) = captures.name("name") {
-            symbols.insert(name.as_str().to_string());
+    let mut visibility = RubyVisibility::Public;
+    for line in contents.lines() {
+        if let Some(captures) = class_module_regex.captures(line) {
+            visibility = RubyVisibility::Public;
+            if let Some(name) = captures.name("name") {
+                symbols.insert(name.as_str().to_string());
+            }
+            continue;
         }
-    }
-    for captures in method_regex.captures_iter(contents) {
-        if let Some(name) = captures.name("name") {
-            symbols.insert(name.as_str().to_string());
+
+        if let Some(captures) = visibility_regex.captures(line) {
+            visibility = match captures.name("visibility").map(|value| value.as_str()) {
+                Some("private") => RubyVisibility::Private,
+                Some("protected") => RubyVisibility::Protected,
+                Some("public") => RubyVisibility::Public,
+                _ => visibility,
+            };
+            continue;
         }
-    }
-    for captures in constant_regex.captures_iter(contents) {
-        if let Some(name) = captures.name("name") {
+
+        if visibility == RubyVisibility::Public
+            && let Some(captures) = method_regex.captures(line)
+            && let Some(name) = captures.name("name")
+        {
             symbols.insert(name.as_str().to_string());
         }
     }
     symbols.into_iter().collect()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RubyVisibility {
+    Public,
+    Private,
+    Protected,
 }
 
 fn collect_ruby_test_symbols(contents: &str) -> Vec<String> {
@@ -1975,7 +1994,7 @@ mod tests {
 
         fs::write(
             root.join("lib/order_summary.rb"),
-            "VERSION = \"1.0\"\n\nclass OrderSummary\n  def ruby_feature_impl\n    \"ok\"\n  end\nend\n\nclass UncoveredService\n  def uncovered_api\n    \"missing\"\n  end\nend\n",
+            "VERSION = \"1.0\"\n\nclass OrderSummary\n  def ruby_feature_impl\n    \"ok\"\n  end\n\n  private\n\n  def internal_helper\n    \"secret\"\n  end\n\n  protected\n\n  def guarded_helper\n    \"guarded\"\n  end\nend\n\nclass UncoveredService\n  def uncovered_api\n    \"missing\"\n  end\nend\n",
         )
         .expect("ruby source");
         fs::write(
@@ -2098,11 +2117,6 @@ mod tests {
             discover_ruby_targets(&SyuConfig::default(), tempdir.path()).expect("targets");
         assert!(targets.iter().any(|target| {
             target.file == Path::new("lib/order_summary.rb")
-                && target.symbol == "VERSION"
-                && target.kind == CoverageTargetKind::PublicSymbol
-        }));
-        assert!(targets.iter().any(|target| {
-            target.file == Path::new("lib/order_summary.rb")
                 && target.symbol == "OrderSummary"
                 && target.kind == CoverageTargetKind::PublicSymbol
         }));
@@ -2111,6 +2125,17 @@ mod tests {
                 && target.symbol == "ruby_feature_impl"
                 && target.kind == CoverageTargetKind::PublicSymbol
         }));
+        assert!(targets.iter().all(|target| target.symbol != "VERSION"));
+        assert!(
+            targets
+                .iter()
+                .all(|target| target.symbol != "internal_helper")
+        );
+        assert!(
+            targets
+                .iter()
+                .all(|target| target.symbol != "guarded_helper")
+        );
         assert!(targets.iter().any(|target| {
             target.file == Path::new("lib/order_summary.rb")
                 && target.symbol == "UncoveredService"
@@ -2232,14 +2257,10 @@ mod tests {
 
         assert!(targets.iter().any(|target| {
             target.file == Path::new("lib/order_summary.rb")
-                && target.symbol == "VERSION"
-                && target.kind == CoverageTargetKind::PublicSymbol
-        }));
-        assert!(targets.iter().any(|target| {
-            target.file == Path::new("lib/order_summary.rb")
                 && target.symbol == "ruby_feature_impl"
                 && target.kind == CoverageTargetKind::PublicSymbol
         }));
+        assert!(targets.iter().all(|target| target.symbol != "VERSION"));
         assert!(targets.iter().any(|target| {
             target.file == Path::new("test/order_summary_test.rb")
                 && target.symbol == "test_ruby_requirement"
