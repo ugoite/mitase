@@ -3778,8 +3778,9 @@ mod tests {
         ownership_symbols_hint, preferred_trace_file_path, render_autofix_plan, render_text_report,
         required_ownership_symbols, run_check_command, sync_feature_registry,
         validate_duplicate_links, validate_duplicate_trace_references, validate_feature,
-        validate_feature_registry_entries, validate_non_empty_field, validate_philosophy,
-        validate_policy, validate_requirement, validate_unique_ids, verify_trace_reference,
+        validate_feature_registry_entries, validate_non_empty_field,
+        validate_openapi_trace_reference, validate_philosophy, validate_policy,
+        validate_requirement, validate_unique_ids, verify_trace_reference,
     };
 
     fn philosophy(id: &str) -> Philosophy {
@@ -4615,6 +4616,218 @@ mod tests {
         assert_eq!(
             describe_trace_reference(&duplicate),
             "file=`src/lib.rs` symbols=[`trace_symbol`] doc_contains=[`REQ-1`]"
+        );
+    }
+
+    #[test]
+    fn describe_trace_reference_includes_openapi_selector_details() {
+        let reference = TraceReference {
+            file: PathBuf::from("api/openapi.yaml"),
+            symbols: Vec::new(),
+            doc_contains: Vec::new(),
+            method: Some("get".to_string()),
+            path: Some("/pets/{petId}".to_string()),
+        };
+
+        assert_eq!(
+            describe_trace_reference(&reference),
+            "file=`api/openapi.yaml` symbols=[] doc_contains=[] method=`get` path=`/pets/{petId}`"
+        );
+    }
+
+    #[test]
+    fn validate_openapi_trace_reference_covers_selector_and_document_failures() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let display_path = tempdir.path().join("api/openapi.yaml");
+        fs::create_dir_all(display_path.parent().expect("api dir should exist")).expect("api dir");
+
+        let reference = TraceReference {
+            file: PathBuf::from("api/openapi.yaml"),
+            symbols: vec!["unexpected".to_string()],
+            doc_contains: vec!["unexpected".to_string()],
+            method: Some("get".to_string()),
+            path: Some("/pets/{petId}".to_string()),
+        };
+
+        let mut issues = Vec::new();
+        assert!(!validate_openapi_trace_reference(
+            "FEAT-API-001",
+            TraceRole::FeatureImplementation,
+            &display_path,
+            &reference,
+            "openapi: 3.0.3\npaths:\n  /pets/{petId}:\n    get:\n      responses:\n        '200':\n          description: ok\n",
+            &mut issues,
+        ));
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "SYU-trace-openapi-001")
+        );
+
+        issues.clear();
+        assert!(!validate_openapi_trace_reference(
+            "FEAT-API-001",
+            TraceRole::FeatureImplementation,
+            &display_path,
+            &TraceReference {
+                method: Some("   ".to_string()),
+                path: Some("/pets/{petId}".to_string()),
+                ..reference.clone()
+            },
+            "openapi: 3.0.3\npaths:\n  /pets/{petId}:\n    get:\n      responses:\n        '200':\n          description: ok\n",
+            &mut issues,
+        ));
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "SYU-trace-openapi-001")
+        );
+
+        issues.clear();
+        assert!(!validate_openapi_trace_reference(
+            "FEAT-API-001",
+            TraceRole::FeatureImplementation,
+            &display_path,
+            &TraceReference {
+                method: Some("get".to_string()),
+                path: Some("   ".to_string()),
+                ..reference.clone()
+            },
+            "openapi: 3.0.3\npaths:\n  /pets/{petId}:\n    get:\n      responses:\n        '200':\n          description: ok\n",
+            &mut issues,
+        ));
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "SYU-trace-openapi-001")
+        );
+
+        issues.clear();
+        assert!(!validate_openapi_trace_reference(
+            "FEAT-API-001",
+            TraceRole::FeatureImplementation,
+            &display_path,
+            &TraceReference {
+                method: Some("propfind".to_string()),
+                path: Some("/pets/{petId}".to_string()),
+                ..reference.clone()
+            },
+            "openapi: 3.0.3\npaths:\n  /pets/{petId}:\n    get:\n      responses:\n        '200':\n          description: ok\n",
+            &mut issues,
+        ));
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "SYU-trace-openapi-001")
+        );
+
+        issues.clear();
+        assert!(!validate_openapi_trace_reference(
+            "FEAT-API-001",
+            TraceRole::FeatureImplementation,
+            &display_path,
+            &TraceReference {
+                method: Some("get".to_string()),
+                path: Some("   ".to_string()),
+                ..reference.clone()
+            },
+            "openapi: 3.0.3\n",
+            &mut issues,
+        ));
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "SYU-trace-openapi-001")
+        );
+
+        issues.clear();
+        assert!(!validate_openapi_trace_reference(
+            "FEAT-API-001",
+            TraceRole::FeatureImplementation,
+            &display_path,
+            &reference,
+            "{",
+            &mut issues,
+        ));
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "SYU-trace-openapi-002")
+        );
+
+        issues.clear();
+        assert!(!validate_openapi_trace_reference(
+            "FEAT-API-001",
+            TraceRole::FeatureImplementation,
+            &display_path,
+            &reference,
+            "openapi: 3.0.3",
+            &mut issues,
+        ));
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "SYU-trace-openapi-002")
+        );
+
+        issues.clear();
+        assert!(!validate_openapi_trace_reference(
+            "FEAT-API-001",
+            TraceRole::FeatureImplementation,
+            &display_path,
+            &reference,
+            "openapi: 3.0.3\npaths:\n  /pets/{petId}: not-a-map\n",
+            &mut issues,
+        ));
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "SYU-trace-openapi-002")
+        );
+
+        issues.clear();
+        assert!(!validate_openapi_trace_reference(
+            "FEAT-API-001",
+            TraceRole::FeatureImplementation,
+            &display_path,
+            &reference,
+            "openapi: 3.0.3\npaths:\n  /pets/{petId}:\n    get: not-an-operation\n",
+            &mut issues,
+        ));
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "SYU-trace-openapi-002")
+        );
+
+        issues.clear();
+        assert!(!validate_openapi_trace_reference(
+            "FEAT-API-001",
+            TraceRole::FeatureImplementation,
+            &display_path,
+            &reference,
+            "openapi: 3.0.3\npaths:\n  /pets/{petId}:\n    post:\n      responses:\n        '200':\n          description: ok\n",
+            &mut issues,
+        ));
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "SYU-trace-openapi-002")
+        );
+
+        issues.clear();
+        assert!(!validate_openapi_trace_reference(
+            "FEAT-API-001",
+            TraceRole::FeatureImplementation,
+            &display_path,
+            &reference,
+            "openapi: 3.0.3\npaths:\n  /other:\n    get:\n      responses:\n        '200':\n          description: ok\n",
+            &mut issues,
+        ));
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "SYU-trace-openapi-002")
         );
     }
 
