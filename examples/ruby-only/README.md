@@ -40,7 +40,8 @@ traceability: requirements=1/1 features=1/1
 ## Key things to notice
 
 - **Ruby tracing** - syu validates the declared Ruby symbols directly against
-  the checked-in `.rb` files without forcing a fallback language key.
+  the checked-in `.rb` files, can inspect adjacent `#` docs for stable symbols,
+  and can enforce ownership coverage for the Ruby files in this workspace.
 - **Small first-run story** - the example keeps the first requirement and
   feature tied to one Minitest method and one Ruby implementation method.
 - **Reciprocal links** - `REQ-RB-001` and `FEAT-RB-001` each reference the
