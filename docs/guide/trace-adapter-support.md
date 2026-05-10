@@ -24,7 +24,7 @@ of a source symbol.
 | --- | --- | --- | --- | --- |
 | Rust | `rust`, `rs` / `.rs` | ✅ Rich symbol inspection plus declaration matching | ✅ | ✅ |
 | Python | `python`, `py`, `pytest`, `unittest` / `.py` | ✅ Rich symbol inspection plus pattern fallback | ✅ | ✅ |
-| Ruby | `ruby`, `rb`, `minitest`, `rspec` / `.rb` | ✅ Pattern-based symbol matching | ❌ | ❌ |
+| Ruby | `ruby`, `rb`, `minitest`, `rspec` / `.rb` | ✅ Pattern-based symbol matching plus declaration-adjacent line-comment inspection | ✅ | ✅ |
 | Go | `go`, `golang`, `gotest` / `.go` | ✅ Rich doc-comment inspection plus pattern fallback | ✅ | ✅ |
 | Java | `java`, `junit` / `.java` | ✅ Pattern-based symbol matching plus declaration-adjacent Javadoc inspection | ✅ | ✅ |
 | C# | `csharp`, `cs`, `dotnet`, `xunit`, `nunit`, `mstest` / `.cs` | ✅ Pattern-based symbol matching plus declaration-adjacent XML doc inspection | ✅ | ✅ |
@@ -45,6 +45,8 @@ builds ownership inventories for these languages only:
   `tests/`
 - **Python** — public names in `src/` that do not start with `_`, plus
   `test_...` and `Test...` symbols in `tests/`
+- **Ruby** — `class`/`module` names and public methods in `lib/` and `src/`,
+  plus `test_...` methods in `test/`, `tests/`, and `spec/`
 - **Go** — exported identifiers in `src/`, plus `Test...`, `Benchmark...`,
   `Fuzz...`, and `Example...` symbols in `_test.go` files
 - **Java** — public classes/interfaces/enums/records plus public or implicit
@@ -62,13 +64,13 @@ they do **not** participate in the repository-wide strict ownership scan.
 
 ## How to choose the right promises
 
-- Need `doc_contains`? Rust, Python, Go, Java, C#, Kotlin, and TypeScript /
+- Need `doc_contains`? Rust, Python, Ruby, Go, Java, C#, Kotlin, and TypeScript /
   JavaScript traces all
   support it today. For a staged rollout, starter examples, and "when should I
   add this?" guidance, use the [dedicated `doc_contains` adoption guide](./doc-contains.md).
-- Need strict ownership coverage? Rust, Python, Go, Java, C#, Kotlin, and
+- Need strict ownership coverage? Rust, Python, Ruby, Go, Java, C#, Kotlin, and
   TypeScript / JavaScript all participate today.
-- Using Ruby, Shell, YAML, JSON, Markdown, or Gitignore traces? Keep the mapping to
+- Using Shell, YAML, JSON, Markdown, or Gitignore traces? Keep the mapping to
   `file` + `symbols` (or `symbols: ["*"]` when one file intentionally belongs
   to one item), but do not expect doc-comment inspection or strict ownership
   inventory.
@@ -118,8 +120,9 @@ add `doc_contains` when the Javadoc stays adjacent to the symbol.
 If you need a Ruby-first starting point today, study the
 [`examples/ruby-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/ruby-only)
 or scaffold `syu init . --template ruby-only`. Both keep real Ruby files in the
-repository while validating explicit symbol mappings, but Ruby traces should
-still stay with `file` plus `symbols` because `doc_contains` is not supported yet.
+repository while validating explicit symbol mappings, and Ruby traces now can
+also use `doc_contains` plus strict ownership inventory when the symbol shape is
+stable.
 If you want a concrete staged C# adoption shape today, study the
 [`examples/csharp-fallback` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/csharp-fallback).
 It keeps real C# files in the repository while validating supported shell and
