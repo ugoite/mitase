@@ -8,6 +8,7 @@ use std::{
     io::{Read, Write},
     net::{IpAddr, SocketAddr},
     path::{Component, Path, PathBuf},
+    process::Command,
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -30,8 +31,9 @@ use syu_core::{
 use crate::{
     cli::AppArgs,
     command::check::collect_check_result,
-    config::{SyuConfig, load_config, resolve_spec_root},
+    config::{SyuConfig, config_path, load_config, resolve_spec_root},
     coverage::normalize_relative_path,
+    history::build_historical_id_index,
     model::{CheckResult, FeatureRegistryDocument, TraceReference},
     workspace::{
         load_feature_documents_with_paths, load_requirement_documents_with_paths,
@@ -539,6 +541,7 @@ fn spec_snapshot(spec_root: &Path) -> Result<String> {
 enum SnapshotDependency {
     File(PathBuf),
     ReadDirError(PathBuf, String),
+    GitHead(String),
 }
 
 impl SnapshotDependency {
@@ -563,6 +566,10 @@ impl SnapshotDependency {
                 path.hash(hasher);
                 kind.hash(hasher);
             }
+            Self::GitHead(head) => {
+                "git_head".hash(hasher);
+                head.hash(hasher);
+            }
         }
     }
 }
@@ -573,6 +580,7 @@ fn app_snapshot_dependencies(
     config: &SyuConfig,
 ) -> BTreeSet<SnapshotDependency> {
     let mut dependencies = BTreeSet::new();
+    dependencies.insert(SnapshotDependency::File(config_path(workspace_root)));
 
     if let Ok(documents) = load_requirement_documents_with_paths(&spec_root.join("requirements")) {
         for document in documents {
@@ -597,7 +605,50 @@ fn app_snapshot_dependencies(
         collect_coverage_snapshot_dependencies(workspace_root, &mut dependencies);
     }
 
+    if config.validate.historical_ids.enabled
+        && let Ok(head) = git_head(workspace_root)
+    {
+        dependencies.insert(SnapshotDependency::GitHead(head));
+    }
+
     dependencies
+}
+
+fn git_head(workspace_root: &Path) -> Result<String> {
+    let output = git_command(workspace_root)
+        .arg("rev-parse")
+        .arg("HEAD")
+        .output()
+        .with_context(|| {
+            format!(
+                "failed to run `git rev-parse HEAD` in `{}`",
+                workspace_root.display()
+            )
+        })?;
+    if !output.status.success() {
+        bail!(
+            "failed to read HEAD for `{}`: {}",
+            workspace_root.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+
+    let head = String::from_utf8(output.stdout).context("git HEAD should be valid UTF-8")?;
+    let head = head.trim().to_string();
+    if head.is_empty() {
+        bail!(
+            "git rev-parse returned an empty HEAD for `{}`",
+            workspace_root.display()
+        );
+    }
+
+    Ok(head)
+}
+
+fn git_command(workspace_root: &Path) -> Command {
+    let mut command = Command::new("git");
+    command.current_dir(workspace_root);
+    command
 }
 
 fn collect_trace_map_snapshot_dependencies(
@@ -1000,6 +1051,7 @@ fn build_app_payload_from_config(workspace_root: &Path, config: &SyuConfig) -> R
         app_server: AppServer::default(),
         source_documents,
         validation: validation_snapshot(collect_check_result(workspace_root)),
+        historical_ids: build_historical_id_index(workspace_root, config)?.snapshot(),
     })
 }
 

@@ -78,6 +78,8 @@ pub struct ValidateConfig {
     #[serde(default)]
     pub require_symbol_trace_coverage: bool,
     #[serde(default)]
+    pub historical_ids: HistoricalIdsConfig,
+    #[serde(default)]
     pub trace_ownership_mode: TraceOwnershipMode,
     #[serde(default = "default_symbol_trace_coverage_ignored_paths")]
     pub symbol_trace_coverage_ignored_paths: Vec<PathBuf>,
@@ -100,8 +102,27 @@ impl Default for ValidateConfig {
             require_non_orphaned_items: default_require_non_orphaned_items(),
             require_reciprocal_links: default_require_reciprocal_links(),
             require_symbol_trace_coverage: false,
+            historical_ids: HistoricalIdsConfig::default(),
             trace_ownership_mode: TraceOwnershipMode::Mapping,
             symbol_trace_coverage_ignored_paths: default_symbol_trace_coverage_ignored_paths(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct HistoricalIdsConfig {
+    #[serde(default = "default_historical_ids_enabled")]
+    pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_ref: Option<String>,
+}
+
+impl Default for HistoricalIdsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_historical_ids_enabled(),
+            start_ref: None,
         }
     }
 }
@@ -204,6 +225,10 @@ fn default_require_non_orphaned_items() -> bool {
 }
 
 fn default_require_reciprocal_links() -> bool {
+    true
+}
+
+fn default_historical_ids_enabled() -> bool {
     true
 }
 
@@ -386,7 +411,7 @@ mod tests {
         fs::write(
             tempdir.path().join(CONFIG_FILE_NAME),
             format!(
-                "version: {version}\nspec:\n  root: spec/contracts\nvalidate:\n  default_fix: true\n  allow_planned: false\n  require_non_orphaned_items: false\n  require_reciprocal_links: false\n  require_symbol_trace_coverage: true\n  trace_ownership_mode: sidecar\nreport:\n  output: docs/generated/syu-report.md\napp:\n  bind: 0.0.0.0\n  port: 4321\nruntimes:\n  python:\n    command: python3\n  node:\n    command: node\n",
+                "version: {version}\nspec:\n  root: spec/contracts\nvalidate:\n  default_fix: true\n  allow_planned: false\n  require_non_orphaned_items: false\n  require_reciprocal_links: false\n  require_symbol_trace_coverage: true\n  historical_ids:\n    enabled: false\n    start_ref: origin/main\n  trace_ownership_mode: sidecar\nreport:\n  output: docs/generated/syu-report.md\napp:\n  bind: 0.0.0.0\n  port: 4321\nruntimes:\n  python:\n    command: python3\n  node:\n    command: node\n",
                 version = current_cli_version()
             ),
         )
@@ -403,6 +428,11 @@ mod tests {
         assert!(!loaded.config.validate.require_non_orphaned_items);
         assert!(!loaded.config.validate.require_reciprocal_links);
         assert!(loaded.config.validate.require_symbol_trace_coverage);
+        assert!(!loaded.config.validate.historical_ids.enabled);
+        assert_eq!(
+            loaded.config.validate.historical_ids.start_ref.as_deref(),
+            Some("origin/main")
+        );
         assert_eq!(
             loaded.config.validate.trace_ownership_mode,
             TraceOwnershipMode::Sidecar
@@ -461,6 +491,8 @@ mod tests {
         assert!(rendered.contains("require_non_orphaned_items: true"));
         assert!(rendered.contains("require_reciprocal_links: true"));
         assert!(rendered.contains("require_symbol_trace_coverage: false"));
+        assert!(rendered.contains("historical_ids:"));
+        assert!(rendered.contains("enabled: true"));
         assert!(rendered.contains("trace_ownership_mode: mapping"));
         assert!(rendered.contains("symbol_trace_coverage_ignored_paths:"));
         assert!(rendered.contains("- build"));
