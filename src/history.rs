@@ -390,6 +390,23 @@ mod tests {
         );
     }
 
+    fn git_stdout(workspace: &Path, args: &[&str]) -> String {
+        let mut command = Command::new("git");
+        command.arg("-C").arg(workspace).args(args);
+        let output = command.output().expect("git should run");
+        assert!(
+            output.status.success(),
+            "git {:?} failed\nstdout:\n{}\nstderr:\n{}",
+            args,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout)
+            .expect("git output should be utf8")
+            .trim()
+            .to_string()
+    }
+
     fn git_commit(workspace: &Path, summary: &str) {
         let timestamp = COMMIT_TIMESTAMP.fetch_add(1, Ordering::Relaxed);
         let timestamp = format!("{timestamp} +0000");
@@ -413,6 +430,19 @@ mod tests {
         git(workspace, &["init"]);
         git(workspace, &["config", "user.name", "Test User"]);
         git(workspace, &["config", "user.email", "test@example.com"]);
+    }
+
+    #[test]
+    fn build_historical_id_index_returns_disabled_index_when_disabled() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = tempdir.path();
+        let mut config = SyuConfig::default();
+        config.validate.historical_ids.enabled = false;
+
+        let index = build_historical_id_index(workspace, &config).expect("index should build");
+        assert!(!index.enabled());
+        assert!(!index.available());
+        assert!(!index.contains("PHIL-HIST-000"));
     }
 
     #[test]
@@ -450,6 +480,71 @@ mod tests {
         let index = build_historical_id_index(workspace, &config).expect("index should build");
         assert!(index.available());
         assert!(index.contains("PHIL-HIST-ROOT-001"));
+    }
+
+    #[test]
+    fn build_historical_id_index_skips_external_spec_roots() {
+        let workspace_dir = tempdir().expect("tempdir should exist");
+        let workspace = workspace_dir.path();
+        init_git_repository(workspace);
+        fs::write(workspace.join("placeholder.txt"), "placeholder\n").expect("placeholder file");
+        git(workspace, &["add", "."]);
+        git_commit(workspace, "chore: initialize repository");
+
+        let external = tempdir().expect("external tempdir should exist");
+        let mut config = SyuConfig::default();
+        config.spec.root = external.path().join("external-spec");
+
+        let index = build_historical_id_index(workspace, &config).expect("index should build");
+        assert!(index.enabled());
+        assert!(!index.available());
+    }
+
+    #[test]
+    fn build_historical_id_index_honors_start_refs_and_skips_feature_docs_without_features_lists() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = tempdir.path();
+        init_git_repository(workspace);
+
+        fs::create_dir_all(workspace.join("philosophy")).expect("philosophy dir");
+        fs::create_dir_all(workspace.join("features")).expect("features dir");
+
+        fs::write(
+            workspace.join("philosophy/foundation.yaml"),
+            "category: Philosophy\nversion: 1\nlanguage: en\nphilosophies:\n  - id: PHIL-HIST-START-001\n    title: Start refs should be indexed.\n    product_design_principle: History should include the start ref snapshot.\n    coding_guideline: Keep invalid feature documents out of the index.\n    linked_policies: []\n",
+        )
+        .expect("philosophy file");
+        fs::write(
+            workspace.join("features/features.yaml"),
+            "version: \"1\"\nfiles: []\n",
+        )
+        .expect("feature registry");
+        fs::write(
+            workspace.join("features/valid.yaml"),
+            "category: History\nversion: 1\nfeatures:\n  - id: FEAT-HIST-START-001\n    title: Start refs should be indexed.\n    summary: Start refs should include valid feature documents.\n    status: implemented\n    linked_requirements: []\n    implementations: {}\n",
+        )
+        .expect("feature file");
+
+        git(workspace, &["add", "."]);
+        git_commit(workspace, "docs: add historical id start ref fixture");
+        let start_ref = git_stdout(workspace, &["rev-parse", "HEAD"]);
+
+        fs::write(
+            workspace.join("features/broken.yaml"),
+            "category: History\nversion: 1\nstories: []\n",
+        )
+        .expect("broken feature file");
+        git(workspace, &["add", "."]);
+        git_commit(workspace, "docs: add ignored historical feature fixture");
+
+        let mut config = SyuConfig::default();
+        config.spec.root = PathBuf::from(".");
+        config.validate.historical_ids.start_ref = Some(start_ref);
+
+        let index = build_historical_id_index(workspace, &config).expect("index should build");
+        assert!(index.available());
+        assert!(index.contains("PHIL-HIST-START-001"));
+        assert!(index.contains("FEAT-HIST-START-001"));
     }
 
     #[test]
