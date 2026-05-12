@@ -13,6 +13,7 @@ use syn::{Attribute, ImplItem, Item, Visibility};
 use crate::{
     config::SyuConfig,
     inspect::{inspect_python_file, inspect_typescript_file},
+    language::{LanguageAdapter, adapter_for_language},
     model::{Feature, Issue, Requirement, TraceReference},
     workspace::Workspace,
 };
@@ -29,6 +30,17 @@ struct CoverageTarget {
     symbol: String,
     kind: CoverageTargetKind,
 }
+
+pub const STRICT_INVENTORY_LANGUAGES: &[&str] = &[
+    "rust",
+    "python",
+    "ruby",
+    "go",
+    "java",
+    "csharp",
+    "kotlin",
+    "typescript",
+];
 
 #[derive(Debug, Default, Clone)]
 struct CoverageMap {
@@ -54,6 +66,12 @@ struct CoverageDiscoverers {
     csharp: DiscoveryWithIssuesFn,
     kotlin: DiscoveryWithIssuesFn,
     typescript: DiscoveryWithIssuesFn,
+}
+
+pub fn supports_strict_inventory(language: &str) -> bool {
+    adapter_for_language(language)
+        .map(LanguageAdapter::canonical_name)
+        .is_some_and(|canonical| STRICT_INVENTORY_LANGUAGES.contains(&canonical))
 }
 
 pub fn validate_symbol_trace_coverage(workspace: &Workspace, issues: &mut Vec<Issue>) {
