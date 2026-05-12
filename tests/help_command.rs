@@ -56,31 +56,46 @@ fn app_help_mentions_remote_bind_opt_in() {
 #[test]
 fn workspace_help_uses_current_directory_default_consistently() {
     for command in [
-        "browse", "show", "search", "trace", "review", "app", "doctor", "validate", "check",
-        "report", "add", "task", "relate", "log", "audit", "explain",
+        &["browse"][..],
+        &["show"][..],
+        &["search"][..],
+        &["trace"][..],
+        &["review"][..],
+        &["app"][..],
+        &["doctor"][..],
+        &["validate"][..],
+        &["check"][..],
+        &["report"][..],
+        &["add"][..],
+        &["task", "classify"][..],
+        &["relate"][..],
+        &["log"][..],
+        &["audit"][..],
+        &["explain"][..],
     ] {
         let output = Command::cargo_bin("syu")
             .expect("binary should build")
-            .args([command, "--help"])
+            .args(command)
+            .arg("--help")
             .output()
             .expect("help should render");
 
-        assert!(output.status.success(), "{command} help should succeed");
+        assert!(output.status.success(), "{command:?} help should succeed");
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         assert!(
             stdout.contains(
                 "Workspace root or any child directory; syu walks upward to find syu.yaml and the configured spec tree"
             ),
-            "{command} help should describe the workspace root consistently",
+            "{command:?} help should describe the workspace root consistently",
         );
         assert!(
             stdout.contains("[default: .]"),
-            "{command} help should keep the current-directory default",
+            "{command:?} help should keep the current-directory default",
         );
         assert!(
             !stdout.contains("default: docs/syu"),
-            "{command} help should not claim docs/syu is the workspace default",
+            "{command:?} help should not claim docs/syu is the workspace default",
         );
     }
 }
