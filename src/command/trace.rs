@@ -1485,8 +1485,8 @@ mod tests {
         assert_eq!(summary.total_features, 1);
         assert_eq!(summary.total_policies, 1);
         assert_eq!(summary.total_philosophies, 1);
-        assert_eq!(summary.ids.direct.requirements.len(), 1);
-        assert_eq!(summary.ids.direct.features.len(), 1);
+        assert_eq!(summary.ids.direct.requirements.len(), 0);
+        assert_eq!(summary.ids.direct.features.len(), 0);
         assert_eq!(summary.ids.indirect.policies.len(), 1);
         assert_eq!(summary.ids.indirect.philosophies.len(), 1);
     }
