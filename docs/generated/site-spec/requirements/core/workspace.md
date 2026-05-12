@@ -557,6 +557,83 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
           - explain_text_handles_gaps_and_empty_sections
           - explain_text_renders_file_only_traces_and_definition_matches
           - explain_text_renders_direct_trace_symbols
+- **id**: REQ-CORE-028
+  - **title**: Provide request-first task classification for requirement planning
+  - **description**:
+    - |
+      The CLI MUST provide a `task classify` command that reads a captured
+      request artifact and the current spec graph, then classifies the request
+      into a requirement create, change, or delete decision with a short
+      explanation. The command MUST emit both text and JSON output, SHOULD make
+      the request artifact and the closest existing spec items visible in the
+      result, and MUST stay focused on the request plus the current spec graph
+      without needing source-code inspection for the first version.
+  - **priority**: medium
+  - **status**: implemented
+  - **linked_policies**:
+    - POL-001
+    - POL-002
+    - POL-004
+  - **linked_features**:
+    - FEAT-TASK-001
+  - **tests**:
+    - **rust**:
+      - **file**: src/command/task.rs
+        - **symbols**:
+          - *
+      - **file**: src/lib.rs
+        - **symbols**:
+          - dispatch
+          - run_dispatch
+      - **file**: src/cli.rs
+        - **symbols**:
+          - TaskArgs
+          - TaskClassifyArgs
+    - **markdown**:
+      - **file**: docs/guide/request-artifact-format.md
+        - **symbols**:
+          - syu task classify
+- **id**: REQ-CORE-029
+  - **title**: Preview planned requirement and feature scaffolds from request planning
+  - **description**:
+    - |
+      The CLI MUST provide a `task scaffold` command that reads a captured
+      request artifact or planning result, then previews reviewable planned
+      requirement and feature updates that reuse the same document, registry,
+      and reciprocal-link conventions as `syu add`. The command MUST show the
+      planned file updates before anything is applied or committed, SHOULD keep
+      the planned requirement and feature documents aligned with the existing
+      task-planning workflow, and MUST stay focused on the request artifact
+      plus the current spec graph rather than inventing a second scaffolding
+      model.
+  - **priority**: medium
+  - **status**: implemented
+  - **linked_policies**:
+    - POL-001
+    - POL-002
+    - POL-004
+  - **linked_features**:
+    - FEAT-TASK-002
+  - **tests**:
+    - **rust**:
+      - **file**: src/command/task.rs
+        - **symbols**:
+          - *
+      - **file**: src/cli.rs
+        - **symbols**:
+          - TaskArgs
+          - TaskScaffoldArgs
+      - **file**: src/lib.rs
+        - **symbols**:
+          - dispatch
+          - run_dispatch
+    - **markdown**:
+      - **file**: docs/guide/request-artifact-format.md
+        - **symbols**:
+          - syu task scaffold
+      - **file**: docs/guide/implementation-planning.md
+        - **symbols**:
+          - syu task scaffold
 
 ## Source YAML
 
@@ -1091,4 +1168,79 @@ requirements:
             - explain_text_handles_gaps_and_empty_sections
             - explain_text_renders_file_only_traces_and_definition_matches
             - explain_text_renders_direct_trace_symbols
+  - id: REQ-CORE-028
+    title: Provide request-first task classification for requirement planning
+    description: |
+      The CLI MUST provide a `task classify` command that reads a captured
+      request artifact and the current spec graph, then classifies the request
+      into a requirement create, change, or delete decision with a short
+      explanation. The command MUST emit both text and JSON output, SHOULD make
+      the request artifact and the closest existing spec items visible in the
+      result, and MUST stay focused on the request plus the current spec graph
+      without needing source-code inspection for the first version.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-001
+      - POL-002
+      - POL-004
+    linked_features:
+      - FEAT-TASK-001
+    tests:
+      rust:
+        - file: src/command/task.rs
+          symbols:
+            - "*"
+        - file: src/lib.rs
+          symbols:
+            - dispatch
+            - run_dispatch
+        - file: src/cli.rs
+          symbols:
+            - TaskArgs
+            - TaskClassifyArgs
+      markdown:
+        - file: docs/guide/request-artifact-format.md
+          symbols:
+            - syu task classify
+  - id: REQ-CORE-029
+    title: Preview planned requirement and feature scaffolds from request planning
+    description: |
+      The CLI MUST provide a `task scaffold` command that reads a captured
+      request artifact or planning result, then previews reviewable planned
+      requirement and feature updates that reuse the same document, registry,
+      and reciprocal-link conventions as `syu add`. The command MUST show the
+      planned file updates before anything is applied or committed, SHOULD keep
+      the planned requirement and feature documents aligned with the existing
+      task-planning workflow, and MUST stay focused on the request artifact
+      plus the current spec graph rather than inventing a second scaffolding
+      model.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-001
+      - POL-002
+      - POL-004
+    linked_features:
+      - FEAT-TASK-002
+    tests:
+      rust:
+        - file: src/command/task.rs
+          symbols:
+            - "*"
+        - file: src/cli.rs
+          symbols:
+            - TaskArgs
+            - TaskScaffoldArgs
+        - file: src/lib.rs
+          symbols:
+            - dispatch
+            - run_dispatch
+      markdown:
+        - file: docs/guide/request-artifact-format.md
+          symbols:
+            - syu task scaffold
+        - file: docs/guide/implementation-planning.md
+          symbols:
+            - syu task scaffold
 ```

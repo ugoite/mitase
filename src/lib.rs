@@ -74,6 +74,7 @@ enum Dispatch {
     Trace(cli::TraceArgs),
     App(cli::AppArgs),
     Doctor(cli::DoctorArgs),
+    Task(cli::TaskArgs),
     PrintHelp,
     Validate(cli::ValidateArgs),
     Report(cli::ReportArgs),
@@ -97,6 +98,7 @@ fn dispatch(cli: cli::Cli, stdin_is_terminal: bool, stdout_is_terminal: bool) ->
         Some(cli::Commands::Trace(args)) => Dispatch::Trace(args),
         Some(cli::Commands::App(args)) => Dispatch::App(args),
         Some(cli::Commands::Doctor(args)) => Dispatch::Doctor(args),
+        Some(cli::Commands::Task(args)) => Dispatch::Task(args),
         None if stdin_is_terminal && stdout_is_terminal => {
             Dispatch::Browse(cli::BrowseArgs::default())
         }
@@ -124,6 +126,7 @@ fn run_dispatch(dispatch: Dispatch) -> Result<i32> {
         Dispatch::Trace(args) => command::trace::run_trace_command(&args),
         Dispatch::App(args) => command::app::run_app_command(&args),
         Dispatch::Doctor(args) => command::doctor::run_doctor_command(&args),
+        Dispatch::Task(args) => command::task::run_task_command(&args),
         Dispatch::PrintHelp => {
             let mut command = cli::Cli::command();
             command.print_help()?;

@@ -1,0 +1,1142 @@
+// FEAT-TASK-001
+// REQ-CORE-028
+// REQ-CORE-029
+
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+};
+
+use anyhow::{Context, Result, bail};
+use regex::Regex;
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    cli::{LookupKind, OutputFormat, TaskArgs, TaskClassifyArgs, TaskCommands, TaskScaffoldArgs},
+    workspace::load_workspace,
+};
+
+use super::lookup::{SearchResult, WorkspaceEntity, WorkspaceLookup};
+
+const REQUEST_ARTIFACT_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum RequirementAction {
+    Create,
+    Change,
+    Delete,
+}
+
+impl RequirementAction {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Create => "requirement_create",
+            Self::Change => "requirement_change",
+            Self::Delete => "requirement_delete",
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct RequestArtifact {
+    version: u32,
+    request: String,
+    #[serde(default)]
+    context: RequestArtifactContext,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct RequestArtifactContext {
+    #[serde(default)]
+    affected_area: Option<String>,
+    #[serde(default)]
+    repository_constraints: Vec<String>,
+    #[serde(default)]
+    linked_ids: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonTaskClassifyOutput {
+    request_path: String,
+    request: String,
+    classification: String,
+    reasons: Vec<String>,
+    explicit_items: Vec<SearchResult>,
+    related_items: Vec<SearchResult>,
+    context: JsonRequestArtifactContext,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonTaskScaffoldOutput {
+    request_path: String,
+    request: String,
+    classification: String,
+    reasons: Vec<String>,
+    updates: Vec<JsonScaffoldUpdate>,
+    context: JsonRequestArtifactContext,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonScaffoldUpdate {
+    kind: String,
+    action: String,
+    path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    contents: String,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonRequestArtifactContext {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    affected_area: Option<String>,
+    repository_constraints: Vec<String>,
+    linked_ids: Vec<String>,
+}
+
+#[derive(Debug)]
+struct ClassificationOutcome {
+    classification: RequirementAction,
+    reasons: Vec<String>,
+    explicit_items: Vec<SearchResult>,
+    related_items: Vec<SearchResult>,
+    request: String,
+    context: RequestArtifactContext,
+}
+
+#[derive(Debug)]
+struct ScaffoldPlan {
+    updates: Vec<ScaffoldUpdate>,
+}
+
+#[derive(Debug)]
+struct ScaffoldUpdate {
+    kind: ScaffoldUpdateKind,
+    action: ScaffoldAction,
+    path: String,
+    id: Option<String>,
+    contents: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ScaffoldUpdateKind {
+    Requirement,
+    Feature,
+    FeatureRegistry,
+}
+
+impl ScaffoldUpdateKind {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Requirement => "requirement",
+            Self::Feature => "feature",
+            Self::FeatureRegistry => "feature registry",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ScaffoldAction {
+    Create,
+    Update,
+    Append,
+}
+
+impl ScaffoldAction {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Create => "create",
+            Self::Update => "update",
+            Self::Append => "append",
+        }
+    }
+}
+
+pub fn run_task_command(args: &TaskArgs) -> Result<i32> {
+    match &args.command {
+        TaskCommands::Classify(classify) => run_task_classify_command(classify),
+        TaskCommands::Scaffold(scaffold) => run_task_scaffold_command(scaffold),
+    }
+}
+
+pub fn run_task_classify_command(args: &TaskClassifyArgs) -> Result<i32> {
+    let workspace = load_workspace(&args.workspace)?;
+    let request_artifact = load_request_artifact(&args.request)?;
+    let outcome = classify_request(&workspace, request_artifact)?;
+
+    match args.format {
+        OutputFormat::Text => print_classify_text_output(&args.request, &outcome),
+        OutputFormat::Json => println!(
+            "{}",
+            serde_json::to_string_pretty(&JsonTaskClassifyOutput {
+                request_path: args.request.display().to_string(),
+                request: outcome.request,
+                classification: outcome.classification.label().to_string(),
+                reasons: outcome.reasons,
+                explicit_items: outcome.explicit_items,
+                related_items: outcome.related_items,
+                context: JsonRequestArtifactContext {
+                    affected_area: outcome.context.affected_area,
+                    repository_constraints: outcome.context.repository_constraints,
+                    linked_ids: outcome.context.linked_ids,
+                },
+            })
+            .expect("serializing task classification output to JSON should succeed")
+        ),
+    }
+
+    Ok(0)
+}
+
+pub fn run_task_scaffold_command(args: &TaskScaffoldArgs) -> Result<i32> {
+    let workspace = load_workspace(&args.workspace)?;
+    let request_artifact = load_request_artifact(&args.request)?;
+    let explicit_ids = request_artifact.explicit_ids();
+    let outcome = classify_request(&workspace, request_artifact)?;
+    let plan = build_scaffold_plan(&workspace, &outcome, &explicit_ids)?;
+
+    match args.format {
+        OutputFormat::Text => print_scaffold_text_output(&args.request, &outcome, &plan),
+        OutputFormat::Json => println!(
+            "{}",
+            serde_json::to_string_pretty(&JsonTaskScaffoldOutput {
+                request_path: args.request.display().to_string(),
+                request: outcome.request,
+                classification: outcome.classification.label().to_string(),
+                reasons: outcome.reasons,
+                updates: plan
+                    .updates
+                    .into_iter()
+                    .map(|update| JsonScaffoldUpdate {
+                        kind: update.kind.label().to_string(),
+                        action: update.action.label().to_string(),
+                        path: update.path,
+                        id: update.id,
+                        contents: update.contents,
+                    })
+                    .collect(),
+                context: JsonRequestArtifactContext {
+                    affected_area: outcome.context.affected_area,
+                    repository_constraints: outcome.context.repository_constraints,
+                    linked_ids: outcome.context.linked_ids,
+                },
+            })
+            .expect("serializing task scaffold output to JSON should succeed")
+        ),
+    }
+
+    Ok(0)
+}
+
+fn load_request_artifact(path: &PathBuf) -> Result<RequestArtifact> {
+    let raw = fs::read_to_string(path)
+        .with_context(|| format!("failed to read request artifact `{}`", path.display()))?;
+    let artifact: RequestArtifact = serde_yaml::from_str(&raw)
+        .with_context(|| format!("failed to parse request artifact `{}`", path.display()))?;
+    if artifact.version != REQUEST_ARTIFACT_VERSION {
+        bail!(
+            "unsupported request artifact version `{}` in `{}`",
+            artifact.version,
+            path.display()
+        );
+    }
+    Ok(artifact)
+}
+
+fn classify_request(
+    workspace: &crate::workspace::Workspace,
+    artifact: RequestArtifact,
+) -> Result<ClassificationOutcome> {
+    let lookup = WorkspaceLookup::new(workspace);
+    let analysis_text = artifact.analysis_text();
+    let lower = analysis_text.to_lowercase();
+    let delete_hits = count_keyword_hits(&lower, DELETE_KEYWORDS);
+    let change_hits = count_keyword_hits(&lower, CHANGE_KEYWORDS);
+    let create_hits = count_keyword_hits(&lower, CREATE_KEYWORDS);
+
+    let explicit_ids = artifact.explicit_ids();
+    let explicit_items = collect_explicit_items(&lookup, &explicit_ids);
+    let mut related_items = collect_related_items(&lookup, &artifact.request);
+    merge_related_items(&mut related_items, lookup.search(&analysis_text, None));
+    related_items.truncate(5);
+
+    let mut reasons = Vec::new();
+    if delete_hits > 0 {
+        reasons.push(format!(
+            "request uses delete-oriented language: {}",
+            describe_keyword_hits(&lower, DELETE_KEYWORDS)
+        ));
+    }
+    if change_hits > 0 {
+        reasons.push(format!(
+            "request uses change-oriented language: {}",
+            describe_keyword_hits(&lower, CHANGE_KEYWORDS)
+        ));
+    }
+    if create_hits > 0 {
+        reasons.push(format!(
+            "request uses create-oriented language: {}",
+            describe_keyword_hits(&lower, CREATE_KEYWORDS)
+        ));
+    }
+    if !explicit_items.is_empty() {
+        reasons.push(format!(
+            "request names existing spec items: {}",
+            explicit_items
+                .iter()
+                .map(|item| item.id.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    if explicit_items.is_empty() && !related_items.is_empty() {
+        reasons.push(format!(
+            "closest spec graph matches are {}",
+            related_items
+                .iter()
+                .map(|item| format!("{} {}", item.kind, item.id))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    if delete_hits == 0 && change_hits == 0 && create_hits == 0 {
+        reasons.push(
+            "request does not use a strong create/change/delete verb, so the graph match and linked IDs carry the decision"
+                .to_string(),
+        );
+    }
+
+    let classification = if delete_hits > 0 {
+        RequirementAction::Delete
+    } else if change_hits > 0 || !explicit_items.is_empty() {
+        RequirementAction::Change
+    } else {
+        RequirementAction::Create
+    };
+
+    if matches!(classification, RequirementAction::Create) {
+        if create_hits > 0 {
+            reasons.push(
+                "request uses create-oriented language and does not name an existing spec item"
+                    .to_string(),
+            );
+        } else {
+            reasons.push(
+                "no existing spec item was named and the request reads like new work".to_string(),
+            );
+        }
+    }
+
+    Ok(ClassificationOutcome {
+        classification,
+        reasons,
+        explicit_items,
+        related_items,
+        request: artifact.request,
+        context: artifact.context,
+    })
+}
+
+fn build_scaffold_plan(
+    workspace: &crate::workspace::Workspace,
+    outcome: &ClassificationOutcome,
+    explicit_ids: &[String],
+) -> Result<ScaffoldPlan> {
+    if matches!(outcome.classification, RequirementAction::Delete) {
+        bail!(
+            "`syu task scaffold` only supports request artifacts that classify as create or change"
+        );
+    }
+
+    let lookup = WorkspaceLookup::new(workspace);
+    let scaffold_stem = scaffold_stem(outcome, explicit_ids);
+
+    let requirement_id = resolve_scaffold_id(
+        &lookup,
+        LookupKind::Requirement,
+        explicit_ids,
+        &scaffold_stem,
+    );
+    let feature_id =
+        resolve_scaffold_id(&lookup, LookupKind::Feature, explicit_ids, &scaffold_stem);
+
+    let requirement_title = lookup
+        .title_for(LookupKind::Requirement, &requirement_id)
+        .map(std::string::ToString::to_string)
+        .unwrap_or_else(|| scaffold_title(&outcome.request, &scaffold_stem));
+    let feature_title = lookup
+        .title_for(LookupKind::Feature, &feature_id)
+        .map(std::string::ToString::to_string)
+        .unwrap_or_else(|| scaffold_title(&outcome.request, &scaffold_stem));
+
+    let requirement_path =
+        resolve_scaffold_document_path(workspace, LookupKind::Requirement, &requirement_id)?;
+    let feature_path = resolve_scaffold_document_path(workspace, LookupKind::Feature, &feature_id)?;
+
+    let requirement_action = if lookup.find(&requirement_id).is_some() {
+        ScaffoldAction::Update
+    } else {
+        ScaffoldAction::Create
+    };
+    let feature_action = if lookup.find(&feature_id).is_some() {
+        ScaffoldAction::Update
+    } else {
+        ScaffoldAction::Create
+    };
+
+    let mut updates = vec![
+        ScaffoldUpdate {
+            kind: ScaffoldUpdateKind::Requirement,
+            action: requirement_action,
+            path: requirement_path.clone(),
+            id: Some(requirement_id.clone()),
+            contents: render_requirement_document(
+                outcome,
+                &requirement_id,
+                &requirement_title,
+                &feature_id,
+                &scaffold_stem,
+            ),
+        },
+        ScaffoldUpdate {
+            kind: ScaffoldUpdateKind::Feature,
+            action: feature_action,
+            path: feature_path.clone(),
+            id: Some(feature_id.clone()),
+            contents: render_feature_document(
+                outcome,
+                &feature_id,
+                &feature_title,
+                &requirement_id,
+                &scaffold_stem,
+            ),
+        },
+    ];
+
+    if matches!(feature_action, ScaffoldAction::Create) {
+        let registry_file = feature_registry_file_label(workspace, &feature_path)?;
+        updates.push(ScaffoldUpdate {
+            kind: ScaffoldUpdateKind::FeatureRegistry,
+            action: ScaffoldAction::Append,
+            path: workspace_relative_display(
+                workspace,
+                &workspace.spec_root.join("features/features.yaml"),
+            ),
+            id: None,
+            contents: format!("  - kind: {}\n    file: {registry_file}\n", scaffold_stem),
+        });
+    }
+
+    Ok(ScaffoldPlan { updates })
+}
+
+impl RequestArtifact {
+    fn analysis_text(&self) -> String {
+        let mut text = String::new();
+        text.push_str(&self.request);
+        if let Some(affected_area) = &self.context.affected_area {
+            text.push('\n');
+            text.push_str(affected_area);
+        }
+        for constraint in &self.context.repository_constraints {
+            text.push('\n');
+            text.push_str(constraint);
+        }
+        for id in &self.context.linked_ids {
+            text.push('\n');
+            text.push_str(id);
+        }
+        text
+    }
+
+    fn explicit_ids(&self) -> Vec<String> {
+        let mut ids = self.context.linked_ids.clone();
+        ids.extend(extract_spec_ids(&self.request));
+        if let Some(affected_area) = &self.context.affected_area {
+            ids.extend(extract_spec_ids(affected_area));
+        }
+        ids.sort();
+        ids.dedup();
+        ids
+    }
+}
+
+fn collect_explicit_items(lookup: &WorkspaceLookup<'_>, ids: &[String]) -> Vec<SearchResult> {
+    let mut items = BTreeMap::<String, SearchResult>::new();
+    for id in ids {
+        if let Some(item) = lookup.find(id) {
+            items.insert(id.clone(), item_to_search_result(item));
+        }
+    }
+    items.into_values().collect()
+}
+
+fn collect_related_items(lookup: &WorkspaceLookup<'_>, request: &str) -> Vec<SearchResult> {
+    let mut items = BTreeMap::<String, SearchResult>::new();
+    for result in lookup.search(request, None) {
+        items.insert(result.id.clone(), result);
+    }
+    items.into_values().collect()
+}
+
+fn merge_related_items(related_items: &mut Vec<SearchResult>, additional_items: Vec<SearchResult>) {
+    let mut merged = BTreeMap::<String, SearchResult>::new();
+    for item in related_items.drain(..) {
+        merged.insert(item.id.clone(), item);
+    }
+    for item in additional_items {
+        merged.insert(item.id.clone(), item);
+    }
+    *related_items = merged.into_values().collect();
+}
+
+fn item_to_search_result(item: WorkspaceEntity<'_>) -> SearchResult {
+    match item {
+        WorkspaceEntity::Philosophy(item) => SearchResult {
+            id: item.id.clone(),
+            kind: "philosophy",
+            title: item.title.clone(),
+        },
+        WorkspaceEntity::Policy(item) => SearchResult {
+            id: item.id.clone(),
+            kind: "policy",
+            title: item.title.clone(),
+        },
+        WorkspaceEntity::Requirement(item) => SearchResult {
+            id: item.id.clone(),
+            kind: "requirement",
+            title: item.title.clone(),
+        },
+        WorkspaceEntity::Feature(item) => SearchResult {
+            id: item.id.clone(),
+            kind: "feature",
+            title: item.title.clone(),
+        },
+    }
+}
+
+fn print_classify_text_output(request_path: &Path, outcome: &ClassificationOutcome) {
+    println!("request: {}", request_path.display());
+    println!("classification: {}", outcome.classification.label());
+    println!();
+    println!("request text:");
+    println!("{}", outcome.request.trim());
+    println!();
+    print_items("explicit items", &outcome.explicit_items);
+    print_items("related items", &outcome.related_items);
+    println!("reasons:");
+    if outcome.reasons.is_empty() {
+        println!("- none");
+    } else {
+        for reason in &outcome.reasons {
+            println!("- {reason}");
+        }
+    }
+}
+
+fn print_scaffold_text_output(
+    request_path: &Path,
+    outcome: &ClassificationOutcome,
+    plan: &ScaffoldPlan,
+) {
+    println!("request: {}", request_path.display());
+    println!("classification: {}", outcome.classification.label());
+    println!();
+    println!("request text:");
+    println!("{}", outcome.request.trim());
+    println!();
+    println!("reasons:");
+    if outcome.reasons.is_empty() {
+        println!("- none");
+    } else {
+        for reason in &outcome.reasons {
+            println!("- {reason}");
+        }
+    }
+    println!();
+    println!("planned updates:");
+    for update in &plan.updates {
+        println!(
+            "- {} {} {}{}",
+            update.action.label(),
+            update.kind.label(),
+            update.path,
+            update
+                .id
+                .as_deref()
+                .map(|id| format!(" for `{id}`"))
+                .unwrap_or_default()
+        );
+        for line in update.contents.lines() {
+            println!("  {line}");
+        }
+        println!();
+    }
+}
+
+fn print_items(heading: &str, items: &[SearchResult]) {
+    println!("{heading}:");
+    if items.is_empty() {
+        println!("- none");
+        return;
+    }
+
+    for item in items {
+        println!("- {}\t{}\t{}", item.id, item.kind, item.title);
+    }
+}
+
+fn render_requirement_document(
+    outcome: &ClassificationOutcome,
+    requirement_id: &str,
+    requirement_title: &str,
+    feature_id: &str,
+    stem: &str,
+) -> String {
+    let prefix = requirement_prefix(requirement_id);
+    format!(
+        "category: {} Requirements\nprefix: {prefix}\n\nrequirements:\n  - id: {requirement_id}\n    title: {requirement_title}\n    description: |\n      Generated from `syu task scaffold` after `syu task classify` returned `{classification}`.\n      Request:\n{request}\n    priority: high\n    status: planned\n    linked_policies: []\n    linked_features:\n      - {feature_id}\n    tests: {{}}\n",
+        title_case_slug(stem),
+        classification = outcome.classification.label(),
+        request = indent_block(outcome.request.trim(), 6),
+    )
+}
+
+fn render_feature_document(
+    outcome: &ClassificationOutcome,
+    feature_id: &str,
+    feature_title: &str,
+    requirement_id: &str,
+    stem: &str,
+) -> String {
+    format!(
+        "category: {} Features\nversion: 1\n\nfeatures:\n  - id: {feature_id}\n    title: {feature_title}\n    summary: |\n      Generated from `syu task scaffold` after `syu task classify` returned `{classification}`.\n      Request:\n{request}\n    status: planned\n    linked_requirements:\n      - {requirement_id}\n    implementations: {{}}\n",
+        title_case_slug(stem),
+        classification = outcome.classification.label(),
+        request = indent_block(outcome.request.trim(), 6),
+    )
+}
+
+fn feature_registry_file_label(
+    workspace: &crate::workspace::Workspace,
+    feature_document: &str,
+) -> Result<String> {
+    let registry_root = workspace.spec_root.join("features");
+    let full_path = workspace.root.join(feature_document);
+    let relative = full_path.strip_prefix(&registry_root).with_context(|| {
+        format!(
+            "feature document `{}` must stay under `{}`",
+            feature_document,
+            registry_root.display()
+        )
+    })?;
+    Ok(path_label(relative))
+}
+
+fn resolve_scaffold_document_path(
+    workspace: &crate::workspace::Workspace,
+    kind: LookupKind,
+    id: &str,
+) -> Result<String> {
+    let existing = WorkspaceLookup::new(workspace)
+        .document_path_for_id(id)?
+        .map(|path| path_label(Path::new(&path)));
+    if let Some(existing) = existing {
+        return Ok(existing);
+    }
+
+    let relative = scaffold_relative_path(kind, id);
+    Ok(workspace_relative_display(
+        workspace,
+        &workspace.spec_root.join(relative),
+    ))
+}
+
+fn scaffold_relative_path(kind: LookupKind, id: &str) -> PathBuf {
+    let segments = id.split('-').collect::<Vec<_>>();
+    let suffix = segments
+        .get(1..segments.len().saturating_sub(1))
+        .unwrap_or(&[]);
+    let folder = suffix
+        .first()
+        .copied()
+        .unwrap_or_else(|| default_scaffold_folder(kind));
+    let file = if suffix.len() > 1 {
+        suffix[1..].join("-")
+    } else {
+        folder.to_string()
+    };
+
+    match kind {
+        LookupKind::Requirement => PathBuf::from(format!(
+            "requirements/{}/{}.yaml",
+            folder.to_ascii_lowercase(),
+            file.to_ascii_lowercase()
+        )),
+        LookupKind::Feature => PathBuf::from(format!(
+            "features/{}/{}.yaml",
+            folder.to_ascii_lowercase(),
+            file.to_ascii_lowercase()
+        )),
+        _ => PathBuf::from("planned/unsupported.yaml"),
+    }
+}
+
+fn default_scaffold_folder(kind: LookupKind) -> &'static str {
+    match kind {
+        LookupKind::Requirement => "core",
+        LookupKind::Feature => "core",
+        LookupKind::Philosophy => "philosophy",
+        LookupKind::Policy => "policies",
+    }
+}
+
+fn resolve_scaffold_id(
+    lookup: &WorkspaceLookup<'_>,
+    kind: LookupKind,
+    explicit_ids: &[String],
+    stem: &str,
+) -> String {
+    let prefix = match kind {
+        LookupKind::Requirement => "REQ",
+        LookupKind::Feature => "FEAT",
+        LookupKind::Philosophy => "PHIL",
+        LookupKind::Policy => "POL",
+    };
+    if let Some(existing) = explicit_ids.iter().find(|id| id.starts_with(prefix)) {
+        return existing.clone();
+    }
+
+    let opposite_prefix = match kind {
+        LookupKind::Requirement => "FEAT",
+        LookupKind::Feature => "REQ",
+        LookupKind::Philosophy => "POL",
+        LookupKind::Policy => "REQ",
+    };
+    if let Some(other) = explicit_ids
+        .iter()
+        .find(|id| id.starts_with(opposite_prefix))
+    {
+        let candidate = rewrite_spec_prefix(other, prefix);
+        if lookup.find(&candidate).is_none() {
+            return candidate;
+        }
+    }
+
+    next_available_scaffold_id(lookup, kind, stem)
+}
+
+fn next_available_scaffold_id(
+    lookup: &WorkspaceLookup<'_>,
+    kind: LookupKind,
+    stem: &str,
+) -> String {
+    let prefix = match kind {
+        LookupKind::Requirement => "REQ",
+        LookupKind::Feature => "FEAT",
+        LookupKind::Philosophy => "PHIL",
+        LookupKind::Policy => "POL",
+    };
+    let stem = normalize_scaffold_stem(stem);
+    let mut index = 1usize;
+    loop {
+        let candidate = format!("{prefix}-{}-{index:03}", stem.to_ascii_uppercase());
+        if lookup.find(&candidate).is_none() {
+            return candidate;
+        }
+        index += 1;
+    }
+}
+
+fn scaffold_stem(outcome: &ClassificationOutcome, explicit_ids: &[String]) -> String {
+    if let Some(id) = explicit_ids.iter().find(|id| id.starts_with("REQ-")) {
+        return id_stem(id);
+    }
+    if let Some(id) = explicit_ids.iter().find(|id| id.starts_with("FEAT-")) {
+        return id_stem(id);
+    }
+    if let Some(area) = outcome.context.affected_area.as_deref() {
+        let slug = slugify(area);
+        if !slug.is_empty() {
+            return slug;
+        }
+    }
+    let summary = summarize_request(&outcome.request);
+    let slug = slugify(&summary);
+    if slug.is_empty() {
+        "task".to_string()
+    } else {
+        slug
+    }
+}
+
+fn normalize_scaffold_stem(stem: &str) -> String {
+    let slug = slugify(stem);
+    if slug.is_empty() {
+        "task".to_string()
+    } else {
+        slug
+    }
+}
+
+fn scaffold_title(request: &str, stem: &str) -> String {
+    let summary = summarize_request(request);
+    if summary.is_empty() {
+        title_case_slug(stem)
+    } else {
+        summary
+    }
+}
+
+fn id_stem(id: &str) -> String {
+    let segments = id.split('-').collect::<Vec<_>>();
+    if segments.len() <= 2 {
+        segments.get(1).copied().unwrap_or("task").to_string()
+    } else {
+        segments[1..segments.len() - 1].join("-")
+    }
+}
+
+fn requirement_prefix(id: &str) -> String {
+    id.rsplit_once('-')
+        .map(|(prefix, _)| prefix.to_string())
+        .unwrap_or_else(|| id.to_string())
+}
+
+fn rewrite_spec_prefix(id: &str, prefix: &str) -> String {
+    let mut segments = id.split('-').collect::<Vec<_>>();
+    if segments.is_empty() {
+        return prefix.to_string();
+    }
+    segments[0] = prefix;
+    segments.join("-")
+}
+
+fn workspace_relative_display(workspace: &crate::workspace::Workspace, path: &Path) -> String {
+    path.strip_prefix(&workspace.root)
+        .unwrap_or(path)
+        .display()
+        .to_string()
+}
+
+fn path_label(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+fn indent_block(text: &str, spaces: usize) -> String {
+    let indent = " ".repeat(spaces);
+    text.lines()
+        .map(|line| format!("{indent}{line}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn title_case_slug(slug: &str) -> String {
+    slug.split('-')
+        .filter(|segment| !segment.is_empty())
+        .map(|segment| {
+            let mut chars = segment.chars();
+            let first = chars.next().expect("empty segments are filtered out");
+            format!("{}{}", first.to_ascii_uppercase(), chars.as_str())
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn summarize_request(request: &str) -> String {
+    let summary = request
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or("planned task")
+        .trim_matches(|ch: char| matches!(ch, '.' | ':' | ';'))
+        .to_string();
+    truncate_text(&summary, 72)
+}
+
+fn truncate_text(text: &str, max_chars: usize) -> String {
+    if text.chars().count() <= max_chars {
+        return text.to_string();
+    }
+
+    let mut truncated = text
+        .chars()
+        .take(max_chars.saturating_sub(3))
+        .collect::<String>();
+    truncated.push_str("...");
+    truncated
+}
+
+fn slugify(text: &str) -> String {
+    let mut slug = String::new();
+    let mut previous_was_dash = false;
+    for ch in text.chars() {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch.to_ascii_lowercase());
+            previous_was_dash = false;
+        } else if !previous_was_dash {
+            slug.push('-');
+            previous_was_dash = true;
+        }
+    }
+    slug.trim_matches('-').to_string()
+}
+
+const DELETE_KEYWORDS: &[&str] = &[
+    "delete",
+    "remove",
+    "drop",
+    "retire",
+    "deprecate",
+    "obsolete",
+    "eliminate",
+    "no longer valid",
+];
+
+const CHANGE_KEYWORDS: &[&str] = &[
+    "change", "update", "modify", "refine", "expand", "extend", "revise", "adjust", "replace",
+    "rework", "clarify",
+];
+
+const CREATE_KEYWORDS: &[&str] = &[
+    "create",
+    "add",
+    "introduce",
+    "new",
+    "implement",
+    "support",
+    "build",
+];
+
+fn count_keyword_hits(text: &str, keywords: &[&str]) -> usize {
+    keywords
+        .iter()
+        .filter(|keyword| text.contains(**keyword))
+        .count()
+}
+
+fn describe_keyword_hits(text: &str, keywords: &[&str]) -> String {
+    keywords
+        .iter()
+        .copied()
+        .filter(|keyword| text.contains(keyword))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn extract_spec_ids(text: &str) -> Vec<String> {
+    static SPEC_ID_RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let re = SPEC_ID_RE.get_or_init(|| {
+        Regex::new(r"\b(?:PHIL|POL|REQ|FEAT)-[A-Z0-9][A-Z0-9-]*\b")
+            .expect("spec id regex should compile")
+    });
+
+    re.find_iter(text).map(|m| m.as_str().to_string()).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+    };
+
+    use tempfile::tempdir;
+
+    use crate::cli::{OutputFormat, TaskArgs, TaskClassifyArgs, TaskCommands, TaskScaffoldArgs};
+
+    use super::{
+        RequirementAction, build_scaffold_plan, classify_request, load_request_artifact,
+        run_task_command,
+    };
+
+    fn write_request_artifact(path: &Path, request: &str, linked_ids: &[&str]) {
+        let linked_ids_block = if linked_ids.is_empty() {
+            "  linked_ids: []\n".to_string()
+        } else {
+            let list = linked_ids
+                .iter()
+                .map(|id| format!("    - {id}\n"))
+                .collect::<String>();
+            format!("  linked_ids:\n{list}")
+        };
+        fs::write(
+            path,
+            format!(
+                "version: 1\nrequest: >\n  {request}\ncontext:\n  affected_area: core\n  repository_constraints:\n    - keep text and JSON output\n{linked_ids_block}",
+            ),
+        )
+        .expect("request artifact should write");
+    }
+
+    fn write_workspace(root: &Path) {
+        fs::write(
+            root.join("syu.yaml"),
+            "version: 1\nspec:\n  root: docs/syu\n",
+        )
+        .expect("workspace config");
+        fs::create_dir_all(root.join("docs/syu/philosophy")).expect("philosophy dir");
+        fs::create_dir_all(root.join("docs/syu/policies")).expect("policy dir");
+        fs::create_dir_all(root.join("docs/syu/requirements/core")).expect("requirements dir");
+        fs::create_dir_all(root.join("docs/syu/features/core")).expect("features dir");
+
+        fs::write(
+            root.join("docs/syu/philosophy/foundation.yaml"),
+            "category: Philosophy\nversion: 1\nlanguage: en\nphilosophies:\n  - id: PHIL-001\n    title: Keep planning explicit\n    product_design_principle: Request artifacts should stay reviewable.\n    coding_guideline: Prefer explicit request classification.\n    linked_policies:\n      - POL-001\n",
+        )
+        .expect("philosophy doc");
+        fs::write(
+            root.join("docs/syu/policies/policies.yaml"),
+            "category: Policies\nversion: 1\nlanguage: en\npolicies:\n  - id: POL-001\n    title: Keep request workflows visible\n    summary: Keep intake and planning separate.\n    description: Request artifacts should be classified against the current graph.\n    linked_philosophies:\n      - PHIL-001\n    linked_requirements:\n      - REQ-CORE-028\n",
+        )
+        .expect("policy doc");
+        fs::write(
+            root.join("docs/syu/requirements/core/classify.yaml"),
+            "category: Core Workspace\nprefix: REQ-CORE\nrequirements:\n  - id: REQ-CORE-028\n    title: Classify request artifacts into requirement actions\n    description: The task classifier should decide whether a request creates, changes, or deletes a requirement.\n    priority: medium\n    status: implemented\n    linked_policies:\n      - POL-001\n    linked_features:\n      - FEAT-TASK-001\n    tests:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - '*'\n",
+        )
+        .expect("requirement doc");
+        fs::write(
+            root.join("docs/syu/requirements/core/scaffold.yaml"),
+            "category: Core Workspace\nprefix: REQ-CORE\nrequirements:\n  - id: REQ-CORE-029\n    title: Scaffold planned requirement and feature updates from task planning\n    description: The scaffold command should turn request planning results into reviewable planned requirement and feature updates.\n    priority: medium\n    status: planned\n    linked_policies:\n      - POL-001\n    linked_features:\n      - FEAT-TASK-002\n    tests: {}\n",
+        )
+        .expect("scaffold requirement doc");
+        fs::write(
+            root.join("docs/syu/features/features.yaml"),
+            "version: 1\nupdated: \"2026-05\"\nfiles:\n  - kind: task\n    file: core/task.yaml\n",
+        )
+        .expect("feature registry");
+        fs::write(
+            root.join("docs/syu/features/core/task.yaml"),
+            "category: Task Planning CLI\nversion: 1\nfeatures:\n  - id: FEAT-TASK-001\n    title: Request artifact classification\n    summary: Classify planned request artifacts into create, change, or delete decisions using the current spec graph and a brief explanation.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-028\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_classify_command\n        - file: src/cli.rs\n          symbols:\n            - TaskArgs\n            - TaskClassifyArgs\n",
+        )
+        .expect("feature doc");
+        fs::write(
+            root.join("docs/syu/features/core/scaffold.yaml"),
+            "category: Core Workspace\nversion: 1\nfeatures:\n  - id: FEAT-TASK-002\n    title: Planned task scaffold preview\n    summary: Preview reviewable planned requirement and feature updates that follow the existing add and registry conventions.\n    status: planned\n    linked_requirements:\n      - REQ-CORE-029\n    implementations: {}\n",
+        )
+        .expect("scaffold feature doc");
+    }
+
+    #[test]
+    fn load_request_artifact_rejects_version_mismatch() {
+        let tempdir = tempdir().expect("tempdir");
+        let request = tempdir.path().join("request.yaml");
+        fs::write(
+            &request,
+            "version: 2\nrequest: Update the requirement\ncontext: {}\n",
+        )
+        .expect("request");
+
+        let error = load_request_artifact(&request).expect_err("version mismatch should fail");
+        assert!(
+            error
+                .to_string()
+                .contains("unsupported request artifact version")
+        );
+    }
+
+    #[test]
+    fn classify_request_prefers_change_for_existing_requirement_ids() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        let request = tempdir.path().join("request.yaml");
+        write_request_artifact(
+            &request,
+            "Update REQ-CORE-028 so the request classifier stays explainable.",
+            &["REQ-CORE-028"],
+        );
+
+        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
+        let artifact = load_request_artifact(&request).expect("request");
+        let outcome = classify_request(&workspace, artifact).expect("classification");
+        assert_eq!(outcome.classification, RequirementAction::Change);
+        assert!(
+            outcome
+                .reasons
+                .iter()
+                .any(|reason| reason.contains("REQ-CORE-028"))
+        );
+    }
+
+    #[test]
+    fn classify_request_prefers_create_for_new_requests_without_existing_ids() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        let request = tempdir.path().join("request.yaml");
+        write_request_artifact(
+            &request,
+            "Create a new request summary for the upcoming planning flow.",
+            &[],
+        );
+
+        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
+        let artifact = load_request_artifact(&request).expect("request");
+        let outcome = classify_request(&workspace, artifact).expect("classification");
+        assert_eq!(outcome.classification, RequirementAction::Create);
+        assert!(
+            outcome
+                .reasons
+                .iter()
+                .any(|reason| reason.contains("create-oriented language"))
+        );
+    }
+
+    #[test]
+    fn build_scaffold_plan_prefers_existing_ids_and_registry_updates() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        let request = tempdir.path().join("request.yaml");
+        write_request_artifact(
+            &request,
+            "Update REQ-CORE-028 and FEAT-TASK-001 so the task workflow stays reviewable.",
+            &["REQ-CORE-028", "FEAT-TASK-001"],
+        );
+
+        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
+        let artifact = load_request_artifact(&request).expect("request");
+        let explicit_ids = artifact.explicit_ids();
+        let outcome = classify_request(&workspace, artifact).expect("classification");
+        let plan = build_scaffold_plan(&workspace, &outcome, &explicit_ids)
+            .expect("scaffold plan should be created");
+
+        assert!(plan.updates.iter().any(|update| {
+            update
+                .path
+                .contains("docs/syu/requirements/core/classify.yaml")
+        }));
+        assert!(
+            plan.updates
+                .iter()
+                .any(|update| update.path.contains("docs/syu/features/core/task.yaml"))
+        );
+        assert!(
+            !plan
+                .updates
+                .iter()
+                .any(|update| matches!(update.kind, super::ScaffoldUpdateKind::FeatureRegistry))
+        );
+    }
+
+    #[test]
+    fn run_task_command_dispatches_classify_and_scaffold() {
+        let _ = TaskCommands::Classify(TaskClassifyArgs {
+            request: PathBuf::from("request.yaml"),
+            workspace: PathBuf::from("."),
+            format: OutputFormat::Text,
+        });
+        let _ = TaskCommands::Scaffold(TaskScaffoldArgs {
+            request: PathBuf::from("request.yaml"),
+            workspace: PathBuf::from("."),
+            format: OutputFormat::Text,
+        });
+        let _ = run_task_command(&TaskArgs {
+            command: TaskCommands::Classify(TaskClassifyArgs {
+                request: PathBuf::from("request.yaml"),
+                workspace: PathBuf::from("."),
+                format: OutputFormat::Text,
+            }),
+        });
+    }
+}

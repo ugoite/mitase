@@ -33,7 +33,9 @@ New here?
   3. syu init .      scaffold a workspace in the current directory
   4. syu validate .  check the layered spec and traceability
   5. syu browse .    explore the spec in your terminal
-  6. syu app .       start the local browser UI server";
+  6. syu app .       start the local browser UI server
+  7. syu task classify request.yaml  classify a request artifact against the current spec graph
+  8. syu task scaffold request.yaml   preview planned requirement and feature updates from a request artifact";
 
 const APP_AFTER_HELP: &str = concat!(
     "After startup, open the printed URL in your browser.\n",
@@ -76,6 +78,20 @@ Examples:
   syu add feature FEAT-AUTH-LOGIN-001 --kind auth
   syu add feature path/to/workspace --interactive
   syu add feature FEAT-AUTH-001 --kind auth --file docs/syu/features/auth/login.yaml";
+
+const TASK_CLASSIFY_AFTER_HELP: &str = "\
+Examples:
+  syu task classify request.yaml
+  syu task classify request.yaml --format json
+
+Use this when a request has already been captured as a request artifact and you want the current spec graph to decide whether the next requirement-level move is to create, change, or delete.";
+
+const TASK_SCAFFOLD_AFTER_HELP: &str = "\
+Examples:
+  syu task scaffold request.yaml
+  syu task scaffold request.yaml --format json
+
+Use this after `syu task classify` when you want reviewable planned requirement and feature updates that stay aligned with the existing `syu add` document and registry conventions.";
 
 const WORKSPACE_HELP: &str = "Workspace root or any child directory; syu walks upward to find syu.yaml and the configured spec tree";
 
@@ -271,6 +287,11 @@ pub enum Commands {
         after_help = COMPLETION_AFTER_HELP
     )]
     Completion(CompletionArgs),
+    #[command(
+        about = "Classify or scaffold request-driven task planning work",
+        after_help = TASK_CLASSIFY_AFTER_HELP
+    )]
+    Task(TaskArgs),
     #[command(
         about = "Scaffold a new philosophy, policy, requirement, or feature stub",
         after_help = ADD_AFTER_HELP
@@ -730,6 +751,55 @@ pub struct CompletionArgs {
 }
 
 #[derive(Debug, Clone, Args)]
+#[command(subcommand_required = true, arg_required_else_help = true)]
+pub struct TaskArgs {
+    #[command(subcommand)]
+    pub command: TaskCommands,
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum TaskCommands {
+    #[command(
+        about = "Classify a request artifact as requirement create, change, or delete",
+        after_help = TASK_CLASSIFY_AFTER_HELP
+    )]
+    Classify(TaskClassifyArgs),
+    #[command(
+        about = "Preview planned requirement and feature scaffolds from a request artifact",
+        after_help = TASK_SCAFFOLD_AFTER_HELP
+    )]
+    Scaffold(TaskScaffoldArgs),
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct TaskClassifyArgs {
+    #[arg(help = "YAML request artifact to classify")]
+    pub request: PathBuf,
+
+    #[arg(help = WORKSPACE_HELP)]
+    #[arg(default_value = ".")]
+    pub workspace: PathBuf,
+
+    #[arg(help = "Output format for the classification result")]
+    #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct TaskScaffoldArgs {
+    #[arg(help = "YAML request artifact to turn into planned spec updates")]
+    pub request: PathBuf,
+
+    #[arg(help = WORKSPACE_HELP)]
+    #[arg(default_value = ".")]
+    pub workspace: PathBuf,
+
+    #[arg(help = "Output format for the scaffold preview")]
+    #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
+}
+
+#[derive(Debug, Clone, Args)]
 pub struct AddArgs {
     #[arg(help = "Layer kind to scaffold (philosophy, policy, requirement, or feature)")]
     pub layer: LookupKind,
@@ -840,8 +910,8 @@ impl ValidationGenreFilter {
 #[cfg(test)]
 mod tests {
     use super::{
-        Cli, CompletionArgs, LookupKind, StarterTemplate, ValidationGenreFilter,
-        ValidationSeverityFilter,
+        Cli, CompletionArgs, LookupKind, StarterTemplate, TaskArgs, TaskClassifyArgs, TaskCommands,
+        TaskScaffoldArgs, ValidationGenreFilter, ValidationSeverityFilter,
     };
     use crate::command::init::{starter_template_example_commands, starter_template_names};
     use clap::Parser;
@@ -911,6 +981,60 @@ mod tests {
         let rendered = format!("{cli:?}");
         assert!(rendered.contains("command: Some(Init("));
         assert!(rendered.contains("template: RustOnly"));
+    }
+
+    #[test]
+    fn task_classify_args_parse_request_paths_and_json_format() {
+        let cli = Cli::try_parse_from([
+            "syu",
+            "task",
+            "classify",
+            "request.yaml",
+            ".",
+            "--format",
+            "json",
+        ])
+        .expect("task classify args should parse");
+
+        assert!(matches!(
+            cli.command,
+            Some(super::Commands::Task(TaskArgs {
+                command: TaskCommands::Classify(TaskClassifyArgs {
+                    request,
+                    workspace,
+                    format,
+                }),
+            })) if request == std::path::Path::new("request.yaml")
+                && workspace == std::path::Path::new(".")
+                && format == super::OutputFormat::Json
+        ));
+    }
+
+    #[test]
+    fn task_scaffold_args_parse_request_paths_and_json_format() {
+        let cli = Cli::try_parse_from([
+            "syu",
+            "task",
+            "scaffold",
+            "request.yaml",
+            ".",
+            "--format",
+            "json",
+        ])
+        .expect("task scaffold args should parse");
+
+        assert!(matches!(
+            cli.command,
+            Some(super::Commands::Task(TaskArgs {
+                command: TaskCommands::Scaffold(TaskScaffoldArgs {
+                    request,
+                    workspace,
+                    format,
+                }),
+            })) if request == std::path::Path::new("request.yaml")
+                && workspace == std::path::Path::new(".")
+                && format == super::OutputFormat::Json
+        ));
     }
 
     #[test]
