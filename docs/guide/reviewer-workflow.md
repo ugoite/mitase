@@ -93,9 +93,10 @@ the follow-up `show`, `relate`, `log`, and `validate --id` commands close at
 hand.
 
 When a changed file is a contract file with traced operations, the range
-summary keeps the owning requirements and features visible instead of reducing
-the file to a bare path. That makes OpenAPI edits easier to review alongside
-the rest of the spec graph.
+summary keeps the owning requirements and features visible and also prints the
+OpenAPI method/path selector under the changed file instead of reducing it to a
+bare path. That makes contract edits easier to review alongside the rest of
+the spec graph.
 
 When you want the same selector flexibility but a more opinionated summary, run
 `syu explain TARGET`. It keeps the ID/path/symbol entry points from `syu

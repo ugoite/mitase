@@ -83,6 +83,10 @@ struct TraceOwnerMatch {
     file: String,
     declared_symbols: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    method: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     matched_symbol: Option<String>,
     match_mode: &'static str,
 }
@@ -321,11 +325,11 @@ fn render_range_text(
     )
     .unwrap();
 
-    let mut by_owner = BTreeMap::<String, Vec<&TraceLookupOutput>>::new();
+    let mut by_owner = BTreeMap::<(String, String), Vec<&TraceLookupOutput>>::new();
     for result in results {
         if result.matched_owners.is_empty() && result.file_only_owners.is_empty() {
             by_owner
-                .entry("UNOWNED".to_string())
+                .entry(("UNOWNED".to_string(), String::new()))
                 .or_default()
                 .push(result);
         } else {
@@ -336,17 +340,24 @@ fn render_range_text(
             };
             for owner in owners {
                 by_owner
-                    .entry(format!("{} {}", owner.kind, owner.id))
+                    .entry((owner.kind.to_string(), owner.id.clone()))
                     .or_default()
                     .push(result);
             }
         }
     }
 
-    for (owner, files) in &by_owner {
-        writeln!(output, "{owner}:").unwrap();
+    for ((kind, id), files) in &by_owner {
+        if kind == "UNOWNED" {
+            writeln!(output, "UNOWNED:").unwrap();
+        } else {
+            writeln!(output, "{kind} {id}:").unwrap();
+        }
         for file in files {
             writeln!(output, "  - {}", file.file).unwrap();
+            if let Some(owner_match) = find_owner_match(file, kind, id) {
+                push_range_owner_match(&mut output, owner_match);
+            }
         }
         writeln!(output).unwrap();
     }
@@ -568,6 +579,8 @@ fn trace_owner_match(
         language: language.to_string(),
         file: file_label.to_string(),
         declared_symbols: reference.symbols.clone(),
+        method: reference.method.clone(),
+        path: reference.path.clone(),
         matched_symbol,
         match_mode: match_mode.label(),
     }
@@ -784,6 +797,40 @@ fn push_owner_match(rendered: &mut String, owner: &TraceOwnerMatch) {
         )
         .expect("writing to a string should succeed");
     }
+    push_trace_operation(rendered, owner, "  ");
+}
+
+fn push_range_owner_match(rendered: &mut String, owner: &TraceOwnerMatch) {
+    push_trace_operation(rendered, owner, "    ");
+}
+
+fn push_trace_operation(rendered: &mut String, owner: &TraceOwnerMatch, indent: &str) {
+    if owner.method.is_none() && owner.path.is_none() {
+        return;
+    }
+
+    let mut parts = Vec::new();
+    if let Some(method) = owner.method.as_deref() {
+        parts.push(format!("method `{method}`"));
+    }
+    if let Some(path) = owner.path.as_deref() {
+        parts.push(format!("path `{path}`"));
+    }
+
+    writeln!(rendered, "{indent}operation: {}", parts.join(" "))
+        .expect("writing to a string should succeed");
+}
+
+fn find_owner_match<'a>(
+    result: &'a TraceLookupOutput,
+    kind: &str,
+    id: &str,
+) -> Option<&'a TraceOwnerMatch> {
+    result
+        .matched_owners
+        .iter()
+        .chain(result.file_only_owners.iter())
+        .find(|owner| owner.kind == kind && owner.id == id)
 }
 
 fn push_entity_section(rendered: &mut String, heading: &str, items: &[EntitySummary]) {
@@ -1031,6 +1078,8 @@ mod tests {
                 language: "rust".to_string(),
                 file: "src/lib.rs".to_string(),
                 declared_symbols: Vec::new(),
+                method: None,
+                path: None,
                 matched_symbol: None,
                 match_mode: "file",
             }],
@@ -1066,6 +1115,8 @@ mod tests {
                     language: "rust".to_string(),
                     file: "src/lib.rs".to_string(),
                     declared_symbols: Vec::new(),
+                    method: None,
+                    path: None,
                     matched_symbol: None,
                     match_mode: "file",
                 },
@@ -1077,6 +1128,8 @@ mod tests {
                     language: "rust".to_string(),
                     file: "src/lib.rs".to_string(),
                     declared_symbols: Vec::new(),
+                    method: None,
+                    path: None,
                     matched_symbol: None,
                     match_mode: "file",
                 },
@@ -1162,6 +1215,8 @@ mod tests {
                     language: "rust".to_string(),
                     file: "src/lib.rs".to_string(),
                     declared_symbols: vec!["run_trace_command".to_string()],
+                    method: None,
+                    path: None,
                     matched_symbol: Some("run_trace_command".to_string()),
                     match_mode: "symbol",
                 },
@@ -1173,6 +1228,8 @@ mod tests {
                     language: "rust".to_string(),
                     file: "src/lib.rs".to_string(),
                     declared_symbols: vec!["*".to_string()],
+                    method: None,
+                    path: None,
                     matched_symbol: Some("*".to_string()),
                     match_mode: "wildcard",
                 },
@@ -1187,6 +1244,35 @@ mod tests {
         assert!(rendered.contains("matched by symbol `run_trace_command`"));
         assert!(rendered.contains("matched by wildcard `*`"));
         assert!(rendered.contains("Requirements:\n- none"));
+    }
+
+    #[test]
+    fn render_text_output_shows_openapi_operation_details() {
+        let rendered = render_text_output(&TraceLookupOutput {
+            file: "api/openapi.yaml".to_string(),
+            symbol: None,
+            status: TraceLookupStatus::Owned,
+            matched_owners: vec![TraceOwnerMatch {
+                kind: "feature",
+                id: "FEAT-TRACE-001".to_string(),
+                title: "OpenAPI trace".to_string(),
+                trace_role: "implementation".to_string(),
+                language: "openapi".to_string(),
+                file: "api/openapi.yaml".to_string(),
+                declared_symbols: Vec::new(),
+                method: Some("get".to_string()),
+                path: Some("/pets/{petId}".to_string()),
+                matched_symbol: None,
+                match_mode: "file",
+            }],
+            file_only_owners: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+            policies: Vec::new(),
+            philosophies: Vec::new(),
+        });
+
+        assert!(rendered.contains("operation: method `get` path `/pets/{petId}`"));
     }
 
     #[test]
@@ -1298,6 +1384,8 @@ mod tests {
                         language: "rust".to_string(),
                         file: "file-only.rs".to_string(),
                         declared_symbols: Vec::new(),
+                        method: None,
+                        path: None,
                         matched_symbol: None,
                         match_mode: "file",
                     }],
@@ -1338,6 +1426,61 @@ mod tests {
         assert!(rendered.contains("Inspected files: 2"));
         assert!(rendered.contains("Skipped files: 0"));
         assert!(rendered.contains("Features: 1"));
+    }
+
+    #[test]
+    fn render_range_text_shows_openapi_operation_details() {
+        let rendered = super::render_range_text(
+            "HEAD~1..HEAD",
+            &[TraceLookupOutput {
+                file: "api/openapi.yaml".to_string(),
+                symbol: None,
+                status: TraceLookupStatus::Owned,
+                matched_owners: vec![TraceOwnerMatch {
+                    kind: "feature",
+                    id: "FEAT-TRACE-001".to_string(),
+                    title: "OpenAPI trace".to_string(),
+                    trace_role: "implementation".to_string(),
+                    language: "openapi".to_string(),
+                    file: "api/openapi.yaml".to_string(),
+                    declared_symbols: Vec::new(),
+                    method: Some("get".to_string()),
+                    path: Some("/pets/{petId}".to_string()),
+                    matched_symbol: None,
+                    match_mode: "file",
+                }],
+                file_only_owners: Vec::new(),
+                requirements: vec![EntitySummary {
+                    id: "REQ-TRACE-001".to_string(),
+                    title: "Trace".to_string(),
+                    document_path: None,
+                }],
+                features: vec![EntitySummary {
+                    id: "FEAT-TRACE-001".to_string(),
+                    title: "OpenAPI trace".to_string(),
+                    document_path: None,
+                }],
+                policies: Vec::new(),
+                philosophies: Vec::new(),
+            }],
+            &[],
+            &super::TraceRangeSummary {
+                changed_files_total: 1,
+                inspected_files: 1,
+                skipped_files: 0,
+                owned_files: 1,
+                partial_files: 0,
+                unowned_files: 0,
+                total_requirements: 1,
+                total_features: 1,
+                total_policies: 0,
+                total_philosophies: 0,
+            },
+        );
+
+        assert!(rendered.contains("feature FEAT-TRACE-001:"));
+        assert!(rendered.contains("  - api/openapi.yaml"));
+        assert!(rendered.contains("operation: method `get` path `/pets/{petId}`"));
     }
 
     #[test]
