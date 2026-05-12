@@ -14,27 +14,30 @@ This page summarizes the built-in trace adapters that ship with this checked-in
 version of `syu`. Use it before you turn on `doc_contains` checks widely or
 enable strict coverage in a mixed-language repository.
 
+The checked-in conformance harness uses the same capability matrix, so update
+both together when adapter support changes.
+
 OpenAPI-backed feature traces are separate from these adapters. Use the OpenAPI
 selector shape when the feature is proved by an API contract document instead
 of a source symbol.
 
 ## Built-in adapter matrix
 
-| Built-in adapter | Accepted `lang:` aliases / files | Symbol existence validation | `doc_contains` validation | Strict `require_symbol_trace_coverage` inventory |
-| --- | --- | --- | --- | --- |
-| Rust | `rust`, `rs` / `.rs` | ✅ Rich symbol inspection plus declaration matching | ✅ | ✅ |
-| Python | `python`, `py`, `pytest`, `unittest` / `.py` | ✅ Rich symbol inspection plus pattern fallback | ✅ | ✅ |
-| Ruby | `ruby`, `rb`, `minitest`, `rspec` / `.rb` | ✅ Pattern-based symbol matching plus declaration-adjacent line-comment inspection | ✅ | ✅ |
-| Go | `go`, `golang`, `gotest` / `.go` | ✅ Rich doc-comment inspection plus pattern fallback | ✅ | ✅ |
-| Java | `java`, `junit` / `.java` | ✅ Pattern-based symbol matching plus declaration-adjacent Javadoc inspection | ✅ | ✅ |
-| C# | `csharp`, `cs`, `dotnet`, `xunit`, `nunit`, `mstest` / `.cs` | ✅ Pattern-based symbol matching plus declaration-adjacent XML doc inspection | ✅ | ✅ |
-| Kotlin | `kotlin`, `kt` / `.kt` | ✅ Pattern-based symbol matching plus declaration-adjacent KDoc inspection | ✅ | ✅ |
-| TypeScript / JavaScript | `typescript`, `ts`, `tsx`, `javascript`, `js`, `jsx`, `vitest`, `bun`, `bun-test` / `.ts`, `.tsx`, `.js`, `.jsx` | ✅ Rich symbol inspection plus pattern fallback | ✅ | ✅ |
-| Shell | `shell`, `sh`, `bash`, `zsh` / `.sh`, `.bash`, `.zsh` | ✅ Pattern-based symbol matching | ❌ | ❌ |
-| YAML | `yaml`, `yml` / `.yaml`, `.yml` | ✅ Pattern-based symbol matching | ❌ | ❌ |
-| JSON | `json` / `.json` | ✅ Pattern-based symbol matching | ❌ | ❌ |
-| Markdown | `markdown`, `md` / `.md` | ✅ Pattern-based symbol matching | ❌ | ❌ |
-| Gitignore | `gitignore`, `ignore` / `.gitignore` | ✅ Filename-aware, pattern-based matching | ❌ | ❌ |
+| Built-in adapter | Accepted `lang:` aliases / files | Symbol existence validation | `doc_contains` validation | Strict `require_symbol_trace_coverage` inventory | Autofix |
+| --- | --- | --- | --- | --- | --- |
+| Rust | `rust`, `rs` / `.rs` | ✅ | ✅ | ✅ | ✅ |
+| Python | `python`, `py`, `pytest`, `unittest` / `.py` | ✅ | ✅ | ✅ | ✅ |
+| Ruby | `ruby`, `rb`, `minitest`, `rspec` / `.rb` | ✅ | ✅ | ✅ | ✅ |
+| Go | `go`, `golang`, `gotest` / `.go` | ✅ | ✅ | ✅ | ✅ |
+| Java | `java`, `junit` / `.java` | ✅ | ✅ | ✅ | ✅ |
+| C# | `csharp`, `cs`, `dotnet`, `xunit`, `nunit`, `mstest` / `.cs` | ✅ | ✅ | ✅ | ✅ |
+| Kotlin | `kotlin`, `kt` / `.kt` | ✅ | ✅ | ✅ | ✅ |
+| TypeScript / JavaScript | `typescript`, `ts`, `tsx`, `javascript`, `js`, `jsx`, `vitest`, `bun`, `bun-test` / `.ts`, `.tsx`, `.js`, `.jsx` | ✅ | ✅ | ✅ | ✅ |
+| Shell | `shell`, `sh`, `bash`, `zsh` / `.sh`, `.bash`, `.zsh` | ✅ | ❌ | ❌ | ❌ |
+| YAML | `yaml`, `yml` / `.yaml`, `.yml` | ✅ | ❌ | ❌ | ❌ |
+| JSON | `json` / `.json` | ✅ | ❌ | ❌ | ❌ |
+| Markdown | `markdown`, `md` / `.md` | ✅ | ❌ | ❌ | ❌ |
+| Gitignore | `gitignore`, `ignore` / `.gitignore` | ✅ | ❌ | ❌ | ❌ |
 
 ## What the strict inventory scans
 
@@ -64,10 +67,10 @@ they do **not** participate in the repository-wide strict ownership scan.
 
 ## How to choose the right promises
 
-- Need `doc_contains`? Rust, Python, Ruby, Go, Java, C#, Kotlin, and TypeScript /
-  JavaScript traces all
-  support it today. For a staged rollout, starter examples, and "when should I
-  add this?" guidance, use the [dedicated `doc_contains` adoption guide](./doc-contains.md).
+- Need `doc_contains` or autofix? Rust, Python, Ruby, Go, Java, C#, Kotlin, and
+  TypeScript / JavaScript traces support both today. For a staged rollout,
+  starter examples, and "when should I add this?" guidance, use the [dedicated
+  `doc_contains` adoption guide](./doc-contains.md).
 - Need strict ownership coverage? Rust, Python, Ruby, Go, Java, C#, Kotlin, and
   TypeScript / JavaScript all participate today.
 - Using Shell, YAML, JSON, Markdown, or Gitignore traces? Keep the mapping to
