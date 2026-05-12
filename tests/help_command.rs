@@ -7,6 +7,7 @@
 // REQ-CORE-025
 // REQ-CORE-026
 // REQ-CORE-027
+// REQ-CORE-028
 
 use assert_cmd::cargo::CommandCargoExt;
 use std::process::Command;
@@ -30,6 +31,7 @@ fn root_help_includes_start_here_guidance() {
     assert!(stdout.contains("syu validate ."));
     assert!(stdout.contains("syu browse ."));
     assert!(stdout.contains("syu app ."));
+    assert!(stdout.contains("syu task classify request.yaml"));
     assert!(stdout.contains(
         "Browse the specification in your terminal (interactive prompts or text output)"
     ));
@@ -55,7 +57,7 @@ fn app_help_mentions_remote_bind_opt_in() {
 fn workspace_help_uses_current_directory_default_consistently() {
     for command in [
         "browse", "show", "search", "trace", "review", "app", "doctor", "validate", "check",
-        "report", "add", "relate", "log", "audit", "explain",
+        "report", "add", "task", "relate", "log", "audit", "explain",
     ] {
         let output = Command::cargo_bin("syu")
             .expect("binary should build")
@@ -259,6 +261,23 @@ fn add_help_mentions_explicit_file_and_feature_kind() {
     );
     assert!(stdout.contains("syu add requirement --interactive"));
     assert!(stdout.contains("FEAT-AUTH-LOGIN-001 --kind auth"));
+}
+
+#[test]
+fn task_help_mentions_request_artifacts_and_json_output() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args(["task", "classify", "--help"])
+        .output()
+        .expect("help should render");
+
+    assert!(output.status.success(), "task help should succeed");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("request artifact"));
+    assert!(stdout.contains("--format"));
+    assert!(stdout.contains("syu task classify request.yaml"));
+    assert!(stdout.contains("syu task classify request.yaml --format json"));
 }
 
 #[test]

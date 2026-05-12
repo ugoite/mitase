@@ -557,6 +557,45 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
           - explain_text_handles_gaps_and_empty_sections
           - explain_text_renders_file_only_traces_and_definition_matches
           - explain_text_renders_direct_trace_symbols
+- **id**: REQ-CORE-028
+  - **title**: Provide request-first task classification for requirement planning
+  - **description**:
+    - |
+      The CLI MUST provide a `task classify` command that reads a captured
+      request artifact and the current spec graph, then classifies the request
+      into a requirement create, change, or delete decision with a short
+      explanation. The command MUST emit both text and JSON output, SHOULD make
+      the request artifact and the closest existing spec items visible in the
+      result, and MUST stay focused on the request plus the current spec graph
+      without needing source-code inspection for the first version.
+  - **priority**: medium
+  - **status**: implemented
+  - **linked_policies**:
+    - POL-001
+    - POL-002
+    - POL-004
+  - **linked_features**:
+    - FEAT-TASK-001
+  - **tests**:
+    - **rust**:
+      - **file**: src/command/task.rs
+        - **symbols**:
+          - *
+      - **file**: src/lib.rs
+        - **symbols**:
+          - dispatches_lookup_subcommands_without_rewriting_them
+          - dispatches_task_subcommands_without_rewriting_them
+      - **file**: tests/help_command.rs
+        - **symbols**:
+          - task_help_mentions_request_artifacts_and_json_output
+      - **file**: tests/task_command.rs
+        - **symbols**:
+          - task_classify_prints_text_output
+          - task_classify_prints_json_output
+    - **markdown**:
+      - **file**: docs/guide/request-artifact-format.md
+        - **symbols**:
+          - syu task classify
 
 ## Source YAML
 
@@ -1091,4 +1130,42 @@ requirements:
             - explain_text_handles_gaps_and_empty_sections
             - explain_text_renders_file_only_traces_and_definition_matches
             - explain_text_renders_direct_trace_symbols
+  - id: REQ-CORE-028
+    title: Provide request-first task classification for requirement planning
+    description: |
+      The CLI MUST provide a `task classify` command that reads a captured
+      request artifact and the current spec graph, then classifies the request
+      into a requirement create, change, or delete decision with a short
+      explanation. The command MUST emit both text and JSON output, SHOULD make
+      the request artifact and the closest existing spec items visible in the
+      result, and MUST stay focused on the request plus the current spec graph
+      without needing source-code inspection for the first version.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-001
+      - POL-002
+      - POL-004
+    linked_features:
+      - FEAT-TASK-001
+    tests:
+      rust:
+        - file: src/command/task.rs
+          symbols:
+            - '*'
+        - file: src/lib.rs
+          symbols:
+            - dispatches_lookup_subcommands_without_rewriting_them
+            - dispatches_task_subcommands_without_rewriting_them
+        - file: tests/help_command.rs
+          symbols:
+            - task_help_mentions_request_artifacts_and_json_output
+        - file: tests/task_command.rs
+          symbols:
+            - task_classify_prints_text_output
+            - task_classify_prints_json_output
+      markdown:
+        - file: docs/guide/request-artifact-format.md
+          symbols:
+            - syu task classify
 ```
