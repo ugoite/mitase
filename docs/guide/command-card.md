@@ -44,8 +44,9 @@ If a pull request already exists, pair this page with the
 Use `syu audit .` before `syu report .` when you want the review handoff to read as one short loop instead of a loose list of checks.
 
 If a reviewed diff includes an OpenAPI contract file, the range summary still
-shows the owning requirements and features so the change stays connected to
-the traced spec items.
+shows the owning requirements and features and now prints the traced
+method/path selector so the change stays connected to the spec items that own
+the contract operation.
 
 ## Common command bundles
 
