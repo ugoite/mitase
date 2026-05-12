@@ -81,8 +81,8 @@ pub(crate) fn build_historical_id_index(
     };
     let spec_root = resolve_spec_root(&workspace_root, config);
     let spec_root_relative = match spec_root.strip_prefix(&repository_root) {
-        Ok(relative) if !relative.as_os_str().is_empty() => relative.to_path_buf(),
-        _ => return Ok(index),
+        Ok(relative) => relative.to_path_buf(),
+        Err(_) => return Ok(index),
     };
 
     let commits = if let Some(start_ref) = index.start_ref.clone() {
@@ -269,11 +269,24 @@ fn git_blob(repository_root: &Path, commit: &str, path: &str) -> Result<Option<S
             )
         })?;
     if !output.status.success() {
-        return Ok(None);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if git_blob_missing(&stderr, commit, path) {
+            return Ok(None);
+        }
+
+        bail!(
+            "failed to read historical blob `{path}` at `{commit}` in `{}`: {}",
+            repository_root.display(),
+            stderr.trim()
+        );
     }
     Ok(Some(
         String::from_utf8(output.stdout).context("git blob output should be valid UTF-8")?,
     ))
+}
+
+fn git_blob_missing(stderr: &str, commit: &str, path: &str) -> bool {
+    stderr.contains(&format!("path '{path}' does not exist in '{commit}'"))
 }
 
 fn git_tree_files(
@@ -281,14 +294,13 @@ fn git_tree_files(
     commit: &str,
     spec_root_relative: &Path,
 ) -> Result<Vec<String>> {
-    let spec_root = spec_root_relative.to_string_lossy().to_string();
     let output = git_command(repository_root)
         .arg("ls-tree")
         .arg("-r")
         .arg("--name-only")
         .arg(commit)
         .arg("--")
-        .arg(&spec_root)
+        .args(spec_root_arg(spec_root_relative))
         .output()
         .with_context(|| {
             format!(
@@ -314,16 +326,28 @@ fn git_tree_files(
         .collect())
 }
 
+fn spec_root_arg(spec_root_relative: &Path) -> Vec<&Path> {
+    if spec_root_relative.as_os_str().is_empty() {
+        Vec::new()
+    } else {
+        vec![spec_root_relative]
+    }
+}
+
 fn is_yaml_file(path: &str) -> bool {
     path.ends_with(".yaml") || path.ends_with(".yml")
 }
 
 fn is_under_section(path: &str, spec_root_relative: &Path, section: &str) -> bool {
-    let prefix = format!(
-        "{}/{}",
-        spec_root_relative.to_string_lossy().replace('\\', "/"),
-        section
-    );
+    let prefix = if spec_root_relative.as_os_str().is_empty() {
+        section.to_string()
+    } else {
+        format!(
+            "{}/{}",
+            spec_root_relative.to_string_lossy().replace('\\', "/"),
+            section
+        )
+    };
     path == prefix || path.starts_with(&format!("{prefix}/"))
 }
 
@@ -336,4 +360,153 @@ fn git_command(workspace_root: &Path) -> Command {
     let mut command = Command::new("git");
     command.current_dir(workspace_root);
     command
+}
+
+#[cfg(test)]
+mod tests {
+    // REQ-CORE-024
+    use super::*;
+
+    use std::{
+        fs,
+        process::Command,
+        sync::atomic::{AtomicU64, Ordering},
+    };
+
+    use tempfile::tempdir;
+
+    static COMMIT_TIMESTAMP: AtomicU64 = AtomicU64::new(1_776_355_200);
+
+    fn git(workspace: &Path, args: &[&str]) {
+        let mut command = Command::new("git");
+        command.arg("-C").arg(workspace).args(args);
+        let output = command.output().expect("git should run");
+        assert!(
+            output.status.success(),
+            "git {:?} failed\nstdout:\n{}\nstderr:\n{}",
+            args,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn git_commit(workspace: &Path, summary: &str) {
+        let timestamp = COMMIT_TIMESTAMP.fetch_add(1, Ordering::Relaxed);
+        let timestamp = format!("{timestamp} +0000");
+        let mut command = Command::new("git");
+        command
+            .arg("-C")
+            .arg(workspace)
+            .args(["commit", "-m", summary])
+            .env("GIT_AUTHOR_DATE", &timestamp)
+            .env("GIT_COMMITTER_DATE", &timestamp);
+        let output = command.output().expect("git commit should run");
+        assert!(
+            output.status.success(),
+            "git commit failed\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn init_git_repository(workspace: &Path) {
+        git(workspace, &["init"]);
+        git(workspace, &["config", "user.name", "Test User"]);
+        git(workspace, &["config", "user.email", "test@example.com"]);
+    }
+
+    #[test]
+    fn build_historical_id_index_supports_repository_root_spec_roots() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = tempdir.path();
+        init_git_repository(workspace);
+
+        fs::create_dir_all(workspace.join("philosophy")).expect("philosophy dir");
+        fs::create_dir_all(workspace.join("policies")).expect("policies dir");
+        fs::create_dir_all(workspace.join("requirements")).expect("requirements dir");
+        fs::create_dir_all(workspace.join("features")).expect("features dir");
+
+        fs::write(
+            workspace.join("philosophy/foundation.yaml"),
+            "category: Philosophy\nversion: 1\nlanguage: en\nphilosophies:\n  - id: PHIL-HIST-ROOT-001\n    title: Root history should be indexed.\n    product_design_principle: Keep the root spec root indexed.\n    coding_guideline: Support repository-root configurations.\n    linked_policies: []\n",
+        )
+        .expect("philosophy file");
+        fs::write(
+            workspace.join("features/features.yaml"),
+            "version: \"1\"\nfiles: []\n",
+        )
+        .expect("feature registry");
+
+        git(workspace, &["add", "."]);
+        git_commit(workspace, "docs: add root historical ids");
+
+        let config = SyuConfig {
+            spec: crate::config::SpecConfig {
+                root: PathBuf::from("."),
+            },
+            ..SyuConfig::default()
+        };
+
+        let index = build_historical_id_index(workspace, &config).expect("index should build");
+        assert!(index.available());
+        assert!(index.contains("PHIL-HIST-ROOT-001"));
+    }
+
+    #[test]
+    fn git_blob_distinguishes_missing_paths_from_unexpected_errors() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = tempdir.path();
+        init_git_repository(workspace);
+
+        fs::write(
+            workspace.join("philosophy.yaml"),
+            "category: Philosophy\nversion: 1\nlanguage: en\nphilosophies:\n  - id: PHIL-HIST-002\n    title: Blob lookup should work.\n    product_design_principle: Missing paths are normal; invalid commits are not.\n    coding_guideline: Keep Git failures visible.\n    linked_policies: []\n",
+        )
+        .expect("philosophy file");
+        git(workspace, &["add", "."]);
+        git_commit(workspace, "docs: add blob lookup fixture");
+
+        let commit = {
+            let output = Command::new("git")
+                .arg("-C")
+                .arg(workspace)
+                .args(["rev-parse", "HEAD"])
+                .output()
+                .expect("git rev-parse should run");
+            assert!(output.status.success(), "git rev-parse failed");
+            String::from_utf8(output.stdout)
+                .expect("commit should be utf8")
+                .trim()
+                .to_string()
+        };
+
+        assert_eq!(
+            git_blob(workspace, &commit, "missing.yaml").expect("missing path lookup"),
+            None
+        );
+
+        let error = git_blob(workspace, "definitely-not-a-commit", "philosophy.yaml")
+            .expect_err("invalid commit should surface as an error");
+        assert!(
+            error
+                .to_string()
+                .contains("failed to read historical blob `philosophy.yaml`"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn git_blob_missing_matches_git_show_missing_path_errors() {
+        let stderr = "fatal: path 'docs/syu/philosophy/foundation.yaml' does not exist in 'HEAD'";
+        assert!(git_blob_missing(
+            stderr,
+            "HEAD",
+            "docs/syu/philosophy/foundation.yaml"
+        ));
+        assert!(!git_blob_missing(
+            "fatal: invalid object name 'HEAD'",
+            "HEAD",
+            "docs/syu/philosophy/foundation.yaml"
+        ));
+    }
 }
