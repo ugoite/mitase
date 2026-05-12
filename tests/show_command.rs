@@ -39,7 +39,7 @@ fn write_show_fixture_workspace() -> tempfile::TempDir {
     .expect("feature registry");
     fs::write(
         docs_root.join("features/solo.yaml"),
-        "category: Features\nversion: 1\nfeatures:\n  - id: FEAT-001\n    title: OpenAPI feature\n    summary: Shows selectors in trace output.\n    status: planned\n    linked_requirements: []\n    implementations:\n      openapi:\n        - file: api/openapi.yaml\n          method: get\n          path: /pets/{petId}\n          symbols: []\n",
+        "category: Features\nversion: 1\nfeatures:\n  - id: FEAT-EMPTY-001\n    title: Empty feature\n    summary: Leaves implementations empty.\n    status: planned\n    linked_requirements: []\n    implementations: {}\n  - id: FEAT-001\n    title: OpenAPI feature\n    summary: Shows selectors in trace output.\n    status: planned\n    linked_requirements: []\n    implementations:\n      openapi:\n        - file: api/openapi.yaml\n          method: get\n          path: /pets/{petId}\n          symbols: []\n",
     )
     .expect("feature file");
 
@@ -225,7 +225,7 @@ fn show_command_handles_empty_links_and_doc_only_traces() {
     let feature = Command::cargo_bin("syu")
         .expect("binary should build")
         .arg("show")
-        .arg("FEAT-001")
+        .arg("FEAT-EMPTY-001")
         .arg(tempdir.path())
         .output()
         .expect("command should run");
