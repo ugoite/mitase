@@ -114,6 +114,20 @@ struct TraceRangeOutput {
 }
 
 #[derive(Debug, Clone, Serialize)]
+struct TraceRangeEntityGroup {
+    requirements: Vec<EntitySummary>,
+    features: Vec<EntitySummary>,
+    policies: Vec<EntitySummary>,
+    philosophies: Vec<EntitySummary>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct TraceRangeIdSummary {
+    direct: TraceRangeEntityGroup,
+    indirect: TraceRangeEntityGroup,
+}
+
+#[derive(Debug, Clone, Serialize)]
 struct TraceRangeSummary {
     changed_files_total: usize,
     inspected_files: usize,
@@ -125,6 +139,7 @@ struct TraceRangeSummary {
     total_features: usize,
     total_policies: usize,
     total_philosophies: usize,
+    ids: TraceRangeIdSummary,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -205,6 +220,20 @@ fn run_trace_range(workspace: &Workspace, range: &str, format: OutputFormat) -> 
                             total_features: 0,
                             total_policies: 0,
                             total_philosophies: 0,
+                            ids: TraceRangeIdSummary {
+                                direct: TraceRangeEntityGroup {
+                                    requirements: Vec::new(),
+                                    features: Vec::new(),
+                                    policies: Vec::new(),
+                                    philosophies: Vec::new(),
+                                },
+                                indirect: TraceRangeEntityGroup {
+                                    requirements: Vec::new(),
+                                    features: Vec::new(),
+                                    policies: Vec::new(),
+                                    philosophies: Vec::new(),
+                                },
+                            },
                         },
                     })
                     .expect("serializing empty trace range output to JSON should succeed")
@@ -240,10 +269,7 @@ fn compute_range_summary(
     results: &[TraceLookupOutput],
     skipped: &[TraceSkippedFile],
 ) -> TraceRangeSummary {
-    let mut requirements = std::collections::BTreeSet::new();
-    let mut features = std::collections::BTreeSet::new();
-    let mut policies = std::collections::BTreeSet::new();
-    let mut philosophies = std::collections::BTreeSet::new();
+    let ids = collect_range_id_summary(results);
 
     let mut owned = 0;
     let mut partial = 0;
@@ -255,19 +281,6 @@ fn compute_range_summary(
             TraceLookupStatus::Partial => partial += 1,
             TraceLookupStatus::Unowned => unowned += 1,
         }
-
-        for req in &result.requirements {
-            requirements.insert(&req.id);
-        }
-        for feat in &result.features {
-            features.insert(&feat.id);
-        }
-        for pol in &result.policies {
-            policies.insert(&pol.id);
-        }
-        for phil in &result.philosophies {
-            philosophies.insert(&phil.id);
-        }
     }
 
     TraceRangeSummary {
@@ -277,10 +290,83 @@ fn compute_range_summary(
         owned_files: owned,
         partial_files: partial,
         unowned_files: unowned,
-        total_requirements: requirements.len(),
-        total_features: features.len(),
-        total_policies: policies.len(),
-        total_philosophies: philosophies.len(),
+        total_requirements: ids.indirect.requirements.len() + ids.direct.requirements.len(),
+        total_features: ids.indirect.features.len() + ids.direct.features.len(),
+        total_policies: ids.indirect.policies.len() + ids.direct.policies.len(),
+        total_philosophies: ids.indirect.philosophies.len() + ids.direct.philosophies.len(),
+        ids,
+    }
+}
+
+fn collect_range_id_summary(results: &[TraceLookupOutput]) -> TraceRangeIdSummary {
+    let mut direct_requirements = BTreeMap::<String, EntitySummary>::new();
+    let mut direct_features = BTreeMap::<String, EntitySummary>::new();
+    let mut indirect_requirements = BTreeMap::<String, EntitySummary>::new();
+    let mut indirect_features = BTreeMap::<String, EntitySummary>::new();
+    let mut indirect_policies = BTreeMap::<String, EntitySummary>::new();
+    let mut indirect_philosophies = BTreeMap::<String, EntitySummary>::new();
+
+    for result in results {
+        for owner in result
+            .matched_owners
+            .iter()
+            .chain(result.file_only_owners.iter())
+        {
+            match owner.kind {
+                "requirement" => {
+                    direct_requirements
+                        .entry(owner.id.clone())
+                        .or_insert_with(|| EntitySummary {
+                            id: owner.id.clone(),
+                            title: owner.title.clone(),
+                            document_path: None,
+                        });
+                }
+                "feature" => {
+                    direct_features
+                        .entry(owner.id.clone())
+                        .or_insert_with(|| EntitySummary {
+                            id: owner.id.clone(),
+                            title: owner.title.clone(),
+                            document_path: None,
+                        });
+                }
+                _ => {}
+            }
+        }
+
+        collect_entities_into_map(&result.requirements, &mut indirect_requirements);
+        collect_entities_into_map(&result.features, &mut indirect_features);
+        collect_entities_into_map(&result.policies, &mut indirect_policies);
+        collect_entities_into_map(&result.philosophies, &mut indirect_philosophies);
+    }
+
+    for id in direct_requirements.keys() {
+        indirect_requirements.remove(id);
+    }
+    for id in direct_features.keys() {
+        indirect_features.remove(id);
+    }
+
+    TraceRangeIdSummary {
+        direct: TraceRangeEntityGroup {
+            requirements: direct_requirements.into_values().collect(),
+            features: direct_features.into_values().collect(),
+            policies: Vec::new(),
+            philosophies: Vec::new(),
+        },
+        indirect: TraceRangeEntityGroup {
+            requirements: indirect_requirements.into_values().collect(),
+            features: indirect_features.into_values().collect(),
+            policies: indirect_policies.into_values().collect(),
+            philosophies: indirect_philosophies.into_values().collect(),
+        },
+    }
+}
+
+fn collect_entities_into_map(items: &[EntitySummary], map: &mut BTreeMap<String, EntitySummary>) {
+    for item in items {
+        map.entry(item.id.clone()).or_insert_with(|| item.clone());
     }
 }
 
@@ -324,6 +410,15 @@ fn render_range_text(
         summary.owned_files, summary.partial_files, summary.unowned_files
     )
     .unwrap();
+
+    writeln!(output, "Affected IDs:").unwrap();
+    render_range_id_group(&mut output, "Direct matches", &summary.ids.direct);
+    render_range_id_group(
+        &mut output,
+        "Indirect upstream/downstream context",
+        &summary.ids.indirect,
+    );
+    writeln!(output).unwrap();
 
     let mut by_owner = BTreeMap::<(String, String), Vec<&TraceLookupOutput>>::new();
     for result in results {
@@ -390,6 +485,31 @@ fn render_range_text(
     }
 
     output
+}
+
+fn render_range_id_group(rendered: &mut String, heading: &str, group: &TraceRangeEntityGroup) {
+    writeln!(rendered, "  {heading}:").expect("writing to String must succeed");
+    let mut wrote_any = false;
+    wrote_any |= render_range_id_items(rendered, "requirements", &group.requirements);
+    wrote_any |= render_range_id_items(rendered, "features", &group.features);
+    wrote_any |= render_range_id_items(rendered, "policies", &group.policies);
+    wrote_any |= render_range_id_items(rendered, "philosophies", &group.philosophies);
+    if !wrote_any {
+        writeln!(rendered, "    - none").expect("writing to String must succeed");
+    }
+}
+
+fn render_range_id_items(rendered: &mut String, label: &str, items: &[EntitySummary]) -> bool {
+    if items.is_empty() {
+        return false;
+    }
+
+    writeln!(rendered, "    {label}:").expect("writing to String must succeed");
+    for item in items {
+        writeln!(rendered, "      - {}\t{}", item.id, item.title)
+            .expect("writing to String must succeed");
+    }
+    true
 }
 
 fn normalize_lookup_file(workspace: &Workspace, file: &Path) -> Result<PathBuf> {
@@ -872,8 +992,9 @@ mod tests {
 
     use super::{
         MatchMode, TraceLookupOutput, TraceLookupStatus, TraceOwnerMatch, TraceOwnerMetadata,
-        collect_related_entities, collect_requirement_context, insert_summary, match_mode,
-        normalize_lookup_file, query_label, render_text_output, trace_owner_match,
+        collect_range_id_summary, collect_related_entities, collect_requirement_context,
+        insert_summary, match_mode, normalize_lookup_file, query_label, render_text_output,
+        trace_owner_match,
     };
 
     #[test]
@@ -1364,6 +1485,103 @@ mod tests {
         assert_eq!(summary.total_features, 1);
         assert_eq!(summary.total_policies, 1);
         assert_eq!(summary.total_philosophies, 1);
+        assert_eq!(summary.ids.direct.requirements.len(), 1);
+        assert_eq!(summary.ids.direct.features.len(), 1);
+        assert_eq!(summary.ids.indirect.policies.len(), 1);
+        assert_eq!(summary.ids.indirect.philosophies.len(), 1);
+    }
+
+    #[test]
+    fn collect_range_id_summary_separates_direct_and_indirect_ids() {
+        let summary = collect_range_id_summary(&[
+            TraceLookupOutput {
+                file: "feature.rs".to_string(),
+                symbol: None,
+                status: TraceLookupStatus::Owned,
+                matched_owners: vec![TraceOwnerMatch {
+                    kind: "feature",
+                    id: "FEAT-1".to_string(),
+                    title: "Feature".to_string(),
+                    trace_role: "implementation".to_string(),
+                    language: "rust".to_string(),
+                    file: "feature.rs".to_string(),
+                    declared_symbols: Vec::new(),
+                    method: None,
+                    path: None,
+                    matched_symbol: None,
+                    match_mode: "file",
+                }],
+                file_only_owners: Vec::new(),
+                requirements: vec![EntitySummary {
+                    id: "REQ-1".to_string(),
+                    title: "Requirement".to_string(),
+                    document_path: None,
+                }],
+                features: vec![EntitySummary {
+                    id: "FEAT-1".to_string(),
+                    title: "Feature".to_string(),
+                    document_path: None,
+                }],
+                policies: vec![EntitySummary {
+                    id: "POL-1".to_string(),
+                    title: "Policy".to_string(),
+                    document_path: None,
+                }],
+                philosophies: vec![EntitySummary {
+                    id: "PHIL-1".to_string(),
+                    title: "Philosophy".to_string(),
+                    document_path: None,
+                }],
+            },
+            TraceLookupOutput {
+                file: "requirement.rs".to_string(),
+                symbol: None,
+                status: TraceLookupStatus::Owned,
+                matched_owners: vec![TraceOwnerMatch {
+                    kind: "requirement",
+                    id: "REQ-2".to_string(),
+                    title: "Requirement 2".to_string(),
+                    trace_role: "test".to_string(),
+                    language: "rust".to_string(),
+                    file: "requirement.rs".to_string(),
+                    declared_symbols: Vec::new(),
+                    method: None,
+                    path: None,
+                    matched_symbol: None,
+                    match_mode: "file",
+                }],
+                file_only_owners: Vec::new(),
+                requirements: vec![EntitySummary {
+                    id: "REQ-2".to_string(),
+                    title: "Requirement 2".to_string(),
+                    document_path: None,
+                }],
+                features: vec![EntitySummary {
+                    id: "FEAT-2".to_string(),
+                    title: "Feature 2".to_string(),
+                    document_path: None,
+                }],
+                policies: vec![EntitySummary {
+                    id: "POL-2".to_string(),
+                    title: "Policy 2".to_string(),
+                    document_path: None,
+                }],
+                philosophies: vec![EntitySummary {
+                    id: "PHIL-2".to_string(),
+                    title: "Philosophy 2".to_string(),
+                    document_path: None,
+                }],
+            },
+        ]);
+
+        assert_eq!(summary.direct.features.len(), 1);
+        assert_eq!(summary.direct.requirements.len(), 1);
+        assert_eq!(summary.indirect.features.len(), 1);
+        assert_eq!(summary.indirect.requirements.len(), 1);
+        assert_eq!(summary.indirect.policies.len(), 2);
+        assert_eq!(summary.indirect.philosophies.len(), 2);
+        assert_eq!(summary.indirect.features[0].id, "FEAT-2");
+        assert_eq!(summary.indirect.requirements[0].id, "REQ-1");
     }
 
     #[test]
@@ -1418,9 +1636,30 @@ mod tests {
                 total_features: 1,
                 total_policies: 0,
                 total_philosophies: 0,
+                ids: super::TraceRangeIdSummary {
+                    direct: super::TraceRangeEntityGroup {
+                        requirements: Vec::new(),
+                        features: vec![EntitySummary {
+                            id: "FEAT-1".to_string(),
+                            title: "Feature".to_string(),
+                            document_path: None,
+                        }],
+                        policies: Vec::new(),
+                        philosophies: Vec::new(),
+                    },
+                    indirect: super::TraceRangeEntityGroup {
+                        requirements: Vec::new(),
+                        features: Vec::new(),
+                        policies: Vec::new(),
+                        philosophies: Vec::new(),
+                    },
+                },
             },
         );
 
+        assert!(rendered.contains("Affected IDs:"));
+        assert!(rendered.contains("Direct matches:"));
+        assert!(rendered.contains("features:"));
         assert!(rendered.contains("feature FEAT-1:"));
         assert!(rendered.contains("UNOWNED:"));
         assert!(rendered.contains("Inspected files: 2"));
@@ -1475,6 +1714,28 @@ mod tests {
                 total_features: 1,
                 total_policies: 0,
                 total_philosophies: 0,
+                ids: super::TraceRangeIdSummary {
+                    direct: super::TraceRangeEntityGroup {
+                        requirements: Vec::new(),
+                        features: vec![EntitySummary {
+                            id: "FEAT-TRACE-001".to_string(),
+                            title: "OpenAPI trace".to_string(),
+                            document_path: None,
+                        }],
+                        policies: Vec::new(),
+                        philosophies: Vec::new(),
+                    },
+                    indirect: super::TraceRangeEntityGroup {
+                        requirements: vec![EntitySummary {
+                            id: "REQ-TRACE-001".to_string(),
+                            title: "Trace".to_string(),
+                            document_path: None,
+                        }],
+                        features: Vec::new(),
+                        policies: Vec::new(),
+                        philosophies: Vec::new(),
+                    },
+                },
             },
         );
 
@@ -1503,6 +1764,20 @@ mod tests {
                 total_features: 0,
                 total_policies: 0,
                 total_philosophies: 0,
+                ids: super::TraceRangeIdSummary {
+                    direct: super::TraceRangeEntityGroup {
+                        requirements: Vec::new(),
+                        features: Vec::new(),
+                        policies: Vec::new(),
+                        philosophies: Vec::new(),
+                    },
+                    indirect: super::TraceRangeEntityGroup {
+                        requirements: Vec::new(),
+                        features: Vec::new(),
+                        policies: Vec::new(),
+                        philosophies: Vec::new(),
+                    },
+                },
             },
         );
 
