@@ -538,10 +538,12 @@ If a traced symbol is missing required documentation snippets, run:
 syu validate . --fix
 ```
 
-Autofix is conservative. It currently repairs documentation-style trace gaps
-for Rust, Python, Go, and TypeScript without guessing at larger structural changes.
-If you want to preview the same fix set without writing files, use
-`syu validate . --fix --dry-run` and review the printed plan instead.
+Autofix is conservative. It repairs documentation-style trace gaps, exact
+duplicate graph links, already-declared reciprocal links, and feature
+registry drift when one safe correction is obvious. It still avoids guessing
+at new links or larger structural changes. If you want to preview the same fix
+set without writing files, use `syu validate . --fix --dry-run` and review the
+printed plan instead.
 
 ## 6. Generate a report
 
