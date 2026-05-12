@@ -173,6 +173,9 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
           - python_only_example_validates
           - ruby_only_example_validates
           - polyglot_example_validates
+      - **file**: tests/trace_adapter_conformance.rs
+        - **symbols**:
+          - built_in_trace_adapters_share_one_capability_matrix
     - **python**:
       - **file**: tests/fixtures/workspaces/passing/python/test_traceability.py
         - **symbols**:
@@ -199,15 +202,11 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       writing files, with both machine-readable and reviewer-friendly output.
       `syu.yaml` MUST be able to configure default fix behavior, and `--no-fix`
       MUST disable it. Autofix MUST stay conservative and avoid speculative
-      structural edits.
-      mechanical repairs for documentation-style trace gaps. `syu.yaml` MUST be
-      able to configure default fix behavior, and `--no-fix` MUST disable it.
-      Autofix MUST stay conservative and avoid speculative structural edits.
-      It MAY also remove exact duplicate graph links, restore already-declared
-      reciprocal links, and resynchronize the feature registry with checked-in
-      feature documents when one safe correction is obvious. If a later write
-      fails, it MUST roll back earlier writes so the workspace is not left
-      half-updated.
+      structural edits. It MAY also remove exact duplicate graph links,
+      restore already-declared reciprocal links, and resynchronize the feature
+      registry with checked-in feature documents when one safe correction is
+      obvious. If a later write fails, it MUST roll back earlier writes so the
+      workspace is not left half-updated.
   - **priority**: high
   - **status**: implemented
   - **linked_policies**:
@@ -419,6 +418,9 @@ requirements:
             - python_only_example_validates
             - ruby_only_example_validates
             - polyglot_example_validates
+        - file: tests/trace_adapter_conformance.rs
+          symbols:
+            - built_in_trace_adapters_share_one_capability_matrix
       python:
         - file: tests/fixtures/workspaces/passing/python/test_traceability.py
           symbols:
@@ -444,15 +446,11 @@ requirements:
       writing files, with both machine-readable and reviewer-friendly output.
       `syu.yaml` MUST be able to configure default fix behavior, and `--no-fix`
       MUST disable it. Autofix MUST stay conservative and avoid speculative
-      structural edits.
-      mechanical repairs for documentation-style trace gaps. `syu.yaml` MUST be
-      able to configure default fix behavior, and `--no-fix` MUST disable it.
-      Autofix MUST stay conservative and avoid speculative structural edits.
-      It MAY also remove exact duplicate graph links, restore already-declared
-      reciprocal links, and resynchronize the feature registry with checked-in
-      feature documents when one safe correction is obvious. If a later write
-      fails, it MUST roll back earlier writes so the workspace is not left
-      half-updated.
+      structural edits. It MAY also remove exact duplicate graph links,
+      restore already-declared reciprocal links, and resynchronize the feature
+      registry with checked-in feature documents when one safe correction is
+      obvious. If a later write fails, it MUST roll back earlier writes so the
+      workspace is not left half-updated.
     priority: high
     status: implemented
     linked_policies:
