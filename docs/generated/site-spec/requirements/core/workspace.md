@@ -592,6 +592,7 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
         - **symbols**:
           - task_classify_prints_text_output
           - task_classify_prints_json_output
+          - task_classify_handles_requests_without_matches
     - **markdown**:
       - **file**: docs/guide/request-artifact-format.md
         - **symbols**:

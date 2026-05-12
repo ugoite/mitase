@@ -107,3 +107,29 @@ fn task_classify_prints_json_output() {
     assert!(stdout.contains("\"classification\": \"requirement_create\""));
     assert!(stdout.contains("\"request_path\": \"request.yaml\""));
 }
+
+#[test]
+// REQ-CORE-028
+fn task_classify_handles_requests_without_matches() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    fs::write(
+        tempdir.path().join("request.yaml"),
+        "version: 1\nrequest: >\n  Blorf zqxw 123.\ncontext: {}\n",
+    )
+    .expect("request");
+
+    let output = {
+        let mut command = std::process::Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "classify", "request.yaml"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task classify should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("classification: requirement_create"));
+    assert!(stdout.contains("- none"));
+    assert!(stdout.contains("request does not use a strong create/change/delete verb"));
+    assert!(stdout.contains("no existing spec item was named and the request reads like new work"));
+}
