@@ -1423,7 +1423,19 @@ mod tests {
                     file: "owned.rs".to_string(),
                     symbol: None,
                     status: TraceLookupStatus::Owned,
-                    matched_owners: Vec::new(),
+                    matched_owners: vec![TraceOwnerMatch {
+                        kind: "feature",
+                        id: "FEAT-1".to_string(),
+                        title: "Feat".to_string(),
+                        trace_role: "implementation".to_string(),
+                        language: "rust".to_string(),
+                        file: "owned.rs".to_string(),
+                        declared_symbols: Vec::new(),
+                        method: None,
+                        path: None,
+                        matched_symbol: None,
+                        match_mode: "symbol",
+                    }],
                     file_only_owners: Vec::new(),
                     requirements: vec![EntitySummary {
                         id: "REQ-1".to_string(),
@@ -1486,7 +1498,8 @@ mod tests {
         assert_eq!(summary.total_policies, 1);
         assert_eq!(summary.total_philosophies, 1);
         assert_eq!(summary.ids.direct.requirements.len(), 0);
-        assert_eq!(summary.ids.direct.features.len(), 0);
+        assert_eq!(summary.ids.direct.features.len(), 1);
+        assert_eq!(summary.ids.indirect.features.len(), 0);
         assert_eq!(summary.ids.indirect.policies.len(), 1);
         assert_eq!(summary.ids.indirect.philosophies.len(), 1);
     }
