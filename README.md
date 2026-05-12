@@ -716,8 +716,8 @@ syu validate . --fix --dry-run
 syu validate . --format json --fix --dry-run
 ```
 
-Today autofix only repairs documentation-style trace gaps that can be updated
-mechanically:
+Today autofix repairs documentation-style trace gaps plus a few deterministic
+graph and registry issues:
 
 - missing requirement / feature IDs in symbol documentation
 - missing `doc_contains` snippets for Rust, Python, Go, and TypeScript symbols
