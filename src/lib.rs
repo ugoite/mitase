@@ -13,6 +13,7 @@ pub mod cli;
 pub mod command;
 pub mod config;
 pub mod coverage;
+pub mod history;
 pub mod inspect;
 pub mod language;
 mod lsp;
