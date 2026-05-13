@@ -17,6 +17,9 @@ main() {
 
   cd "$root"
 
+  log_step "Aligning the global npm version with app/package.json."
+  bash scripts/ci/pinned-npm.sh install app
+
   log_step "Installing browser-app dependencies for local app builds, scripts/ci/check-browser-app-freshness.sh, and npm --prefix app run test:e2e."
   npm --prefix app ci
 
