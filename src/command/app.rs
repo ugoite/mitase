@@ -633,7 +633,11 @@ fn git_head(workspace_root: &Path) -> Result<String> {
         );
     }
 
-    let head = String::from_utf8(output.stdout).context("git HEAD should be valid UTF-8")?;
+    parse_git_head_stdout(output.stdout, workspace_root)
+}
+
+fn parse_git_head_stdout(stdout: Vec<u8>, workspace_root: &Path) -> Result<String> {
+    let head = String::from_utf8(stdout).context("git HEAD should be valid UTF-8")?;
     let head = head.trim().to_string();
     if head.is_empty() {
         bail!(
@@ -1366,12 +1370,13 @@ mod tests {
         bind_failure_message, browser_root_labels, build_app_payload, canonical_workspace_root,
         collect_feature_sources, collect_snapshot_files_with_extensions,
         collect_yaml_sources_recursive, content_type_for_path, dev_server_probe_request_sent,
-        dev_server_probe_succeeds, is_asset_like, load_current_snapshot,
+        dev_server_probe_succeeds, git_head, is_asset_like, load_current_snapshot,
         non_loopback_warning_lines, normalized_asset_path, normalized_trace_snapshot_path,
-        readiness_probe_request_sent, readiness_probe_succeeds, redacted_relative_label,
-        redacted_root_label, refresh_current_once, relative_display, require_remote_bind_opt_in,
-        resolve_app_server_settings, spec_snapshot, startup_lines, trailing_path_components_label,
-        validation_snapshot, wait_for_dev_server_with_retry, wait_for_ready_with_retry,
+        parse_git_head_stdout, readiness_probe_request_sent, readiness_probe_succeeds,
+        redacted_relative_label, redacted_root_label, refresh_current_once, relative_display,
+        require_remote_bind_opt_in, resolve_app_server_settings, spec_snapshot, startup_lines,
+        trailing_path_components_label, validation_snapshot, wait_for_dev_server_with_retry,
+        wait_for_ready_with_retry,
     };
 
     fn fixture_root(name: &str) -> PathBuf {
@@ -2363,6 +2368,42 @@ mod tests {
 
         let second = load_current_snapshot(tempdir.path(), &config).expect("snapshot");
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn git_head_surfaces_non_repository_errors() {
+        let tempdir = tempdir().expect("tempdir should exist");
+
+        let error = git_head(tempdir.path()).expect_err("non-repository HEAD lookup should fail");
+
+        assert!(
+            error.to_string().contains("failed to read HEAD"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn git_head_surfaces_spawn_and_empty_stdout_errors() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let file_workspace = tempdir.path().join("not-a-directory");
+        fs::write(&file_workspace, "not a directory\n").expect("workspace file");
+
+        let spawn_error =
+            git_head(&file_workspace).expect_err("file current_dir should fail to spawn git");
+        assert!(
+            spawn_error.to_string().contains("failed to run"),
+            "unexpected error: {spawn_error}"
+        );
+
+        let empty_error =
+            parse_git_head_stdout(Vec::new(), tempdir.path()).expect_err("empty HEAD should fail");
+
+        assert!(
+            empty_error
+                .to_string()
+                .contains("git rev-parse returned an empty HEAD"),
+            "unexpected error: {empty_error}"
+        );
     }
 
     #[test]

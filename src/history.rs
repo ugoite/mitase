@@ -93,10 +93,9 @@ pub(crate) fn build_historical_id_index(
             &start_ref,
             &mut index,
         )?;
-        commits.extend(git_rev_list(
-            &repository_root,
-            &format!("{start_ref}..HEAD"),
-        )?);
+        let commit_range = format!("{start_ref}..HEAD");
+        let later_commits = git_rev_list(&repository_root, &commit_range)?;
+        commits.extend(later_commits);
         commits
     } else {
         git_rev_list(&repository_root, "HEAD")?
@@ -128,8 +127,11 @@ fn git_repository_root(workspace_root: &Path) -> Result<PathBuf> {
         );
     }
 
-    let root =
-        String::from_utf8(output.stdout).context("git repository root should be valid UTF-8")?;
+    parse_git_repository_root_stdout(output.stdout, workspace_root)
+}
+
+fn parse_git_repository_root_stdout(stdout: Vec<u8>, workspace_root: &Path) -> Result<PathBuf> {
+    let root = String::from_utf8(stdout).context("git repository root should be valid UTF-8")?;
     let root = root.trim();
     if root.is_empty() {
         bail!(
@@ -179,43 +181,64 @@ fn record_commit_snapshot(
 ) -> Result<()> {
     let files = git_tree_files(repository_root, commit, spec_root_relative)?;
     for file in files {
-        if !is_yaml_file(&file) {
-            continue;
-        }
+        record_snapshot_file(repository_root, spec_root_relative, commit, &file, index)?;
+    }
 
-        if is_under_section(&file, spec_root_relative, "philosophy") {
-            if let Some(document) =
-                parse_blob::<PhilosophyDocument>(repository_root, commit, &file)?
-            {
+    Ok(())
+}
+
+fn record_snapshot_file(
+    repository_root: &Path,
+    spec_root_relative: &Path,
+    commit: &str,
+    file: &str,
+    index: &mut HistoricalIdIndex,
+) -> Result<()> {
+    if !is_yaml_file(file) {
+        return Ok(());
+    }
+
+    if is_under_section(file, spec_root_relative, "philosophy") {
+        parse_blob::<PhilosophyDocument>(repository_root, commit, file)?
+            .into_iter()
+            .for_each(|document| {
                 for item in document.philosophies {
                     record_id(index, SectionKind::Philosophy, item.id);
                 }
-            }
-        } else if is_under_section(&file, spec_root_relative, "policies") {
-            if let Some(document) = parse_blob::<PolicyDocument>(repository_root, commit, &file)? {
+            });
+        return Ok(());
+    }
+
+    if is_under_section(file, spec_root_relative, "policies") {
+        parse_blob::<PolicyDocument>(repository_root, commit, file)?
+            .into_iter()
+            .for_each(|document| {
                 for item in document.policies {
                     record_id(index, SectionKind::Policies, item.id);
                 }
-            }
-        } else if is_under_section(&file, spec_root_relative, "requirements") {
-            if let Some(document) =
-                parse_blob::<RequirementDocument>(repository_root, commit, &file)?
-            {
+            });
+        return Ok(());
+    }
+
+    if is_under_section(file, spec_root_relative, "requirements") {
+        parse_blob::<RequirementDocument>(repository_root, commit, file)?
+            .into_iter()
+            .for_each(|document| {
                 for item in document.requirements {
                     record_id(index, SectionKind::Requirements, item.id);
                 }
-            }
-        } else if is_under_section(&file, spec_root_relative, "features") {
-            if file.ends_with("features.yaml") {
-                continue;
-            }
+            });
+        return Ok(());
+    }
 
-            if let Some(document) = parse_feature_blob(repository_root, commit, &file)? {
+    if is_under_section(file, spec_root_relative, "features") && !file.ends_with("features.yaml") {
+        parse_feature_blob(repository_root, commit, file)?
+            .into_iter()
+            .for_each(|document| {
                 for item in document.features {
                     record_id(index, SectionKind::Features, item.id);
                 }
-            }
-        }
+            });
     }
 
     Ok(())
@@ -580,6 +603,94 @@ mod tests {
     }
 
     #[test]
+    fn build_historical_id_index_handles_empty_historical_documents() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = tempdir.path();
+        init_git_repository(workspace);
+
+        fs::create_dir_all(workspace.join("philosophy")).expect("philosophy dir");
+        fs::create_dir_all(workspace.join("policies")).expect("policies dir");
+        fs::create_dir_all(workspace.join("requirements/core")).expect("requirements dir");
+        fs::create_dir_all(workspace.join("features")).expect("features dir");
+        fs::write(
+            workspace.join("philosophy/empty.yaml"),
+            "category: Philosophy\nversion: 1\nlanguage: en\nphilosophies: []\n",
+        )
+        .expect("philosophy file");
+        fs::write(
+            workspace.join("policies/empty.yaml"),
+            "category: Policy\nversion: 1\nlanguage: en\npolicies: []\n",
+        )
+        .expect("policy file");
+        fs::write(
+            workspace.join("requirements/core/empty.yaml"),
+            "category: Core History\nprefix: REQ-HIST\nrequirements: []\n",
+        )
+        .expect("requirement file");
+        fs::write(
+            workspace.join("features/empty.yaml"),
+            "category: History\nversion: 1\nfeatures: []\n",
+        )
+        .expect("feature file");
+
+        git(workspace, &["add", "."]);
+        git_commit(workspace, "docs: add empty historical sections");
+
+        let config = SyuConfig {
+            spec: crate::config::SpecConfig {
+                root: PathBuf::from("."),
+            },
+            ..SyuConfig::default()
+        };
+
+        let index = build_historical_id_index(workspace, &config).expect("index should build");
+
+        assert!(index.available());
+        assert!(!index.contains("REQ-HIST-MISSING-001"));
+    }
+
+    #[test]
+    fn build_historical_id_index_surfaces_start_ref_snapshot_errors() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = tempdir.path();
+        init_git_repository(workspace);
+        fs::write(workspace.join("placeholder.txt"), "placeholder\n").expect("placeholder file");
+        git(workspace, &["add", "."]);
+        git_commit(workspace, "chore: initialize repository");
+
+        let mut config = SyuConfig::default();
+        config.spec.root = PathBuf::from(".");
+        config.validate.historical_ids.start_ref = Some("definitely-not-a-ref".to_string());
+
+        let error = build_historical_id_index(workspace, &config)
+            .expect_err("invalid start ref should fail while recording the start snapshot");
+        assert!(
+            error
+                .to_string()
+                .contains("failed to enumerate historical files"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn build_historical_id_index_handles_empty_start_ref_ranges() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = tempdir.path();
+        init_git_repository(workspace);
+        fs::write(workspace.join("placeholder.txt"), "placeholder\n").expect("placeholder file");
+        git(workspace, &["add", "."]);
+        git_commit(workspace, "chore: initialize repository");
+        let start_ref = git_stdout(workspace, &["rev-parse", "HEAD"]);
+
+        let mut config = SyuConfig::default();
+        config.spec.root = PathBuf::from(".");
+        config.validate.historical_ids.start_ref = Some(start_ref);
+
+        let index = build_historical_id_index(workspace, &config).expect("index should build");
+        assert!(index.available());
+    }
+
+    #[test]
     fn historical_id_helpers_surface_git_and_parse_errors() {
         let tempdir = tempdir().expect("tempdir should exist");
         let workspace = tempdir.path();
@@ -655,6 +766,20 @@ mod tests {
                 .is_none()
         );
         assert!(parse_feature_blob(workspace, &commit, "features/structured.yaml").is_err());
+    }
+
+    #[test]
+    fn git_repository_root_rejects_empty_stdout() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let error = parse_git_repository_root_stdout(Vec::new(), tempdir.path())
+            .expect_err("empty git root should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("git rev-parse returned an empty repository root"),
+            "unexpected error: {error}"
+        );
     }
 
     #[test]
