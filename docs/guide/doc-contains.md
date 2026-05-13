@@ -40,6 +40,7 @@ the few symbols where comment-level evidence genuinely helps.
 
 - **Rust**
 - **Python**
+- **Ruby**
 - **Go**
 - **Java**
 - **C#**
@@ -49,9 +50,9 @@ the few symbols where comment-level evidence genuinely helps.
 For the full matrix, including strict ownership coverage and symbol-only
 adapters, use the [trace adapter capability matrix](./trace-adapter-support.md).
 
-Languages such as Ruby, Shell, YAML, JSON, Markdown, and Gitignore can still use
-explicit `file` + `symbols` traces, but they do not validate `doc_contains`
-yet.
+Ruby can use `doc_contains` now. Shell, YAML, JSON, Markdown, and Gitignore can
+still use explicit `file` + `symbols` traces, but they do not validate
+`doc_contains` yet.
 
 ## Starter-level examples to copy from
 
