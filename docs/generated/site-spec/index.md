@@ -26,6 +26,7 @@ This section is generated from the YAML source under `docs/syu/`.
 - [Report Command / Report](features/cli/report)
 - [Lookup Search CLI / Search](features/cli/search)
 - [Lookup CLI / Show List](features/cli/show-list)
+- [Task Planning CLI / Task](features/cli/task)
 - [Trace Lookup CLI / Trace](features/cli/trace)
 - [Documentation / Docs](features/documentation/docs)
 - [Agent Skills / Skills](features/documentation/skills)
