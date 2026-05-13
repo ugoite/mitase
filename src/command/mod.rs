@@ -20,6 +20,7 @@ pub mod relate;
 pub mod report;
 pub mod search;
 pub mod show;
+pub mod task;
 pub mod templates;
 pub mod trace;
 
