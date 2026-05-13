@@ -8,6 +8,7 @@ use std::{
     io::{Read, Write},
     net::{IpAddr, SocketAddr},
     path::{Component, Path, PathBuf},
+    process::Command,
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -30,8 +31,9 @@ use syu_core::{
 use crate::{
     cli::AppArgs,
     command::check::collect_check_result,
-    config::{SyuConfig, load_config, resolve_spec_root},
+    config::{SyuConfig, config_path, load_config, resolve_spec_root},
     coverage::normalize_relative_path,
+    history::build_historical_id_index,
     model::{CheckResult, FeatureRegistryDocument, TraceReference},
     workspace::{
         load_feature_documents_with_paths, load_requirement_documents_with_paths,
@@ -539,6 +541,7 @@ fn spec_snapshot(spec_root: &Path) -> Result<String> {
 enum SnapshotDependency {
     File(PathBuf),
     ReadDirError(PathBuf, String),
+    GitHead(String),
 }
 
 impl SnapshotDependency {
@@ -563,6 +566,10 @@ impl SnapshotDependency {
                 path.hash(hasher);
                 kind.hash(hasher);
             }
+            Self::GitHead(head) => {
+                "git_head".hash(hasher);
+                head.hash(hasher);
+            }
         }
     }
 }
@@ -573,6 +580,7 @@ fn app_snapshot_dependencies(
     config: &SyuConfig,
 ) -> BTreeSet<SnapshotDependency> {
     let mut dependencies = BTreeSet::new();
+    dependencies.insert(SnapshotDependency::File(config_path(workspace_root)));
 
     if let Ok(documents) = load_requirement_documents_with_paths(&spec_root.join("requirements")) {
         for document in documents {
@@ -597,7 +605,54 @@ fn app_snapshot_dependencies(
         collect_coverage_snapshot_dependencies(workspace_root, &mut dependencies);
     }
 
+    if config.validate.historical_ids.enabled
+        && let Ok(head) = git_head(workspace_root)
+    {
+        dependencies.insert(SnapshotDependency::GitHead(head));
+    }
+
     dependencies
+}
+
+fn git_head(workspace_root: &Path) -> Result<String> {
+    let output = git_command(workspace_root)
+        .arg("rev-parse")
+        .arg("HEAD")
+        .output()
+        .with_context(|| {
+            format!(
+                "failed to run `git rev-parse HEAD` in `{}`",
+                workspace_root.display()
+            )
+        })?;
+    if !output.status.success() {
+        bail!(
+            "failed to read HEAD for `{}`: {}",
+            workspace_root.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+
+    parse_git_head_stdout(output.stdout, workspace_root)
+}
+
+fn parse_git_head_stdout(stdout: Vec<u8>, workspace_root: &Path) -> Result<String> {
+    let head = String::from_utf8(stdout).context("git HEAD should be valid UTF-8")?;
+    let head = head.trim().to_string();
+    if head.is_empty() {
+        bail!(
+            "git rev-parse returned an empty HEAD for `{}`",
+            workspace_root.display()
+        );
+    }
+
+    Ok(head)
+}
+
+fn git_command(workspace_root: &Path) -> Command {
+    let mut command = Command::new("git");
+    command.current_dir(workspace_root);
+    command
 }
 
 fn collect_trace_map_snapshot_dependencies(
@@ -1000,6 +1055,7 @@ fn build_app_payload_from_config(workspace_root: &Path, config: &SyuConfig) -> R
         app_server: AppServer::default(),
         source_documents,
         validation: validation_snapshot(collect_check_result(workspace_root)),
+        historical_ids: build_historical_id_index(workspace_root, config)?.snapshot(),
     })
 }
 
@@ -1314,12 +1370,13 @@ mod tests {
         bind_failure_message, browser_root_labels, build_app_payload, canonical_workspace_root,
         collect_feature_sources, collect_snapshot_files_with_extensions,
         collect_yaml_sources_recursive, content_type_for_path, dev_server_probe_request_sent,
-        dev_server_probe_succeeds, is_asset_like, load_current_snapshot,
+        dev_server_probe_succeeds, git_head, is_asset_like, load_current_snapshot,
         non_loopback_warning_lines, normalized_asset_path, normalized_trace_snapshot_path,
-        readiness_probe_request_sent, readiness_probe_succeeds, redacted_relative_label,
-        redacted_root_label, refresh_current_once, relative_display, require_remote_bind_opt_in,
-        resolve_app_server_settings, spec_snapshot, startup_lines, trailing_path_components_label,
-        validation_snapshot, wait_for_dev_server_with_retry, wait_for_ready_with_retry,
+        parse_git_head_stdout, readiness_probe_request_sent, readiness_probe_succeeds,
+        redacted_relative_label, redacted_root_label, refresh_current_once, relative_display,
+        require_remote_bind_opt_in, resolve_app_server_settings, spec_snapshot, startup_lines,
+        trailing_path_components_label, validation_snapshot, wait_for_dev_server_with_retry,
+        wait_for_ready_with_retry,
     };
 
     fn fixture_root(name: &str) -> PathBuf {
@@ -2311,6 +2368,42 @@ mod tests {
 
         let second = load_current_snapshot(tempdir.path(), &config).expect("snapshot");
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn git_head_surfaces_non_repository_errors() {
+        let tempdir = tempdir().expect("tempdir should exist");
+
+        let error = git_head(tempdir.path()).expect_err("non-repository HEAD lookup should fail");
+
+        assert!(
+            error.to_string().contains("failed to read HEAD"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn git_head_surfaces_spawn_and_empty_stdout_errors() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let file_workspace = tempdir.path().join("not-a-directory");
+        fs::write(&file_workspace, "not a directory\n").expect("workspace file");
+
+        let spawn_error =
+            git_head(&file_workspace).expect_err("file current_dir should fail to spawn git");
+        assert!(
+            spawn_error.to_string().contains("failed to run"),
+            "unexpected error: {spawn_error}"
+        );
+
+        let empty_error =
+            parse_git_head_stdout(Vec::new(), tempdir.path()).expect_err("empty HEAD should fail");
+
+        assert!(
+            empty_error
+                .to_string()
+                .contains("git rev-parse returned an empty HEAD"),
+            "unexpected error: {empty_error}"
+        );
     }
 
     #[test]

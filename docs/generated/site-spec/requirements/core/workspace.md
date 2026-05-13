@@ -442,6 +442,9 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       - **file**: src/command/log.rs
         - **symbols**:
           - *
+      - **file**: src/history.rs
+        - **symbols**:
+          - *
 - **id**: REQ-CORE-025
   - **title**: Provide a heuristic audit command for cross-layer overlap and tension review
   - **description**:
@@ -977,6 +980,9 @@ requirements:
           symbols:
             - dispatches_log_subcommands_without_rewriting_them
         - file: src/command/log.rs
+          symbols:
+            - '*'
+        - file: src/history.rs
           symbols:
             - '*'
   - id: REQ-CORE-025

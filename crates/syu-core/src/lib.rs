@@ -86,12 +86,22 @@ pub struct ValidationSnapshot {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HistoricalIdSnapshot {
+    pub enabled: bool,
+    pub available: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_ref: Option<String>,
+    pub ids_by_section: BTreeMap<SectionKind, Vec<String>>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AppPayload {
     pub workspace_root: String,
     pub spec_root: String,
     pub app_server: AppServer,
     pub source_documents: Vec<SourceDocument>,
     pub validation: ValidationSnapshot,
+    pub historical_ids: HistoricalIdSnapshot,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -109,6 +119,7 @@ pub struct BrowserWorkspace {
     pub sections: Vec<BrowserSection>,
     pub item_index: BTreeMap<String, BrowserIndexEntry>,
     pub validation: ValidationSnapshot,
+    pub historical_ids: HistoricalIdSnapshot,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -326,6 +337,7 @@ pub fn build_browser_workspace(payload: AppPayload) -> BrowserWorkspace {
         sections,
         item_index,
         validation: payload.validation,
+        historical_ids: payload.historical_ids,
     }
 }
 
@@ -552,8 +564,8 @@ fn folder_segments(path: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        AppPayload, AppServer, DefinitionCounts, ReferencedRule, SectionKind, Severity,
-        SourceDocument, TraceCount, TraceSummary, ValidationIssue, ValidationSnapshot,
+        AppPayload, AppServer, DefinitionCounts, HistoricalIdSnapshot, ReferencedRule, SectionKind,
+        Severity, SourceDocument, TraceCount, TraceSummary, ValidationIssue, ValidationSnapshot,
         build_browser_workspace,
     };
 
@@ -627,6 +639,7 @@ mod tests {
                 },
             ],
             validation: sample_validation(),
+            historical_ids: HistoricalIdSnapshot::default(),
         });
 
         assert_eq!(workspace.sections.len(), 4);
@@ -680,6 +693,7 @@ mod tests {
                 content: "category: Broken\nversion: [\n".to_string(),
             }],
             validation: ValidationSnapshot::default(),
+            historical_ids: HistoricalIdSnapshot::default(),
         });
 
         let document = &workspace.sections[2].documents[0];
