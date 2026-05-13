@@ -11,6 +11,7 @@ use anyhow::{Context, Result, bail};
 use crate::{
     cli::{AddArgs, LookupKind},
     coverage::normalize_relative_path,
+    history::build_historical_id_index,
     model::{
         FeatureDocument, FeatureRegistryDocument, PhilosophyDocument, PolicyDocument,
         RequirementDocument,
@@ -45,6 +46,18 @@ pub fn run_add_command(args: &AddArgs) -> Result<i32> {
     {
         bail!(
             "{} `{}` already exists in `{}`",
+            args.layer.label(),
+            resolved.parsed_id.normalized,
+            workspace.root.display()
+        );
+    }
+    let historical_ids = build_historical_id_index(&workspace.root, &workspace.config)?;
+    if historical_ids.enabled()
+        && historical_ids.available()
+        && historical_ids.contains(&resolved.parsed_id.normalized)
+    {
+        bail!(
+            "{} `{}` has already existed in the git-backed historical index for `{}`",
             args.layer.label(),
             resolved.parsed_id.normalized,
             workspace.root.display()
@@ -926,6 +939,7 @@ mod tests {
         collections::VecDeque,
         fs,
         path::{Path, PathBuf},
+        process::Command,
     };
 
     use tempfile::{TempDir, tempdir};
@@ -993,6 +1007,15 @@ mod tests {
             fs::create_dir_all(parent).expect("parent directory should exist");
         }
         fs::write(path, contents).expect("test fixture file should be written");
+    }
+
+    fn git(path: &Path, args: &[&str]) {
+        let status = Command::new("git")
+            .current_dir(path)
+            .args(args)
+            .status()
+            .expect("git command should run");
+        assert!(status.success(), "git {:?} failed", args);
     }
 
     #[test]
@@ -1440,6 +1463,70 @@ mod tests {
             workspace
                 .join("docs/syu/requirements/auth/auth.yaml")
                 .exists()
+        );
+    }
+
+    #[test]
+    fn run_add_command_rejects_historical_ids_that_no_longer_exist_currently() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = tempdir.path().join("workspace");
+        fs::create_dir_all(workspace.join("docs/syu/philosophy")).expect("philosophy dir");
+        fs::create_dir_all(workspace.join("docs/syu/policies")).expect("policies dir");
+        fs::create_dir_all(workspace.join("docs/syu/requirements/core")).expect("requirements dir");
+        fs::create_dir_all(workspace.join("docs/syu/features/core")).expect("features dir");
+        write_file(
+            &workspace.join("syu.yaml"),
+            "version: 1\nspec:\n  root: docs/syu\nvalidate:\n  default_fix: false\n  allow_planned: true\n  require_non_orphaned_items: true\n  require_reciprocal_links: true\n  require_symbol_trace_coverage: false\n",
+        );
+        write_file(
+            &workspace.join("docs/syu/philosophy/foundation.yaml"),
+            "category: Philosophy\nversion: 1\nphilosophies:\n  - id: PHIL-001\n    title: Stable value\n    product_design_principle: Keep it explainable.\n    coding_guideline: Share logic.\n",
+        );
+        write_file(
+            &workspace.join("docs/syu/policies/policies.yaml"),
+            "category: Policies\nversion: 1\nlanguage: en\npolicies:\n  - id: POL-001\n    title: Keep links explicit\n    summary: summary\n    description: description\n    linked_philosophies:\n      - PHIL-001\n",
+        );
+        write_file(
+            &workspace.join("docs/syu/requirements/core/req.yaml"),
+            "category: Core\nprefix: REQ\nrequirements:\n  - id: REQ-001\n    title: Historical requirement\n    description: old\n    priority: medium\n    status: planned\n    linked_policies:\n      - POL-001\n    linked_features:\n      - FEAT-001\n",
+        );
+        write_file(
+            &workspace.join("docs/syu/features/features.yaml"),
+            "version: \"1\"\nfiles:\n  - kind: core\n    file: core/feature.yaml\n",
+        );
+        write_file(
+            &workspace.join("docs/syu/features/core/feature.yaml"),
+            "category: Core\nversion: 1\nfeatures:\n  - id: FEAT-001\n    title: Historical feature\n    summary: summary\n    status: planned\n    linked_requirements:\n      - REQ-001\n",
+        );
+        git(&workspace, &["init"]);
+        git(&workspace, &["config", "user.email", "codex@example.com"]);
+        git(&workspace, &["config", "user.name", "Codex"]);
+        git(&workspace, &["add", "."]);
+        git(&workspace, &["commit", "-m", "initial historical id"]);
+
+        write_file(
+            &workspace.join("docs/syu/requirements/core/req.yaml"),
+            "category: Core\nprefix: REQ\nrequirements:\n  - id: REQ-002\n    title: Historical requirement\n    description: new\n    priority: medium\n    status: planned\n    linked_policies:\n      - POL-001\n    linked_features:\n      - FEAT-001\n",
+        );
+        git(&workspace, &["add", "docs/syu/requirements/core/req.yaml"]);
+        git(
+            &workspace,
+            &["commit", "-m", "replace historical requirement"],
+        );
+
+        let error = run_add_command(&AddArgs {
+            layer: LookupKind::Requirement,
+            id: Some("REQ-001".to_string()),
+            workspace: workspace.clone(),
+            interactive: false,
+            file: None,
+            kind: None,
+        })
+        .expect_err("historical ids should be rejected");
+
+        assert!(
+            error.to_string().contains("git-backed historical index"),
+            "{error:#}"
         );
     }
 
