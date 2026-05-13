@@ -26,6 +26,11 @@ install_precommit_tooling() {
   bash scripts/install-precommit.sh
 }
 
+align_app_npm() {
+  log_step "Aligning the global npm version with app/package.json."
+  bash scripts/ci/pinned-npm.sh install app
+}
+
 main() {
   local root
   root="$(repo_root)"
@@ -36,6 +41,7 @@ main() {
   install_coverage_tooling
   install_wasm_tooling
   install_precommit_tooling
+  align_app_npm
   log_step "Browser-app npm installs and Playwright browsers stay opt-in. Run bash .devcontainer/setup-browser-tooling.sh when you need app builds or end-to-end coverage."
   log_step "Devcontainer setup complete."
 }
