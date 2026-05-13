@@ -172,8 +172,11 @@ ready to claim traces yet, leave it `planned`.
 
 Use `syu validate . --fix --dry-run` when you want to preview the autofix plan
 before changing files. Once you have decided the owning IDs, `syu validate .
---fix` is good at inserting required doc-comment snippets; it does not choose
-the right graph links for you.
+--fix` is good at inserting required doc-comment snippets, removing exact
+duplicate graph links, restoring already-declared reciprocal links, and
+resynchronizing the feature registry when the checked-in feature documents and
+registry disagree in a deterministic way. It still does not choose ambiguous
+graph links for you.
 
 If one small file is intentionally owned by one requirement or feature, you can
 use `symbols: ['*']` instead of enumerating every public symbol by hand.
