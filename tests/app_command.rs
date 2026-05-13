@@ -72,7 +72,8 @@ fn clean_shutdown(status: &std::process::ExitStatus) -> bool {
 }
 
 fn wait_for_server(port: u16) {
-    for _ in 0..80 {
+    // Coverage builds are slower, so give the app more time to finish its startup work.
+    for _ in 0..200 {
         if let Ok(response) = http_get(port, "/health")
             && response.contains("200 OK")
             && response.contains("\"status\":\"ok\"")
@@ -149,7 +150,7 @@ fn spawn_fake_vite_server() -> std::thread::JoinHandle<()> {
 }
 
 fn wait_for_output_fragment(path: &Path, fragment: &str) {
-    for _ in 0..80 {
+    for _ in 0..200 {
         if fs::read_to_string(path)
             .map(|contents| contents.contains(fragment))
             .unwrap_or(false)
