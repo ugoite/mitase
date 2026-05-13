@@ -109,6 +109,53 @@ fn task_classify_prints_json_output() {
 }
 
 #[test]
+fn task_classify_reports_related_items_without_explicit_ids() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_request(tempdir.path(), "Request artifact classification", &[]);
+
+    let output = {
+        let mut command = std::process::Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "classify", "request.yaml"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task classify should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("classification: requirement_create"));
+    assert!(stdout.contains("closest spec graph matches are"));
+    assert!(stdout.contains("related items:"));
+    assert!(stdout.contains("FEAT-TASK-001"));
+}
+
+#[test]
+fn task_classify_reports_explicit_items_from_all_spec_layers() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_request(
+        tempdir.path(),
+        "Update PHIL-001, POL-001, REQ-CORE-028, and FEAT-TASK-001 together.",
+        &["PHIL-001", "POL-001", "REQ-CORE-028", "FEAT-TASK-001"],
+    );
+
+    let output = {
+        let mut command = std::process::Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "classify", "request.yaml"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task classify should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("classification: requirement_change"));
+    assert!(stdout.contains("PHIL-001\tphilosophy\tKeep planning explicit"));
+    assert!(stdout.contains("POL-001\tpolicy\tKeep request workflows visible"));
+    assert!(stdout.contains("REQ-CORE-028\trequirement\tClassify request artifacts"));
+    assert!(stdout.contains("FEAT-TASK-001\tfeature\tRequest artifact classification"));
+}
+
+#[test]
 // REQ-CORE-028
 fn task_classify_handles_requests_without_matches() {
     let tempdir = tempdir().expect("tempdir");

@@ -324,12 +324,8 @@ fn print_text_output(request_path: &Path, outcome: &ClassificationOutcome) {
     print_items("explicit items", &outcome.explicit_items);
     print_items("related items", &outcome.related_items);
     println!("reasons:");
-    if outcome.reasons.is_empty() {
-        println!("- none");
-    } else {
-        for reason in &outcome.reasons {
-            println!("- {reason}");
-        }
+    for reason in &outcome.reasons {
+        println!("- {reason}");
     }
 }
 
@@ -525,6 +521,34 @@ mod tests {
                 .reasons
                 .iter()
                 .any(|reason| reason.contains("create-oriented language"))
+        );
+    }
+
+    #[test]
+    fn classify_request_merges_related_items_from_analysis_text() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        let request = tempdir.path().join("request.yaml");
+        fs::write(
+            &request,
+            "version: 1\nrequest: >\n  Classify request artifacts into requirement actions\ncontext: {}\n",
+        )
+        .expect("request artifact should write");
+
+        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
+        let artifact = load_request_artifact(&request).expect("request");
+        let outcome = classify_request(&workspace, artifact).expect("classification");
+        assert!(
+            outcome
+                .related_items
+                .iter()
+                .any(|item| item.id == "REQ-CORE-028")
+        );
+        assert!(
+            outcome
+                .reasons
+                .iter()
+                .any(|reason| reason.contains("closest spec graph matches"))
         );
     }
 

@@ -592,6 +592,8 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
         - **symbols**:
           - task_classify_prints_text_output
           - task_classify_prints_json_output
+          - task_classify_reports_related_items_without_explicit_ids
+          - task_classify_reports_explicit_items_from_all_spec_layers
           - task_classify_handles_requests_without_matches
     - **markdown**:
       - **file**: docs/guide/request-artifact-format.md
@@ -1165,6 +1167,8 @@ requirements:
           symbols:
             - task_classify_prints_text_output
             - task_classify_prints_json_output
+            - task_classify_reports_related_items_without_explicit_ids
+            - task_classify_reports_explicit_items_from_all_spec_layers
             - task_classify_handles_requests_without_matches
       markdown:
         - file: docs/guide/request-artifact-format.md
