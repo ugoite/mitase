@@ -858,7 +858,7 @@ rules:
     description: |
       The strict trace coverage rule only means something when `syu` can walk the
       repository paths that are supposed to contain owned Rust, Python, Go,
-      Java, C#, Kotlin, and TypeScript/JavaScript source and test files.
+      Java, C#, Kotlin, TypeScript/JavaScript, and Ruby source and test files.
       Generated-path ignores keep common build output such as `build/`,
       `coverage/`, `dist/`, and `target/` out of the inventory without hiding
       authored nested paths like `src/build/`. If directory discovery fails, the
