@@ -7,6 +7,7 @@
 // REQ-CORE-025
 // REQ-CORE-026
 // REQ-CORE-027
+// REQ-CORE-028
 
 use assert_cmd::cargo::CommandCargoExt;
 use std::process::Command;
@@ -30,6 +31,7 @@ fn root_help_includes_start_here_guidance() {
     assert!(stdout.contains("syu validate ."));
     assert!(stdout.contains("syu browse ."));
     assert!(stdout.contains("syu app ."));
+    assert!(stdout.contains("syu task classify request.yaml"));
     assert!(stdout.contains(
         "Browse the specification in your terminal (interactive prompts or text output)"
     ));
@@ -54,31 +56,46 @@ fn app_help_mentions_remote_bind_opt_in() {
 #[test]
 fn workspace_help_uses_current_directory_default_consistently() {
     for command in [
-        "browse", "show", "search", "trace", "review", "app", "doctor", "validate", "check",
-        "report", "add", "relate", "log", "audit", "explain",
+        &["browse"][..],
+        &["show"][..],
+        &["search"][..],
+        &["trace"][..],
+        &["review"][..],
+        &["app"][..],
+        &["doctor"][..],
+        &["validate"][..],
+        &["check"][..],
+        &["report"][..],
+        &["add"][..],
+        &["task", "classify"][..],
+        &["relate"][..],
+        &["log"][..],
+        &["audit"][..],
+        &["explain"][..],
     ] {
         let output = Command::cargo_bin("syu")
             .expect("binary should build")
-            .args([command, "--help"])
+            .args(command)
+            .arg("--help")
             .output()
             .expect("help should render");
 
-        assert!(output.status.success(), "{command} help should succeed");
+        assert!(output.status.success(), "{command:?} help should succeed");
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         assert!(
             stdout.contains(
                 "Workspace root or any child directory; syu walks upward to find syu.yaml and the configured spec tree"
             ),
-            "{command} help should describe the workspace root consistently",
+            "{command:?} help should describe the workspace root consistently",
         );
         assert!(
             stdout.contains("[default: .]"),
-            "{command} help should keep the current-directory default",
+            "{command:?} help should keep the current-directory default",
         );
         assert!(
             !stdout.contains("default: docs/syu"),
-            "{command} help should not claim docs/syu is the workspace default",
+            "{command:?} help should not claim docs/syu is the workspace default",
         );
     }
 }
@@ -259,6 +276,23 @@ fn add_help_mentions_explicit_file_and_feature_kind() {
     );
     assert!(stdout.contains("syu add requirement --interactive"));
     assert!(stdout.contains("FEAT-AUTH-LOGIN-001 --kind auth"));
+}
+
+#[test]
+fn task_help_mentions_request_artifacts_and_json_output() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args(["task", "classify", "--help"])
+        .output()
+        .expect("help should render");
+
+    assert!(output.status.success(), "task help should succeed");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("request artifact"));
+    assert!(stdout.contains("--format"));
+    assert!(stdout.contains("syu task classify request.yaml"));
+    assert!(stdout.contains("syu task classify request.yaml --format json"));
 }
 
 #[test]

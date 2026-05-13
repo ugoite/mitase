@@ -5,9 +5,11 @@
 // FEAT-TRACE-001
 // FEAT-BROWSE-001
 // FEAT-LSP-001
+// FEAT-TASK-001
 // REQ-CORE-021
 // REQ-CORE-023
 // REQ-CORE-024
+// REQ-CORE-028
 
 pub mod cli;
 pub mod command;
@@ -68,6 +70,7 @@ enum Dispatch {
     List(cli::ListArgs),
     Show(cli::ShowArgs),
     Search(cli::SearchArgs),
+    Task(cli::TaskArgs),
     Audit(cli::AuditArgs),
     Log(cli::LogArgs),
     Explain(cli::ExplainArgs),
@@ -75,7 +78,6 @@ enum Dispatch {
     Trace(cli::TraceArgs),
     App(cli::AppArgs),
     Doctor(cli::DoctorArgs),
-    Task(cli::TaskArgs),
     PrintHelp,
     Validate(cli::ValidateArgs),
     Report(cli::ReportArgs),
@@ -92,6 +94,7 @@ fn dispatch(cli: cli::Cli, stdin_is_terminal: bool, stdout_is_terminal: bool) ->
         Some(cli::Commands::List(args)) => Dispatch::List(args),
         Some(cli::Commands::Show(args)) => Dispatch::Show(args),
         Some(cli::Commands::Search(args)) => Dispatch::Search(args),
+        Some(cli::Commands::Task(args)) => Dispatch::Task(args),
         Some(cli::Commands::Audit(args)) => Dispatch::Audit(args),
         Some(cli::Commands::Log(args)) => Dispatch::Log(args),
         Some(cli::Commands::Explain(args)) => Dispatch::Explain(args),
@@ -99,7 +102,6 @@ fn dispatch(cli: cli::Cli, stdin_is_terminal: bool, stdout_is_terminal: bool) ->
         Some(cli::Commands::Trace(args)) => Dispatch::Trace(args),
         Some(cli::Commands::App(args)) => Dispatch::App(args),
         Some(cli::Commands::Doctor(args)) => Dispatch::Doctor(args),
-        Some(cli::Commands::Task(args)) => Dispatch::Task(args),
         None if stdin_is_terminal && stdout_is_terminal => {
             Dispatch::Browse(cli::BrowseArgs::default())
         }
@@ -120,6 +122,7 @@ fn run_dispatch(dispatch: Dispatch) -> Result<i32> {
         Dispatch::List(args) => command::list::run_list_command(&args),
         Dispatch::Show(args) => command::show::run_show_command(&args),
         Dispatch::Search(args) => command::search::run_search_command(&args),
+        Dispatch::Task(args) => command::task::run_task_command(&args),
         Dispatch::Audit(args) => command::audit::run_audit_command(&args),
         Dispatch::Log(args) => command::log::run_log_command(&args),
         Dispatch::Explain(args) => command::explain::run_explain_command(&args),
@@ -127,7 +130,6 @@ fn run_dispatch(dispatch: Dispatch) -> Result<i32> {
         Dispatch::Trace(args) => command::trace::run_trace_command(&args),
         Dispatch::App(args) => command::app::run_app_command(&args),
         Dispatch::Doctor(args) => command::doctor::run_doctor_command(&args),
-        Dispatch::Task(args) => command::task::run_task_command(&args),
         Dispatch::PrintHelp => {
             let mut command = cli::Cli::command();
             command.print_help()?;
@@ -358,6 +360,37 @@ mod tests {
     }
 
     #[test]
+    // REQ-CORE-028
+    fn dispatches_task_subcommands_without_rewriting_them() {
+        let task = super::dispatch(
+            Cli {
+                command: Some(Commands::Task(TaskArgs {
+                    command: TaskCommands::Classify(TaskClassifyArgs {
+                        request: PathBuf::from("request.yaml"),
+                        workspace: PathBuf::from("workspace"),
+                        format: OutputFormat::Json,
+                    }),
+                })),
+            },
+            true,
+            true,
+        );
+
+        assert!(matches!(
+            task,
+            super::Dispatch::Task(crate::cli::TaskArgs {
+                command: TaskCommands::Classify(TaskClassifyArgs {
+                    request,
+                    workspace,
+                    format,
+                })
+            }) if request == Path::new("request.yaml")
+                && workspace == Path::new("workspace")
+                && format == OutputFormat::Json
+        ));
+    }
+
+    #[test]
     // REQ-CORE-025
     fn dispatches_audit_subcommands_without_rewriting_them() {
         let audit = super::dispatch(
@@ -483,37 +516,6 @@ mod tests {
                     && !interactive
                     && file == Some(PathBuf::from("docs/syu/features/auth/login.yaml"))
                     && kind.as_deref() == Some("auth")
-        ));
-    }
-
-    #[test]
-    // REQ-CORE-028
-    fn dispatches_task_subcommands_without_rewriting_them() {
-        let task = super::dispatch(
-            Cli {
-                command: Some(Commands::Task(TaskArgs {
-                    command: TaskCommands::Classify(TaskClassifyArgs {
-                        request: PathBuf::from("request.yaml"),
-                        workspace: PathBuf::from("workspace"),
-                        format: OutputFormat::Json,
-                    }),
-                })),
-            },
-            true,
-            true,
-        );
-
-        assert!(matches!(
-            task,
-            super::Dispatch::Task(crate::cli::TaskArgs {
-                command: TaskCommands::Classify(TaskClassifyArgs {
-                    request,
-                    workspace,
-                    format
-                })
-            }) if request == Path::new("request.yaml")
-                && workspace == Path::new("workspace")
-                && format == OutputFormat::Json
         ));
     }
 }
