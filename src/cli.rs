@@ -592,7 +592,9 @@ pub struct ValidateArgs {
     #[arg(long, action = ArgAction::SetTrue)]
     pub spec_only: bool,
 
-    #[arg(help = "Apply conservative documentation autofixes")]
+    #[arg(
+        help = "Apply conservative autofixes for trace docs, graph links, and feature registry drift"
+    )]
     #[arg(long, action = ArgAction::SetTrue)]
     pub fix: bool,
 
