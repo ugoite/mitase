@@ -88,9 +88,10 @@ syu review --range origin/main...HEAD
 ```
 
 `syu review` is a friendly entry point for the same range tracing logic. It
-summarizes changed files, surfaces unowned or skipped paths inline, and keeps
-the follow-up `show`, `relate`, `log`, and `validate --id` commands close at
-hand.
+starts with the affected philosophy, policy, requirement, and feature IDs,
+separates directly matched items from indirect upstream/downstream context,
+surfaces unowned or skipped paths inline, and keeps the follow-up `show`,
+`relate`, `log`, and `validate --id` commands close at hand.
 
 When a changed file is a contract file with traced operations, the range
 summary keeps the owning requirements and features visible and also prints the
