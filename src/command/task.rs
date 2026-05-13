@@ -527,12 +527,8 @@ fn print_classify_text_output(request_path: &Path, outcome: &ClassificationOutco
     print_items("explicit items", &outcome.explicit_items);
     print_items("related items", &outcome.related_items);
     println!("reasons:");
-    if outcome.reasons.is_empty() {
-        println!("- none");
-    } else {
-        for reason in &outcome.reasons {
-            println!("- {reason}");
-        }
+    for reason in &outcome.reasons {
+        println!("- {reason}");
     }
 }
 
@@ -548,12 +544,8 @@ fn print_scaffold_text_output(
     println!("{}", outcome.request.trim());
     println!();
     println!("reasons:");
-    if outcome.reasons.is_empty() {
-        println!("- none");
-    } else {
-        for reason in &outcome.reasons {
-            println!("- {reason}");
-        }
+    for reason in &outcome.reasons {
+        println!("- {reason}");
     }
     println!();
     println!("planned updates:");
@@ -781,13 +773,8 @@ fn normalize_scaffold_stem(stem: &str) -> String {
     }
 }
 
-fn scaffold_title(request: &str, stem: &str) -> String {
-    let summary = summarize_request(request);
-    if summary.is_empty() {
-        title_case_slug(stem)
-    } else {
-        summary
-    }
+fn scaffold_title(request: &str, _stem: &str) -> String {
+    summarize_request(request)
 }
 
 fn id_stem(id: &str) -> String {
@@ -807,9 +794,6 @@ fn requirement_prefix(id: &str) -> String {
 
 fn rewrite_spec_prefix(id: &str, prefix: &str) -> String {
     let mut segments = id.split('-').collect::<Vec<_>>();
-    if segments.is_empty() {
-        return prefix.to_string();
-    }
     segments[0] = prefix;
     segments.join("-")
 }
@@ -948,8 +932,8 @@ mod tests {
     use crate::cli::{OutputFormat, TaskArgs, TaskClassifyArgs, TaskCommands, TaskScaffoldArgs};
 
     use super::{
-        RequirementAction, build_scaffold_plan, classify_request, load_request_artifact,
-        run_task_command,
+        ClassificationOutcome, RequirementAction, build_scaffold_plan, classify_request,
+        load_request_artifact, run_task_command,
     };
 
     fn write_request_artifact(path: &Path, request: &str, linked_ids: &[&str]) {
@@ -1117,6 +1101,209 @@ mod tests {
                 .iter()
                 .any(|update| matches!(update.kind, super::ScaffoldUpdateKind::FeatureRegistry))
         );
+    }
+
+    #[test]
+    fn build_scaffold_plan_creates_new_documents_and_registry_entry() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        let request = tempdir.path().join("request.yaml");
+        write_request_artifact(
+            &request,
+            "Create a new checkout planning flow for reviewers.",
+            &[],
+        );
+
+        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
+        let artifact = load_request_artifact(&request).expect("request");
+        let explicit_ids = artifact.explicit_ids();
+        let outcome = classify_request(&workspace, artifact).expect("classification");
+        let plan = build_scaffold_plan(&workspace, &outcome, &explicit_ids)
+            .expect("scaffold plan should be created");
+
+        assert!(plan.updates.iter().any(|update| {
+            matches!(update.kind, super::ScaffoldUpdateKind::Requirement)
+                && matches!(update.action, super::ScaffoldAction::Create)
+                && update.path.contains("docs/syu/requirements/core/core.yaml")
+        }));
+        assert!(plan.updates.iter().any(|update| {
+            matches!(update.kind, super::ScaffoldUpdateKind::Feature)
+                && matches!(update.action, super::ScaffoldAction::Create)
+                && update.path.contains("docs/syu/features/core/core.yaml")
+        }));
+        assert!(plan.updates.iter().any(|update| {
+            matches!(update.kind, super::ScaffoldUpdateKind::FeatureRegistry)
+                && matches!(update.action, super::ScaffoldAction::Append)
+                && update.contents.contains("file: core/core.yaml")
+        }));
+    }
+
+    #[test]
+    fn build_scaffold_plan_rejects_delete_classifications() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        let request = tempdir.path().join("request.yaml");
+        write_request_artifact(
+            &request,
+            "Delete REQ-CORE-028 because the workflow is obsolete.",
+            &["REQ-CORE-028"],
+        );
+
+        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
+        let artifact = load_request_artifact(&request).expect("request");
+        let explicit_ids = artifact.explicit_ids();
+        let outcome = classify_request(&workspace, artifact).expect("classification");
+        let error = build_scaffold_plan(&workspace, &outcome, &explicit_ids)
+            .expect_err("delete scaffolds should be rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("only supports request artifacts")
+        );
+    }
+
+    #[test]
+    fn scaffold_helpers_cover_prefixes_paths_and_fallbacks() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
+        let lookup = crate::command::lookup::WorkspaceLookup::new(&workspace);
+
+        assert_eq!(RequirementAction::Delete.label(), "requirement_delete");
+        assert_eq!(
+            super::ScaffoldUpdateKind::FeatureRegistry.label(),
+            "feature registry"
+        );
+        assert_eq!(super::ScaffoldAction::Append.label(), "append");
+        assert_eq!(
+            super::scaffold_relative_path(
+                crate::cli::LookupKind::Requirement,
+                "REQ-AUTH-LOGIN-001"
+            ),
+            PathBuf::from("requirements/auth/login.yaml")
+        );
+        assert_eq!(
+            super::scaffold_relative_path(crate::cli::LookupKind::Feature, "FEAT-001"),
+            PathBuf::from("features/core/core.yaml")
+        );
+        assert_eq!(
+            super::scaffold_relative_path(crate::cli::LookupKind::Policy, "POL-001"),
+            PathBuf::from("planned/unsupported.yaml")
+        );
+        assert_eq!(
+            super::default_scaffold_folder(crate::cli::LookupKind::Requirement),
+            "core"
+        );
+        assert_eq!(
+            super::default_scaffold_folder(crate::cli::LookupKind::Philosophy),
+            "philosophy"
+        );
+        assert_eq!(
+            super::resolve_scaffold_id(
+                &lookup,
+                crate::cli::LookupKind::Requirement,
+                &["FEAT-AUTH-LOGIN-001".to_string()],
+                "ignored",
+            ),
+            "REQ-AUTH-LOGIN-001"
+        );
+        assert_eq!(
+            super::resolve_scaffold_id(
+                &lookup,
+                crate::cli::LookupKind::Philosophy,
+                &["POL-001".to_string()],
+                "governance",
+            ),
+            "PHIL-GOVERNANCE-001"
+        );
+        assert_eq!(
+            super::resolve_scaffold_id(
+                &lookup,
+                crate::cli::LookupKind::Policy,
+                &["REQ-CORE-028".to_string()],
+                "governance",
+            ),
+            "POL-CORE-028"
+        );
+        assert_eq!(
+            super::next_available_scaffold_id(&lookup, crate::cli::LookupKind::Feature, "task"),
+            "FEAT-TASK-002"
+        );
+        assert_eq!(
+            super::next_available_scaffold_id(
+                &lookup,
+                crate::cli::LookupKind::Philosophy,
+                "planning"
+            ),
+            "PHIL-PLANNING-001"
+        );
+        assert_eq!(
+            super::next_available_scaffold_id(&lookup, crate::cli::LookupKind::Policy, "planning"),
+            "POL-PLANNING-001"
+        );
+        assert_eq!(super::normalize_scaffold_stem("!!!"), "task");
+        assert_eq!(super::summarize_request("\n\n"), "planned task");
+        assert_eq!(super::truncate_text("abcdef", 3), "...");
+        assert_eq!(super::slugify("  Auth: Login++Flow  "), "auth-login-flow");
+        assert_eq!(super::title_case_slug("auth-login-flow"), "Auth Login Flow");
+        assert_eq!(super::id_stem("REQ"), "task");
+
+        let error = super::feature_registry_file_label(&workspace, "outside/features/auth.yaml")
+            .expect_err("external feature docs should be rejected");
+        assert!(error.to_string().contains("must stay under"));
+
+        let mut related = vec![super::SearchResult {
+            id: "REQ-CORE-028".to_string(),
+            kind: "requirement",
+            title: "Classify request artifacts into requirement actions".to_string(),
+        }];
+        super::merge_related_items(
+            &mut related,
+            vec![super::SearchResult {
+                id: "FEAT-TASK-001".to_string(),
+                kind: "feature",
+                title: "Request artifact classification".to_string(),
+            }],
+        );
+        assert!(related.iter().any(|item| item.id == "FEAT-TASK-001"));
+    }
+
+    #[test]
+    fn scaffold_stem_prefers_feature_area_summary_then_task_fallback() {
+        let base = ClassificationOutcome {
+            classification: RequirementAction::Create,
+            reasons: vec!["reason".to_string()],
+            explicit_items: Vec::new(),
+            related_items: Vec::new(),
+            request: "Create reviewer intake.".to_string(),
+            context: super::RequestArtifactContext::default(),
+        };
+
+        assert_eq!(
+            super::scaffold_stem(&base, &["FEAT-AUTH-LOGIN-001".to_string()]),
+            "AUTH-LOGIN"
+        );
+        assert_eq!(super::scaffold_stem(&base, &[]), "create-reviewer-intake");
+
+        let with_area = ClassificationOutcome {
+            context: super::RequestArtifactContext {
+                affected_area: Some("Checkout Flow".to_string()),
+                ..super::RequestArtifactContext::default()
+            },
+            ..base
+        };
+        assert_eq!(super::scaffold_stem(&with_area, &[]), "checkout-flow");
+
+        let fallback = ClassificationOutcome {
+            request: "!!!".to_string(),
+            context: super::RequestArtifactContext {
+                affected_area: Some("!!!".to_string()),
+                ..super::RequestArtifactContext::default()
+            },
+            ..with_area
+        };
+        assert_eq!(super::scaffold_stem(&fallback, &[]), "task");
+        assert_eq!(super::scaffold_title("", "fallback-title"), "planned task");
     }
 
     #[test]

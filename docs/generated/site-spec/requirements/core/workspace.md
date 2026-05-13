@@ -585,10 +585,15 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
         - **symbols**:
           - dispatch
           - run_dispatch
+          - dispatches_task_subcommands_without_rewriting_them
       - **file**: src/cli.rs
         - **symbols**:
           - TaskArgs
           - TaskClassifyArgs
+      - **file**: tests/task_command.rs
+        - **symbols**:
+          - task_classify_prints_text_output_with_related_items
+          - task_classify_prints_json_output_with_explicit_items
     - **markdown**:
       - **file**: docs/guide/request-artifact-format.md
         - **symbols**:
@@ -627,6 +632,12 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
         - **symbols**:
           - dispatch
           - run_dispatch
+          - dispatches_task_subcommands_without_rewriting_them
+      - **file**: tests/task_command.rs
+        - **symbols**:
+          - task_scaffold_prints_text_preview_for_new_planned_updates
+          - task_scaffold_prints_json_preview_for_existing_ids
+          - task_scaffold_rejects_delete_requests
     - **markdown**:
       - **file**: docs/guide/request-artifact-format.md
         - **symbols**:
@@ -1195,10 +1206,15 @@ requirements:
           symbols:
             - dispatch
             - run_dispatch
+            - dispatches_task_subcommands_without_rewriting_them
         - file: src/cli.rs
           symbols:
             - TaskArgs
             - TaskClassifyArgs
+        - file: tests/task_command.rs
+          symbols:
+            - task_classify_prints_text_output_with_related_items
+            - task_classify_prints_json_output_with_explicit_items
       markdown:
         - file: docs/guide/request-artifact-format.md
           symbols:
@@ -1236,6 +1252,12 @@ requirements:
           symbols:
             - dispatch
             - run_dispatch
+            - dispatches_task_subcommands_without_rewriting_them
+        - file: tests/task_command.rs
+          symbols:
+            - task_scaffold_prints_text_preview_for_new_planned_updates
+            - task_scaffold_prints_json_preview_for_existing_ids
+            - task_scaffold_rejects_delete_requests
       markdown:
         - file: docs/guide/request-artifact-format.md
           symbols:

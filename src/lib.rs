@@ -161,8 +161,8 @@ mod tests {
 
     use crate::cli::{
         AddArgs, AppArgs, AuditArgs, Cli, Commands, CompletionArgs, ExplainArgs, HistoryKind,
-        ListArgs, LogArgs, LookupKind, OutputFormat, RelateArgs, SearchArgs, ShowArgs,
-        TemplatesArgs, TraceArgs,
+        ListArgs, LogArgs, LookupKind, OutputFormat, RelateArgs, SearchArgs, ShowArgs, TaskArgs,
+        TaskClassifyArgs, TaskCommands, TemplatesArgs, TraceArgs,
     };
     use clap_complete::Shell;
 
@@ -482,6 +482,37 @@ mod tests {
                     && !interactive
                     && file == Some(PathBuf::from("docs/syu/features/auth/login.yaml"))
                     && kind.as_deref() == Some("auth")
+        ));
+    }
+
+    #[test]
+    // REQ-CORE-028
+    fn dispatches_task_subcommands_without_rewriting_them() {
+        let task = super::dispatch(
+            Cli {
+                command: Some(Commands::Task(TaskArgs {
+                    command: TaskCommands::Classify(TaskClassifyArgs {
+                        request: PathBuf::from("request.yaml"),
+                        workspace: PathBuf::from("workspace"),
+                        format: OutputFormat::Json,
+                    }),
+                })),
+            },
+            true,
+            true,
+        );
+
+        assert!(matches!(
+            task,
+            super::Dispatch::Task(crate::cli::TaskArgs {
+                command: TaskCommands::Classify(TaskClassifyArgs {
+                    request,
+                    workspace,
+                    format
+                })
+            }) if request == Path::new("request.yaml")
+                && workspace == Path::new("workspace")
+                && format == OutputFormat::Json
         ));
     }
 }
