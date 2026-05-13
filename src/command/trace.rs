@@ -1585,6 +1585,29 @@ mod tests {
                     document_path: None,
                 }],
             },
+            TraceLookupOutput {
+                file: "policy.rs".to_string(),
+                symbol: None,
+                status: TraceLookupStatus::Owned,
+                matched_owners: vec![TraceOwnerMatch {
+                    kind: "policy",
+                    id: "POL-IGNORED".to_string(),
+                    title: "Ignored policy".to_string(),
+                    trace_role: "documentation".to_string(),
+                    language: "rust".to_string(),
+                    file: "policy.rs".to_string(),
+                    declared_symbols: Vec::new(),
+                    method: None,
+                    path: None,
+                    matched_symbol: None,
+                    match_mode: "file",
+                }],
+                file_only_owners: Vec::new(),
+                requirements: Vec::new(),
+                features: Vec::new(),
+                policies: Vec::new(),
+                philosophies: Vec::new(),
+            },
         ]);
 
         assert_eq!(summary.direct.features.len(), 1);
