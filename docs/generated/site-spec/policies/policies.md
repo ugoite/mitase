@@ -43,6 +43,7 @@ description: "Generated reference for docs/syu/policies/policies.yaml"
     - REQ-CORE-021
     - REQ-CORE-023
     - REQ-CORE-025
+    - REQ-CORE-028
 - **id**: POL-002
   - **title**: Validation should explain the current state instead of only failing
   - **summary**: Errors, reports, and browsing should make the layered model legible even when the workspace is broken.
@@ -70,6 +71,7 @@ description: "Generated reference for docs/syu/policies/policies.yaml"
     - REQ-CORE-024
     - REQ-CORE-025
     - REQ-CORE-026
+    - REQ-CORE-028
 - **id**: POL-003
   - **title**: Traceability should prove ownership from specification to code and tests
   - **summary**: Declared traces should map to real files, real symbols, optional full-file ownership, and derivable repository history.
@@ -122,6 +124,7 @@ description: "Generated reference for docs/syu/policies/policies.yaml"
     - REQ-CORE-025
     - REQ-CORE-026
     - REQ-CORE-027
+    - REQ-CORE-028
 - **id**: POL-005
   - **title**: Documentation and examples must lower adoption friction
   - **summary**: Guides, reports, sites, and examples are part of the product surface.
@@ -225,6 +228,7 @@ policies:
       - REQ-CORE-021
       - REQ-CORE-023
       - REQ-CORE-025
+      - REQ-CORE-028
 
   - id: POL-002
     title: Validation should explain the current state instead of only failing
@@ -252,6 +256,7 @@ policies:
       - REQ-CORE-024
       - REQ-CORE-025
       - REQ-CORE-026
+      - REQ-CORE-028
 
   - id: POL-003
     title: Traceability should prove ownership from specification to code and tests
@@ -304,6 +309,7 @@ policies:
       - REQ-CORE-025
       - REQ-CORE-026
       - REQ-CORE-027
+      - REQ-CORE-028
 
   - id: POL-005
     title: Documentation and examples must lower adoption friction

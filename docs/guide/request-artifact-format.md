@@ -50,3 +50,7 @@ context:
 The artifact is intentionally smaller than the spec itself. Once the request is
 understood, move the real work into planned requirements and features with the
 normal spec workflow.
+
+For a quick planning pass, `syu task classify request.yaml` can read the
+artifact and the current spec graph, then return a requirement create, change,
+or delete decision with an explanation in text or JSON.

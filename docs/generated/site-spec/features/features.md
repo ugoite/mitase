@@ -41,6 +41,8 @@ description: "Generated reference for docs/syu/features/features.yaml"
   - **file**: cli/init.yaml
 - **kind**: add
   - **file**: cli/add.yaml
+- **kind**: task
+  - **file**: cli/task.yaml
 - **kind**: doctor
   - **file**: cli/doctor.yaml
 - **kind**: report
@@ -93,6 +95,8 @@ files:
     file: cli/init.yaml
   - kind: add
     file: cli/add.yaml
+  - kind: task
+    file: cli/task.yaml
   - kind: doctor
     file: cli/doctor.yaml
   - kind: report

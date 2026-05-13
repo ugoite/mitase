@@ -16,7 +16,9 @@
 // FEAT-REPORT-001
 // FEAT-INIT-002
 // FEAT-DOCTOR-001
+// FEAT-TASK-001
 // REQ-CORE-001
+// REQ-CORE-028
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, builder::BoolishValueParser};
 use clap_complete::Shell;
@@ -33,7 +35,8 @@ New here?
   3. syu init .      scaffold a workspace in the current directory
   4. syu validate .  check the layered spec and traceability
   5. syu browse .    explore the spec in your terminal
-  6. syu app .       start the local browser UI server";
+  6. syu app .       start the local browser UI server
+  7. syu task classify request.yaml  classify a request artifact against the current spec graph";
 
 const APP_AFTER_HELP: &str = concat!(
     "After startup, open the printed URL in your browser.\n",
@@ -76,6 +79,13 @@ Examples:
   syu add feature FEAT-AUTH-LOGIN-001 --kind auth
   syu add feature path/to/workspace --interactive
   syu add feature FEAT-AUTH-001 --kind auth --file docs/syu/features/auth/login.yaml";
+
+const TASK_CLASSIFY_AFTER_HELP: &str = "\
+Examples:
+  syu task classify request.yaml
+  syu task classify request.yaml --format json
+
+Use this when a request has already been captured as a request artifact and you want the current spec graph to decide whether the next requirement-level move is to create, change, or delete.";
 
 const WORKSPACE_HELP: &str = "Workspace root or any child directory; syu walks upward to find syu.yaml and the configured spec tree";
 
@@ -276,6 +286,11 @@ pub enum Commands {
         after_help = ADD_AFTER_HELP
     )]
     Add(AddArgs),
+    #[command(
+        about = "Classify request artifacts against the current spec graph",
+        after_help = TASK_CLASSIFY_AFTER_HELP
+    )]
+    Task(TaskArgs),
     #[command(about = "Start LSP server for editor integrations (JSON-RPC 2.0 over stdio)")]
     Lsp,
 }
@@ -766,6 +781,36 @@ pub struct AddArgs {
     pub kind: Option<String>,
 }
 
+#[derive(Debug, Clone, Args)]
+#[command(subcommand_required = true, arg_required_else_help = true)]
+pub struct TaskArgs {
+    #[command(subcommand)]
+    pub command: TaskCommands,
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum TaskCommands {
+    #[command(
+        about = "Classify a request artifact as requirement create, change, or delete",
+        after_help = TASK_CLASSIFY_AFTER_HELP
+    )]
+    Classify(TaskClassifyArgs),
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct TaskClassifyArgs {
+    #[arg(help = "YAML request artifact to classify")]
+    pub request: PathBuf,
+
+    #[arg(help = WORKSPACE_HELP)]
+    #[arg(default_value = ".")]
+    pub workspace: PathBuf,
+
+    #[arg(help = "Output format for the classification result")]
+    #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Default)]
 pub enum StarterTemplate {
     #[default]
@@ -842,8 +887,8 @@ impl ValidationGenreFilter {
 #[cfg(test)]
 mod tests {
     use super::{
-        Cli, CompletionArgs, LookupKind, StarterTemplate, ValidationGenreFilter,
-        ValidationSeverityFilter,
+        Cli, CompletionArgs, LookupKind, StarterTemplate, TaskArgs, TaskClassifyArgs, TaskCommands,
+        ValidationGenreFilter, ValidationSeverityFilter,
     };
     use crate::command::init::{starter_template_example_commands, starter_template_names};
     use clap::Parser;
@@ -955,6 +1000,33 @@ mod tests {
         let rendered = format!("{cli:?}");
         assert!(rendered.contains("command: Some(Templates("));
         assert!(rendered.contains("format: Text"));
+    }
+
+    #[test]
+    fn task_classify_args_parse_request_paths_and_json_format() {
+        let cli = Cli::try_parse_from([
+            "syu",
+            "task",
+            "classify",
+            "request.yaml",
+            ".",
+            "--format",
+            "json",
+        ])
+        .expect("task classify args should parse");
+
+        assert!(matches!(
+            cli.command,
+            Some(super::Commands::Task(TaskArgs {
+                command: TaskCommands::Classify(TaskClassifyArgs {
+                    request,
+                    workspace,
+                    format,
+                }),
+            })) if request == std::path::Path::new("request.yaml")
+                && workspace == std::path::Path::new(".")
+                && format == super::OutputFormat::Json
+        ));
     }
 
     #[test]
