@@ -601,11 +601,8 @@ mod tests {
             "category: History\nversion: 1\nfeatures: [\n",
         )
         .expect("invalid feature file");
-        fs::write(
-            workspace.join("features/not-a-mapping.yaml"),
-            "- 1\n",
-        )
-        .expect("non-mapping feature file");
+        fs::write(workspace.join("features/not-a-mapping.yaml"), "- 1\n")
+            .expect("non-mapping feature file");
         fs::write(
             workspace.join("features/structured.yaml"),
             "category: History\nversion: 1\nfeatures:\n  - id: FEAT-HIST-STRUCT-001\n    title: Structured feature docs should parse.\n    summary: Structured feature docs should hit the parse-error path.\n    status: implemented\n    linked_requirements: []\n    implementations: []\n",
@@ -631,12 +628,7 @@ mod tests {
         assert!(git_tree_files(&missing_repo, "HEAD", std::path::Path::new("")).is_err());
         assert!(git_blob(&missing_repo, "HEAD", "philosophy.yaml").is_err());
 
-        assert!(parse_blob::<PhilosophyDocument>(
-            workspace,
-            &commit,
-            "philosophy.yaml"
-        )
-        .is_err());
+        assert!(parse_blob::<PhilosophyDocument>(workspace, &commit, "philosophy.yaml").is_err());
         assert!(
             parse_blob::<PhilosophyDocument>(workspace, &commit, "missing.yaml")
                 .expect("missing historical blob lookup should succeed")
@@ -662,10 +654,7 @@ mod tests {
                 .expect("non-mapping feature blob lookup should succeed")
                 .is_none()
         );
-        assert!(
-            parse_feature_blob(workspace, &commit, "features/structured.yaml")
-                .is_err()
-        );
+        assert!(parse_feature_blob(workspace, &commit, "features/structured.yaml").is_err());
     }
 
     #[test]
