@@ -381,12 +381,14 @@ mod tests {
         let mut command = Command::new("git");
         command.arg("-C").arg(workspace).args(args);
         let output = command.output().expect("git should run");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
             output.status.success(),
             "git {:?} failed\nstdout:\n{}\nstderr:\n{}",
             args,
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
+            stdout,
+            stderr
         );
     }
 
@@ -394,12 +396,14 @@ mod tests {
         let mut command = Command::new("git");
         command.arg("-C").arg(workspace).args(args);
         let output = command.output().expect("git should run");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
             output.status.success(),
             "git {:?} failed\nstdout:\n{}\nstderr:\n{}",
             args,
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
+            stdout,
+            stderr
         );
         String::from_utf8(output.stdout)
             .expect("git output should be utf8")
@@ -418,11 +422,13 @@ mod tests {
             .env("GIT_AUTHOR_DATE", &timestamp)
             .env("GIT_COMMITTER_DATE", &timestamp);
         let output = command.output().expect("git commit should run");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
             output.status.success(),
             "git commit failed\nstdout:\n{}\nstderr:\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
+            stdout,
+            stderr
         );
     }
 
@@ -501,12 +507,25 @@ mod tests {
     }
 
     #[test]
+    fn build_historical_id_index_returns_unavailable_when_workspace_is_not_a_git_repository() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = tempdir.path();
+        let config = SyuConfig::default();
+
+        let index = build_historical_id_index(workspace, &config).expect("index should build");
+        assert!(index.enabled());
+        assert!(!index.available());
+    }
+
+    #[test]
     fn build_historical_id_index_honors_start_refs_and_skips_feature_docs_without_features_lists() {
         let tempdir = tempdir().expect("tempdir should exist");
         let workspace = tempdir.path();
         init_git_repository(workspace);
 
         fs::create_dir_all(workspace.join("philosophy")).expect("philosophy dir");
+        fs::create_dir_all(workspace.join("policies")).expect("policies dir");
+        fs::create_dir_all(workspace.join("requirements/core")).expect("requirements dir");
         fs::create_dir_all(workspace.join("features")).expect("features dir");
 
         fs::write(
@@ -514,6 +533,16 @@ mod tests {
             "category: Philosophy\nversion: 1\nlanguage: en\nphilosophies:\n  - id: PHIL-HIST-START-001\n    title: Start refs should be indexed.\n    product_design_principle: History should include the start ref snapshot.\n    coding_guideline: Keep invalid feature documents out of the index.\n    linked_policies: []\n",
         )
         .expect("philosophy file");
+        fs::write(
+            workspace.join("policies/policies.yaml"),
+            "category: Policy\nversion: 1\nlanguage: en\npolicies:\n  - id: POL-HIST-START-001\n    title: Policy history should be indexed.\n    summary: Start refs should include policy documents.\n    description: Cover the policy branch in the historical index.\n    linked_philosophies: []\n    linked_requirements: []\n",
+        )
+        .expect("policy file");
+        fs::write(
+            workspace.join("requirements/core/req.yaml"),
+            "category: Core History\nprefix: REQ-HIST\nrequirements:\n  - id: REQ-HIST-START-001\n    title: Requirement history should be indexed.\n    description: Start refs should include requirement documents.\n    priority: medium\n    status: implemented\n    linked_policies: []\n    linked_features: []\n    tests: {}\n",
+        )
+        .expect("requirement file");
         fs::write(
             workspace.join("features/features.yaml"),
             "version: \"1\"\nfiles: []\n",
@@ -524,6 +553,7 @@ mod tests {
             "category: History\nversion: 1\nfeatures:\n  - id: FEAT-HIST-START-001\n    title: Start refs should be indexed.\n    summary: Start refs should include valid feature documents.\n    status: implemented\n    linked_requirements: []\n    implementations: {}\n",
         )
         .expect("feature file");
+        fs::write(workspace.join("notes.txt"), "ignore me\n").expect("non-yaml file");
 
         git(workspace, &["add", "."]);
         git_commit(workspace, "docs: add historical id start ref fixture");
@@ -544,7 +574,98 @@ mod tests {
         let index = build_historical_id_index(workspace, &config).expect("index should build");
         assert!(index.available());
         assert!(index.contains("PHIL-HIST-START-001"));
+        assert!(index.contains("POL-HIST-START-001"));
+        assert!(index.contains("REQ-HIST-START-001"));
         assert!(index.contains("FEAT-HIST-START-001"));
+    }
+
+    #[test]
+    fn historical_id_helpers_surface_git_and_parse_errors() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = tempdir.path();
+        init_git_repository(workspace);
+
+        fs::write(
+            workspace.join("philosophy.yaml"),
+            "category: Philosophy\nversion: 1\nlanguage: en\nphilosophies:\n  - id: PHIL-HIST-BROKEN-001\n    title: Broken documents should fail to parse.\n    product_design_principle: Historical parsing errors should remain visible.\n    coding_guideline: Keep YAML failures explicit.\n    linked_policies: []\n    - invalid\n",
+        )
+        .expect("malformed philosophy file");
+        fs::create_dir_all(workspace.join("features")).expect("features dir");
+        fs::write(
+            workspace.join("features/broken.yaml"),
+            "category: History\nversion: 1\nstories: []\n",
+        )
+        .expect("broken feature file");
+        fs::write(
+            workspace.join("features/invalid.yaml"),
+            "category: History\nversion: 1\nfeatures: [\n",
+        )
+        .expect("invalid feature file");
+        fs::write(
+            workspace.join("features/not-a-mapping.yaml"),
+            "- 1\n",
+        )
+        .expect("non-mapping feature file");
+        fs::write(
+            workspace.join("features/structured.yaml"),
+            "category: History\nversion: 1\nfeatures:\n  - id: FEAT-HIST-STRUCT-001\n    title: Structured feature docs should parse.\n    summary: Structured feature docs should hit the parse-error path.\n    status: implemented\n    linked_requirements: []\n    implementations: []\n",
+        )
+        .expect("structured feature file");
+
+        git(workspace, &["add", "."]);
+        git_commit(workspace, "docs: add malformed historical fixtures");
+        let commit = git_stdout(workspace, &["rev-parse", "HEAD"]);
+        let missing_repo = workspace.join("missing-repo");
+
+        assert!(git_repository_root(&missing_repo).is_err());
+        assert!(git_rev_list(workspace, "definitely-not-a-revision").is_err());
+        assert!(git_rev_list(&missing_repo, "HEAD").is_err());
+        assert!(
+            git_tree_files(
+                workspace,
+                "definitely-not-a-commit",
+                std::path::Path::new("")
+            )
+            .is_err()
+        );
+        assert!(git_tree_files(&missing_repo, "HEAD", std::path::Path::new("")).is_err());
+        assert!(git_blob(&missing_repo, "HEAD", "philosophy.yaml").is_err());
+
+        assert!(parse_blob::<PhilosophyDocument>(
+            workspace,
+            &commit,
+            "philosophy.yaml"
+        )
+        .is_err());
+        assert!(
+            parse_blob::<PhilosophyDocument>(workspace, &commit, "missing.yaml")
+                .expect("missing historical blob lookup should succeed")
+                .is_none()
+        );
+        assert!(
+            parse_feature_blob(workspace, &commit, "features/broken.yaml")
+                .expect("feature blob lookup should succeed")
+                .is_none()
+        );
+        assert!(
+            parse_feature_blob(workspace, &commit, "features/missing.yaml")
+                .expect("missing feature blob lookup should succeed")
+                .is_none()
+        );
+        assert!(
+            parse_feature_blob(workspace, &commit, "features/invalid.yaml")
+                .expect("invalid feature blob lookup should succeed")
+                .is_none()
+        );
+        assert!(
+            parse_feature_blob(workspace, &commit, "features/not-a-mapping.yaml")
+                .expect("non-mapping feature blob lookup should succeed")
+                .is_none()
+        );
+        assert!(
+            parse_feature_blob(workspace, &commit, "features/structured.yaml")
+                .is_err()
+        );
     }
 
     #[test]
