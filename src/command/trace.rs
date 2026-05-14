@@ -1571,6 +1571,101 @@ mod tests {
     }
 
     #[test]
+    fn render_range_text_includes_empty_scope_guard_details() {
+        let summary = super::TraceRangeSummary {
+            changed_files_total: 0,
+            inspected_files: 0,
+            skipped_files: 0,
+            owned_files: 0,
+            partial_files: 0,
+            unowned_files: 0,
+            total_requirements: 0,
+            total_features: 0,
+            total_policies: 0,
+            total_philosophies: 0,
+            ids: super::TraceRangeIdSummary {
+                direct: super::TraceRangeEntityGroup {
+                    requirements: Vec::new(),
+                    features: Vec::new(),
+                    policies: Vec::new(),
+                    philosophies: Vec::new(),
+                },
+                indirect: super::TraceRangeEntityGroup {
+                    requirements: Vec::new(),
+                    features: Vec::new(),
+                    policies: Vec::new(),
+                    philosophies: Vec::new(),
+                },
+            },
+        };
+        let scope_guard = super::TraceRangeScopeGuard {
+            allowed_ids: Vec::new(),
+            out_of_scope_items: Vec::new(),
+        };
+
+        let rendered = super::render_range_text("HEAD..HEAD", &[], &[], &summary, Some(&scope_guard));
+
+        assert!(rendered.contains("Git range: HEAD..HEAD"));
+        assert!(rendered.contains("No files changed in range"));
+        assert!(rendered.contains("Allowed IDs:\n    - none"));
+        assert!(rendered.contains("Out-of-scope items:\n    - none"));
+    }
+
+    #[test]
+    fn collect_trace_scope_guard_marks_unowned_items() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("docs/syu"),
+            config: SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: vec![crate::model::Requirement {
+                id: "REQ-TRACE-001".to_string(),
+                title: "Trace requirement".to_string(),
+                description: "desc".to_string(),
+                priority: "medium".to_string(),
+                status: "implemented".to_string(),
+                linked_policies: Vec::new(),
+                linked_features: Vec::new(),
+                tests: BTreeMap::new(),
+            }],
+            features: vec![crate::model::Feature {
+                id: "FEAT-TRACE-001".to_string(),
+                title: "Trace feature".to_string(),
+                summary: "desc".to_string(),
+                status: "implemented".to_string(),
+                linked_requirements: Vec::new(),
+                implementations: BTreeMap::new(),
+            }],
+        };
+
+        let scope_guard = super::collect_trace_scope_guard(
+            &workspace,
+            &[TraceLookupOutput {
+                file: "src/unowned.rs".to_string(),
+                symbol: None,
+                status: TraceLookupStatus::Unowned,
+                matched_owners: Vec::new(),
+                file_only_owners: Vec::new(),
+                requirements: Vec::new(),
+                features: Vec::new(),
+                policies: Vec::new(),
+                philosophies: Vec::new(),
+            }],
+            &["REQ-TRACE-001".to_string()],
+        )
+        .expect("scope guard collection should succeed")
+        .expect("scope guard should be present");
+
+        assert_eq!(scope_guard.allowed_ids.len(), 1);
+        assert_eq!(scope_guard.out_of_scope_items.len(), 1);
+        assert_eq!(scope_guard.out_of_scope_items[0].file, "src/unowned.rs");
+        assert_eq!(scope_guard.out_of_scope_items[0].reason.as_deref(), Some("unowned"));
+        assert!(scope_guard.out_of_scope_items[0].owners.is_empty());
+    }
+
+    #[test]
     fn run_trace_command_requires_a_file_or_range() {
         let error = super::run_trace_command(&TraceArgs {
             file: None,
