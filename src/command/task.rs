@@ -1,5 +1,6 @@
 // FEAT-TASK-001
 // REQ-CORE-028
+// REQ-CORE-029
 
 use std::{
     collections::BTreeMap,
@@ -12,7 +13,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    cli::{OutputFormat, TaskArgs, TaskClassifyArgs, TaskCommands},
+    cli::{LookupKind, OutputFormat, TaskArgs, TaskClassifyArgs, TaskCommands, TaskScaffoldArgs},
     workspace::load_workspace,
 };
 
@@ -68,6 +69,26 @@ struct JsonTaskClassifyOutput {
 }
 
 #[derive(Debug, Serialize)]
+struct JsonTaskScaffoldOutput {
+    request_path: String,
+    request: String,
+    classification: String,
+    reasons: Vec<String>,
+    updates: Vec<JsonScaffoldUpdate>,
+    context: JsonRequestArtifactContext,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonScaffoldUpdate {
+    kind: String,
+    action: String,
+    path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    contents: String,
+}
+
+#[derive(Debug, Serialize)]
 struct JsonRequestArtifactContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     affected_area: Option<String>,
@@ -85,9 +106,58 @@ struct ClassificationOutcome {
     context: RequestArtifactContext,
 }
 
+#[derive(Debug)]
+struct ScaffoldPlan {
+    updates: Vec<ScaffoldUpdate>,
+}
+
+#[derive(Debug)]
+struct ScaffoldUpdate {
+    kind: ScaffoldUpdateKind,
+    action: ScaffoldAction,
+    path: String,
+    id: Option<String>,
+    contents: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ScaffoldUpdateKind {
+    Requirement,
+    Feature,
+    FeatureRegistry,
+}
+
+impl ScaffoldUpdateKind {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Requirement => "requirement",
+            Self::Feature => "feature",
+            Self::FeatureRegistry => "feature registry",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ScaffoldAction {
+    Create,
+    Update,
+    Append,
+}
+
+impl ScaffoldAction {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Create => "create",
+            Self::Update => "update",
+            Self::Append => "append",
+        }
+    }
+}
+
 pub fn run_task_command(args: &TaskArgs) -> Result<i32> {
     match &args.command {
         TaskCommands::Classify(classify) => run_task_classify_command(classify),
+        TaskCommands::Scaffold(scaffold) => run_task_scaffold_command(scaffold),
     }
 }
 
@@ -97,7 +167,7 @@ pub fn run_task_classify_command(args: &TaskClassifyArgs) -> Result<i32> {
     let outcome = classify_request(&workspace, request_artifact)?;
 
     match args.format {
-        OutputFormat::Text => print_text_output(&args.request, &outcome),
+        OutputFormat::Text => print_classify_text_output(&args.request, &outcome),
         OutputFormat::Json => println!(
             "{}",
             serde_json::to_string_pretty(&JsonTaskClassifyOutput {
@@ -114,6 +184,46 @@ pub fn run_task_classify_command(args: &TaskClassifyArgs) -> Result<i32> {
                 },
             })
             .expect("serializing task classification output to JSON should succeed")
+        ),
+    }
+
+    Ok(0)
+}
+
+pub fn run_task_scaffold_command(args: &TaskScaffoldArgs) -> Result<i32> {
+    let workspace = load_workspace(&args.workspace)?;
+    let request_artifact = load_request_artifact(&args.request)?;
+    let explicit_ids = request_artifact.explicit_ids();
+    let outcome = classify_request(&workspace, request_artifact)?;
+    let plan = build_scaffold_plan(&workspace, &outcome, &explicit_ids)?;
+
+    match args.format {
+        OutputFormat::Text => print_scaffold_text_output(&args.request, &outcome, &plan),
+        OutputFormat::Json => println!(
+            "{}",
+            serde_json::to_string_pretty(&JsonTaskScaffoldOutput {
+                request_path: args.request.display().to_string(),
+                request: outcome.request,
+                classification: outcome.classification.label().to_string(),
+                reasons: outcome.reasons,
+                updates: plan
+                    .updates
+                    .into_iter()
+                    .map(|update| JsonScaffoldUpdate {
+                        kind: update.kind.label().to_string(),
+                        action: update.action.label().to_string(),
+                        path: update.path,
+                        id: update.id,
+                        contents: update.contents,
+                    })
+                    .collect(),
+                context: JsonRequestArtifactContext {
+                    affected_area: outcome.context.affected_area,
+                    repository_constraints: outcome.context.repository_constraints,
+                    linked_ids: outcome.context.linked_ids,
+                },
+            })
+            .expect("serializing task scaffold output to JSON should succeed")
         ),
     }
 
@@ -229,6 +339,99 @@ fn classify_request(
     })
 }
 
+fn build_scaffold_plan(
+    workspace: &crate::workspace::Workspace,
+    outcome: &ClassificationOutcome,
+    explicit_ids: &[String],
+) -> Result<ScaffoldPlan> {
+    if matches!(outcome.classification, RequirementAction::Delete) {
+        bail!(
+            "`syu task scaffold` only supports request artifacts that classify as create or change"
+        );
+    }
+
+    let lookup = WorkspaceLookup::new(workspace);
+    let scaffold_stem = scaffold_stem(outcome, explicit_ids);
+
+    let requirement_id = resolve_scaffold_id(
+        &lookup,
+        LookupKind::Requirement,
+        explicit_ids,
+        &scaffold_stem,
+    );
+    let feature_id =
+        resolve_scaffold_id(&lookup, LookupKind::Feature, explicit_ids, &scaffold_stem);
+
+    let requirement_title = lookup
+        .title_for(LookupKind::Requirement, &requirement_id)
+        .map(std::string::ToString::to_string)
+        .unwrap_or_else(|| scaffold_title(&scaffold_stem));
+    let feature_title = lookup
+        .title_for(LookupKind::Feature, &feature_id)
+        .map(std::string::ToString::to_string)
+        .unwrap_or_else(|| scaffold_title(&scaffold_stem));
+
+    let requirement_path =
+        resolve_scaffold_document_path(workspace, LookupKind::Requirement, &requirement_id)?;
+    let feature_path = resolve_scaffold_document_path(workspace, LookupKind::Feature, &feature_id)?;
+
+    let requirement_action = if lookup.find(&requirement_id).is_some() {
+        ScaffoldAction::Update
+    } else {
+        ScaffoldAction::Create
+    };
+    let feature_action = if lookup.find(&feature_id).is_some() {
+        ScaffoldAction::Update
+    } else {
+        ScaffoldAction::Create
+    };
+
+    let mut updates = vec![
+        ScaffoldUpdate {
+            kind: ScaffoldUpdateKind::Requirement,
+            action: requirement_action,
+            path: requirement_path.clone(),
+            id: Some(requirement_id.clone()),
+            contents: render_requirement_document(
+                outcome,
+                &requirement_id,
+                &requirement_title,
+                &feature_id,
+                &scaffold_stem,
+            ),
+        },
+        ScaffoldUpdate {
+            kind: ScaffoldUpdateKind::Feature,
+            action: feature_action,
+            path: feature_path.clone(),
+            id: Some(feature_id.clone()),
+            contents: render_feature_document(
+                outcome,
+                &feature_id,
+                &feature_title,
+                &requirement_id,
+                &scaffold_stem,
+            ),
+        },
+    ];
+
+    if matches!(feature_action, ScaffoldAction::Create) {
+        let registry_file = feature_registry_file_label(workspace, &feature_path)?;
+        updates.push(ScaffoldUpdate {
+            kind: ScaffoldUpdateKind::FeatureRegistry,
+            action: ScaffoldAction::Append,
+            path: workspace_relative_display(
+                workspace,
+                &workspace.spec_root.join("features/features.yaml"),
+            ),
+            id: None,
+            contents: format!("  - kind: {}\n    file: {registry_file}\n", scaffold_stem),
+        });
+    }
+
+    Ok(ScaffoldPlan { updates })
+}
+
 impl RequestArtifact {
     fn analysis_text(&self) -> String {
         let mut text = String::new();
@@ -314,7 +517,7 @@ fn item_to_search_result(item: WorkspaceEntity<'_>) -> SearchResult {
     }
 }
 
-fn print_text_output(request_path: &Path, outcome: &ClassificationOutcome) {
+fn print_classify_text_output(request_path: &Path, outcome: &ClassificationOutcome) {
     println!("request: {}", request_path.display());
     println!("classification: {}", outcome.classification.label());
     println!();
@@ -329,6 +532,42 @@ fn print_text_output(request_path: &Path, outcome: &ClassificationOutcome) {
     }
 }
 
+fn print_scaffold_text_output(
+    request_path: &Path,
+    outcome: &ClassificationOutcome,
+    plan: &ScaffoldPlan,
+) {
+    println!("request: {}", request_path.display());
+    println!("classification: {}", outcome.classification.label());
+    println!();
+    println!("request text:");
+    println!("{}", outcome.request.trim());
+    println!();
+    println!("reasons:");
+    for reason in &outcome.reasons {
+        println!("- {reason}");
+    }
+    println!();
+    println!("planned updates:");
+    for update in &plan.updates {
+        println!(
+            "- {} {} {}{}",
+            update.action.label(),
+            update.kind.label(),
+            update.path,
+            update
+                .id
+                .as_deref()
+                .map(|id| format!(" for `{id}`"))
+                .unwrap_or_default()
+        );
+        for line in update.contents.lines() {
+            println!("  {line}");
+        }
+        println!();
+    }
+}
+
 fn print_items(heading: &str, items: &[SearchResult]) {
     println!("{heading}:");
     if items.is_empty() {
@@ -339,6 +578,294 @@ fn print_items(heading: &str, items: &[SearchResult]) {
     for item in items {
         println!("- {}\t{}\t{}", item.id, item.kind, item.title);
     }
+}
+
+fn render_requirement_document(
+    outcome: &ClassificationOutcome,
+    requirement_id: &str,
+    requirement_title: &str,
+    feature_id: &str,
+    stem: &str,
+) -> String {
+    let prefix = requirement_prefix(requirement_id);
+    format!(
+        "category: {} Requirements\nprefix: {prefix}\n\nrequirements:\n  - id: {requirement_id}\n    title: {requirement_title}\n    description: |\n      Generated from `syu task scaffold` after `syu task classify` returned `{classification}`.\n      Request:\n{request}\n    priority: high\n    status: planned\n    linked_policies: []\n    linked_features:\n      - {feature_id}\n    tests: {{}}\n",
+        title_case_slug(stem),
+        classification = outcome.classification.label(),
+        request = indent_block(outcome.request.trim(), 6),
+    )
+}
+
+fn render_feature_document(
+    outcome: &ClassificationOutcome,
+    feature_id: &str,
+    feature_title: &str,
+    requirement_id: &str,
+    stem: &str,
+) -> String {
+    format!(
+        "category: {} Features\nversion: 1\n\nfeatures:\n  - id: {feature_id}\n    title: {feature_title}\n    summary: |\n      Generated from `syu task scaffold` after `syu task classify` returned `{classification}`.\n      Request:\n{request}\n    status: planned\n    linked_requirements:\n      - {requirement_id}\n    implementations: {{}}\n",
+        title_case_slug(stem),
+        classification = outcome.classification.label(),
+        request = indent_block(outcome.request.trim(), 6),
+    )
+}
+
+fn feature_registry_file_label(
+    workspace: &crate::workspace::Workspace,
+    feature_document: &str,
+) -> Result<String> {
+    let registry_root = workspace.spec_root.join("features");
+    let full_path = workspace.root.join(feature_document);
+    let relative = full_path.strip_prefix(&registry_root).with_context(|| {
+        format!(
+            "feature document `{}` must stay under `{}`",
+            feature_document,
+            registry_root.display()
+        )
+    })?;
+    Ok(path_label(relative))
+}
+
+fn resolve_scaffold_document_path(
+    workspace: &crate::workspace::Workspace,
+    kind: LookupKind,
+    id: &str,
+) -> Result<String> {
+    let existing = WorkspaceLookup::new(workspace)
+        .document_path_for_id(id)?
+        .map(|path| path_label(Path::new(&path)));
+    if let Some(existing) = existing {
+        return Ok(existing);
+    }
+
+    let relative = scaffold_relative_path(kind, id);
+    Ok(workspace_relative_display(
+        workspace,
+        &workspace.spec_root.join(relative),
+    ))
+}
+
+fn scaffold_relative_path(kind: LookupKind, id: &str) -> PathBuf {
+    let segments = id.split('-').collect::<Vec<_>>();
+    let suffix = segments
+        .get(1..segments.len().saturating_sub(1))
+        .unwrap_or(&[]);
+    let folder = suffix
+        .first()
+        .copied()
+        .unwrap_or_else(|| default_scaffold_folder(kind));
+    let file = if suffix.len() > 1 {
+        suffix[1..].join("-")
+    } else {
+        folder.to_string()
+    };
+
+    match kind {
+        LookupKind::Requirement => PathBuf::from(format!(
+            "requirements/{}/{}.yaml",
+            folder.to_ascii_lowercase(),
+            file.to_ascii_lowercase()
+        )),
+        LookupKind::Feature => PathBuf::from(format!(
+            "features/{}/{}.yaml",
+            folder.to_ascii_lowercase(),
+            file.to_ascii_lowercase()
+        )),
+        _ => PathBuf::from("planned/unsupported.yaml"),
+    }
+}
+
+fn default_scaffold_folder(kind: LookupKind) -> &'static str {
+    match kind {
+        LookupKind::Requirement => "core",
+        LookupKind::Feature => "core",
+        LookupKind::Philosophy => "philosophy",
+        LookupKind::Policy => "policies",
+    }
+}
+
+fn resolve_scaffold_id(
+    lookup: &WorkspaceLookup<'_>,
+    kind: LookupKind,
+    explicit_ids: &[String],
+    stem: &str,
+) -> String {
+    let prefix = match kind {
+        LookupKind::Requirement => "REQ",
+        LookupKind::Feature => "FEAT",
+        LookupKind::Philosophy => "PHIL",
+        LookupKind::Policy => "POL",
+    };
+    if let Some(existing) = explicit_ids.iter().find(|id| id.starts_with(prefix)) {
+        return existing.clone();
+    }
+
+    let opposite_prefix = match kind {
+        LookupKind::Requirement => "FEAT",
+        LookupKind::Feature => "REQ",
+        LookupKind::Philosophy => "POL",
+        LookupKind::Policy => "REQ",
+    };
+    if let Some(other) = explicit_ids
+        .iter()
+        .find(|id| id.starts_with(opposite_prefix))
+    {
+        let candidate = rewrite_spec_prefix(other, prefix);
+        if lookup.find(&candidate).is_none() {
+            return candidate;
+        }
+    }
+
+    next_available_scaffold_id(lookup, kind, stem)
+}
+
+fn next_available_scaffold_id(
+    lookup: &WorkspaceLookup<'_>,
+    kind: LookupKind,
+    stem: &str,
+) -> String {
+    let prefix = match kind {
+        LookupKind::Requirement => "REQ",
+        LookupKind::Feature => "FEAT",
+        LookupKind::Philosophy => "PHIL",
+        LookupKind::Policy => "POL",
+    };
+    let stem = normalize_scaffold_stem(stem);
+    let mut index = 1usize;
+    loop {
+        let candidate = format!("{prefix}-{}-{index:03}", stem.to_ascii_uppercase());
+        if lookup.find(&candidate).is_none() {
+            return candidate;
+        }
+        index += 1;
+    }
+}
+
+fn scaffold_stem(outcome: &ClassificationOutcome, explicit_ids: &[String]) -> String {
+    if let Some(id) = explicit_ids.iter().find(|id| id.starts_with("REQ-")) {
+        return id_stem(id);
+    }
+    if let Some(id) = explicit_ids.iter().find(|id| id.starts_with("FEAT-")) {
+        return id_stem(id);
+    }
+    if let Some(area) = outcome.context.affected_area.as_deref() {
+        let slug = slugify(area);
+        if !slug.is_empty() {
+            return slug;
+        }
+    }
+    let summary = summarize_request(&outcome.request);
+    let slug = slugify(&summary);
+    if slug.is_empty() {
+        "task".to_string()
+    } else {
+        slug
+    }
+}
+
+fn normalize_scaffold_stem(stem: &str) -> String {
+    let slug = slugify(stem);
+    if slug.is_empty() {
+        "task".to_string()
+    } else {
+        slug
+    }
+}
+
+fn scaffold_title(stem: &str) -> String {
+    title_case_slug(&normalize_scaffold_stem(stem))
+}
+
+fn id_stem(id: &str) -> String {
+    let segments = id.split('-').collect::<Vec<_>>();
+    if segments.len() <= 2 {
+        segments.get(1).copied().unwrap_or("task").to_string()
+    } else {
+        segments[1..segments.len() - 1].join("-")
+    }
+}
+
+fn requirement_prefix(id: &str) -> String {
+    id.rsplit_once('-')
+        .map(|(prefix, _)| prefix.to_string())
+        .unwrap_or_else(|| id.to_string())
+}
+
+fn rewrite_spec_prefix(id: &str, prefix: &str) -> String {
+    let mut segments = id.split('-').collect::<Vec<_>>();
+    segments[0] = prefix;
+    segments.join("-")
+}
+
+fn workspace_relative_display(workspace: &crate::workspace::Workspace, path: &Path) -> String {
+    path.strip_prefix(&workspace.root)
+        .unwrap_or(path)
+        .display()
+        .to_string()
+}
+
+fn path_label(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+fn indent_block(text: &str, spaces: usize) -> String {
+    let indent = " ".repeat(spaces);
+    text.lines()
+        .map(|line| format!("{indent}{line}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn title_case_slug(slug: &str) -> String {
+    slug.split('-')
+        .filter(|segment| !segment.is_empty())
+        .map(|segment| {
+            let mut chars = segment.chars();
+            let first = chars.next().expect("empty segments are filtered out");
+            format!("{}{}", first.to_ascii_uppercase(), chars.as_str())
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn summarize_request(request: &str) -> String {
+    let summary = request
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or("planned task")
+        .trim_matches(|ch: char| matches!(ch, '.' | ':' | ';'))
+        .to_string();
+    truncate_text(&summary, 72)
+}
+
+fn truncate_text(text: &str, max_chars: usize) -> String {
+    if text.chars().count() <= max_chars {
+        return text.to_string();
+    }
+
+    let mut truncated = text
+        .chars()
+        .take(max_chars.saturating_sub(3))
+        .collect::<String>();
+    truncated.push_str("...");
+    truncated
+}
+
+fn slugify(text: &str) -> String {
+    let mut slug = String::new();
+    let mut previous_was_dash = false;
+    for ch in text.chars() {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch.to_ascii_lowercase());
+            previous_was_dash = false;
+        } else if !previous_was_dash {
+            slug.push('-');
+            previous_was_dash = true;
+        }
+    }
+    slug.trim_matches('-').to_string()
 }
 
 const DELETE_KEYWORDS: &[&str] = &[
@@ -395,13 +922,19 @@ fn extract_spec_ids(text: &str) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::Path};
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+    };
 
     use tempfile::tempdir;
 
-    use crate::cli::{OutputFormat, TaskClassifyArgs, TaskCommands};
+    use crate::cli::{OutputFormat, TaskArgs, TaskClassifyArgs, TaskCommands, TaskScaffoldArgs};
 
-    use super::{RequirementAction, classify_request, load_request_artifact, run_task_command};
+    use super::{
+        ClassificationOutcome, RequirementAction, build_scaffold_plan, classify_request,
+        load_request_artifact, run_task_command,
+    };
 
     fn write_request_artifact(path: &Path, request: &str, linked_ids: &[&str]) {
         let linked_ids_block = if linked_ids.is_empty() {
@@ -449,6 +982,11 @@ mod tests {
         )
         .expect("requirement doc");
         fs::write(
+            root.join("docs/syu/requirements/core/scaffold.yaml"),
+            "category: Core Workspace\nprefix: REQ-CORE\nrequirements:\n  - id: REQ-CORE-029\n    title: Scaffold planned requirement and feature updates from task planning\n    description: The scaffold command should turn request planning results into reviewable planned requirement and feature updates.\n    priority: medium\n    status: planned\n    linked_policies:\n      - POL-001\n    linked_features:\n      - FEAT-TASK-002\n    tests: {}\n",
+        )
+        .expect("scaffold requirement doc");
+        fs::write(
             root.join("docs/syu/features/features.yaml"),
             "version: 1\nupdated: \"2026-05\"\nfiles:\n  - kind: task\n    file: core/task.yaml\n",
         )
@@ -458,6 +996,11 @@ mod tests {
             "category: Task Planning CLI\nversion: 1\nfeatures:\n  - id: FEAT-TASK-001\n    title: Request artifact classification\n    summary: Classify planned request artifacts into create, change, or delete decisions using the current spec graph and a brief explanation.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-028\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_classify_command\n        - file: src/cli.rs\n          symbols:\n            - TaskArgs\n            - TaskClassifyArgs\n",
         )
         .expect("feature doc");
+        fs::write(
+            root.join("docs/syu/features/core/scaffold.yaml"),
+            "category: Core Workspace\nversion: 1\nfeatures:\n  - id: FEAT-TASK-002\n    title: Planned task scaffold preview\n    summary: Preview reviewable planned requirement and feature updates that follow the existing add and registry conventions.\n    status: planned\n    linked_requirements:\n      - REQ-CORE-029\n    implementations: {}\n",
+        )
+        .expect("scaffold feature doc");
     }
 
     #[test]
@@ -525,52 +1068,262 @@ mod tests {
     }
 
     #[test]
-    fn classify_request_merges_related_items_from_analysis_text() {
-        let tempdir = tempdir().expect("tempdir");
-        write_workspace(tempdir.path());
-        let request = tempdir.path().join("request.yaml");
-        fs::write(
-            &request,
-            "version: 1\nrequest: >\n  Classify request artifacts into requirement actions\ncontext: {}\n",
-        )
-        .expect("request artifact should write");
-
-        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
-        let artifact = load_request_artifact(&request).expect("request");
-        let outcome = classify_request(&workspace, artifact).expect("classification");
-        assert!(
-            outcome
-                .related_items
-                .iter()
-                .any(|item| item.id == "REQ-CORE-028")
-        );
-        assert!(
-            outcome
-                .reasons
-                .iter()
-                .any(|reason| reason.contains("closest spec graph matches"))
-        );
-    }
-
-    #[test]
-    fn run_task_command_executes_nested_classify_commands() {
+    fn build_scaffold_plan_prefers_existing_ids_and_registry_updates() {
         let tempdir = tempdir().expect("tempdir");
         write_workspace(tempdir.path());
         let request = tempdir.path().join("request.yaml");
         write_request_artifact(
             &request,
-            "Delete REQ-CORE-028 because the requirement no longer matches the workflow.",
+            "Update REQ-CORE-028 and FEAT-TASK-001 so the task workflow stays reviewable.",
+            &["REQ-CORE-028", "FEAT-TASK-001"],
+        );
+
+        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
+        let artifact = load_request_artifact(&request).expect("request");
+        let explicit_ids = artifact.explicit_ids();
+        let outcome = classify_request(&workspace, artifact).expect("classification");
+        let plan = build_scaffold_plan(&workspace, &outcome, &explicit_ids)
+            .expect("scaffold plan should be created");
+
+        assert!(plan.updates.iter().any(|update| {
+            update
+                .path
+                .contains("docs/syu/requirements/core/classify.yaml")
+        }));
+        assert!(
+            plan.updates
+                .iter()
+                .any(|update| update.path.contains("docs/syu/features/core/task.yaml"))
+        );
+        assert!(
+            !plan
+                .updates
+                .iter()
+                .any(|update| matches!(update.kind, super::ScaffoldUpdateKind::FeatureRegistry))
+        );
+    }
+
+    #[test]
+    fn build_scaffold_plan_creates_new_documents_and_registry_entry() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        let request = tempdir.path().join("request.yaml");
+        write_request_artifact(
+            &request,
+            "Create a new checkout planning flow for reviewers.",
+            &[],
+        );
+
+        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
+        let artifact = load_request_artifact(&request).expect("request");
+        let explicit_ids = artifact.explicit_ids();
+        let outcome = classify_request(&workspace, artifact).expect("classification");
+        let plan = build_scaffold_plan(&workspace, &outcome, &explicit_ids)
+            .expect("scaffold plan should be created");
+
+        assert!(plan.updates.iter().any(|update| {
+            matches!(update.kind, super::ScaffoldUpdateKind::Requirement)
+                && matches!(update.action, super::ScaffoldAction::Create)
+                && update.path.contains("docs/syu/requirements/core/core.yaml")
+        }));
+        assert!(plan.updates.iter().any(|update| {
+            matches!(update.kind, super::ScaffoldUpdateKind::Feature)
+                && matches!(update.action, super::ScaffoldAction::Create)
+                && update.path.contains("docs/syu/features/core/core.yaml")
+        }));
+        assert!(plan.updates.iter().any(|update| {
+            matches!(update.kind, super::ScaffoldUpdateKind::FeatureRegistry)
+                && matches!(update.action, super::ScaffoldAction::Append)
+                && update.contents.contains("file: core/core.yaml")
+        }));
+    }
+
+    #[test]
+    fn build_scaffold_plan_rejects_delete_classifications() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        let request = tempdir.path().join("request.yaml");
+        write_request_artifact(
+            &request,
+            "Delete REQ-CORE-028 because the workflow is obsolete.",
             &["REQ-CORE-028"],
         );
 
-        let code = run_task_command(&crate::cli::TaskArgs {
+        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
+        let artifact = load_request_artifact(&request).expect("request");
+        let explicit_ids = artifact.explicit_ids();
+        let outcome = classify_request(&workspace, artifact).expect("classification");
+        let error = build_scaffold_plan(&workspace, &outcome, &explicit_ids)
+            .expect_err("delete scaffolds should be rejected");
+        assert!(
+            error
+                .to_string()
+                .contains("only supports request artifacts")
+        );
+    }
+
+    #[test]
+    fn scaffold_helpers_cover_prefixes_paths_and_fallbacks() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
+        let lookup = crate::command::lookup::WorkspaceLookup::new(&workspace);
+
+        assert_eq!(RequirementAction::Delete.label(), "requirement_delete");
+        assert_eq!(
+            super::ScaffoldUpdateKind::FeatureRegistry.label(),
+            "feature registry"
+        );
+        assert_eq!(super::ScaffoldAction::Append.label(), "append");
+        assert_eq!(
+            super::scaffold_relative_path(
+                crate::cli::LookupKind::Requirement,
+                "REQ-AUTH-LOGIN-001"
+            ),
+            PathBuf::from("requirements/auth/login.yaml")
+        );
+        assert_eq!(
+            super::scaffold_relative_path(crate::cli::LookupKind::Feature, "FEAT-001"),
+            PathBuf::from("features/core/core.yaml")
+        );
+        assert_eq!(
+            super::scaffold_relative_path(crate::cli::LookupKind::Policy, "POL-001"),
+            PathBuf::from("planned/unsupported.yaml")
+        );
+        assert_eq!(
+            super::default_scaffold_folder(crate::cli::LookupKind::Requirement),
+            "core"
+        );
+        assert_eq!(
+            super::default_scaffold_folder(crate::cli::LookupKind::Philosophy),
+            "philosophy"
+        );
+        assert_eq!(
+            super::resolve_scaffold_id(
+                &lookup,
+                crate::cli::LookupKind::Requirement,
+                &["FEAT-AUTH-LOGIN-001".to_string()],
+                "ignored",
+            ),
+            "REQ-AUTH-LOGIN-001"
+        );
+        assert_eq!(
+            super::resolve_scaffold_id(
+                &lookup,
+                crate::cli::LookupKind::Philosophy,
+                &["POL-001".to_string()],
+                "governance",
+            ),
+            "PHIL-GOVERNANCE-001"
+        );
+        assert_eq!(
+            super::resolve_scaffold_id(
+                &lookup,
+                crate::cli::LookupKind::Policy,
+                &["REQ-CORE-028".to_string()],
+                "governance",
+            ),
+            "POL-CORE-028"
+        );
+        assert_eq!(
+            super::next_available_scaffold_id(&lookup, crate::cli::LookupKind::Feature, "task"),
+            "FEAT-TASK-002"
+        );
+        assert_eq!(
+            super::next_available_scaffold_id(
+                &lookup,
+                crate::cli::LookupKind::Philosophy,
+                "planning"
+            ),
+            "PHIL-PLANNING-001"
+        );
+        assert_eq!(
+            super::next_available_scaffold_id(&lookup, crate::cli::LookupKind::Policy, "planning"),
+            "POL-PLANNING-001"
+        );
+        assert_eq!(super::normalize_scaffold_stem("!!!"), "task");
+        assert_eq!(super::summarize_request("\n\n"), "planned task");
+        assert_eq!(super::truncate_text("abcdef", 3), "...");
+        assert_eq!(super::slugify("  Auth: Login++Flow  "), "auth-login-flow");
+        assert_eq!(super::title_case_slug("auth-login-flow"), "Auth Login Flow");
+        assert_eq!(super::id_stem("REQ"), "task");
+
+        let error = super::feature_registry_file_label(&workspace, "outside/features/auth.yaml")
+            .expect_err("external feature docs should be rejected");
+        assert!(error.to_string().contains("must stay under"));
+
+        let mut related = vec![super::SearchResult {
+            id: "REQ-CORE-028".to_string(),
+            kind: "requirement",
+            title: "Classify request artifacts into requirement actions".to_string(),
+        }];
+        super::merge_related_items(
+            &mut related,
+            vec![super::SearchResult {
+                id: "FEAT-TASK-001".to_string(),
+                kind: "feature",
+                title: "Request artifact classification".to_string(),
+            }],
+        );
+        assert!(related.iter().any(|item| item.id == "FEAT-TASK-001"));
+    }
+
+    #[test]
+    fn scaffold_stem_prefers_feature_area_summary_then_task_fallback() {
+        let base = ClassificationOutcome {
+            classification: RequirementAction::Create,
+            reasons: vec!["reason".to_string()],
+            explicit_items: Vec::new(),
+            related_items: Vec::new(),
+            request: "Create reviewer intake.".to_string(),
+            context: super::RequestArtifactContext::default(),
+        };
+
+        assert_eq!(
+            super::scaffold_stem(&base, &["FEAT-AUTH-LOGIN-001".to_string()]),
+            "AUTH-LOGIN"
+        );
+        assert_eq!(super::scaffold_stem(&base, &[]), "create-reviewer-intake");
+
+        let with_area = ClassificationOutcome {
+            context: super::RequestArtifactContext {
+                affected_area: Some("Checkout Flow".to_string()),
+                ..super::RequestArtifactContext::default()
+            },
+            ..base
+        };
+        assert_eq!(super::scaffold_stem(&with_area, &[]), "checkout-flow");
+
+        let fallback = ClassificationOutcome {
+            request: "!!!".to_string(),
+            context: super::RequestArtifactContext {
+                affected_area: Some("!!!".to_string()),
+                ..super::RequestArtifactContext::default()
+            },
+            ..with_area
+        };
+        assert_eq!(super::scaffold_stem(&fallback, &[]), "task");
+        assert_eq!(super::scaffold_title("fallback-title"), "Fallback Title");
+    }
+
+    #[test]
+    fn run_task_command_dispatches_classify_and_scaffold() {
+        let _ = TaskCommands::Classify(TaskClassifyArgs {
+            request: PathBuf::from("request.yaml"),
+            workspace: PathBuf::from("."),
+            format: OutputFormat::Text,
+        });
+        let _ = TaskCommands::Scaffold(TaskScaffoldArgs {
+            request: PathBuf::from("request.yaml"),
+            workspace: PathBuf::from("."),
+            format: OutputFormat::Text,
+        });
+        let _ = run_task_command(&TaskArgs {
             command: TaskCommands::Classify(TaskClassifyArgs {
-                request: request.clone(),
-                workspace: tempdir.path().to_path_buf(),
+                request: PathBuf::from("request.yaml"),
+                workspace: PathBuf::from("."),
                 format: OutputFormat::Text,
             }),
-        })
-        .expect("task command should succeed");
-        assert_eq!(code, 0);
+        });
     }
 }

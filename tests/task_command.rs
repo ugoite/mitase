@@ -1,4 +1,5 @@
 // REQ-CORE-028
+// REQ-CORE-029
 
 use std::fs;
 
@@ -23,7 +24,7 @@ fn write_workspace(root: &std::path::Path) {
     .expect("philosophy doc");
     fs::write(
         root.join("docs/syu/policies/policies.yaml"),
-        "category: Policies\nversion: 1\nlanguage: en\npolicies:\n  - id: POL-001\n    title: Keep request workflows visible\n    summary: Keep intake and planning separate.\n    description: Request artifacts should be classified against the current graph.\n    linked_philosophies:\n      - PHIL-001\n    linked_requirements:\n      - REQ-CORE-028\n",
+        "category: Policies\nversion: 1\nlanguage: en\npolicies:\n  - id: POL-001\n    title: Keep request workflows visible\n    summary: Keep intake and planning separate.\n    description: Request artifacts should be classified against the current graph.\n    linked_philosophies:\n      - PHIL-001\n    linked_requirements:\n      - REQ-CORE-028\n      - REQ-CORE-029\n",
     )
     .expect("policy doc");
     fs::write(
@@ -32,18 +33,28 @@ fn write_workspace(root: &std::path::Path) {
     )
     .expect("requirement doc");
     fs::write(
+        root.join("docs/syu/requirements/core/scaffold.yaml"),
+        "category: Core Workspace\nprefix: REQ-CORE\nrequirements:\n  - id: REQ-CORE-029\n    title: Scaffold planned requirement and feature updates from task planning\n    description: The scaffold command should turn request planning results into reviewable planned requirement and feature updates.\n    priority: medium\n    status: implemented\n    linked_policies:\n      - POL-001\n    linked_features:\n      - FEAT-TASK-002\n    tests:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - '*'\n",
+    )
+    .expect("scaffold requirement doc");
+    fs::write(
         root.join("docs/syu/features/features.yaml"),
-        "version: 1\nupdated: \"2026-05\"\nfiles:\n  - kind: task\n    file: core/task.yaml\n",
+        "version: 1\nupdated: \"2026-05\"\nfiles:\n  - kind: task\n    file: core/task.yaml\n  - kind: task\n    file: core/scaffold.yaml\n",
     )
     .expect("feature registry");
     fs::write(
         root.join("docs/syu/features/core/task.yaml"),
-        "category: Task Planning CLI\nversion: 1\nfeatures:\n  - id: FEAT-TASK-001\n    title: Request artifact classification\n    summary: Classify captured request artifacts into create, change, or delete decisions using the current spec graph, with a short explanation and text or JSON output.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-028\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_classify_command\n        - file: src/cli.rs\n          symbols:\n            - TaskArgs\n            - TaskClassifyArgs\n        - file: src/lib.rs\n          symbols:\n            - dispatches_task_subcommands_without_rewriting_them\n",
+        "category: Task Planning CLI\nversion: 1\nfeatures:\n  - id: FEAT-TASK-001\n    title: Request artifact classification\n    summary: Classify captured request artifacts into create, change, or delete decisions using the current spec graph, with a short explanation and text or JSON output.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-028\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_classify_command\n",
     )
     .expect("feature doc");
+    fs::write(
+        root.join("docs/syu/features/core/scaffold.yaml"),
+        "category: Core Workspace\nversion: 1\nfeatures:\n  - id: FEAT-TASK-002\n    title: Planned task scaffold preview\n    summary: Preview reviewable planned requirement and feature updates that follow the existing add and registry conventions.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-029\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_scaffold_command\n",
+    )
+    .expect("scaffold feature doc");
 }
 
-fn write_request(root: &std::path::Path, request: &str, linked_ids: &[&str]) {
+fn write_request(root: &std::path::Path, request: &str, affected_area: &str, linked_ids: &[&str]) {
     let linked_ids_block = if linked_ids.is_empty() {
         "  linked_ids: []\n".to_string()
     } else {
@@ -56,20 +67,21 @@ fn write_request(root: &std::path::Path, request: &str, linked_ids: &[&str]) {
     fs::write(
         root.join("request.yaml"),
         format!(
-            "version: 1\nrequest: >\n  {request}\ncontext:\n  affected_area: core\n  repository_constraints:\n    - keep text and JSON output\n{linked_ids_block}",
+            "version: 1\nrequest: >\n  {request}\ncontext:\n  affected_area: {affected_area}\n  repository_constraints:\n    - keep text and JSON output\n{linked_ids_block}",
         ),
     )
     .expect("request");
 }
 
 #[test]
-fn task_classify_prints_text_output() {
+fn task_classify_prints_text_output_with_related_items() {
     let tempdir = tempdir().expect("tempdir");
     write_workspace(tempdir.path());
     write_request(
         tempdir.path(),
-        "Update REQ-CORE-028 so the request classifier stays explainable.",
-        &["REQ-CORE-028"],
+        "Request artifact classification",
+        "core",
+        &[],
     );
 
     let output = {
@@ -81,18 +93,21 @@ fn task_classify_prints_text_output() {
 
     assert!(output.status.success(), "task classify should succeed");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("classification: requirement_change"));
-    assert!(stdout.contains("REQ-CORE-028"));
+    assert!(stdout.contains("classification: requirement_create"));
+    assert!(stdout.contains("related items:"));
+    assert!(stdout.contains("FEAT-TASK-001"));
+    assert!(stdout.contains("closest spec graph matches are"));
 }
 
 #[test]
-fn task_classify_prints_json_output() {
+fn task_classify_prints_json_output_with_explicit_items() {
     let tempdir = tempdir().expect("tempdir");
     write_workspace(tempdir.path());
     write_request(
         tempdir.path(),
-        "Create a new request summary for planning.",
-        &[],
+        "Update PHIL-001, POL-001, REQ-CORE-028, and FEAT-TASK-001 together.",
+        "core",
+        &["PHIL-001", "POL-001", "REQ-CORE-028", "FEAT-TASK-001"],
     );
 
     let output = {
@@ -104,79 +119,85 @@ fn task_classify_prints_json_output() {
 
     assert!(output.status.success(), "task classify should succeed");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("\"classification\": \"requirement_create\""));
-    assert!(stdout.contains("\"request_path\": \"request.yaml\""));
+    assert!(stdout.contains("\"classification\": \"requirement_change\""));
+    assert!(stdout.contains("\"id\": \"PHIL-001\""));
+    assert!(stdout.contains("\"id\": \"POL-001\""));
+    assert!(stdout.contains("\"id\": \"REQ-CORE-028\""));
+    assert!(stdout.contains("\"id\": \"FEAT-TASK-001\""));
 }
 
 #[test]
-fn task_classify_reports_related_items_without_explicit_ids() {
-    let tempdir = tempdir().expect("tempdir");
-    write_workspace(tempdir.path());
-    write_request(tempdir.path(), "Request artifact classification", &[]);
-
-    let output = {
-        let mut command = std::process::Command::cargo_bin("syu").expect("binary should build");
-        command.current_dir(tempdir.path());
-        command.args(["task", "classify", "request.yaml"]);
-        command.output().expect("command should run")
-    };
-
-    assert!(output.status.success(), "task classify should succeed");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("classification: requirement_create"));
-    assert!(stdout.contains("closest spec graph matches are"));
-    assert!(stdout.contains("related items:"));
-    assert!(stdout.contains("FEAT-TASK-001"));
-}
-
-#[test]
-fn task_classify_reports_explicit_items_from_all_spec_layers() {
+fn task_scaffold_prints_text_preview_for_new_planned_updates() {
     let tempdir = tempdir().expect("tempdir");
     write_workspace(tempdir.path());
     write_request(
         tempdir.path(),
-        "Update PHIL-001, POL-001, REQ-CORE-028, and FEAT-TASK-001 together.",
-        &["PHIL-001", "POL-001", "REQ-CORE-028", "FEAT-TASK-001"],
+        "Create a new checkout planning flow for reviewers.",
+        "checkout",
+        &[],
     );
 
     let output = {
         let mut command = std::process::Command::cargo_bin("syu").expect("binary should build");
         command.current_dir(tempdir.path());
-        command.args(["task", "classify", "request.yaml"]);
+        command.args(["task", "scaffold", "request.yaml"]);
         command.output().expect("command should run")
     };
 
-    assert!(output.status.success(), "task classify should succeed");
+    assert!(output.status.success(), "task scaffold should succeed");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("classification: requirement_change"));
-    assert!(stdout.contains("PHIL-001\tphilosophy\tKeep planning explicit"));
-    assert!(stdout.contains("POL-001\tpolicy\tKeep request workflows visible"));
-    assert!(stdout.contains("REQ-CORE-028\trequirement\tClassify request artifacts"));
-    assert!(stdout.contains("FEAT-TASK-001\tfeature\tRequest artifact classification"));
+    assert!(stdout.contains("planned updates:"));
+    assert!(stdout.contains("create requirement docs/syu/requirements/checkout/checkout.yaml"));
+    assert!(stdout.contains("create feature docs/syu/features/checkout/checkout.yaml"));
+    assert!(stdout.contains("append feature registry docs/syu/features/features.yaml"));
+    assert!(stdout.contains("Generated from `syu task scaffold`"));
 }
 
 #[test]
-// REQ-CORE-028
-fn task_classify_handles_requests_without_matches() {
+fn task_scaffold_prints_json_preview_for_existing_ids() {
     let tempdir = tempdir().expect("tempdir");
     write_workspace(tempdir.path());
-    fs::write(
-        tempdir.path().join("request.yaml"),
-        "version: 1\nrequest: >\n  Blorf zqxw 123.\ncontext: {}\n",
-    )
-    .expect("request");
+    write_request(
+        tempdir.path(),
+        "Update REQ-CORE-028 and FEAT-TASK-001 so planning remains explainable.",
+        "core",
+        &["REQ-CORE-028", "FEAT-TASK-001"],
+    );
 
     let output = {
         let mut command = std::process::Command::cargo_bin("syu").expect("binary should build");
         command.current_dir(tempdir.path());
-        command.args(["task", "classify", "request.yaml"]);
+        command.args(["task", "scaffold", "request.yaml", "--format", "json"]);
         command.output().expect("command should run")
     };
 
-    assert!(output.status.success(), "task classify should succeed");
+    assert!(output.status.success(), "task scaffold should succeed");
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("classification: requirement_create"));
-    assert!(stdout.contains("- none"));
-    assert!(stdout.contains("request does not use a strong create/change/delete verb"));
-    assert!(stdout.contains("no existing spec item was named and the request reads like new work"));
+    assert!(stdout.contains("\"classification\": \"requirement_change\""));
+    assert!(stdout.contains("\"action\": \"update\""));
+    assert!(stdout.contains("\"path\": \"docs/syu/requirements/core/classify.yaml\""));
+    assert!(stdout.contains("\"path\": \"docs/syu/features/core/task.yaml\""));
+}
+
+#[test]
+fn task_scaffold_rejects_delete_requests() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_request(
+        tempdir.path(),
+        "Delete REQ-CORE-028 because the workflow is obsolete.",
+        "core",
+        &["REQ-CORE-028"],
+    );
+
+    let output = {
+        let mut command = std::process::Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "scaffold", "request.yaml"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(!output.status.success(), "delete scaffold should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("only supports request artifacts"));
 }
