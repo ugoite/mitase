@@ -249,11 +249,11 @@ until you are ready to declare real tests and implementation traces.
 
 ### Unsupported implementation languages can still adopt the spec layers first
 
-`syu` can validate code-level traces today in Rust, Python, Go, Java, C#, Kotlin, and TypeScript/JavaScript, plus lighter file/symbol ownership in `shell`, `yaml`, `json`, `markdown`, and `gitignore`. Repositories that still contain other
+`syu` can validate code-level traces today in Rust, Python, Ruby, Go, Java, C#, Kotlin, and TypeScript/JavaScript, plus lighter file/symbol ownership in `shell`, `yaml`, `json`, `markdown`, and `gitignore`. Repositories that still contain other
 unsupported implementation languages can still adopt `syu` today, but they
 should treat code-level mappings for those files as future work.
 
-Go, Java, C#, and Kotlin already participate in strict `validate.require_symbol_trace_coverage` inventory. Go, Java, C#, and Kotlin now support `doc_contains` checks as well. The [trace adapter capability matrix](./trace-adapter-support.md)
+Go, Ruby, Java, C#, and Kotlin already participate in strict `validate.require_symbol_trace_coverage` inventory. Go, Ruby, Java, C#, and Kotlin now support `doc_contains` checks as well. The [trace adapter capability matrix](./trace-adapter-support.md)
 summarizes that language-by-language support.
 
 Today you can still:
@@ -290,11 +290,13 @@ implementations:
 What you should avoid for unsupported-language files today is adding
 language-specific `tests:` or `implementations:` entries before the adapter
 exists at all. If you need code-level tracing with `doc_contains`, stay with
-Rust, Python, Go, Java, C#, Kotlin, or TypeScript/JavaScript for now. For
-Ruby-first repositories, use
+Rust, Python, Ruby, Go, Java, C#, Kotlin, or TypeScript/JavaScript for now.
+For Ruby-first repositories, use
 [`examples/ruby-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/ruby-only)
-or `syu init . --template ruby-only`: both use real Ruby files plus symbol-level
-trace mappings that validate today.
+or `syu init . --template ruby-only`: both use real Ruby files plus
+symbol-level trace mappings that validate today, and the Ruby adapter can also
+inspect adjacent comments and enforce strict ownership inventory when the
+symbol shape is stable.
 For Go-first repositories,
 use [`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
 or `syu init . --template go-only`: both use real Go files plus symbol-level
