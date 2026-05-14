@@ -142,7 +142,7 @@ of editing `syu.yaml`.
 
 ### `validate.require_symbol_trace_coverage`
 
-When `true`, `syu` scans Rust, Python, Go, Java, C#, Kotlin, and TypeScript/JavaScript source and test files to confirm that every public symbol belongs to some feature and every test belongs to some requirement.
+When `true`, `syu` scans Rust, Python, Go, Java, C#, Kotlin, and TypeScript/JavaScript source and test files, plus Ruby source and test files, to confirm that every public symbol belongs to some feature and every test belongs to some requirement.
 
 - `false`: only declared traces are verified
 - `true`: undeclared public APIs and tests become validation errors
@@ -159,8 +159,8 @@ That example keeps the higher-layer spec and surrounding automation explicit
 without requiring every checked-in C# file to be traced immediately. Use
 [`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
 or `syu init . --template go-only` as a reminder that Go now supports symbol
-checks, coverage ownership, and `doc_contains`, and that Java, C#, and Kotlin do
-too.
+checks, coverage ownership, and `doc_contains`, and that Ruby, Java, C#, and
+Kotlin do too.
 
 ### `validate.historical_ids.enabled`
 
