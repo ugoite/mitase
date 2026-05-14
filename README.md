@@ -406,6 +406,24 @@ next reciprocal-link edits are concrete instead of guesswork. Edit the generated
 stub fields and reciprocal links before you expect `syu validate` to pass
 cleanly.
 
+### `syu task`
+
+Turn a captured request into reviewable planned-state spec work:
+
+```bash
+syu task classify request.yaml
+syu task scaffold request.yaml
+syu task classify request.yaml --format json
+syu task scaffold request.yaml --format json
+```
+
+`syu task classify` reads the request artifact and current spec graph, then
+decides whether the request looks like create, change, or delete work.
+`syu task scaffold` reuses that request and the current graph to preview the
+planned requirement and feature updates, including the document and registry
+conventions that `syu add` already follows. Review the output before you apply
+the edits or commit them.
+
 ### `syu validate`
 
 Validate definitions and traceability:

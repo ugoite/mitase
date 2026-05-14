@@ -72,6 +72,14 @@ syu add requirement REQ-PLANNING-001
 syu add feature FEAT-PLANNING-001 --kind planning
 ```
 
+If you already have a request artifact and want a reviewable preview before you
+edit YAML by hand, use the task workflow first:
+
+```bash
+syu task classify request.yaml
+syu task scaffold request.yaml
+```
+
 Keep the planned items small. If one request is trying to introduce multiple
 behaviors, split the request before you split the implementation.
 
