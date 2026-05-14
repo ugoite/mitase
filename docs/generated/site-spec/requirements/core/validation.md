@@ -76,6 +76,7 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       - **file**: tests/historical_id_validation.rs
         - **symbols**:
           - validate_rejects_reintroduced_deleted_requirement_ids
+          - validate_reports_historical_index_build_failures
       - **file**: tests/workspace_discovery_command.rs
         - **symbols**:
           - validate_command_discovers_workspace_from_nested_current_directory
@@ -327,6 +328,7 @@ requirements:
         - file: tests/historical_id_validation.rs
           symbols:
             - validate_rejects_reintroduced_deleted_requirement_ids
+            - validate_reports_historical_index_build_failures
         - file: tests/workspace_discovery_command.rs
           symbols:
             - validate_command_discovers_workspace_from_nested_current_directory

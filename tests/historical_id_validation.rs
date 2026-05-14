@@ -145,3 +145,55 @@ fn validate_rejects_reintroduced_deleted_requirement_ids() {
             .is_some_and(|suggestion| suggestion.contains("validate.historical_ids.enabled"))
     );
 }
+
+#[test]
+fn validate_reports_historical_index_build_failures() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    let workspace = tempdir.path();
+
+    git(workspace, &["init"]);
+    git(workspace, &["config", "user.name", "Test User"]);
+    git(workspace, &["config", "user.email", "test@example.com"]);
+
+    write_workspace(workspace, "REQ-001");
+
+    fs::write(
+        workspace.join("syu.yaml"),
+        format!(
+            "version: {version}\nspec:\n  root: docs/syu\nvalidate:\n  default_fix: false\n  allow_planned: true\n  require_non_orphaned_items: true\n  require_reciprocal_links: true\n  require_symbol_trace_coverage: false\n  historical_ids:\n    enabled: true\n    start_ref: definitely-not-a-ref\nruntimes:\n  python:\n    command: auto\n  node:\n    command: auto\n",
+            version = env!("CARGO_PKG_VERSION"),
+        ),
+    )
+    .expect("config");
+
+    git(workspace, &["add", "."]);
+    git(workspace, &["commit", "-m", "initial workspace"]);
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(workspace)
+        .arg("--format")
+        .arg("json")
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        !output.status.success(),
+        "historical index build failures should fail validation"
+    );
+
+    let json: Value = serde_json::from_slice(&output.stdout).expect("output should be JSON");
+    let issues = json["issues"]
+        .as_array()
+        .expect("issues should be represented as an array");
+    let load_issue = issues
+        .iter()
+        .find(|issue| issue["code"] == "SYU-workspace-load-001")
+        .expect("historical index build failures should be reported");
+
+    let message = load_issue["message"]
+        .as_str()
+        .expect("message should be a string");
+    assert!(message.contains("historical ID index"));
+}

@@ -631,8 +631,15 @@ fn collect_check_result_from_workspace_with_mode(
         root: &workspace.root,
         spec_only,
     };
+    let mut historical_id_index_error = None;
     let historical_ids = if workspace.config.validate.historical_ids.enabled {
-        build_historical_id_index(&workspace.root, &workspace.config).ok()
+        match build_historical_id_index(&workspace.root, &workspace.config) {
+            Ok(index) => Some(index),
+            Err(error) => {
+                historical_id_index_error = Some(error.to_string());
+                None
+            }
+        }
     } else {
         None
     };
@@ -677,6 +684,18 @@ fn collect_check_result_from_workspace_with_mode(
 
     if let Some(historical_ids) = historical_ids.as_ref() {
         validate_historical_id_reuse(workspace, historical_ids, &mut issues);
+    }
+    if let Some(error) = historical_id_index_error {
+        issues.push(Issue::error(
+            "SYU-workspace-load-001",
+            "workspace",
+            Some(workspace.root.display().to_string()),
+            format!("Failed to build the historical ID index: {error}."),
+            Some(
+                "Fix the Git history or set `validate.historical_ids.enabled: false` if historical ID validation is intentionally unavailable."
+                    .to_string(),
+            ),
+        ));
     }
 
     validate_orphaned_definitions(workspace, &mut issues);
