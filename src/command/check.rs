@@ -19,6 +19,7 @@ use crate::{
         normalize_relative_path, normalized_symbol_trace_coverage_ignored_paths,
         path_matches_ignored_generated_directory, validate_symbol_trace_coverage,
     },
+    history::{HistoricalIdIndex, build_historical_id_index},
     inspect::{apply_symbol_doc_fix, inspect_symbol, supports_rich_inspection},
     language::adapter_for_language,
     model::{
@@ -225,6 +226,7 @@ const COVERAGE_RULE_CODES: &[&str] = &[
     "SYU-coverage-public-001",
     "SYU-coverage-test-001",
 ];
+const HISTORICAL_ID_RULE_CODES: &[&str] = &["SYU-workspace-historical-001"];
 
 impl TraceRole {
     fn label(self) -> &'static str {
@@ -414,6 +416,12 @@ fn disabled_rule_groups(config: &SyuConfig) -> Vec<DisabledRuleGroup> {
         groups.push(DisabledRuleGroup {
             config_key: "validate.require_symbol_trace_coverage",
             codes: COVERAGE_RULE_CODES,
+        });
+    }
+    if !config.validate.historical_ids.enabled {
+        groups.push(DisabledRuleGroup {
+            config_key: "validate.historical_ids.enabled",
+            codes: HISTORICAL_ID_RULE_CODES,
         });
     }
     groups
@@ -623,6 +631,11 @@ fn collect_check_result_from_workspace_with_mode(
         root: &workspace.root,
         spec_only,
     };
+    let historical_ids = if workspace.config.validate.historical_ids.enabled {
+        build_historical_id_index(&workspace.root, &workspace.config).ok()
+    } else {
+        None
+    };
     let requirement_validation_index = RequirementValidationIndex {
         policies_by_id: &policies_by_id,
         features_by_id: &features_by_id,
@@ -660,6 +673,10 @@ fn collect_check_result_from_workspace_with_mode(
             &mut issues,
             &mut trace_summary.feature_traces,
         );
+    }
+
+    if let Some(historical_ids) = historical_ids.as_ref() {
+        validate_historical_id_reuse(workspace, historical_ids, &mut issues);
     }
 
     validate_orphaned_definitions(workspace, &mut issues);
@@ -1937,6 +1954,74 @@ fn validate_unique_ids<'a>(
                 )),
             ));
         }
+    }
+}
+
+fn validate_historical_id_reuse(
+    workspace: &Workspace,
+    historical_ids: &HistoricalIdIndex,
+    issues: &mut Vec<Issue>,
+) {
+    if !historical_ids.enabled() || !historical_ids.available() {
+        return;
+    }
+
+    validate_historical_id_reuse_for_ids(
+        "philosophy",
+        workspace.philosophies.iter().map(|item| item.id.as_str()),
+        historical_ids,
+        issues,
+    );
+    validate_historical_id_reuse_for_ids(
+        "policy",
+        workspace.policies.iter().map(|item| item.id.as_str()),
+        historical_ids,
+        issues,
+    );
+    validate_historical_id_reuse_for_ids(
+        "requirement",
+        workspace.requirements.iter().map(|item| item.id.as_str()),
+        historical_ids,
+        issues,
+    );
+    validate_historical_id_reuse_for_ids(
+        "feature",
+        workspace.features.iter().map(|item| item.id.as_str()),
+        historical_ids,
+        issues,
+    );
+}
+
+fn validate_historical_id_reuse_for_ids<'a>(
+    kind: &str,
+    ids: impl Iterator<Item = &'a str>,
+    historical_ids: &HistoricalIdIndex,
+    issues: &mut Vec<Issue>,
+) {
+    let mut seen = HashSet::new();
+    for id in ids {
+        if !seen.insert(id) {
+            continue;
+        }
+
+        let Some(evidence) = historical_ids.deleted_entry(id) else {
+            continue;
+        };
+
+        let location = Some(evidence.path.display().to_string());
+        issues.push(Issue::error(
+            "SYU-workspace-historical-001",
+            format!("{kind} {id}"),
+            location,
+            format!(
+                "{kind} `{id}` reuses an ID that was last known in `{}` at commit `{}` before it was deleted.",
+                evidence.path.display(),
+                evidence.commit,
+            ),
+            Some(
+                "Choose a new ID for the replacement item, or temporarily set `validate.historical_ids.enabled: false` while intentionally migrating old data.".to_string(),
+            ),
+        ));
     }
 }
 

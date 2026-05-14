@@ -68,6 +68,26 @@ items:
       in addition to verifying declared traces. The validate command can enable
       or disable this for one run with `--require-symbol-trace-coverage` or
       `--require-symbol-trace-coverage=false`.
+  - key: validate.historical_ids.enabled
+    type: boolean
+    default: true
+    summary: Rejects reuse of IDs that were deleted in git history.
+    description: |
+      When enabled, `syu validate` scans the Git history for philosophy,
+      policy, requirement, and feature IDs that were later deleted. If a
+      current spec entry reuses one of those IDs, validation fails so the
+      historical meaning stays unambiguous. Set this to `false` only for
+      deliberate migrations that need a temporary opt-out while old data is
+      being renamed.
+  - key: validate.historical_ids.start_ref
+    type: string?
+    default: none
+    summary: Limits historical ID comparisons to commits after a chosen ref.
+    description: |
+      When set, `syu` starts the historical ID scan from the named Git ref
+      instead of the full repository history. This is useful when a migration
+      intentionally wants to treat an older branch point as the baseline for
+      deleted-ID checks.
   - key: validate.trace_ownership_mode
     type: enum(mapping|inline|sidecar)
     default: mapping

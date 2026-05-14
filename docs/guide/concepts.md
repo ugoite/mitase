@@ -38,6 +38,7 @@ Examples:
 
 - every requirement must link to at least one feature
 - every traced symbol must carry a stable ID in its documentation
+- deleted IDs should stay retired unless a migration explicitly disables the historical ID check
 - every isolated philosophy / policy / requirement / feature should be treated as drift
 - generated reports must be readable by both humans and automation
 
