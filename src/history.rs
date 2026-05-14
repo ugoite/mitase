@@ -599,9 +599,18 @@ mod tests {
     #[test]
     fn update_historical_reuse_index_skips_already_deleted_ids() {
         let mut index = HistoricalIdIndex::default();
-        let mut previous_commit_ids = BTreeSet::from(["REQ-HIST-DELETE-001".to_string()]);
+        let deleted_id = "REQ-HIST-DELETE-001".to_string();
+        index.deleted_by_value.insert(
+            deleted_id.clone(),
+            HistoricalIdOccurrence {
+                section: SectionKind::Requirements,
+                path: PathBuf::from("requirements/core/req.yaml"),
+                commit: "abc123".to_string(),
+            },
+        );
+        let mut previous_commit_ids = BTreeSet::from([deleted_id.clone()]);
         let mut latest_occurrences = BTreeMap::from([(
-            "REQ-HIST-DELETE-001".to_string(),
+            deleted_id.clone(),
             HistoricalIdOccurrence {
                 section: SectionKind::Requirements,
                 path: PathBuf::from("requirements/core/req.yaml"),
@@ -613,11 +622,6 @@ mod tests {
             ids_by_value: BTreeSet::new(),
             occurrences_by_value: BTreeMap::new(),
         };
-        let snapshot_again = CommitSnapshot {
-            ids_by_section: BTreeMap::new(),
-            ids_by_value: BTreeSet::new(),
-            occurrences_by_value: BTreeMap::new(),
-        };
 
         update_historical_reuse_index(
             &mut index,
@@ -625,15 +629,9 @@ mod tests {
             &mut latest_occurrences,
             snapshot,
         );
-        update_historical_reuse_index(
-            &mut index,
-            &mut previous_commit_ids,
-            &mut latest_occurrences,
-            snapshot_again,
-        );
 
         assert_eq!(index.deleted_by_value.len(), 1);
-        assert!(index.deleted_by_value.contains_key("REQ-HIST-DELETE-001"));
+        assert!(index.deleted_by_value.contains_key(&deleted_id));
     }
 
     #[test]
@@ -910,6 +908,16 @@ mod tests {
         git_commit(workspace, "docs: add malformed historical fixtures");
         let commit = git_stdout(workspace, &["rev-parse", "HEAD"]);
         let missing_repo = workspace.join("missing-repo");
+
+        assert!(
+            record_commit_snapshot(
+                workspace,
+                Path::new(""),
+                &commit,
+                &mut HistoricalIdIndex::default()
+            )
+            .is_err()
+        );
 
         assert!(git_repository_root(&missing_repo).is_err());
         assert!(git_rev_list(workspace, "definitely-not-a-revision").is_err());

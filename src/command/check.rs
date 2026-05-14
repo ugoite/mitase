@@ -4541,6 +4541,49 @@ mod tests {
     }
 
     #[test]
+    fn validate_historical_id_reuse_skips_duplicate_ids_in_the_same_kind() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let repo = tempdir.path();
+        git(repo, &["init"]);
+        git(repo, &["config", "user.name", "Test User"]);
+        git(repo, &["config", "user.email", "test@example.com"]);
+        fs::write(repo.join("placeholder.txt"), "placeholder\n").expect("placeholder file");
+        git(repo, &["add", "."]);
+        git(repo, &["commit", "-m", "initial commit"]);
+
+        let available_index =
+            build_historical_id_index(repo, &SyuConfig::default()).expect("index should build");
+        assert!(available_index.available());
+
+        let mut workspace = test_workspace(Path::new("."));
+        workspace.requirements.push(Requirement {
+            id: "REQ-000".to_string(),
+            title: "Example".to_string(),
+            description: "Example".to_string(),
+            priority: "high".to_string(),
+            status: "implemented".to_string(),
+            linked_policies: Vec::new(),
+            linked_features: Vec::new(),
+            tests: BTreeMap::new(),
+        });
+        workspace.requirements.push(Requirement {
+            id: "REQ-000".to_string(),
+            title: "Duplicate".to_string(),
+            description: "Duplicate".to_string(),
+            priority: "high".to_string(),
+            status: "implemented".to_string(),
+            linked_policies: Vec::new(),
+            linked_features: Vec::new(),
+            tests: BTreeMap::new(),
+        });
+
+        let mut issues = Vec::new();
+        validate_historical_id_reuse(&workspace, &available_index, &mut issues);
+
+        assert!(issues.is_empty());
+    }
+
+    #[test]
     fn filter_check_result_scopes_visible_issues() {
         let issues = vec![
             Issue::warning("SYU-graph-links-001", "subject", None, "message", None),
