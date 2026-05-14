@@ -35,11 +35,40 @@ description: "Generated reference for docs/syu/features/cli/task.yaml"
           - TaskClassifyArgs
       - **file**: src/lib.rs
         - **symbols**:
-          - dispatches_task_subcommands_without_rewriting_them
+          - dispatch
+          - run_dispatch
     - **markdown**:
       - **file**: docs/guide/request-artifact-format.md
         - **symbols**:
           - syu task classify
+- **id**: FEAT-TASK-002
+  - **title**: Planned task scaffold preview
+  - **summary**: Preview reviewable planned requirement and feature updates that keep the current add-command document and registry conventions intact before the edits are applied or committed.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-029
+  - **implementations**:
+    - **rust**:
+      - **file**: src/command/task.rs
+        - **symbols**:
+          - run_task_command
+          - run_task_scaffold_command
+          - build_scaffold_plan
+      - **file**: src/cli.rs
+        - **symbols**:
+          - TaskArgs
+          - TaskScaffoldArgs
+      - **file**: src/lib.rs
+        - **symbols**:
+          - dispatch
+          - run_dispatch
+    - **markdown**:
+      - **file**: docs/guide/request-artifact-format.md
+        - **symbols**:
+          - syu task scaffold
+      - **file**: docs/guide/implementation-planning.md
+        - **symbols**:
+          - syu task scaffold
 
 ## Source YAML
 
@@ -66,9 +95,38 @@ features:
             - TaskClassifyArgs
         - file: src/lib.rs
           symbols:
-            - dispatches_task_subcommands_without_rewriting_them
+            - dispatch
+            - run_dispatch
       markdown:
         - file: docs/guide/request-artifact-format.md
           symbols:
             - syu task classify
+  - id: FEAT-TASK-002
+    title: Planned task scaffold preview
+    summary: Preview reviewable planned requirement and feature updates that keep the current add-command document and registry conventions intact before the edits are applied or committed.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-029
+    implementations:
+      rust:
+        - file: src/command/task.rs
+          symbols:
+            - run_task_command
+            - run_task_scaffold_command
+            - build_scaffold_plan
+        - file: src/cli.rs
+          symbols:
+            - TaskArgs
+            - TaskScaffoldArgs
+        - file: src/lib.rs
+          symbols:
+            - dispatch
+            - run_dispatch
+      markdown:
+        - file: docs/guide/request-artifact-format.md
+          symbols:
+            - syu task scaffold
+        - file: docs/guide/implementation-planning.md
+          symbols:
+            - syu task scaffold
 ```
