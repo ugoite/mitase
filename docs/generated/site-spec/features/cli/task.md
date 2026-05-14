@@ -69,6 +69,33 @@ description: "Generated reference for docs/syu/features/cli/task.yaml"
       - **file**: docs/guide/implementation-planning.md
         - **symbols**:
           - syu task scaffold
+- **id**: FEAT-TASK-003
+  - **title**: Request artifact scoping
+  - **summary**: Map request artifacts onto nearby requirements, policies, philosophies, and features with signals for higher-level discussion and planned-state follow-up.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-030
+  - **implementations**:
+    - **rust**:
+      - **file**: src/command/task.rs
+        - **symbols**:
+          - run_task_command
+          - run_task_scope_command
+      - **file**: src/cli.rs
+        - **symbols**:
+          - TaskArgs
+          - TaskScopeArgs
+      - **file**: src/lib.rs
+        - **symbols**:
+          - dispatch
+          - run_dispatch
+    - **markdown**:
+      - **file**: docs/guide/request-artifact-format.md
+        - **symbols**:
+          - syu task scope
+      - **file**: docs/guide/implementation-planning.md
+        - **symbols**:
+          - syu task scope
 
 ## Source YAML
 
@@ -129,4 +156,31 @@ features:
         - file: docs/guide/implementation-planning.md
           symbols:
             - syu task scaffold
+  - id: FEAT-TASK-003
+    title: Request artifact scoping
+    summary: Map request artifacts onto nearby requirements, policies, philosophies, and features with signals for higher-level discussion and planned-state follow-up.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-030
+    implementations:
+      rust:
+        - file: src/command/task.rs
+          symbols:
+            - run_task_command
+            - run_task_scope_command
+        - file: src/cli.rs
+          symbols:
+            - TaskArgs
+            - TaskScopeArgs
+        - file: src/lib.rs
+          symbols:
+            - dispatch
+            - run_dispatch
+      markdown:
+        - file: docs/guide/request-artifact-format.md
+          symbols:
+            - syu task scope
+        - file: docs/guide/implementation-planning.md
+          symbols:
+            - syu task scope
 ```

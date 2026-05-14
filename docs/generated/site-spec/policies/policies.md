@@ -233,6 +233,7 @@ policies:
       - REQ-CORE-025
       - REQ-CORE-028
       - REQ-CORE-029
+      - REQ-CORE-030
 
   - id: POL-002
     title: Validation should explain the current state instead of only failing
@@ -262,6 +263,7 @@ policies:
       - REQ-CORE-026
       - REQ-CORE-028
       - REQ-CORE-029
+      - REQ-CORE-030
 
   - id: POL-003
     title: Traceability should prove ownership from specification to code and tests
@@ -316,6 +318,7 @@ policies:
       - REQ-CORE-027
       - REQ-CORE-028
       - REQ-CORE-029
+      - REQ-CORE-030
 
   - id: POL-005
     title: Documentation and examples must lower adoption friction

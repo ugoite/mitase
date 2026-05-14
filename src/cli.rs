@@ -16,7 +16,9 @@
 // FEAT-REPORT-001
 // FEAT-INIT-002
 // FEAT-DOCTOR-001
+// FEAT-TASK-003
 // REQ-CORE-001
+// REQ-CORE-030
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, builder::BoolishValueParser};
 use clap_complete::Shell;
@@ -35,7 +37,8 @@ New here?
   5. syu browse .    explore the spec in your terminal
   6. syu app .       start the local browser UI server
   7. syu task classify request.yaml  classify a request artifact against the current spec graph
-  8. syu task scaffold request.yaml   preview planned requirement and feature updates from a request artifact";
+  8. syu task scope request.yaml      map a request artifact onto candidate requirements, policies, philosophies, and features
+  9. syu task scaffold request.yaml   preview planned requirement and feature updates from a request artifact";
 
 const APP_AFTER_HELP: &str = concat!(
     "After startup, open the printed URL in your browser.\n",
@@ -86,12 +89,19 @@ Examples:
 
 Use this when a request has already been captured as a request artifact and you want the current spec graph to decide whether the next requirement-level move is to create, change, or delete.";
 
+const TASK_SCOPE_AFTER_HELP: &str = "\
+Examples:
+  syu task scope request.yaml
+  syu task scope request.yaml --format json
+
+Use this when you want the request artifact mapped onto nearby requirements, policies, philosophies, and features before you decide whether the work needs new planned spec edits.";
+
 const TASK_SCAFFOLD_AFTER_HELP: &str = "\
 Examples:
   syu task scaffold request.yaml
   syu task scaffold request.yaml --format json
 
-Use this after `syu task classify` when you want reviewable planned requirement and feature updates that stay aligned with the existing `syu add` document and registry conventions.";
+Use this after `syu task scope` and `syu task classify` when you want reviewable planned requirement and feature updates that stay aligned with the existing `syu add` document and registry conventions.";
 
 const WORKSPACE_HELP: &str = "Workspace root or any child directory; syu walks upward to find syu.yaml and the configured spec tree";
 
@@ -288,7 +298,7 @@ pub enum Commands {
     )]
     Completion(CompletionArgs),
     #[command(
-        about = "Classify or scaffold request-driven task planning work",
+        about = "Classify, scope, or scaffold request-driven task planning work",
         after_help = TASK_CLASSIFY_AFTER_HELP
     )]
     Task(TaskArgs),
@@ -767,6 +777,11 @@ pub enum TaskCommands {
     )]
     Classify(TaskClassifyArgs),
     #[command(
+        about = "Scope a request artifact against nearby requirements, policies, philosophies, and features",
+        after_help = TASK_SCOPE_AFTER_HELP
+    )]
+    Scope(TaskScopeArgs),
+    #[command(
         about = "Preview planned requirement and feature scaffolds from a request artifact",
         after_help = TASK_SCAFFOLD_AFTER_HELP
     )]
@@ -783,6 +798,20 @@ pub struct TaskClassifyArgs {
     pub workspace: PathBuf,
 
     #[arg(help = "Output format for the classification result")]
+    #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct TaskScopeArgs {
+    #[arg(help = "YAML request artifact to scope against the spec graph")]
+    pub request: PathBuf,
+
+    #[arg(help = WORKSPACE_HELP)]
+    #[arg(default_value = ".")]
+    pub workspace: PathBuf,
+
+    #[arg(help = "Output format for the scoping result")]
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
     pub format: OutputFormat,
 }
@@ -913,7 +942,7 @@ impl ValidationGenreFilter {
 mod tests {
     use super::{
         Cli, CompletionArgs, LookupKind, StarterTemplate, TaskArgs, TaskClassifyArgs, TaskCommands,
-        TaskScaffoldArgs, ValidationGenreFilter, ValidationSeverityFilter,
+        TaskScaffoldArgs, TaskScopeArgs, ValidationGenreFilter, ValidationSeverityFilter,
     };
     use crate::command::init::{starter_template_example_commands, starter_template_names};
     use clap::Parser;
@@ -1002,6 +1031,33 @@ mod tests {
             cli.command,
             Some(super::Commands::Task(TaskArgs {
                 command: TaskCommands::Classify(TaskClassifyArgs {
+                    request,
+                    workspace,
+                    format,
+                }),
+            })) if request == std::path::Path::new("request.yaml")
+                && workspace == std::path::Path::new(".")
+                && format == super::OutputFormat::Json
+        ));
+    }
+
+    #[test]
+    fn task_scope_args_parse_request_paths_and_json_format() {
+        let cli = Cli::try_parse_from([
+            "syu",
+            "task",
+            "scope",
+            "request.yaml",
+            ".",
+            "--format",
+            "json",
+        ])
+        .expect("task scope args should parse");
+
+        assert!(matches!(
+            cli.command,
+            Some(super::Commands::Task(TaskArgs {
+                command: TaskCommands::Scope(TaskScopeArgs {
                     request,
                     workspace,
                     format,

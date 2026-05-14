@@ -651,6 +651,54 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       - **file**: docs/guide/implementation-planning.md
         - **symbols**:
           - syu task scaffold
+- **id**: REQ-CORE-030
+  - **title**: Scope requests against requirements, policies, philosophies, and features
+  - **description**:
+    - |
+      The CLI MUST provide a `task scope` command that reads a captured request
+      artifact and maps it onto nearby requirements, policies, philosophies,
+      and features from the checked-in spec graph. The command SHOULD surface
+      candidate requirements, SHOULD flag when the request appears to require
+      policy or philosophy discussion, SHOULD identify candidate features that
+      may need planned-state updates before implementation starts, and MUST stay
+      grounded in the repository graph instead of inferring the request from
+      git history alone.
+  - **priority**: medium
+  - **status**: implemented
+  - **linked_policies**:
+    - POL-001
+    - POL-002
+    - POL-004
+  - **linked_features**:
+    - FEAT-TASK-003
+  - **tests**:
+    - **rust**:
+      - **file**: src/command/task.rs
+        - **symbols**:
+          - *
+      - **file**: src/cli.rs
+        - **symbols**:
+          - TaskArgs
+          - TaskScopeArgs
+      - **file**: src/lib.rs
+        - **symbols**:
+          - dispatch
+          - run_dispatch
+          - dispatches_task_subcommands_without_rewriting_them
+      - **file**: tests/task_command.rs
+        - **symbols**:
+          - task_scope_prints_text_output_with_candidate_requirements_and_flags
+          - task_scope_prints_json_output_with_planning_signals
+      - **file**: tests/help_command.rs
+        - **symbols**:
+          - task_scope_help_mentions_request_artifacts_and_json_output
+    - **markdown**:
+      - **file**: docs/guide/request-artifact-format.md
+        - **symbols**:
+          - syu task scope
+      - **file**: docs/guide/implementation-planning.md
+        - **symbols**:
+          - syu task scope
 
 ## Source YAML
 
@@ -1277,4 +1325,48 @@ requirements:
         - file: docs/guide/implementation-planning.md
           symbols:
             - syu task scaffold
+  - id: REQ-CORE-030
+    title: Scope requests against requirements, policies, philosophies, and features
+    description: |
+      The CLI MUST provide a `task scope` command that reads a captured request
+      artifact and maps it onto nearby requirements, policies, philosophies,
+      and features from the checked-in spec graph. The command SHOULD surface
+      candidate requirements, SHOULD flag when the request appears to require
+      policy or philosophy discussion, SHOULD identify candidate features that
+      may need planned-state updates before implementation starts, and MUST stay
+      grounded in the repository graph instead of inferring the request from
+      git history alone.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-001
+      - POL-002
+      - POL-004
+    linked_features:
+      - FEAT-TASK-003
+    tests:
+      rust:
+        - file: src/command/task.rs
+          symbols:
+            - "*"
+        - file: src/cli.rs
+          symbols:
+            - TaskArgs
+            - TaskScopeArgs
+        - file: src/lib.rs
+          symbols:
+            - dispatch
+            - run_dispatch
+            - dispatches_task_subcommands_without_rewriting_them
+        - file: tests/task_command.rs
+          symbols:
+            - task_scope_prints_text_output_with_candidate_requirements_and_flags
+            - task_scope_prints_json_output_with_planning_signals
+      markdown:
+        - file: docs/guide/request-artifact-format.md
+          symbols:
+            - syu task scope
+        - file: docs/guide/implementation-planning.md
+          symbols:
+            - syu task scope
 ```

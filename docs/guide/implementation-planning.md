@@ -31,6 +31,9 @@ Use the existing navigation commands to find the best anchor before you edit
 anything:
 
 ```bash
+syu task scope request.yaml
+syu task classify request.yaml
+syu task scaffold request.yaml
 syu show FEAT-CHECK-001
 syu relate FEAT-CHECK-001
 syu browse .
@@ -38,7 +41,8 @@ syu search validation --kind requirement
 ```
 
 At this point, decide whether the request belongs to an existing requirement or
-feature, or whether it needs a new one.
+feature, whether it needs a new one, and whether the scope result suggests a
+policy or philosophy review before you touch feature-specific YAML.
 
 ## 3. Decide whether to create, expand, or delete a requirement
 
@@ -76,6 +80,7 @@ If you already have a request artifact and want a reviewable preview before you
 edit YAML by hand, use the task workflow first:
 
 ```bash
+syu task scope request.yaml
 syu task classify request.yaml
 syu task scaffold request.yaml
 ```
