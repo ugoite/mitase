@@ -85,14 +85,15 @@ description: "Generated reference for docs/syu/config/validate.yaml"
 - **key**: validate.require_symbol_trace_coverage
   - **type**: boolean
   - **default**: False
-  - **summary**: Enforces ownership for public Rust, Python, Go, Java, C#, Kotlin, and TypeScript/JavaScript symbols and tests.
+  - **summary**: Enforces ownership for public Rust, Python, Go, Java, C#, Kotlin, and TypeScript/JavaScript symbols and tests, with Ruby covered by the same inventory rules.
   - **description**:
     - |
       When enabled, `syu` requires every public Rust, Python, Go, Java, C#,
       Kotlin, and TypeScript/JavaScript symbol to belong to some feature and
       every test in those inventoried languages to belong to some requirement,
-      in addition to verifying declared traces. The validate command can enable
-      or disable this for one run with `--require-symbol-trace-coverage` or
+      in addition to verifying declared traces. Ruby uses the same strict
+      ownership inventory path. The validate command can enable or disable this
+      for one run with `--require-symbol-trace-coverage` or
       `--require-symbol-trace-coverage=false`.
 - **key**: validate.trace_ownership_mode
   - **type**: enum(mapping|inline|sidecar)
@@ -205,13 +206,14 @@ items:
   - key: validate.require_symbol_trace_coverage
     type: boolean
     default: false
-    summary: Enforces ownership for public Rust, Python, Go, Java, C#, Kotlin, and TypeScript/JavaScript symbols and tests.
+    summary: Enforces ownership for public Rust, Python, Go, Java, C#, Kotlin, and TypeScript/JavaScript symbols and tests, with Ruby covered by the same inventory rules.
     description: |
       When enabled, `syu` requires every public Rust, Python, Go, Java, C#,
       Kotlin, and TypeScript/JavaScript symbol to belong to some feature and
       every test in those inventoried languages to belong to some requirement,
-      in addition to verifying declared traces. The validate command can enable
-      or disable this for one run with `--require-symbol-trace-coverage` or
+      in addition to verifying declared traces. Ruby uses the same strict
+      ownership inventory path. The validate command can enable or disable this
+      for one run with `--require-symbol-trace-coverage` or
       `--require-symbol-trace-coverage=false`.
   - key: validate.trace_ownership_mode
     type: enum(mapping|inline|sidecar)
