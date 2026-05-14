@@ -365,11 +365,11 @@ fn build_scaffold_plan(
     let requirement_title = lookup
         .title_for(LookupKind::Requirement, &requirement_id)
         .map(std::string::ToString::to_string)
-        .unwrap_or_else(|| scaffold_title(&outcome.request, &scaffold_stem));
+        .unwrap_or_else(|| scaffold_title(&scaffold_stem));
     let feature_title = lookup
         .title_for(LookupKind::Feature, &feature_id)
         .map(std::string::ToString::to_string)
-        .unwrap_or_else(|| scaffold_title(&outcome.request, &scaffold_stem));
+        .unwrap_or_else(|| scaffold_title(&scaffold_stem));
 
     let requirement_path =
         resolve_scaffold_document_path(workspace, LookupKind::Requirement, &requirement_id)?;
@@ -773,7 +773,7 @@ fn normalize_scaffold_stem(stem: &str) -> String {
     }
 }
 
-fn scaffold_title(_request: &str, stem: &str) -> String {
+fn scaffold_title(stem: &str) -> String {
     title_case_slug(&normalize_scaffold_stem(stem))
 }
 
@@ -1303,10 +1303,7 @@ mod tests {
             ..with_area
         };
         assert_eq!(super::scaffold_stem(&fallback, &[]), "task");
-        assert_eq!(
-            super::scaffold_title("", "fallback-title"),
-            "Fallback Title"
-        );
+        assert_eq!(super::scaffold_title("fallback-title"), "Fallback Title");
     }
 
     #[test]
