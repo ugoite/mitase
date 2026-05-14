@@ -597,6 +597,46 @@ mod tests {
     }
 
     #[test]
+    fn update_historical_reuse_index_skips_already_deleted_ids() {
+        let mut index = HistoricalIdIndex::default();
+        let mut previous_commit_ids = BTreeSet::from(["REQ-HIST-DELETE-001".to_string()]);
+        let mut latest_occurrences = BTreeMap::from([(
+            "REQ-HIST-DELETE-001".to_string(),
+            HistoricalIdOccurrence {
+                section: SectionKind::Requirements,
+                path: PathBuf::from("requirements/core/req.yaml"),
+                commit: "abc123".to_string(),
+            },
+        )]);
+        let snapshot = CommitSnapshot {
+            ids_by_section: BTreeMap::new(),
+            ids_by_value: BTreeSet::new(),
+            occurrences_by_value: BTreeMap::new(),
+        };
+        let snapshot_again = CommitSnapshot {
+            ids_by_section: BTreeMap::new(),
+            ids_by_value: BTreeSet::new(),
+            occurrences_by_value: BTreeMap::new(),
+        };
+
+        update_historical_reuse_index(
+            &mut index,
+            &mut previous_commit_ids,
+            &mut latest_occurrences,
+            snapshot,
+        );
+        update_historical_reuse_index(
+            &mut index,
+            &mut previous_commit_ids,
+            &mut latest_occurrences,
+            snapshot_again,
+        );
+
+        assert_eq!(index.deleted_by_value.len(), 1);
+        assert!(index.deleted_by_value.contains_key("REQ-HIST-DELETE-001"));
+    }
+
+    #[test]
     fn build_historical_id_index_supports_repository_root_spec_roots() {
         let tempdir = tempdir().expect("tempdir should exist");
         let workspace = tempdir.path();
@@ -631,6 +671,30 @@ mod tests {
         let index = build_historical_id_index(workspace, &config).expect("index should build");
         assert!(index.available());
         assert!(index.contains("PHIL-HIST-ROOT-001"));
+    }
+
+    #[test]
+    fn record_commit_snapshot_reads_matching_files() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = tempdir.path();
+        init_git_repository(workspace);
+
+        fs::create_dir_all(workspace.join("philosophy")).expect("philosophy dir");
+        fs::write(
+            workspace.join("philosophy/foundation.yaml"),
+            "category: Philosophy\nversion: 1\nlanguage: en\nphilosophies:\n  - id: PHIL-HIST-SNAPSHOT-001\n    title: Snapshot history should be indexed.\n    product_design_principle: Record files from the commit snapshot.\n    coding_guideline: Keep snapshot coverage explicit.\n    linked_policies: []\n",
+        )
+        .expect("philosophy file");
+
+        git(workspace, &["add", "."]);
+        git_commit(workspace, "docs: add snapshot historical ids");
+        let commit = git_stdout(workspace, &["rev-parse", "HEAD"]);
+
+        let mut index = HistoricalIdIndex::default();
+        let snapshot = record_commit_snapshot(workspace, Path::new(""), &commit, &mut index)
+            .expect("snapshot should build");
+
+        assert!(snapshot.ids_by_value.contains("PHIL-HIST-SNAPSHOT-001"));
     }
 
     #[test]

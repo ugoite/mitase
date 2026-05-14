@@ -3928,6 +3928,7 @@ mod tests {
         collections::{BTreeMap, BTreeSet, HashMap},
         fs,
         path::{Path, PathBuf},
+        process::Command,
     };
 
     #[cfg(unix)]
@@ -3938,6 +3939,7 @@ mod tests {
     use crate::{
         cli::{ValidationGenreFilter, ValidationSeverityFilter},
         config::{SyuConfig, TraceOwnershipMode},
+        history::build_historical_id_index,
         model::{
             DefinitionCounts, Feature, FeatureDocument, Issue, OwnershipEntry, OwnershipManifest,
             Philosophy, PhilosophyDocument, Policy, PolicyDocument, Requirement,
@@ -3948,21 +3950,37 @@ mod tests {
     };
 
     use super::{
-        AutofixPlan, AutofixPlanChange, AutofixTransaction, FilteredIssueView, IssueFilters,
-        ItemLocation, MutableLoadedDocument, ORPHAN_RULE_CODES, RECIPROCAL_RULE_CODES,
-        RequirementValidationIndex, TextReportSummary, TraceRole, ValidationResources,
-        apply_autofix, apply_feature_reciprocals, apply_philosophy_reciprocals,
-        apply_policy_reciprocals, apply_requirement_reciprocals, collect_check_result,
-        collect_feature_yaml_paths, describe_trace_reference, entry_covers_symbols,
-        feature_registry_kind, filter_check_result, finalize_autofix_error,
-        format_reference_location, looks_like_feature_document, merge_ownership_entry,
-        ownership_symbols_hint, preferred_trace_file_path, render_autofix_plan, render_text_report,
-        required_ownership_symbols, resolve_openapi_path_item, run_check_command,
-        sync_feature_registry, validate_duplicate_links, validate_duplicate_trace_references,
-        validate_feature, validate_feature_registry_entries, validate_non_empty_field,
+        AutofixPlan, AutofixPlanChange, AutofixTransaction, FilteredIssueView,
+        HISTORICAL_ID_RULE_CODES, IssueFilters, ItemLocation, MutableLoadedDocument,
+        ORPHAN_RULE_CODES, RECIPROCAL_RULE_CODES, RequirementValidationIndex, TextReportSummary,
+        TraceRole, ValidationResources, apply_autofix, apply_feature_reciprocals,
+        apply_philosophy_reciprocals, apply_policy_reciprocals, apply_requirement_reciprocals,
+        collect_check_result, collect_check_result_from_workspace, collect_feature_yaml_paths,
+        describe_trace_reference, entry_covers_symbols, feature_registry_kind, filter_check_result,
+        finalize_autofix_error, format_reference_location, looks_like_feature_document,
+        merge_ownership_entry, ownership_symbols_hint, preferred_trace_file_path,
+        render_autofix_plan, render_text_report, required_ownership_symbols,
+        resolve_openapi_path_item, run_check_command, sync_feature_registry,
+        validate_duplicate_links, validate_duplicate_trace_references, validate_feature,
+        validate_feature_registry_entries, validate_historical_id_reuse, validate_non_empty_field,
         validate_openapi_trace_reference, validate_philosophy, validate_policy,
         validate_requirement, validate_unique_ids, verify_trace_reference,
     };
+
+    fn git(workspace: &Path, args: &[&str]) {
+        let mut command = Command::new("git");
+        command.arg("-C").arg(workspace).args(args);
+        let output = command.output().expect("git should run");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success(),
+            "git {:?} failed\nstdout:\n{}\nstderr:\n{}",
+            args,
+            stdout,
+            stderr
+        );
+    }
 
     fn philosophy(id: &str) -> Philosophy {
         Philosophy {
@@ -4385,6 +4403,10 @@ mod tests {
                 require_non_orphaned_items: false,
                 require_reciprocal_links: false,
                 require_symbol_trace_coverage: true,
+                historical_ids: crate::config::HistoricalIdsConfig {
+                    enabled: false,
+                    start_ref: None,
+                },
                 ..Default::default()
             },
             ..Default::default()
@@ -4402,7 +4424,10 @@ mod tests {
 
         assert_eq!(
             summary.checked_rule_count,
-            all_rules().len() - ORPHAN_RULE_CODES.len() - RECIPROCAL_RULE_CODES.len()
+            all_rules().len()
+                - ORPHAN_RULE_CODES.len()
+                - RECIPROCAL_RULE_CODES.len()
+                - HISTORICAL_ID_RULE_CODES.len()
         );
         assert_eq!(summary.workspace_item_count, 10);
         assert_eq!(
@@ -4414,8 +4439,22 @@ mod tests {
             vec![
                 "validate.require_non_orphaned_items=false (1 rule)".to_string(),
                 "validate.require_reciprocal_links=false (1 rule)".to_string(),
+                "validate.historical_ids.enabled=false (1 rule)".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn collect_check_result_from_workspace_skips_historical_id_index_when_disabled() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        write_valid_planned_workspace(tempdir.path());
+        let mut workspace =
+            crate::workspace::load_workspace(tempdir.path()).expect("workspace should load");
+        workspace.config.validate.historical_ids.enabled = false;
+
+        let result = collect_check_result_from_workspace(&workspace);
+
+        assert!(result.issues.is_empty());
     }
 
     #[test]
@@ -4457,6 +4496,48 @@ mod tests {
         );
 
         assert!(report.contains("note: 1 built-in rule is disabled by current config"));
+    }
+
+    #[test]
+    fn validate_historical_id_reuse_skips_unavailable_indexes_and_missing_matches() {
+        let workspace = test_workspace(Path::new("."));
+        let mut issues = Vec::new();
+
+        let unavailable_root = tempdir().expect("tempdir should exist");
+        let unavailable_index =
+            build_historical_id_index(unavailable_root.path(), &SyuConfig::default())
+                .expect("index should build");
+        assert!(!unavailable_index.available());
+        validate_historical_id_reuse(&workspace, &unavailable_index, &mut issues);
+        assert!(issues.is_empty());
+
+        let tempdir = tempdir().expect("tempdir should exist");
+        let repo = tempdir.path();
+        git(repo, &["init"]);
+        git(repo, &["config", "user.name", "Test User"]);
+        git(repo, &["config", "user.email", "test@example.com"]);
+        fs::write(repo.join("placeholder.txt"), "placeholder\n").expect("placeholder file");
+        git(repo, &["add", "."]);
+        git(repo, &["commit", "-m", "initial commit"]);
+
+        let available_index =
+            build_historical_id_index(repo, &SyuConfig::default()).expect("index should build");
+        assert!(available_index.available());
+
+        let mut workspace = test_workspace(Path::new("."));
+        workspace.requirements.push(Requirement {
+            id: "REQ-000".to_string(),
+            title: "Example".to_string(),
+            description: "Example".to_string(),
+            priority: "high".to_string(),
+            status: "implemented".to_string(),
+            linked_policies: Vec::new(),
+            linked_features: Vec::new(),
+            tests: BTreeMap::new(),
+        });
+
+        validate_historical_id_reuse(&workspace, &available_index, &mut issues);
+        assert!(issues.is_empty());
     }
 
     #[test]
