@@ -672,7 +672,7 @@ Key behaviors:
 - `validate.allow_planned` controls whether `planned` requirements and features are allowed at all
 - `validate.require_non_orphaned_items` turns isolated layered definitions into validation errors
 - `validate.require_reciprocal_links` keeps adjacent-layer backlinks mandatory by default while still allowing phased migration when disabled
-- `validate.require_symbol_trace_coverage` opt-in checks that public Rust, Python, Go, Java, C#, Kotlin, and TypeScript/JavaScript symbols belong to features and tests belong to requirements, while still skipping configured repository-relative generated paths
+- `validate.require_symbol_trace_coverage` opt-in checks that public Rust, Python, Go, Java, C#, Kotlin, and TypeScript/JavaScript symbols belong to features and tests belong to requirements, with Ruby covered by the same inventory rules, while still skipping configured repository-relative generated paths
 - `report.output` sets the default `syu report` destination while `--output` still takes precedence
 - `app.bind` and `app.port` define the default local browser-app address and port unless `--bind` / `--port` override them
 - `report.output` sets the default `syu report` destination while `--output` still takes precedence
@@ -720,7 +720,7 @@ Today autofix repairs documentation-style trace gaps plus a few deterministic
 graph and registry issues:
 
 - missing requirement / feature IDs in symbol documentation
-- missing `doc_contains` snippets for Rust, Python, Go, and TypeScript symbols
+- missing `doc_contains` snippets for Rust, Python, Ruby, Go, and TypeScript symbols
 - exact duplicate graph links in philosophy / policy / requirement / feature files
 - missing reciprocal graph links when the opposite side is already declared
 - drift between checked-in feature documents and `features/features.yaml`
