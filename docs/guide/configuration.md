@@ -162,6 +162,29 @@ or `syu init . --template go-only` as a reminder that Go now supports symbol
 checks, coverage ownership, and `doc_contains`, and that Ruby, Java, C#, and
 Kotlin do too.
 
+### `validate.historical_ids.enabled`
+
+Controls whether `syu` rejects IDs that were already deleted somewhere in Git
+history.
+
+- `true`: a philosophy, policy, requirement, or feature cannot reuse an ID
+  that was previously deleted in the repository history
+- `false`: the historical ID rule is skipped, which is useful for temporary
+  migrations that are renaming old data
+
+Keep this enabled in steady state so a deleted ID stays retired. If you are
+intentionally migrating legacy content, turn it off for the migration window
+and restore it after the old identifiers have been replaced.
+
+### `validate.historical_ids.start_ref`
+
+Optional Git ref that limits the historical-ID scan to commits after a chosen
+baseline.
+
+Use this when a migration wants to compare against a known branch point instead
+of the full repository history. The default is to scan the entire history that
+Git exposes from `HEAD`.
+
 ### `validate.trace_ownership_mode`
 
 Controls whether traced files need an extra ownership breadcrumb beyond the
