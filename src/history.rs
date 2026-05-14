@@ -24,6 +24,7 @@ pub(crate) struct HistoricalIdIndex {
     start_ref: Option<String>,
     ids_by_section: BTreeMap<SectionKind, BTreeSet<String>>,
     ids_by_value: BTreeSet<String>,
+    deleted_by_value: BTreeMap<String, HistoricalIdOccurrence>,
 }
 
 impl HistoricalIdIndex {
@@ -39,6 +40,10 @@ impl HistoricalIdIndex {
         self.ids_by_value.contains(id)
     }
 
+    pub(crate) fn deleted_entry(&self, id: &str) -> Option<&HistoricalIdOccurrence> {
+        self.deleted_by_value.get(id)
+    }
+
     pub(crate) fn snapshot(&self) -> HistoricalIdSnapshot {
         HistoricalIdSnapshot {
             enabled: self.enabled,
@@ -51,6 +56,20 @@ impl HistoricalIdIndex {
                 .collect(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct HistoricalIdOccurrence {
+    pub(crate) section: SectionKind,
+    pub(crate) path: PathBuf,
+    pub(crate) commit: String,
+}
+
+#[derive(Debug, Default)]
+struct CommitSnapshot {
+    ids_by_section: BTreeMap<SectionKind, BTreeSet<String>>,
+    ids_by_value: BTreeSet<String>,
+    occurrences_by_value: BTreeMap<String, HistoricalIdOccurrence>,
 }
 
 pub(crate) fn build_historical_id_index(
@@ -68,6 +87,7 @@ pub(crate) fn build_historical_id_index(
             (SectionKind::Features, BTreeSet::new()),
         ]),
         ids_by_value: BTreeSet::new(),
+        deleted_by_value: BTreeMap::new(),
     };
 
     if !index.enabled {
@@ -85,14 +105,22 @@ pub(crate) fn build_historical_id_index(
         Err(_) => return Ok(index),
     };
 
+    let mut previous_commit_ids = BTreeSet::new();
+    let mut latest_occurrences = BTreeMap::new();
     let commits = if let Some(start_ref) = index.start_ref.clone() {
         let mut commits = Vec::new();
-        record_commit_snapshot(
+        let snapshot = record_commit_snapshot(
             &repository_root,
             &spec_root_relative,
             &start_ref,
             &mut index,
         )?;
+        update_historical_reuse_index(
+            &mut index,
+            &mut previous_commit_ids,
+            &mut latest_occurrences,
+            snapshot,
+        );
         let commit_range = format!("{start_ref}..HEAD");
         let later_commits = git_rev_list(&repository_root, &commit_range)?;
         commits.extend(later_commits);
@@ -102,11 +130,43 @@ pub(crate) fn build_historical_id_index(
     };
 
     for commit in commits {
-        record_commit_snapshot(&repository_root, &spec_root_relative, &commit, &mut index)?;
+        let snapshot =
+            record_commit_snapshot(&repository_root, &spec_root_relative, &commit, &mut index)?;
+        update_historical_reuse_index(
+            &mut index,
+            &mut previous_commit_ids,
+            &mut latest_occurrences,
+            snapshot,
+        );
     }
 
     index.available = true;
     Ok(index)
+}
+
+fn update_historical_reuse_index(
+    index: &mut HistoricalIdIndex,
+    previous_commit_ids: &mut BTreeSet<String>,
+    latest_occurrences: &mut BTreeMap<String, HistoricalIdOccurrence>,
+    snapshot: CommitSnapshot,
+) {
+    for id in previous_commit_ids.difference(&snapshot.ids_by_value) {
+        if index.deleted_by_value.contains_key(id) {
+            continue;
+        }
+
+        if let Some(previous_occurrence) = latest_occurrences.get(id) {
+            index
+                .deleted_by_value
+                .insert(id.clone(), previous_occurrence.clone());
+        }
+    }
+
+    for (id, occurrence) in snapshot.occurrences_by_value {
+        latest_occurrences.insert(id, occurrence);
+    }
+
+    *previous_commit_ids = snapshot.ids_by_value;
 }
 
 fn git_repository_root(workspace_root: &Path) -> Result<PathBuf> {
@@ -178,13 +238,21 @@ fn record_commit_snapshot(
     spec_root_relative: &Path,
     commit: &str,
     index: &mut HistoricalIdIndex,
-) -> Result<()> {
+) -> Result<CommitSnapshot> {
     let files = git_tree_files(repository_root, commit, spec_root_relative)?;
+    let mut snapshot = CommitSnapshot::default();
     for file in files {
-        record_snapshot_file(repository_root, spec_root_relative, commit, &file, index)?;
+        record_snapshot_file(
+            repository_root,
+            spec_root_relative,
+            commit,
+            &file,
+            index,
+            &mut snapshot,
+        )?;
     }
 
-    Ok(())
+    Ok(snapshot)
 }
 
 fn record_snapshot_file(
@@ -193,6 +261,7 @@ fn record_snapshot_file(
     commit: &str,
     file: &str,
     index: &mut HistoricalIdIndex,
+    snapshot: &mut CommitSnapshot,
 ) -> Result<()> {
     if !is_yaml_file(file) {
         return Ok(());
@@ -203,7 +272,14 @@ fn record_snapshot_file(
             .into_iter()
             .for_each(|document| {
                 for item in document.philosophies {
-                    record_id(index, SectionKind::Philosophy, item.id);
+                    record_id(
+                        index,
+                        snapshot,
+                        SectionKind::Philosophy,
+                        Path::new(file),
+                        commit,
+                        item.id,
+                    );
                 }
             });
         return Ok(());
@@ -214,7 +290,14 @@ fn record_snapshot_file(
             .into_iter()
             .for_each(|document| {
                 for item in document.policies {
-                    record_id(index, SectionKind::Policies, item.id);
+                    record_id(
+                        index,
+                        snapshot,
+                        SectionKind::Policies,
+                        Path::new(file),
+                        commit,
+                        item.id,
+                    );
                 }
             });
         return Ok(());
@@ -225,7 +308,14 @@ fn record_snapshot_file(
             .into_iter()
             .for_each(|document| {
                 for item in document.requirements {
-                    record_id(index, SectionKind::Requirements, item.id);
+                    record_id(
+                        index,
+                        snapshot,
+                        SectionKind::Requirements,
+                        Path::new(file),
+                        commit,
+                        item.id,
+                    );
                 }
             });
         return Ok(());
@@ -236,7 +326,14 @@ fn record_snapshot_file(
             .into_iter()
             .for_each(|document| {
                 for item in document.features {
-                    record_id(index, SectionKind::Features, item.id);
+                    record_id(
+                        index,
+                        snapshot,
+                        SectionKind::Features,
+                        Path::new(file),
+                        commit,
+                        item.id,
+                    );
                 }
             });
     }
@@ -374,9 +471,34 @@ fn is_under_section(path: &str, spec_root_relative: &Path, section: &str) -> boo
     path == prefix || path.starts_with(&format!("{prefix}/"))
 }
 
-fn record_id(index: &mut HistoricalIdIndex, kind: SectionKind, id: String) {
+fn record_id(
+    index: &mut HistoricalIdIndex,
+    snapshot: &mut CommitSnapshot,
+    kind: SectionKind,
+    path: &Path,
+    commit: &str,
+    id: String,
+) {
     index.ids_by_value.insert(id.clone());
-    index.ids_by_section.entry(kind).or_default().insert(id);
+    index
+        .ids_by_section
+        .entry(kind)
+        .or_default()
+        .insert(id.clone());
+    snapshot.ids_by_value.insert(id.clone());
+    snapshot
+        .ids_by_section
+        .entry(kind)
+        .or_default()
+        .insert(id.clone());
+    snapshot
+        .occurrences_by_value
+        .entry(id)
+        .or_insert_with(|| HistoricalIdOccurrence {
+            section: kind,
+            path: path.to_path_buf(),
+            commit: commit.to_string(),
+        });
 }
 
 fn git_command(workspace_root: &Path) -> Command {
@@ -475,6 +597,44 @@ mod tests {
     }
 
     #[test]
+    fn update_historical_reuse_index_skips_already_deleted_ids() {
+        let mut index = HistoricalIdIndex::default();
+        let deleted_id = "REQ-HIST-DELETE-001".to_string();
+        index.deleted_by_value.insert(
+            deleted_id.clone(),
+            HistoricalIdOccurrence {
+                section: SectionKind::Requirements,
+                path: PathBuf::from("requirements/core/req.yaml"),
+                commit: "abc123".to_string(),
+            },
+        );
+        let mut previous_commit_ids = BTreeSet::from([deleted_id.clone()]);
+        let mut latest_occurrences = BTreeMap::from([(
+            deleted_id.clone(),
+            HistoricalIdOccurrence {
+                section: SectionKind::Requirements,
+                path: PathBuf::from("requirements/core/req.yaml"),
+                commit: "abc123".to_string(),
+            },
+        )]);
+        let snapshot = CommitSnapshot {
+            ids_by_section: BTreeMap::new(),
+            ids_by_value: BTreeSet::new(),
+            occurrences_by_value: BTreeMap::new(),
+        };
+
+        update_historical_reuse_index(
+            &mut index,
+            &mut previous_commit_ids,
+            &mut latest_occurrences,
+            snapshot,
+        );
+
+        assert_eq!(index.deleted_by_value.len(), 1);
+        assert!(index.deleted_by_value.contains_key(&deleted_id));
+    }
+
+    #[test]
     fn build_historical_id_index_supports_repository_root_spec_roots() {
         let tempdir = tempdir().expect("tempdir should exist");
         let workspace = tempdir.path();
@@ -509,6 +669,30 @@ mod tests {
         let index = build_historical_id_index(workspace, &config).expect("index should build");
         assert!(index.available());
         assert!(index.contains("PHIL-HIST-ROOT-001"));
+    }
+
+    #[test]
+    fn record_commit_snapshot_reads_matching_files() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = tempdir.path();
+        init_git_repository(workspace);
+
+        fs::create_dir_all(workspace.join("philosophy")).expect("philosophy dir");
+        fs::write(
+            workspace.join("philosophy/foundation.yaml"),
+            "category: Philosophy\nversion: 1\nlanguage: en\nphilosophies:\n  - id: PHIL-HIST-SNAPSHOT-001\n    title: Snapshot history should be indexed.\n    product_design_principle: Record files from the commit snapshot.\n    coding_guideline: Keep snapshot coverage explicit.\n    linked_policies: []\n",
+        )
+        .expect("philosophy file");
+
+        git(workspace, &["add", "."]);
+        git_commit(workspace, "docs: add snapshot historical ids");
+        let commit = git_stdout(workspace, &["rev-parse", "HEAD"]);
+
+        let mut index = HistoricalIdIndex::default();
+        let snapshot = record_commit_snapshot(workspace, Path::new(""), &commit, &mut index)
+            .expect("snapshot should build");
+
+        assert!(snapshot.ids_by_value.contains("PHIL-HIST-SNAPSHOT-001"));
     }
 
     #[test]
@@ -724,6 +908,16 @@ mod tests {
         git_commit(workspace, "docs: add malformed historical fixtures");
         let commit = git_stdout(workspace, &["rev-parse", "HEAD"]);
         let missing_repo = workspace.join("missing-repo");
+
+        assert!(
+            record_commit_snapshot(
+                workspace,
+                Path::new(""),
+                &commit,
+                &mut HistoricalIdIndex::default()
+            )
+            .is_err()
+        );
 
         assert!(git_repository_root(&missing_repo).is_err());
         assert!(git_rev_list(workspace, "definitely-not-a-revision").is_err());
