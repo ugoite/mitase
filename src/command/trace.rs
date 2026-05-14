@@ -259,7 +259,7 @@ fn run_trace_range(
                 },
             },
         };
-        let scope_guard = collect_trace_scope_guard(workspace, &[], allowed_ids);
+        let scope_guard = collect_trace_scope_guard(workspace, &[], allowed_ids)?;
         let guard_failed = scope_guard
             .as_ref()
             .is_some_and(|guard| !guard.out_of_scope_items.is_empty());
@@ -290,7 +290,7 @@ fn run_trace_range(
     let (results, skipped) = collect_trace_range_outputs(workspace, &changed_files);
 
     let summary = compute_range_summary(changed_files.len(), &results, &skipped);
-    let scope_guard = collect_trace_scope_guard(workspace, &results, allowed_ids);
+    let scope_guard = collect_trace_scope_guard(workspace, &results, allowed_ids)?;
     let guard_failed = scope_guard
         .as_ref()
         .is_some_and(|guard| !guard.out_of_scope_items.is_empty());
@@ -592,15 +592,15 @@ fn collect_trace_scope_guard(
     workspace: &Workspace,
     results: &[TraceLookupOutput],
     allowed_ids: &[String],
-) -> Option<TraceRangeScopeGuard> {
+) -> Result<Option<TraceRangeScopeGuard>> {
     if allowed_ids.is_empty() {
-        return None;
+        return Ok(None);
     }
 
     let lookup = WorkspaceLookup::new(workspace);
     let mut allowed_ids_by_id = BTreeMap::<String, TraceScopeGuardItem>::new();
     for id in allowed_ids {
-        let item = resolve_scope_guard_item(&lookup, id);
+        let item = resolve_scope_guard_item(&lookup, id)?;
         allowed_ids_by_id.entry(item.id.clone()).or_insert(item);
     }
 
@@ -634,34 +634,30 @@ fn collect_trace_scope_guard(
         }
     }
 
-    Some(TraceRangeScopeGuard {
+    Ok(Some(TraceRangeScopeGuard {
         allowed_ids: allowed_ids_by_id.into_values().collect(),
         out_of_scope_items,
-    })
+    }))
 }
 
-fn resolve_scope_guard_item(lookup: &WorkspaceLookup<'_>, id: &str) -> TraceScopeGuardItem {
+fn resolve_scope_guard_item(lookup: &WorkspaceLookup<'_>, id: &str) -> Result<TraceScopeGuardItem> {
     if let Some(requirement) = lookup.requirement(id) {
-        return TraceScopeGuardItem {
+        return Ok(TraceScopeGuardItem {
             kind: "requirement".to_string(),
             id: requirement.id.clone(),
             title: requirement.title.clone(),
-        };
+        });
     }
 
     if let Some(feature) = lookup.feature(id) {
-        return TraceScopeGuardItem {
+        return Ok(TraceScopeGuardItem {
             kind: "feature".to_string(),
             id: feature.id.clone(),
             title: feature.title.clone(),
-        };
+        });
     }
 
-    TraceScopeGuardItem {
-        kind: "unknown".to_string(),
-        id: id.to_string(),
-        title: id.to_string(),
-    }
+    bail!("scope guard id `{id}` does not match a requirement or feature");
 }
 
 fn render_range_id_group(rendered: &mut String, heading: &str, group: &TraceRangeEntityGroup) {

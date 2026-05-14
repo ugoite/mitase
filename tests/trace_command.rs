@@ -326,6 +326,30 @@ fn review_command_blocks_out_of_scope_requirement_and_feature_flows() {
 }
 
 #[test]
+fn review_command_rejects_unknown_expected_ids() {
+    let workspace = init_git_fixture_workspace();
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .current_dir(workspace.path().join("workspace"))
+        .args([
+            "review",
+            "--range",
+            "HEAD~1..HEAD",
+            "--expected-id",
+            "REQ-NOT-REAL-001",
+        ])
+        .output()
+        .expect("review range command should run");
+
+    assert!(!output.status.success(), "unknown expected ids should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr
+            .contains("scope guard id `REQ-NOT-REAL-001` does not match a requirement or feature")
+    );
+}
+
+#[test]
 fn trace_command_reports_empty_git_ranges_as_json() {
     let workspace = init_git_fixture_workspace();
     let output = Command::cargo_bin("syu")
