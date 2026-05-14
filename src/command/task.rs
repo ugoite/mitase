@@ -773,8 +773,8 @@ fn normalize_scaffold_stem(stem: &str) -> String {
     }
 }
 
-fn scaffold_title(request: &str, _stem: &str) -> String {
-    summarize_request(request)
+fn scaffold_title(_request: &str, stem: &str) -> String {
+    title_case_slug(&normalize_scaffold_stem(stem))
 }
 
 fn id_stem(id: &str) -> String {
@@ -1303,7 +1303,10 @@ mod tests {
             ..with_area
         };
         assert_eq!(super::scaffold_stem(&fallback, &[]), "task");
-        assert_eq!(super::scaffold_title("", "fallback-title"), "planned task");
+        assert_eq!(
+            super::scaffold_title("", "fallback-title"),
+            "Fallback Title"
+        );
     }
 
     #[test]
