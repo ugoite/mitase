@@ -156,6 +156,8 @@ Examples:
   syu trace src/rust_feature.rs --symbol feature_trace_rust
   syu trace src/rust_feature.rs path/to/workspace --format json
   syu review --range origin/main...HEAD
+  syu review --range origin/main...HEAD --allowed-id FEAT-TRACE-001
+  syu review --range origin/main...HEAD --expected-id REQ-TRACE-001
   syu trace --range main..HEAD
   syu trace --range origin/main...HEAD --format json";
 
@@ -488,6 +490,12 @@ pub struct TraceArgs {
     #[arg(help = "Git range to analyze (e.g., main..HEAD or origin/main...HEAD)")]
     #[arg(long, conflicts_with = "file")]
     pub range: Option<String>,
+
+    #[arg(
+        help = "Repeatable requirement or feature IDs the reviewed range is expected or allowed to touch"
+    )]
+    #[arg(long, value_delimiter = ',', visible_alias = "expected-id")]
+    pub allowed_id: Vec<String>,
 
     #[arg(help = "Output format for trace lookup results")]
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
