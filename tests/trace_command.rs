@@ -112,6 +112,36 @@ fn init_git_fixture_workspace() -> tempfile::TempDir {
     tempdir
 }
 
+fn init_git_fixture_workspace_with_requirement_and_feature_changes() -> tempfile::TempDir {
+    let tempdir = tempdir().expect("tempdir should exist");
+    let workspace = tempdir.path().join("workspace");
+    copy_dir_recursive(&fixture_path("passing"), &workspace);
+
+    git(&workspace, &["init"]);
+    git(&workspace, &["config", "user.name", "Test User"]);
+    git(&workspace, &["config", "user.email", "test@example.com"]);
+    git(&workspace, &["add", "."]);
+    git_commit(&workspace, "chore: seed traced workspace");
+
+    fs::write(
+        workspace.join("src/rust_trace_tests.rs"),
+        "// REQ-TRACE-001\npub fn req_trace_rust_test() {\n    println!(\"changed requirement\");\n}\n",
+    )
+    .expect("changed requirement-owned trace");
+    fs::write(
+        workspace.join("src/rust_feature.rs"),
+        "// FEAT-TRACE-001\npub fn feature_trace_rust() {\n    println!(\"changed feature\");\n}\n",
+    )
+    .expect("changed feature-owned trace");
+    git(&workspace, &["add", "."]);
+    git_commit(
+        &workspace,
+        "feat: update traced requirement and feature files",
+    );
+
+    tempdir
+}
+
 #[test]
 fn trace_command_resolves_feature_owners_from_file_only_lookup() {
     let output = Command::cargo_bin("syu")
@@ -246,6 +276,77 @@ fn trace_command_reports_git_range_summary_for_changed_files() {
     assert!(stdout.contains("UNOWNED:"));
     assert!(stdout.contains("src/rust_feature.rs"));
     assert!(stdout.contains("src/unowned.rs"));
+}
+
+#[test]
+fn review_command_blocks_out_of_scope_requirement_and_feature_flows() {
+    let workspace = init_git_fixture_workspace_with_requirement_and_feature_changes();
+
+    let requirement_output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .current_dir(workspace.path().join("workspace"))
+        .args([
+            "review",
+            "--range",
+            "HEAD~1..HEAD",
+            "--expected-id",
+            "REQ-TRACE-001",
+        ])
+        .output()
+        .expect("review range command should run");
+
+    assert_eq!(requirement_output.status.code(), Some(1));
+    let requirement_stdout = String::from_utf8_lossy(&requirement_output.stdout);
+    assert!(requirement_stdout.contains("Scope guard:"));
+    assert!(requirement_stdout.contains("Allowed IDs:"));
+    assert!(requirement_stdout.contains("requirement REQ-TRACE-001"));
+    assert!(requirement_stdout.contains("feature FEAT-TRACE-001"));
+    assert!(requirement_stdout.contains("outside allowed IDs"));
+
+    let feature_output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .current_dir(workspace.path().join("workspace"))
+        .args([
+            "review",
+            "--range",
+            "HEAD~1..HEAD",
+            "--allowed-id",
+            "FEAT-TRACE-001",
+        ])
+        .output()
+        .expect("review range command should run");
+
+    assert_eq!(feature_output.status.code(), Some(1));
+    let feature_stdout = String::from_utf8_lossy(&feature_output.stdout);
+    assert!(feature_stdout.contains("Scope guard:"));
+    assert!(feature_stdout.contains("Allowed IDs:"));
+    assert!(feature_stdout.contains("feature FEAT-TRACE-001"));
+    assert!(feature_stdout.contains("requirement REQ-TRACE-001"));
+    assert!(feature_stdout.contains("outside allowed IDs"));
+}
+
+#[test]
+fn review_command_rejects_unknown_expected_ids() {
+    let workspace = init_git_fixture_workspace();
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .current_dir(workspace.path().join("workspace"))
+        .args([
+            "review",
+            "--range",
+            "HEAD~1..HEAD",
+            "--expected-id",
+            "REQ-NOT-REAL-001",
+        ])
+        .output()
+        .expect("review range command should run");
+
+    assert!(!output.status.success(), "unknown expected ids should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr
+            .contains("scope guard id `REQ-NOT-REAL-001` does not match a requirement or feature")
+    );
 }
 
 #[test]

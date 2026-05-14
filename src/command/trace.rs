@@ -2,7 +2,7 @@
 // REQ-CORE-021
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fmt::Write as _,
     path::{Path, PathBuf},
 };
@@ -111,6 +111,8 @@ struct TraceRangeOutput {
     files: Vec<TraceLookupOutput>,
     skipped_files: Vec<TraceSkippedFile>,
     summary: TraceRangeSummary,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    scope_guard: Option<TraceRangeScopeGuard>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -143,6 +145,35 @@ struct TraceRangeSummary {
 }
 
 #[derive(Debug, Clone, Serialize)]
+struct TraceRangeScopeGuard {
+    allowed_ids: Vec<TraceScopeGuardItem>,
+    out_of_scope_items: Vec<TraceScopeGuardViolation>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct TraceScopeGuardItem {
+    kind: String,
+    id: String,
+    title: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct TraceScopeGuardOwner {
+    kind: String,
+    id: String,
+    title: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct TraceScopeGuardViolation {
+    file: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    owners: Vec<TraceScopeGuardOwner>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 struct TraceSkippedFile {
     file: String,
     reason: String,
@@ -162,7 +193,7 @@ pub fn run_trace_command(args: &TraceArgs) -> Result<i32> {
         if args.symbol.is_some() {
             bail!("--symbol cannot be used with --range");
         }
-        return run_trace_range(&workspace, range, args.format);
+        return run_trace_range(&workspace, range, args.format, &args.allowed_id);
     }
 
     let Some(file) = &args.file else {
@@ -193,14 +224,51 @@ pub fn run_trace_command(args: &TraceArgs) -> Result<i32> {
     Ok(0)
 }
 
-fn run_trace_range(workspace: &Workspace, range: &str, format: OutputFormat) -> Result<i32> {
+fn run_trace_range(
+    workspace: &Workspace,
+    range: &str,
+    format: OutputFormat,
+    allowed_ids: &[String],
+) -> Result<i32> {
     let changed_files = resolve_git_range_changed_files(&workspace.root, range)?;
 
     if changed_files.is_empty() {
+        let summary = TraceRangeSummary {
+            changed_files_total: 0,
+            inspected_files: 0,
+            skipped_files: 0,
+            owned_files: 0,
+            partial_files: 0,
+            unowned_files: 0,
+            total_requirements: 0,
+            total_features: 0,
+            total_policies: 0,
+            total_philosophies: 0,
+            ids: TraceRangeIdSummary {
+                direct: TraceRangeEntityGroup {
+                    requirements: Vec::new(),
+                    features: Vec::new(),
+                    policies: Vec::new(),
+                    philosophies: Vec::new(),
+                },
+                indirect: TraceRangeEntityGroup {
+                    requirements: Vec::new(),
+                    features: Vec::new(),
+                    policies: Vec::new(),
+                    philosophies: Vec::new(),
+                },
+            },
+        };
+        let scope_guard = collect_trace_scope_guard(workspace, &[], allowed_ids)?;
+        let guard_failed = scope_guard
+            .as_ref()
+            .is_some_and(|guard| !guard.out_of_scope_items.is_empty());
         match format {
             OutputFormat::Text => {
-                println!("Git range: {range}");
-                println!("No files changed in range");
+                print!(
+                    "{}",
+                    render_range_text(range, &[], &[], &summary, scope_guard.as_ref())
+                );
             }
             OutputFormat::Json => {
                 println!(
@@ -209,46 +277,29 @@ fn run_trace_range(workspace: &Workspace, range: &str, format: OutputFormat) -> 
                         range: range.to_string(),
                         files: Vec::new(),
                         skipped_files: Vec::new(),
-                        summary: TraceRangeSummary {
-                            changed_files_total: 0,
-                            inspected_files: 0,
-                            skipped_files: 0,
-                            owned_files: 0,
-                            partial_files: 0,
-                            unowned_files: 0,
-                            total_requirements: 0,
-                            total_features: 0,
-                            total_policies: 0,
-                            total_philosophies: 0,
-                            ids: TraceRangeIdSummary {
-                                direct: TraceRangeEntityGroup {
-                                    requirements: Vec::new(),
-                                    features: Vec::new(),
-                                    policies: Vec::new(),
-                                    philosophies: Vec::new(),
-                                },
-                                indirect: TraceRangeEntityGroup {
-                                    requirements: Vec::new(),
-                                    features: Vec::new(),
-                                    policies: Vec::new(),
-                                    philosophies: Vec::new(),
-                                },
-                            },
-                        },
+                        summary,
+                        scope_guard,
                     })
                     .expect("serializing empty trace range output to JSON should succeed")
                 );
             }
         }
-        return Ok(0);
+        return Ok(if guard_failed { 1 } else { 0 });
     }
 
     let (results, skipped) = collect_trace_range_outputs(workspace, &changed_files);
 
     let summary = compute_range_summary(changed_files.len(), &results, &skipped);
+    let scope_guard = collect_trace_scope_guard(workspace, &results, allowed_ids)?;
+    let guard_failed = scope_guard
+        .as_ref()
+        .is_some_and(|guard| !guard.out_of_scope_items.is_empty());
 
     match format {
-        OutputFormat::Text => print!("{}", render_range_text(range, &results, &skipped, &summary)),
+        OutputFormat::Text => print!(
+            "{}",
+            render_range_text(range, &results, &skipped, &summary, scope_guard.as_ref())
+        ),
         OutputFormat::Json => println!(
             "{}",
             serde_json::to_string_pretty(&TraceRangeOutput {
@@ -256,12 +307,13 @@ fn run_trace_range(workspace: &Workspace, range: &str, format: OutputFormat) -> 
                 files: results,
                 skipped_files: skipped,
                 summary,
+                scope_guard,
             })
             .expect("serializing trace range output to JSON should succeed")
         ),
     }
 
-    Ok(0)
+    Ok(if guard_failed { 1 } else { 0 })
 }
 
 fn compute_range_summary(
@@ -398,6 +450,7 @@ fn render_range_text(
     results: &[TraceLookupOutput],
     skipped: &[TraceSkippedFile],
     summary: &TraceRangeSummary,
+    scope_guard: Option<&TraceRangeScopeGuard>,
 ) -> String {
     let mut output = String::new();
     writeln!(output, "Git range: {range}").unwrap();
@@ -410,6 +463,18 @@ fn render_range_text(
         summary.owned_files, summary.partial_files, summary.unowned_files
     )
     .unwrap();
+
+    if summary.changed_files_total == 0 && results.is_empty() && skipped.is_empty() {
+        writeln!(output, "No files changed in range").unwrap();
+        if let Some(scope_guard) = scope_guard {
+            render_scope_guard_text(&mut output, scope_guard);
+        }
+        return output;
+    }
+
+    if let Some(scope_guard) = scope_guard {
+        render_scope_guard_text(&mut output, scope_guard);
+    }
 
     writeln!(output, "Affected IDs:").unwrap();
     render_range_id_group(&mut output, "Direct matches", &summary.ids.direct);
@@ -485,6 +550,114 @@ fn render_range_text(
     }
 
     output
+}
+
+fn render_scope_guard_text(rendered: &mut String, scope_guard: &TraceRangeScopeGuard) {
+    writeln!(rendered, "Scope guard:").expect("writing to String must succeed");
+    writeln!(rendered, "  Allowed IDs:").expect("writing to String must succeed");
+    if scope_guard.allowed_ids.is_empty() {
+        writeln!(rendered, "    - none").expect("writing to String must succeed");
+    } else {
+        for item in &scope_guard.allowed_ids {
+            writeln!(rendered, "    - {} {}\t{}", item.kind, item.id, item.title)
+                .expect("writing to String must succeed");
+        }
+    }
+
+    writeln!(rendered, "  Out-of-scope items:").expect("writing to String must succeed");
+    if scope_guard.out_of_scope_items.is_empty() {
+        writeln!(rendered, "    - none").expect("writing to String must succeed");
+        writeln!(rendered).expect("writing to String must succeed");
+        return;
+    }
+
+    for item in &scope_guard.out_of_scope_items {
+        writeln!(rendered, "    - {}", item.file).expect("writing to String must succeed");
+        if let Some(reason) = item.reason.as_deref() {
+            writeln!(rendered, "      reason: {}", reason).expect("writing to String must succeed");
+        }
+        for owner in &item.owners {
+            writeln!(
+                rendered,
+                "      - {} {}\t{}",
+                owner.kind, owner.id, owner.title
+            )
+            .expect("writing to String must succeed");
+        }
+    }
+    writeln!(rendered).expect("writing to String must succeed");
+}
+
+fn collect_trace_scope_guard(
+    workspace: &Workspace,
+    results: &[TraceLookupOutput],
+    allowed_ids: &[String],
+) -> Result<Option<TraceRangeScopeGuard>> {
+    if allowed_ids.is_empty() {
+        return Ok(None);
+    }
+
+    let lookup = WorkspaceLookup::new(workspace);
+    let mut allowed_ids_by_id = BTreeMap::<String, TraceScopeGuardItem>::new();
+    for id in allowed_ids {
+        let item = resolve_scope_guard_item(&lookup, id)?;
+        allowed_ids_by_id.entry(item.id.clone()).or_insert(item);
+    }
+
+    let allowed_set = allowed_ids_by_id.keys().cloned().collect::<BTreeSet<_>>();
+    let mut out_of_scope_items = Vec::new();
+
+    for result in results {
+        let offending_owners = result
+            .matched_owners
+            .iter()
+            .filter(|owner| !allowed_set.contains(&owner.id))
+            .map(|owner| TraceScopeGuardOwner {
+                kind: owner.kind.to_string(),
+                id: owner.id.clone(),
+                title: owner.title.clone(),
+            })
+            .collect::<Vec<_>>();
+
+        if result.matched_owners.is_empty() {
+            out_of_scope_items.push(TraceScopeGuardViolation {
+                file: result.file.clone(),
+                owners: Vec::new(),
+                reason: Some("unowned".to_string()),
+            });
+        } else if !offending_owners.is_empty() {
+            out_of_scope_items.push(TraceScopeGuardViolation {
+                file: result.file.clone(),
+                owners: offending_owners,
+                reason: Some("outside allowed IDs".to_string()),
+            });
+        }
+    }
+
+    Ok(Some(TraceRangeScopeGuard {
+        allowed_ids: allowed_ids_by_id.into_values().collect(),
+        out_of_scope_items,
+    }))
+}
+
+fn resolve_scope_guard_item(lookup: &WorkspaceLookup<'_>, id: &str) -> Result<TraceScopeGuardItem> {
+    if let Some(requirement) = lookup.requirement(id) {
+        return Ok(TraceScopeGuardItem {
+            kind: "requirement".to_string(),
+            id: requirement.id.clone(),
+            title: requirement.title.clone(),
+        });
+    }
+
+    if let Some(feature) = lookup.feature(id) {
+        return Ok(TraceScopeGuardItem {
+            kind: "feature".to_string(),
+            id: feature.id.clone(),
+            title: feature.title.clone(),
+        });
+    }
+
+    bail!("scope guard id `{id}` does not match a requirement or feature");
 }
 
 fn render_range_id_group(rendered: &mut String, heading: &str, group: &TraceRangeEntityGroup) {
@@ -1124,6 +1297,7 @@ mod tests {
             workspace: PathBuf::from("."),
             symbol: Some("   ".to_string()),
             range: None,
+            allowed_id: Vec::new(),
             format: OutputFormat::Text,
         })
         .expect_err("blank symbols should fail");
@@ -1397,12 +1571,112 @@ mod tests {
     }
 
     #[test]
+    fn render_range_text_includes_empty_scope_guard_details() {
+        let summary = super::TraceRangeSummary {
+            changed_files_total: 0,
+            inspected_files: 0,
+            skipped_files: 0,
+            owned_files: 0,
+            partial_files: 0,
+            unowned_files: 0,
+            total_requirements: 0,
+            total_features: 0,
+            total_policies: 0,
+            total_philosophies: 0,
+            ids: super::TraceRangeIdSummary {
+                direct: super::TraceRangeEntityGroup {
+                    requirements: Vec::new(),
+                    features: Vec::new(),
+                    policies: Vec::new(),
+                    philosophies: Vec::new(),
+                },
+                indirect: super::TraceRangeEntityGroup {
+                    requirements: Vec::new(),
+                    features: Vec::new(),
+                    policies: Vec::new(),
+                    philosophies: Vec::new(),
+                },
+            },
+        };
+        let scope_guard = super::TraceRangeScopeGuard {
+            allowed_ids: Vec::new(),
+            out_of_scope_items: Vec::new(),
+        };
+
+        let rendered =
+            super::render_range_text("HEAD..HEAD", &[], &[], &summary, Some(&scope_guard));
+
+        assert!(rendered.contains("Git range: HEAD..HEAD"));
+        assert!(rendered.contains("No files changed in range"));
+        assert!(rendered.contains("Allowed IDs:\n    - none"));
+        assert!(rendered.contains("Out-of-scope items:\n    - none"));
+    }
+
+    #[test]
+    fn collect_trace_scope_guard_marks_unowned_items() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("docs/syu"),
+            config: SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: vec![crate::model::Requirement {
+                id: "REQ-TRACE-001".to_string(),
+                title: "Trace requirement".to_string(),
+                description: "desc".to_string(),
+                priority: "medium".to_string(),
+                status: "implemented".to_string(),
+                linked_policies: Vec::new(),
+                linked_features: Vec::new(),
+                tests: BTreeMap::new(),
+            }],
+            features: vec![crate::model::Feature {
+                id: "FEAT-TRACE-001".to_string(),
+                title: "Trace feature".to_string(),
+                summary: "desc".to_string(),
+                status: "implemented".to_string(),
+                linked_requirements: Vec::new(),
+                implementations: BTreeMap::new(),
+            }],
+        };
+
+        let scope_guard = super::collect_trace_scope_guard(
+            &workspace,
+            &[TraceLookupOutput {
+                file: "src/unowned.rs".to_string(),
+                symbol: None,
+                status: TraceLookupStatus::Unowned,
+                matched_owners: Vec::new(),
+                file_only_owners: Vec::new(),
+                requirements: Vec::new(),
+                features: Vec::new(),
+                policies: Vec::new(),
+                philosophies: Vec::new(),
+            }],
+            &["REQ-TRACE-001".to_string()],
+        )
+        .expect("scope guard collection should succeed")
+        .expect("scope guard should be present");
+
+        assert_eq!(scope_guard.allowed_ids.len(), 1);
+        assert_eq!(scope_guard.out_of_scope_items.len(), 1);
+        assert_eq!(scope_guard.out_of_scope_items[0].file, "src/unowned.rs");
+        assert_eq!(
+            scope_guard.out_of_scope_items[0].reason.as_deref(),
+            Some("unowned")
+        );
+        assert!(scope_guard.out_of_scope_items[0].owners.is_empty());
+    }
+
+    #[test]
     fn run_trace_command_requires_a_file_or_range() {
         let error = super::run_trace_command(&TraceArgs {
             file: None,
             workspace: PathBuf::from("."),
             symbol: None,
             range: None,
+            allowed_id: Vec::new(),
             format: OutputFormat::Text,
         })
         .expect_err("missing file and range should fail");
@@ -1691,6 +1965,7 @@ mod tests {
                     },
                 },
             },
+            None,
         );
 
         assert!(rendered.contains("Affected IDs:"));
@@ -1773,6 +2048,7 @@ mod tests {
                     },
                 },
             },
+            None,
         );
 
         assert!(rendered.contains("feature FEAT-TRACE-001:"));
@@ -1815,6 +2091,7 @@ mod tests {
                     },
                 },
             },
+            None,
         );
 
         assert!(rendered.contains("Skipped files: 1"));
