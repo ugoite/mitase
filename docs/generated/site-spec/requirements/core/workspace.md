@@ -586,22 +586,71 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
           - *
       - **file**: src/lib.rs
         - **symbols**:
-          - dispatches_lookup_subcommands_without_rewriting_them
+          - dispatch
+          - run_dispatch
           - dispatches_task_subcommands_without_rewriting_them
+      - **file**: src/cli.rs
+        - **symbols**:
+          - TaskArgs
+          - TaskClassifyArgs
+      - **file**: tests/task_command.rs
+        - **symbols**:
+          - task_classify_prints_text_output_with_related_items
+          - task_classify_prints_json_output_with_explicit_items
       - **file**: tests/help_command.rs
         - **symbols**:
           - task_help_mentions_request_artifacts_and_json_output
-      - **file**: tests/task_command.rs
-        - **symbols**:
-          - task_classify_prints_text_output
-          - task_classify_prints_json_output
-          - task_classify_reports_related_items_without_explicit_ids
-          - task_classify_reports_explicit_items_from_all_spec_layers
-          - task_classify_handles_requests_without_matches
     - **markdown**:
       - **file**: docs/guide/request-artifact-format.md
         - **symbols**:
           - syu task classify
+- **id**: REQ-CORE-029
+  - **title**: Preview planned requirement and feature scaffolds from request planning
+  - **description**:
+    - |
+      The CLI MUST provide a `task scaffold` command that reads a captured
+      request artifact or planning result, then previews reviewable planned
+      requirement and feature updates that reuse the same document, registry,
+      and reciprocal-link conventions as `syu add`. The command MUST show the
+      planned file updates before anything is applied or committed, SHOULD keep
+      the planned requirement and feature documents aligned with the existing
+      task-planning workflow, and MUST stay focused on the request artifact
+      plus the current spec graph rather than inventing a second scaffolding
+      model.
+  - **priority**: medium
+  - **status**: implemented
+  - **linked_policies**:
+    - POL-001
+    - POL-002
+    - POL-004
+  - **linked_features**:
+    - FEAT-TASK-002
+  - **tests**:
+    - **rust**:
+      - **file**: src/command/task.rs
+        - **symbols**:
+          - *
+      - **file**: src/cli.rs
+        - **symbols**:
+          - TaskArgs
+          - TaskScaffoldArgs
+      - **file**: src/lib.rs
+        - **symbols**:
+          - dispatch
+          - run_dispatch
+          - dispatches_task_subcommands_without_rewriting_them
+      - **file**: tests/task_command.rs
+        - **symbols**:
+          - task_scaffold_prints_text_preview_for_new_planned_updates
+          - task_scaffold_prints_json_preview_for_existing_ids
+          - task_scaffold_rejects_delete_requests
+    - **markdown**:
+      - **file**: docs/guide/request-artifact-format.md
+        - **symbols**:
+          - syu task scaffold
+      - **file**: docs/guide/implementation-planning.md
+        - **symbols**:
+          - syu task scaffold
 
 ## Source YAML
 
@@ -1161,23 +1210,71 @@ requirements:
       rust:
         - file: src/command/task.rs
           symbols:
-            - '*'
+            - "*"
         - file: src/lib.rs
           symbols:
-            - dispatches_lookup_subcommands_without_rewriting_them
+            - dispatch
+            - run_dispatch
             - dispatches_task_subcommands_without_rewriting_them
+        - file: src/cli.rs
+          symbols:
+            - TaskArgs
+            - TaskClassifyArgs
+        - file: tests/task_command.rs
+          symbols:
+            - task_classify_prints_text_output_with_related_items
+            - task_classify_prints_json_output_with_explicit_items
         - file: tests/help_command.rs
           symbols:
             - task_help_mentions_request_artifacts_and_json_output
-        - file: tests/task_command.rs
-          symbols:
-            - task_classify_prints_text_output
-            - task_classify_prints_json_output
-            - task_classify_reports_related_items_without_explicit_ids
-            - task_classify_reports_explicit_items_from_all_spec_layers
-            - task_classify_handles_requests_without_matches
       markdown:
         - file: docs/guide/request-artifact-format.md
           symbols:
             - syu task classify
+  - id: REQ-CORE-029
+    title: Preview planned requirement and feature scaffolds from request planning
+    description: |
+      The CLI MUST provide a `task scaffold` command that reads a captured
+      request artifact or planning result, then previews reviewable planned
+      requirement and feature updates that reuse the same document, registry,
+      and reciprocal-link conventions as `syu add`. The command MUST show the
+      planned file updates before anything is applied or committed, SHOULD keep
+      the planned requirement and feature documents aligned with the existing
+      task-planning workflow, and MUST stay focused on the request artifact
+      plus the current spec graph rather than inventing a second scaffolding
+      model.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-001
+      - POL-002
+      - POL-004
+    linked_features:
+      - FEAT-TASK-002
+    tests:
+      rust:
+        - file: src/command/task.rs
+          symbols:
+            - "*"
+        - file: src/cli.rs
+          symbols:
+            - TaskArgs
+            - TaskScaffoldArgs
+        - file: src/lib.rs
+          symbols:
+            - dispatch
+            - run_dispatch
+            - dispatches_task_subcommands_without_rewriting_them
+        - file: tests/task_command.rs
+          symbols:
+            - task_scaffold_prints_text_preview_for_new_planned_updates
+            - task_scaffold_prints_json_preview_for_existing_ids
+            - task_scaffold_rejects_delete_requests
+      markdown:
+        - file: docs/guide/request-artifact-format.md
+          symbols:
+            - syu task scaffold
+        - file: docs/guide/implementation-planning.md
+          symbols:
+            - syu task scaffold
 ```
