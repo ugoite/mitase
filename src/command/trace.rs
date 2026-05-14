@@ -1603,7 +1603,8 @@ mod tests {
             out_of_scope_items: Vec::new(),
         };
 
-        let rendered = super::render_range_text("HEAD..HEAD", &[], &[], &summary, Some(&scope_guard));
+        let rendered =
+            super::render_range_text("HEAD..HEAD", &[], &[], &summary, Some(&scope_guard));
 
         assert!(rendered.contains("Git range: HEAD..HEAD"));
         assert!(rendered.contains("No files changed in range"));
@@ -1661,7 +1662,10 @@ mod tests {
         assert_eq!(scope_guard.allowed_ids.len(), 1);
         assert_eq!(scope_guard.out_of_scope_items.len(), 1);
         assert_eq!(scope_guard.out_of_scope_items[0].file, "src/unowned.rs");
-        assert_eq!(scope_guard.out_of_scope_items[0].reason.as_deref(), Some("unowned"));
+        assert_eq!(
+            scope_guard.out_of_scope_items[0].reason.as_deref(),
+            Some("unowned")
+        );
         assert!(scope_guard.out_of_scope_items[0].owners.is_empty());
     }
 
