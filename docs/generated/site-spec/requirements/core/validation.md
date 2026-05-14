@@ -26,17 +26,19 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       references, verify reciprocal links across the adjacent-layer graph by
       default, reject duplicate adjacent-layer IDs inside a single relationship
       list, report isolated definitions by default, enforce `planned` /
-      `implemented` delivery-state rules for requirements and features, warn
-      when linked requirements and features drift apart semantically on delivery
-      state, and surface rule codes with human-readable titles and explanations
-      in validation output. It MUST also support optional filtered views by
-      severity, rule genre, and exact rule code for both text and JSON output
-      without changing the underlying validation result, MUST support a
-      reviewer-friendly `--spec-only` mode that skips traced source checks while
-      still validating the layered specification itself, and `syu.yaml` MUST be
-      able to disable reciprocal-link enforcement without disabling missing-
-      reference validation. `check` MAY remain as a compatibility alias, but
-      `validate` is the canonical command name.
+      `implemented` delivery-state rules for requirements and features, reject
+      deleted philosophy, policy, requirement, and feature IDs when they are
+      reused by default, warn when linked requirements and features drift apart
+      semantically on delivery state, and surface rule codes with human-readable
+      titles and explanations in validation output. It MUST also support
+      optional filtered views by severity, rule genre, and exact rule code for
+      both text and JSON output without changing the underlying validation
+      result, MUST support a reviewer-friendly `--spec-only` mode that skips
+      traced source checks while still validating the layered specification
+      itself, and `syu.yaml` MUST be able to disable reciprocal-link
+      enforcement without disabling missing-reference validation. `check` MAY
+      remain as a compatibility alias, but `validate` is the canonical command
+      name.
   - **priority**: high
   - **status**: implemented
   - **linked_policies**:
@@ -71,6 +73,10 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
           - validate_cli_override_for_planned_items_mentions_cli_source
           - validate_cli_override_can_disable_orphan_checks
           - validate_cli_override_can_disable_reciprocal_checks
+      - **file**: tests/historical_id_validation.rs
+        - **symbols**:
+          - validate_rejects_reintroduced_deleted_requirement_ids
+          - validate_reports_historical_index_build_failures
       - **file**: tests/workspace_discovery_command.rs
         - **symbols**:
           - validate_command_discovers_workspace_from_nested_current_directory
@@ -272,17 +278,19 @@ requirements:
       references, verify reciprocal links across the adjacent-layer graph by
       default, reject duplicate adjacent-layer IDs inside a single relationship
       list, report isolated definitions by default, enforce `planned` /
-      `implemented` delivery-state rules for requirements and features, warn
-      when linked requirements and features drift apart semantically on delivery
-      state, and surface rule codes with human-readable titles and explanations
-      in validation output. It MUST also support optional filtered views by
-      severity, rule genre, and exact rule code for both text and JSON output
-      without changing the underlying validation result, MUST support a
-      reviewer-friendly `--spec-only` mode that skips traced source checks while
-      still validating the layered specification itself, and `syu.yaml` MUST be
-      able to disable reciprocal-link enforcement without disabling missing-
-      reference validation. `check` MAY remain as a compatibility alias, but
-      `validate` is the canonical command name.
+      `implemented` delivery-state rules for requirements and features, reject
+      deleted philosophy, policy, requirement, and feature IDs when they are
+      reused by default, warn when linked requirements and features drift apart
+      semantically on delivery state, and surface rule codes with human-readable
+      titles and explanations in validation output. It MUST also support
+      optional filtered views by severity, rule genre, and exact rule code for
+      both text and JSON output without changing the underlying validation
+      result, MUST support a reviewer-friendly `--spec-only` mode that skips
+      traced source checks while still validating the layered specification
+      itself, and `syu.yaml` MUST be able to disable reciprocal-link
+      enforcement without disabling missing-reference validation. `check` MAY
+      remain as a compatibility alias, but `validate` is the canonical command
+      name.
     priority: high
     status: implemented
     linked_policies:
@@ -317,6 +325,10 @@ requirements:
             - validate_cli_override_for_planned_items_mentions_cli_source
             - validate_cli_override_can_disable_orphan_checks
             - validate_cli_override_can_disable_reciprocal_checks
+        - file: tests/historical_id_validation.rs
+          symbols:
+            - validate_rejects_reintroduced_deleted_requirement_ids
+            - validate_reports_historical_index_build_failures
         - file: tests/workspace_discovery_command.rs
           symbols:
             - validate_command_discovers_workspace_from_nested_current_directory
