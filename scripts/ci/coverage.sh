@@ -168,6 +168,9 @@ def changed_lines() -> dict[Path, set[int]]:
         # Ignore non-hunk context.
     return lines
 
+def is_test_path(path: Path) -> bool:
+    return "tests" in path.parts
+
 def lcov_counts() -> dict[Path, dict[int, int]]:
     counts: dict[Path, dict[int, int]] = collections.defaultdict(dict)
     current_path = None
@@ -191,6 +194,8 @@ coverage = lcov_counts()
 
 misses = []
 for path, line_numbers in diff_lines.items():
+    if is_test_path(path):
+        continue
     covered_lines = coverage.get(path, {})
     for line_number in sorted(line_numbers):
         if covered_lines.get(line_number, 0) <= 0:
