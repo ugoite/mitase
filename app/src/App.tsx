@@ -5,6 +5,7 @@ import type {
   AppDataErrorResponse,
   AppPayload,
   BrowserDocument,
+  BrowserHistoryResponse,
   BrowserTraceGroup,
   BrowserWorkspace,
   ReferencedRule,
@@ -48,14 +49,32 @@ const SEARCH_FILTER_GROUP_ID = "spec-search-filter-group";
 const REFRESH_POLL_MIN_MS = 2_000;
 const REFRESH_POLL_MAX_MS = 10_000;
 const STARTER_TEMPLATES: StarterGalleryEntry[] = [
-  { name: "docs-first", summary: "Documentation-heavy repos that want a gentle starter scaffold." },
-  { name: "rust-only", summary: "Rust-first workspaces with built-in traceable source and tests." },
-  { name: "go-only", summary: "Go-first repos that want a minimal language-shaped starter." },
-  { name: "typescript-only", summary: "TypeScript-first repos with checked-in Node metadata." },
-  { name: "polyglot", summary: "Teams that know they will mix multiple languages from the start." },
+  {
+    name: "docs-first",
+    summary: "Documentation-heavy repos that want a gentle starter scaffold.",
+  },
+  {
+    name: "rust-only",
+    summary: "Rust-first workspaces with built-in traceable source and tests.",
+  },
+  {
+    name: "go-only",
+    summary: "Go-first repos that want a minimal language-shaped starter.",
+  },
+  {
+    name: "typescript-only",
+    summary: "TypeScript-first repos with checked-in Node metadata.",
+  },
+  {
+    name: "polyglot",
+    summary: "Teams that know they will mix multiple languages from the start.",
+  },
 ];
 const STARTER_EXAMPLES: StarterGalleryEntry[] = [
-  { name: "browser-ui", summary: "A traced React/TypeScript UI example for frontend-heavy teams." },
+  {
+    name: "browser-ui",
+    summary: "A traced React/TypeScript UI example for frontend-heavy teams.",
+  },
   {
     name: "csharp-fallback",
     summary: "A staged C# adoption path that keeps the first traces lighter.",
@@ -97,6 +116,11 @@ function App() {
   const [selectedDocumentPath, setSelectedDocumentPath] = useState("");
   const [selectedItemId, setSelectedItemId] = useState("");
   const [selectedIssueKey, setSelectedIssueKey] = useState<string | null>(null);
+  const [selectedItemHistory, setSelectedItemHistory] = useState<BrowserHistoryResponse | null>(
+    null,
+  );
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchFilter, setSearchFilter] = useState<SearchFilter>("all");
   const [focusedResultId, setFocusedResultId] = useState<string | null>(null);
@@ -121,10 +145,16 @@ function App() {
     const hashItemId = hashParts[1] ?? "";
     const hashTarget =
       hashItemId && isSectionKind(hashSection) ? browserWorkspace.item_index.get(hashItemId) : null;
+    const historicalSection =
+      hashItemId != null ? sectionForHistoricalId(browserWorkspace, hashItemId) : null;
 
     if (hashTarget && hashItemId) {
       setSelectedSection(hashTarget.kind);
       setSelectedDocumentPath(hashTarget.document_path);
+      setSelectedItemId(hashItemId);
+    } else if (hashItemId && historicalSection) {
+      setSelectedSection(historicalSection);
+      setSelectedDocumentPath("");
       setSelectedItemId(hashItemId);
     } else if (isSectionKind(hashSection)) {
       const section = browserWorkspace.sections.find((s) => s.kind === hashSection);
@@ -171,7 +201,10 @@ function App() {
       try {
         const [wasmModule, dataResponse] = await Promise.all([
           import("./wasm/syu_app_wasm.js") as Promise<WasmModule>,
-          fetch("/api/app-data.json", { cache: "no-store", signal: controller.signal }),
+          fetch("/api/app-data.json", {
+            cache: "no-store",
+            signal: controller.signal,
+          }),
         ]);
 
         if (!dataResponse.ok) {
@@ -382,24 +415,91 @@ function App() {
       return null;
     }
 
-    return (
-      currentSection.documents.find((document) => document.path === selectedDocumentPath) ??
-      currentSection.documents[0] ??
-      null
-    );
-  }, [currentSection, selectedDocumentPath]);
+    const selectedDocument =
+      currentSection.documents.find((document) => document.path === selectedDocumentPath) ?? null;
+
+    if (workspace && selectedItemId && sectionForHistoricalId(workspace, selectedItemId)) {
+      return selectedDocument;
+    }
+
+    return selectedDocument ?? currentSection.documents[0] ?? null;
+  }, [currentSection, selectedDocumentPath, selectedItemId, workspace]);
 
   const currentItem = useMemo(() => {
     if (!currentDocument) {
       return null;
     }
 
-    return (
-      currentDocument.items.find((item) => item.id === selectedItemId) ??
-      currentDocument.items[0] ??
-      null
-    );
-  }, [currentDocument, selectedItemId]);
+    const selectedItem = currentDocument.items.find((item) => item.id === selectedItemId) ?? null;
+    if (selectedItem) {
+      return selectedItem;
+    }
+
+    if (workspace && selectedItemId && sectionForHistoricalId(workspace, selectedItemId)) {
+      return null;
+    }
+
+    return currentDocument.items[0] ?? null;
+  }, [currentDocument, selectedItemId, workspace]);
+
+  useEffect(() => {
+    if (!workspace || !selectedItemId) {
+      setSelectedItemHistory(null);
+      setHistoryError(null);
+      setHistoryLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setSelectedItemHistory(null);
+    setHistoryLoading(true);
+    setHistoryError(null);
+
+    const loadHistory = async () => {
+      try {
+        const response = await fetch(
+          `/api/item-history.json?id=${encodeURIComponent(selectedItemId)}`,
+          {
+            cache: "no-store",
+            signal: controller.signal,
+          },
+        );
+        if (!response.ok) {
+          throw new Error(await describeItemHistoryFailure(response));
+        }
+        const history = (await response.json()) as BrowserHistoryResponse;
+        if (!controller.signal.aborted) {
+          setSelectedItemHistory(history);
+        }
+      } catch (historyLoadError) {
+        if (controller.signal.aborted || isAbortError(historyLoadError)) {
+          return;
+        }
+        setSelectedItemHistory(null);
+        setHistoryError(formatHistoryFailure(historyLoadError));
+      } finally {
+        if (!controller.signal.aborted) {
+          setHistoryLoading(false);
+        }
+      }
+    };
+
+    void loadHistory();
+
+    return () => {
+      controller.abort();
+    };
+  }, [selectedItemId, workspace]);
+
+  const currentHistory = useMemo(() => {
+    if (!selectedItemHistory || selectedItemHistory.id !== selectedItemId) {
+      return null;
+    }
+
+    return selectedItemHistory;
+  }, [selectedItemHistory, selectedItemId]);
+
+  const selectedItemTitle = currentItem?.title ?? currentHistory?.title ?? "No document selected";
 
   const refreshState: RefreshState = refreshError
     ? "stale"
@@ -497,7 +597,10 @@ function App() {
     return [
       { title: "Summary", content: currentItem.summary },
       { title: "Description", content: currentItem.description },
-      { title: "Product design principle", content: currentItem.product_design_principle },
+      {
+        title: "Product design principle",
+        content: currentItem.product_design_principle,
+      },
       { title: "Coding guideline", content: currentItem.coding_guideline },
     ].filter((panel): panel is { title: string; content: string } => Boolean(panel.content));
   }, [currentItem]);
@@ -1168,7 +1271,8 @@ function App() {
               <div className="mt-3 space-y-1">
                 {searchResults.length === 0 ? (
                   <p className="px-2 py-2 text-xs text-slate-500" role="status">
-                    No items match{searchFilter === "all" ? "." : ` in ${searchFilter}.`}
+                    No items match
+                    {searchFilter === "all" ? "." : ` in ${searchFilter}.`}
                   </p>
                 ) : (
                   <div
@@ -1348,12 +1452,16 @@ function App() {
                   </button>
                 )}
                 <h2 className="mt-2 text-2xl font-semibold text-white">
-                  {currentItem
-                    ? `${currentItem.id} — ${currentItem.title}`
+                  {selectedItemId
+                    ? `${selectedItemId} — ${selectedItemTitle}`
                     : (currentDocument?.title ?? "No document selected")}
                 </h2>
                 {currentDocument ? (
                   <p className="mt-2 text-sm text-slate-400">{currentDocument.path}</p>
+                ) : currentHistory ? (
+                  <p className="mt-2 text-sm text-slate-400">
+                    Historical item resolved from the git-backed index.
+                  </p>
                 ) : null}
               </div>
               <div className="flex flex-wrap gap-2">
@@ -1364,6 +1472,9 @@ function App() {
                   <MetaPill label="priority" value={currentItem.priority} />
                 ) : null}
                 {currentItem ? <MetaPill label="layer" value={currentItem.kind} /> : null}
+                {!currentItem && currentHistory ? (
+                  <MetaPill label="history" value={currentHistory.status} />
+                ) : null}
               </div>
             </div>
 
@@ -1451,6 +1562,147 @@ function App() {
             ) : (
               <div className="mt-6 rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-slate-400">
                 Choose a document from the left navigation to inspect its content.
+              </div>
+            )}
+          </section>
+
+          <section className="app-glass rounded-3xl border border-white/10 p-5 shadow-2xl shadow-sky-950/15 sm:p-6">
+            <div className="flex flex-col gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">history</p>
+                <h2 className="mt-2 text-xl font-semibold text-white">Git-backed lifecycle</h2>
+                <p className="mt-2 text-sm leading-7 text-slate-400">
+                  This panel uses the same lookup as{" "}
+                  <code className="rounded bg-black/20 px-1 py-0.5">syu log</code>
+                  so you can inspect the current item or a deleted historical ID without leaving the
+                  app.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {currentHistory ? (
+                  <MetaPill label="item" value={currentHistory.entity_kind} />
+                ) : null}
+                {currentHistory ? <MetaPill label="status" value={currentHistory.status} /> : null}
+                {currentHistory ? <MetaPill label="selection" value={currentHistory.kind} /> : null}
+              </div>
+            </div>
+
+            {historyLoading ? (
+              <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm text-slate-300">
+                Loading git history for the selected item...
+              </div>
+            ) : historyError ? (
+              <div className="mt-5 rounded-2xl border border-amber-400/30 bg-amber-400/10 px-4 py-4 text-sm text-amber-100">
+                <p className="font-medium">History is unavailable right now.</p>
+                <p className="mt-2 leading-7 text-amber-50/90">{historyError}</p>
+              </div>
+            ) : currentHistory ? (
+              <div className="mt-5 space-y-5">
+                <section>
+                  <p className="text-xs uppercase tracking-[0.25em] text-slate-500">
+                    tracked paths
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    {currentHistory.tracked_paths.map((tracked) => (
+                      <div
+                        key={`${tracked.kind}:${tracked.path}:${tracked.owner_id}:${tracked.source}`}
+                        className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-300"
+                      >
+                        <p className="font-medium text-sky-200">{tracked.kind}</p>
+                        <p className="mt-1 break-all text-slate-200">{tracked.path}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          owner {tracked.owner_kind} {tracked.owner_id} · {tracked.source}
+                          {tracked.language ? ` · ${tracked.language}` : ""}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                {currentHistory.lifecycle_events.length > 0 ? (
+                  <section>
+                    <p className="text-xs uppercase tracking-[0.25em] text-slate-500">
+                      lifecycle events
+                    </p>
+                    <div className="mt-3 space-y-2">
+                      {currentHistory.lifecycle_events.map((event) => (
+                        <article
+                          key={`${event.event}-${event.sha}`}
+                          className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-300"
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full border border-sky-400/30 bg-sky-400/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-[0.2em] text-sky-100">
+                              {event.event}
+                            </span>
+                            <span className="font-mono text-xs text-slate-500">
+                              {event.short_sha}
+                            </span>
+                            <span className="text-xs text-slate-500">{event.authored_at}</span>
+                          </div>
+                          <p className="mt-2 text-slate-100">{event.summary}</p>
+                          <p className="mt-1 text-xs text-slate-500">{event.author}</p>
+                          {event.path ? (
+                            <p className="mt-1 break-all font-mono text-xs text-slate-400">
+                              path: {event.path}
+                            </p>
+                          ) : null}
+                          {event.note ? (
+                            <p className="mt-1 text-xs text-amber-200">{event.note}</p>
+                          ) : null}
+                        </article>
+                      ))}
+                    </div>
+                  </section>
+                ) : (
+                  <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-400">
+                    No lifecycle events were returned for this item.
+                  </p>
+                )}
+
+                <section>
+                  <p className="text-xs uppercase tracking-[0.25em] text-slate-500">
+                    recent commits
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    {currentHistory.commits.length > 0 ? (
+                      currentHistory.commits.map((commit) => (
+                        <article
+                          key={commit.sha}
+                          className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-300"
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-mono text-xs text-sky-200">
+                              {commit.short_sha}
+                            </span>
+                            <span className="text-xs text-slate-500">{commit.authored_at}</span>
+                          </div>
+                          <p className="mt-2 text-slate-100">{commit.summary}</p>
+                          <p className="mt-1 text-xs text-slate-500">{commit.author}</p>
+                          {commit.reasons.length > 0 ? (
+                            <div className="mt-3 space-y-2">
+                              {commit.reasons.map((reason) => (
+                                <p
+                                  key={`${commit.sha}:${reason.kind}:${reason.path}:${reason.owner_id}`}
+                                  className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 font-mono text-xs text-slate-300"
+                                >
+                                  {reason.kind} {reason.path} {reason.owner_kind} {reason.owner_id}
+                                </p>
+                              ))}
+                            </div>
+                          ) : null}
+                        </article>
+                      ))
+                    ) : (
+                      <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-400">
+                        No matching commits were found for this item.
+                      </p>
+                    )}
+                  </div>
+                </section>
+              </div>
+            ) : (
+              <div className="mt-5 rounded-2xl border border-dashed border-white/10 px-4 py-4 text-sm text-slate-400">
+                Pick an item to load its lifecycle history.
               </div>
             )}
           </section>
@@ -1585,6 +1837,21 @@ function formatRefreshFailure(action: string, error: unknown): string {
   return `Could not ${action}: ${errorMessage(error, "Unexpected refresh failure")}`;
 }
 
+async function describeItemHistoryFailure(response: Response): Promise<string> {
+  const fallback = `Failed to load item history: ${response.status} ${response.statusText}`;
+
+  try {
+    const body = await response.text();
+    return body.trim() || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function formatHistoryFailure(error: unknown): string {
+  return `Could not load item history: ${errorMessage(error, "Unexpected history failure")}`;
+}
+
 async function describeAppDataRefreshFailure(response: Response): Promise<string> {
   const fallback = `Failed to refresh app data: ${response.status} ${response.statusText}`;
 
@@ -1625,6 +1892,17 @@ function isAppDataErrorResponse(value: unknown): value is AppDataErrorResponse {
     typeof candidate.summary === "string" &&
     typeof candidate.guidance === "string"
   );
+}
+
+function sectionForHistoricalId(workspace: BrowserWorkspace, id: string): SectionKind | null {
+  for (const kind of SECTION_ORDER) {
+    const ids = workspace.historical_ids.ids_by_section[kind];
+    if (ids?.includes(id)) {
+      return kind;
+    }
+  }
+
+  return null;
 }
 
 function formatRefreshAnnouncement(state: RefreshState, refreshError: string | null): string {

@@ -41,7 +41,7 @@ const GIT_ENVIRONMENT_KEYS: [&str; 8] = [
 ];
 
 #[derive(Debug, Serialize)]
-struct JsonLogOutput {
+pub(crate) struct HistoryResponse {
     id: String,
     entity_kind: &'static str,
     title: String,
@@ -50,7 +50,7 @@ struct JsonLogOutput {
     kind: &'static str,
     include_related: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    scope: Option<JsonHistoryScope>,
+    scope: Option<HistoryScopeResponse>,
     #[serde(skip_serializing_if = "Option::is_none")]
     path_filter: Option<String>,
     tracked_paths: Vec<TrackedPath>,
@@ -59,8 +59,19 @@ struct JsonLogOutput {
     commits: Vec<MatchedCommit>,
 }
 
+pub(crate) struct HistoryRequest<'a> {
+    pub(crate) workspace: &'a Workspace,
+    pub(crate) repository_root: &'a Path,
+    pub(crate) id: &'a str,
+    pub(crate) kind: HistoryKind,
+    pub(crate) include_related: bool,
+    pub(crate) scope: Option<HistoryScope>,
+    pub(crate) path_filter: Option<&'a Path>,
+    pub(crate) limit: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct JsonHistoryScope {
+struct HistoryScopeResponse {
     label: String,
     revision_range: String,
 }
@@ -128,19 +139,8 @@ struct HistoryTargetRequest<'a> {
     path_filter: Option<&'a Path>,
 }
 
-struct HistoryRenderRequest<'a> {
-    target: &'a HistoryTarget,
-    repository_root: &'a Path,
-    kind: HistoryKind,
-    include_related: bool,
-    scope: Option<&'a HistoryScope>,
-    path_filter: Option<&'a Path>,
-    lifecycle_events: &'a [HistoryLifecycleEvent],
-    commits: &'a [MatchedCommit],
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct HistoryScope {
+pub(crate) struct HistoryScope {
     label: String,
     revision_range: String,
 }
@@ -151,8 +151,6 @@ pub fn run_log_command(args: &LogArgs) -> Result<i32> {
     }
 
     let workspace = load_workspace(&args.workspace)?;
-    let lookup = WorkspaceLookup::new(&workspace);
-    let historical_ids = build_historical_id_index(&workspace.root, &workspace.config)?;
     let path_filter = args
         .path
         .as_deref()
@@ -160,69 +158,81 @@ pub fn run_log_command(args: &LogArgs) -> Result<i32> {
         .transpose()?
         .filter(|path| !path.as_os_str().is_empty());
     let repository_root = resolve_git_repository_root(&workspace.root)?;
-    let mut view = build_history_target(HistoryTargetRequest {
-        lookup,
-        historical_ids,
+    let history = build_history_response(HistoryRequest {
         workspace: &workspace,
         repository_root: &repository_root,
-        workspace_root: &workspace.root,
         id: &args.id,
         kind: args.kind,
+        include_related: args.include_related,
+        scope: resolve_history_scope(
+            &workspace.root,
+            args.range.as_deref(),
+            args.merge_base_ref.as_deref(),
+        )?,
         path_filter: path_filter.as_deref(),
+        limit: args.limit,
     })?;
-    if args.include_related && view.target.status != "historical" {
-        let related =
-            collect_related_tracked_paths(&workspace, &args.id, args.kind, path_filter.as_deref())?;
-        view.target.tracked_paths.extend(related);
-        dedupe_tracked_paths(&mut view.target.tracked_paths);
-    }
-    let merge_base_ref = args.merge_base_ref.as_deref();
-    let scope = resolve_history_scope(&workspace.root, args.range.as_deref(), merge_base_ref)?;
-    let commits = load_git_history(
-        &workspace.root,
-        args.limit,
-        &view.target.tracked_paths,
-        scope.as_ref(),
-    )?;
 
     match args.format {
-        OutputFormat::Text => print!(
-            "{}",
-            render_history_text(HistoryRenderRequest {
-                target: &view.target,
-                repository_root: &repository_root,
-                kind: args.kind,
-                include_related: args.include_related,
-                scope: scope.as_ref(),
-                path_filter: path_filter.as_deref(),
-                lifecycle_events: &view.lifecycle_events,
-                commits: &commits,
-            })
-        ),
+        OutputFormat::Text => print!("{}", render_history_text(&history)),
         OutputFormat::Json => println!(
             "{}",
-            serde_json::to_string_pretty(&JsonLogOutput {
-                id: view.target.id.clone(),
-                entity_kind: view.target.entity_kind,
-                title: view.target.title.clone(),
-                status: view.target.status,
-                repository_root: repository_root.display().to_string(),
-                kind: args.kind.label(),
-                include_related: args.include_related,
-                scope: scope.as_ref().map(|scope| JsonHistoryScope {
-                    label: scope.label.clone(),
-                    revision_range: scope.revision_range.clone(),
-                }),
-                path_filter: path_filter.map(|path| path.display().to_string()),
-                tracked_paths: view.target.tracked_paths.clone(),
-                lifecycle_events: view.lifecycle_events.clone(),
-                commits,
-            })
-            .expect("serializing log output to JSON should succeed")
+            serde_json::to_string_pretty(&history)
+                .expect("serializing log output to JSON should succeed")
         ),
     }
 
     Ok(0)
+}
+
+pub(crate) fn build_history_response(request: HistoryRequest<'_>) -> Result<HistoryResponse> {
+    let lookup = WorkspaceLookup::new(request.workspace);
+    let historical_ids =
+        build_historical_id_index(&request.workspace.root, &request.workspace.config)?;
+    let mut view = build_history_target(HistoryTargetRequest {
+        lookup,
+        historical_ids,
+        workspace: request.workspace,
+        repository_root: request.repository_root,
+        workspace_root: &request.workspace.root,
+        id: request.id,
+        kind: request.kind,
+        path_filter: request.path_filter,
+    })?;
+    if request.include_related && view.target.status != "historical" {
+        let related = collect_related_tracked_paths(
+            request.workspace,
+            request.id,
+            request.kind,
+            request.path_filter,
+        )?;
+        view.target.tracked_paths.extend(related);
+        dedupe_tracked_paths(&mut view.target.tracked_paths);
+    }
+    let commits = load_git_history(
+        &request.workspace.root,
+        request.limit,
+        &view.target.tracked_paths,
+        request.scope.as_ref(),
+    )?;
+
+    Ok(HistoryResponse {
+        id: view.target.id,
+        entity_kind: view.target.entity_kind,
+        title: view.target.title,
+        status: view.target.status,
+        repository_root: request.repository_root.display().to_string(),
+        kind: request.kind.label(),
+        include_related: request.include_related,
+        scope: request.scope.map(|scope| HistoryScopeResponse {
+            label: scope.label,
+            revision_range: scope.revision_range,
+        }),
+        path_filter: request.path_filter.map(|path| path.display().to_string()),
+        tracked_paths: view.target.tracked_paths,
+        lifecycle_events: view.lifecycle_events,
+        commits,
+    })
 }
 
 fn build_history_target(request: HistoryTargetRequest<'_>) -> Result<HistoryView> {
@@ -712,7 +722,7 @@ fn is_yaml_document(path: &Path) -> bool {
     )
 }
 
-fn lookup_kind_for_id(id: &str) -> Option<LookupKind> {
+pub(crate) fn lookup_kind_for_id(id: &str) -> Option<LookupKind> {
     if id.starts_with("PHIL-") {
         return Some(LookupKind::Philosophy);
     }
@@ -954,7 +964,7 @@ fn normalize_path_filter(workspace_root: &Path, path: &Path) -> Result<PathBuf> 
     Ok(normalized)
 }
 
-fn resolve_git_repository_root(workspace_root: &Path) -> Result<PathBuf> {
+pub(crate) fn resolve_git_repository_root(workspace_root: &Path) -> Result<PathBuf> {
     let output = git_command(workspace_root)
         .args(["rev-parse", "--show-toplevel"])
         .output()
@@ -1324,19 +1334,18 @@ fn parse_git_field(field: &[u8]) -> Result<String> {
         .to_string())
 }
 
-fn render_history_text(request: HistoryRenderRequest<'_>) -> String {
+fn render_history_text(request: &HistoryResponse) -> String {
     let mut output = String::new();
     writeln!(
         output,
         "History: {} {} — {}",
-        request.target.entity_kind, request.target.id, request.target.title
+        request.entity_kind, request.id, request.title
     )
     .expect("writing to String must succeed");
-    writeln!(output, "Repository: {}", request.repository_root.display())
+    writeln!(output, "Repository: {}", request.repository_root)
         .expect("writing to String must succeed");
-    writeln!(output, "Status: {}", request.target.status).expect("writing to String must succeed");
-    writeln!(output, "Selection: {}", request.kind.label())
-        .expect("writing to String must succeed");
+    writeln!(output, "Status: {}", request.status).expect("writing to String must succeed");
+    writeln!(output, "Selection: {}", request.kind).expect("writing to String must succeed");
     writeln!(
         output,
         "Related surface: {}",
@@ -1347,23 +1356,22 @@ fn render_history_text(request: HistoryRenderRequest<'_>) -> String {
         }
     )
     .expect("writing to String must succeed");
-    if let Some(scope) = request.scope {
+    if let Some(scope) = &request.scope {
         writeln!(output, "Scope: {}", scope.label).expect("writing to String must succeed");
     }
-    if let Some(path_filter) = request.path_filter {
-        writeln!(output, "Path filter: {}", path_filter.display())
-            .expect("writing to String must succeed");
+    if let Some(path_filter) = &request.path_filter {
+        writeln!(output, "Path filter: {}", path_filter).expect("writing to String must succeed");
     }
 
     writeln!(output, "Tracked paths:").expect("writing to String must succeed");
-    for tracked in &request.target.tracked_paths {
+    for tracked in &request.tracked_paths {
         writeln!(output, "- {}", render_tracked_path(tracked))
             .expect("writing to String must succeed");
     }
 
     if !request.lifecycle_events.is_empty() {
         writeln!(output, "Lifecycle:").expect("writing to String must succeed");
-        for event in request.lifecycle_events {
+        for event in &request.lifecycle_events {
             writeln!(
                 output,
                 "- {} {} {}",
@@ -1385,7 +1393,7 @@ fn render_history_text(request: HistoryRenderRequest<'_>) -> String {
     }
 
     writeln!(output, "Commits:").expect("writing to String must succeed");
-    for commit in request.commits {
+    for commit in &request.commits {
         writeln!(
             output,
             "- {} {} {}",
@@ -2421,27 +2429,24 @@ mod tests {
 
     #[test]
     fn render_history_text_handles_empty_commit_lists() {
-        let target = super::HistoryTarget {
+        let rendered = render_history_text(&super::HistoryResponse {
             id: "REQ-LOG-001".to_string(),
             entity_kind: "requirement",
             title: "Requirement history".to_string(),
             status: "current",
+            repository_root: "/repo".to_string(),
+            kind: "definition",
+            include_related: false,
+            scope: None,
+            path_filter: Some("docs".to_string()),
             tracked_paths: vec![TrackedPath::definition(
                 "requirement",
                 "REQ-LOG-001",
                 "selected",
                 "docs/req.yaml",
             )],
-        };
-        let rendered = render_history_text(super::HistoryRenderRequest {
-            target: &target,
-            repository_root: Path::new("/repo"),
-            kind: HistoryKind::Definition,
-            include_related: false,
-            scope: None,
-            path_filter: Some(Path::new("docs")),
-            lifecycle_events: &[],
-            commits: &[],
+            lifecycle_events: vec![],
+            commits: vec![],
         });
         assert!(rendered.contains("Related surface: selected only"));
         assert!(rendered.contains("Path filter: docs"));
@@ -2450,30 +2455,27 @@ mod tests {
 
     #[test]
     fn render_history_text_lists_commit_reasons() {
-        let target = super::HistoryTarget {
+        let rendered = render_history_text(&super::HistoryResponse {
             id: "REQ-LOG-001".to_string(),
             entity_kind: "requirement",
             title: "Requirement history".to_string(),
             status: "current",
+            repository_root: "/repo".to_string(),
+            kind: "implementation",
+            include_related: true,
+            scope: Some(super::HistoryScopeResponse {
+                label: "merge-base(origin/main)..HEAD".to_string(),
+                revision_range: "abc123..HEAD".to_string(),
+            }),
+            path_filter: None,
             tracked_paths: vec![TrackedPath::definition(
                 "requirement",
                 "REQ-LOG-001",
                 "selected",
                 "docs/req.yaml",
             )],
-        };
-        let rendered = render_history_text(super::HistoryRenderRequest {
-            target: &target,
-            repository_root: Path::new("/repo"),
-            kind: HistoryKind::Implementation,
-            include_related: true,
-            scope: Some(&HistoryScope {
-                label: "merge-base(origin/main)..HEAD".to_string(),
-                revision_range: "abc123..HEAD".to_string(),
-            }),
-            path_filter: None,
-            lifecycle_events: &[],
-            commits: &[MatchedCommit {
+            lifecycle_events: vec![],
+            commits: vec![MatchedCommit {
                 sha: "abc".to_string(),
                 short_sha: "abc".to_string(),
                 summary: "feat: update history".to_string(),
