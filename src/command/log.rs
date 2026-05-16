@@ -1461,14 +1461,18 @@ mod tests {
 
     use crate::{
         cli::LookupKind,
+        config::SyuConfig,
         model::{Feature, Requirement, TraceReference},
+        workspace::Workspace,
     };
 
     use super::{
-        HistoryKind, HistoryScope, MatchedCommit, TrackedPath, collect_trace_paths,
-        commit_is_ancestor_of, load_git_history, lookup_kind_for_id, normalize_path_filter,
-        order_commits_by_repository_history, parse_git_history, render_history_text,
-        resolve_history_scope, sort_commits_by_history_relationship, tracked_paths_for_feature,
+        HistoryKind, HistoryScope, MatchedCommit, ResolvedHistoryTarget, TrackedPath,
+        collect_trace_paths, commit_is_ancestor_of, discover_historical_definition, git_show_file,
+        load_git_history, load_git_history_records, lookup_kind_for_id, normalize_path_filter,
+        order_commits_by_repository_history, parse_git_history, parse_git_history_records,
+        render_history_text, resolve_historical_history_target, resolve_history_scope,
+        sort_commits_by_history_relationship, tracked_paths_for_feature,
         tracked_paths_for_requirement,
     };
 
@@ -1662,6 +1666,260 @@ mod tests {
         let history =
             load_git_history(Path::new("."), 5, &[], None).expect("empty tracked paths are okay");
         assert!(history.is_empty());
+    }
+
+    #[test]
+    fn resolve_historical_history_target_covers_all_supported_kinds() {
+        let repo = tempdir().expect("tempdir should exist");
+        init_test_git_repository(repo.path());
+
+        fs::create_dir_all(repo.path().join("docs/syu/philosophy")).expect("philosophy dir");
+        fs::create_dir_all(repo.path().join("docs/syu/policies")).expect("policies dir");
+        fs::create_dir_all(repo.path().join("docs/syu/features/legacy")).expect("feature dir");
+
+        fs::write(
+            repo.path().join("docs/syu/philosophy/legacy.yaml"),
+            "category: Philosophy\nversion: 1\nlanguage: en\nphilosophies:\n  - id: PHIL-HIST-DEL-001\n    title: Deleted philosophy history lookup.\n    product_design_principle: Keep historical philosophy ids discoverable.\n    coding_guideline: Keep historical philosophy ids discoverable.\n    linked_policies: []\n",
+        )
+        .expect("philosophy history file");
+        git_commit(repo.path(), "docs: add deleted philosophy history");
+        fs::remove_file(repo.path().join("docs/syu/philosophy/legacy.yaml"))
+            .expect("philosophy history file should delete");
+        git_commit(repo.path(), "docs: delete philosophy history");
+
+        fs::write(
+            repo.path().join("docs/syu/policies/legacy.yaml"),
+            "category: Policies\nversion: 1\nlanguage: en\npolicies:\n  - id: POL-HIST-DEL-001\n    title: Deleted policy history lookup.\n    summary: Keep historical policy ids discoverable.\n    description: Keep historical policy ids discoverable.\n    linked_philosophies: []\n    linked_requirements: []\n",
+        )
+        .expect("policy history file");
+        git_commit(repo.path(), "docs: add deleted policy history");
+        fs::remove_file(repo.path().join("docs/syu/policies/legacy.yaml"))
+            .expect("policy history file should delete");
+        git_commit(repo.path(), "docs: delete policy history");
+
+        fs::write(
+            repo.path().join("docs/syu/features/legacy/note.txt"),
+            "FEAT-HIST-DEL-001\n",
+        )
+        .expect("feature note file");
+        git_commit(repo.path(), "docs: add feature history note");
+        fs::write(
+            repo.path().join("docs/syu/features/legacy/history.yaml"),
+            "category: Legacy\nversion: 1\nfeatures:\n  - id: FEAT-HIST-DEL-001\n    title: Deleted feature history lookup.\n    summary: Keep historical feature ids discoverable.\n    status: implemented\n    linked_requirements: []\n    implementations: {}\n",
+        )
+        .expect("feature history file");
+        git_commit(repo.path(), "docs: add deleted feature history");
+        fs::write(
+            repo.path().join("docs/syu/features/legacy/history.yaml"),
+            "category: Legacy\nversion: 1\nfeatures:\n  - id: FEAT-HIST-DEL-001\n    title: Deleted feature history lookup after update.\n    summary: Keep historical feature ids discoverable.\n    status: implemented\n    linked_requirements: []\n    implementations: {}\n",
+        )
+        .expect("feature history update");
+        git_commit(repo.path(), "docs: update deleted feature history");
+        fs::remove_file(repo.path().join("docs/syu/features/legacy/history.yaml"))
+            .expect("feature history file should delete");
+        git_commit(repo.path(), "docs: delete feature history");
+
+        let workspace = Workspace {
+            root: repo.path().to_path_buf(),
+            spec_root: repo.path().join("docs/syu"),
+            config: SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+
+        let philosophy = resolve_historical_history_target(
+            &workspace,
+            repo.path(),
+            "PHIL-HIST-DEL-001",
+            LookupKind::Philosophy,
+        )
+        .expect("philosophy history should resolve");
+        match philosophy {
+            ResolvedHistoryTarget::Historical {
+                entity_kind,
+                title,
+                lifecycle_events,
+                ..
+            } => {
+                assert_eq!(entity_kind, "philosophy");
+                assert!(title.contains("Deleted philosophy history lookup"));
+                assert!(
+                    lifecycle_events
+                        .iter()
+                        .any(|event| event.event == "created")
+                );
+            }
+            _ => panic!("expected historical philosophy target"),
+        }
+
+        let policy = resolve_historical_history_target(
+            &workspace,
+            repo.path(),
+            "POL-HIST-DEL-001",
+            LookupKind::Policy,
+        )
+        .expect("policy history should resolve");
+        match policy {
+            ResolvedHistoryTarget::Historical {
+                entity_kind,
+                title,
+                lifecycle_events,
+                ..
+            } => {
+                assert_eq!(entity_kind, "policy");
+                assert!(title.contains("Deleted policy history lookup"));
+                assert!(
+                    lifecycle_events
+                        .iter()
+                        .any(|event| event.event == "created")
+                );
+            }
+            _ => panic!("expected historical policy target"),
+        }
+
+        let feature = resolve_historical_history_target(
+            &workspace,
+            repo.path(),
+            "FEAT-HIST-DEL-001",
+            LookupKind::Feature,
+        )
+        .expect("feature history should resolve");
+        match feature {
+            ResolvedHistoryTarget::Historical {
+                entity_kind,
+                title,
+                lifecycle_events,
+                ..
+            } => {
+                assert_eq!(entity_kind, "feature");
+                assert!(title.contains("Deleted feature history lookup"));
+                assert!(
+                    lifecycle_events
+                        .iter()
+                        .any(|event| event.event == "created")
+                );
+                assert!(
+                    lifecycle_events
+                        .iter()
+                        .any(|event| event.event == "removed")
+                );
+            }
+            _ => panic!("expected historical feature target"),
+        }
+    }
+
+    #[test]
+    fn resolve_historical_history_target_reports_out_of_repository_roots() {
+        let repo = tempdir().expect("tempdir should exist");
+        let outside = tempdir().expect("tempdir should exist");
+        let workspace = Workspace {
+            root: repo.path().to_path_buf(),
+            spec_root: outside.path().join("workspace/spec"),
+            config: SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+
+        let error = match resolve_historical_history_target(
+            &workspace,
+            repo.path(),
+            "FEAT-HIST-DEL-001",
+            LookupKind::Feature,
+        ) {
+            Ok(_) => panic!("root mismatch should fail"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("is not inside repository"));
+    }
+
+    #[test]
+    fn discover_historical_definition_reports_missing_ids() {
+        let repo = tempdir().expect("tempdir should exist");
+        init_test_git_repository(repo.path());
+
+        fs::create_dir_all(repo.path().join("docs/syu/features")).expect("features dir");
+        fs::write(
+            repo.path().join("docs/syu/features/placeholder.yaml"),
+            "version: \"1\"\nfiles: []\n",
+        )
+        .expect("feature registry");
+        git_commit(repo.path(), "docs: add placeholder feature registry");
+
+        let error = discover_historical_definition(
+            repo.path(),
+            Path::new("docs/syu/features"),
+            "FEAT-HIST-MISSING-001",
+            LookupKind::Feature,
+        )
+        .expect_err("missing historical ids should fail");
+        assert!(
+            error
+                .to_string()
+                .contains("could not locate historical definition path")
+        );
+    }
+
+    #[test]
+    fn load_git_history_records_reports_git_log_failures() {
+        let repo = tempdir().expect("tempdir should exist");
+        let fake_bin = tempdir().expect("tempdir should exist");
+        write_fake_git_for_history_log_failure(fake_bin.path());
+        let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
+
+        let scope = HistoryScope {
+            label: "range `HEAD~1..HEAD`".to_string(),
+            revision_range: "HEAD~1..HEAD".to_string(),
+        };
+        let error = load_git_history_records(
+            repo.path(),
+            Path::new("docs/syu/features"),
+            &[],
+            Some(&scope),
+        )
+        .expect_err("git log failures should be reported");
+        assert!(error.to_string().contains("failed to inspect git history"));
+        assert!(error.to_string().contains("synthetic git log failure"));
+    }
+
+    #[test]
+    fn parse_git_history_records_rejects_short_records_and_empty_paths() {
+        let malformed = parse_git_history_records(b"\x1ebad-record\x00")
+            .expect_err("short records should fail");
+        assert!(
+            malformed
+                .to_string()
+                .contains("unexpected `git log` output")
+        );
+
+        let parsed = parse_git_history_records(
+            b"\x1esha\x00short\x00author\x002026-04-13T00:00:00+00:00\x00subject\x00 \n\x00",
+        )
+        .expect("records should parse");
+        assert_eq!(parsed.len(), 1);
+        assert!(parsed[0].paths.is_empty());
+    }
+
+    #[test]
+    fn git_show_file_reports_spawn_failures() {
+        let repo = tempdir().expect("tempdir should exist");
+        let fake_bin = tempdir().expect("tempdir should exist");
+        let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
+
+        let error = git_show_file(
+            repo.path(),
+            "deadbeef",
+            Path::new("docs/syu/features/a.yaml"),
+        )
+        .expect_err("git show spawn failures should be reported");
+        assert!(
+            error
+                .to_string()
+                .contains("failed to run `git show deadbeef:docs/syu/features/a.yaml`")
+        );
     }
 
     #[test]
@@ -2373,6 +2631,16 @@ mod tests {
         set_executable(&script_path);
     }
 
+    fn write_fake_git_for_history_log_failure(script_dir: &Path) {
+        let script_path = script_dir.join("git");
+        fs::write(
+            &script_path,
+            "#!/bin/sh\nset -eu\nif [ \"$3\" = \"log\" ]; then\n  echo 'synthetic git log failure' >&2\n  exit 1\nfi\necho 'unexpected git invocation' >&2\nexit 1\n",
+        )
+        .expect("fake git script");
+        set_executable(&script_path);
+    }
+
     fn set_executable(path: &Path) {
         #[cfg(unix)]
         {
@@ -2420,6 +2688,11 @@ mod tests {
             stdout,
             stderr
         );
+    }
+
+    fn git_commit(workspace: &Path, summary: &str) {
+        git(workspace, &["add", "."]);
+        git(workspace, &["commit", "-m", summary]);
     }
 
     fn git_stdout(path: &Path, args: &[&str]) -> String {
