@@ -1670,6 +1670,7 @@ mod tests {
 
     #[test]
     fn resolve_historical_history_target_covers_all_supported_kinds() {
+        let _lock = PATH_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let repo = tempdir().expect("tempdir should exist");
         init_test_git_repository(repo.path());
 
@@ -1812,6 +1813,7 @@ mod tests {
 
     #[test]
     fn resolve_historical_history_target_reports_out_of_repository_roots() {
+        let _lock = PATH_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let repo = tempdir().expect("tempdir should exist");
         let outside = tempdir().expect("tempdir should exist");
         let workspace = Workspace {
@@ -1838,6 +1840,7 @@ mod tests {
 
     #[test]
     fn discover_historical_definition_reports_missing_ids() {
+        let _lock = PATH_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let repo = tempdir().expect("tempdir should exist");
         init_test_git_repository(repo.path());
 
@@ -1865,6 +1868,7 @@ mod tests {
 
     #[test]
     fn load_git_history_records_reports_git_log_failures() {
+        let _lock = PATH_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let repo = tempdir().expect("tempdir should exist");
         let fake_bin = tempdir().expect("tempdir should exist");
         write_fake_git_for_history_log_failure(fake_bin.path());
@@ -1905,6 +1909,7 @@ mod tests {
 
     #[test]
     fn git_show_file_reports_spawn_failures() {
+        let _lock = PATH_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let repo = tempdir().expect("tempdir should exist");
         let fake_bin = tempdir().expect("tempdir should exist");
         let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
