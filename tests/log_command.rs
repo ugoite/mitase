@@ -408,11 +408,13 @@ fn log_command_can_include_related_history_for_deleted_ids() {
     let json: Value = serde_json::from_slice(&output.stdout).expect("output should be valid JSON");
     assert_eq!(json["include_related"], true);
     assert_eq!(json["status"], "historical");
-    assert!(json["tracked_paths"]
-        .as_array()
-        .expect("tracked paths")
-        .iter()
-        .any(|path| path["source"] == "historical"));
+    assert!(
+        json["tracked_paths"]
+            .as_array()
+            .expect("tracked paths")
+            .iter()
+            .any(|path| path["source"] == "historical")
+    );
 }
 
 #[test]

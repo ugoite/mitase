@@ -534,8 +534,14 @@ fn trace_command_treats_skipped_git_diff_paths_as_out_of_scope_when_allowed_ids_
     let json: Value = serde_json::from_slice(&output.stdout).expect("json output");
     assert_eq!(json["summary"]["skipped_files"], 1);
     let scope_guard = json["scope_guard"].as_object().expect("scope guard");
-    assert_eq!(scope_guard["out_of_scope_items"].as_array().unwrap().len(), 1);
-    assert_eq!(scope_guard["out_of_scope_items"][0]["file"], "../outside.rs");
+    assert_eq!(
+        scope_guard["out_of_scope_items"].as_array().unwrap().len(),
+        1
+    );
+    assert_eq!(
+        scope_guard["out_of_scope_items"][0]["file"],
+        "../outside.rs"
+    );
     assert!(
         scope_guard["out_of_scope_items"][0]["reason"]
             .as_str()
