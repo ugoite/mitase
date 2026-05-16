@@ -313,6 +313,7 @@ mod tests {
                     workspace: PathBuf::from("workspace"),
                     symbol: Some("run".to_string()),
                     range: None,
+                    allowed_id: Vec::new(),
                     format: OutputFormat::Json,
                 })),
             },

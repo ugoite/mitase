@@ -1362,6 +1362,9 @@ requirements:
           symbols:
             - task_scope_prints_text_output_with_candidate_requirements_and_flags
             - task_scope_prints_json_output_with_planning_signals
+        - file: tests/help_command.rs
+          symbols:
+            - task_scope_help_mentions_request_artifacts_and_json_output
       markdown:
         - file: docs/guide/request-artifact-format.md
           symbols:

@@ -50,6 +50,20 @@ description: "Generated reference for docs/syu/features/validation/validation.ya
       meaningful and automated validation can no longer tell which item a trace
       or relationship intended to reference. This rule preserves the repository
       as a navigable graph instead of a collection of ambiguous labels.
+- **code**: SYU-workspace-historical-001
+  - **genre**: workspace
+  - **severity**: error
+  - **title**: Deleted IDs must not be reused by default
+  - **summary**: Reintroducing an ID that was already deleted makes the historical record ambiguous.
+  - **description**:
+    - |
+      Stable IDs are only useful when deleted values stay retired. If a new
+      philosophy, policy, requirement, or feature reuses an ID that already
+      existed in Git history and was later deleted, reviewers can no longer tell
+      whether the current item is the original definition or a renamed
+      replacement. This rule keeps the historical record trustworthy by
+      rejecting reused deleted IDs unless a repository explicitly disables the
+      check for a migration.
 - **code**: SYU-workspace-registry-001
   - **genre**: workspace
   - **severity**: error
@@ -400,12 +414,12 @@ description: "Generated reference for docs/syu/features/validation/validation.ya
   - **genre**: coverage
   - **severity**: error
   - **title**: Coverage inventory paths must be walkable
-  - **summary**: Strict trace coverage starts by discovering supported Rust, Python, Go, Java, C#, Kotlin, and TypeScript/JavaScript source and test files under `src/` and `tests/`, while skipping configured repository-relative generated paths.
+  - **summary**: Strict trace coverage starts by discovering supported Rust, Python, Go, Java, C#, Kotlin, and TypeScript/JavaScript source and test files under `src/` and `tests/`, with Ruby included in the same inventory pass, while skipping configured repository-relative generated paths.
   - **description**:
     - |
       The strict trace coverage rule only means something when `syu` can walk the
       repository paths that are supposed to contain owned Rust, Python, Go,
-      Java, C#, Kotlin, and TypeScript/JavaScript source and test files.
+      Java, C#, Kotlin, TypeScript/JavaScript, and Ruby source and test files.
       Generated-path ignores keep common build output such as `build/`,
       `coverage/`, `dist/`, and `target/` out of the inventory without hiding
       authored nested paths like `src/build/`. If directory discovery fails, the
@@ -503,6 +517,20 @@ rules:
       meaningful and automated validation can no longer tell which item a trace
       or relationship intended to reference. This rule preserves the repository
       as a navigable graph instead of a collection of ambiguous labels.
+
+  - code: SYU-workspace-historical-001
+    genre: workspace
+    severity: error
+    title: Deleted IDs must not be reused by default
+    summary: Reintroducing an ID that was already deleted makes the historical record ambiguous.
+    description: |
+      Stable IDs are only useful when deleted values stay retired. If a new
+      philosophy, policy, requirement, or feature reuses an ID that already
+      existed in Git history and was later deleted, reviewers can no longer tell
+      whether the current item is the original definition or a renamed
+      replacement. This rule keeps the historical record trustworthy by
+      rejecting reused deleted IDs unless a repository explicitly disables the
+      check for a migration.
 
   - code: SYU-workspace-registry-001
     genre: workspace
@@ -854,11 +882,11 @@ rules:
     genre: coverage
     severity: error
     title: Coverage inventory paths must be walkable
-    summary: Strict trace coverage starts by discovering supported Rust, Python, Go, Java, C#, Kotlin, and TypeScript/JavaScript source and test files under `src/` and `tests/`, while skipping configured repository-relative generated paths.
+    summary: Strict trace coverage starts by discovering supported Rust, Python, Go, Java, C#, Kotlin, and TypeScript/JavaScript source and test files under `src/` and `tests/`, with Ruby included in the same inventory pass, while skipping configured repository-relative generated paths.
     description: |
       The strict trace coverage rule only means something when `syu` can walk the
       repository paths that are supposed to contain owned Rust, Python, Go,
-      Java, C#, Kotlin, and TypeScript/JavaScript source and test files.
+      Java, C#, Kotlin, TypeScript/JavaScript, and Ruby source and test files.
       Generated-path ignores keep common build output such as `build/`,
       `coverage/`, `dist/`, and `target/` out of the inventory without hiding
       authored nested paths like `src/build/`. If directory discovery fails, the

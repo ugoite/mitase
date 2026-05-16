@@ -93,6 +93,17 @@ separates directly matched items from indirect upstream/downstream context,
 surfaces unowned or skipped paths inline, and keeps the follow-up `show`,
 `relate`, `log`, and `validate --id` commands close at hand.
 
+When you want the range to stay inside a named requirement or feature, add
+`--allowed-id` or its `--expected-id` alias:
+
+```bash
+syu review --range origin/main...HEAD --allowed-id FEAT-CHECK-001
+```
+
+If the range changes files or spec items outside that set, `syu` exits
+non-zero and lists the allowed IDs together with the out-of-scope files and
+owners so you can review the mismatch quickly.
+
 When a changed file is a contract file with traced operations, the range
 summary keeps the owning requirements and features visible and also prints the
 OpenAPI method/path selector under the changed file instead of reducing it to a

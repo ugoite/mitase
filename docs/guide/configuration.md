@@ -142,7 +142,7 @@ of editing `syu.yaml`.
 
 ### `validate.require_symbol_trace_coverage`
 
-When `true`, `syu` scans Rust, Python, Go, Java, C#, Kotlin, and TypeScript/JavaScript source and test files to confirm that every public symbol belongs to some feature and every test belongs to some requirement.
+When `true`, `syu` scans Rust, Python, Go, Java, C#, Kotlin, and TypeScript/JavaScript source and test files, plus Ruby source and test files, to confirm that every public symbol belongs to some feature and every test belongs to some requirement.
 
 - `false`: only declared traces are verified
 - `true`: undeclared public APIs and tests become validation errors
@@ -159,8 +159,31 @@ That example keeps the higher-layer spec and surrounding automation explicit
 without requiring every checked-in C# file to be traced immediately. Use
 [`examples/go-only` workspace on GitHub](https://github.com/ugoite/syu/tree/main/examples/go-only)
 or `syu init . --template go-only` as a reminder that Go now supports symbol
-checks, coverage ownership, and `doc_contains`, and that Java, C#, and Kotlin do
-too.
+checks, coverage ownership, and `doc_contains`, and that Ruby, Java, C#, and
+Kotlin do too.
+
+### `validate.historical_ids.enabled`
+
+Controls whether `syu` rejects IDs that were already deleted somewhere in Git
+history.
+
+- `true`: a philosophy, policy, requirement, or feature cannot reuse an ID
+  that was previously deleted in the repository history
+- `false`: the historical ID rule is skipped, which is useful for temporary
+  migrations that are renaming old data
+
+Keep this enabled in steady state so a deleted ID stays retired. If you are
+intentionally migrating legacy content, turn it off for the migration window
+and restore it after the old identifiers have been replaced.
+
+### `validate.historical_ids.start_ref`
+
+Optional Git ref that limits the historical-ID scan to commits after a chosen
+baseline.
+
+Use this when a migration wants to compare against a known branch point instead
+of the full repository history. The default is to scan the entire history that
+Git exposes from `HEAD`.
 
 ### `validate.trace_ownership_mode`
 
