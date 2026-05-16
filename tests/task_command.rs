@@ -166,6 +166,84 @@ fn task_scope_prints_text_output_with_candidate_requirements_and_flags() {
 }
 
 #[test]
+fn task_scope_prints_text_output_without_scope_notes_when_no_scope_keywords_match() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_request(
+        tempdir.path(),
+        "Update REQ-CORE-028 to clarify request intake.",
+        "core",
+        &["REQ-CORE-028"],
+    );
+
+    let output = {
+        let mut command = std::process::Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "scope", "request.yaml"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task scope should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("candidate features:\n- none"));
+    assert!(stdout.contains("policy discussion likely: no"));
+    assert!(stdout.contains("philosophy discussion likely: no"));
+    assert!(stdout.contains("candidate feature planned-state updates: no"));
+    assert!(!stdout.contains("scope notes:"));
+}
+
+#[test]
+fn task_scope_prints_keyword_based_notes_without_matched_policy_or_philosophy_items() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_request(
+        tempdir.path(),
+        "Need approval and ethos updates for the request flow.",
+        "core",
+        &[],
+    );
+
+    let output = {
+        let mut command = std::process::Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "scope", "request.yaml"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task scope should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("policy discussion likely: yes"));
+    assert!(stdout.contains("philosophy discussion likely: yes"));
+    assert!(stdout.contains("request uses policy-oriented language: approval"));
+    assert!(stdout.contains("request uses philosophy-oriented language: ethos"));
+}
+
+#[test]
+fn task_scope_prints_feature_candidates_without_planned_state_updates_for_delete_requests() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_request(
+        tempdir.path(),
+        "Delete FEAT-TASK-001 from the planning flow.",
+        "core",
+        &["FEAT-TASK-001"],
+    );
+
+    let output = {
+        let mut command = std::process::Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "scope", "request.yaml"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task scope should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("candidate features:"));
+    assert!(stdout.contains("FEAT-TASK-001"));
+    assert!(!stdout.contains("planned-state update suggested"));
+}
+
+#[test]
 fn task_scope_prints_json_output_with_planning_signals() {
     let tempdir = tempdir().expect("tempdir");
     write_workspace(tempdir.path());

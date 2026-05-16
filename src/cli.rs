@@ -505,9 +505,7 @@ pub struct TraceArgs {
     #[arg(long, conflicts_with = "file")]
     pub range: Option<String>,
 
-    #[arg(
-        help = "Allowed requirement or feature IDs for review range scope guards"
-    )]
+    #[arg(help = "Allowed requirement or feature IDs for review range scope guards")]
     #[arg(long = "allowed-id", alias = "expected-id")]
     pub allowed_id: Vec<String>,
 
