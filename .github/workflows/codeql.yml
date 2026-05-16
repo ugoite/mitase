@@ -26,8 +26,8 @@ permissions:
   security-events: write
 
 jobs:
-  analyze:
-    name: Analyze (rust)
+  codeql-required:
+    name: codeql-required
     runs-on: ubuntu-latest
     permissions:
       actions: read
