@@ -383,6 +383,39 @@ fn log_command_serializes_deleted_id_history_with_lifecycle_events() {
 }
 
 #[test]
+fn log_command_can_include_related_history_for_deleted_ids() {
+    let workspace = write_history_workspace();
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args([
+            "log",
+            "REQ-HIST-DEL-001",
+            workspace.path().to_str().expect("utf8 path"),
+            "--include-related",
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("command should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json: Value = serde_json::from_slice(&output.stdout).expect("output should be valid JSON");
+    assert_eq!(json["include_related"], true);
+    assert_eq!(json["status"], "historical");
+    assert!(json["tracked_paths"]
+        .as_array()
+        .expect("tracked paths")
+        .iter()
+        .any(|path| path["source"] == "historical"));
+}
+
+#[test]
 fn log_command_supports_json_kind_and_path_filters() {
     let workspace = write_history_workspace();
     let output = Command::cargo_bin("syu")
