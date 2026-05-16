@@ -1269,8 +1269,9 @@ mod tests {
     };
 
     use super::{
-        ClassificationOutcome, RequirementAction, build_scaffold_plan, classify_request,
-        load_request_artifact, run_task_command,
+        ClassificationOutcome, RequirementAction, SearchResult, WorkspaceLookup,
+        build_scaffold_plan, classify_request, collect_feature_candidates, load_request_artifact,
+        run_task_command,
     };
 
     fn write_request_artifact(path: &Path, request: &str, linked_ids: &[&str]) {
@@ -1507,6 +1508,31 @@ mod tests {
                 .to_string()
                 .contains("only supports request artifacts")
         );
+    }
+
+    #[test]
+    fn collect_feature_candidates_skips_missing_workspace_features() {
+        let tempdir = tempdir().expect("tempdir");
+        let workspace = crate::workspace::Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("docs/syu"),
+            config: crate::config::SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+        let lookup = WorkspaceLookup::new(&workspace);
+        let explicit_items = vec![SearchResult {
+            id: "FEAT-MISSING-001".to_string(),
+            kind: "feature",
+            title: "Missing feature".to_string(),
+        }];
+
+        let candidates =
+            collect_feature_candidates(&lookup, &explicit_items, &[], RequirementAction::Create, 5);
+
+        assert!(candidates.is_empty());
     }
 
     #[test]

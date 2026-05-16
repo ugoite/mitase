@@ -23,8 +23,10 @@
 | --- | --- | --- | --- | --- | --- |
 | error | SYU-workspace-historical-001 | Deleted IDs must not be reused by default | feature FEAT-TASK-001 | docs/syu/features/cli/task.yaml | feature `FEAT-TASK-001` reuses an ID that was last known in `docs/syu/features/cli/task.yaml` at commit `94926b74ffd6f569f74df7d307778144f5789314` before it was deleted. |
 | error | SYU-workspace-historical-001 | Deleted IDs must not be reused by default | feature FEAT-TASK-002 | docs/syu/features/cli/task.yaml | feature `FEAT-TASK-002` reuses an ID that was last known in `docs/syu/features/cli/task.yaml` at commit `94926b74ffd6f569f74df7d307778144f5789314` before it was deleted. |
+| error | SYU-workspace-historical-001 | Deleted IDs must not be reused by default | feature FEAT-TASK-003 | docs/syu/features/cli/task.yaml | feature `FEAT-TASK-003` reuses an ID that was last known in `docs/syu/features/cli/task.yaml` at commit `1df26ddb011a5153489bd8f13af658423529b026` before it was deleted. |
 | error | SYU-workspace-historical-001 | Deleted IDs must not be reused by default | requirement REQ-CORE-028 | docs/syu/requirements/core/workspace.yaml | requirement `REQ-CORE-028` reuses an ID that was last known in `docs/syu/requirements/core/workspace.yaml` at commit `94926b74ffd6f569f74df7d307778144f5789314` before it was deleted. |
 | error | SYU-workspace-historical-001 | Deleted IDs must not be reused by default | requirement REQ-CORE-029 | docs/syu/requirements/core/workspace.yaml | requirement `REQ-CORE-029` reuses an ID that was last known in `docs/syu/requirements/core/workspace.yaml` at commit `94926b74ffd6f569f74df7d307778144f5789314` before it was deleted. |
+| error | SYU-workspace-historical-001 | Deleted IDs must not be reused by default | requirement REQ-CORE-030 | docs/syu/requirements/core/workspace.yaml | requirement `REQ-CORE-030` reuses an ID that was last known in `docs/syu/requirements/core/workspace.yaml` at commit `1df26ddb011a5153489bd8f13af658423529b026` before it was deleted. |
 
 ## Referenced rules
 
