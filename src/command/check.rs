@@ -906,7 +906,7 @@ fn apply_graph_autofix(
     let requirement_root = workspace.spec_root.join("requirements");
     let feature_root = workspace.spec_root.join("features");
     let root = &workspace.root;
-    let description = "synchronize graph links";
+    let description = "synchronize graph and trace hygiene";
 
     let mut philosophy_docs = if philosophy_root.is_dir() {
         load_philosophy_documents_with_paths(&philosophy_root)?
@@ -954,6 +954,8 @@ fn apply_graph_autofix(
     dedupe_policy_links(&mut policy_docs);
     dedupe_requirement_links(&mut requirement_docs);
     dedupe_feature_links(&mut feature_docs);
+    normalize_trace_hygiene_for_requirement_documents(&mut requirement_docs);
+    normalize_trace_hygiene_for_feature_documents(&mut feature_docs);
 
     let philosophy_index = index_philosophies(&philosophy_docs);
     let policy_index = index_policies(&policy_docs);
@@ -1426,6 +1428,61 @@ fn write_modified_documents<T: serde::Serialize>(
     Ok(())
 }
 
+fn normalize_trace_hygiene_for_requirement_documents(
+    documents: &mut [MutableLoadedDocument<RequirementDocument>],
+) {
+    for document in documents {
+        for requirement in &mut document.document.requirements {
+            if let Some(canonical_status) = normalize_delivery_status_label(&requirement.status)
+                && requirement.status.trim() != canonical_status
+            {
+                requirement.status = canonical_status.to_string();
+                document.changed = true;
+            }
+
+            if normalize_trace_references(&mut requirement.tests) {
+                document.changed = true;
+            }
+        }
+    }
+}
+
+fn normalize_trace_hygiene_for_feature_documents(
+    documents: &mut [MutableLoadedDocument<FeatureDocument>],
+) {
+    for document in documents {
+        for feature in &mut document.document.features {
+            if let Some(canonical_status) = normalize_delivery_status_label(&feature.status)
+                && feature.status.trim() != canonical_status
+            {
+                feature.status = canonical_status.to_string();
+                document.changed = true;
+            }
+
+            if normalize_trace_references(&mut feature.implementations) {
+                document.changed = true;
+            }
+        }
+    }
+}
+
+fn normalize_trace_references(
+    references_by_language: &mut BTreeMap<String, Vec<TraceReference>>,
+) -> bool {
+    let mut changed = false;
+    for references in references_by_language.values_mut() {
+        for reference in references {
+            if let Some(preferred_path) = preferred_trace_file_path(&reference.file)
+                && preferred_path != reference.file
+            {
+                reference.file = preferred_path;
+                changed = true;
+            }
+        }
+    }
+    changed
+}
+
 struct AutofixChangeRequest<'a> {
     root: &'a Path,
     path: &'a Path,
@@ -1506,7 +1563,9 @@ fn apply_autofix_for_reference_with_transaction(
         return Ok(());
     }
 
-    let path = root.join(&reference.file);
+    let file_path =
+        preferred_trace_file_path(&reference.file).unwrap_or_else(|| reference.file.clone());
+    let path = root.join(&file_path);
     if !path.is_file() || !adapter.supports_path(&path) {
         return Ok(());
     }
@@ -1847,9 +1906,17 @@ fn collapse_whitespace(value: &str) -> String {
 }
 
 fn normalize_delivery_status(status: &str) -> Option<DeliveryStatus> {
+    normalize_delivery_status_label(status).map(|label| match label {
+        "planned" => DeliveryStatus::Planned,
+        "implemented" => DeliveryStatus::Implemented,
+        _ => unreachable!("canonical delivery status labels are exhaustive"),
+    })
+}
+
+fn normalize_delivery_status_label(status: &str) -> Option<&'static str> {
     match status.trim() {
-        "planned" | "planed" => Some(DeliveryStatus::Planned),
-        "implemented" => Some(DeliveryStatus::Implemented),
+        "planned" | "planed" => Some("planned"),
+        "implemented" => Some("implemented"),
         _ => None,
     }
 }
@@ -2521,7 +2588,6 @@ fn merge_ownership_entry(
         return false;
     }
 
-    let wildcard_required = required_symbols.len() == 1 && required_symbols[0] == "*";
     let mut changed = false;
 
     if let Some(entry) = manifest
@@ -2529,25 +2595,10 @@ fn merge_ownership_entry(
         .iter_mut()
         .find(|entry| entry.id == owner_id)
     {
-        if wildcard_required {
-            if !entry.symbols.iter().any(|symbol| symbol.trim() == "*") {
-                entry.symbols = vec!["*".to_string()];
-                changed = true;
-            }
-        } else if !entry.symbols.iter().any(|symbol| symbol.trim() == "*") {
-            let mut combined = entry
-                .symbols
-                .iter()
-                .map(|symbol| symbol.trim())
-                .filter(|symbol| !symbol.is_empty())
-                .map(ToOwned::to_owned)
-                .collect::<BTreeSet<_>>();
-            let original_len = combined.len();
-            combined.extend(required_symbols);
-            if combined.len() != original_len {
-                entry.symbols = combined.into_iter().collect();
-                changed = true;
-            }
+        let normalized_symbols = normalize_ownership_symbols(&entry.symbols, &required_symbols);
+        if entry.symbols != normalized_symbols {
+            entry.symbols = normalized_symbols;
+            changed = true;
         }
     } else {
         manifest.owners.push(OwnershipEntry {
@@ -2563,6 +2614,23 @@ fn merge_ownership_entry(
             .sort_by(|left, right| left.id.cmp(&right.id));
     }
     changed
+}
+
+fn normalize_ownership_symbols(existing: &[String], required: &[String]) -> Vec<String> {
+    let wildcard_required = required.len() == 1 && required[0] == "*";
+    if wildcard_required || existing.iter().any(|symbol| symbol.trim() == "*") {
+        return vec!["*".to_string()];
+    }
+
+    existing
+        .iter()
+        .chain(required.iter())
+        .map(|symbol| symbol.trim())
+        .filter(|symbol| !symbol.is_empty() && *symbol != "*")
+        .map(ToOwned::to_owned)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
 }
 
 fn validate_philosophy(
@@ -6586,6 +6654,37 @@ mod tests {
             },
         ));
         assert_eq!(manifest.owners[1].symbols, vec!["*".to_string()]);
+    }
+
+    #[test]
+    fn merge_ownership_entry_normalizes_duplicate_sidecar_symbols() {
+        let mut manifest = OwnershipManifest {
+            version: 1,
+            owners: vec![OwnershipEntry {
+                id: "REQ-1".to_string(),
+                symbols: vec![
+                    "covered".to_string(),
+                    "covered".to_string(),
+                    " extra ".to_string(),
+                ],
+            }],
+        };
+
+        assert!(merge_ownership_entry(
+            &mut manifest,
+            "REQ-1",
+            &TraceReference {
+                file: PathBuf::from("trace.rs"),
+                symbols: vec!["covered".to_string()],
+                doc_contains: Vec::new(),
+                method: None,
+                path: None,
+            },
+        ));
+        assert_eq!(
+            manifest.owners[0].symbols,
+            vec!["covered".to_string(), "extra".to_string()]
+        );
     }
 
     #[test]
