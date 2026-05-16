@@ -2,6 +2,6 @@
   "version": 1,
   "required_checks": [
     { "context": "ci-required", "workflow": "ci", "job_id": "ci-required" },
-    { "context": "codeql-required", "workflow": "codeql", "job_id": "codeql-required" }
+    { "context": "codeql-required", "workflow": "codeql", "job_id": "analyze" }
   ]
 }
