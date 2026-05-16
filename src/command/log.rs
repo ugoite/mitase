@@ -170,17 +170,11 @@ pub fn run_log_command(args: &LogArgs) -> Result<i32> {
         kind: args.kind,
         path_filter: path_filter.as_deref(),
     })?;
-    if args.include_related {
-        if view.target.status != "historical" {
-            let related = collect_related_tracked_paths(
-                &workspace,
-                &args.id,
-                args.kind,
-                path_filter.as_deref(),
-            )?;
-            view.target.tracked_paths.extend(related);
-            dedupe_tracked_paths(&mut view.target.tracked_paths);
-        }
+    if args.include_related && view.target.status != "historical" {
+        let related =
+            collect_related_tracked_paths(&workspace, &args.id, args.kind, path_filter.as_deref())?;
+        view.target.tracked_paths.extend(related);
+        dedupe_tracked_paths(&mut view.target.tracked_paths);
     }
     let merge_base_ref = args.merge_base_ref.as_deref();
     let scope = resolve_history_scope(&workspace.root, args.range.as_deref(), merge_base_ref)?;
