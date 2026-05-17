@@ -1186,6 +1186,7 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(setup_rust_action.contains("Swatinem/rust-cache@v2"));
     assert!(ci_workflow.contains("taiki-e/cache-cargo-install-action@v3"));
     assert!(ci_workflow.contains("tool: cargo-llvm-cov"));
+    assert!(ci_workflow.contains("tool: cargo-nextest"));
     assert!(ci_workflow.contains("tool: wasm-pack"));
     assert!(release_artifacts.contains("libc6-dev-arm64-cross"));
     assert!(ci_workflow.contains("merge_group:"));
