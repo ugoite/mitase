@@ -2136,5 +2136,4 @@ mod tests {
         assert_eq!(skipped[0].file, "../outside.rs");
         assert!(skipped[0].reason.contains("must stay under workspace"));
     }
-
 }
