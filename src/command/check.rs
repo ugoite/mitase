@@ -1471,7 +1471,7 @@ fn normalize_trace_references(
 ) -> bool {
     let mut changed = false;
     for references in references_by_language.values_mut() {
-        for reference in references {
+        for reference in references.iter_mut() {
             if let Some(preferred_path) = preferred_trace_file_path(&reference.file)
                 && preferred_path != reference.file
             {
@@ -1479,6 +1479,24 @@ fn normalize_trace_references(
                 changed = true;
             }
         }
+
+        let mut seen = HashSet::new();
+        references.retain(|reference| {
+            let key = (
+                reference.file.clone(),
+                reference.symbols.clone(),
+                reference.doc_contains.clone(),
+                reference.method.clone(),
+                reference.path.clone(),
+            );
+
+            if seen.insert(key) {
+                true
+            } else {
+                changed = true;
+                false
+            }
+        });
     }
     changed
 }
