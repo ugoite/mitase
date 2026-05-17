@@ -6942,7 +6942,11 @@ mod tests {
 
         assert_eq!(run.summary.symbol_updates, 1);
         assert_eq!(run.summary.updated_files.len(), 1);
-        assert!(run.summary.updated_files.contains(&PathBuf::from("trace.rs")));
+        assert!(
+            run.summary
+                .updated_files
+                .contains(&PathBuf::from("trace.rs"))
+        );
     }
 
     #[test]
