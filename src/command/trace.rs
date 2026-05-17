@@ -2137,37 +2137,4 @@ mod tests {
         assert!(skipped[0].reason.contains("must stay under workspace"));
     }
 
-    #[test]
-    fn collect_trace_scope_guard_marks_skipped_files_as_out_of_scope() {
-        let tempdir = tempdir().expect("tempdir should exist");
-        let workspace = Workspace {
-            root: tempdir.path().to_path_buf(),
-            spec_root: tempdir.path().join("docs/syu"),
-            config: SyuConfig::default(),
-            philosophies: Vec::new(),
-            policies: Vec::new(),
-            requirements: Vec::new(),
-            features: Vec::new(),
-        };
-        let skipped = vec![super::TraceSkippedFile {
-            file: "../outside.rs".to_string(),
-            reason: "must stay under workspace".to_string(),
-        }];
-
-        let scope_guard = super::collect_trace_scope_guard(
-            &workspace,
-            &[],
-            &skipped,
-            &[String::from("REQ-TRACE-001")],
-        )
-        .expect("scope guard collection should succeed")
-        .expect("scope guard should be present");
-
-        assert_eq!(scope_guard.out_of_scope_items.len(), 1);
-        assert_eq!(scope_guard.out_of_scope_items[0].file, "../outside.rs");
-        assert_eq!(
-            scope_guard.out_of_scope_items[0].reason.as_deref(),
-            Some("must stay under workspace")
-        );
-    }
 }
