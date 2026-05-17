@@ -2357,13 +2357,7 @@ fn validate_duplicate_trace_references(
     let subject = format!("{} {}", role.subject_kind(), owner_id);
 
     for reference in references {
-        let key = (
-            reference.file.clone(),
-            reference.symbols.clone(),
-            reference.doc_contains.clone(),
-            reference.method.clone(),
-            reference.path.clone(),
-        );
+        let key = trace_reference_duplicate_key(reference);
         if seen.insert(key) {
             continue;
         }
@@ -2384,6 +2378,25 @@ fn validate_duplicate_trace_references(
             )),
         ));
     }
+}
+
+fn trace_reference_duplicate_key(
+    reference: &TraceReference,
+) -> (
+    PathBuf,
+    Vec<String>,
+    Vec<String>,
+    Option<String>,
+    Option<String>,
+) {
+    let file = preferred_trace_file_path(&reference.file).unwrap_or_else(|| reference.file.clone());
+    (
+        file,
+        reference.symbols.clone(),
+        reference.doc_contains.clone(),
+        reference.method.clone(),
+        reference.path.clone(),
+    )
 }
 
 fn preferred_trace_file_path(file: &Path) -> Option<PathBuf> {
@@ -5560,6 +5573,62 @@ mod tests {
                 .iter()
                 .any(|issue| issue.code == "SYU-graph-reciprocal-001")
         );
+    }
+
+    #[test]
+    fn validate_philosophy_reports_all_required_blank_fields() {
+        let mut entry = philosophy("PHIL-1");
+        entry.id.clear();
+        entry.title.clear();
+        entry.product_design_principle.clear();
+        entry.coding_guideline.clear();
+
+        let mut issues = Vec::new();
+        validate_philosophy(&entry, &HashMap::new(), &SyuConfig::default(), &mut issues);
+
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "SYU-workspace-blank-001"
+                    && issue.location.as_deref() == Some("id"))
+        );
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "SYU-workspace-blank-001"
+                    && issue.location.as_deref() == Some("title"))
+        );
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "SYU-workspace-blank-001"
+                    && issue.location.as_deref() == Some("product_design_principle"))
+        );
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "SYU-workspace-blank-001"
+                    && issue.location.as_deref() == Some("coding_guideline"))
+        );
+    }
+
+    #[test]
+    fn validate_delivery_status_reports_invalid_status() {
+        let mut issues = Vec::new();
+        assert_eq!(
+            super::validate_delivery_status(
+                "feature",
+                "FEAT-1",
+                "retired",
+                &SyuConfig::default(),
+                &mut issues
+            ),
+            None
+        );
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].code, "SYU-delivery-invalid-001");
+        assert_eq!(issues[0].location.as_deref(), Some("status"));
     }
 
     #[test]
