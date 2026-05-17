@@ -82,6 +82,7 @@ edit YAML by hand, use the task workflow first:
 ```bash
 syu task scope request.yaml
 syu task classify request.yaml
+syu task scope request.yaml
 syu task scaffold request.yaml
 ```
 

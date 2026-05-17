@@ -74,16 +74,6 @@ struct JsonTaskClassifyOutput {
 }
 
 #[derive(Debug, Serialize)]
-struct JsonTaskScaffoldOutput {
-    request_path: String,
-    request: String,
-    classification: String,
-    reasons: Vec<String>,
-    updates: Vec<JsonScaffoldUpdate>,
-    context: JsonRequestArtifactContext,
-}
-
-#[derive(Debug, Serialize)]
 struct JsonTaskScopeOutput {
     request_path: String,
     request: String,
@@ -94,6 +84,16 @@ struct JsonTaskScopeOutput {
     features: Vec<ScopeFeatureCandidate>,
     policies: Vec<SearchResult>,
     philosophies: Vec<SearchResult>,
+    context: JsonRequestArtifactContext,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonTaskScaffoldOutput {
+    request_path: String,
+    request: String,
+    classification: String,
+    reasons: Vec<String>,
+    updates: Vec<JsonScaffoldUpdate>,
     context: JsonRequestArtifactContext,
 }
 

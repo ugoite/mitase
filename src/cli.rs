@@ -37,7 +37,7 @@ New here?
   5. syu browse .    explore the spec in your terminal
   6. syu app .       start the local browser UI server
   7. syu task classify request.yaml  classify a request artifact against the current spec graph
-  8. syu task scope request.yaml      map a request artifact onto candidate requirements, policies, philosophies, and features
+  8. syu task scope request.yaml      map a request artifact onto the current spec graph
   9. syu task scaffold request.yaml   preview planned requirement and feature updates from a request artifact";
 
 const APP_AFTER_HELP: &str = concat!(
@@ -94,7 +94,7 @@ Examples:
   syu task scope request.yaml
   syu task scope request.yaml --format json
 
-Use this when you want the request artifact mapped onto nearby requirements, policies, philosophies, and features before you decide whether the work needs new planned spec edits.";
+Use this when you want the current spec graph to surface candidate requirements, related features, and possible policy or philosophy discussion before implementation starts.";
 
 const TASK_SCAFFOLD_AFTER_HELP: &str = "\
 Examples:
@@ -781,7 +781,7 @@ pub enum TaskCommands {
     )]
     Classify(TaskClassifyArgs),
     #[command(
-        about = "Scope a request artifact against nearby requirements, policies, philosophies, and features",
+        about = "Map a request artifact onto candidate requirements, policies, philosophies, and features",
         after_help = TASK_SCOPE_AFTER_HELP
     )]
     Scope(TaskScopeArgs),
@@ -808,14 +808,14 @@ pub struct TaskClassifyArgs {
 
 #[derive(Debug, Clone, Args)]
 pub struct TaskScopeArgs {
-    #[arg(help = "YAML request artifact to scope against the spec graph")]
+    #[arg(help = "YAML request artifact to scope against the current spec graph")]
     pub request: PathBuf,
 
     #[arg(help = WORKSPACE_HELP)]
     #[arg(default_value = ".")]
     pub workspace: PathBuf,
 
-    #[arg(help = "Output format for the scoping result")]
+    #[arg(help = "Output format for the scope result")]
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
     pub format: OutputFormat,
 }

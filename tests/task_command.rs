@@ -159,10 +159,11 @@ fn task_scope_prints_text_output_with_candidate_requirements_and_flags() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("candidate requirements:"));
     assert!(stdout.contains("candidate features:"));
+    assert!(stdout.contains("scope signals:"));
     assert!(stdout.contains("policy discussion likely: yes"));
     assert!(stdout.contains("philosophy discussion likely: yes"));
     assert!(stdout.contains("FEAT-TASK-001"));
-    assert!(stdout.contains("planned-state update suggested"));
+    assert!(stdout.contains("candidate feature planned-state updates: yes"));
 }
 
 #[test]
@@ -264,9 +265,12 @@ fn task_scope_prints_json_output_with_planning_signals() {
     assert!(output.status.success(), "task scope should succeed");
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("\"classification\": \"requirement_change\""));
+    assert!(stdout.contains("\"signals\": {"));
     assert!(stdout.contains("\"policy_discussion\": true"));
     assert!(stdout.contains("\"philosophy_discussion\": true"));
     assert!(stdout.contains("\"planned_feature_updates\": true"));
+    assert!(stdout.contains("\"requirements\": ["));
+    assert!(stdout.contains("\"features\": ["));
     assert!(stdout.contains("\"id\": \"REQ-CORE-028\""));
     assert!(stdout.contains("\"id\": \"FEAT-TASK-001\""));
 }
@@ -322,6 +326,64 @@ fn task_scaffold_prints_json_preview_for_existing_ids() {
     assert!(stdout.contains("\"action\": \"update\""));
     assert!(stdout.contains("\"path\": \"docs/syu/requirements/core/classify.yaml\""));
     assert!(stdout.contains("\"path\": \"docs/syu/features/core/task.yaml\""));
+}
+
+#[test]
+fn task_scope_prints_text_summary_with_candidate_items() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_request(
+        tempdir.path(),
+        "Scope REQ-CORE-028 with FEAT-TASK-001 and ask whether policy wording needs refinement.",
+        "core",
+        &["REQ-CORE-028", "FEAT-TASK-001"],
+    );
+
+    let output = {
+        let mut command = std::process::Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "scope", "request.yaml"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task scope should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("candidate requirements:"));
+    assert!(stdout.contains("REQ-CORE-028"));
+    assert!(stdout.contains("candidate features:"));
+    assert!(stdout.contains("FEAT-TASK-001"));
+    assert!(stdout.contains("scope signals:"));
+    assert!(stdout.contains("policy discussion likely: yes"));
+    assert!(stdout.contains("philosophy discussion likely: no"));
+    assert!(stdout.contains("candidate feature planned-state updates: yes"));
+}
+
+#[test]
+fn task_scope_prints_json_summary_for_candidate_items() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_request(
+        tempdir.path(),
+        "Scope REQ-CORE-028 with FEAT-TASK-001 and ask whether policy wording needs refinement.",
+        "core",
+        &["REQ-CORE-028", "FEAT-TASK-001"],
+    );
+
+    let output = {
+        let mut command = std::process::Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "scope", "request.yaml", "--format", "json"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task scope should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("\"signals\": {"));
+    assert!(stdout.contains("\"policy_discussion\": true"));
+    assert!(stdout.contains("\"philosophy_discussion\": false"));
+    assert!(stdout.contains("\"planned_feature_updates\": true"));
+    assert!(stdout.contains("\"requirements\": ["));
+    assert!(stdout.contains("\"features\": ["));
 }
 
 #[test]
