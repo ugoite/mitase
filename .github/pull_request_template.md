@@ -16,7 +16,8 @@ If you list requirement or feature IDs here, include the same IDs in the PR titl
 ## Validation
 
 - [ ] `scripts/ci/quality-gates.sh`
-- [ ] `scripts/ci/coverage.sh summary` (required when Rust logic changes)
+- [ ] `scripts/ci/quality-gates.sh fast`
+- [ ] `scripts/ci/coverage.sh pr` (required when Rust logic changes)
 - [ ] `cargo run -- validate .`
 - [ ] Docs, examples, or self-spec updated when behavior changed
 

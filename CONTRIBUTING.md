@@ -70,12 +70,19 @@ dependency installs, and Playwright browser readiness for this checkout.
 1. **Every change**
 
    ```bash
-   scripts/ci/quality-gates.sh
+   scripts/ci/quality-gates.sh fast
    cargo run -- validate .
    ```
 
-   `scripts/ci/quality-gates.sh` also checks that the committed
-   `docs/generated/` artifacts are fresh. To refresh those files directly, run:
+   `scripts/ci/quality-gates.sh fast` keeps the local pre-push path short.
+   The full gate also checks that the committed `docs/generated/` artifacts
+   are fresh and generates the repository report:
+
+   ```bash
+   scripts/ci/quality-gates.sh full
+   ```
+
+   To refresh those files directly, run:
 
    ```bash
    scripts/ci/check-generated-docs-freshness.sh
@@ -85,11 +92,12 @@ dependency installs, and Playwright browser readiness for this checkout.
    CI scripts that affect Rust flows)
 
    ```bash
-   scripts/ci/coverage.sh summary
+   scripts/ci/coverage.sh pr
    ```
 
-   That command also emits a requirement/feature coverage summary so reviewers
-   can inspect the current Rust line coverage in spec terms.
+   That command enforces changed-line coverage for pull requests and emits a
+   requirement/feature coverage summary. Use `scripts/ci/coverage.sh summary`
+   when you want the full 100% repository coverage gate locally.
 
 3. **Browser app, WASM, or checked-in `app/dist` bundle** (`app/src`,
    `app/wasm`, browser build config, or generated browser assets)
