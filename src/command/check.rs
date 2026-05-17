@@ -1071,7 +1071,6 @@ fn trace_reference_dedup_key(reference: &TraceReference) -> String {
     }
     key
 }
-
 fn load_feature_documents_for_autofix(
     feature_root: &Path,
 ) -> Result<Vec<MutableLoadedDocument<FeatureDocument>>> {
@@ -4067,6 +4066,12 @@ mod tests {
     };
 
     use super::{
+        AutofixChangeRequest, AutofixMode, AutofixRun, DeliveryStatus,
+        load_feature_documents_for_autofix, normalize_delivery_status, normalize_trace_reference,
+        trace_reference_dedup_key, write_or_plan_autofix_change,
+    };
+
+    use super::{
         AutofixPlan, AutofixPlanChange, AutofixTransaction, FilteredIssueView,
         HISTORICAL_ID_RULE_CODES, IssueFilters, ItemLocation, MutableLoadedDocument,
         ORPHAN_RULE_CODES, RECIPROCAL_RULE_CODES, RequirementValidationIndex, TextReportSummary,
@@ -5039,6 +5044,130 @@ mod tests {
             describe_trace_reference(&duplicate),
             "file=`src/lib.rs` symbols=[`trace_symbol`] doc_contains=[`REQ-1`]"
         );
+    }
+
+    #[test]
+    fn normalize_trace_reference_canonicalizes_and_deduplicates_files() {
+        let canonical = TraceReference {
+            file: PathBuf::from("src/lib.rs"),
+            symbols: vec!["trace_symbol".to_string()],
+            doc_contains: vec!["REQ-1".to_string()],
+            method: None,
+            path: None,
+        };
+        let relative = TraceReference {
+            file: PathBuf::from("./src/lib.rs"),
+            ..canonical.clone()
+        };
+
+        let normalized = normalize_trace_reference(&relative);
+        let mut seen = BTreeSet::new();
+        assert!(seen.insert(trace_reference_dedup_key(&normalized)));
+        assert!(
+            !seen.insert(trace_reference_dedup_key(&normalize_trace_reference(
+                &canonical
+            )))
+        );
+        assert_eq!(normalized.file, PathBuf::from("src/lib.rs"));
+        assert_eq!(normalized.symbols, vec!["trace_symbol".to_string()]);
+        assert_eq!(normalized.doc_contains, vec!["REQ-1".to_string()]);
+    }
+
+    #[test]
+    fn normalize_delivery_status_accepts_typos_and_known_values() {
+        assert_eq!(
+            normalize_delivery_status(" planed "),
+            Some(DeliveryStatus::Planned)
+        );
+        assert_eq!(
+            normalize_delivery_status("implemented"),
+            Some(DeliveryStatus::Implemented)
+        );
+        assert_eq!(normalize_delivery_status("unknown"), None);
+    }
+
+    #[test]
+    fn load_feature_documents_for_autofix_loads_only_feature_documents() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let feature_root = tempdir.path().join("docs/syu/features");
+        fs::create_dir_all(feature_root.join("core")).expect("feature dirs");
+        fs::write(
+            feature_root.join("features.yaml"),
+            "version: \"1\"\nfiles:\n  - kind: core\n    file: core.yaml\n",
+        )
+        .expect("registry");
+        fs::write(
+            feature_root.join("core.yaml"),
+            "category: Core Features\nversion: 1\n\nfeatures:\n  - id: FEAT-1\n    title: Example\n    summary: Keep it simple.\n    status: implemented\n    linked_requirements: []\n    implementations: {}\n",
+        )
+        .expect("feature document");
+        fs::write(
+            feature_root.join("notes.yaml"),
+            "category: Notes\nversion: 1\nnotes:\n  - ignore me\n",
+        )
+        .expect("non-feature document");
+
+        let documents = load_feature_documents_for_autofix(&feature_root)
+            .expect("feature documents should load");
+
+        assert_eq!(documents.len(), 1);
+        assert_eq!(documents[0].path, feature_root.join("core.yaml"));
+    }
+
+    #[test]
+    fn write_or_plan_autofix_change_records_apply_and_plan_modes() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let root = tempdir.path();
+        let path = root.join("trace.rs");
+        fs::write(&path, "original").expect("file should exist");
+
+        let mut apply_run = AutofixRun::default();
+        let mut apply_transaction = AutofixTransaction::default();
+        write_or_plan_autofix_change(AutofixChangeRequest {
+            root,
+            path: &path,
+            transaction: &mut apply_transaction,
+            run: &mut apply_run,
+            mode: AutofixMode::Apply,
+            rules: vec!["SYU-trace-file-003"],
+            summary_text: "update trace path".to_string(),
+            contents: Some("updated".to_string()),
+        })
+        .expect("apply mode should write");
+
+        assert_eq!(
+            fs::read_to_string(&path).expect("updated file should exist"),
+            "updated"
+        );
+        assert_eq!(apply_run.summary.symbol_updates, 1);
+        assert!(
+            apply_run
+                .summary
+                .updated_files
+                .contains(Path::new("trace.rs"))
+        );
+
+        let mut plan_run = AutofixRun {
+            plan: Some(AutofixPlan::default()),
+            ..Default::default()
+        };
+        let mut plan_transaction = AutofixTransaction::default();
+        write_or_plan_autofix_change(AutofixChangeRequest {
+            root,
+            path: &path,
+            transaction: &mut plan_transaction,
+            run: &mut plan_run,
+            mode: AutofixMode::Plan,
+            rules: vec!["SYU-trace-file-003"],
+            summary_text: "update trace path".to_string(),
+            contents: None,
+        })
+        .expect("plan mode should record change");
+
+        let plan = plan_run.plan.expect("plan should be initialized");
+        assert_eq!(plan.planned_updates, 1);
+        assert!(plan.updated_files.contains(Path::new("trace.rs")));
+        assert_eq!(plan.changes.len(), 1);
     }
 
     #[test]
