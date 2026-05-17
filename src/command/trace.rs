@@ -2149,7 +2149,7 @@ mod tests {
             requirements: Vec::new(),
             features: Vec::new(),
         };
-        let skipped = vec![TraceSkippedFile {
+        let skipped = vec![super::TraceSkippedFile {
             file: "../outside.rs".to_string(),
             reason: "must stay under workspace".to_string(),
         }];
