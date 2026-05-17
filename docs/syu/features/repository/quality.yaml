@@ -4,7 +4,7 @@ version: 1
 features:
   - id: FEAT-QUALITY-001
     title: Repository quality automation
-    summary: Keep self-validation, dependency hygiene across Rust, GitHub Actions, the docs site, and the browser app, code scanning, and merge-queue-safe CI execution fast enough to run on every pull request.
+    summary: Keep self-validation, dependency hygiene across Rust, GitHub Actions, the docs site, and the browser app, code scanning, and merge-queue-safe CI execution split into fast branch feedback, PR confidence, merge-queue enforcement, and maintenance checks.
     status: implemented
     linked_requirements:
       - REQ-CORE-005
@@ -15,6 +15,9 @@ features:
         - file: scripts/ci/quality-gates.sh
           symbols:
             - run_quality_gates
+        - file: scripts/dev/validate-changed.sh
+          symbols:
+            - validate_changed
         - file: scripts/ci/validate-app.sh
           symbols:
             - run_optional_e2e
@@ -25,6 +28,8 @@ features:
         - file: scripts/ci/coverage.sh
           symbols:
             - configure_llvm_tools
+            - enforce_diff_coverage
+            - enforce_lcov_threshold
             - run_coverage
         - file: scripts/ci/check-generated-docs-freshness.sh
           symbols:
@@ -54,29 +59,54 @@ features:
       yaml:
         - file: .pre-commit-config.yaml
           symbols:
-            - syu-validate-self
+            - syu-validate-changed
             - syu-quality-gates
             - syu-coverage-gate
         - file: .github/workflows/ci.yml
           symbols:
             - merge_group
             - file-hygiene
-            - quality
-            - coverage
+            - quality-fast
+            - quality-full
+            - coverage-pr
+            - coverage-full
             - actionlint
+            - dependency-review
+            - spec-linkage
+            - squash-history-spec-ids
+            - browser-app
+            - installer-smoke
+            - installed-binary-smoke
+            - docs-site
+            - ci-required
             - "./.github/actions/setup-rust"
             - taiki-e/cache-cargo-install-action@v3
             - "tool: cargo-llvm-cov"
-            - "tool: cargo-audit"
             - Set up Python with pip cache
             - "cache-dependency-path: app/package-lock.json"
             - Cache pre-commit hooks
             - actions/cache@v5
             - "~/.cache/pre-commit"
             - scripts/ci/pinned-npm.sh install app
-            - scripts/ci/pinned-npm.sh install website
             - Build browser app bundle
             - Review dependency changes
+            - "scripts/ci/quality-gates.sh fast"
+            - "scripts/ci/quality-gates.sh full"
+            - "scripts/ci/coverage.sh pr"
+            - "scripts/ci/coverage.sh lcov"
+        - file: .github/workflows/branch-push.yml
+          symbols:
+            - duplicate-check
+            - has_open_pr
+            - scripts/ci/quality-gates.sh fast
+        - file: .github/workflows/maintenance.yml
+          symbols:
+            - dependency-audit
+            - npm-audit
+            - schedule
+            - workflow_dispatch
+            - cargo audit
+            - npm audit
         - file: .github/actions/setup-rust/action.yml
           symbols:
             - Restore Rust cache
@@ -86,10 +116,11 @@ features:
             - actions/setup-node@v6
             - "cache-dependency-path: website/package-lock.json"
             - install-docs-site-deps.sh
+            - scripts/ci/pinned-npm.sh install website
         - file: .github/workflows/codeql.yml
           symbols:
             - merge_group
-            - Analyze (rust)
+            - codeql-required
             - github/codeql-action/init@v4
         - file: .github/workflows/merge-queue-watchdog.yml
           symbols:
