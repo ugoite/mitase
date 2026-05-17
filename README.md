@@ -792,7 +792,7 @@ If you're working on `syu` itself rather than using it in another repository:
 Run the shared repository checks:
 
 ```bash
-scripts/ci/quality-gates.sh
+scripts/ci/quality-gates.sh full
 ```
 
 Run the 100% line-coverage gate:
@@ -800,6 +800,12 @@ Run the 100% line-coverage gate:
 ```bash
 cargo install cargo-llvm-cov --locked
 scripts/ci/coverage.sh summary
+```
+
+For pull-request diff coverage, use:
+
+```bash
+scripts/ci/coverage.sh pr
 ```
 
 Generate an LCOV artifact locally:
