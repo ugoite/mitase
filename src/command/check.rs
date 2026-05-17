@@ -1024,13 +1024,18 @@ fn apply_autofix_for_trace_map_with_transaction(
     transaction: &mut AutofixTransaction,
 ) -> Result<()> {
     for (language, references) in references_by_language {
+        let mut seen_references = BTreeSet::new();
         for reference in references {
+            let normalized_reference = normalize_trace_reference(reference);
+            if !seen_references.insert(trace_reference_dedup_key(&normalized_reference)) {
+                continue;
+            }
             apply_autofix_for_reference_with_transaction(
                 root,
                 config,
                 owner_id,
                 language,
-                reference,
+                &normalized_reference,
                 run,
                 mode,
                 transaction,
@@ -1039,6 +1044,32 @@ fn apply_autofix_for_trace_map_with_transaction(
     }
 
     Ok(())
+}
+
+fn normalize_trace_reference(reference: &TraceReference) -> TraceReference {
+    let mut normalized = reference.clone();
+    if let Some(preferred_path) = preferred_trace_file_path(&normalized.file) {
+        normalized.file = preferred_path;
+    }
+    normalized
+}
+
+fn trace_reference_dedup_key(reference: &TraceReference) -> String {
+    let mut key = String::new();
+    key.push_str(&reference.file.to_string_lossy());
+    key.push('|');
+    key.push_str(&reference.symbols.join(","));
+    key.push('|');
+    key.push_str(&reference.doc_contains.join(","));
+    key.push('|');
+    if let Some(method) = reference.method.as_deref() {
+        key.push_str(method);
+    }
+    key.push('|');
+    if let Some(path) = reference.path.as_deref() {
+        key.push_str(path);
+    }
+    key
 }
 
 fn load_feature_documents_for_autofix(
@@ -6863,6 +6894,55 @@ mod tests {
 
         assert!(summary.updated_files.is_empty());
         assert_eq!(summary.symbol_updates, 0);
+    }
+
+    #[test]
+    fn apply_autofix_for_trace_map_dedupes_normalized_references() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let root = tempdir.path();
+        fs::write(root.join("trace.rs"), "pub fn expected() {}\n")
+            .expect("trace file should exist");
+
+        let mut config = SyuConfig::default();
+        config.validate.trace_ownership_mode = TraceOwnershipMode::Inline;
+
+        let mut references_by_language = BTreeMap::new();
+        references_by_language.insert(
+            "rust".to_string(),
+            vec![
+                TraceReference {
+                    file: PathBuf::from("trace.rs"),
+                    symbols: vec!["expected".to_string()],
+                    doc_contains: Vec::new(),
+                    method: None,
+                    path: None,
+                },
+                TraceReference {
+                    file: PathBuf::from("./trace.rs"),
+                    symbols: vec!["expected".to_string()],
+                    doc_contains: Vec::new(),
+                    method: None,
+                    path: None,
+                },
+            ],
+        );
+
+        let mut run = super::AutofixRun::default();
+        let mut transaction = super::AutofixTransaction::default();
+        super::apply_autofix_for_trace_map_with_transaction(
+            root,
+            &config,
+            "REQ-1",
+            &references_by_language,
+            &mut run,
+            super::AutofixMode::Apply,
+            &mut transaction,
+        )
+        .expect("normalized references should be processed once");
+
+        assert_eq!(run.summary.symbol_updates, 1);
+        assert_eq!(run.summary.updated_files.len(), 1);
+        assert!(run.summary.updated_files.contains(&PathBuf::from("trace.rs")));
     }
 
     #[test]
