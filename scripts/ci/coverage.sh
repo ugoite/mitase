@@ -33,7 +33,7 @@ generate_lcov() {
   local output_path="$1"
 
   mkdir -p "$(dirname "$output_path")"
-  cargo llvm-cov --lcov --output-path "$output_path"
+  cargo llvm-cov nextest --lcov --output-path "$output_path"
 }
 
 generate_spec_coverage_summary() {

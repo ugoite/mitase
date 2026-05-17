@@ -102,6 +102,7 @@ jobs:
   coverage-pr:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
         with:
@@ -130,6 +131,13 @@ jobs:
 
       - name: Run PR coverage gate
         run: scripts/ci/coverage.sh pr
+
+      - name: Upload nextest JUnit on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: nextest-junit
+          path: target/nextest/**/junit.xml
 
       - name: Upload coverage artifact
         if: always()

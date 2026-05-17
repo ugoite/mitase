@@ -288,6 +288,42 @@ fn write_fake_git_for_merge_base_spawn_failure(script_dir: &Path) {
     }
 }
 
+fn write_fake_git_for_historical_lookup_guard(script_dir: &Path, forbidden_fragment: &str) {
+    let script_path = script_dir.join("git");
+    let script = format!(
+        r#"#!/bin/sh
+set -eu
+workspace="$2"
+command_name="$3"
+state_file="/tmp/syu-historical-lookup-armed"
+if [ "$command_name" = "grep" ]; then
+  : >"$state_file"
+fi
+if [ "$command_name" = "show" ] && [ -f "$state_file" ]; then
+  case "$4" in
+    *{forbidden_fragment}*)
+      echo 'unexpected git show for unrelated history file' >&2
+      exit 1
+      ;;
+  esac
+fi
+exec /usr/bin/git "$@"
+"#,
+        forbidden_fragment = forbidden_fragment
+    );
+    fs::write(&script_path, script).expect("fake git script");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut permissions = fs::metadata(&script_path)
+            .expect("fake git metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).expect("fake git permissions");
+    }
+}
+
 #[test]
 fn log_command_renders_requirement_definition_and_test_history() {
     let workspace = write_history_workspace();
@@ -415,6 +451,46 @@ fn log_command_can_include_related_history_for_deleted_ids() {
             .iter()
             .any(|path| path["source"] == "historical")
     );
+}
+
+#[test]
+fn log_command_avoids_showing_unrelated_yaml_in_deleted_history_lookup() {
+    let workspace = write_history_workspace();
+    let fake_bin = tempdir().expect("tempdir should exist");
+    write_fake_git_for_historical_lookup_guard(fake_bin.path(), "unrelated-");
+    let _ = fs::remove_file("/tmp/syu-historical-lookup-armed");
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .env("PATH", fake_bin.path())
+        .env("SYU_TEST_RESOLVE_HISTORICAL_TARGET", "1")
+        .args([
+            "log",
+            "REQ-HIST-DEL-001",
+            workspace.path().to_str().expect("utf8 path"),
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("command should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json: Value = serde_json::from_slice(&output.stdout).expect("output should be valid JSON");
+    assert_eq!(json["status"], "historical");
+    assert_eq!(json["entity_kind"], "requirement");
+    assert!(
+        json["title"]
+            .as_str()
+            .expect("title")
+            .contains("Deleted requirement")
+    );
+    assert!(json["lifecycle_events"].is_array());
 }
 
 #[test]
