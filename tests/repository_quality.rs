@@ -65,6 +65,8 @@ fn repository_declares_precommit_and_quality_gates() {
     let precommit = read_file(".pre-commit-config.yaml");
     let install_precommit = read_file("scripts/install-precommit.sh");
     let quality_script = read_file("scripts/ci/quality-gates.sh");
+    let branch_push_workflow = read_file(".github/workflows/branch-push.yml");
+    let maintenance_workflow = read_file(".github/workflows/maintenance.yml");
     let validate_app_script = read_file("scripts/ci/validate-app.sh");
     let validate_website_script = read_file("scripts/ci/validate-website.sh");
     let install_docs_site_deps_script = read_file("scripts/ci/install-docs-site-deps.sh");
@@ -75,17 +77,27 @@ fn repository_declares_precommit_and_quality_gates() {
 
     assert!(precommit.contains("FEAT-QUALITY-001"));
     assert!(precommit.contains("shellcheck"));
-    assert!(precommit.contains("syu-validate-self"));
+    assert!(precommit.contains("syu-validate-changed"));
     assert!(precommit.contains("syu-quality-gates"));
     assert!(precommit.contains("syu-coverage-gate"));
 
     assert!(quality_script.contains("FEAT-QUALITY-001"));
     assert!(quality_script.contains("run_quality_gates"));
+    assert!(quality_script.contains("fast"));
+    assert!(quality_script.contains("full"));
     assert!(quality_script.contains("cargo fmt --all --check"));
     assert!(quality_script.contains("cargo clippy --all-targets --all-features -- -D warnings"));
+    assert!(quality_script.contains("cargo test --lib --bins"));
     assert!(quality_script.contains("cargo test"));
     assert!(quality_script.contains("cargo run -- validate ."));
     assert!(quality_script.contains("check-generated-docs-freshness.sh"));
+    assert!(branch_push_workflow.contains("duplicate-check:"));
+    assert!(branch_push_workflow.contains("has_open_pr"));
+    assert!(branch_push_workflow.contains("scripts/ci/quality-gates.sh fast"));
+    assert!(maintenance_workflow.contains("dependency-audit:"));
+    assert!(maintenance_workflow.contains("npm-audit:"));
+    assert!(maintenance_workflow.contains("schedule:"));
+    assert!(maintenance_workflow.contains("0 6 * * 1"));
     assert!(validate_app_script.contains("FEAT-QUALITY-001"));
     assert!(validate_app_script.contains("validate_app"));
     assert!(validate_app_script.contains("scripts/ci/quality-gates.sh"));
@@ -120,26 +132,26 @@ fn repository_declares_precommit_and_quality_gates() {
 
     assert!(ci_workflow.contains("FEAT-QUALITY-001"));
     assert!(ci_workflow.contains("file-hygiene:"));
-    assert!(ci_workflow.contains("shell: bash"));
-    assert!(ci_workflow.contains("hooks=("));
-    assert!(ci_workflow.contains("check-merge-conflict"));
-    assert!(ci_workflow.contains("pre-commit run --all-files \"$hook\""));
-    assert!(ci_workflow.contains("quality:"));
+    assert!(ci_workflow.contains("quality-fast:"));
+    assert!(ci_workflow.contains("quality-full:"));
+    assert!(ci_workflow.contains("coverage-pr:"));
+    assert!(ci_workflow.contains("coverage-full:"));
     assert!(ci_workflow.contains("actionlint:"));
-    assert!(ci_workflow.contains("dependency-audit:"));
     assert!(ci_workflow.contains("dependency-review:"));
     assert!(ci_workflow.contains("squash-history-spec-ids:"));
     assert!(ci_workflow.contains("spec-linkage:"));
+    assert!(ci_workflow.contains("browser-app:"));
     assert!(ci_workflow.contains("installer-smoke:"));
     assert!(ci_workflow.contains("installed-binary-smoke:"));
+    assert!(ci_workflow.contains("docs-site:"));
+    assert!(ci_workflow.contains("ci-required:"));
+    assert!(ci_workflow.contains("scripts/ci/quality-gates.sh fast"));
+    assert!(ci_workflow.contains("scripts/ci/quality-gates.sh full"));
+    assert!(ci_workflow.contains("scripts/ci/coverage.sh pr"));
+    assert!(ci_workflow.contains("scripts/ci/coverage.sh lcov"));
     assert!(ci_workflow.contains("shell: bash"));
     assert!(ci_workflow.contains("hooks=("));
     assert!(ci_workflow.contains("pre-commit run --all-files \"$hook\""));
-    assert!(ci_workflow.contains("scripts/ci/quality-gates.sh"));
-    assert!(ci_workflow.contains("cargo audit"));
-    assert!(ci_workflow.contains("schedule:"));
-    assert!(ci_workflow.contains("0 6 * * 1"));
-    assert!(ci_workflow.contains("github.event_name != 'schedule'"));
     assert!(ci_workflow.contains("Review dependency changes"));
     assert!(ci_workflow.contains("Require spec IDs in squash commit titles"));
     assert!(ci_workflow.contains("scripts/ci/check-squash-title-spec-ids.sh"));
@@ -202,8 +214,10 @@ fn repository_declares_coverage_gate_at_one_hundred_percent() {
         "coverage summary generation should not shell out through repeated `syu show` calls"
     );
 
-    assert!(ci_workflow.contains("coverage:"));
+    assert!(ci_workflow.contains("coverage-pr:"));
+    assert!(ci_workflow.contains("coverage-full:"));
     assert!(ci_workflow.contains("scripts/ci/coverage.sh lcov"));
+    assert!(ci_workflow.contains("scripts/ci/coverage.sh pr"));
     assert!(ci_workflow.contains("cargo-llvm-cov"));
     assert!(ci_workflow.contains("target/coverage/spec-coverage-summary.md"));
 }
@@ -214,6 +228,7 @@ fn repository_keeps_node_majors_aligned_across_docs_packages_and_ci() {
     let contributing = read_file("CONTRIBUTING.md");
     let ci_workflow = read_file(".github/workflows/ci.yml");
     let codeql_workflow = read_file(".github/workflows/codeql.yml");
+    let docs_build_action = read_file(".github/actions/build-docs-site/action.yml");
     let release_artifacts_workflow = read_file(".github/workflows/release-artifacts.yml");
     let app_nvmrc = read_file("app/.nvmrc");
     let website_nvmrc = read_file("website/.nvmrc");
@@ -253,7 +268,7 @@ fn repository_keeps_node_majors_aligned_across_docs_packages_and_ci() {
     assert!(contributing.contains("use **Node 20** for `website/`"));
 
     assert!(ci_workflow.contains("node-version: \"25\""));
-    assert!(ci_workflow.contains("node-version: \"20\""));
+    assert!(docs_build_action.contains("node-version: \"20\""));
     assert!(codeql_workflow.contains("node-version: \"25\""));
     assert!(release_artifacts_workflow.contains("node-version: \"25\""));
 }
@@ -1145,6 +1160,8 @@ fn repository_declares_contribution_workflow_assets() {
 // REQ-CORE-014
 fn repository_declares_dependency_hygiene_and_ci_caching() {
     let ci_workflow = read_file(".github/workflows/ci.yml");
+    let branch_push_workflow = read_file(".github/workflows/branch-push.yml");
+    let maintenance_workflow = read_file(".github/workflows/maintenance.yml");
     let setup_rust_action = read_file(".github/actions/setup-rust/action.yml");
     let codeql_workflow = read_file(".github/workflows/codeql.yml");
     let merge_queue_watchdog = read_file(".github/workflows/merge-queue-watchdog.yml");
@@ -1169,11 +1186,15 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(setup_rust_action.contains("Swatinem/rust-cache@v2"));
     assert!(ci_workflow.contains("taiki-e/cache-cargo-install-action@v3"));
     assert!(ci_workflow.contains("tool: cargo-llvm-cov"));
-    assert!(ci_workflow.contains("tool: cargo-audit"));
     assert!(ci_workflow.contains("tool: wasm-pack"));
     assert!(release_artifacts.contains("libc6-dev-arm64-cross"));
     assert!(ci_workflow.contains("merge_group:"));
-    assert!(ci_workflow.contains("check-msrv:"));
+    assert!(ci_workflow.contains("quality-fast:"));
+    assert!(ci_workflow.contains("quality-full:"));
+    assert!(ci_workflow.contains("coverage-pr:"));
+    assert!(ci_workflow.contains("coverage-full:"));
+    assert!(ci_workflow.contains("browser-app:"));
+    assert!(ci_workflow.contains("ci-required:"));
     assert!(ci_workflow.contains("Set up Python with pip cache"));
     assert!(ci_workflow.contains("cache: pip"));
     assert!(ci_workflow.contains("cache-dependency-path: .pre-commit-config.yaml"));
@@ -1181,7 +1202,7 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(ci_workflow.contains("actions/cache@v5"));
     assert!(ci_workflow.contains("~/.cache/pre-commit"));
     assert!(ci_workflow.contains("cache-dependency-path: app/package-lock.json"));
-    assert!(ci_workflow.contains("Set up Rust for quality gates"));
+    assert!(ci_workflow.contains("Set up Rust for fast quality gates"));
     assert!(ci_workflow.contains("Install browser app dependencies"));
     assert!(ci_workflow.contains("npm --prefix app ci"));
     assert!(browser_app_freshness.contains("npm ci"));
@@ -1192,10 +1213,17 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(docs_build_action.contains("install-docs-site-deps.sh"));
     assert!(docs_build_action.contains("npm run build"));
     assert!(docs_lock.contains("\"lockfileVersion\":"));
+    assert!(branch_push_workflow.contains("duplicate-check:"));
+    assert!(branch_push_workflow.contains("has_open_pr"));
+    assert!(branch_push_workflow.contains("scripts/ci/quality-gates.sh fast"));
+    assert!(maintenance_workflow.contains("dependency-audit:"));
+    assert!(maintenance_workflow.contains("npm-audit:"));
+    assert!(maintenance_workflow.contains("schedule:"));
+    assert!(maintenance_workflow.contains("0 6 * * 1"));
     assert!(codeql_workflow.contains("FEAT-QUALITY-001"));
     assert!(codeql_workflow.contains("merge_group:"));
     assert!(codeql_workflow.contains("security-events: write"));
-    assert!(codeql_workflow.contains("Analyze (rust)"));
+    assert!(codeql_workflow.contains("codeql-required"));
     assert!(codeql_workflow.contains("actions/setup-node@v6"));
     assert!(codeql_workflow.contains("dtolnay/rust-toolchain@stable"));
     assert!(codeql_workflow.contains("Swatinem/rust-cache@v2"));
@@ -1257,19 +1285,18 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
             .iter()
             .any(|entry| entry["workflow"] == "codeql")
     );
-    assert!(contexts.contains(&"file-hygiene"));
-    assert!(contexts.contains(&"MSRV check (1.88)"));
-    assert!(contexts.contains(&"Analyze (rust)"));
-    assert!(!contexts.contains(&"dependency-review"));
+    assert!(contexts.contains(&"ci-required"));
+    assert!(contexts.contains(&"codeql-required"));
+    assert_eq!(contexts.len(), 2);
     assert!(
         required_checks
             .iter()
-            .any(|entry| entry["job_id"] == "check-msrv")
+            .any(|entry| entry["job_id"] == "ci-required")
     );
     assert!(
         required_checks
             .iter()
-            .any(|entry| entry["job_id"] == "analyze")
+            .any(|entry| entry["job_id"] == "codeql-required")
     );
 
     assert!(release_artifacts.contains("Restore Rust cache"));
@@ -1294,6 +1321,7 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
 // REQ-CORE-017
 fn repository_ships_browser_app() {
     let ci_workflow = read_file(".github/workflows/ci.yml");
+    let docs_build_action = read_file(".github/actions/build-docs-site/action.yml");
     let build_script = read_file("build.rs");
     let app_gitignore = read_file("app/.gitignore");
     let app_package = read_file("app/package.json");
@@ -1309,7 +1337,6 @@ fn repository_ships_browser_app() {
     assert!(ci_workflow.contains("browser-app:"));
     assert!(ci_workflow.contains("Build browser app bundle"));
     assert!(ci_workflow.contains("scripts/ci/pinned-npm.sh install app"));
-    assert!(ci_workflow.contains("scripts/ci/pinned-npm.sh install website"));
     assert!(ci_workflow.contains("scripts/ci/check-browser-app-freshness.sh"));
     assert!(ci_workflow.contains("if: success()"));
     assert!(
@@ -1353,6 +1380,8 @@ fn repository_ships_browser_app() {
     assert!(bundle_freshness.contains("rm -rf src/wasm dist"));
     assert!(bundle_freshness.contains("Browser app Wasm bridge was not regenerated"));
     assert!(!bundle_freshness.contains("[[ -d node_modules ]]"));
+    assert!(docs_build_action.contains("scripts/ci/pinned-npm.sh install website"));
+    assert!(docs_build_action.contains("bash scripts/ci/install-docs-site-deps.sh"));
     assert!(pinned_npm.contains("FEAT-QUALITY-001"));
     assert!(pinned_npm.contains("packageManager"));
     assert!(pinned_npm.contains("npm install --global"));
