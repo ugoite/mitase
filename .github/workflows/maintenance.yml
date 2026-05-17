@@ -1,0 +1,72 @@
+# FEAT-QUALITY-001
+name: maintenance
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: maintenance-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+
+      - name: Install cargo-audit
+        uses: taiki-e/cache-cargo-install-action@v3
+        with:
+          tool: cargo-audit
+
+      - name: Run dependency audit
+        run: cargo audit
+
+  npm-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js (browser app)
+        uses: actions/setup-node@v6
+        with:
+          node-version: "25"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Align npm with app/package.json
+        shell: bash
+        run: scripts/ci/pinned-npm.sh install app
+
+      - name: Audit browser app dependencies
+        working-directory: app
+        run: npm audit --audit-level=high
+
+      - name: Set up Node.js (docs site)
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Align npm with website/package.json
+        shell: bash
+        run: scripts/ci/pinned-npm.sh install website
+
+      - name: Audit docs site dependencies
+        working-directory: website
+        run: npm audit --audit-level=high
