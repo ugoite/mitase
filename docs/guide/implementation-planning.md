@@ -5,7 +5,9 @@
 Use this guide when a new request is ready to become planned spec work before
 the implementation starts. If you already know the exact IDs and files, jump to
 [reviewer workflow](./reviewer-workflow.md). If you only have a request note,
-start with [request artifact format](./request-artifact-format.md).
+start with [request artifact format](./request-artifact-format.md). If you need
+a temporary delivery artifact instead of a persistent spec item, use [goal plan
+format](./goal-plan-format.md).
 
 ## When to use it
 
@@ -69,11 +71,14 @@ spec instead of hiding it inside implementation notes.
 ## 5. Turn the request into planned spec edits
 
 Use `syu add` when you need new planned requirements or features, then edit the
-generated YAML so the new work is reviewable:
+generated YAML so the new work is reviewable. If you need a temporary planning
+artifact for implementation tracking, capture it as a Goal Plan instead of
+adding a fifth spec layer:
 
 ```bash
 syu add requirement REQ-PLANNING-001
 syu add feature FEAT-PLANNING-001 --kind planning
+syu task scaffold request.yaml
 ```
 
 If you already have a request artifact and want a reviewable preview before you

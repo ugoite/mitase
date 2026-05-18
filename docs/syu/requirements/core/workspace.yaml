@@ -672,3 +672,45 @@ requirements:
         - file: docs/guide/implementation-planning.md
           symbols:
             - syu task scope
+  - id: REQ-CORE-031
+    title: Define temporary Goal Plan artifacts for implementation tracking
+    description: |
+      The repository MUST document temporary Goal Plan artifacts as delivery
+      artifacts that may live in task files, PR bodies, issue bodies, CI
+      artifacts, or other ephemeral locations outside `spec.root`. Goal Plans
+      MUST stay separate from the persistent philosophy, policy, requirement,
+      and feature layers, SHOULD carry explicit goal, scope, test, coverage,
+      and completion fields, and SHOULD support both request-driven and
+      diff-inferred sources with an explicit confidence signal for inferred
+      plans. The default `syu validate .` workflow MUST not require Goal Plans
+      to exist and MUST not treat `.syu/tasks` as persistent spec content unless
+      a future configuration explicitly opts in.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-001
+      - POL-002
+      - POL-004
+    linked_features:
+      - FEAT-TASK-004
+    tests:
+      rust:
+        - file: src/command/task.rs
+          symbols:
+            - GoalPlanArtifact
+            - load_goal_plan_artifact
+        - file: tests/task_command.rs
+          symbols:
+            - goal_plan_artifact_supports_request_driven_and_diff_inferred_sources
+            - goal_plan_artifact_requires_the_goal_plan_marker
+            - goal_plan_format_is_documented_as_temporary
+        - file: tests/help_command.rs
+          symbols:
+            - workspace_help_mentions_goal_plan_artifacts
+      markdown:
+        - file: docs/guide/goal-plan-format.md
+          symbols:
+            - syu.goal_plan
+        - file: docs/guide/implementation-planning.md
+          symbols:
+            - goal plan format
