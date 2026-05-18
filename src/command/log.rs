@@ -14,11 +14,7 @@ use serde::Serialize;
 use crate::{
     cli::{HistoryKind, LogArgs, LookupKind, OutputFormat},
     coverage::normalize_relative_path,
-    history::{HistoricalIdIndex, build_historical_id_index},
-    model::{
-        Feature, FeatureDocument, PhilosophyDocument, PolicyDocument, Requirement,
-        RequirementDocument, TraceReference,
-    },
+    model::{Feature, Requirement, TraceReference},
     workspace::{Workspace, load_workspace},
 };
 
@@ -45,7 +41,6 @@ struct JsonLogOutput {
     id: String,
     entity_kind: &'static str,
     title: String,
-    status: &'static str,
     repository_root: String,
     kind: &'static str,
     include_related: bool,
@@ -54,8 +49,6 @@ struct JsonLogOutput {
     #[serde(skip_serializing_if = "Option::is_none")]
     path_filter: Option<String>,
     tracked_paths: Vec<TrackedPath>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    lifecycle_events: Vec<HistoryLifecycleEvent>,
     commits: Vec<MatchedCommit>,
 }
 
@@ -88,55 +81,12 @@ struct MatchedCommit {
     reasons: Vec<TrackedPath>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct HistoryLifecycleEvent {
-    event: &'static str,
-    sha: String,
-    short_sha: String,
-    summary: String,
-    author: String,
-    authored_at: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    path: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    note: Option<String>,
-}
-
 #[derive(Debug, Clone)]
 struct HistoryTarget {
     id: String,
     entity_kind: &'static str,
     title: String,
-    status: &'static str,
     tracked_paths: Vec<TrackedPath>,
-}
-
-#[derive(Debug, Clone)]
-struct HistoryView {
-    target: HistoryTarget,
-    lifecycle_events: Vec<HistoryLifecycleEvent>,
-}
-
-struct HistoryTargetRequest<'a> {
-    lookup: WorkspaceLookup<'a>,
-    historical_ids: HistoricalIdIndex,
-    workspace: &'a Workspace,
-    repository_root: &'a Path,
-    workspace_root: &'a Path,
-    id: &'a str,
-    kind: HistoryKind,
-    path_filter: Option<&'a Path>,
-}
-
-struct HistoryRenderRequest<'a> {
-    target: &'a HistoryTarget,
-    repository_root: &'a Path,
-    kind: HistoryKind,
-    include_related: bool,
-    scope: Option<&'a HistoryScope>,
-    path_filter: Option<&'a Path>,
-    lifecycle_events: &'a [HistoryLifecycleEvent],
-    commits: &'a [MatchedCommit],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
