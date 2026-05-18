@@ -1030,6 +1030,28 @@ fn load_request_artifact(path: &PathBuf) -> Result<RequestArtifact> {
     Ok(artifact)
 }
 
+fn load_goal_plan_artifact(path: &PathBuf) -> Result<GoalPlanArtifact> {
+    let raw = fs::read_to_string(path)
+        .with_context(|| format!("failed to read goal plan artifact `{}`", path.display()))?;
+    let artifact: GoalPlanArtifact = serde_yaml::from_str(&raw)
+        .with_context(|| format!("failed to parse goal plan artifact `{}`", path.display()))?;
+    if artifact.version != GOAL_PLAN_VERSION {
+        bail!(
+            "unsupported goal plan artifact version `{}` in `{}`",
+            artifact.version,
+            path.display()
+        );
+    }
+    if artifact.kind != "syu.goal_plan" {
+        bail!(
+            "unsupported goal plan artifact kind `{}` in `{}`",
+            artifact.kind,
+            path.display()
+        );
+    }
+    Ok(artifact)
+}
+
 fn classify_request(
     workspace: &crate::workspace::Workspace,
     artifact: &RequestArtifact,
