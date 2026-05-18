@@ -1512,13 +1512,7 @@ fn normalize_trace_references(
 
         let mut seen = HashSet::new();
         references.retain(|reference| {
-            let key = (
-                reference.file.clone(),
-                reference.symbols.clone(),
-                reference.doc_contains.clone(),
-                reference.method.clone(),
-                reference.path.clone(),
-            );
+            let key = trace_reference_duplicate_key(reference);
 
             if seen.insert(key) {
                 true
@@ -4081,7 +4075,7 @@ mod tests {
     use super::{
         AutofixChangeRequest, AutofixMode, AutofixRun, DeliveryStatus,
         load_feature_documents_for_autofix, normalize_delivery_status, normalize_trace_reference,
-        trace_reference_dedup_key, write_or_plan_autofix_change,
+        normalize_trace_references, trace_reference_dedup_key, write_or_plan_autofix_change,
     };
 
     use super::{
@@ -5084,6 +5078,33 @@ mod tests {
         assert_eq!(normalized.file, PathBuf::from("src/lib.rs"));
         assert_eq!(normalized.symbols, vec!["trace_symbol".to_string()]);
         assert_eq!(normalized.doc_contains, vec!["REQ-1".to_string()]);
+    }
+
+    #[test]
+    fn normalize_trace_references_deduplicates_after_canonicalizing_paths() {
+        let mut references_by_language = BTreeMap::from([(
+            "rust".to_string(),
+            vec![
+                TraceReference {
+                    file: PathBuf::from("src/lib.rs"),
+                    symbols: vec!["trace_symbol".to_string()],
+                    doc_contains: vec!["REQ-1".to_string()],
+                    method: None,
+                    path: None,
+                },
+                TraceReference {
+                    file: PathBuf::from("./src/lib.rs"),
+                    symbols: vec!["trace_symbol".to_string()],
+                    doc_contains: vec!["REQ-1".to_string()],
+                    method: None,
+                    path: None,
+                },
+            ],
+        )]);
+
+        assert!(normalize_trace_references(&mut references_by_language));
+        assert_eq!(references_by_language["rust"].len(), 1);
+        assert_eq!(references_by_language["rust"][0].file, PathBuf::from("src/lib.rs"));
     }
 
     #[test]
