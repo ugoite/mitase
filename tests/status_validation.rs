@@ -87,6 +87,33 @@ fn write_workspace(
 
 #[test]
 // REQ-CORE-001
+fn validate_ignores_temporary_goal_plan_files_outside_spec_root() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    write_workspace(tempdir.path(), true, "planned", "planned", false, false);
+    fs::create_dir_all(tempdir.path().join(".syu/tasks")).expect("goal plan dir");
+    fs::write(
+        tempdir.path().join(".syu/tasks/plan.yaml"),
+        "version: 1\nkind: syu.goal_plan\nsource:\n  mode: request_driven\n  request_artifact: .syu/tasks/request.yaml\n  range: null\n  confidence: high\ngoal:\n  id: GOAL-001\n  title: Temporary goal plan\n  statement: Keep goal plans outside spec.root.\n  non_goals: []\nspec_mapping:\n  persistent_items: {}\n  spec_updates:\n    required: false\n    expected_updates: []\nimplementation_plan:\n  scope:\n    include: []\n    exclude: []\n  steps: []\ntest_plan:\n  selection_mode: minimal\n  required_tests: {}\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include: []\n  exclude: []\ncompletion:\n  must_pass: []\n",
+    )
+    .expect("goal plan");
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(tempdir.path())
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        output.status.success(),
+        "goal plan files outside spec.root should not affect validation\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+// REQ-CORE-001
 fn validate_accepts_planned_entries_without_traces() {
     let tempdir = tempdir().expect("tempdir should exist");
     write_workspace(tempdir.path(), true, "planned", "planned", false, false);

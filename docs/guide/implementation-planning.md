@@ -7,6 +7,11 @@ the implementation starts. If you already know the exact IDs and files, jump to
 [reviewer workflow](./reviewer-workflow.md). If you only have a request note,
 start with [request artifact format](./request-artifact-format.md).
 
+For request-driven delivery work, the planning artifact is a temporary Goal
+Plan. It is intentionally separate from the persistent `philosophy` / `policy`
+/ `requirement` / `feature` model and can live in a workspace-local task file,
+an issue body, a PR body, or a CI artifact.
+
 ## When to use it
 
 - A request has enough detail to turn into planned requirements or features.
@@ -85,6 +90,12 @@ syu task classify request.yaml
 syu task scope request.yaml
 syu task scaffold request.yaml
 ```
+
+The resulting Goal Plan should stay outside `spec.root` unless you explicitly
+choose to materialize it somewhere else for delivery tooling. By default,
+`syu validate .` only loads the persistent spec tree under the configured
+`spec.root`, so temporary planning files such as `.syu/tasks/*.yaml` do not
+become part of the long-lived graph.
 
 Keep the planned items small. If one request is trying to introduce multiple
 behaviors, split the request before you split the implementation.

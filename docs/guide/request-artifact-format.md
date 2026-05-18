@@ -49,8 +49,13 @@ context:
 
 The artifact is intentionally smaller than the spec itself. Once the request is
 understood, move the real work into planned requirements and features with the
-normal spec workflow. `syu task classify` can read the artifact and the current
-graph first, `syu task scope request.yaml` can map the request onto nearby
-requirements, policies, philosophies, and features, and `syu task scaffold
-request.yaml` can preview the planned requirement and feature updates that
-follow from that decision.
+normal spec workflow. `syu task classify request.yaml` can read the artifact
+and the current graph first, `syu task scope request.yaml` can map the request
+onto nearby requirements, policies, philosophies, and features, and `syu task
+scaffold request.yaml` can preview the planned requirement and feature updates
+that follow from that decision.
+
+For request-driven delivery, the planning record is a temporary Goal Plan, not
+a fifth persistent spec layer. It may live in `.syu/tasks/*.yaml`, a GitHub
+issue body, a GitHub PR body, or a CI artifact. It does not need to sit under
+`spec.root`, and `syu validate .` should continue to ignore it by default.
