@@ -1958,6 +1958,23 @@ mod tests {
     }
 
     #[test]
+    fn goal_plan_artifact_defaults_to_request_driven_source_when_omitted() {
+        let tempdir = tempdir().expect("tempdir");
+        let path = tempdir.path().join("goal-plan.yaml");
+        fs::write(
+            &path,
+            "version: 1\nkind: syu.goal_plan\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\nimplementation_plan:\n  scope:\n    include: []\n    exclude: []\n  steps: []\ntest_plan:\n  selection_mode: minimal\n  required_tests: {}\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\ncompletion:\n  must_pass: []\n",
+        )
+        .expect("goal plan");
+
+        let artifact = load_goal_plan_artifact(&path).expect("goal plan should load");
+        assert_eq!(artifact.source.mode, GoalPlanSourceMode::RequestDriven);
+        assert!(artifact.source.request_artifact.is_none());
+        assert!(artifact.source.range.is_none());
+        assert!(artifact.source.confidence.is_none());
+    }
+
+    #[test]
     fn goal_plan_artifact_requires_the_goal_plan_marker() {
         let tempdir = tempdir().expect("tempdir");
         let path = tempdir.path().join("goal-plan.yaml");
