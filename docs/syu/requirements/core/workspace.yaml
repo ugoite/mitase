@@ -620,3 +620,51 @@ requirements:
         - file: docs/guide/implementation-planning.md
           symbols:
             - syu task scaffold
+  - id: REQ-CORE-030
+    title: Generate temporary Goal Plans from request artifacts
+    description: |
+      The CLI MUST provide a `task plan` command that reads a captured request
+      artifact, classifies and scopes it against the current spec graph, and
+      emits a temporary Goal Plan artifact that stays outside the persistent
+      spec tree. The command MUST surface goal, non-goal, spec-mapping,
+      implementation-scope, test-scope, coverage, and completion sections, MUST
+      support text, YAML, and JSON output, SHOULD warn when the output path
+      appears to live under `spec.root`, and SHOULD keep the plan useful even
+      when only a low-confidence implementation scope can be inferred.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-001
+      - POL-002
+      - POL-004
+    linked_features:
+      - FEAT-TASK-003
+    tests:
+      rust:
+        - file: src/command/task.rs
+          symbols:
+            - "*"
+        - file: src/lib.rs
+          symbols:
+            - dispatch
+            - run_dispatch
+            - dispatches_task_subcommands_without_rewriting_them
+        - file: src/cli.rs
+          symbols:
+            - TaskArgs
+            - TaskPlanArgs
+        - file: tests/task_command.rs
+          symbols:
+            - task_plan_prints_yaml_output_and_writes_plan_file
+            - task_plan_prints_json_output_for_explicit_ids
+            - task_plan_warns_when_output_is_inside_spec_root
+        - file: tests/help_command.rs
+          symbols:
+            - task_plan_help_mentions_goal_plans_and_output_path
+      markdown:
+        - file: docs/guide/request-artifact-format.md
+          symbols:
+            - syu task plan
+        - file: docs/guide/implementation-planning.md
+          symbols:
+            - syu task plan

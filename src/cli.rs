@@ -16,7 +16,9 @@
 // FEAT-REPORT-001
 // FEAT-INIT-002
 // FEAT-DOCTOR-001
+// FEAT-TASK-003
 // REQ-CORE-001
+// REQ-CORE-030
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, builder::BoolishValueParser};
 use clap_complete::Shell;
@@ -35,7 +37,8 @@ New here?
   5. syu browse .    explore the spec in your terminal
   6. syu app .       start the local browser UI server
   7. syu task classify request.yaml  classify a request artifact against the current spec graph
-  8. syu task scaffold request.yaml   preview planned requirement and feature updates from a request artifact";
+  8. syu task scaffold request.yaml   preview planned requirement and feature updates from a request artifact
+  9. syu task plan request.yaml       generate a temporary Goal Plan from a request artifact";
 
 const APP_AFTER_HELP: &str = concat!(
     "After startup, open the printed URL in your browser.\n",
@@ -86,12 +89,26 @@ Examples:
 
 Use this when a request has already been captured as a request artifact and you want the current spec graph to decide whether the next requirement-level move is to create, change, or delete.";
 
+const TASK_AFTER_HELP: &str = "\
+Examples:
+  syu task classify request.yaml
+  syu task scaffold request.yaml
+  syu task plan request.yaml --output .syu/tasks/current.yaml";
+
 const TASK_SCAFFOLD_AFTER_HELP: &str = "\
 Examples:
   syu task scaffold request.yaml
   syu task scaffold request.yaml --format json
 
 Use this after `syu task classify` when you want reviewable planned requirement and feature updates that stay aligned with the existing `syu add` document and registry conventions.";
+
+const TASK_PLAN_AFTER_HELP: &str = "\
+Examples:
+  syu task plan request.yaml
+  syu task plan request.yaml --output .syu/tasks/current.yaml
+  syu task plan request.yaml --format json
+
+Use this when a scoped request is ready to become a temporary Goal Plan that stays outside the persistent spec tree while still mapping the request to existing philosophy, policy, requirement, and feature items.";
 
 const WORKSPACE_HELP: &str = "Workspace root or any child directory; syu walks upward to find syu.yaml and the configured spec tree";
 
@@ -290,8 +307,8 @@ pub enum Commands {
     )]
     Completion(CompletionArgs),
     #[command(
-        about = "Classify or scaffold request-driven task planning work",
-        after_help = TASK_CLASSIFY_AFTER_HELP
+        about = "Classify, scaffold, or plan request-driven task planning work",
+        after_help = TASK_AFTER_HELP
     )]
     Task(TaskArgs),
     #[command(
@@ -779,6 +796,11 @@ pub enum TaskCommands {
         after_help = TASK_SCAFFOLD_AFTER_HELP
     )]
     Scaffold(TaskScaffoldArgs),
+    #[command(
+        about = "Generate a temporary Goal Plan from a request artifact",
+        after_help = TASK_PLAN_AFTER_HELP
+    )]
+    Plan(TaskPlanArgs),
 }
 
 #[derive(Debug, Clone, Args)]
@@ -807,6 +829,24 @@ pub struct TaskScaffoldArgs {
     #[arg(help = "Output format for the scaffold preview")]
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
     pub format: OutputFormat,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct TaskPlanArgs {
+    #[arg(help = "YAML request artifact to turn into a Goal Plan")]
+    pub request: PathBuf,
+
+    #[arg(help = WORKSPACE_HELP)]
+    #[arg(default_value = ".")]
+    pub workspace: PathBuf,
+
+    #[arg(help = "Write the Goal Plan artifact to a file instead of stdout")]
+    #[arg(short, long)]
+    pub output: Option<PathBuf>,
+
+    #[arg(help = "Output format for the Goal Plan artifact or summary")]
+    #[arg(long, value_enum, default_value_t = TaskPlanFormat::Text)]
+    pub format: TaskPlanFormat,
 }
 
 #[derive(Debug, Clone, Args)]
@@ -881,6 +921,13 @@ pub enum OutputFormat {
     Json,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum TaskPlanFormat {
+    Text,
+    Yaml,
+    Json,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 pub enum ValidationSeverityFilter {
     Error,
@@ -921,7 +968,7 @@ impl ValidationGenreFilter {
 mod tests {
     use super::{
         Cli, CompletionArgs, LookupKind, StarterTemplate, TaskArgs, TaskClassifyArgs, TaskCommands,
-        TaskScaffoldArgs, ValidationGenreFilter, ValidationSeverityFilter,
+        TaskPlanArgs, TaskScaffoldArgs, ValidationGenreFilter, ValidationSeverityFilter,
     };
     use crate::command::init::{starter_template_example_commands, starter_template_names};
     use clap::Parser;
@@ -1044,6 +1091,37 @@ mod tests {
             })) if request == std::path::Path::new("request.yaml")
                 && workspace == std::path::Path::new(".")
                 && format == super::OutputFormat::Json
+        ));
+    }
+
+    #[test]
+    fn task_plan_args_parse_request_paths_output_and_yaml_format() {
+        let cli = Cli::try_parse_from([
+            "syu",
+            "task",
+            "plan",
+            "request.yaml",
+            ".",
+            "--output",
+            ".syu/tasks/current.yaml",
+            "--format",
+            "yaml",
+        ])
+        .expect("task plan args should parse");
+
+        assert!(matches!(
+            cli.command,
+            Some(super::Commands::Task(TaskArgs {
+                command: TaskCommands::Plan(TaskPlanArgs {
+                    request,
+                    workspace,
+                    output,
+                    format,
+                }),
+            })) if request == std::path::Path::new("request.yaml")
+                && workspace == std::path::Path::new(".")
+                && output.as_deref() == Some(std::path::Path::new(".syu/tasks/current.yaml"))
+                && format == super::TaskPlanFormat::Yaml
         ));
     }
 
