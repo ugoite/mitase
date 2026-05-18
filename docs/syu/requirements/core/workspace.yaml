@@ -706,6 +706,7 @@ requirements:
             - goal_plan_format_is_documented_as_temporary
         - file: tests/help_command.rs
           symbols:
+            - task_scaffold_help_mentions_goal_plans_and_json_output
             - workspace_help_mentions_goal_plan_artifacts
       markdown:
         - file: docs/guide/goal-plan-format.md

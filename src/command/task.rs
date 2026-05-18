@@ -25,6 +25,8 @@ use crate::{
 use super::lookup::{SearchResult, WorkspaceEntity, WorkspaceLookup};
 
 const REQUEST_ARTIFACT_VERSION: u32 = 1;
+#[cfg(test)]
+#[allow(dead_code)]
 const GOAL_PLAN_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -53,6 +55,8 @@ struct RequestArtifact {
     context: RequestArtifactContext,
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
 struct GoalPlanArtifact {
     version: u32,
@@ -68,6 +72,8 @@ struct GoalPlanArtifact {
     completion: GoalPlanCompletion,
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
 struct GoalPlanSource {
     mode: GoalPlanSourceMode,
@@ -79,6 +85,8 @@ struct GoalPlanSource {
     confidence: Option<GoalPlanConfidence>,
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 impl Default for GoalPlanSource {
     fn default() -> Self {
         Self {
@@ -90,6 +98,8 @@ impl Default for GoalPlanSource {
     }
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 enum GoalPlanSourceMode {
@@ -100,6 +110,8 @@ enum GoalPlanSourceMode {
     DiffInferred,
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 enum GoalPlanConfidence {
@@ -108,6 +120,8 @@ enum GoalPlanConfidence {
     Low,
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
 struct GoalPlanGoal {
     id: String,
@@ -117,6 +131,8 @@ struct GoalPlanGoal {
     non_goals: Vec<String>,
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Default, Clone)]
 struct GoalPlanSpecMapping {
     #[serde(default)]
@@ -125,6 +141,8 @@ struct GoalPlanSpecMapping {
     spec_updates: GoalPlanSpecUpdates,
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Default, Clone)]
 struct GoalPlanPersistentItems {
     #[serde(default)]
@@ -137,6 +155,8 @@ struct GoalPlanPersistentItems {
     features: Vec<String>,
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Default, Clone)]
 struct GoalPlanSpecUpdates {
     #[serde(default)]
@@ -145,6 +165,8 @@ struct GoalPlanSpecUpdates {
     expected_updates: Vec<String>,
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
 struct GoalPlanImplementationPlan {
     scope: GoalPlanScope,
@@ -152,6 +174,8 @@ struct GoalPlanImplementationPlan {
     steps: Vec<String>,
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Default, Clone)]
 struct GoalPlanScope {
     #[serde(default)]
@@ -160,6 +184,8 @@ struct GoalPlanScope {
     exclude: Vec<String>,
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
 struct GoalPlanTestPlan {
     selection_mode: GoalPlanSelectionMode,
@@ -169,6 +195,8 @@ struct GoalPlanTestPlan {
     suggested_tests: BTreeMap<String, Vec<String>>,
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 enum GoalPlanSelectionMode {
@@ -181,6 +209,8 @@ enum GoalPlanSelectionMode {
     Full,
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
 struct GoalPlanCoverage {
     mode: GoalPlanCoverageMode,
@@ -191,6 +221,8 @@ struct GoalPlanCoverage {
     exclude: Vec<String>,
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 enum GoalPlanCoverageMode {
@@ -203,6 +235,8 @@ enum GoalPlanCoverageMode {
     Full,
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Default, Clone)]
 struct GoalPlanCompletion {
     #[serde(default)]
@@ -503,6 +537,8 @@ fn load_request_artifact(path: &PathBuf) -> Result<RequestArtifact> {
     Ok(artifact)
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 fn load_goal_plan_artifact(path: &PathBuf) -> Result<GoalPlanArtifact> {
     let raw = fs::read_to_string(path)
         .with_context(|| format!("failed to read goal plan artifact `{}`", path.display()))?;
@@ -1448,9 +1484,10 @@ mod tests {
     };
 
     use super::{
-        ClassificationOutcome, RequirementAction, SearchResult, WorkspaceLookup,
-        build_scaffold_plan, classify_request, collect_feature_candidates, load_request_artifact,
-        run_task_command,
+        ClassificationOutcome, GoalPlanConfidence, GoalPlanCoverageMode, GoalPlanSelectionMode,
+        GoalPlanSourceMode, RequirementAction, SearchResult, WorkspaceLookup, build_scaffold_plan,
+        classify_request, collect_feature_candidates, load_goal_plan_artifact,
+        load_request_artifact, run_task_command,
     };
 
     fn write_request_artifact(path: &Path, request: &str, linked_ids: &[&str]) {

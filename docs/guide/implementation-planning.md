@@ -9,6 +9,9 @@ start with [request artifact format](./request-artifact-format.md). If you need
 a temporary delivery artifact instead of a persistent spec item, use [goal plan
 format](./goal-plan-format.md).
 
+The goal plan format is temporary by design and should not become a fifth
+persistent spec layer.
+
 ## When to use it
 
 - A request has enough detail to turn into planned requirements or features.
