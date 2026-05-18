@@ -1,6 +1,8 @@
 // FEAT-TASK-001
+// FEAT-TASK-003
 // REQ-CORE-028
 // REQ-CORE-029
+// REQ-CORE-030
 
 use std::{
     collections::BTreeMap,
@@ -13,7 +15,10 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    cli::{LookupKind, OutputFormat, TaskArgs, TaskClassifyArgs, TaskCommands, TaskScaffoldArgs},
+    cli::{
+        LookupKind, OutputFormat, TaskArgs, TaskClassifyArgs, TaskCommands, TaskScaffoldArgs,
+        TaskScopeArgs,
+    },
     workspace::load_workspace,
 };
 
@@ -39,7 +44,7 @@ impl RequirementAction {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct RequestArtifact {
     version: u32,
     request: String,
@@ -47,7 +52,7 @@ struct RequestArtifact {
     context: RequestArtifactContext,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Default, Clone)]
 struct RequestArtifactContext {
     #[serde(default)]
     affected_area: Option<String>,
@@ -65,6 +70,20 @@ struct JsonTaskClassifyOutput {
     reasons: Vec<String>,
     explicit_items: Vec<SearchResult>,
     related_items: Vec<SearchResult>,
+    context: JsonRequestArtifactContext,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonTaskScopeOutput {
+    request_path: String,
+    request: String,
+    classification: String,
+    reasons: Vec<String>,
+    signals: JsonScopeSignals,
+    requirements: Vec<SearchResult>,
+    features: Vec<ScopeFeatureCandidate>,
+    policies: Vec<SearchResult>,
+    philosophies: Vec<SearchResult>,
     context: JsonRequestArtifactContext,
 }
 
@@ -96,6 +115,24 @@ struct JsonRequestArtifactContext {
     linked_ids: Vec<String>,
 }
 
+#[derive(Debug, Serialize)]
+struct JsonScopeSignals {
+    policy_discussion: bool,
+    philosophy_discussion: bool,
+    planned_feature_updates: bool,
+}
+
+#[derive(Debug)]
+struct ScopeOutcome {
+    classification: ClassificationOutcome,
+    signals: ScopeSignals,
+    requirements: Vec<SearchResult>,
+    features: Vec<ScopeFeatureCandidate>,
+    policies: Vec<SearchResult>,
+    philosophies: Vec<SearchResult>,
+    notes: Vec<String>,
+}
+
 #[derive(Debug)]
 struct ClassificationOutcome {
     classification: RequirementAction,
@@ -104,6 +141,22 @@ struct ClassificationOutcome {
     related_items: Vec<SearchResult>,
     request: String,
     context: RequestArtifactContext,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ScopeSignals {
+    policy_discussion: bool,
+    philosophy_discussion: bool,
+    planned_feature_updates: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ScopeFeatureCandidate {
+    id: String,
+    title: String,
+    status: String,
+    linked_requirements: Vec<String>,
+    planned_state_update: bool,
 }
 
 #[derive(Debug)]
@@ -157,6 +210,7 @@ impl ScaffoldAction {
 pub fn run_task_command(args: &TaskArgs) -> Result<i32> {
     match &args.command {
         TaskCommands::Classify(classify) => run_task_classify_command(classify),
+        TaskCommands::Scope(scope) => run_task_scope_command(scope),
         TaskCommands::Scaffold(scaffold) => run_task_scaffold_command(scaffold),
     }
 }
@@ -164,7 +218,7 @@ pub fn run_task_command(args: &TaskArgs) -> Result<i32> {
 pub fn run_task_classify_command(args: &TaskClassifyArgs) -> Result<i32> {
     let workspace = load_workspace(&args.workspace)?;
     let request_artifact = load_request_artifact(&args.request)?;
-    let outcome = classify_request(&workspace, request_artifact)?;
+    let outcome = classify_request(&workspace, &request_artifact)?;
 
     match args.format {
         OutputFormat::Text => print_classify_text_output(&args.request, &outcome),
@@ -190,11 +244,58 @@ pub fn run_task_classify_command(args: &TaskClassifyArgs) -> Result<i32> {
     Ok(0)
 }
 
+pub fn run_task_scope_command(args: &TaskScopeArgs) -> Result<i32> {
+    let workspace = load_workspace(&args.workspace)?;
+    let request_artifact = load_request_artifact(&args.request)?;
+    let outcome = scope_request(&workspace, &request_artifact)?;
+
+    match args.format {
+        OutputFormat::Text => print_scope_text_output(&args.request, &outcome),
+        OutputFormat::Json => {
+            let ScopeOutcome {
+                classification,
+                signals,
+                requirements,
+                features,
+                policies,
+                philosophies,
+                notes: _,
+            } = outcome;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&JsonTaskScopeOutput {
+                    request_path: args.request.display().to_string(),
+                    request: classification.request,
+                    classification: classification.classification.label().to_string(),
+                    reasons: classification.reasons,
+                    signals: JsonScopeSignals {
+                        policy_discussion: signals.policy_discussion,
+                        philosophy_discussion: signals.philosophy_discussion,
+                        planned_feature_updates: signals.planned_feature_updates,
+                    },
+                    requirements,
+                    features,
+                    policies,
+                    philosophies,
+                    context: JsonRequestArtifactContext {
+                        affected_area: classification.context.affected_area,
+                        repository_constraints: classification.context.repository_constraints,
+                        linked_ids: classification.context.linked_ids,
+                    },
+                })
+                .expect("serializing task scope output to JSON should succeed")
+            )
+        }
+    }
+
+    Ok(0)
+}
+
 pub fn run_task_scaffold_command(args: &TaskScaffoldArgs) -> Result<i32> {
     let workspace = load_workspace(&args.workspace)?;
     let request_artifact = load_request_artifact(&args.request)?;
     let explicit_ids = request_artifact.explicit_ids();
-    let outcome = classify_request(&workspace, request_artifact)?;
+    let outcome = classify_request(&workspace, &request_artifact)?;
     let plan = build_scaffold_plan(&workspace, &outcome, &explicit_ids)?;
 
     match args.format {
@@ -247,7 +348,7 @@ fn load_request_artifact(path: &PathBuf) -> Result<RequestArtifact> {
 
 fn classify_request(
     workspace: &crate::workspace::Workspace,
-    artifact: RequestArtifact,
+    artifact: &RequestArtifact,
 ) -> Result<ClassificationOutcome> {
     let lookup = WorkspaceLookup::new(workspace);
     let analysis_text = artifact.analysis_text();
@@ -334,8 +435,94 @@ fn classify_request(
         reasons,
         explicit_items,
         related_items,
-        request: artifact.request,
-        context: artifact.context,
+        request: artifact.request.clone(),
+        context: artifact.context.clone(),
+    })
+}
+
+fn scope_request(
+    workspace: &crate::workspace::Workspace,
+    artifact: &RequestArtifact,
+) -> Result<ScopeOutcome> {
+    let classification = classify_request(workspace, artifact)?;
+    let lookup = WorkspaceLookup::new(workspace);
+    let analysis_text = artifact.analysis_text();
+    let lower = analysis_text.to_lowercase();
+    let explicit_ids = artifact.explicit_ids();
+    let explicit_items = collect_explicit_items(&lookup, &explicit_ids);
+    let search_results = lookup.search(&analysis_text, None);
+
+    let requirements = collect_scoped_results(&explicit_items, &search_results, "requirement", 5);
+    let policies = collect_scoped_results(&explicit_items, &search_results, "policy", 5);
+    let philosophies = collect_scoped_results(&explicit_items, &search_results, "philosophy", 5);
+    let features = collect_feature_candidates(
+        &lookup,
+        &explicit_items,
+        &search_results,
+        classification.classification,
+        5,
+    );
+
+    let policy_keyword_hits = count_keyword_hits(&lower, POLICY_DISCUSSION_KEYWORDS);
+    let philosophy_keyword_hits = count_keyword_hits(&lower, PHILOSOPHY_DISCUSSION_KEYWORDS);
+    let policy_discussion = !policies.is_empty() || policy_keyword_hits > 0;
+    let philosophy_discussion = !philosophies.is_empty() || philosophy_keyword_hits > 0;
+    let planned_feature_updates = features.iter().any(|feature| feature.planned_state_update);
+
+    let mut notes = Vec::new();
+    if policy_discussion {
+        if !policies.is_empty() {
+            notes.push(format!(
+                "request reaches policy context through {}",
+                policies
+                    .iter()
+                    .map(|item| item.id.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        } else {
+            notes.push(format!(
+                "request uses policy-oriented language: {}",
+                describe_keyword_hits(&lower, POLICY_DISCUSSION_KEYWORDS)
+            ));
+        }
+    }
+    if philosophy_discussion {
+        if !philosophies.is_empty() {
+            notes.push(format!(
+                "request reaches philosophy context through {}",
+                philosophies
+                    .iter()
+                    .map(|item| item.id.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        } else {
+            notes.push(format!(
+                "request uses philosophy-oriented language: {}",
+                describe_keyword_hits(&lower, PHILOSOPHY_DISCUSSION_KEYWORDS)
+            ));
+        }
+    }
+    if planned_feature_updates {
+        notes.push(
+            "feature candidates include existing items that may need planned-state updates before implementation"
+                .to_string(),
+        );
+    }
+
+    Ok(ScopeOutcome {
+        classification,
+        signals: ScopeSignals {
+            policy_discussion,
+            philosophy_discussion,
+            planned_feature_updates,
+        },
+        requirements,
+        features,
+        policies,
+        philosophies,
+        notes,
     })
 }
 
@@ -481,6 +668,55 @@ fn collect_related_items(lookup: &WorkspaceLookup<'_>, request: &str) -> Vec<Sea
     items.into_values().collect()
 }
 
+fn collect_scoped_results(
+    explicit_items: &[SearchResult],
+    search_results: &[SearchResult],
+    kind: &'static str,
+    limit: usize,
+) -> Vec<SearchResult> {
+    let mut items = BTreeMap::<String, SearchResult>::new();
+    for result in explicit_items
+        .iter()
+        .chain(search_results.iter())
+        .filter(|item| item.kind == kind)
+    {
+        items.insert(result.id.clone(), result.clone());
+    }
+    items.into_values().take(limit).collect()
+}
+
+fn collect_feature_candidates(
+    lookup: &WorkspaceLookup<'_>,
+    explicit_items: &[SearchResult],
+    search_results: &[SearchResult],
+    classification: RequirementAction,
+    limit: usize,
+) -> Vec<ScopeFeatureCandidate> {
+    let mut items = BTreeMap::<String, ScopeFeatureCandidate>::new();
+    for result in explicit_items
+        .iter()
+        .chain(search_results.iter())
+        .filter(|item| item.kind == "feature")
+    {
+        if let Some(feature) = lookup.feature(&result.id) {
+            items.insert(
+                feature.id.clone(),
+                ScopeFeatureCandidate {
+                    id: feature.id.clone(),
+                    title: feature.title.clone(),
+                    status: feature.status.clone(),
+                    linked_requirements: feature.linked_requirements.clone(),
+                    planned_state_update: matches!(
+                        classification,
+                        RequirementAction::Create | RequirementAction::Change
+                    ) && !feature.status.eq_ignore_ascii_case("planned"),
+                },
+            );
+        }
+    }
+    items.into_values().take(limit).collect()
+}
+
 fn merge_related_items(related_items: &mut Vec<SearchResult>, additional_items: Vec<SearchResult>) {
     let mut merged = BTreeMap::<String, SearchResult>::new();
     for item in related_items.drain(..) {
@@ -532,6 +768,46 @@ fn print_classify_text_output(request_path: &Path, outcome: &ClassificationOutco
     }
 }
 
+fn print_scope_text_output(request_path: &Path, outcome: &ScopeOutcome) {
+    println!("request: {}", request_path.display());
+    println!(
+        "classification: {}",
+        outcome.classification.classification.label()
+    );
+    println!();
+    println!("request text:");
+    println!("{}", outcome.classification.request.trim());
+    println!();
+    print_items("candidate requirements", &outcome.requirements);
+    print_feature_candidates("candidate features", &outcome.features);
+    print_items("candidate policies", &outcome.policies);
+    print_items("candidate philosophies", &outcome.philosophies);
+    println!("scope signals:");
+    println!(
+        "- policy discussion likely: {}",
+        bool_label(outcome.signals.policy_discussion)
+    );
+    println!(
+        "- philosophy discussion likely: {}",
+        bool_label(outcome.signals.philosophy_discussion)
+    );
+    println!(
+        "- candidate feature planned-state updates: {}",
+        bool_label(outcome.signals.planned_feature_updates)
+    );
+    println!("reasons:");
+    for reason in &outcome.classification.reasons {
+        println!("- {reason}");
+    }
+    if !outcome.notes.is_empty() {
+        println!();
+        println!("scope notes:");
+        for note in &outcome.notes {
+            println!("- {note}");
+        }
+    }
+}
+
 fn print_scaffold_text_output(
     request_path: &Path,
     outcome: &ClassificationOutcome,
@@ -578,6 +854,38 @@ fn print_items(heading: &str, items: &[SearchResult]) {
     for item in items {
         println!("- {}\t{}\t{}", item.id, item.kind, item.title);
     }
+}
+
+fn print_feature_candidates(heading: &str, items: &[ScopeFeatureCandidate]) {
+    println!("{heading}:");
+    if items.is_empty() {
+        println!("- none");
+        return;
+    }
+
+    for item in items {
+        println!(
+            "- {}\t{}\t{}{}",
+            item.id,
+            item.status,
+            item.title,
+            if item.planned_state_update {
+                " [planned-state update suggested]"
+            } else {
+                ""
+            }
+        );
+        if !item.linked_requirements.is_empty() {
+            println!(
+                "  linked requirements: {}",
+                item.linked_requirements.join(", ")
+            );
+        }
+    }
+}
+
+fn bool_label(value: bool) -> &'static str {
+    if value { "yes" } else { "no" }
 }
 
 fn render_requirement_document(
@@ -894,6 +1202,33 @@ const CREATE_KEYWORDS: &[&str] = &[
     "build",
 ];
 
+const POLICY_DISCUSSION_KEYWORDS: &[&str] = &[
+    "policy",
+    "policies",
+    "standard",
+    "governance",
+    "approval",
+    "compliance",
+    "rule",
+    "guideline",
+    "process",
+    "constraint",
+];
+
+const PHILOSOPHY_DISCUSSION_KEYWORDS: &[&str] = &[
+    "philosophy",
+    "principle",
+    "principles",
+    "guideline",
+    "guidelines",
+    "values",
+    "approach",
+    "direction",
+    "ethos",
+    "design principle",
+    "coding guideline",
+];
+
 fn count_keyword_hits(text: &str, keywords: &[&str]) -> usize {
     keywords
         .iter()
@@ -929,11 +1264,14 @@ mod tests {
 
     use tempfile::tempdir;
 
-    use crate::cli::{OutputFormat, TaskArgs, TaskClassifyArgs, TaskCommands, TaskScaffoldArgs};
+    use crate::cli::{
+        OutputFormat, TaskArgs, TaskClassifyArgs, TaskCommands, TaskScaffoldArgs, TaskScopeArgs,
+    };
 
     use super::{
-        ClassificationOutcome, RequirementAction, build_scaffold_plan, classify_request,
-        load_request_artifact, run_task_command,
+        ClassificationOutcome, RequirementAction, SearchResult, WorkspaceLookup,
+        build_scaffold_plan, classify_request, collect_feature_candidates, load_request_artifact,
+        run_task_command,
     };
 
     fn write_request_artifact(path: &Path, request: &str, linked_ids: &[&str]) {
@@ -987,13 +1325,18 @@ mod tests {
         )
         .expect("scaffold requirement doc");
         fs::write(
+            root.join("docs/syu/requirements/core/scope.yaml"),
+            "category: Core Workspace\nprefix: REQ-CORE\nrequirements:\n  - id: REQ-CORE-030\n    title: Scope requests against requirements, policies, philosophies, and features\n    description: The task scope command should map a request artifact onto nearby spec items before planning starts.\n    priority: medium\n    status: planned\n    linked_policies:\n      - POL-001\n    linked_features:\n      - FEAT-TASK-003\n    tests: {}\n",
+        )
+        .expect("scope requirement doc");
+        fs::write(
             root.join("docs/syu/features/features.yaml"),
-            "version: 1\nupdated: \"2026-05\"\nfiles:\n  - kind: task\n    file: core/task.yaml\n",
+            "version: 1\nupdated: \"2026-05\"\nfiles:\n  - kind: task\n    file: core/task.yaml\n  - kind: task\n    file: core/scaffold.yaml\n  - kind: task\n    file: core/scope.yaml\n",
         )
         .expect("feature registry");
         fs::write(
             root.join("docs/syu/features/core/task.yaml"),
-            "category: Task Planning CLI\nversion: 1\nfeatures:\n  - id: FEAT-TASK-001\n    title: Request artifact classification\n    summary: Classify planned request artifacts into create, change, or delete decisions using the current spec graph and a brief explanation.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-028\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_classify_command\n        - file: src/cli.rs\n          symbols:\n            - TaskArgs\n            - TaskClassifyArgs\n",
+            "category: Task Planning CLI\nversion: 1\nfeatures:\n  - id: FEAT-TASK-001\n    title: Request artifact classification\n    summary: Classify planned request artifacts into create, change, or delete decisions using the current spec graph and a brief explanation.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-028\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_classify_command\n        - file: src/cli.rs\n          symbols:\n            - TaskArgs\n            - TaskClassifyArgs\n  - id: FEAT-TASK-003\n    title: Request artifact scoping\n    summary: Map request artifacts onto candidate requirements, policies, philosophies, and features before planning begins.\n    status: planned\n    linked_requirements:\n      - REQ-CORE-030\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_scope_command\n        - file: src/cli.rs\n          symbols:\n            - TaskArgs\n            - TaskScopeArgs\n",
         )
         .expect("feature doc");
         fs::write(
@@ -1001,6 +1344,11 @@ mod tests {
             "category: Core Workspace\nversion: 1\nfeatures:\n  - id: FEAT-TASK-002\n    title: Planned task scaffold preview\n    summary: Preview reviewable planned requirement and feature updates that follow the existing add and registry conventions.\n    status: planned\n    linked_requirements:\n      - REQ-CORE-029\n    implementations: {}\n",
         )
         .expect("scaffold feature doc");
+        fs::write(
+            root.join("docs/syu/features/core/scope.yaml"),
+            "category: Core Workspace\nversion: 1\nfeatures:\n  - id: FEAT-TASK-003\n    title: Request artifact scoping\n    summary: Map request artifacts onto candidate requirements, policies, philosophies, and features before planning begins.\n    status: planned\n    linked_requirements:\n      - REQ-CORE-030\n    implementations: {}\n",
+        )
+        .expect("scope feature doc");
     }
 
     #[test]
@@ -1034,7 +1382,7 @@ mod tests {
 
         let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
         let artifact = load_request_artifact(&request).expect("request");
-        let outcome = classify_request(&workspace, artifact).expect("classification");
+        let outcome = classify_request(&workspace, &artifact).expect("classification");
         assert_eq!(outcome.classification, RequirementAction::Change);
         assert!(
             outcome
@@ -1057,7 +1405,7 @@ mod tests {
 
         let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
         let artifact = load_request_artifact(&request).expect("request");
-        let outcome = classify_request(&workspace, artifact).expect("classification");
+        let outcome = classify_request(&workspace, &artifact).expect("classification");
         assert_eq!(outcome.classification, RequirementAction::Create);
         assert!(
             outcome
@@ -1081,7 +1429,7 @@ mod tests {
         let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
         let artifact = load_request_artifact(&request).expect("request");
         let explicit_ids = artifact.explicit_ids();
-        let outcome = classify_request(&workspace, artifact).expect("classification");
+        let outcome = classify_request(&workspace, &artifact).expect("classification");
         let plan = build_scaffold_plan(&workspace, &outcome, &explicit_ids)
             .expect("scaffold plan should be created");
 
@@ -1117,7 +1465,7 @@ mod tests {
         let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
         let artifact = load_request_artifact(&request).expect("request");
         let explicit_ids = artifact.explicit_ids();
-        let outcome = classify_request(&workspace, artifact).expect("classification");
+        let outcome = classify_request(&workspace, &artifact).expect("classification");
         let plan = build_scaffold_plan(&workspace, &outcome, &explicit_ids)
             .expect("scaffold plan should be created");
 
@@ -1152,7 +1500,7 @@ mod tests {
         let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
         let artifact = load_request_artifact(&request).expect("request");
         let explicit_ids = artifact.explicit_ids();
-        let outcome = classify_request(&workspace, artifact).expect("classification");
+        let outcome = classify_request(&workspace, &artifact).expect("classification");
         let error = build_scaffold_plan(&workspace, &outcome, &explicit_ids)
             .expect_err("delete scaffolds should be rejected");
         assert!(
@@ -1160,6 +1508,31 @@ mod tests {
                 .to_string()
                 .contains("only supports request artifacts")
         );
+    }
+
+    #[test]
+    fn collect_feature_candidates_skips_missing_workspace_features() {
+        let tempdir = tempdir().expect("tempdir");
+        let workspace = crate::workspace::Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("docs/syu"),
+            config: crate::config::SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+        let lookup = WorkspaceLookup::new(&workspace);
+        let explicit_items = vec![SearchResult {
+            id: "FEAT-MISSING-001".to_string(),
+            kind: "feature",
+            title: "Missing feature".to_string(),
+        }];
+
+        let candidates =
+            collect_feature_candidates(&lookup, &explicit_items, &[], RequirementAction::Create, 5);
+
+        assert!(candidates.is_empty());
     }
 
     #[test]
@@ -1227,7 +1600,7 @@ mod tests {
         );
         assert_eq!(
             super::next_available_scaffold_id(&lookup, crate::cli::LookupKind::Feature, "task"),
-            "FEAT-TASK-002"
+            "FEAT-TASK-004"
         );
         assert_eq!(
             super::next_available_scaffold_id(
@@ -1307,8 +1680,13 @@ mod tests {
     }
 
     #[test]
-    fn run_task_command_dispatches_classify_and_scaffold() {
+    fn run_task_command_dispatches_classify_scope_and_scaffold() {
         let _ = TaskCommands::Classify(TaskClassifyArgs {
+            request: PathBuf::from("request.yaml"),
+            workspace: PathBuf::from("."),
+            format: OutputFormat::Text,
+        });
+        let _ = TaskCommands::Scope(TaskScopeArgs {
             request: PathBuf::from("request.yaml"),
             workspace: PathBuf::from("."),
             format: OutputFormat::Text,
