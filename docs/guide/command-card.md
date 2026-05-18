@@ -30,7 +30,7 @@ If a pull request already exists, pair this page with the
 | Jump from code to the owning spec | `syu trace src/command/check.rs --symbol run_check_command` | start in code and resolve the traced requirement and feature chain |
 | List items by layer | `syu list feature` | print list-shaped output instead of the browser-style explorer |
 | Search by keyword or ID | `syu search validation --kind feature` | find the right spec item before `show`, `relate`, or `log` |
-| Review traced history | `syu log FEAT-CHECK-001 --kind implementation --path src/command` | inspect recent git history for the currently traced surface, or fall back to the historical index when an ID was deleted |
+| Review traced history | `syu log FEAT-CHECK-001 --kind implementation --path src/command` | inspect recent git history for the currently traced surface |
 | Browse in the terminal | `syu browse .` | explore the graph interactively without leaving the shell |
 | Browse in the browser | `syu app .` | use the local browser UI for visual navigation, tabs, and validation context |
 | Start the editor protocol server | `syu lsp` | connect an editor client over stdio when you want the current hover-only LSP surface |

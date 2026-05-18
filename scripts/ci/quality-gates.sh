@@ -16,8 +16,7 @@ run_quality_gates() {
 
   case "$mode" in
     fast)
-      # Keep the fast lane short; the history-heavy log unit tests run in coverage.
-      cargo test --lib --bins -- --skip command::log::tests::
+      cargo test --lib --bins
       ;;
     full)
       cargo test

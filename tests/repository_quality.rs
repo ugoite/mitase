@@ -87,7 +87,7 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(quality_script.contains("full"));
     assert!(quality_script.contains("cargo fmt --all --check"));
     assert!(quality_script.contains("cargo clippy --all-targets --all-features -- -D warnings"));
-    assert!(quality_script.contains("cargo test --lib --bins -- --skip command::log::tests::"));
+    assert!(quality_script.contains("cargo test --lib --bins"));
     assert!(quality_script.contains("cargo test"));
     assert!(quality_script.contains("cargo run -- validate ."));
     assert!(quality_script.contains("check-generated-docs-freshness.sh"));
