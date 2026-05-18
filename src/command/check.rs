@@ -5104,7 +5104,10 @@ mod tests {
 
         assert!(normalize_trace_references(&mut references_by_language));
         assert_eq!(references_by_language["rust"].len(), 1);
-        assert_eq!(references_by_language["rust"][0].file, PathBuf::from("src/lib.rs"));
+        assert_eq!(
+            references_by_language["rust"][0].file,
+            PathBuf::from("src/lib.rs")
+        );
     }
 
     #[test]
