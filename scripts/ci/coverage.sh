@@ -198,7 +198,9 @@ for path, line_numbers in diff_lines.items():
         continue
     covered_lines = coverage.get(path, {})
     for line_number in sorted(line_numbers):
-        if covered_lines.get(line_number, 0) <= 0:
+        if line_number not in covered_lines:
+            continue
+        if covered_lines[line_number] <= 0:
             misses.append((path, line_number))
 
 if misses:
