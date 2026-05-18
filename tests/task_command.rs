@@ -1,5 +1,6 @@
 // REQ-CORE-028
 // REQ-CORE-029
+// REQ-CORE-030
 
 use std::fs;
 
@@ -38,13 +39,18 @@ fn write_workspace(root: &std::path::Path) {
     )
     .expect("scaffold requirement doc");
     fs::write(
+        root.join("docs/syu/requirements/core/scope.yaml"),
+        "category: Core Workspace\nprefix: REQ-CORE\nrequirements:\n  - id: REQ-CORE-030\n    title: Scope requests against requirements, policies, philosophies, and features\n    description: The task scope command should map a request artifact onto nearby spec items before planning starts.\n    priority: medium\n    status: implemented\n    linked_policies:\n      - POL-001\n    linked_features:\n      - FEAT-TASK-003\n    tests:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - '*'\n",
+    )
+    .expect("scope requirement doc");
+    fs::write(
         root.join("docs/syu/features/features.yaml"),
-        "version: 1\nupdated: \"2026-05\"\nfiles:\n  - kind: task\n    file: core/task.yaml\n  - kind: task\n    file: core/scaffold.yaml\n",
+        "version: 1\nupdated: \"2026-05\"\nfiles:\n  - kind: task\n    file: core/task.yaml\n  - kind: task\n    file: core/scaffold.yaml\n  - kind: task\n    file: core/scope.yaml\n",
     )
     .expect("feature registry");
     fs::write(
         root.join("docs/syu/features/core/task.yaml"),
-        "category: Task Planning CLI\nversion: 1\nfeatures:\n  - id: FEAT-TASK-001\n    title: Request artifact classification\n    summary: Classify captured request artifacts into create, change, or delete decisions using the current spec graph, with a short explanation and text or JSON output.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-028\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_classify_command\n",
+        "category: Task Planning CLI\nversion: 1\nfeatures:\n  - id: FEAT-TASK-001\n    title: Request artifact classification\n    summary: Classify captured request artifacts into create, change, or delete decisions using the current spec graph, with a short explanation and text or JSON output.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-028\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_classify_command\n  - id: FEAT-TASK-003\n    title: Request artifact scoping\n    summary: Map request artifacts onto candidate requirements, policies, philosophies, and features before planning begins.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-030\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_scope_command\n",
     )
     .expect("feature doc");
     fs::write(
@@ -52,6 +58,11 @@ fn write_workspace(root: &std::path::Path) {
         "category: Core Workspace\nversion: 1\nfeatures:\n  - id: FEAT-TASK-002\n    title: Planned task scaffold preview\n    summary: Preview reviewable planned requirement and feature updates that follow the existing add and registry conventions.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-029\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_scaffold_command\n",
     )
     .expect("scaffold feature doc");
+    fs::write(
+        root.join("docs/syu/features/core/scope.yaml"),
+        "category: Core Workspace\nversion: 1\nfeatures:\n  - id: FEAT-TASK-003\n    title: Request artifact scoping\n    summary: Map request artifacts onto candidate requirements, policies, philosophies, and features before planning begins.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-030\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_scope_command\n",
+    )
+    .expect("scope feature doc");
 }
 
 fn write_request(root: &std::path::Path, request: &str, affected_area: &str, linked_ids: &[&str]) {
@@ -127,6 +138,144 @@ fn task_classify_prints_json_output_with_explicit_items() {
 }
 
 #[test]
+fn task_scope_prints_text_output_with_candidate_requirements_and_flags() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_request(
+        tempdir.path(),
+        "Update PHIL-001, POL-001, REQ-CORE-028, and FEAT-TASK-001 so the planning flow stays explainable.",
+        "core",
+        &["PHIL-001", "POL-001", "REQ-CORE-028", "FEAT-TASK-001"],
+    );
+
+    let output = {
+        let mut command = std::process::Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "scope", "request.yaml"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task scope should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("candidate requirements:"));
+    assert!(stdout.contains("candidate features:"));
+    assert!(stdout.contains("scope signals:"));
+    assert!(stdout.contains("policy discussion likely: yes"));
+    assert!(stdout.contains("philosophy discussion likely: yes"));
+    assert!(stdout.contains("FEAT-TASK-001"));
+    assert!(stdout.contains("candidate feature planned-state updates: yes"));
+}
+
+#[test]
+fn task_scope_prints_text_output_without_scope_notes_when_no_scope_keywords_match() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_request(
+        tempdir.path(),
+        "Update REQ-CORE-028 to clarify request intake.",
+        "core",
+        &["REQ-CORE-028"],
+    );
+
+    let output = {
+        let mut command = std::process::Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "scope", "request.yaml"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task scope should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("candidate features:\n- none"));
+    assert!(stdout.contains("policy discussion likely: no"));
+    assert!(stdout.contains("philosophy discussion likely: no"));
+    assert!(stdout.contains("candidate feature planned-state updates: no"));
+    assert!(!stdout.contains("scope notes:"));
+}
+
+#[test]
+fn task_scope_prints_keyword_based_notes_without_matched_policy_or_philosophy_items() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_request(
+        tempdir.path(),
+        "Need approval and ethos updates for the request flow.",
+        "core",
+        &[],
+    );
+
+    let output = {
+        let mut command = std::process::Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "scope", "request.yaml"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task scope should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("policy discussion likely: yes"));
+    assert!(stdout.contains("philosophy discussion likely: yes"));
+    assert!(stdout.contains("request uses policy-oriented language: approval"));
+    assert!(stdout.contains("request uses philosophy-oriented language: ethos"));
+}
+
+#[test]
+fn task_scope_prints_feature_candidates_without_planned_state_updates_for_delete_requests() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_request(
+        tempdir.path(),
+        "Delete FEAT-TASK-001 from the planning flow.",
+        "core",
+        &["FEAT-TASK-001"],
+    );
+
+    let output = {
+        let mut command = std::process::Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "scope", "request.yaml"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task scope should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("candidate features:"));
+    assert!(stdout.contains("FEAT-TASK-001"));
+    assert!(!stdout.contains("planned-state update suggested"));
+}
+
+#[test]
+fn task_scope_prints_json_output_with_planning_signals() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_request(
+        tempdir.path(),
+        "Update PHIL-001, POL-001, REQ-CORE-028, and FEAT-TASK-001 so the planning flow stays explainable.",
+        "core",
+        &["PHIL-001", "POL-001", "REQ-CORE-028", "FEAT-TASK-001"],
+    );
+
+    let output = {
+        let mut command = std::process::Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "scope", "request.yaml", "--format", "json"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task scope should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("\"classification\": \"requirement_change\""));
+    assert!(stdout.contains("\"signals\": {"));
+    assert!(stdout.contains("\"policy_discussion\": true"));
+    assert!(stdout.contains("\"philosophy_discussion\": true"));
+    assert!(stdout.contains("\"planned_feature_updates\": true"));
+    assert!(stdout.contains("\"requirements\": ["));
+    assert!(stdout.contains("\"features\": ["));
+    assert!(stdout.contains("\"id\": \"REQ-CORE-028\""));
+    assert!(stdout.contains("\"id\": \"FEAT-TASK-001\""));
+}
+
+#[test]
 fn task_scaffold_prints_text_preview_for_new_planned_updates() {
     let tempdir = tempdir().expect("tempdir");
     write_workspace(tempdir.path());
@@ -177,6 +326,64 @@ fn task_scaffold_prints_json_preview_for_existing_ids() {
     assert!(stdout.contains("\"action\": \"update\""));
     assert!(stdout.contains("\"path\": \"docs/syu/requirements/core/classify.yaml\""));
     assert!(stdout.contains("\"path\": \"docs/syu/features/core/task.yaml\""));
+}
+
+#[test]
+fn task_scope_prints_text_summary_with_candidate_items() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_request(
+        tempdir.path(),
+        "Scope REQ-CORE-028 with FEAT-TASK-001 and ask whether policy wording needs refinement.",
+        "core",
+        &["REQ-CORE-028", "FEAT-TASK-001"],
+    );
+
+    let output = {
+        let mut command = std::process::Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "scope", "request.yaml"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task scope should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("candidate requirements:"));
+    assert!(stdout.contains("REQ-CORE-028"));
+    assert!(stdout.contains("candidate features:"));
+    assert!(stdout.contains("FEAT-TASK-001"));
+    assert!(stdout.contains("scope signals:"));
+    assert!(stdout.contains("policy discussion likely: yes"));
+    assert!(stdout.contains("philosophy discussion likely: no"));
+    assert!(stdout.contains("candidate feature planned-state updates: yes"));
+}
+
+#[test]
+fn task_scope_prints_json_summary_for_candidate_items() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_request(
+        tempdir.path(),
+        "Scope REQ-CORE-028 with FEAT-TASK-001 and ask whether policy wording needs refinement.",
+        "core",
+        &["REQ-CORE-028", "FEAT-TASK-001"],
+    );
+
+    let output = {
+        let mut command = std::process::Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "scope", "request.yaml", "--format", "json"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task scope should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("\"signals\": {"));
+    assert!(stdout.contains("\"policy_discussion\": true"));
+    assert!(stdout.contains("\"philosophy_discussion\": false"));
+    assert!(stdout.contains("\"planned_feature_updates\": true"));
+    assert!(stdout.contains("\"requirements\": ["));
+    assert!(stdout.contains("\"features\": ["));
 }
 
 #[test]

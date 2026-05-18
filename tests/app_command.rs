@@ -72,8 +72,9 @@ fn clean_shutdown(status: &std::process::ExitStatus) -> bool {
 }
 
 fn wait_for_server(port: u16) {
-    // Coverage builds are slower, so give the app more time to finish its startup work.
-    for _ in 0..200 {
+    // Coverage builds and the test harness can be slower, so give the app enough
+    // time to finish startup before declaring the dev-server path unhealthy.
+    for _ in 0..600 {
         if let Ok(response) = http_get(port, "/health")
             && response.contains("200 OK")
             && response.contains("\"status\":\"ok\"")
