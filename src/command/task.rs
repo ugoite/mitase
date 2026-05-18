@@ -1954,9 +1954,10 @@ mod tests {
     };
 
     use super::{
-        ClassificationOutcome, RequirementAction, SearchResult, WorkspaceLookup,
-        build_scaffold_plan, classify_request, collect_feature_candidates, load_request_artifact,
-        run_task_command,
+        ClassificationOutcome, RequirementAction, SearchResult, WorkspaceLookup, build_goal_plan,
+        build_scaffold_plan, classify_request, collect_feature_candidates, load_goal_plan_artifact,
+        load_request_artifact, render_goal_plan_output, resolve_task_plan_output_path,
+        run_task_command, scope_request,
     };
 
     fn write_request_artifact(path: &Path, request: &str, linked_ids: &[&str]) {
