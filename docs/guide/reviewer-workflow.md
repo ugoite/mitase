@@ -169,6 +169,16 @@ Use `syu log` when review needs historical context:
 - do I need the linked requirement/feature surface, not just one selected ID?
 - what changed on this review branch since it diverged from main?
 
+When the current workspace no longer contains the ID, `syu log` falls back to
+the git-backed historical ID index. That view is different from the normal
+current-trace surface:
+
+- the command can still resolve the deleted ID
+- the output highlights lifecycle events such as creation, moves, removal, and
+  later redefinition attempts
+- the history is about the prior definition document, not the current traced
+  implementation or test surface
+
 Treat `syu log` as history for the **currently traced** surface, not proof that
 the whole PR diff is covered. A newly added implementation or test file can be
 missing from this history slice if the trace mapping was never updated, so pair

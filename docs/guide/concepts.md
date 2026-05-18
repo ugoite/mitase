@@ -94,6 +94,16 @@ Without features, requirements never connect to running software.
 repository can explain itself from ideals down to code and tests without being
 tied to a single implementation language.
 
+## Temporary goal plans
+
+Goal Plans are delivery artifacts, not persistent spec layers.
+
+They are meant for request-driven or diff-inferred implementation planning and
+can live outside `spec.root` in places like `.syu/tasks/*.yaml`, a GitHub issue
+body, a GitHub PR body, or a CI artifact. They may reference the persistent
+spec graph, but they should not become a long-lived fifth layer alongside
+philosophy, policy, requirement, and feature.
+
 ## Authoring guidelines
 
 ### Write philosophy for stability

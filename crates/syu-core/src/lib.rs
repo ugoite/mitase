@@ -1,7 +1,7 @@
 // FEAT-APP-001
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, path::PathBuf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -180,6 +180,144 @@ pub struct BrowserTraceReference {
     pub doc_contains: Vec<String>,
     pub method: Option<String>,
     pub path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub enum GoalPlanSourceMode {
+    RequestDriven,
+    DiffInferred,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub enum GoalPlanConfidence {
+    High,
+    Medium,
+    Low,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub enum GoalPlanSelectionMode {
+    Minimal,
+    Affected,
+    Full,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub enum GoalPlanCoverageMode {
+    ChangedLines,
+    Affected,
+    Full,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct GoalPlan {
+    pub version: u32,
+    pub kind: String,
+    pub source: GoalPlanSource,
+    pub goal: GoalPlanGoal,
+    pub spec_mapping: GoalPlanSpecMapping,
+    pub implementation_plan: GoalPlanImplementationPlan,
+    pub test_plan: GoalPlanTestPlan,
+    pub coverage: GoalPlanCoverage,
+    pub completion: GoalPlanCompletion,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct GoalPlanSource {
+    pub mode: GoalPlanSourceMode,
+    pub request_artifact: Option<PathBuf>,
+    pub range: Option<String>,
+    pub confidence: GoalPlanConfidence,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct GoalPlanGoal {
+    pub id: String,
+    pub title: String,
+    pub statement: String,
+    #[serde(default)]
+    pub non_goals: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct GoalPlanSpecMapping {
+    #[serde(default)]
+    pub persistent_items: GoalPlanPersistentItems,
+    pub spec_updates: GoalPlanSpecUpdates,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct GoalPlanPersistentItems {
+    #[serde(default)]
+    pub philosophies: Vec<String>,
+    #[serde(default)]
+    pub policies: Vec<String>,
+    #[serde(default)]
+    pub requirements: Vec<String>,
+    #[serde(default)]
+    pub features: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct GoalPlanSpecUpdates {
+    pub required: bool,
+    #[serde(default)]
+    pub expected_updates: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct GoalPlanImplementationPlan {
+    pub scope: GoalPlanScope,
+    #[serde(default)]
+    pub steps: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct GoalPlanScope {
+    #[serde(default)]
+    pub include: Vec<String>,
+    #[serde(default)]
+    pub exclude: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct GoalPlanTestPlan {
+    pub selection_mode: GoalPlanSelectionMode,
+    #[serde(default)]
+    pub required_tests: BTreeMap<String, Vec<String>>,
+    #[serde(default)]
+    pub suggested_tests: BTreeMap<String, Vec<String>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct GoalPlanCoverage {
+    pub mode: GoalPlanCoverageMode,
+    pub threshold: u32,
+    #[serde(default)]
+    pub include: Vec<String>,
+    #[serde(default)]
+    pub exclude: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub struct GoalPlanCompletion {
+    #[serde(default)]
+    pub must_pass: Vec<String>,
 }
 
 #[allow(dead_code)]
@@ -564,9 +702,12 @@ fn folder_segments(path: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        AppPayload, AppServer, DefinitionCounts, HistoricalIdSnapshot, ReferencedRule, SectionKind,
-        Severity, SourceDocument, TraceCount, TraceSummary, ValidationIssue, ValidationSnapshot,
-        build_browser_workspace,
+        AppPayload, AppServer, DefinitionCounts, GoalPlan, GoalPlanCompletion, GoalPlanConfidence,
+        GoalPlanCoverage, GoalPlanCoverageMode, GoalPlanGoal, GoalPlanImplementationPlan,
+        GoalPlanPersistentItems, GoalPlanScope, GoalPlanSelectionMode, GoalPlanSource,
+        GoalPlanSourceMode, GoalPlanSpecMapping, GoalPlanSpecUpdates, GoalPlanTestPlan,
+        HistoricalIdSnapshot, ReferencedRule, SectionKind, Severity, SourceDocument, TraceCount,
+        TraceSummary, ValidationIssue, ValidationSnapshot, build_browser_workspace,
     };
 
     fn sample_validation() -> ValidationSnapshot {
@@ -700,5 +841,112 @@ mod tests {
         assert_eq!(document.path, "broken.yaml");
         assert!(document.parse_error.is_some());
         assert!(document.items.is_empty());
+    }
+
+    #[test]
+    fn goal_plan_round_trips_through_yaml() {
+        let plan = GoalPlan {
+            version: 1,
+            kind: "syu.goal_plan".to_string(),
+            source: GoalPlanSource {
+                mode: GoalPlanSourceMode::RequestDriven,
+                request_artifact: Some(".syu/tasks/request.yaml".into()),
+                range: None,
+                confidence: GoalPlanConfidence::High,
+            },
+            goal: GoalPlanGoal {
+                id: "GOAL-001".to_string(),
+                title: "Ship a checkout flow".to_string(),
+                statement: "Implement the checkout flow with explicit scope.".to_string(),
+                non_goals: vec!["Rework the entire cart system".to_string()],
+            },
+            spec_mapping: GoalPlanSpecMapping {
+                persistent_items: GoalPlanPersistentItems {
+                    philosophies: vec!["PHIL-001".to_string()],
+                    policies: vec!["POL-001".to_string()],
+                    requirements: vec!["REQ-001".to_string()],
+                    features: vec!["FEAT-001".to_string()],
+                },
+                spec_updates: GoalPlanSpecUpdates {
+                    required: true,
+                    expected_updates: vec!["REQ-001".to_string()],
+                },
+            },
+            implementation_plan: GoalPlanImplementationPlan {
+                scope: GoalPlanScope {
+                    include: vec!["src/checkout.rs".to_string()],
+                    exclude: vec!["src/cart.rs".to_string()],
+                },
+                steps: vec!["Draft the checkout service".to_string()],
+            },
+            test_plan: GoalPlanTestPlan {
+                selection_mode: GoalPlanSelectionMode::Affected,
+                required_tests: [("rust".to_string(), vec!["tests/checkout.rs".to_string()])]
+                    .into_iter()
+                    .collect(),
+                suggested_tests: [("rust".to_string(), vec!["tests/cart.rs".to_string()])]
+                    .into_iter()
+                    .collect(),
+            },
+            coverage: GoalPlanCoverage {
+                mode: GoalPlanCoverageMode::ChangedLines,
+                threshold: 100,
+                include: vec!["src/checkout.rs".to_string()],
+                exclude: vec!["target".to_string()],
+            },
+            completion: GoalPlanCompletion {
+                must_pass: vec!["syu validate .".to_string()],
+            },
+        };
+
+        let yaml = serde_yaml::to_string(&plan).expect("serialize plan");
+        let decoded: GoalPlan = serde_yaml::from_str(&yaml).expect("deserialize plan");
+        assert_eq!(decoded, plan);
+        assert!(yaml.contains("kind: syu.goal_plan"));
+        assert!(yaml.contains("mode: request_driven"));
+        assert!(yaml.contains("confidence: high"));
+    }
+
+    #[test]
+    fn goal_plan_rejects_unknown_fields() {
+        let yaml = r#"
+version: 1
+kind: syu.goal_plan
+source:
+  mode: request_driven
+  request_artifact: .syu/tasks/request.yaml
+  range: null
+  confidence: high
+goal:
+  id: GOAL-001
+  title: Ship a checkout flow
+  statement: Implement the checkout flow with explicit scope.
+  non_goals: []
+spec_mapping:
+  persistent_items: {}
+  spec_updates:
+    required: true
+    expected_updates: []
+implementation_plan:
+  scope:
+    include: []
+    exclude: []
+  steps: []
+test_plan:
+  selection_mode: minimal
+  required_tests: {}
+  suggested_tests: {}
+coverage:
+  mode: changed_lines
+  threshold: 100
+  include: []
+  exclude: []
+completion:
+  must_pass: []
+extra: nope
+"#;
+
+        let err = serde_yaml::from_str::<GoalPlan>(yaml).expect_err("unknown field should fail");
+        assert!(err.to_string().contains("extra"));
     }
 }

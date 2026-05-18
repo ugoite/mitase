@@ -6,7 +6,8 @@
 
 It keeps machine-readable `philosophy`, `policy`, `requirements`, and `feature`
 YAML definitions connected to real repository work: validation, implementation
-ownership, maintenance, contributor workflow, and release delivery.
+ownership, maintenance, contributor workflow, and release delivery. Temporary
+Goal Plans for request-driven work stay outside that persistent model.
 
 The design goal is intentionally pragmatic:
 
@@ -553,6 +554,11 @@ or implementation files. Then it shows the commits that touched those paths and
 why each commit matched. Use `--kind` when you only want definition, test, or
 implementation history, and `--path` when you want to narrow the traced paths
 to one repository-relative file or directory prefix.
+
+If the current workspace no longer contains the ID, `syu log` falls back to
+the git-backed historical index. In that case it still resolves the item and
+shows lifecycle events for the old definition document so you can see creation,
+moves, removal, and later redefinition attempts.
 ### `syu relate`
 
 Inspect the connected graph around one definition, repository path, or traced
