@@ -2405,4 +2405,112 @@ mod tests {
             }),
         });
     }
+
+    #[test]
+    fn goal_plan_builder_renders_outputs_and_writes_files() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        let request = tempdir.path().join("request.yaml");
+        write_request_artifact(
+            &request,
+            "Generate a plan for the current request-driven workflow.",
+            &["PHIL-001", "POL-001", "REQ-CORE-030", "FEAT-TASK-003"],
+        );
+
+        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
+        let artifact = load_request_artifact(&request).expect("request");
+        let scope_outcome = scope_request(&workspace, &artifact).expect("scope");
+        let explicit_ids = artifact.explicit_ids();
+        let plan = build_goal_plan(&workspace, &scope_outcome, &explicit_ids, &request)
+            .expect("goal plan");
+
+        assert_eq!(plan.kind, "syu.goal_plan");
+        assert_eq!(plan.source.mode, "request_driven");
+        assert_eq!(plan.source.confidence, "high");
+        assert_eq!(plan.coverage.threshold, 100);
+        assert!(plan.spec_mapping.spec_updates_required);
+        assert!(
+            plan.spec_mapping
+                .spec_update_reasons
+                .iter()
+                .any(|reason| reason.contains("request does not name concrete spec IDs"))
+        );
+        assert!(
+            plan.implementation_plan
+                .scope
+                .include
+                .iter()
+                .any(|entry| entry.file.contains("src/command/task.rs"))
+        );
+        assert!(
+            plan.test_plan
+                .required_tests
+                .get("rust")
+                .expect("rust tests")
+                .iter()
+                .any(|entry| entry.file.contains("src/command/task.rs"))
+        );
+        assert!(plan.warnings.is_empty());
+
+        let text =
+            render_goal_plan_output(&request, &plan, TaskPlanFormat::Text).expect("text render");
+        assert!(text.contains("kind: syu.goal_plan"));
+        assert!(text.contains("goal:"));
+        assert!(text.contains("implementation plan:"));
+        assert!(text.contains("test plan:"));
+        assert!(text.contains("coverage: changed_lines (threshold 100)"));
+
+        let yaml =
+            render_goal_plan_output(&request, &plan, TaskPlanFormat::Yaml).expect("yaml render");
+        assert!(yaml.contains("kind: syu.goal_plan"));
+
+        let json =
+            render_goal_plan_output(&request, &plan, TaskPlanFormat::Json).expect("json render");
+        assert!(json.contains("\"kind\": \"syu.goal_plan\""));
+
+        let output_path = tempdir.path().join(".syu/tasks/current.yaml");
+        let resolved = resolve_task_plan_output_path(tempdir.path(), &output_path);
+        assert_eq!(resolved, output_path);
+        if let Some(parent) = resolved.parent() {
+            fs::create_dir_all(parent).expect("create output dir");
+        }
+        fs::write(&resolved, text).expect("write plan");
+        assert!(resolved.exists());
+    }
+
+    #[test]
+    fn goal_plan_builder_marks_low_confidence_and_warns_when_scope_is_sparse() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        let request = tempdir.path().join("request.yaml");
+        write_request_artifact(&request, "Introduce a brand new planning path.", &[]);
+
+        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
+        let artifact = load_request_artifact(&request).expect("request");
+        let scope_outcome = scope_request(&workspace, &artifact).expect("scope");
+        let explicit_ids = artifact.explicit_ids();
+        let plan = build_goal_plan(&workspace, &scope_outcome, &explicit_ids, &request)
+            .expect("goal plan");
+
+        assert_eq!(plan.source.confidence, "low");
+        assert_eq!(plan.implementation_plan.confidence, "low");
+        assert_eq!(plan.test_plan.confidence, "low");
+        assert!(plan.spec_mapping.persistent_items.requirements.is_empty());
+        assert!(plan.spec_mapping.persistent_items.features.is_empty());
+        assert!(
+            plan.warnings
+                .iter()
+                .any(|warning| warning.contains("inferred from request text"))
+        );
+        assert!(
+            plan.warnings
+                .iter()
+                .any(|warning| warning.contains("No close graph matches were found"))
+        );
+        assert!(
+            plan.warnings
+                .iter()
+                .any(|warning| warning.contains("No implementation scope could be inferred"))
+        );
+    }
 }
