@@ -28,6 +28,7 @@ use crate::{
 use super::lookup::{SearchResult, WorkspaceEntity, WorkspaceLookup};
 
 const REQUEST_ARTIFACT_VERSION: u32 = 1;
+const GOAL_PLAN_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -63,6 +64,162 @@ struct RequestArtifactContext {
     repository_constraints: Vec<String>,
     #[serde(default)]
     linked_ids: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+struct GoalPlanArtifact {
+    version: u32,
+    kind: String,
+    #[serde(default)]
+    source: GoalPlanSource,
+    goal: GoalPlanGoal,
+    #[serde(default)]
+    spec_mapping: GoalPlanSpecMapping,
+    implementation_plan: GoalPlanImplementationPlan,
+    test_plan: GoalPlanTestPlan,
+    coverage: GoalPlanCoverage,
+    completion: GoalPlanCompletion,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+struct GoalPlanSource {
+    mode: GoalPlanSourceMode,
+    #[serde(default)]
+    request_artifact: Option<String>,
+    #[serde(default)]
+    range: Option<String>,
+    #[serde(default)]
+    confidence: Option<GoalPlanConfidence>,
+}
+
+impl Default for GoalPlanSource {
+    fn default() -> Self {
+        Self {
+            mode: GoalPlanSourceMode::RequestDriven,
+            request_artifact: None,
+            range: None,
+            confidence: None,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+enum GoalPlanSourceMode {
+    #[default]
+    #[serde(rename = "request_driven")]
+    RequestDriven,
+    #[serde(rename = "diff_inferred")]
+    DiffInferred,
+}
+
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum GoalPlanConfidence {
+    High,
+    Medium,
+    Low,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+struct GoalPlanGoal {
+    id: String,
+    title: String,
+    statement: String,
+    #[serde(default)]
+    non_goals: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
+struct GoalPlanSpecMapping {
+    #[serde(default)]
+    persistent_items: GoalPlanPersistentItems,
+    #[serde(default)]
+    spec_updates: GoalPlanSpecUpdates,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
+struct GoalPlanPersistentItems {
+    #[serde(default)]
+    philosophies: Vec<String>,
+    #[serde(default)]
+    policies: Vec<String>,
+    #[serde(default)]
+    requirements: Vec<String>,
+    #[serde(default)]
+    features: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
+struct GoalPlanSpecUpdates {
+    #[serde(default)]
+    required: bool,
+    #[serde(default)]
+    expected_updates: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+struct GoalPlanImplementationPlan {
+    scope: GoalPlanScope,
+    #[serde(default)]
+    steps: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
+struct GoalPlanScope {
+    #[serde(default)]
+    include: Vec<String>,
+    #[serde(default)]
+    exclude: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+struct GoalPlanTestPlan {
+    selection_mode: GoalPlanSelectionMode,
+    #[serde(default)]
+    required_tests: BTreeMap<String, Vec<String>>,
+    #[serde(default)]
+    suggested_tests: BTreeMap<String, Vec<String>>,
+}
+
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+enum GoalPlanSelectionMode {
+    #[default]
+    #[serde(rename = "minimal")]
+    Minimal,
+    #[serde(rename = "affected")]
+    Affected,
+    #[serde(rename = "full")]
+    Full,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+struct GoalPlanCoverage {
+    mode: GoalPlanCoverageMode,
+    threshold: u32,
+    #[serde(default)]
+    include: Vec<String>,
+    #[serde(default)]
+    exclude: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+enum GoalPlanCoverageMode {
+    #[default]
+    #[serde(rename = "changed_lines")]
+    ChangedLines,
+    #[serde(rename = "affected")]
+    Affected,
+    #[serde(rename = "full")]
+    Full,
+}
+
+#[derive(Debug, Deserialize, Default, Clone)]
+struct GoalPlanCompletion {
+    #[serde(default)]
+    must_pass: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
