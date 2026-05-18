@@ -33,6 +33,7 @@ anything:
 ```bash
 syu task scope request.yaml
 syu task classify request.yaml
+syu task plan request.yaml
 syu task scaffold request.yaml
 syu show FEAT-CHECK-001
 syu relate FEAT-CHECK-001
@@ -82,9 +83,13 @@ edit YAML by hand, use the task workflow first:
 ```bash
 syu task scope request.yaml
 syu task classify request.yaml
-syu task scope request.yaml
+syu task plan request.yaml
 syu task scaffold request.yaml
 ```
+
+Use `syu task plan` when you need the temporary Goal Plan artifact itself.
+That is the step that should capture the implementation plan, test plan,
+coverage target, completion checks, and any warnings that still need review.
 
 Keep the planned items small. If one request is trying to introduce multiple
 behaviors, split the request before you split the implementation.

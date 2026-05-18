@@ -7,11 +7,13 @@
 // FEAT-LSP-001
 // FEAT-TASK-001
 // FEAT-TASK-003
+// FEAT-TASK-004
 // REQ-CORE-021
 // REQ-CORE-023
 // REQ-CORE-024
 // REQ-CORE-028
 // REQ-CORE-030
+// REQ-CORE-031
 
 pub mod cli;
 pub mod command;
@@ -167,7 +169,7 @@ mod tests {
     use crate::cli::{
         AddArgs, AppArgs, AuditArgs, Cli, Commands, CompletionArgs, ExplainArgs, HistoryKind,
         ListArgs, LogArgs, LookupKind, OutputFormat, RelateArgs, SearchArgs, ShowArgs, TaskArgs,
-        TaskClassifyArgs, TaskCommands, TaskScopeArgs, TemplatesArgs, TraceArgs,
+        TaskClassifyArgs, TaskCommands, TaskPlanArgs, TaskScopeArgs, TemplatesArgs, TraceArgs,
     };
     use clap_complete::Shell;
 
@@ -416,6 +418,34 @@ mod tests {
             }) if request == Path::new("request.yaml")
                 && workspace == Path::new("workspace")
                 && format == OutputFormat::Json
+        ));
+        let plan = super::dispatch(
+            Cli {
+                command: Some(Commands::Task(TaskArgs {
+                    command: TaskCommands::Plan(TaskPlanArgs {
+                        request: PathBuf::from("request.yaml"),
+                        workspace: PathBuf::from("workspace"),
+                        output: Some(PathBuf::from(".syu/tasks/current.yaml")),
+                        format: crate::cli::TaskPlanFormat::Yaml,
+                    }),
+                })),
+            },
+            true,
+            true,
+        );
+        assert!(matches!(
+            plan,
+            super::Dispatch::Task(crate::cli::TaskArgs {
+                command: TaskCommands::Plan(TaskPlanArgs {
+                    request,
+                    workspace,
+                    output,
+                    format,
+                })
+            }) if request == Path::new("request.yaml")
+                && workspace == Path::new("workspace")
+                && output.as_deref() == Some(Path::new(".syu/tasks/current.yaml"))
+                && format == crate::cli::TaskPlanFormat::Yaml
         ));
     }
 
