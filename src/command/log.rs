@@ -2,6 +2,7 @@
 // REQ-CORE-024
 
 use std::{
+    cell::RefCell,
     collections::{BTreeMap, BTreeSet},
     fmt::Write,
     path::{Component, Path, PathBuf},
@@ -30,6 +31,7 @@ use super::{
 
 const GIT_RECORD_SEPARATOR: u8 = 0x1e;
 const HISTORICAL_LOOKUP_MAX_COMMITS: usize = 1000;
+const GIT_BINARY_OVERRIDE_ENV: &str = "SYU_GIT_BINARY";
 const GIT_ENVIRONMENT_KEYS: [&str; 8] = [
     "GIT_ALTERNATE_OBJECT_DIRECTORIES",
     "GIT_CEILING_DIRECTORIES",
@@ -40,6 +42,11 @@ const GIT_ENVIRONMENT_KEYS: [&str; 8] = [
     "GIT_PREFIX",
     "GIT_WORK_TREE",
 ];
+
+#[cfg(test)]
+thread_local! {
+    static TEST_GIT_BINARY_OVERRIDE: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
+}
 
 #[derive(Debug, Serialize)]
 struct JsonLogOutput {
@@ -1431,12 +1438,27 @@ fn sort_ready_commits(ready: &mut [String], commit_lookup: &BTreeMap<String, Mat
 }
 
 pub(crate) fn git_command(workspace_root: &Path) -> Command {
-    let mut command = Command::new("git");
+    let git_binary = test_git_binary_override().unwrap_or_else(|| {
+        std::env::var_os(GIT_BINARY_OVERRIDE_ENV)
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("git"))
+    });
+    let mut command = Command::new(git_binary);
     command.arg("-C").arg(workspace_root);
     for key in GIT_ENVIRONMENT_KEYS {
         command.env_remove(key);
     }
     command
+}
+
+#[cfg(test)]
+fn test_git_binary_override() -> Option<PathBuf> {
+    TEST_GIT_BINARY_OVERRIDE.with(|cell| cell.borrow().clone())
+}
+
+#[cfg(not(test))]
+fn test_git_binary_override() -> Option<PathBuf> {
+    None
 }
 
 pub(crate) fn resolve_git_range_changed_files(
@@ -1640,7 +1662,6 @@ mod tests {
         fs,
         path::{Path, PathBuf},
         process::Command,
-        sync::{LazyLock, Mutex, MutexGuard},
     };
 
     use tempfile::tempdir;
@@ -1653,44 +1674,33 @@ mod tests {
     };
 
     use super::{
-        HistoryKind, HistoryScope, MatchedCommit, ResolvedHistoryTarget, TrackedPath,
-        collect_trace_paths, commit_is_ancestor_of, discover_historical_definition, git_show_file,
-        load_git_history, load_git_history_records, lookup_kind_for_id, normalize_path_filter,
-        order_commits_by_repository_history, parse_git_history, parse_git_history_records,
-        render_history_text, resolve_historical_history_target, resolve_history_scope,
-        sort_commits_by_history_relationship, tracked_paths_for_feature,
+        HistoryKind, HistoryScope, MatchedCommit, ResolvedHistoryTarget, TEST_GIT_BINARY_OVERRIDE,
+        TrackedPath, collect_trace_paths, commit_is_ancestor_of, discover_historical_definition,
+        git_show_file, load_git_history, load_git_history_records, lookup_kind_for_id,
+        normalize_path_filter, order_commits_by_repository_history, parse_git_history,
+        parse_git_history_records, render_history_text, resolve_historical_history_target,
+        resolve_history_scope, sort_commits_by_history_relationship, tracked_paths_for_feature,
         tracked_paths_for_requirement,
     };
 
-    static PATH_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+    fn set_test_git_binary_override(path: Option<PathBuf>) -> Option<PathBuf> {
+        TEST_GIT_BINARY_OVERRIDE.with(|cell| cell.replace(path))
+    }
 
     struct PathGuard {
-        original: std::ffi::OsString,
-        _lock: MutexGuard<'static, ()>,
+        original: Option<PathBuf>,
     }
 
     impl PathGuard {
-        fn set(paths: Vec<PathBuf>) -> Self {
-            let lock = PATH_LOCK.lock().unwrap_or_else(|err| err.into_inner());
-            let original = std::env::var_os("PATH").unwrap_or_default();
-            unsafe {
-                std::env::set_var(
-                    "PATH",
-                    std::env::join_paths(paths).expect("path should join"),
-                );
-            }
-            Self {
-                original,
-                _lock: lock,
-            }
+        fn set_git_binary(path: &Path) -> Self {
+            let original = set_test_git_binary_override(Some(path.to_path_buf()));
+            Self { original }
         }
     }
 
     impl Drop for PathGuard {
         fn drop(&mut self) {
-            unsafe {
-                std::env::set_var("PATH", &self.original);
-            }
+            let _ = set_test_git_binary_override(self.original.clone());
         }
     }
 
@@ -1856,7 +1866,6 @@ mod tests {
 
     #[test]
     fn resolve_historical_history_target_covers_all_supported_kinds() {
-        let _lock = PATH_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let repo = tempdir().expect("tempdir should exist");
         init_test_git_repository(repo.path());
 
@@ -2002,7 +2011,6 @@ mod tests {
 
     #[test]
     fn resolve_historical_history_target_reports_out_of_repository_roots() {
-        let _lock = PATH_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let repo = tempdir().expect("tempdir should exist");
         let outside = tempdir().expect("tempdir should exist");
         let workspace = Workspace {
@@ -2030,7 +2038,6 @@ mod tests {
 
     #[test]
     fn discover_historical_definition_reports_missing_ids() {
-        let _lock = PATH_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let repo = tempdir().expect("tempdir should exist");
         init_test_git_repository(repo.path());
 
@@ -2059,11 +2066,10 @@ mod tests {
 
     #[test]
     fn load_git_history_records_reports_git_log_failures() {
-        let _lock = PATH_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let repo = tempdir().expect("tempdir should exist");
         let fake_bin = tempdir().expect("tempdir should exist");
         write_fake_git_for_history_log_failure(fake_bin.path());
-        let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
+        let _path_guard = PathGuard::set_git_binary(&fake_bin.path().join("git"));
 
         let scope = HistoryScope {
             label: "range `HEAD~1..HEAD`".to_string(),
@@ -2100,10 +2106,9 @@ mod tests {
 
     #[test]
     fn git_show_file_reports_spawn_failures() {
-        let _lock = PATH_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let repo = tempdir().expect("tempdir should exist");
         let fake_bin = tempdir().expect("tempdir should exist");
-        let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
+        let _path_guard = PathGuard::set_git_binary(&fake_bin.path().join("git"));
 
         let error = git_show_file(
             repo.path(),
@@ -2138,7 +2143,7 @@ mod tests {
     #[test]
     fn resolve_history_scope_reports_merge_base_failures() {
         let fake_bin = tempdir().expect("tempdir should exist");
-        let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
+        let _path_guard = PathGuard::set_git_binary(&fake_bin.path().join("git"));
         write_fake_git_for_scope_merge_base_failure(fake_bin.path());
 
         let error = resolve_history_scope(Path::new("/repo"), None, Some("origin/main"))
@@ -2150,7 +2155,7 @@ mod tests {
     #[test]
     fn resolve_history_scope_rejects_empty_merge_base_output() {
         let fake_bin = tempdir().expect("tempdir should exist");
-        let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
+        let _path_guard = PathGuard::set_git_binary(&fake_bin.path().join("git"));
         write_fake_git_for_scope_merge_base_empty_output(fake_bin.path());
 
         let error = resolve_history_scope(Path::new("/repo"), None, Some("origin/main"))
@@ -2161,7 +2166,7 @@ mod tests {
     #[test]
     fn resolve_history_scope_reports_spawn_failures() {
         let fake_bin = tempdir().expect("tempdir should exist");
-        let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
+        let _path_guard = PathGuard::set_git_binary(&fake_bin.path().join("git"));
 
         let error = resolve_history_scope(Path::new("/repo"), None, Some("origin/main"))
             .expect_err("missing git binary should fail");
@@ -2201,7 +2206,6 @@ mod tests {
 
     #[test]
     fn run_log_command_supports_related_surface_and_merge_base_scope() {
-        let _lock = PATH_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let workspace_root = tempdir().expect("tempdir should exist");
         write_related_workspace_fixture(workspace_root.path());
         init_test_git_repository(workspace_root.path());
@@ -2225,7 +2229,6 @@ mod tests {
 
     #[test]
     fn order_commits_by_repository_history_uses_candidate_ancestry() {
-        let _lock = PATH_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let repo = tempdir().expect("tempdir should exist");
         init_test_git_repository(repo.path());
 
@@ -2283,7 +2286,6 @@ mod tests {
 
     #[test]
     fn order_commits_by_repository_history_falls_back_when_merge_base_fails() {
-        let _lock = PATH_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let repo = tempdir().expect("tempdir should exist");
         init_test_git_repository(repo.path());
 
@@ -2357,7 +2359,7 @@ mod tests {
                 ("old-b", "old-a", false),
             ],
         );
-        let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
+        let _path_guard = PathGuard::set_git_binary(&fake_bin.path().join("git"));
 
         let commits = BTreeMap::from([
             (
@@ -2433,7 +2435,7 @@ mod tests {
                 ("mid-b", "mid-a", false),
             ],
         );
-        let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
+        let _path_guard = PathGuard::set_git_binary(&fake_bin.path().join("git"));
 
         let commits = BTreeMap::from([
             (
@@ -2508,7 +2510,7 @@ mod tests {
                 ("old-c", "old-a", true),
             ],
         );
-        let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
+        let _path_guard = PathGuard::set_git_binary(&fake_bin.path().join("git"));
 
         let mut commits = vec![
             MatchedCommit {
@@ -2573,7 +2575,7 @@ mod tests {
     #[test]
     fn commit_is_ancestor_of_reports_spawn_failures() {
         let fake_bin = tempdir().expect("tempdir should exist");
-        let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
+        let _path_guard = PathGuard::set_git_binary(&fake_bin.path().join("git"));
 
         let error = commit_is_ancestor_of(Path::new("/repo"), "old", "new", &mut BTreeMap::new())
             .expect_err("missing git binary should fail");
