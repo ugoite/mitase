@@ -6,10 +6,12 @@
 // FEAT-BROWSE-001
 // FEAT-LSP-001
 // FEAT-TASK-001
+// FEAT-TASK-003
 // REQ-CORE-021
 // REQ-CORE-023
 // REQ-CORE-024
 // REQ-CORE-028
+// REQ-CORE-030
 
 pub mod cli;
 pub mod command;
@@ -165,7 +167,7 @@ mod tests {
     use crate::cli::{
         AddArgs, AppArgs, AuditArgs, Cli, Commands, CompletionArgs, ExplainArgs, HistoryKind,
         ListArgs, LogArgs, LookupKind, OutputFormat, RelateArgs, SearchArgs, ShowArgs, TaskArgs,
-        TaskClassifyArgs, TaskCommands, TemplatesArgs, TraceArgs,
+        TaskClassifyArgs, TaskCommands, TaskScopeArgs, TemplatesArgs, TraceArgs,
     };
     use clap_complete::Shell;
 
@@ -377,10 +379,36 @@ mod tests {
             true,
         );
 
+        let scope = super::dispatch(
+            Cli {
+                command: Some(Commands::Task(TaskArgs {
+                    command: TaskCommands::Scope(TaskScopeArgs {
+                        request: PathBuf::from("request.yaml"),
+                        workspace: PathBuf::from("workspace"),
+                        format: OutputFormat::Json,
+                    }),
+                })),
+            },
+            true,
+            true,
+        );
+
         assert!(matches!(
             task,
             super::Dispatch::Task(crate::cli::TaskArgs {
                 command: TaskCommands::Classify(TaskClassifyArgs {
+                    request,
+                    workspace,
+                    format,
+                })
+            }) if request == Path::new("request.yaml")
+                && workspace == Path::new("workspace")
+                && format == OutputFormat::Json
+        ));
+        assert!(matches!(
+            scope,
+            super::Dispatch::Task(crate::cli::TaskArgs {
+                command: TaskCommands::Scope(TaskScopeArgs {
                     request,
                     workspace,
                     format,
