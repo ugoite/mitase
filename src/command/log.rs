@@ -2,7 +2,6 @@
 // REQ-CORE-024
 
 use std::{
-    cell::RefCell,
     collections::{BTreeMap, BTreeSet},
     fmt::Write,
     path::{Component, Path, PathBuf},
@@ -42,6 +41,9 @@ const GIT_ENVIRONMENT_KEYS: [&str; 8] = [
     "GIT_PREFIX",
     "GIT_WORK_TREE",
 ];
+
+#[cfg(test)]
+use std::cell::RefCell;
 
 #[cfg(test)]
 thread_local! {
