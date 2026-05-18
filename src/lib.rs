@@ -6,10 +6,12 @@
 // FEAT-BROWSE-001
 // FEAT-LSP-001
 // FEAT-TASK-001
+// FEAT-TASK-003
 // REQ-CORE-021
 // REQ-CORE-023
 // REQ-CORE-024
 // REQ-CORE-028
+// REQ-CORE-030
 
 pub mod cli;
 pub mod command;

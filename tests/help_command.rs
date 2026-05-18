@@ -296,6 +296,24 @@ fn task_help_mentions_request_artifacts_and_json_output() {
 }
 
 #[test]
+fn task_plan_help_mentions_goal_plans_and_output_path() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args(["task", "plan", "--help"])
+        .output()
+        .expect("help should render");
+
+    assert!(output.status.success(), "task plan help should succeed");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Goal Plan"));
+    assert!(stdout.contains("--output"));
+    assert!(stdout.contains("syu task plan request.yaml"));
+    assert!(stdout.contains("syu task plan request.yaml --output .syu/tasks/current.yaml"));
+    assert!(stdout.contains("syu task plan request.yaml --format json"));
+}
+
+#[test]
 // REQ-CORE-024
 fn validate_help_mentions_warning_exit_code_for_automation() {
     let output = Command::cargo_bin("syu")

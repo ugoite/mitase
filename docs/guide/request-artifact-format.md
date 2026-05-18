@@ -50,6 +50,7 @@ context:
 The artifact is intentionally smaller than the spec itself. Once the request is
 understood, move the real work into planned requirements and features with the
 normal spec workflow. `syu task classify request.yaml` can read the artifact
-and the current graph first, and `syu task scaffold request.yaml` can then
-preview the planned requirement and feature updates that follow from that
-decision.
+and the current graph first, `syu task scaffold request.yaml` can then preview
+the planned requirement and feature updates that follow from that decision, and
+`syu task plan request.yaml` can turn the scoped request into a temporary Goal
+Plan artifact for implementation work outside the persistent spec tree.

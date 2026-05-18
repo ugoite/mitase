@@ -1,9 +1,12 @@
 // FEAT-TASK-001
+// FEAT-TASK-002
+// FEAT-TASK-003
 // REQ-CORE-028
 // REQ-CORE-029
+// REQ-CORE-030
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
 };
@@ -13,7 +16,11 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    cli::{LookupKind, OutputFormat, TaskArgs, TaskClassifyArgs, TaskCommands, TaskScaffoldArgs},
+    cli::{
+        LookupKind, OutputFormat, TaskArgs, TaskClassifyArgs, TaskCommands, TaskPlanArgs,
+        TaskPlanFormat, TaskScaffoldArgs,
+    },
+    coverage::normalize_relative_path,
     workspace::load_workspace,
 };
 
@@ -79,6 +86,23 @@ struct JsonTaskScaffoldOutput {
 }
 
 #[derive(Debug, Serialize)]
+struct JsonTaskPlanOutput {
+    version: u32,
+    kind: String,
+    request_path: String,
+    request: String,
+    classification: String,
+    source: JsonTaskPlanSource,
+    goal: JsonTaskPlanGoal,
+    spec_mapping: JsonTaskPlanSpecMapping,
+    implementation_plan: JsonTaskPlanImplementationPlan,
+    test_plan: JsonTaskPlanTestPlan,
+    coverage: JsonTaskPlanCoverage,
+    completion: JsonTaskPlanCompletion,
+    warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
 struct JsonScaffoldUpdate {
     kind: String,
     action: String,
@@ -86,6 +110,81 @@ struct JsonScaffoldUpdate {
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<String>,
     contents: String,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonTaskPlanSource {
+    mode: String,
+    request_artifact: String,
+    classification: String,
+    confidence: String,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonTaskPlanGoal {
+    id: String,
+    title: String,
+    statement: String,
+    non_goals: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonTaskPlanSpecMapping {
+    persistent_items: JsonTaskPlanPersistentItems,
+    spec_updates_required: bool,
+    spec_update_reasons: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Default)]
+struct JsonTaskPlanPersistentItems {
+    philosophies: Vec<JsonTaskPlanItem>,
+    policies: Vec<JsonTaskPlanItem>,
+    requirements: Vec<JsonTaskPlanItem>,
+    features: Vec<JsonTaskPlanItem>,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonTaskPlanItem {
+    id: String,
+    title: String,
+    document_path: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonTaskPlanImplementationPlan {
+    confidence: String,
+    scope: JsonTaskPlanScope,
+}
+
+#[derive(Debug, Serialize, Default)]
+struct JsonTaskPlanScope {
+    include: Vec<JsonTaskPlanScopeEntry>,
+    exclude: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonTaskPlanScopeEntry {
+    file: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    symbols: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonTaskPlanTestPlan {
+    selection_mode: String,
+    confidence: String,
+    required_tests: BTreeMap<String, Vec<JsonTaskPlanScopeEntry>>,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonTaskPlanCoverage {
+    mode: String,
+    threshold: u8,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonTaskPlanCompletion {
+    must_pass: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -158,6 +257,7 @@ pub fn run_task_command(args: &TaskArgs) -> Result<i32> {
     match &args.command {
         TaskCommands::Classify(classify) => run_task_classify_command(classify),
         TaskCommands::Scaffold(scaffold) => run_task_scaffold_command(scaffold),
+        TaskCommands::Plan(plan) => run_task_plan_command(plan),
     }
 }
 
@@ -225,6 +325,45 @@ pub fn run_task_scaffold_command(args: &TaskScaffoldArgs) -> Result<i32> {
             })
             .expect("serializing task scaffold output to JSON should succeed")
         ),
+    }
+
+    Ok(0)
+}
+
+pub fn run_task_plan_command(args: &TaskPlanArgs) -> Result<i32> {
+    let workspace = load_workspace(&args.workspace)?;
+    let request_artifact = load_request_artifact(&args.request)?;
+    let explicit_ids = request_artifact.explicit_ids();
+    let outcome = classify_request(&workspace, request_artifact)?;
+    let plan = build_goal_plan(&workspace, &outcome, &explicit_ids, &args.request)?;
+    let output_format = match (&args.output, args.format) {
+        (Some(_), TaskPlanFormat::Text) => TaskPlanFormat::Yaml,
+        (_, format) => format,
+    };
+    let rendered = render_goal_plan_output(&args.request, &outcome, &plan, output_format)?;
+
+    if let Some(output) = &args.output {
+        let resolved_output = resolve_task_plan_output_path(&workspace.root, output);
+        if resolved_output.starts_with(&workspace.spec_root) {
+            eprintln!(
+                "warning: task plan output `{}` is inside spec.root `{}`; the plan is intended to stay outside the persistent spec tree",
+                resolved_output.display(),
+                workspace.spec_root.display()
+            );
+        }
+
+        if let Some(parent) = resolved_output.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&resolved_output, rendered)?;
+        println!("wrote goal plan to {}", resolved_output.display());
+    } else {
+        print!("{rendered}");
+        if !rendered.ends_with('\n') {
+            println!();
+        }
     }
 
     Ok(0)
@@ -430,6 +569,530 @@ fn build_scaffold_plan(
     }
 
     Ok(ScaffoldPlan { updates })
+}
+
+fn build_goal_plan(
+    workspace: &crate::workspace::Workspace,
+    outcome: &ClassificationOutcome,
+    explicit_ids: &[String],
+    request_path: &Path,
+) -> Result<JsonTaskPlanOutput> {
+    let lookup = WorkspaceLookup::new(workspace);
+    let persistent_items = collect_task_plan_persistent_items(&lookup, outcome)?;
+    let spec_update_reasons = determine_spec_update_reasons(outcome, &persistent_items);
+    let spec_updates_required = !spec_update_reasons.is_empty();
+    let scope_include =
+        collect_task_plan_scope_entries(workspace, &persistent_items, explicit_ids)?;
+    let test_plan = collect_task_plan_tests(workspace, &persistent_items, outcome)?;
+    let implementation_confidence = task_plan_confidence(scope_include.len(), outcome);
+    let source_confidence = if outcome.explicit_items.is_empty() && outcome.related_items.is_empty()
+    {
+        "low"
+    } else if outcome.explicit_items.is_empty() {
+        "medium"
+    } else {
+        "high"
+    };
+
+    Ok(JsonTaskPlanOutput {
+        version: 1,
+        kind: "syu.goal_plan".to_string(),
+        request_path: request_path.display().to_string(),
+        request: outcome.request.clone(),
+        classification: outcome.classification.label().to_string(),
+        source: JsonTaskPlanSource {
+            mode: "request_driven".to_string(),
+            request_artifact: request_path.display().to_string(),
+            classification: outcome.classification.label().to_string(),
+            confidence: source_confidence.to_string(),
+        },
+        goal: JsonTaskPlanGoal {
+            id: "GOAL-TASK-PLAN-001".to_string(),
+            title: "Generate request-driven Goal Plans".to_string(),
+            statement: format!(
+                "Turn the scoped request into a temporary implementation plan linked to the current spec graph: {}",
+                summarize_request(&outcome.request)
+            ),
+            non_goals: vec![
+                "Do not modify persistent spec files.".to_string(),
+                "Do not add a fifth persistent spec layer.".to_string(),
+                "Do not skip validation or coverage checks.".to_string(),
+            ],
+        },
+        spec_mapping: JsonTaskPlanSpecMapping {
+            persistent_items,
+            spec_updates_required,
+            spec_update_reasons,
+        },
+        implementation_plan: JsonTaskPlanImplementationPlan {
+            confidence: implementation_confidence.to_string(),
+            scope: JsonTaskPlanScope {
+                include: scope_include,
+                exclude: vec!["docs/generated/**".to_string(), "target/**".to_string()],
+            },
+        },
+        test_plan,
+        coverage: JsonTaskPlanCoverage {
+            mode: "changed_lines".to_string(),
+            threshold: 100,
+        },
+        completion: JsonTaskPlanCompletion {
+            must_pass: vec![
+                "syu task check .syu/tasks/current.yaml --range origin/main...HEAD".to_string(),
+                "syu validate .".to_string(),
+            ],
+        },
+        warnings: collect_task_plan_warnings(outcome),
+    })
+}
+
+fn render_goal_plan_output(
+    request_path: &Path,
+    outcome: &ClassificationOutcome,
+    plan: &JsonTaskPlanOutput,
+    format: TaskPlanFormat,
+) -> Result<String> {
+    match format {
+        TaskPlanFormat::Text => Ok(render_goal_plan_text_output(request_path, outcome, plan)),
+        TaskPlanFormat::Yaml => Ok(serde_yaml::to_string(plan)
+            .expect("serializing task plan output to YAML should succeed")),
+        TaskPlanFormat::Json => Ok(serde_json::to_string_pretty(plan)
+            .expect("serializing task plan output to JSON should succeed")),
+    }
+}
+
+fn render_goal_plan_text_output(
+    request_path: &Path,
+    outcome: &ClassificationOutcome,
+    plan: &JsonTaskPlanOutput,
+) -> String {
+    let mut output = String::new();
+    use std::fmt::Write as _;
+
+    writeln!(&mut output, "request: {}", request_path.display()).expect("write to string");
+    writeln!(&mut output, "version: {}", plan.version).expect("write to string");
+    writeln!(&mut output, "kind: {}", plan.kind).expect("write to string");
+    writeln!(
+        &mut output,
+        "classification: {}",
+        outcome.classification.label()
+    )
+    .expect("write to string");
+    writeln!(&mut output, "source confidence: {}", plan.source.confidence)
+        .expect("write to string");
+    writeln!(&mut output).expect("write to string");
+    writeln!(&mut output, "goal:").expect("write to string");
+    writeln!(&mut output, "  id: {}", plan.goal.id).expect("write to string");
+    writeln!(&mut output, "  title: {}", plan.goal.title).expect("write to string");
+    writeln!(&mut output, "  statement: {}", plan.goal.statement).expect("write to string");
+    writeln!(&mut output, "  non-goals:").expect("write to string");
+    for item in &plan.goal.non_goals {
+        writeln!(&mut output, "    - {item}").expect("write to string");
+    }
+    writeln!(&mut output).expect("write to string");
+    writeln!(&mut output, "persistent spec mapping:").expect("write to string");
+    print_plan_item_section(
+        &mut output,
+        "philosophies",
+        &plan.spec_mapping.persistent_items.philosophies,
+    );
+    print_plan_item_section(
+        &mut output,
+        "policies",
+        &plan.spec_mapping.persistent_items.policies,
+    );
+    print_plan_item_section(
+        &mut output,
+        "requirements",
+        &plan.spec_mapping.persistent_items.requirements,
+    );
+    print_plan_item_section(
+        &mut output,
+        "features",
+        &plan.spec_mapping.persistent_items.features,
+    );
+    writeln!(
+        &mut output,
+        "  spec updates required: {}",
+        if plan.spec_mapping.spec_updates_required {
+            "yes"
+        } else {
+            "no"
+        }
+    )
+    .expect("write to string");
+    if !plan.spec_mapping.spec_update_reasons.is_empty() {
+        writeln!(&mut output, "  spec update reasons:").expect("write to string");
+        for reason in &plan.spec_mapping.spec_update_reasons {
+            writeln!(&mut output, "    - {reason}").expect("write to string");
+        }
+    }
+    writeln!(&mut output).expect("write to string");
+    writeln!(&mut output, "implementation plan:").expect("write to string");
+    writeln!(
+        &mut output,
+        "  confidence: {}",
+        plan.implementation_plan.confidence
+    )
+    .expect("write to string");
+    writeln!(&mut output, "  include:").expect("write to string");
+    if plan.implementation_plan.scope.include.is_empty() {
+        writeln!(&mut output, "    - none").expect("write to string");
+    } else {
+        for entry in &plan.implementation_plan.scope.include {
+            writeln!(&mut output, "    - {}", render_scope_entry(entry)).expect("write to string");
+        }
+    }
+    writeln!(&mut output, "  exclude:").expect("write to string");
+    for item in &plan.implementation_plan.scope.exclude {
+        writeln!(&mut output, "    - {item}").expect("write to string");
+    }
+    writeln!(&mut output).expect("write to string");
+    writeln!(&mut output, "test plan:").expect("write to string");
+    writeln!(
+        &mut output,
+        "  selection mode: {}",
+        plan.test_plan.selection_mode
+    )
+    .expect("write to string");
+    writeln!(&mut output, "  confidence: {}", plan.test_plan.confidence).expect("write to string");
+    if plan.test_plan.required_tests.is_empty() {
+        writeln!(&mut output, "  required tests:").expect("write to string");
+        writeln!(&mut output, "    - none").expect("write to string");
+    } else {
+        writeln!(&mut output, "  required tests:").expect("write to string");
+        for (language, entries) in &plan.test_plan.required_tests {
+            writeln!(&mut output, "    {language}:").expect("write to string");
+            for entry in entries {
+                writeln!(&mut output, "      - {}", render_scope_entry(entry))
+                    .expect("write to string");
+            }
+        }
+    }
+    writeln!(&mut output).expect("write to string");
+    writeln!(
+        &mut output,
+        "coverage: {} (threshold {})",
+        plan.coverage.mode, plan.coverage.threshold
+    )
+    .expect("write to string");
+    writeln!(&mut output).expect("write to string");
+    writeln!(&mut output, "completion checks:").expect("write to string");
+    for item in &plan.completion.must_pass {
+        writeln!(&mut output, "- {item}").expect("write to string");
+    }
+    if !plan.warnings.is_empty() {
+        writeln!(&mut output).expect("write to string");
+        writeln!(&mut output, "warnings:").expect("write to string");
+        for warning in &plan.warnings {
+            writeln!(&mut output, "- {warning}").expect("write to string");
+        }
+    }
+
+    output
+}
+
+fn print_plan_item_section(output: &mut String, heading: &str, items: &[JsonTaskPlanItem]) {
+    use std::fmt::Write as _;
+
+    writeln!(output, "  {heading}:").expect("write to string");
+    if items.is_empty() {
+        writeln!(output, "    - none").expect("write to string");
+        return;
+    }
+    for item in items {
+        let document_path = item
+            .document_path
+            .as_deref()
+            .map(|path| format!(" ({path})"))
+            .unwrap_or_default();
+        writeln!(output, "    - {} {}{}", item.id, item.title, document_path)
+            .expect("write to string");
+    }
+}
+
+fn render_scope_entry(entry: &JsonTaskPlanScopeEntry) -> String {
+    if entry.symbols.is_empty() {
+        entry.file.clone()
+    } else {
+        format!("{} [{}]", entry.file, entry.symbols.join(", "))
+    }
+}
+
+fn resolve_task_plan_output_path(workspace_root: &Path, output: &Path) -> PathBuf {
+    if output.is_absolute() {
+        return output.to_path_buf();
+    }
+
+    workspace_root.join(normalize_relative_path(output))
+}
+
+fn collect_task_plan_persistent_items(
+    lookup: &WorkspaceLookup<'_>,
+    outcome: &ClassificationOutcome,
+) -> Result<JsonTaskPlanPersistentItems> {
+    let mut items = JsonTaskPlanPersistentItems::default();
+    let mut seen = BTreeSet::new();
+
+    for result in outcome
+        .explicit_items
+        .iter()
+        .chain(outcome.related_items.iter())
+    {
+        if !seen.insert(result.id.clone()) {
+            continue;
+        }
+
+        let item = JsonTaskPlanItem {
+            id: result.id.clone(),
+            title: result.title.clone(),
+            document_path: lookup.document_path_for_id(&result.id)?,
+        };
+        match result.kind {
+            "philosophy" => items.philosophies.push(item),
+            "policy" => items.policies.push(item),
+            "requirement" => items.requirements.push(item),
+            "feature" => items.features.push(item),
+            _ => {}
+        }
+    }
+
+    items.philosophies.sort_by(|a, b| a.id.cmp(&b.id));
+    items.policies.sort_by(|a, b| a.id.cmp(&b.id));
+    items.requirements.sort_by(|a, b| a.id.cmp(&b.id));
+    items.features.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(items)
+}
+
+fn determine_spec_update_reasons(
+    outcome: &ClassificationOutcome,
+    persistent_items: &JsonTaskPlanPersistentItems,
+) -> Vec<String> {
+    let mut reasons = Vec::new();
+    if persistent_items.requirements.is_empty() {
+        reasons.push(
+            "No durable requirement was identified, so a new or expanded requirement is likely needed before implementation."
+                .to_string(),
+        );
+    }
+    if persistent_items.features.is_empty() {
+        reasons.push(
+            "No feature anchor was identified, so the plan is still provisional and may need a new feature definition."
+                .to_string(),
+        );
+    }
+    if outcome.explicit_items.is_empty() {
+        reasons.push(
+            "The request does not name concrete spec IDs, so the mapping is inferred from the current graph and request text."
+                .to_string(),
+        );
+    }
+    if outcome.explicit_items.is_empty() && outcome.related_items.is_empty() {
+        reasons.push(
+            "No close graph matches were found, which is a strong signal that spec updates are likely required."
+                .to_string(),
+        );
+    }
+
+    reasons
+}
+
+fn collect_task_plan_scope_entries(
+    workspace: &crate::workspace::Workspace,
+    persistent_items: &JsonTaskPlanPersistentItems,
+    explicit_ids: &[String],
+) -> Result<Vec<JsonTaskPlanScopeEntry>> {
+    let mut files = BTreeMap::<String, BTreeSet<String>>::new();
+
+    let feature_ids = persistent_items
+        .features
+        .iter()
+        .map(|item| item.id.as_str())
+        .chain(
+            explicit_ids
+                .iter()
+                .map(|id| id.as_str())
+                .filter(|id| id.starts_with("FEAT-")),
+        );
+
+    for feature_id in feature_ids {
+        collect_feature_scope_entries(workspace, feature_id, &mut files);
+    }
+
+    for requirement in persistent_items
+        .requirements
+        .iter()
+        .filter_map(|item| lookup_requirement(workspace, &item.id))
+    {
+        for feature_id in &requirement.linked_features {
+            collect_feature_scope_entries(workspace, feature_id, &mut files);
+        }
+    }
+
+    let mut entries = files
+        .into_iter()
+        .map(|(file, symbols)| JsonTaskPlanScopeEntry {
+            file,
+            symbols: symbols.into_iter().collect(),
+        })
+        .collect::<Vec<_>>();
+    entries.sort_by(|a, b| a.file.cmp(&b.file));
+    entries.dedup_by(|a, b| a.file == b.file && a.symbols == b.symbols);
+    Ok(entries)
+}
+
+fn collect_feature_scope_entries(
+    workspace: &crate::workspace::Workspace,
+    feature_id: &str,
+    files: &mut BTreeMap<String, BTreeSet<String>>,
+) {
+    let Some(feature) = workspace.features.iter().find(|item| item.id == feature_id) else {
+        return;
+    };
+
+    for references in feature.implementations.values() {
+        for reference in references {
+            let file = normalize_relative_path(&reference.file)
+                .display()
+                .to_string();
+            let symbols = files.entry(file).or_default();
+            for symbol in &reference.symbols {
+                symbols.insert(symbol.clone());
+            }
+        }
+    }
+}
+
+fn collect_task_plan_tests(
+    workspace: &crate::workspace::Workspace,
+    persistent_items: &JsonTaskPlanPersistentItems,
+    outcome: &ClassificationOutcome,
+) -> Result<JsonTaskPlanTestPlan> {
+    let mut required_tests = BTreeMap::<String, Vec<JsonTaskPlanScopeEntry>>::new();
+    let mut seen = BTreeSet::new();
+
+    for requirement in persistent_items
+        .requirements
+        .iter()
+        .filter_map(|item| lookup_requirement(workspace, &item.id))
+    {
+        for (language, tests) in &requirement.tests {
+            let entries = required_tests.entry(language.clone()).or_default();
+            for reference in tests {
+                let file = normalize_relative_path(&reference.file)
+                    .display()
+                    .to_string();
+                let key = format!("{language}:{file}:{}", reference.symbols.join(","));
+                if !seen.insert(key) {
+                    continue;
+                }
+                entries.push(JsonTaskPlanScopeEntry {
+                    file,
+                    symbols: reference.symbols.clone(),
+                });
+            }
+        }
+    }
+
+    for feature in persistent_items
+        .features
+        .iter()
+        .filter_map(|item| lookup_feature(workspace, &item.id))
+    {
+        for requirement_id in &feature.linked_requirements {
+            if let Some(requirement) = lookup_requirement(workspace, requirement_id) {
+                for (language, tests) in &requirement.tests {
+                    let entries = required_tests.entry(language.clone()).or_default();
+                    for reference in tests {
+                        let file = normalize_relative_path(&reference.file)
+                            .display()
+                            .to_string();
+                        let key = format!("{language}:{file}:{}", reference.symbols.join(","));
+                        if !seen.insert(key) {
+                            continue;
+                        }
+                        entries.push(JsonTaskPlanScopeEntry {
+                            file,
+                            symbols: reference.symbols.clone(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    for entries in required_tests.values_mut() {
+        entries.sort_by(|a, b| a.file.cmp(&b.file));
+        entries.dedup_by(|a, b| a.file == b.file && a.symbols == b.symbols);
+    }
+
+    let selection_mode = if required_tests.is_empty() {
+        "minimal"
+    } else {
+        "linked-declarations"
+    };
+    let confidence = task_plan_confidence_for_tests(required_tests.len(), outcome);
+
+    Ok(JsonTaskPlanTestPlan {
+        selection_mode: selection_mode.to_string(),
+        confidence: confidence.to_string(),
+        required_tests,
+    })
+}
+
+fn task_plan_confidence(
+    scope_include_count: usize,
+    outcome: &ClassificationOutcome,
+) -> &'static str {
+    if scope_include_count == 0 || outcome.related_items.is_empty() {
+        "low"
+    } else if outcome.explicit_items.is_empty() {
+        "medium"
+    } else {
+        "high"
+    }
+}
+
+fn task_plan_confidence_for_tests(
+    test_group_count: usize,
+    outcome: &ClassificationOutcome,
+) -> &'static str {
+    if test_group_count == 0 || outcome.related_items.is_empty() {
+        "low"
+    } else {
+        "high"
+    }
+}
+
+fn collect_task_plan_warnings(outcome: &ClassificationOutcome) -> Vec<String> {
+    let mut warnings = Vec::new();
+    if outcome.explicit_items.is_empty() {
+        warnings.push(
+            "The plan is inferred from request text and graph matches, so review the proposed scope carefully."
+                .to_string(),
+        );
+    }
+    if outcome.related_items.is_empty() {
+        warnings.push(
+            "No close graph matches were found, so the plan may need a new requirement or feature before implementation."
+                .to_string(),
+        );
+    }
+    warnings
+}
+
+fn lookup_requirement<'a>(
+    workspace: &'a crate::workspace::Workspace,
+    id: &str,
+) -> Option<&'a crate::model::Requirement> {
+    workspace.requirements.iter().find(|item| item.id == id)
+}
+
+fn lookup_feature<'a>(
+    workspace: &'a crate::workspace::Workspace,
+    id: &str,
+) -> Option<&'a crate::model::Feature> {
+    workspace.features.iter().find(|item| item.id == id)
 }
 
 impl RequestArtifact {

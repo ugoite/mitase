@@ -78,6 +78,7 @@ edit YAML by hand, use the task workflow first:
 ```bash
 syu task classify request.yaml
 syu task scaffold request.yaml
+syu task plan request.yaml --output .syu/tasks/current.yaml
 ```
 
 Keep the planned items small. If one request is trying to introduce multiple
