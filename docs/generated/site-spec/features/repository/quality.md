@@ -44,7 +44,7 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
         - **symbols**:
           - configure_llvm_tools
           - enforce_diff_coverage
-          - enforce_lcov_threshold
+          - report_lcov_coverage
           - run_coverage
       - **file**: scripts/ci/check-generated-docs-freshness.sh
         - **symbols**:
@@ -190,7 +190,7 @@ features:
           symbols:
             - configure_llvm_tools
             - enforce_diff_coverage
-            - enforce_lcov_threshold
+            - report_lcov_coverage
             - run_coverage
         - file: scripts/ci/check-generated-docs-freshness.sh
           symbols:
