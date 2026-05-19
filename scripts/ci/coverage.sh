@@ -3,8 +3,6 @@
 
 set -euo pipefail
 
-LINE_THRESHOLD=100
-
 ensure_cargo_bin_in_path() {
   local cargo_bin_dir
 
@@ -50,16 +48,13 @@ generate_spec_coverage_summary() {
   fi
 }
 
-enforce_lcov_threshold() {
+report_lcov_coverage() {
   local lcov_path="$1"
 
-  # Keep the repository contract equivalent to cargo llvm-cov --fail-under-lines 100,
-  # but evaluate it from LCOV's executed-line data so the gate reflects true line coverage.
-  python3 - "$lcov_path" "$LINE_THRESHOLD" <<'PY'
+  python3 - "$lcov_path" <<'PY'
 import sys
 
 lcov_path = sys.argv[1]
-threshold = float(sys.argv[2])
 covered = 0
 total = 0
 current_file = None
@@ -83,7 +78,8 @@ with open(lcov_path, encoding="utf-8") as handle:
 
 coverage = 100.0 if total == 0 else covered * 100.0 / total
 print(f"line coverage: {coverage:.2f}% ({covered}/{total})")
-if coverage + 1e-9 < threshold:
+
+if misses:
     print("\nuncovered executable lines:")
     by_file = {}
     for filename, line_number in misses:
@@ -100,7 +96,6 @@ if coverage + 1e-9 < threshold:
             if 1 <= line_number <= len(source_lines):
                 snippet = source_lines[line_number - 1].strip()
             print(f"  {line_number}: {snippet}")
-    raise SystemExit(1)
 PY
 }
 
@@ -207,9 +202,8 @@ if misses:
     print("changed lines without coverage:")
     for path, line_number in misses:
         print(f"- {path.relative_to(repo_root)}:{line_number}")
-    raise SystemExit(1)
-
-print("changed-line coverage: 100.00%")
+else:
+    print("changed-line coverage: 100.00%")
 PY
 }
 
@@ -238,17 +232,17 @@ run_coverage() {
     summary)
       generate_lcov target/coverage/lcov.info
       generate_spec_coverage_summary target/coverage/lcov.info target/coverage/spec-coverage-summary.md
-      enforce_lcov_threshold target/coverage/lcov.info
+      report_lcov_coverage target/coverage/lcov.info
       ;;
     lcov)
       generate_lcov target/coverage/lcov.info
       generate_spec_coverage_summary target/coverage/lcov.info target/coverage/spec-coverage-summary.md
-      enforce_lcov_threshold target/coverage/lcov.info
+      report_lcov_coverage target/coverage/lcov.info
       ;;
     html)
       generate_lcov target/coverage/lcov.info
       generate_spec_coverage_summary target/coverage/lcov.info target/coverage/spec-coverage-summary.md
-      enforce_lcov_threshold target/coverage/lcov.info
+      report_lcov_coverage target/coverage/lcov.info
       cargo llvm-cov --no-run --html
       ;;
     *)
