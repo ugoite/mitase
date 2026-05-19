@@ -184,15 +184,18 @@ fn repository_declares_precommit_and_quality_gates() {
 
 #[test]
 // REQ-CORE-006
-fn repository_declares_coverage_gate_at_one_hundred_percent() {
+fn repository_declares_coverage_reporting_without_percentage_gate() {
     let coverage_script = read_file("scripts/ci/coverage.sh");
     let spec_summary_script = read_file("scripts/ci/write-spec-coverage-summary.py");
     let ci_workflow = read_file(".github/workflows/ci.yml");
 
     assert!(coverage_script.contains("FEAT-QUALITY-001"));
     assert!(coverage_script.contains("run_coverage"));
-    assert!(coverage_script.contains("LINE_THRESHOLD=100"));
-    assert!(coverage_script.contains("--fail-under-lines 100"));
+    assert!(coverage_script.contains("generate_lcov"));
+    assert!(coverage_script.contains("report_lcov_coverage"));
+    assert!(coverage_script.contains("enforce_diff_coverage"));
+    assert!(!coverage_script.contains("LINE_THRESHOLD=100"));
+    assert!(!coverage_script.contains("--fail-under-lines 100"));
     assert!(coverage_script.contains("cargo llvm-cov"));
     assert!(coverage_script.contains("generate_spec_coverage_summary"));
     assert!(coverage_script.contains("target/coverage/spec-coverage-summary.md"));

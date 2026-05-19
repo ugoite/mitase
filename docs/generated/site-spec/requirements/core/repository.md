@@ -41,11 +41,12 @@ description: "Generated reference for docs/syu/requirements/core/repository.yaml
           - repository_declares_precommit_and_quality_gates
           - repository_keeps_node_majors_aligned_across_docs_packages_and_ci
 - **id**: REQ-CORE-006
-  - **title**: Enforce 100 percent line coverage in CI
+  - **title**: Report coverage in CI without gating on percentage
   - **description**:
     - |
-      The repository MUST gate CI on 100 percent Rust line coverage using a
-      repeatable command so regressions in verification logic remain visible.
+      The repository MUST measure and report Rust line coverage in CI using a
+      repeatable command so regressions in verification logic remain visible,
+      but it MUST NOT block merges on a minimum coverage percentage.
   - **priority**: high
   - **status**: implemented
   - **linked_policies**:
@@ -56,7 +57,7 @@ description: "Generated reference for docs/syu/requirements/core/repository.yaml
     - **rust**:
       - **file**: tests/repository_quality.rs
         - **symbols**:
-          - repository_declares_coverage_gate_at_one_hundred_percent
+          - repository_declares_coverage_reporting_without_percentage_gate
       - **file**: tests/spec_coverage_summary_script.rs
         - **symbols**:
           - *
@@ -232,10 +233,11 @@ requirements:
             - repository_declares_precommit_and_quality_gates
             - repository_keeps_node_majors_aligned_across_docs_packages_and_ci
   - id: REQ-CORE-006
-    title: Enforce 100 percent line coverage in CI
+    title: Report coverage in CI without gating on percentage
     description: |
-      The repository MUST gate CI on 100 percent Rust line coverage using a
-      repeatable command so regressions in verification logic remain visible.
+      The repository MUST measure and report Rust line coverage in CI using a
+      repeatable command so regressions in verification logic remain visible,
+      but it MUST NOT block merges on a minimum coverage percentage.
     priority: high
     status: implemented
     linked_policies:
@@ -246,7 +248,7 @@ requirements:
       rust:
         - file: tests/repository_quality.rs
           symbols:
-            - repository_declares_coverage_gate_at_one_hundred_percent
+            - repository_declares_coverage_reporting_without_percentage_gate
         - file: tests/spec_coverage_summary_script.rs
           symbols:
             - '*'
