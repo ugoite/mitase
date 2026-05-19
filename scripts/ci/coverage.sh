@@ -202,6 +202,7 @@ if misses:
     print("changed lines without coverage:")
     for path, line_number in misses:
         print(f"- {path.relative_to(repo_root)}:{line_number}")
+    raise SystemExit(1)
 else:
     print("changed-line coverage: 100.00%")
 PY
