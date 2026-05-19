@@ -203,7 +203,7 @@ if misses:
     for path, line_number in misses:
         print(f"- {path.relative_to(repo_root)}:{line_number}")
 else:
-    print("changed-line coverage: 100.00%")
+    print("coverage measure script")
 PY
 }
 
