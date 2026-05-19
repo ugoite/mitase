@@ -259,7 +259,7 @@ fn run_trace_range(
                 },
             },
         };
-        let scope_guard = collect_trace_scope_guard(workspace, &[], allowed_ids)?;
+        let scope_guard = collect_trace_scope_guard(workspace, &[], &[], allowed_ids)?;
         let guard_failed = scope_guard
             .as_ref()
             .is_some_and(|guard| !guard.out_of_scope_items.is_empty());
@@ -290,7 +290,7 @@ fn run_trace_range(
     let (results, skipped) = collect_trace_range_outputs(workspace, &changed_files);
 
     let summary = compute_range_summary(changed_files.len(), &results, &skipped);
-    let scope_guard = collect_trace_scope_guard(workspace, &results, allowed_ids)?;
+    let scope_guard = collect_trace_scope_guard(workspace, &results, &skipped, allowed_ids)?;
     let guard_failed = scope_guard
         .as_ref()
         .is_some_and(|guard| !guard.out_of_scope_items.is_empty());
@@ -591,6 +591,7 @@ fn render_scope_guard_text(rendered: &mut String, scope_guard: &TraceRangeScopeG
 fn collect_trace_scope_guard(
     workspace: &Workspace,
     results: &[TraceLookupOutput],
+    skipped_files: &[TraceSkippedFile],
     allowed_ids: &[String],
 ) -> Result<Option<TraceRangeScopeGuard>> {
     if allowed_ids.is_empty() {
@@ -632,6 +633,14 @@ fn collect_trace_scope_guard(
                 reason: Some("outside allowed IDs".to_string()),
             });
         }
+    }
+
+    for skipped_file in skipped_files {
+        out_of_scope_items.push(TraceScopeGuardViolation {
+            file: skipped_file.file.clone(),
+            owners: Vec::new(),
+            reason: Some(skipped_file.reason.clone()),
+        });
     }
 
     Ok(Some(TraceRangeScopeGuard {
@@ -1654,6 +1663,7 @@ mod tests {
                 policies: Vec::new(),
                 philosophies: Vec::new(),
             }],
+            &[],
             &["REQ-TRACE-001".to_string()],
         )
         .expect("scope guard collection should succeed")
