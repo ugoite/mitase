@@ -58,6 +58,44 @@ fn write_history_workspace() -> TempDir {
     .expect("history feature file");
 
     init_git_repository(tempdir.path());
+    fs::create_dir_all(docs_root.join("requirements/legacy/archive")).expect("legacy dir");
+    update_file(
+        &docs_root.join("requirements/legacy/original.yaml"),
+        "category: Legacy\nprefix: REQ-HIST-DEL\n\nrequirements:\n  - id: REQ-HIST-DEL-001\n    title: Deleted requirement history lookup\n    description: Historical IDs should remain inspectable after deletion.\n    priority: medium\n    status: implemented\n    linked_policies: []\n    linked_features: []\n    tests: {}\n",
+    );
+    git_commit(tempdir.path(), "docs: add deleted requirement history");
+
+    fs::rename(
+        docs_root.join("requirements/legacy/original.yaml"),
+        docs_root.join("requirements/legacy/archive/renamed.yaml"),
+    )
+    .expect("legacy requirement should rename");
+    update_file(
+        &docs_root.join("requirements/legacy/archive/renamed.yaml"),
+        "category: Legacy\nprefix: REQ-HIST-DEL\n\nrequirements:\n  - id: REQ-HIST-DEL-001\n    title: Deleted requirement history lookup after rename\n    description: Historical IDs should remain inspectable after deletion.\n    priority: medium\n    status: implemented\n    linked_policies: []\n    linked_features: []\n    tests: {}\n",
+    );
+    git_commit(tempdir.path(), "docs: move deleted requirement history");
+
+    fs::remove_file(docs_root.join("requirements/legacy/archive/renamed.yaml"))
+        .expect("legacy requirement should delete");
+    git_commit(tempdir.path(), "docs: delete requirement history");
+
+    update_file(
+        &docs_root.join("requirements/legacy/redefined.yaml"),
+        "category: Legacy\nprefix: REQ-HIST-DEL\n\nrequirements:\n  - id: REQ-HIST-DEL-001\n    title: Deleted requirement redefinition attempt\n    description: Reusing a deleted ID should stay visible in history.\n    priority: medium\n    status: implemented\n    linked_policies: []\n    linked_features: []\n    tests: {}\n",
+    );
+    git_commit(
+        tempdir.path(),
+        "docs: reintroduce deleted requirement history",
+    );
+
+    fs::remove_file(docs_root.join("requirements/legacy/redefined.yaml"))
+        .expect("redefined legacy requirement should delete");
+    git_commit(
+        tempdir.path(),
+        "docs: remove reintroduced requirement history",
+    );
+
     update_file(
         &tempdir.path().join("docs/syu/requirements/core.yaml"),
         "category: Core\nprefix: REQ-HIST\n\nrequirements:\n  - id: REQ-HIST-001\n    title: Requirement history lookup\n    description: Requirement history should show the traced test, checked-in definition, and maintenance story.\n    priority: medium\n    status: implemented\n    linked_policies:\n      - POL-HIST-001\n    linked_features:\n      - FEAT-HIST-001\n    tests:\n      rust:\n        - file: src/history_tests.rs\n          symbols:\n            - requirement_history_test\n",
@@ -250,6 +288,42 @@ fn write_fake_git_for_merge_base_spawn_failure(script_dir: &Path) {
     }
 }
 
+fn write_fake_git_for_historical_lookup_guard(script_dir: &Path, forbidden_fragment: &str) {
+    let script_path = script_dir.join("git");
+    let script = format!(
+        r#"#!/bin/sh
+set -eu
+workspace="$2"
+command_name="$3"
+state_file="/tmp/syu-historical-lookup-armed"
+if [ "$command_name" = "grep" ]; then
+  : >"$state_file"
+fi
+if [ "$command_name" = "show" ] && [ -f "$state_file" ]; then
+  case "$4" in
+    *{forbidden_fragment}*)
+      echo 'unexpected git show for unrelated history file' >&2
+      exit 1
+      ;;
+  esac
+fi
+exec /usr/bin/git "$@"
+"#,
+        forbidden_fragment = forbidden_fragment
+    );
+    fs::write(&script_path, script).expect("fake git script");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut permissions = fs::metadata(&script_path)
+            .expect("fake git metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).expect("fake git permissions");
+    }
+}
+
 #[test]
 fn log_command_renders_requirement_definition_and_test_history() {
     let workspace = write_history_workspace();
@@ -278,6 +352,145 @@ fn log_command_renders_requirement_definition_and_test_history() {
         !stdout.contains("feat: update traced implementation"),
         "requirement history should not include feature implementation commits"
     );
+}
+
+#[test]
+fn log_command_renders_deleted_id_history_with_lifecycle_events() {
+    let workspace = write_history_workspace();
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args([
+            "log",
+            "REQ-HIST-DEL-001",
+            workspace.path().to_str().expect("utf8 path"),
+        ])
+        .output()
+        .expect("command should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Status: historical"));
+    assert!(stdout.contains("Lifecycle:"));
+    assert!(stdout.contains("created"));
+    assert!(stdout.contains("moved"));
+    assert!(stdout.contains("removed"));
+    assert!(stdout.contains("redefined"));
+    assert!(stdout.contains("deleted from the historical index"));
+}
+
+#[test]
+fn log_command_serializes_deleted_id_history_with_lifecycle_events() {
+    let workspace = write_history_workspace();
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args([
+            "log",
+            "REQ-HIST-DEL-001",
+            workspace.path().to_str().expect("utf8 path"),
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("command should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json: Value = serde_json::from_slice(&output.stdout).expect("output should be valid JSON");
+    assert_eq!(json["status"], "historical");
+    let lifecycle = json["lifecycle_events"]
+        .as_array()
+        .expect("lifecycle events");
+    assert!(lifecycle.iter().any(|event| event["event"] == "created"));
+    assert!(lifecycle.iter().any(|event| event["event"] == "moved"));
+    assert!(lifecycle.iter().any(|event| event["event"] == "removed"));
+    assert!(lifecycle.iter().any(|event| event["event"] == "redefined"));
+    assert_eq!(json["tracked_paths"][0]["source"], "historical");
+}
+
+#[test]
+fn log_command_can_include_related_history_for_deleted_ids() {
+    let workspace = write_history_workspace();
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args([
+            "log",
+            "REQ-HIST-DEL-001",
+            workspace.path().to_str().expect("utf8 path"),
+            "--include-related",
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("command should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json: Value = serde_json::from_slice(&output.stdout).expect("output should be valid JSON");
+    assert_eq!(json["include_related"], true);
+    assert_eq!(json["status"], "historical");
+    assert!(
+        json["tracked_paths"]
+            .as_array()
+            .expect("tracked paths")
+            .iter()
+            .any(|path| path["source"] == "historical")
+    );
+}
+
+#[test]
+fn log_command_avoids_showing_unrelated_yaml_in_deleted_history_lookup() {
+    let workspace = write_history_workspace();
+    let fake_bin = tempdir().expect("tempdir should exist");
+    write_fake_git_for_historical_lookup_guard(fake_bin.path(), "unrelated-");
+    let _ = fs::remove_file("/tmp/syu-historical-lookup-armed");
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .env("PATH", fake_bin.path())
+        .env("SYU_TEST_RESOLVE_HISTORICAL_TARGET", "1")
+        .args([
+            "log",
+            "REQ-HIST-DEL-001",
+            workspace.path().to_str().expect("utf8 path"),
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("command should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json: Value = serde_json::from_slice(&output.stdout).expect("output should be valid JSON");
+    assert_eq!(json["status"], "historical");
+    assert_eq!(json["entity_kind"], "requirement");
+    assert!(
+        json["title"]
+            .as_str()
+            .expect("title")
+            .contains("Deleted requirement")
+    );
+    assert!(json["lifecycle_events"].is_array());
 }
 
 #[test]
