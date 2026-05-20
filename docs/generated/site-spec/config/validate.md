@@ -49,7 +49,11 @@ description: "Generated reference for docs/syu/config/validate.yaml"
       When `true`, `syu validate` behaves as if `--fix` was passed unless the
       user explicitly disables fixes with `--no-fix`. Autofix is rollback-safe:
       if a later write fails, earlier edits are restored and the run reports
-      whether it never started or was rolled back after partial changes.
+      whether it never started or was rolled back after partial changes. The
+      fix set stays conservative: it can insert missing trace docs, normalize
+      canonical trace paths, repair legacy `planned` typos, and clean up
+      deterministic ownership metadata when one safe correction exists, but it
+      does not guess at structural intent.
 - **key**: validate.allow_planned
   - **type**: boolean
   - **default**: True
@@ -130,7 +134,9 @@ description: "Generated reference for docs/syu/config/validate.yaml"
       trace mapping as the canonical file/symbol link but requires each traced
       file to have an adjacent `&lt;file&gt;.syu-ownership.yaml` manifest with
       matching owner IDs and symbols. Autofix updates the sidecar manifest
-      instead of inserting IDs into source when `sidecar` is enabled.
+      instead of inserting IDs into source when `sidecar` is enabled, and it
+      may normalize deterministic ownership metadata in that manifest when one
+      safe correction is obvious.
       Repository-relative generated paths listed in
       `validate.symbol_trace_coverage_ignored_paths` stay opted out of the
       extra `SYU-trace-id-001` ownership requirement in `inline` and `sidecar`
@@ -195,7 +201,11 @@ items:
       When `true`, `syu validate` behaves as if `--fix` was passed unless the
       user explicitly disables fixes with `--no-fix`. Autofix is rollback-safe:
       if a later write fails, earlier edits are restored and the run reports
-      whether it never started or was rolled back after partial changes.
+      whether it never started or was rolled back after partial changes. The
+      fix set stays conservative: it can insert missing trace docs, normalize
+      canonical trace paths, repair legacy `planned` typos, and clean up
+      deterministic ownership metadata when one safe correction exists, but it
+      does not guess at structural intent.
   - key: validate.allow_planned
     type: boolean
     default: true
@@ -269,7 +279,9 @@ items:
       trace mapping as the canonical file/symbol link but requires each traced
       file to have an adjacent `<file>.syu-ownership.yaml` manifest with
       matching owner IDs and symbols. Autofix updates the sidecar manifest
-      instead of inserting IDs into source when `sidecar` is enabled.
+      instead of inserting IDs into source when `sidecar` is enabled, and it
+      may normalize deterministic ownership metadata in that manifest when one
+      safe correction is obvious.
       Repository-relative generated paths listed in
       `validate.symbol_trace_coverage_ignored_paths` stay opted out of the
       extra `SYU-trace-id-001` ownership requirement in `inline` and `sidecar`
