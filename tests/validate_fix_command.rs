@@ -612,6 +612,166 @@ fn validate_fix_writes_sidecar_ownership_manifests_when_configured() {
 
 #[test]
 // REQ-CORE-003
+fn validate_fix_normalizes_trace_paths_in_spec_documents() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    write_workspace(tempdir.path(), false);
+
+    let requirement_path = tempdir.path().join("docs/syu/requirements/core.yaml");
+    let requirement = fs::read_to_string(&requirement_path).expect("requirement");
+    fs::write(
+        &requirement_path,
+        requirement.replace("file: src/trace.rs", "file: ./src/trace.rs"),
+    )
+    .expect("requirement should update");
+
+    let feature_path = tempdir.path().join("docs/syu/features/core.yaml");
+    let feature = fs::read_to_string(&feature_path).expect("feature");
+    fs::write(
+        &feature_path,
+        feature.replace("file: src/trace.rs", "file: ./src/trace.rs"),
+    )
+    .expect("feature should update");
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(tempdir.path())
+        .arg("--fix")
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let requirement = fs::read_to_string(&requirement_path).expect("requirement");
+    assert!(requirement.contains("file: src/trace.rs"));
+    assert!(!requirement.contains("file: ./src/trace.rs"));
+
+    let feature = fs::read_to_string(&feature_path).expect("feature");
+    assert!(feature.contains("file: src/trace.rs"));
+    assert!(!feature.contains("file: ./src/trace.rs"));
+
+    let source = fs::read_to_string(tempdir.path().join("src/trace.rs")).expect("source");
+    assert!(source.contains("requirement doc line"));
+    assert!(source.contains("feature doc line"));
+}
+
+#[test]
+// REQ-CORE-003
+fn validate_fix_deduplicates_normalized_trace_paths_in_spec_documents() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    write_workspace(tempdir.path(), false);
+
+    let requirement_path = tempdir.path().join("docs/syu/requirements/core.yaml");
+    let requirement = fs::read_to_string(&requirement_path).expect("requirement");
+    fs::write(
+        &requirement_path,
+        requirement.replace(
+            "        - file: src/trace.rs\n          symbols:\n            - req_trace\n          doc_contains:\n            - requirement doc line\n",
+            "        - file: src/trace.rs\n          symbols:\n            - req_trace\n          doc_contains:\n            - requirement doc line\n        - file: ./src/trace.rs\n          symbols:\n            - req_trace\n          doc_contains:\n            - requirement doc line\n",
+        ),
+    )
+    .expect("requirement should update");
+
+    let feature_path = tempdir.path().join("docs/syu/features/core.yaml");
+    let feature = fs::read_to_string(&feature_path).expect("feature");
+    fs::write(
+        &feature_path,
+        feature.replace(
+            "        - file: src/trace.rs\n          symbols:\n            - req_trace\n          doc_contains:\n            - feature doc line\n",
+            "        - file: src/trace.rs\n          symbols:\n            - req_trace\n          doc_contains:\n            - feature doc line\n        - file: ./src/trace.rs\n          symbols:\n            - req_trace\n          doc_contains:\n            - feature doc line\n",
+        ),
+    )
+    .expect("feature should update");
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(tempdir.path())
+        .arg("--fix")
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let requirement = fs::read_to_string(&requirement_path).expect("requirement");
+    assert_eq!(requirement.matches("file: src/trace.rs").count(), 1);
+    assert!(!requirement.contains("file: ./src/trace.rs"));
+
+    let feature = fs::read_to_string(&feature_path).expect("feature");
+    assert_eq!(feature.matches("file: src/trace.rs").count(), 1);
+    assert!(!feature.contains("file: ./src/trace.rs"));
+}
+
+#[test]
+// REQ-CORE-003
+fn validate_fix_normalizes_status_typos_in_spec_documents() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    write_graph_workspace(tempdir.path());
+
+    let requirement_path = tempdir.path().join("docs/syu/requirements/core.yaml");
+    let requirement = fs::read_to_string(&requirement_path).expect("requirement");
+    fs::write(
+        &requirement_path,
+        requirement.replace("status: planned", "status: planed"),
+    )
+    .expect("requirement should update");
+
+    let core_feature_path = tempdir.path().join("docs/syu/features/core.yaml");
+    let core_feature = fs::read_to_string(&core_feature_path).expect("core feature");
+    fs::write(
+        &core_feature_path,
+        core_feature.replace("status: planned", "status: planed"),
+    )
+    .expect("core feature should update");
+
+    let extra_feature_path = tempdir.path().join("docs/syu/features/extra/extra.yaml");
+    let extra_feature = fs::read_to_string(&extra_feature_path).expect("extra feature");
+    fs::write(
+        &extra_feature_path,
+        extra_feature.replace("status: planned", "status: planed"),
+    )
+    .expect("extra feature should update");
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .arg("validate")
+        .arg(tempdir.path())
+        .arg("--fix")
+        .output()
+        .expect("validate should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let requirement = fs::read_to_string(&requirement_path).expect("requirement");
+    assert!(requirement.contains("status: planned"));
+    assert!(!requirement.contains("status: planed"));
+
+    let core_feature = fs::read_to_string(&core_feature_path).expect("core feature");
+    assert!(core_feature.contains("status: planned"));
+    assert!(!core_feature.contains("status: planed"));
+
+    let extra_feature = fs::read_to_string(&extra_feature_path).expect("extra feature");
+    assert!(extra_feature.contains("status: planned"));
+    assert!(!extra_feature.contains("status: planed"));
+}
+
+#[test]
+// REQ-CORE-003
 fn validate_fix_repairs_graph_links_and_feature_registry_drift() {
     let tempdir = tempdir().expect("tempdir should exist");
     write_graph_workspace(tempdir.path());
