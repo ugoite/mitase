@@ -401,7 +401,7 @@ test("renders git history for the selected item", async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByText("Git-backed lifecycle")).toBeVisible();
   await expect(page.getByText("feat: add OpenAPI implementation trace")).toBeVisible();
-  await expect(page.getByText("docs/syu/features/cli/trace.yaml")).toBeVisible();
+  await expect(page.getByText("docs/syu/features/cli/trace.yaml", { exact: true })).toBeVisible();
 });
 
 test("renders history for a deleted item from the historical index", async ({ page }) => {
@@ -493,6 +493,7 @@ test("renders history for a deleted item from the historical index", async ({ pa
   });
 
   await page.goto("/#features/FEAT-DELETED-001");
+  await expect(page.getByRole("heading", { level: 1, name: /^syu\b/i })).toBeVisible();
   await expect(
     page.getByRole("heading", {
       name: /FEAT-DELETED-001 .* Deleted feature history/i,
@@ -835,9 +836,6 @@ test("keeps the selected validation issue stable across refresh reordering", asy
 test("shows a visible banner when version polling fails after the initial load", async ({
   page,
 }) => {
-  await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1, name: /^syu\b/i })).toBeVisible();
-
   let pollAttempts = 0;
   await page.route("**/api/version", async (route) => {
     pollAttempts += 1;
@@ -847,6 +845,9 @@ test("shows a visible banner when version polling fails after the initial load",
       body: "app data refresh failed",
     });
   });
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1, name: /^syu\b/i })).toBeVisible();
 
   await expect.poll(() => pollAttempts, { timeout: 10000 }).toBeGreaterThan(0);
 
@@ -863,9 +864,6 @@ test("shows a visible banner when version polling fails after the initial load",
 test("shows a visible banner when a workspace refresh reload fails after the initial load", async ({
   page,
 }) => {
-  await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1, name: /^syu\b/i })).toBeVisible();
-
   let refreshLoads = 0;
   await page.route("**/api/version", async (route) => {
     await route.fulfill({
@@ -890,6 +888,9 @@ test("shows a visible banner when a workspace refresh reload fails after the ini
     });
   });
 
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1, name: /^syu\b/i })).toBeVisible();
+
   await expect.poll(() => refreshLoads, { timeout: 10000 }).toBeGreaterThan(0);
 
   const alert = page.getByRole("alert");
@@ -905,14 +906,6 @@ test("allows a manual refresh and updates the last refresh timestamp after a sta
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1, name: /^syu\b/i })).toBeVisible();
-  await expect(page.locator("header").getByLabel("Last successful refresh").first()).toBeVisible();
-
-  const refreshTimestamp = page.getByLabel("Last successful refresh").first();
-  const initialTimestamp = await refreshTimestamp.getAttribute("datetime");
-  expect(initialTimestamp).not.toBeNull();
-
   let pollAttempts = 0;
   await page.route("**/api/version", async (route) => {
     pollAttempts += 1;
@@ -929,6 +922,14 @@ test("allows a manual refresh and updates the last refresh timestamp after a sta
     await route.continue();
   });
 
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1, name: /^syu\b/i })).toBeVisible();
+  await expect(page.locator("header").getByLabel("Last successful refresh").first()).toBeVisible();
+
+  const refreshTimestamp = page.getByLabel("Last successful refresh").first();
+  const initialTimestamp = await refreshTimestamp.getAttribute("datetime");
+  expect(initialTimestamp).not.toBeNull();
+
   const alert = page.getByRole("alert");
   await expect.poll(() => pollAttempts, { timeout: 10000 }).toBeGreaterThan(0);
   await expect(alert).toContainText("Live refresh needs attention.");
@@ -942,14 +943,6 @@ test("allows a manual refresh and updates the last refresh timestamp after a sta
 });
 
 test("announces refresh state changes through a polite live region", async ({ page }) => {
-  await page.goto("/");
-
-  const liveRegion = page.locator('[data-refresh-live-region="true"]');
-  await expect(liveRegion).toHaveAttribute("role", "status");
-  await expect(liveRegion).toHaveAttribute("aria-live", "polite");
-  await expect(liveRegion).toHaveAttribute("aria-atomic", "true");
-  await expect(liveRegion).toHaveText("Workspace snapshot is current.");
-
   let pollAttempts = 0;
   await page.route("**/api/version", async (route) => {
     pollAttempts += 1;
@@ -959,6 +952,14 @@ test("announces refresh state changes through a polite live region", async ({ pa
       body: "app data refresh failed",
     });
   });
+
+  await page.goto("/");
+
+  const liveRegion = page.locator('[data-refresh-live-region="true"]');
+  await expect(liveRegion).toHaveAttribute("role", "status");
+  await expect(liveRegion).toHaveAttribute("aria-live", "polite");
+  await expect(liveRegion).toHaveAttribute("aria-atomic", "true");
+  await expect(liveRegion).toHaveText("Workspace snapshot is current.");
 
   await expect.poll(() => pollAttempts, { timeout: 10000 }).toBeGreaterThan(0);
   await expect(liveRegion).toContainText("Workspace snapshot is stale.");
