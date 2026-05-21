@@ -96,6 +96,22 @@ description: "Generated reference for docs/syu/features/cli/task.yaml"
       - **file**: docs/guide/implementation-planning.md
         - **symbols**:
           - syu task scope
+- **id**: FEAT-TASK-004
+  - **title**: Temporary Goal Plan schema
+  - **summary**: Model temporary Goal Plan artifacts with goal, scope, test, coverage, and completion fields outside the persistent spec tree.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-031
+  - **implementations**:
+    - **rust**:
+      - **file**: src/command/task.rs
+        - **symbols**:
+          - GoalPlanArtifact
+          - load_goal_plan_artifact
+    - **markdown**:
+      - **file**: docs/guide/goal-plan-format.md
+        - **symbols**:
+          - syu.goal_plan
 
 ## Source YAML
 
@@ -183,4 +199,20 @@ features:
         - file: docs/guide/implementation-planning.md
           symbols:
             - syu task scope
+  - id: FEAT-TASK-004
+    title: Temporary Goal Plan schema
+    summary: Model temporary Goal Plan artifacts with goal, scope, test, coverage, and completion fields outside the persistent spec tree.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-031
+    implementations:
+      rust:
+        - file: src/command/task.rs
+          symbols:
+            - GoalPlanArtifact
+            - load_goal_plan_artifact
+      markdown:
+        - file: docs/guide/goal-plan-format.md
+          symbols:
+            - syu.goal_plan
 ```

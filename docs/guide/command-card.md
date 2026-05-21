@@ -27,6 +27,7 @@ If a pull request already exists, pair this page with the
 | Expand the nearby graph | `syu relate FEAT-CHECK-001` | see linked policies, requirements, features, files, and symbols around one selector |
 | Review a PR range | `syu review --range origin/main...HEAD` | start with the affected philosophy, policy, requirement, and feature IDs, then drill into changed files with `show`, `relate`, or `log` |
 | Guard a review range | `syu review --range origin/main...HEAD --allowed-id FEAT-CHECK-001` | block changes that step outside the named requirement or feature IDs and list the out-of-scope items |
+| Draft a temporary goal plan | `syu task scaffold request.yaml` | preview a bounded delivery artifact with goal, scope, tests, coverage, and completion checks without adding a fifth persistent spec layer |
 | Jump from code to the owning spec | `syu trace src/command/check.rs --symbol run_check_command` | start in code and resolve the traced requirement and feature chain |
 | List items by layer | `syu list feature` | print list-shaped output instead of the browser-style explorer |
 | Search by keyword or ID | `syu search validation --kind feature` | find the right spec item before `show`, `relate`, or `log` |
@@ -85,6 +86,8 @@ syu report .
 - Use [getting started](./getting-started.md) for the narrated install-to-validate flow.
 - Use [examples and templates](./examples-and-templates.md) when you want the
   checked-in starter and example matrix.
+- Use [goal plan format](./goal-plan-format.md) when you need a temporary
+  delivery artifact instead of a persistent spec item.
 - Use [LSP guide](./lsp.md) when you are connecting `syu` to an editor client
   over stdio instead of using the checked-in VS Code extension directly.
 - Use [configuration](./configuration.md) when you need validation and runtime
