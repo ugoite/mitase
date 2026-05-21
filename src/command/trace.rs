@@ -113,6 +113,8 @@ struct TraceRangeOutput {
     summary: TraceRangeSummary,
     #[serde(skip_serializing_if = "Option::is_none")]
     scope_guard: Option<TraceRangeScopeGuard>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    strict_review: Option<TraceRangeReviewOutput>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -148,6 +150,32 @@ struct TraceRangeSummary {
 struct TraceRangeScopeGuard {
     allowed_ids: Vec<TraceScopeGuardItem>,
     out_of_scope_items: Vec<TraceScopeGuardViolation>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct TraceRangeReviewOutput {
+    enabled: bool,
+    failed: bool,
+    findings: Vec<TraceRangeReviewFinding>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct TraceRangeReviewFinding {
+    kind: TraceRangeReviewFindingKind,
+    file: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    owners: Vec<TraceScopeGuardOwner>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum TraceRangeReviewFindingKind {
+    Unowned,
+    AmbiguousOwnership,
+    OutOfScope,
+    TraceDrift,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -193,7 +221,13 @@ pub fn run_trace_command(args: &TraceArgs) -> Result<i32> {
         if args.symbol.is_some() {
             bail!("--symbol cannot be used with --range");
         }
-        return run_trace_range(&workspace, range, args.format, &args.allowed_id);
+        return run_trace_range(
+            &workspace,
+            range,
+            args.format,
+            args.strict,
+            &args.allowed_id,
+        );
     }
 
     let Some(file) = &args.file else {
@@ -228,6 +262,7 @@ fn run_trace_range(
     workspace: &Workspace,
     range: &str,
     format: OutputFormat,
+    strict: bool,
     allowed_ids: &[String],
 ) -> Result<i32> {
     let changed_files = resolve_git_range_changed_files(&workspace.root, range)?;
@@ -260,14 +295,23 @@ fn run_trace_range(
             },
         };
         let scope_guard = collect_trace_scope_guard(workspace, &[], &[], allowed_ids)?;
+        let strict_review = collect_trace_review_output(&[], &[], scope_guard.as_ref(), strict);
         let guard_failed = scope_guard
             .as_ref()
             .is_some_and(|guard| !guard.out_of_scope_items.is_empty());
+        let strict_failed = strict_review.as_ref().is_some_and(|review| review.failed);
         match format {
             OutputFormat::Text => {
                 print!(
                     "{}",
-                    render_range_text(range, &[], &[], &summary, scope_guard.as_ref())
+                    render_range_text(
+                        range,
+                        &[],
+                        &[],
+                        &summary,
+                        scope_guard.as_ref(),
+                        strict_review.as_ref(),
+                    )
                 );
             }
             OutputFormat::Json => {
@@ -279,26 +323,37 @@ fn run_trace_range(
                         skipped_files: Vec::new(),
                         summary,
                         scope_guard,
+                        strict_review,
                     })
                     .expect("serializing empty trace range output to JSON should succeed")
                 );
             }
         }
-        return Ok(if guard_failed { 1 } else { 0 });
+        return Ok(if guard_failed || strict_failed { 1 } else { 0 });
     }
 
     let (results, skipped) = collect_trace_range_outputs(workspace, &changed_files);
 
     let summary = compute_range_summary(changed_files.len(), &results, &skipped);
     let scope_guard = collect_trace_scope_guard(workspace, &results, &skipped, allowed_ids)?;
+    let strict_review =
+        collect_trace_review_output(&results, &skipped, scope_guard.as_ref(), strict);
     let guard_failed = scope_guard
         .as_ref()
         .is_some_and(|guard| !guard.out_of_scope_items.is_empty());
+    let strict_failed = strict_review.as_ref().is_some_and(|review| review.failed);
 
     match format {
         OutputFormat::Text => print!(
             "{}",
-            render_range_text(range, &results, &skipped, &summary, scope_guard.as_ref())
+            render_range_text(
+                range,
+                &results,
+                &skipped,
+                &summary,
+                scope_guard.as_ref(),
+                strict_review.as_ref(),
+            )
         ),
         OutputFormat::Json => println!(
             "{}",
@@ -308,12 +363,13 @@ fn run_trace_range(
                 skipped_files: skipped,
                 summary,
                 scope_guard,
+                strict_review,
             })
             .expect("serializing trace range output to JSON should succeed")
         ),
     }
 
-    Ok(if guard_failed { 1 } else { 0 })
+    Ok(if guard_failed || strict_failed { 1 } else { 0 })
 }
 
 fn compute_range_summary(
@@ -451,6 +507,7 @@ fn render_range_text(
     skipped: &[TraceSkippedFile],
     summary: &TraceRangeSummary,
     scope_guard: Option<&TraceRangeScopeGuard>,
+    strict_review: Option<&TraceRangeReviewOutput>,
 ) -> String {
     let mut output = String::new();
     writeln!(output, "Git range: {range}").unwrap();
@@ -463,6 +520,10 @@ fn render_range_text(
         summary.owned_files, summary.partial_files, summary.unowned_files
     )
     .unwrap();
+
+    if let Some(strict_review) = strict_review {
+        render_strict_review_text(&mut output, strict_review);
+    }
 
     if summary.changed_files_total == 0 && results.is_empty() && skipped.is_empty() {
         writeln!(output, "No files changed in range").unwrap();
@@ -550,6 +611,55 @@ fn render_range_text(
     }
 
     output
+}
+
+fn render_strict_review_text(rendered: &mut String, strict_review: &TraceRangeReviewOutput) {
+    writeln!(
+        rendered,
+        "Strict review: {}",
+        if strict_review.failed {
+            "failed"
+        } else {
+            "passed"
+        }
+    )
+    .unwrap();
+    writeln!(rendered, "  Findings:").unwrap();
+    if strict_review.findings.is_empty() {
+        writeln!(rendered, "    - none").unwrap();
+        writeln!(rendered).unwrap();
+        return;
+    }
+
+    for finding in &strict_review.findings {
+        writeln!(rendered, "    - {}: {}", finding.kind.label(), finding.file).unwrap();
+        if let Some(reason) = finding.reason.as_deref() {
+            writeln!(rendered, "      reason: {reason}").unwrap();
+        }
+        if !finding.owners.is_empty() {
+            writeln!(rendered, "      owners:").unwrap();
+            for owner in &finding.owners {
+                writeln!(
+                    rendered,
+                    "        - {} {}\t{}",
+                    owner.kind, owner.id, owner.title
+                )
+                .unwrap();
+            }
+        }
+    }
+    writeln!(rendered).unwrap();
+}
+
+impl TraceRangeReviewFindingKind {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Unowned => "unowned",
+            Self::AmbiguousOwnership => "ambiguous ownership",
+            Self::OutOfScope => "out of scope",
+            Self::TraceDrift => "trace drift",
+        }
+    }
 }
 
 fn render_scope_guard_text(rendered: &mut String, scope_guard: &TraceRangeScopeGuard) {
@@ -647,6 +757,119 @@ fn collect_trace_scope_guard(
         allowed_ids: allowed_ids_by_id.into_values().collect(),
         out_of_scope_items,
     }))
+}
+
+fn collect_trace_review_output(
+    results: &[TraceLookupOutput],
+    skipped_files: &[TraceSkippedFile],
+    scope_guard: Option<&TraceRangeScopeGuard>,
+    strict: bool,
+) -> Option<TraceRangeReviewOutput> {
+    if !strict {
+        return None;
+    }
+
+    let mut findings =
+        BTreeMap::<(TraceRangeReviewFindingKind, String), TraceRangeReviewFinding>::new();
+
+    for result in results {
+        if result.matched_owners.is_empty() && result.file_only_owners.is_empty() {
+            push_review_finding(
+                &mut findings,
+                TraceRangeReviewFindingKind::Unowned,
+                result.file.clone(),
+                Vec::new(),
+                Some("no requirement or feature trace owns this file".to_string()),
+            );
+            continue;
+        }
+
+        let owners = result
+            .matched_owners
+            .iter()
+            .chain(result.file_only_owners.iter())
+            .map(|owner| TraceScopeGuardOwner {
+                kind: owner.kind.to_string(),
+                id: owner.id.clone(),
+                title: owner.title.clone(),
+            })
+            .collect::<Vec<_>>();
+
+        if owners.len() > 1 {
+            push_review_finding(
+                &mut findings,
+                TraceRangeReviewFindingKind::AmbiguousOwnership,
+                result.file.clone(),
+                owners,
+                Some("multiple requirement or feature owners match this file".to_string()),
+            );
+        } else if result.status == TraceLookupStatus::Partial {
+            push_review_finding(
+                &mut findings,
+                TraceRangeReviewFindingKind::TraceDrift,
+                result.file.clone(),
+                owners,
+                Some("the file is owned, but the requested symbol did not match".to_string()),
+            );
+        }
+    }
+
+    if let Some(scope_guard) = scope_guard {
+        for violation in &scope_guard.out_of_scope_items {
+            let kind = match violation.reason.as_deref() {
+                Some("unowned") => TraceRangeReviewFindingKind::Unowned,
+                Some("outside allowed IDs") => TraceRangeReviewFindingKind::OutOfScope,
+                Some(_) => TraceRangeReviewFindingKind::TraceDrift,
+                None => TraceRangeReviewFindingKind::TraceDrift,
+            };
+
+            if kind == TraceRangeReviewFindingKind::Unowned {
+                continue;
+            }
+
+            push_review_finding(
+                &mut findings,
+                kind,
+                violation.file.clone(),
+                violation.owners.clone(),
+                violation.reason.clone(),
+            );
+        }
+    } else {
+        for skipped in skipped_files {
+            push_review_finding(
+                &mut findings,
+                TraceRangeReviewFindingKind::TraceDrift,
+                skipped.file.clone(),
+                Vec::new(),
+                Some(skipped.reason.clone()),
+            );
+        }
+    }
+
+    let findings = findings.into_values().collect::<Vec<_>>();
+    Some(TraceRangeReviewOutput {
+        enabled: true,
+        failed: !findings.is_empty(),
+        findings,
+    })
+}
+
+fn push_review_finding(
+    findings: &mut BTreeMap<(TraceRangeReviewFindingKind, String), TraceRangeReviewFinding>,
+    kind: TraceRangeReviewFindingKind,
+    file: String,
+    owners: Vec<TraceScopeGuardOwner>,
+    reason: Option<String>,
+) {
+    findings
+        .entry((kind, file.clone()))
+        .or_insert_with(|| TraceRangeReviewFinding {
+            kind,
+            file,
+            owners,
+            reason,
+        });
 }
 
 fn resolve_scope_guard_item(lookup: &WorkspaceLookup<'_>, id: &str) -> Result<TraceScopeGuardItem> {
@@ -1613,7 +1836,7 @@ mod tests {
         };
 
         let rendered =
-            super::render_range_text("HEAD..HEAD", &[], &[], &summary, Some(&scope_guard));
+            super::render_range_text("HEAD..HEAD", &[], &[], &summary, Some(&scope_guard), None);
 
         assert!(rendered.contains("Git range: HEAD..HEAD"));
         assert!(rendered.contains("No files changed in range"));
