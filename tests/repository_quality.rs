@@ -87,7 +87,7 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(quality_script.contains("full"));
     assert!(quality_script.contains("cargo fmt --all --check"));
     assert!(quality_script.contains("cargo clippy --all-targets --all-features -- -D warnings"));
-    assert!(quality_script.contains("cargo test --lib --bins"));
+    assert!(quality_script.contains("cargo test --lib --bins -- --skip command::log::tests::"));
     assert!(quality_script.contains("cargo test"));
     assert!(quality_script.contains("cargo run -- validate ."));
     assert!(quality_script.contains("check-generated-docs-freshness.sh"));
@@ -1189,6 +1189,7 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(setup_rust_action.contains("Swatinem/rust-cache@v2"));
     assert!(ci_workflow.contains("taiki-e/cache-cargo-install-action@v3"));
     assert!(ci_workflow.contains("tool: cargo-llvm-cov"));
+    assert!(ci_workflow.contains("tool: cargo-nextest"));
     assert!(ci_workflow.contains("tool: wasm-pack"));
     assert!(release_artifacts.contains("libc6-dev-arm64-cross"));
     assert!(ci_workflow.contains("merge_group:"));

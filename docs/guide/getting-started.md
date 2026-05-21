@@ -28,6 +28,9 @@ Need a different level of guidance?
   starts.
 - Use [request artifact format](./request-artifact-format.md) when you want a
   small, repeatable request record before you touch the spec tree.
+- Use [goal plan format](./goal-plan-format.md) when you need a temporary
+  delivery artifact that records scope, tests, and completion checks without
+  creating a persistent spec layer.
 - Stay on this page when you want the first workspace setup explained step by
   step, including why the manual YAML edits matter before validation and how the
   same commands fit together as one guided story.

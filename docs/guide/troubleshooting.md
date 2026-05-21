@@ -359,8 +359,11 @@ if it is obsolete.
 | What `--fix` does | Safe? |
 |---|---|
 | Inserts required `doc_contains` snippets using language-appropriate comment or doc-comment syntax | ✅ Yes |
+| Normalizes canonical trace file spellings when one repository-relative path is clearly the same file | ✅ Yes |
+| Repairs legacy `planned` typos back to the canonical `planned` status | ✅ Yes |
 | Removes exact duplicate graph links or restores an already-declared reciprocal link | ✅ Yes |
 | Resynchronizes `features/features.yaml` with checked-in feature documents | ✅ Yes |
+| Normalizes deterministic sidecar ownership metadata when one safe correction exists | ✅ Yes |
 | Rewrites or deletes symbols | ❌ No — `--fix` never does this |
 | Adds missing `linked_*` graph links | ❌ No — only you know the correct links |
 | Creates new spec entries | ❌ No |

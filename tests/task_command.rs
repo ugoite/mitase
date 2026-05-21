@@ -408,3 +408,36 @@ fn task_scaffold_rejects_delete_requests() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("only supports request artifacts"));
 }
+
+#[test]
+// REQ-CORE-031
+fn goal_plan_artifact_supports_request_driven_and_diff_inferred_sources() {
+    let guide = fs::read_to_string("docs/guide/goal-plan-format.md")
+        .expect("goal plan guide should be readable");
+
+    assert!(guide.contains("syu.goal_plan"));
+    assert!(guide.contains("request_driven"));
+    assert!(guide.contains("diff-inferred"));
+    assert!(guide.contains("confidence"));
+}
+
+#[test]
+// REQ-CORE-031
+fn goal_plan_artifact_requires_the_goal_plan_marker() {
+    let guide = fs::read_to_string("docs/guide/goal-plan-format.md")
+        .expect("goal plan guide should be readable");
+
+    assert!(guide.contains("kind: syu.goal_plan"));
+    assert!(guide.contains("Goal Plans are"));
+    assert!(guide.contains("planning artifacts"));
+}
+
+#[test]
+// REQ-CORE-031
+fn goal_plan_format_is_documented_as_temporary() {
+    let guide = fs::read_to_string("docs/guide/implementation-planning.md")
+        .expect("implementation planning guide should be readable");
+
+    assert!(guide.contains("goal plan format"));
+    assert!(guide.contains("temporary"));
+}

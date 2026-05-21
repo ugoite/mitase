@@ -38,7 +38,7 @@ New here?
   6. syu app .       start the local browser UI server
   7. syu task classify request.yaml  classify a request artifact against the current spec graph
   8. syu task scope request.yaml      map a request artifact onto the current spec graph
-  9. syu task scaffold request.yaml   preview planned requirement and feature updates from a request artifact";
+  9. syu task scaffold request.yaml   preview planned requirement, feature, and goal plan updates from a request artifact";
 
 const APP_AFTER_HELP: &str = concat!(
     "After startup, open the printed URL in your browser.\n",
@@ -101,7 +101,7 @@ Examples:
   syu task scaffold request.yaml
   syu task scaffold request.yaml --format json
 
-Use this after `syu task scope` and `syu task classify` when you want reviewable planned requirement and feature updates that stay aligned with the existing `syu add` document and registry conventions.";
+Use this after `syu task scope` and `syu task classify` when you want reviewable planned requirement, feature, and temporary Goal Plan updates that stay aligned with the existing `syu add` document and registry conventions.";
 
 const WORKSPACE_HELP: &str = "Workspace root or any child directory; syu walks upward to find syu.yaml and the configured spec tree";
 
