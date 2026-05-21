@@ -1530,6 +1530,7 @@ mod tests {
             symbol: Some("   ".to_string()),
             range: None,
             allowed_id: Vec::new(),
+            strict: false,
             format: OutputFormat::Text,
         })
         .expect_err("blank symbols should fail");
@@ -1910,6 +1911,7 @@ mod tests {
             symbol: None,
             range: None,
             allowed_id: Vec::new(),
+            strict: false,
             format: OutputFormat::Text,
         })
         .expect_err("missing file and range should fail");
@@ -2199,6 +2201,7 @@ mod tests {
                 },
             },
             None,
+            None,
         );
 
         assert!(rendered.contains("Affected IDs:"));
@@ -2282,6 +2285,7 @@ mod tests {
                 },
             },
             None,
+            None,
         );
 
         assert!(rendered.contains("feature FEAT-TRACE-001:"));
@@ -2324,6 +2328,7 @@ mod tests {
                     },
                 },
             },
+            None,
             None,
         );
 
