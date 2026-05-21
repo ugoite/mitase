@@ -418,6 +418,42 @@ fn log_command_can_include_related_history_for_deleted_ids() {
 }
 
 #[test]
+fn log_command_scopes_deleted_id_lifecycle_events() {
+    let workspace = write_history_workspace();
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args([
+            "log",
+            "REQ-HIST-DEL-001",
+            workspace.path().to_str().expect("utf8 path"),
+            "--range",
+            "HEAD~5..HEAD",
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("command should run");
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let json: Value = serde_json::from_slice(&output.stdout).expect("output should be valid JSON");
+    let lifecycle = json["lifecycle_events"]
+        .as_array()
+        .expect("lifecycle events");
+    assert!(!lifecycle.is_empty());
+    assert!(
+        lifecycle
+            .iter()
+            .all(|event| event["path"] != "docs/syu/requirements/legacy/original.yaml")
+    );
+}
+
+#[test]
 fn log_command_supports_json_kind_and_path_filters() {
     let workspace = write_history_workspace();
     let output = Command::cargo_bin("syu")

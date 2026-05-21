@@ -137,6 +137,7 @@ struct HistoryTargetRequest<'a> {
     id: &'a str,
     kind: HistoryKind,
     path_filter: Option<&'a Path>,
+    scope: Option<&'a HistoryScope>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -198,6 +199,7 @@ pub(crate) fn build_history_response(request: HistoryRequest<'_>) -> Result<Hist
         id: request.id,
         kind: request.kind,
         path_filter: request.path_filter,
+        scope: request.scope.as_ref(),
     })?;
     if request.include_related && view.target.status != "historical" {
         let related = collect_related_tracked_paths(
@@ -243,6 +245,7 @@ fn build_history_target(request: HistoryTargetRequest<'_>) -> Result<HistoryView
         request.repository_root,
         request.workspace,
         request.id,
+        request.scope,
     )?;
 
     let (entity_kind, title, status, traces, lifecycle_events) = match resolved {
@@ -355,6 +358,7 @@ fn resolve_history_entity<'a>(
     repository_root: &'a Path,
     workspace: &'a Workspace,
     id: &'a str,
+    scope: Option<&'a HistoryScope>,
 ) -> Result<ResolvedHistoryTarget<'a>> {
     let Some(kind) = lookup_kind_for_id(id) else {
         let workspace_arg = shell_quote_path(workspace_root);
@@ -372,7 +376,7 @@ fn resolve_history_entity<'a>(
 
     if entries.is_empty() {
         if historical_ids.enabled() && historical_ids.available() && historical_ids.contains(id) {
-            return resolve_historical_history_target(workspace, repository_root, id, kind);
+            return resolve_historical_history_target(workspace, repository_root, id, kind, scope);
         }
         let workspace_arg = shell_quote_path(workspace_root);
         bail!(
@@ -411,6 +415,7 @@ fn resolve_historical_history_target<'a>(
     repository_root: &'a Path,
     id: &'a str,
     kind: LookupKind,
+    scope: Option<&'a HistoryScope>,
 ) -> Result<ResolvedHistoryTarget<'a>> {
     let section_root = match kind {
         LookupKind::Philosophy => workspace.spec_root.join("philosophy"),
@@ -434,6 +439,7 @@ fn resolve_historical_history_target<'a>(
         &section_relative,
         id,
         discovery.definition_path.as_path(),
+        scope,
     )?;
 
     Ok(ResolvedHistoryTarget::Historical {
@@ -465,16 +471,13 @@ fn discover_historical_definition(
             let Some(contents) = git_show_file(repository_root, &record.commit.sha, &path)? else {
                 continue;
             };
-            if !contents.contains(id) {
-                continue;
+            if let Some(title) = historical_title_for_id(kind, &contents, id) {
+                return Ok(HistoricalDefinitionDiscovery {
+                    entity_kind: historical_entity_kind(kind),
+                    title,
+                    definition_path: path,
+                });
             }
-            let title = historical_title_for_id(kind, &contents, id)
-                .unwrap_or_else(|| "historical definition".to_string());
-            return Ok(HistoricalDefinitionDiscovery {
-                entity_kind: historical_entity_kind(kind),
-                title,
-                definition_path: path,
-            });
         }
     }
 
@@ -489,13 +492,14 @@ fn build_historical_lifecycle_events(
     section_relative: &Path,
     id: &str,
     definition_path: &Path,
+    scope: Option<&HistoryScope>,
 ) -> Result<Vec<HistoryLifecycleEvent>> {
     let mut events = Vec::new();
     let mut seen_presence = false;
     let mut removed = false;
     let mut last_path = definition_path.to_path_buf();
 
-    for record in load_git_history_records(repository_root, section_relative, &[], None)? {
+    for record in load_git_history_records(repository_root, section_relative, &[], scope)? {
         let present_paths = record
             .paths
             .iter()
