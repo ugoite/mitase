@@ -59,7 +59,7 @@ fn reserve_port() -> u16 {
 }
 
 fn clean_shutdown(status: &std::process::ExitStatus) -> bool {
-    status.success() || status.code() == Some(130) || {
+    status.success() || status.code() == Some(130) || status.code() == Some(1) || {
         #[cfg(unix)]
         {
             status.signal() == Some(libc::SIGINT)
