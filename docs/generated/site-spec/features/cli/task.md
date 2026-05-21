@@ -97,8 +97,8 @@ description: "Generated reference for docs/syu/features/cli/task.yaml"
         - **symbols**:
           - syu task scope
 - **id**: FEAT-TASK-004
-  - **title**: Temporary Goal Plan schema
-  - **summary**: Model temporary Goal Plan artifacts with goal, scope, test, coverage, and completion fields outside the persistent spec tree.
+  - **title**: Temporary Goal Plan generation
+  - **summary**: Generate and load temporary Goal Plan artifacts with goal, scope, test, coverage, and completion fields outside the persistent spec tree.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-031
@@ -106,9 +106,27 @@ description: "Generated reference for docs/syu/features/cli/task.yaml"
     - **rust**:
       - **file**: src/command/task.rs
         - **symbols**:
+          - run_task_command
+          - run_task_plan_command
+          - build_goal_plan
           - GoalPlanArtifact
           - load_goal_plan_artifact
+      - **file**: src/cli.rs
+        - **symbols**:
+          - TaskArgs
+          - TaskPlanArgs
+          - TaskPlanFormat
+      - **file**: src/lib.rs
+        - **symbols**:
+          - dispatch
+          - run_dispatch
     - **markdown**:
+      - **file**: docs/guide/request-artifact-format.md
+        - **symbols**:
+          - syu task plan
+      - **file**: docs/guide/implementation-planning.md
+        - **symbols**:
+          - syu task plan
       - **file**: docs/guide/goal-plan-format.md
         - **symbols**:
           - syu.goal_plan
@@ -200,8 +218,8 @@ features:
           symbols:
             - syu task scope
   - id: FEAT-TASK-004
-    title: Temporary Goal Plan schema
-    summary: Model temporary Goal Plan artifacts with goal, scope, test, coverage, and completion fields outside the persistent spec tree.
+    title: Temporary Goal Plan generation
+    summary: Generate and load temporary Goal Plan artifacts with goal, scope, test, coverage, and completion fields outside the persistent spec tree.
     status: implemented
     linked_requirements:
       - REQ-CORE-031
@@ -209,9 +227,27 @@ features:
       rust:
         - file: src/command/task.rs
           symbols:
+            - run_task_command
+            - run_task_plan_command
+            - build_goal_plan
             - GoalPlanArtifact
             - load_goal_plan_artifact
+        - file: src/cli.rs
+          symbols:
+            - TaskArgs
+            - TaskPlanArgs
+            - TaskPlanFormat
+        - file: src/lib.rs
+          symbols:
+            - dispatch
+            - run_dispatch
       markdown:
+        - file: docs/guide/request-artifact-format.md
+          symbols:
+            - syu task plan
+        - file: docs/guide/implementation-planning.md
+          symbols:
+            - syu task plan
         - file: docs/guide/goal-plan-format.md
           symbols:
             - syu.goal_plan
