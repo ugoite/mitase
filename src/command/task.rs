@@ -25,6 +25,9 @@ use crate::{
 use super::lookup::{SearchResult, WorkspaceEntity, WorkspaceLookup};
 
 const REQUEST_ARTIFACT_VERSION: u32 = 1;
+#[cfg(test)]
+#[allow(dead_code)]
+const GOAL_PLAN_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -50,6 +53,194 @@ struct RequestArtifact {
     request: String,
     #[serde(default)]
     context: RequestArtifactContext,
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Clone)]
+struct GoalPlanArtifact {
+    version: u32,
+    kind: String,
+    #[serde(default)]
+    source: GoalPlanSource,
+    goal: GoalPlanGoal,
+    #[serde(default)]
+    spec_mapping: GoalPlanSpecMapping,
+    implementation_plan: GoalPlanImplementationPlan,
+    test_plan: GoalPlanTestPlan,
+    coverage: GoalPlanCoverage,
+    completion: GoalPlanCompletion,
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Clone)]
+struct GoalPlanSource {
+    mode: GoalPlanSourceMode,
+    #[serde(default)]
+    request_artifact: Option<String>,
+    #[serde(default)]
+    range: Option<String>,
+    #[serde(default)]
+    confidence: Option<GoalPlanConfidence>,
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+impl Default for GoalPlanSource {
+    fn default() -> Self {
+        Self {
+            mode: GoalPlanSourceMode::RequestDriven,
+            request_artifact: None,
+            range: None,
+            confidence: None,
+        }
+    }
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+enum GoalPlanSourceMode {
+    #[default]
+    #[serde(rename = "request_driven")]
+    RequestDriven,
+    #[serde(rename = "diff_inferred")]
+    DiffInferred,
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum GoalPlanConfidence {
+    High,
+    Medium,
+    Low,
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Clone)]
+struct GoalPlanGoal {
+    id: String,
+    title: String,
+    statement: String,
+    #[serde(default)]
+    non_goals: Vec<String>,
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Default, Clone)]
+struct GoalPlanSpecMapping {
+    #[serde(default)]
+    persistent_items: GoalPlanPersistentItems,
+    #[serde(default)]
+    spec_updates: GoalPlanSpecUpdates,
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Default, Clone)]
+struct GoalPlanPersistentItems {
+    #[serde(default)]
+    philosophies: Vec<String>,
+    #[serde(default)]
+    policies: Vec<String>,
+    #[serde(default)]
+    requirements: Vec<String>,
+    #[serde(default)]
+    features: Vec<String>,
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Default, Clone)]
+struct GoalPlanSpecUpdates {
+    #[serde(default)]
+    required: bool,
+    #[serde(default)]
+    expected_updates: Vec<String>,
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Clone)]
+struct GoalPlanImplementationPlan {
+    scope: GoalPlanScope,
+    #[serde(default)]
+    steps: Vec<String>,
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Default, Clone)]
+struct GoalPlanScope {
+    #[serde(default)]
+    include: Vec<String>,
+    #[serde(default)]
+    exclude: Vec<String>,
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Clone)]
+struct GoalPlanTestPlan {
+    selection_mode: GoalPlanSelectionMode,
+    #[serde(default)]
+    required_tests: BTreeMap<String, Vec<String>>,
+    #[serde(default)]
+    suggested_tests: BTreeMap<String, Vec<String>>,
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+enum GoalPlanSelectionMode {
+    #[default]
+    #[serde(rename = "minimal")]
+    Minimal,
+    #[serde(rename = "affected")]
+    Affected,
+    #[serde(rename = "full")]
+    Full,
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Clone)]
+struct GoalPlanCoverage {
+    mode: GoalPlanCoverageMode,
+    threshold: u32,
+    #[serde(default)]
+    include: Vec<String>,
+    #[serde(default)]
+    exclude: Vec<String>,
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+enum GoalPlanCoverageMode {
+    #[default]
+    #[serde(rename = "changed_lines")]
+    ChangedLines,
+    #[serde(rename = "affected")]
+    Affected,
+    #[serde(rename = "full")]
+    Full,
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Default, Clone)]
+struct GoalPlanCompletion {
+    #[serde(default)]
+    must_pass: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]
@@ -340,6 +531,30 @@ fn load_request_artifact(path: &PathBuf) -> Result<RequestArtifact> {
         bail!(
             "unsupported request artifact version `{}` in `{}`",
             artifact.version,
+            path.display()
+        );
+    }
+    Ok(artifact)
+}
+
+#[cfg(test)]
+#[allow(dead_code)]
+fn load_goal_plan_artifact(path: &PathBuf) -> Result<GoalPlanArtifact> {
+    let raw = fs::read_to_string(path)
+        .with_context(|| format!("failed to read goal plan artifact `{}`", path.display()))?;
+    let artifact: GoalPlanArtifact = serde_yaml::from_str(&raw)
+        .with_context(|| format!("failed to parse goal plan artifact `{}`", path.display()))?;
+    if artifact.version != GOAL_PLAN_VERSION {
+        bail!(
+            "unsupported goal plan artifact version `{}` in `{}`",
+            artifact.version,
+            path.display()
+        );
+    }
+    if artifact.kind != "syu.goal_plan" {
+        bail!(
+            "unsupported goal plan artifact kind `{}` in `{}`",
+            artifact.kind,
             path.display()
         );
     }
@@ -1269,9 +1484,10 @@ mod tests {
     };
 
     use super::{
-        ClassificationOutcome, RequirementAction, SearchResult, WorkspaceLookup,
-        build_scaffold_plan, classify_request, collect_feature_candidates, load_request_artifact,
-        run_task_command,
+        ClassificationOutcome, GoalPlanConfidence, GoalPlanCoverageMode, GoalPlanSelectionMode,
+        GoalPlanSourceMode, RequirementAction, SearchResult, WorkspaceLookup, build_scaffold_plan,
+        classify_request, collect_feature_candidates, load_goal_plan_artifact,
+        load_request_artifact, run_task_command,
     };
 
     fn write_request_artifact(path: &Path, request: &str, linked_ids: &[&str]) {
@@ -1703,5 +1919,76 @@ mod tests {
                 format: OutputFormat::Text,
             }),
         });
+    }
+
+    #[test]
+    fn goal_plan_artifact_supports_request_driven_and_diff_inferred_sources() {
+        let tempdir = tempdir().expect("tempdir");
+        let path = tempdir.path().join("goal-plan.yaml");
+        fs::write(
+            &path,
+            "version: 1\nkind: syu.goal_plan\nsource:\n  mode: request_driven\n  request_artifact: request.yaml\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\n  non_goals:\n    - Add persistent task specs under spec.root\nspec_mapping:\n  persistent_items:\n    philosophies:\n      - PHIL-001\n    policies:\n      - POL-001\n    requirements:\n      - REQ-CORE-030\n    features:\n      - FEAT-TASK-003\n  spec_updates:\n    required: false\n    expected_updates: []\nimplementation_plan:\n  scope:\n    include:\n      - src/command/task.rs\n    exclude:\n      - docs/syu/**\n  steps:\n    - add a Goal Plan model\n    - document the temporary artifact locations\ntest_plan:\n  selection_mode: affected\n  required_tests:\n    rust:\n      - tests/task_command.rs\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include:\n    - src/command/task.rs\n  exclude: []\ncompletion:\n  must_pass:\n    - syu validate .\n",
+        )
+        .expect("goal plan");
+
+        let artifact = load_goal_plan_artifact(&path).expect("goal plan should load");
+        assert_eq!(artifact.kind, "syu.goal_plan");
+        assert_eq!(artifact.goal.id, "GOAL-001");
+        assert_eq!(artifact.source.mode, GoalPlanSourceMode::RequestDriven);
+        assert_eq!(
+            artifact.source.request_artifact.as_deref(),
+            Some("request.yaml")
+        );
+        assert_eq!(artifact.coverage.mode, GoalPlanCoverageMode::ChangedLines);
+        assert_eq!(
+            artifact.test_plan.selection_mode,
+            GoalPlanSelectionMode::Affected
+        );
+
+        fs::write(
+            &path,
+            "version: 1\nkind: syu.goal_plan\nsource:\n  mode: diff_inferred\n  range: origin/main...HEAD\n  confidence: high\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\n  non_goals:\n    - Add persistent task specs under spec.root\nspec_mapping:\n  persistent_items:\n    philosophies:\n      - PHIL-001\n    policies:\n      - POL-001\n    requirements:\n      - REQ-CORE-030\n    features:\n      - FEAT-TASK-003\n  spec_updates:\n    required: false\n    expected_updates: []\nimplementation_plan:\n  scope:\n    include:\n      - src/command/task.rs\n    exclude:\n      - docs/syu/**\n  steps:\n    - add a Goal Plan model\n    - document the temporary artifact locations\ntest_plan:\n  selection_mode: affected\n  required_tests:\n    rust:\n      - tests/task_command.rs\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include:\n    - src/command/task.rs\n  exclude: []\ncompletion:\n  must_pass:\n    - syu validate .\n",
+        )
+        .expect("goal plan");
+
+        let artifact = load_goal_plan_artifact(&path).expect("goal plan should load");
+        assert_eq!(artifact.source.mode, GoalPlanSourceMode::DiffInferred);
+        assert_eq!(artifact.source.range.as_deref(), Some("origin/main...HEAD"));
+        assert_eq!(artifact.source.confidence, Some(GoalPlanConfidence::High));
+    }
+
+    #[test]
+    fn goal_plan_artifact_defaults_to_request_driven_source_when_omitted() {
+        let tempdir = tempdir().expect("tempdir");
+        let path = tempdir.path().join("goal-plan.yaml");
+        fs::write(
+            &path,
+            "version: 1\nkind: syu.goal_plan\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\nimplementation_plan:\n  scope:\n    include: []\n    exclude: []\n  steps: []\ntest_plan:\n  selection_mode: minimal\n  required_tests: {}\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\ncompletion:\n  must_pass: []\n",
+        )
+        .expect("goal plan");
+
+        let artifact = load_goal_plan_artifact(&path).expect("goal plan should load");
+        assert_eq!(artifact.source.mode, GoalPlanSourceMode::RequestDriven);
+        assert!(artifact.source.request_artifact.is_none());
+        assert!(artifact.source.range.is_none());
+        assert!(artifact.source.confidence.is_none());
+    }
+
+    #[test]
+    fn goal_plan_artifact_requires_the_goal_plan_marker() {
+        let tempdir = tempdir().expect("tempdir");
+        let path = tempdir.path().join("goal-plan.yaml");
+        fs::write(
+            &path,
+            "version: 1\nkind: syu.not_goal_plan\nsource:\n  mode: request_driven\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\nimplementation_plan:\n  scope:\n    include: []\n    exclude: []\n  steps: []\ntest_plan:\n  selection_mode: minimal\n  required_tests: {}\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\ncompletion:\n  must_pass: []\n",
+        )
+        .expect("goal plan");
+
+        let error = load_goal_plan_artifact(&path).expect_err("invalid goal plan should fail");
+        assert!(
+            error
+                .to_string()
+                .contains("unsupported goal plan artifact kind")
+        );
     }
 }
