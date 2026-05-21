@@ -1747,6 +1747,7 @@ mod tests {
             repo.path(),
             "PHIL-HIST-DEL-001",
             LookupKind::Philosophy,
+            None,
         )
         .expect("philosophy history should resolve");
         match philosophy {
@@ -1772,6 +1773,7 @@ mod tests {
             repo.path(),
             "POL-HIST-DEL-001",
             LookupKind::Policy,
+            None,
         )
         .expect("policy history should resolve");
         match policy {
@@ -1797,6 +1799,7 @@ mod tests {
             repo.path(),
             "FEAT-HIST-DEL-001",
             LookupKind::Feature,
+            None,
         )
         .expect("feature history should resolve");
         match feature {
@@ -1843,6 +1846,7 @@ mod tests {
             repo.path(),
             "FEAT-HIST-DEL-001",
             LookupKind::Feature,
+            None,
         ) {
             Ok(_) => panic!("root mismatch should fail"),
             Err(error) => error,
