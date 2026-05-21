@@ -82,8 +82,8 @@ features:
           symbols:
             - syu task scope
   - id: FEAT-TASK-004
-    title: Goal Plan generation
-    summary: Turn scoped request artifacts into temporary Goal Plans with implementation, test, coverage, and completion sections outside the persistent spec tree.
+    title: Temporary Goal Plan generation
+    summary: Generate and load temporary Goal Plan artifacts with goal, scope, test, coverage, and completion fields outside the persistent spec tree.
     status: implemented
     linked_requirements:
       - REQ-CORE-031
@@ -94,6 +94,8 @@ features:
             - run_task_command
             - run_task_plan_command
             - build_goal_plan
+            - GoalPlanArtifact
+            - load_goal_plan_artifact
         - file: src/cli.rs
           symbols:
             - TaskArgs
@@ -110,3 +112,6 @@ features:
         - file: docs/guide/implementation-planning.md
           symbols:
             - syu task plan
+        - file: docs/guide/goal-plan-format.md
+          symbols:
+            - syu.goal_plan

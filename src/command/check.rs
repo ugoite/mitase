@@ -906,7 +906,7 @@ fn apply_graph_autofix(
     let requirement_root = workspace.spec_root.join("requirements");
     let feature_root = workspace.spec_root.join("features");
     let root = &workspace.root;
-    let description = "synchronize graph links";
+    let description = "synchronize graph and trace hygiene";
 
     let mut philosophy_docs = if philosophy_root.is_dir() {
         load_philosophy_documents_with_paths(&philosophy_root)?
@@ -954,6 +954,8 @@ fn apply_graph_autofix(
     dedupe_policy_links(&mut policy_docs);
     dedupe_requirement_links(&mut requirement_docs);
     dedupe_feature_links(&mut feature_docs);
+    normalize_trace_hygiene_for_requirement_documents(&mut requirement_docs);
+    normalize_trace_hygiene_for_feature_documents(&mut feature_docs);
 
     let philosophy_index = index_philosophies(&philosophy_docs);
     let policy_index = index_policies(&policy_docs);
@@ -1022,13 +1024,18 @@ fn apply_autofix_for_trace_map_with_transaction(
     transaction: &mut AutofixTransaction,
 ) -> Result<()> {
     for (language, references) in references_by_language {
+        let mut seen_references = BTreeSet::new();
         for reference in references {
+            let normalized_reference = normalize_trace_reference(reference);
+            if !seen_references.insert(trace_reference_dedup_key(&normalized_reference)) {
+                continue;
+            }
             apply_autofix_for_reference_with_transaction(
                 root,
                 config,
                 owner_id,
                 language,
-                reference,
+                &normalized_reference,
                 run,
                 mode,
                 transaction,
@@ -1039,6 +1046,31 @@ fn apply_autofix_for_trace_map_with_transaction(
     Ok(())
 }
 
+fn normalize_trace_reference(reference: &TraceReference) -> TraceReference {
+    let mut normalized = reference.clone();
+    if let Some(preferred_path) = preferred_trace_file_path(&normalized.file) {
+        normalized.file = preferred_path;
+    }
+    normalized
+}
+
+fn trace_reference_dedup_key(reference: &TraceReference) -> String {
+    let mut key = String::new();
+    key.push_str(&reference.file.to_string_lossy());
+    key.push('|');
+    key.push_str(&reference.symbols.join(","));
+    key.push('|');
+    key.push_str(&reference.doc_contains.join(","));
+    key.push('|');
+    if let Some(method) = reference.method.as_deref() {
+        key.push_str(method);
+    }
+    key.push('|');
+    if let Some(path) = reference.path.as_deref() {
+        key.push_str(path);
+    }
+    key
+}
 fn load_feature_documents_for_autofix(
     feature_root: &Path,
 ) -> Result<Vec<MutableLoadedDocument<FeatureDocument>>> {
@@ -1426,6 +1458,73 @@ fn write_modified_documents<T: serde::Serialize>(
     Ok(())
 }
 
+fn normalize_trace_hygiene_for_requirement_documents(
+    documents: &mut [MutableLoadedDocument<RequirementDocument>],
+) {
+    for document in documents {
+        for requirement in &mut document.document.requirements {
+            if let Some(canonical_status) = normalize_delivery_status_label(&requirement.status)
+                && requirement.status.trim() != canonical_status
+            {
+                requirement.status = canonical_status.to_string();
+                document.changed = true;
+            }
+
+            if normalize_trace_references(&mut requirement.tests) {
+                document.changed = true;
+            }
+        }
+    }
+}
+
+fn normalize_trace_hygiene_for_feature_documents(
+    documents: &mut [MutableLoadedDocument<FeatureDocument>],
+) {
+    for document in documents {
+        for feature in &mut document.document.features {
+            if let Some(canonical_status) = normalize_delivery_status_label(&feature.status)
+                && feature.status.trim() != canonical_status
+            {
+                feature.status = canonical_status.to_string();
+                document.changed = true;
+            }
+
+            if normalize_trace_references(&mut feature.implementations) {
+                document.changed = true;
+            }
+        }
+    }
+}
+
+fn normalize_trace_references(
+    references_by_language: &mut BTreeMap<String, Vec<TraceReference>>,
+) -> bool {
+    let mut changed = false;
+    for references in references_by_language.values_mut() {
+        for reference in references.iter_mut() {
+            if let Some(preferred_path) = preferred_trace_file_path(&reference.file)
+                && preferred_path != reference.file
+            {
+                reference.file = preferred_path;
+                changed = true;
+            }
+        }
+
+        let mut seen = HashSet::new();
+        references.retain(|reference| {
+            let key = trace_reference_duplicate_key(reference);
+
+            if seen.insert(key) {
+                true
+            } else {
+                changed = true;
+                false
+            }
+        });
+    }
+    changed
+}
+
 struct AutofixChangeRequest<'a> {
     root: &'a Path,
     path: &'a Path,
@@ -1506,7 +1605,9 @@ fn apply_autofix_for_reference_with_transaction(
         return Ok(());
     }
 
-    let path = root.join(&reference.file);
+    let file_path =
+        preferred_trace_file_path(&reference.file).unwrap_or_else(|| reference.file.clone());
+    let path = root.join(&file_path);
     if !path.is_file() || !adapter.supports_path(&path) {
         return Ok(());
     }
@@ -1847,9 +1948,17 @@ fn collapse_whitespace(value: &str) -> String {
 }
 
 fn normalize_delivery_status(status: &str) -> Option<DeliveryStatus> {
+    normalize_delivery_status_label(status).map(|label| match label {
+        "planned" => DeliveryStatus::Planned,
+        "implemented" => DeliveryStatus::Implemented,
+        _ => unreachable!("canonical delivery status labels are exhaustive"),
+    })
+}
+
+fn normalize_delivery_status_label(status: &str) -> Option<&'static str> {
     match status.trim() {
-        "planned" | "planed" => Some(DeliveryStatus::Planned),
-        "implemented" => Some(DeliveryStatus::Implemented),
+        "planned" | "planed" => Some("planned"),
+        "implemented" => Some("implemented"),
         _ => None,
     }
 }
@@ -2242,13 +2351,7 @@ fn validate_duplicate_trace_references(
     let subject = format!("{} {}", role.subject_kind(), owner_id);
 
     for reference in references {
-        let key = (
-            reference.file.clone(),
-            reference.symbols.clone(),
-            reference.doc_contains.clone(),
-            reference.method.clone(),
-            reference.path.clone(),
-        );
+        let key = trace_reference_duplicate_key(reference);
         if seen.insert(key) {
             continue;
         }
@@ -2269,6 +2372,25 @@ fn validate_duplicate_trace_references(
             )),
         ));
     }
+}
+
+fn trace_reference_duplicate_key(
+    reference: &TraceReference,
+) -> (
+    PathBuf,
+    Vec<String>,
+    Vec<String>,
+    Option<String>,
+    Option<String>,
+) {
+    let file = preferred_trace_file_path(&reference.file).unwrap_or_else(|| reference.file.clone());
+    (
+        file,
+        reference.symbols.clone(),
+        reference.doc_contains.clone(),
+        reference.method.clone(),
+        reference.path.clone(),
+    )
 }
 
 fn preferred_trace_file_path(file: &Path) -> Option<PathBuf> {
@@ -2521,7 +2643,6 @@ fn merge_ownership_entry(
         return false;
     }
 
-    let wildcard_required = required_symbols.len() == 1 && required_symbols[0] == "*";
     let mut changed = false;
 
     if let Some(entry) = manifest
@@ -2529,25 +2650,10 @@ fn merge_ownership_entry(
         .iter_mut()
         .find(|entry| entry.id == owner_id)
     {
-        if wildcard_required {
-            if !entry.symbols.iter().any(|symbol| symbol.trim() == "*") {
-                entry.symbols = vec!["*".to_string()];
-                changed = true;
-            }
-        } else if !entry.symbols.iter().any(|symbol| symbol.trim() == "*") {
-            let mut combined = entry
-                .symbols
-                .iter()
-                .map(|symbol| symbol.trim())
-                .filter(|symbol| !symbol.is_empty())
-                .map(ToOwned::to_owned)
-                .collect::<BTreeSet<_>>();
-            let original_len = combined.len();
-            combined.extend(required_symbols);
-            if combined.len() != original_len {
-                entry.symbols = combined.into_iter().collect();
-                changed = true;
-            }
+        let normalized_symbols = normalize_ownership_symbols(&entry.symbols, &required_symbols);
+        if entry.symbols != normalized_symbols {
+            entry.symbols = normalized_symbols;
+            changed = true;
         }
     } else {
         manifest.owners.push(OwnershipEntry {
@@ -2563,6 +2669,23 @@ fn merge_ownership_entry(
             .sort_by(|left, right| left.id.cmp(&right.id));
     }
     changed
+}
+
+fn normalize_ownership_symbols(existing: &[String], required: &[String]) -> Vec<String> {
+    let wildcard_required = required.len() == 1 && required[0] == "*";
+    if wildcard_required || existing.iter().any(|symbol| symbol.trim() == "*") {
+        return vec!["*".to_string()];
+    }
+
+    existing
+        .iter()
+        .chain(required.iter())
+        .map(|symbol| symbol.trim())
+        .filter(|symbol| !symbol.is_empty() && *symbol != "*")
+        .map(ToOwned::to_owned)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
 }
 
 fn validate_philosophy(
@@ -3950,6 +4073,12 @@ mod tests {
     };
 
     use super::{
+        AutofixChangeRequest, AutofixMode, AutofixRun, DeliveryStatus,
+        load_feature_documents_for_autofix, normalize_delivery_status, normalize_trace_reference,
+        normalize_trace_references, trace_reference_dedup_key, write_or_plan_autofix_change,
+    };
+
+    use super::{
         AutofixPlan, AutofixPlanChange, AutofixTransaction, FilteredIssueView,
         HISTORICAL_ID_RULE_CODES, IssueFilters, ItemLocation, MutableLoadedDocument,
         ORPHAN_RULE_CODES, RECIPROCAL_RULE_CODES, RequirementValidationIndex, TextReportSummary,
@@ -4925,6 +5054,160 @@ mod tests {
     }
 
     #[test]
+    fn normalize_trace_reference_canonicalizes_and_deduplicates_files() {
+        let canonical = TraceReference {
+            file: PathBuf::from("src/lib.rs"),
+            symbols: vec!["trace_symbol".to_string()],
+            doc_contains: vec!["REQ-1".to_string()],
+            method: None,
+            path: None,
+        };
+        let relative = TraceReference {
+            file: PathBuf::from("./src/lib.rs"),
+            ..canonical.clone()
+        };
+
+        let normalized = normalize_trace_reference(&relative);
+        let mut seen = BTreeSet::new();
+        assert!(seen.insert(trace_reference_dedup_key(&normalized)));
+        assert!(
+            !seen.insert(trace_reference_dedup_key(&normalize_trace_reference(
+                &canonical
+            )))
+        );
+        assert_eq!(normalized.file, PathBuf::from("src/lib.rs"));
+        assert_eq!(normalized.symbols, vec!["trace_symbol".to_string()]);
+        assert_eq!(normalized.doc_contains, vec!["REQ-1".to_string()]);
+    }
+
+    #[test]
+    fn normalize_trace_references_deduplicates_after_canonicalizing_paths() {
+        let mut references_by_language = BTreeMap::from([(
+            "rust".to_string(),
+            vec![
+                TraceReference {
+                    file: PathBuf::from("src/lib.rs"),
+                    symbols: vec!["trace_symbol".to_string()],
+                    doc_contains: vec!["REQ-1".to_string()],
+                    method: None,
+                    path: None,
+                },
+                TraceReference {
+                    file: PathBuf::from("./src/lib.rs"),
+                    symbols: vec!["trace_symbol".to_string()],
+                    doc_contains: vec!["REQ-1".to_string()],
+                    method: None,
+                    path: None,
+                },
+            ],
+        )]);
+
+        assert!(normalize_trace_references(&mut references_by_language));
+        assert_eq!(references_by_language["rust"].len(), 1);
+        assert_eq!(
+            references_by_language["rust"][0].file,
+            PathBuf::from("src/lib.rs")
+        );
+    }
+
+    #[test]
+    fn normalize_delivery_status_accepts_typos_and_known_values() {
+        assert_eq!(
+            normalize_delivery_status(" planed "),
+            Some(DeliveryStatus::Planned)
+        );
+        assert_eq!(
+            normalize_delivery_status("implemented"),
+            Some(DeliveryStatus::Implemented)
+        );
+        assert_eq!(normalize_delivery_status("unknown"), None);
+    }
+
+    #[test]
+    fn load_feature_documents_for_autofix_loads_only_feature_documents() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let feature_root = tempdir.path().join("docs/syu/features");
+        fs::create_dir_all(feature_root.join("core")).expect("feature dirs");
+        fs::write(
+            feature_root.join("features.yaml"),
+            "version: \"1\"\nfiles:\n  - kind: core\n    file: core.yaml\n",
+        )
+        .expect("registry");
+        fs::write(
+            feature_root.join("core.yaml"),
+            "category: Core Features\nversion: 1\n\nfeatures:\n  - id: FEAT-1\n    title: Example\n    summary: Keep it simple.\n    status: implemented\n    linked_requirements: []\n    implementations: {}\n",
+        )
+        .expect("feature document");
+        fs::write(
+            feature_root.join("notes.yaml"),
+            "category: Notes\nversion: 1\nnotes:\n  - ignore me\n",
+        )
+        .expect("non-feature document");
+
+        let documents = load_feature_documents_for_autofix(&feature_root)
+            .expect("feature documents should load");
+
+        assert_eq!(documents.len(), 1);
+        assert_eq!(documents[0].path, feature_root.join("core.yaml"));
+    }
+
+    #[test]
+    fn write_or_plan_autofix_change_records_apply_and_plan_modes() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let root = tempdir.path();
+        let path = root.join("trace.rs");
+        fs::write(&path, "original").expect("file should exist");
+
+        let mut apply_run = AutofixRun::default();
+        let mut apply_transaction = AutofixTransaction::default();
+        write_or_plan_autofix_change(AutofixChangeRequest {
+            root,
+            path: &path,
+            transaction: &mut apply_transaction,
+            run: &mut apply_run,
+            mode: AutofixMode::Apply,
+            rules: vec!["SYU-trace-file-003"],
+            summary_text: "update trace path".to_string(),
+            contents: Some("updated".to_string()),
+        })
+        .expect("apply mode should write");
+
+        assert_eq!(
+            fs::read_to_string(&path).expect("updated file should exist"),
+            "updated"
+        );
+        assert_eq!(apply_run.summary.symbol_updates, 1);
+        assert!(
+            apply_run
+                .summary
+                .updated_files
+                .contains(Path::new("trace.rs"))
+        );
+
+        let mut plan_run = AutofixRun {
+            plan: Some(AutofixPlan::default()),
+            ..Default::default()
+        };
+        let mut plan_transaction = AutofixTransaction::default();
+        write_or_plan_autofix_change(AutofixChangeRequest {
+            root,
+            path: &path,
+            transaction: &mut plan_transaction,
+            run: &mut plan_run,
+            mode: AutofixMode::Plan,
+            rules: vec!["SYU-trace-file-003"],
+            summary_text: "update trace path".to_string(),
+            contents: None,
+        })
+        .expect("plan mode should record change");
+
+        let plan = plan_run.plan.expect("plan should be initialized");
+        assert_eq!(plan.planned_updates, 1);
+        assert!(plan.updated_files.contains(Path::new("trace.rs")));
+        assert_eq!(plan.changes.len(), 1);
+    }
+
+    #[test]
     fn describe_trace_reference_includes_openapi_selector_details() {
         let reference = TraceReference {
             file: PathBuf::from("api/openapi.yaml"),
@@ -5314,6 +5597,62 @@ mod tests {
                 .iter()
                 .any(|issue| issue.code == "SYU-graph-reciprocal-001")
         );
+    }
+
+    #[test]
+    fn validate_philosophy_reports_all_required_blank_fields() {
+        let mut entry = philosophy("PHIL-1");
+        entry.id.clear();
+        entry.title.clear();
+        entry.product_design_principle.clear();
+        entry.coding_guideline.clear();
+
+        let mut issues = Vec::new();
+        validate_philosophy(&entry, &HashMap::new(), &SyuConfig::default(), &mut issues);
+
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "SYU-workspace-blank-001"
+                    && issue.location.as_deref() == Some("id"))
+        );
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "SYU-workspace-blank-001"
+                    && issue.location.as_deref() == Some("title"))
+        );
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "SYU-workspace-blank-001"
+                    && issue.location.as_deref() == Some("product_design_principle"))
+        );
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == "SYU-workspace-blank-001"
+                    && issue.location.as_deref() == Some("coding_guideline"))
+        );
+    }
+
+    #[test]
+    fn validate_delivery_status_reports_invalid_status() {
+        let mut issues = Vec::new();
+        assert_eq!(
+            super::validate_delivery_status(
+                "feature",
+                "FEAT-1",
+                "retired",
+                &SyuConfig::default(),
+                &mut issues
+            ),
+            None
+        );
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].code, "SYU-delivery-invalid-001");
+        assert_eq!(issues[0].location.as_deref(), Some("status"));
     }
 
     #[test]
@@ -6589,6 +6928,37 @@ mod tests {
     }
 
     #[test]
+    fn merge_ownership_entry_normalizes_duplicate_sidecar_symbols() {
+        let mut manifest = OwnershipManifest {
+            version: 1,
+            owners: vec![OwnershipEntry {
+                id: "REQ-1".to_string(),
+                symbols: vec![
+                    "covered".to_string(),
+                    "covered".to_string(),
+                    " extra ".to_string(),
+                ],
+            }],
+        };
+
+        assert!(merge_ownership_entry(
+            &mut manifest,
+            "REQ-1",
+            &TraceReference {
+                file: PathBuf::from("trace.rs"),
+                symbols: vec!["covered".to_string()],
+                doc_contains: Vec::new(),
+                method: None,
+                path: None,
+            },
+        ));
+        assert_eq!(
+            manifest.owners[0].symbols,
+            vec!["covered".to_string(), "extra".to_string()]
+        );
+    }
+
+    #[test]
     fn verify_trace_reference_reports_missing_owner_in_sidecar_manifest() {
         let tempdir = tempdir().expect("tempdir should exist");
         let path = tempdir.path().join("trace.rs");
@@ -6746,6 +7116,59 @@ mod tests {
 
         assert!(summary.updated_files.is_empty());
         assert_eq!(summary.symbol_updates, 0);
+    }
+
+    #[test]
+    fn apply_autofix_for_trace_map_dedupes_normalized_references() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let root = tempdir.path();
+        fs::write(root.join("trace.rs"), "pub fn expected() {}\n")
+            .expect("trace file should exist");
+
+        let mut config = SyuConfig::default();
+        config.validate.trace_ownership_mode = TraceOwnershipMode::Inline;
+
+        let mut references_by_language = BTreeMap::new();
+        references_by_language.insert(
+            "rust".to_string(),
+            vec![
+                TraceReference {
+                    file: PathBuf::from("trace.rs"),
+                    symbols: vec!["expected".to_string()],
+                    doc_contains: Vec::new(),
+                    method: None,
+                    path: None,
+                },
+                TraceReference {
+                    file: PathBuf::from("./trace.rs"),
+                    symbols: vec!["expected".to_string()],
+                    doc_contains: Vec::new(),
+                    method: None,
+                    path: None,
+                },
+            ],
+        );
+
+        let mut run = super::AutofixRun::default();
+        let mut transaction = super::AutofixTransaction::default();
+        super::apply_autofix_for_trace_map_with_transaction(
+            root,
+            &config,
+            "REQ-1",
+            &references_by_language,
+            &mut run,
+            super::AutofixMode::Apply,
+            &mut transaction,
+        )
+        .expect("normalized references should be processed once");
+
+        assert_eq!(run.summary.symbol_updates, 1);
+        assert_eq!(run.summary.updated_files.len(), 1);
+        assert!(
+            run.summary
+                .updated_files
+                .contains(&PathBuf::from("trace.rs"))
+        );
     }
 
     #[test]

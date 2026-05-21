@@ -112,7 +112,7 @@ Examples:
   syu task scaffold request.yaml
   syu task scaffold request.yaml --format json
 
-Use this after `syu task scope` and `syu task classify` when you want reviewable planned requirement and feature updates that stay aligned with the existing `syu add` document and registry conventions.";
+Use this after `syu task scope` and `syu task classify` when you want reviewable planned requirement, feature, and temporary Goal Plan updates that stay aligned with the existing `syu add` document and registry conventions.";
 
 const TASK_AFTER_HELP: &str = "\
 Examples:
