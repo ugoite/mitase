@@ -1129,7 +1129,10 @@ fn print_scaffold_text_output(
 fn print_task_check_text_output(plan_path: &Path, report: &GoalPlanCheckReport) {
     println!("goal plan: {}", plan_path.display());
     println!("git range: {}", report.range);
-    println!("status: {}", if report.passed() { "passed" } else { "failed" });
+    println!(
+        "status: {}",
+        if report.passed() { "passed" } else { "failed" }
+    );
     println!();
     println!("changed files:");
     if report.changed_files.is_empty() {
@@ -1427,8 +1430,7 @@ fn validate_goal_plan_test_reference(
                 Some(format!("{location}::{snippet}")),
                 "required test text is missing",
                 Some(
-                    "Add the expected documentation text to the referenced test file."
-                        .to_string(),
+                    "Add the expected documentation text to the referenced test file.".to_string(),
                 ),
             ));
         }
@@ -1444,19 +1446,15 @@ fn build_globset(patterns: &[String]) -> Result<Option<GlobSet>> {
 
     let mut builder = GlobSetBuilder::new();
     for pattern in patterns {
-        builder.add(
-            Glob::new(pattern).with_context(|| format!("invalid scope glob `{pattern}`"))?,
-        );
+        builder.add(Glob::new(pattern).with_context(|| format!("invalid scope glob `{pattern}`"))?);
     }
 
-    Ok(Some(builder.build().context("failed to build scope glob set")?))
+    Ok(Some(
+        builder.build().context("failed to build scope glob set")?,
+    ))
 }
 
-fn path_matches_scope(
-    path: &Path,
-    include: Option<&GlobSet>,
-    exclude: Option<&GlobSet>,
-) -> bool {
+fn path_matches_scope(path: &Path, include: Option<&GlobSet>, exclude: Option<&GlobSet>) -> bool {
     let included = include.is_none_or(|set| set.is_match(path));
     let excluded = exclude.is_some_and(|set| set.is_match(path));
     included && !excluded
@@ -1471,10 +1469,7 @@ fn is_production_path(path: &Path) -> bool {
         || rendered.starts_with("website/")
         || rendered.starts_with("repo/")
         || rendered.starts_with("scripts/")
-        || matches!(
-            rendered.as_str(),
-            "build.rs" | "Cargo.toml" | "Cargo.lock"
-        )
+        || matches!(rendered.as_str(), "build.rs" | "Cargo.toml" | "Cargo.lock")
 }
 
 fn print_items(heading: &str, items: &[SearchResult]) {
