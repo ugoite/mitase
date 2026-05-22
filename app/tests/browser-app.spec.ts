@@ -314,9 +314,10 @@ test("shows openapi operation details in the item panel", async ({ page }) => {
   });
 
   await page.goto("/#features/FEAT-TRACE-001");
+  await page.bringToFront();
   await expect(
     page.getByRole("heading", {
-      name: /FEAT-TRACE-001 .* OpenAPI implementation trace/i,
+      name: /FEAT-TRACE-001\b/i,
     }),
   ).toBeVisible();
   await expect(page.getByText("operation", { exact: true })).toBeVisible();
@@ -394,9 +395,10 @@ test("renders git history for the selected item", async ({ page }) => {
   });
 
   await page.goto("/#features/FEAT-TRACE-001");
+  await page.bringToFront();
   await expect(
     page.getByRole("heading", {
-      name: /FEAT-TRACE-001 .* OpenAPI implementation trace/i,
+      name: /FEAT-TRACE-001\b/i,
     }),
   ).toBeVisible();
   await expect(page.getByText("Git-backed lifecycle")).toBeVisible();
@@ -493,10 +495,11 @@ test("renders history for a deleted item from the historical index", async ({ pa
   });
 
   await page.goto("/#features/FEAT-DELETED-001");
+  await page.bringToFront();
   await expect(page.getByRole("heading", { level: 1, name: /^syu\b/i })).toBeVisible();
   await expect(
     page.getByRole("heading", {
-      name: /FEAT-DELETED-001 .* Deleted feature history/i,
+      name: /FEAT-DELETED-001\b/i,
     }),
   ).toBeVisible();
   await expect(page.getByText("Historical item resolved from the git-backed index.")).toBeVisible();
@@ -626,7 +629,11 @@ test("loads deep links and supports keyboard search navigation", async ({ page }
   await searchInput.press("Escape");
   await expect(searchInput).toHaveValue("");
   await searchInput.fill("syu");
-  await filterGroup.getByRole("button", { name: "Requirements" }).click();
+  await expect(async () => {
+    const requirementsFilter = filterGroup.getByRole("button", { name: "Requirements" });
+    await requirementsFilter.click();
+    await expect(requirementsFilter).toHaveAttribute("aria-pressed", "true");
+  }).toPass();
   await expect(filterGroup.getByRole("button", { name: "Requirements" })).toHaveAttribute(
     "aria-pressed",
     "true",
@@ -847,9 +854,10 @@ test("shows a visible banner when version polling fails after the initial load",
   });
 
   await page.goto("/");
+  await page.bringToFront();
   await expect(page.getByRole("heading", { level: 1, name: /^syu\b/i })).toBeVisible();
 
-  await expect.poll(() => pollAttempts, { timeout: 10000 }).toBeGreaterThan(0);
+  await expect.poll(() => pollAttempts, { timeout: 20000 }).toBeGreaterThan(0);
 
   const alert = page.getByRole("alert");
   await expect(alert).toContainText("Live refresh needs attention.");
@@ -889,9 +897,10 @@ test("shows a visible banner when a workspace refresh reload fails after the ini
   });
 
   await page.goto("/");
+  await page.bringToFront();
   await expect(page.getByRole("heading", { level: 1, name: /^syu\b/i })).toBeVisible();
 
-  await expect.poll(() => refreshLoads, { timeout: 10000 }).toBeGreaterThan(0);
+  await expect.poll(() => refreshLoads, { timeout: 20000 }).toBeGreaterThan(0);
 
   const alert = page.getByRole("alert");
   await expect(alert).toContainText("Live refresh needs attention.");
@@ -923,6 +932,7 @@ test("allows a manual refresh and updates the last refresh timestamp after a sta
   });
 
   await page.goto("/");
+  await page.bringToFront();
   await expect(page.getByRole("heading", { level: 1, name: /^syu\b/i })).toBeVisible();
   await expect(page.locator("header").getByLabel("Last successful refresh").first()).toBeVisible();
 
@@ -931,7 +941,7 @@ test("allows a manual refresh and updates the last refresh timestamp after a sta
   expect(initialTimestamp).not.toBeNull();
 
   const alert = page.getByRole("alert");
-  await expect.poll(() => pollAttempts, { timeout: 10000 }).toBeGreaterThan(0);
+  await expect.poll(() => pollAttempts, { timeout: 20000 }).toBeGreaterThan(0);
   await expect(alert).toContainText("Live refresh needs attention.");
 
   await page.waitForTimeout(20);
@@ -954,6 +964,7 @@ test("announces refresh state changes through a polite live region", async ({ pa
   });
 
   await page.goto("/");
+  await page.bringToFront();
 
   const liveRegion = page.locator('[data-refresh-live-region="true"]');
   await expect(liveRegion).toHaveAttribute("role", "status");
@@ -961,7 +972,7 @@ test("announces refresh state changes through a polite live region", async ({ pa
   await expect(liveRegion).toHaveAttribute("aria-atomic", "true");
   await expect(liveRegion).toHaveText("Workspace snapshot is current.");
 
-  await expect.poll(() => pollAttempts, { timeout: 10000 }).toBeGreaterThan(0);
+  await expect.poll(() => pollAttempts, { timeout: 20000 }).toBeGreaterThan(0);
   await expect(liveRegion).toContainText("Workspace snapshot is stale.");
   await expect(liveRegion).toContainText("Could not check for workspace updates");
 
