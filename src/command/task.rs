@@ -1257,21 +1257,20 @@ fn check_goal_plan(
         }
     }
 
-    if let Some(source_range) = artifact.source.range.as_deref() {
-        if matches!(artifact.source.mode, GoalPlanSourceMode::DiffInferred)
-            && source_range.trim() != range
-        {
-            issues.push(Issue::warning(
-                "GOAL-TASK-PLAN-011",
-                "source.range",
-                None,
-                "plan source range does not match the requested git range",
-                Some(
-                    "Rebuild or update the Goal Plan so its recorded range matches the check input."
-                        .to_string(),
-                ),
-            ));
-        }
+    if let Some(source_range) = artifact.source.range.as_deref()
+        && matches!(artifact.source.mode, GoalPlanSourceMode::DiffInferred)
+        && source_range.trim() != range
+    {
+        issues.push(Issue::warning(
+            "GOAL-TASK-PLAN-011",
+            "source.range",
+            None,
+            "plan source range does not match the requested git range",
+            Some(
+                "Rebuild or update the Goal Plan so its recorded range matches the check input."
+                    .to_string(),
+            ),
+        ));
     }
 
     let include_matcher = build_globset(&artifact.implementation_plan.scope.include)?;
