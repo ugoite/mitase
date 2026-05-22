@@ -19,7 +19,7 @@ description: "Generated reference for docs/syu/features/cli/trace.yaml"
 
 - **id**: FEAT-TRACE-001
   - **title**: Source-first trace lookup
-  - **summary**: Start from a repository file path and optional symbol, then resolve linked requirements, features, policies, and philosophies from trace ownership, including range summaries that surface affected IDs before file details.
+  - **summary**: Start from a repository file path and optional symbol, then resolve linked requirements, features, policies, and philosophies from trace ownership, including range summaries and strict reviewer failures that surface affected IDs and structured findings before file details.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-021
@@ -41,7 +41,7 @@ version: 1
 features:
   - id: FEAT-TRACE-001
     title: Source-first trace lookup
-    summary: Start from a repository file path and optional symbol, then resolve linked requirements, features, policies, and philosophies from trace ownership, including range summaries that surface affected IDs before file details.
+    summary: Start from a repository file path and optional symbol, then resolve linked requirements, features, policies, and philosophies from trace ownership, including range summaries and strict reviewer failures that surface affected IDs and structured findings before file details.
     status: implemented
     linked_requirements:
       - REQ-CORE-021
