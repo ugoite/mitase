@@ -17,7 +17,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use axum::{
     Json, Router,
     body::Body,
-    extract::State,
+    extract::{Query, State},
     http::{HeaderValue, StatusCode, Uri, header},
     response::{IntoResponse, Response},
     routing::get,
@@ -29,14 +29,17 @@ use syu_core::{
 };
 
 use crate::{
-    cli::AppArgs,
+    cli::{AppArgs, HistoryKind},
     command::check::collect_check_result,
+    command::log::{
+        HistoryRequest, build_history_response, lookup_kind_for_id, resolve_git_repository_root,
+    },
     config::{SyuConfig, config_path, load_config, resolve_spec_root},
     coverage::normalize_relative_path,
     history::build_historical_id_index,
     model::{CheckResult, FeatureRegistryDocument, TraceReference},
     workspace::{
-        load_feature_documents_with_paths, load_requirement_documents_with_paths,
+        load_feature_documents_with_paths, load_requirement_documents_with_paths, load_workspace,
         resolve_workspace_root,
     },
 };
@@ -432,11 +435,17 @@ fn canonical_workspace_root(workspace_root: &Path) -> Result<PathBuf> {
 fn app_router(state: AppState) -> Router {
     Router::new()
         .route("/api/app-data.json", get(app_data))
+        .route("/api/item-history.json", get(item_history))
         .route("/api/version", get(app_version))
         .route("/health", get(health))
         .route("/healthz", get(healthz))
         .fallback(get(serve_static))
         .with_state(state)
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+struct ItemHistoryQuery {
+    id: String,
 }
 
 async fn app_data(State(state): State<AppState>) -> std::result::Result<Response, AppError> {
@@ -449,6 +458,28 @@ async fn app_data(State(state): State<AppState>) -> std::result::Result<Response
         HeaderValue::from_str(&current.snapshot).context("invalid snapshot header value")?,
     );
     Ok(response)
+}
+
+async fn item_history(
+    State(state): State<AppState>,
+    Query(query): Query<ItemHistoryQuery>,
+) -> std::result::Result<Json<crate::command::log::HistoryResponse>, AppError> {
+    let workspace = load_workspace(&state.workspace_root)?;
+    let repository_root = resolve_git_repository_root(&workspace.root)?;
+    let kind = lookup_kind_for_id(&query.id)
+        .map(|_| HistoryKind::All)
+        .ok_or_else(|| anyhow!("unknown item ID `{}`", query.id))?;
+    let response = build_history_response(HistoryRequest {
+        workspace: &workspace,
+        repository_root: &repository_root,
+        id: &query.id,
+        kind,
+        include_related: true,
+        scope: None,
+        path_filter: None,
+        limit: 10,
+    })?;
+    Ok(Json(response))
 }
 
 async fn app_version(
@@ -1349,6 +1380,7 @@ mod tests {
         io::{Error, ErrorKind, Read, Write as _},
         net::TcpListener,
         path::{Path, PathBuf},
+        process::Command,
         sync::atomic::{AtomicUsize, Ordering},
         thread,
         time::Duration,
@@ -1478,6 +1510,29 @@ mod tests {
             "#[test]\nfn requirement_trace() {}\n",
         )
         .expect("requirement source");
+    }
+
+    fn init_git_repository(root: &Path) {
+        git(root, &["init"]);
+        git(root, &["config", "user.name", "Test User"]);
+        git(root, &["config", "user.email", "test@example.com"]);
+        git(root, &["add", "."]);
+        git(root, &["commit", "-m", "chore: initial history fixture"]);
+    }
+
+    fn git(root: &Path, args: &[&str]) {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(args)
+            .output()
+            .expect("git should run");
+        assert!(
+            output.status.success(),
+            "git command failed\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     #[cfg(unix)]
@@ -2723,6 +2778,42 @@ mod tests {
 
         assert_ne!(first_json, second_json);
         assert!(second_json.contains("Updated title"));
+    }
+
+    #[tokio::test]
+    async fn item_history_route_returns_git_history_for_selected_item() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let root = tempdir.path();
+        write_snapshot_workspace(root, false);
+        init_git_repository(root);
+
+        let router = app_router(app_state(root));
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/api/item-history.json?id=FEAT-001")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body");
+        let json: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        assert_eq!(json["id"], "FEAT-001");
+        assert_eq!(json["entity_kind"], "feature");
+        assert_eq!(json["status"], "current");
+        assert!(
+            json["commits"]
+                .as_array()
+                .map(|commits| !commits.is_empty())
+                .unwrap_or(false),
+            "history route should return at least one matching commit"
+        );
     }
 
     #[tokio::test]
