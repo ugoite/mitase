@@ -411,7 +411,14 @@ fn emit_startup_lines(lines: Vec<String>) -> Result<()> {
 }
 
 fn app_dev_server_origin(args: &AppArgs) -> Option<String> {
-    args.dev_server.then_some(APP_DEV_SERVER_ORIGIN.to_string())
+    if !args.dev_server {
+        return None;
+    }
+
+    env::var("SYU_APP_DEV_SERVER_ORIGIN")
+        .ok()
+        .filter(|origin| !origin.is_empty())
+        .or_else(|| Some(APP_DEV_SERVER_ORIGIN.to_string()))
 }
 
 fn resolve_app_server_settings(args: &AppArgs, config: &SyuConfig) -> AppServerSettings {
