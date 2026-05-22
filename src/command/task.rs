@@ -623,17 +623,21 @@ pub fn run_task_plan_command(args: &TaskPlanArgs) -> Result<i32> {
     let request_artifact = load_request_artifact(&args.request)?;
     let explicit_ids = request_artifact.explicit_ids();
     let scope_outcome = scope_request(&workspace, &request_artifact)?;
-    let plan = build_goal_plan(&workspace, &scope_outcome, &explicit_ids, &args.request)?;
+    let resolved_output = args
+        .output
+        .as_ref()
+        .map(|output| resolve_task_plan_output_path(&workspace.root, output));
+    let plan = build_goal_plan(
+        &workspace,
+        &scope_outcome,
+        &explicit_ids,
+        &args.request,
+        args.output.as_deref(),
+    )?;
+    let rendered = render_goal_plan_output(&args.request, &plan, args.format)?;
 
-    let render_format = if args.output.is_some() && matches!(args.format, TaskPlanFormat::Text) {
-        TaskPlanFormat::Yaml
-    } else {
-        args.format
-    };
-    let rendered = render_goal_plan_output(&args.request, &plan, render_format)?;
-
-    if let Some(output) = &args.output {
-        let resolved_output = resolve_task_plan_output_path(&workspace.root, output);
+    if let Some(_output) = &args.output {
+        let resolved_output = resolved_output.expect("output path should be resolved");
         if resolved_output.starts_with(&workspace.spec_root) {
             eprintln!(
                 "warning: task plan output `{}` is inside spec.root `{}`; the plan is intended to stay outside the persistent spec tree",
@@ -663,6 +667,7 @@ fn build_goal_plan(
     outcome: &ScopeOutcome,
     explicit_ids: &[String],
     request_path: &Path,
+    output_path: Option<&Path>,
 ) -> Result<JsonTaskPlanOutput> {
     let lookup = WorkspaceLookup::new(workspace);
     let persistent_items = collect_task_plan_persistent_items(&lookup, outcome)?;
@@ -731,13 +736,21 @@ fn build_goal_plan(
             threshold: 100,
         },
         completion: JsonTaskPlanCompletion {
-            must_pass: vec![
-                "syu task check .syu/tasks/current.yaml --range origin/main...HEAD".to_string(),
-                "syu validate .".to_string(),
-            ],
+            must_pass: task_plan_completion_checks(output_path),
         },
         warnings: collect_task_plan_warnings(outcome),
     })
+}
+
+fn task_plan_completion_checks(output_path: Option<&Path>) -> Vec<String> {
+    let plan_path = output_path
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|| ".syu/tasks/current.yaml".to_string());
+
+    vec![
+        format!("syu task check {plan_path} --range origin/main...HEAD"),
+        "syu validate .".to_string(),
+    ]
 }
 
 fn render_goal_plan_output(
@@ -2638,7 +2651,7 @@ mod tests {
         let artifact = load_request_artifact(&request).expect("request");
         let scope_outcome = scope_request(&workspace, &artifact).expect("scope");
         let explicit_ids = artifact.explicit_ids();
-        let plan = build_goal_plan(&workspace, &scope_outcome, &explicit_ids, &request)
+        let plan = build_goal_plan(&workspace, &scope_outcome, &explicit_ids, &request, None)
             .expect("goal plan");
 
         assert_eq!(plan.kind, "syu.goal_plan");
@@ -2662,6 +2675,7 @@ mod tests {
         assert!(text.contains("implementation plan:"));
         assert!(text.contains("test plan:"));
         assert!(text.contains("coverage: changed_lines (threshold 100)"));
+        assert!(text.contains("syu task check .syu/tasks/current.yaml --range origin/main...HEAD"));
 
         let yaml =
             render_goal_plan_output(&request, &plan, TaskPlanFormat::Yaml).expect("yaml render");
@@ -2679,6 +2693,26 @@ mod tests {
         }
         fs::write(&resolved, text).expect("write plan");
         assert!(resolved.exists());
+
+        let custom_output = tempdir.path().join("docs/syu/plans/current.yaml");
+        let custom_plan = build_goal_plan(
+            &workspace,
+            &scope_outcome,
+            &explicit_ids,
+            &request,
+            Some(custom_output.as_path()),
+        )
+        .expect("goal plan");
+        assert!(
+            custom_plan
+                .completion
+                .must_pass
+                .iter()
+                .any(|check| check.contains(&format!(
+                    "syu task check {}",
+                    custom_output.display()
+                )))
+        );
     }
 
     #[test]
@@ -2692,7 +2726,7 @@ mod tests {
         let artifact = load_request_artifact(&request).expect("request");
         let scope_outcome = scope_request(&workspace, &artifact).expect("scope");
         let explicit_ids = artifact.explicit_ids();
-        let plan = build_goal_plan(&workspace, &scope_outcome, &explicit_ids, &request)
+        let plan = build_goal_plan(&workspace, &scope_outcome, &explicit_ids, &request, None)
             .expect("goal plan");
 
         assert_eq!(plan.source.confidence, "low");

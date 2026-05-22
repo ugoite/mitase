@@ -317,10 +317,11 @@ fn task_plan_prints_text_output_and_writes_goal_plan_file() {
         .expect("goal plan should be written");
     assert!(rendered.contains("kind: syu.goal_plan"));
     assert!(rendered.contains("goal:"));
-    assert!(rendered.contains("implementation_plan:"));
-    assert!(rendered.contains("test_plan:"));
-    assert!(rendered.contains("coverage:"));
-    assert!(rendered.contains("completion:"));
+    assert!(rendered.contains("implementation plan:"));
+    assert!(rendered.contains("test plan:"));
+    assert!(rendered.contains("coverage: changed_lines (threshold 100)"));
+    assert!(rendered.contains("completion checks:"));
+    assert!(rendered.contains("syu task check .syu/tasks/current.yaml --range origin/main...HEAD"));
 }
 
 #[test]
