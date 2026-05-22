@@ -141,15 +141,15 @@ fn app_command_test_lock() -> &'static Mutex<()> {
     LOCK.get_or_init(|| Mutex::new(()))
 }
 
-fn spawn_fake_vite_server() -> std::thread::JoinHandle<()> {
-    let listener = TcpListener::bind(("127.0.0.1", 4173)).expect("fake vite listener should bind");
+fn spawn_fake_dev_server(port: u16, status_line: &'static str) -> std::thread::JoinHandle<()> {
+    let listener = TcpListener::bind(("127.0.0.1", port)).expect("fake vite listener should bind");
     thread::spawn(move || {
         let (mut stream, _) = listener.accept().expect("fake vite client should connect");
         let mut request = [0_u8; 512];
         let _ = stream.read(&mut request);
         write!(
             stream,
-            "HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            "{status_line}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
         )
         .expect("fake vite response should write");
         stream.flush().expect("fake vite response should flush");
@@ -361,7 +361,8 @@ fn app_command_can_serve_a_dev_server_shell() {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let port = reserve_port();
-    let fake_vite = spawn_fake_vite_server();
+    let dev_server_port = reserve_port();
+    let fake_vite = spawn_fake_dev_server(dev_server_port, "HTTP/1.1 200 OK");
     let mut child = Command::cargo_bin("syu")
         .expect("binary should build")
         .arg("app")
@@ -371,6 +372,10 @@ fn app_command_can_serve_a_dev_server_shell() {
         .arg("--port")
         .arg(port.to_string())
         .arg("--dev-server")
+        .env(
+            "SYU_APP_DEV_SERVER_ORIGIN",
+            format!("http://127.0.0.1:{dev_server_port}"),
+        )
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -381,8 +386,8 @@ fn app_command_can_serve_a_dev_server_shell() {
 
     let index = http_get(port, "/").expect("index should load");
     assert!(index.contains("200 OK"));
-    assert!(index.contains("http://127.0.0.1:4173/@vite/client"));
-    assert!(index.contains("http://127.0.0.1:4173/src/main.tsx"));
+    assert!(index.contains(&format!("http://127.0.0.1:{dev_server_port}/@vite/client")));
+    assert!(index.contains(&format!("http://127.0.0.1:{dev_server_port}/src/main.tsx")));
 
     let payload = http_get(port, "/api/app-data.json").expect("payload should load");
     assert!(payload.contains("200 OK"));
@@ -398,6 +403,8 @@ fn app_command_requires_a_running_dev_server_for_dev_mode() {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let port = reserve_port();
+    let dev_server_port = reserve_port();
+    let _fake_vite = spawn_fake_dev_server(dev_server_port, "HTTP/1.1 503 Service Unavailable");
     let output = Command::cargo_bin("syu")
         .expect("binary should build")
         .arg("app")
@@ -407,6 +414,10 @@ fn app_command_requires_a_running_dev_server_for_dev_mode() {
         .arg("--port")
         .arg(port.to_string())
         .arg("--dev-server")
+        .env(
+            "SYU_APP_DEV_SERVER_ORIGIN",
+            format!("http://127.0.0.1:{dev_server_port}"),
+        )
         .output()
         .expect("app command should run");
 

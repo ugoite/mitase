@@ -316,6 +316,7 @@ mod tests {
                     symbol: Some("run".to_string()),
                     range: None,
                     allowed_id: Vec::new(),
+                    strict: false,
                     format: OutputFormat::Json,
                 })),
             },
