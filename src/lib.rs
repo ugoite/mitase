@@ -170,8 +170,8 @@ mod tests {
     use crate::cli::{
         AddArgs, AppArgs, AuditArgs, Cli, Commands, CompletionArgs, ExplainArgs, HistoryKind,
         ListArgs, LogArgs, LookupKind, OutputFormat, RelateArgs, SearchArgs, ShowArgs, TaskArgs,
-        TaskCheckArgs, TaskClassifyArgs, TaskCommands, TaskPlanArgs, TaskPlanFormat,
-        TaskScopeArgs, TemplatesArgs, TraceArgs,
+        TaskCheckArgs, TaskClassifyArgs, TaskCommands, TaskPlanArgs, TaskPlanFormat, TaskScopeArgs,
+        TemplatesArgs, TraceArgs,
     };
     use clap_complete::Shell;
 

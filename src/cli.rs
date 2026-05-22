@@ -1036,8 +1036,7 @@ mod tests {
     use super::{
         Cli, CompletionArgs, LookupKind, StarterTemplate, TaskArgs, TaskCheckArgs,
         TaskClassifyArgs, TaskCommands, TaskPlanArgs, TaskPlanFormat, TaskScaffoldArgs,
-        TaskScopeArgs, ValidationGenreFilter,
-        ValidationSeverityFilter,
+        TaskScopeArgs, ValidationGenreFilter, ValidationSeverityFilter,
     };
     use crate::command::init::{starter_template_example_commands, starter_template_names};
     use clap::Parser;
