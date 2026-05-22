@@ -2234,7 +2234,7 @@ mod tests {
         );
         assert_eq!(
             super::next_available_scaffold_id(&lookup, crate::cli::LookupKind::Feature, "task"),
-            "FEAT-TASK-004"
+            "FEAT-TASK-005"
         );
         assert_eq!(
             super::next_available_scaffold_id(
