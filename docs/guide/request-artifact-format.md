@@ -53,4 +53,7 @@ normal spec workflow. `syu task classify` can read the artifact and the current
 graph first, `syu task scope request.yaml` can map the request onto nearby
 requirements, policies, philosophies, and features, and `syu task scaffold
 request.yaml` can preview the planned requirement and feature updates that
-follow from that decision.
+follow from that decision. `syu task plan request.yaml` can then turn the
+scoped request into a temporary Goal Plan artifact that stays outside the
+persistent spec tree while still keeping the implementation, test, coverage,
+and completion work visible.

@@ -1,6 +1,7 @@
 // REQ-CORE-028
 // REQ-CORE-029
 // REQ-CORE-030
+// REQ-CORE-031
 
 use std::fs;
 
@@ -25,7 +26,7 @@ fn write_workspace(root: &std::path::Path) {
     .expect("philosophy doc");
     fs::write(
         root.join("docs/syu/policies/policies.yaml"),
-        "category: Policies\nversion: 1\nlanguage: en\npolicies:\n  - id: POL-001\n    title: Keep request workflows visible\n    summary: Keep intake and planning separate.\n    description: Request artifacts should be classified against the current graph.\n    linked_philosophies:\n      - PHIL-001\n    linked_requirements:\n      - REQ-CORE-028\n      - REQ-CORE-029\n",
+        "category: Policies\nversion: 1\nlanguage: en\npolicies:\n  - id: POL-001\n    title: Keep request workflows visible\n    summary: Keep intake and planning separate.\n    description: Request artifacts should be classified against the current graph.\n    linked_philosophies:\n      - PHIL-001\n    linked_requirements:\n      - REQ-CORE-028\n      - REQ-CORE-029\n      - REQ-CORE-030\n      - REQ-CORE-031\n",
     )
     .expect("policy doc");
     fs::write(
@@ -44,8 +45,13 @@ fn write_workspace(root: &std::path::Path) {
     )
     .expect("scope requirement doc");
     fs::write(
+        root.join("docs/syu/requirements/core/plan.yaml"),
+        "category: Core Workspace\nprefix: REQ-CORE\nrequirements:\n  - id: REQ-CORE-031\n    title: Generate temporary Goal Plans from scoped requests\n    description: The task plan command should turn a scoped request artifact into a temporary Goal Plan while keeping persistent spec files untouched.\n    priority: medium\n    status: implemented\n    linked_policies:\n      - POL-001\n    linked_features:\n      - FEAT-TASK-004\n    tests:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - '*'\n",
+    )
+    .expect("plan requirement doc");
+    fs::write(
         root.join("docs/syu/features/features.yaml"),
-        "version: 1\nupdated: \"2026-05\"\nfiles:\n  - kind: task\n    file: core/task.yaml\n  - kind: task\n    file: core/scaffold.yaml\n  - kind: task\n    file: core/scope.yaml\n",
+        "version: 1\nupdated: \"2026-05\"\nfiles:\n  - kind: task\n    file: core/task.yaml\n  - kind: task\n    file: core/scaffold.yaml\n  - kind: task\n    file: core/scope.yaml\n  - kind: task\n    file: core/plan.yaml\n",
     )
     .expect("feature registry");
     fs::write(
@@ -53,6 +59,11 @@ fn write_workspace(root: &std::path::Path) {
         "category: Task Planning CLI\nversion: 1\nfeatures:\n  - id: FEAT-TASK-001\n    title: Request artifact classification\n    summary: Classify captured request artifacts into create, change, or delete decisions using the current spec graph, with a short explanation and text or JSON output.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-028\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_classify_command\n  - id: FEAT-TASK-003\n    title: Request artifact scoping\n    summary: Map request artifacts onto candidate requirements, policies, philosophies, and features before planning begins.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-030\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_scope_command\n",
     )
     .expect("feature doc");
+    fs::write(
+        root.join("docs/syu/features/core/plan.yaml"),
+        "category: Core Workspace\nversion: 1\nfeatures:\n  - id: FEAT-TASK-004\n    title: Goal Plan generation\n    summary: Turn scoped request artifacts into temporary Goal Plans with implementation, test, coverage, and completion sections outside the persistent spec tree.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-031\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_plan_command\n",
+    )
+    .expect("plan feature doc");
     fs::write(
         root.join("docs/syu/features/core/scaffold.yaml"),
         "category: Core Workspace\nversion: 1\nfeatures:\n  - id: FEAT-TASK-002\n    title: Planned task scaffold preview\n    summary: Preview reviewable planned requirement and feature updates that follow the existing add and registry conventions.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-029\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_scaffold_command\n",
@@ -273,6 +284,103 @@ fn task_scope_prints_json_output_with_planning_signals() {
     assert!(stdout.contains("\"features\": ["));
     assert!(stdout.contains("\"id\": \"REQ-CORE-028\""));
     assert!(stdout.contains("\"id\": \"FEAT-TASK-001\""));
+}
+
+#[test]
+fn task_plan_prints_text_output_and_writes_goal_plan_file() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_request(
+        tempdir.path(),
+        "Generate a plan for the current request-driven workflow.",
+        "core",
+        &["REQ-CORE-030", "FEAT-TASK-003"],
+    );
+
+    let output = {
+        let mut command = std::process::Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args([
+            "task",
+            "plan",
+            "request.yaml",
+            "--output",
+            ".syu/tasks/current.yaml",
+        ]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task plan should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("wrote goal plan to"));
+    let rendered = fs::read_to_string(tempdir.path().join(".syu/tasks/current.yaml"))
+        .expect("goal plan should be written");
+    assert!(rendered.contains("kind: syu.goal_plan"));
+    assert!(rendered.contains("goal:"));
+    assert!(rendered.contains("implementation plan:"));
+    assert!(rendered.contains("test plan:"));
+    assert!(rendered.contains("coverage: changed_lines (threshold 100)"));
+    assert!(rendered.contains("completion checks:"));
+    assert!(rendered.contains("syu task check .syu/tasks/current.yaml --range origin/main...HEAD"));
+}
+
+#[test]
+fn task_plan_prints_json_output_with_scope_and_test_sections() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_request(
+        tempdir.path(),
+        "Generate a plan for the current request-driven workflow.",
+        "core",
+        &["REQ-CORE-030", "FEAT-TASK-003"],
+    );
+
+    let output = {
+        let mut command = std::process::Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "plan", "request.yaml", "--format", "json"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task plan should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("\"kind\": \"syu.goal_plan\""));
+    assert!(stdout.contains("\"goal\": {"));
+    assert!(stdout.contains("\"implementation_plan\": {"));
+    assert!(stdout.contains("\"test_plan\": {"));
+    assert!(stdout.contains("\"coverage\": {"));
+    assert!(stdout.contains("\"completion\": {"));
+}
+
+#[test]
+fn task_plan_warns_when_output_is_inside_spec_root() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_request(
+        tempdir.path(),
+        "Generate a plan for the current request-driven workflow.",
+        "core",
+        &["REQ-CORE-030", "FEAT-TASK-003"],
+    );
+
+    let output = {
+        let mut command = std::process::Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args([
+            "task",
+            "plan",
+            "request.yaml",
+            "--output",
+            "docs/syu/plans/current.yaml",
+        ]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task plan should succeed");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("warning: task plan output"));
+    assert!(stderr.contains("inside spec.root"));
+    assert!(tempdir.path().join("docs/syu/plans/current.yaml").exists());
 }
 
 #[test]
