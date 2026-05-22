@@ -172,6 +172,7 @@ Examples:
   syu trace src/rust_feature.rs --symbol feature_trace_rust
   syu trace src/rust_feature.rs path/to/workspace --format json
   syu review --range origin/main...HEAD
+  syu review --range origin/main...HEAD --strict --allowed-id FEAT-CHECK-001 --format json
   syu trace --range main..HEAD
   syu trace --range origin/main...HEAD --format json";
 
@@ -261,7 +262,7 @@ pub enum Commands {
     Relate(RelateArgs),
     #[command(
         visible_alias = "review",
-        about = "Resolve linked requirements, features, policies, and philosophies from a traced file or symbol",
+        about = "Resolve linked requirements, features, policies, and philosophies from a traced file or symbol, or review a git range",
         after_help = TRACE_AFTER_HELP
     )]
     Trace(TraceArgs),
@@ -508,6 +509,12 @@ pub struct TraceArgs {
     #[arg(help = "Allowed requirement or feature IDs for review range scope guards")]
     #[arg(long = "allowed-id", alias = "expected-id")]
     pub allowed_id: Vec<String>,
+
+    #[arg(
+        help = "Fail range review when unowned, ambiguously owned, or out-of-scope changes appear"
+    )]
+    #[arg(long)]
+    pub strict: bool,
 
     #[arg(help = "Output format for trace lookup results")]
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
