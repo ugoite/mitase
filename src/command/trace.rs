@@ -873,6 +873,22 @@ fn push_review_finding(
 }
 
 fn resolve_scope_guard_item(lookup: &WorkspaceLookup<'_>, id: &str) -> Result<TraceScopeGuardItem> {
+    if let Some(philosophy) = lookup.philosophy(id) {
+        return Ok(TraceScopeGuardItem {
+            kind: "philosophy".to_string(),
+            id: philosophy.id.clone(),
+            title: philosophy.title.clone(),
+        });
+    }
+
+    if let Some(policy) = lookup.policy(id) {
+        return Ok(TraceScopeGuardItem {
+            kind: "policy".to_string(),
+            id: policy.id.clone(),
+            title: policy.title.clone(),
+        });
+    }
+
     if let Some(requirement) = lookup.requirement(id) {
         return Ok(TraceScopeGuardItem {
             kind: "requirement".to_string(),
@@ -889,7 +905,7 @@ fn resolve_scope_guard_item(lookup: &WorkspaceLookup<'_>, id: &str) -> Result<Tr
         });
     }
 
-    bail!("scope guard id `{id}` does not match a requirement or feature");
+    bail!("scope guard id `{id}` does not match a philosophy, policy, requirement, or feature");
 }
 
 fn render_range_id_group(rendered: &mut String, heading: &str, group: &TraceRangeEntityGroup) {
