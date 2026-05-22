@@ -93,6 +93,19 @@ separates directly matched items from indirect upstream/downstream context,
 surfaces unowned or skipped paths inline, and keeps the follow-up `show`,
 `relate`, `log`, and `validate --id` commands close at hand.
 
+When CI or a merge queue needs the review step to fail on ownership drift
+instead of only summarizing it, add `--strict`:
+
+```bash
+syu review --range origin/main...HEAD --strict --allowed-id FEAT-CHECK-001 --format json
+```
+
+Strict range review turns unowned files, ambiguous ownership, and skipped or
+out-of-scope paths into a failing result while still returning structured
+findings for terminal use or JSON consumers. Use it when the range itself is
+the review contract. Keep using `syu audit` for heuristic notes and
+`syu validate` when you need the full validation pass across the repository.
+
 When you want the range to stay inside a named requirement or feature, add
 `--allowed-id` or its `--expected-id` alias:
 

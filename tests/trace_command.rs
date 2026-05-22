@@ -142,6 +142,47 @@ fn init_git_fixture_workspace_with_requirement_and_feature_changes() -> tempfile
     tempdir
 }
 
+fn init_git_fixture_workspace_with_strict_review_conflicts() -> tempfile::TempDir {
+    let tempdir = tempdir().expect("tempdir should exist");
+    let workspace = tempdir.path().join("workspace");
+    copy_dir_recursive(&fixture_path("passing"), &workspace);
+
+    let feature_yaml = workspace.join("docs/syu/features/traceability/core.yaml");
+    let feature_contents = fs::read_to_string(&feature_yaml).expect("feature yaml");
+    let feature_contents = feature_contents.replacen(
+        "        - file: src/rust_feature.rs\n          symbols:\n            - feature_trace_rust\n",
+        "        - file: src/rust_feature.rs\n          symbols:\n            - feature_trace_rust\n        - file: src/ambiguous.rs\n          symbols:\n            - ambiguous_trace\n",
+        1,
+    );
+    fs::write(&feature_yaml, feature_contents).expect("feature yaml should update");
+
+    let requirement_yaml = workspace.join("docs/syu/requirements/traceability/core.yaml");
+    let requirement_contents = fs::read_to_string(&requirement_yaml).expect("requirement yaml");
+    let requirement_contents = requirement_contents.replacen(
+        "        - file: src/rust_trace_tests.rs\n          symbols:\n            - req_trace_rust_test\n",
+        "        - file: src/rust_trace_tests.rs\n          symbols:\n            - req_trace_rust_test\n        - file: src/ambiguous.rs\n          symbols:\n            - ambiguous_trace\n",
+        1,
+    );
+    fs::write(&requirement_yaml, requirement_contents).expect("requirement yaml should update");
+
+    git(&workspace, &["init"]);
+    git(&workspace, &["config", "user.name", "Test User"]);
+    git(&workspace, &["config", "user.email", "test@example.com"]);
+    git(&workspace, &["add", "."]);
+    git_commit(&workspace, "chore: seed traced workspace");
+
+    fs::write(
+        workspace.join("src/ambiguous.rs"),
+        "// REQ-TRACE-001\n// FEAT-TRACE-001\npub fn ambiguous_trace() {}\n",
+    )
+    .expect("ambiguous source");
+    fs::write(workspace.join("src/unowned.rs"), "pub fn unowned() {}\n").expect("unowned source");
+    git(&workspace, &["add", "."]);
+    git_commit(&workspace, "feat: add strict review conflicts");
+
+    tempdir
+}
+
 #[test]
 fn trace_command_resolves_feature_owners_from_file_only_lookup() {
     let output = Command::cargo_bin("syu")
@@ -323,6 +364,50 @@ fn review_command_blocks_out_of_scope_requirement_and_feature_flows() {
     assert!(feature_stdout.contains("feature FEAT-TRACE-001"));
     assert!(feature_stdout.contains("requirement REQ-TRACE-001"));
     assert!(feature_stdout.contains("outside allowed IDs"));
+}
+
+#[test]
+fn review_command_strict_mode_reports_unowned_and_ambiguous_changes() {
+    let workspace = init_git_fixture_workspace_with_strict_review_conflicts();
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .current_dir(workspace.path().join("workspace"))
+        .args([
+            "review",
+            "--range",
+            "HEAD~1..HEAD",
+            "--strict",
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("review range command should run");
+
+    assert_eq!(output.status.code(), Some(1));
+    let json: Value = serde_json::from_slice(&output.stdout).expect("json output");
+    let strict_review = json["strict_review"].as_object().expect("strict review");
+    assert!(strict_review["failed"].as_bool().expect("strict status"));
+
+    let findings = strict_review["findings"]
+        .as_array()
+        .expect("strict findings array");
+    assert!(findings.iter().any(|finding| finding["kind"] == "unowned"));
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding["kind"] == "ambiguous_ownership")
+    );
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding["file"] == "src/unowned.rs")
+    );
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding["file"] == "src/ambiguous.rs")
+    );
 }
 
 #[test]
@@ -549,6 +634,73 @@ fn trace_command_treats_skipped_git_diff_paths_as_out_of_scope_when_allowed_ids_
             .contains("must stay under workspace")
     );
     assert!(scope_guard["out_of_scope_items"][0].get("owners").is_none());
+}
+
+#[test]
+fn review_command_strict_mode_reports_skipped_paths_as_trace_drift() {
+    let tempdir = tempdir().expect("tempdir should exist");
+    let script_dir = tempdir.path().join("bin");
+    fs::create_dir_all(&script_dir).expect("script dir");
+    let script_path = script_dir.join("git");
+    fs::write(
+        &script_path,
+        "#!/bin/sh\nset -eu\nprintf '../outside.rs\\nsrc/rust_feature.rs\\n'\n",
+    )
+    .expect("fake git");
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut permissions = fs::metadata(&script_path).expect("metadata").permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).expect("permissions");
+    }
+
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .current_dir(fixture_path("passing"))
+        .env(
+            "PATH",
+            format!(
+                "{}:{}",
+                script_dir.display(),
+                std::env::var("PATH").expect("PATH env")
+            ),
+        )
+        .args([
+            "review",
+            "--range",
+            "HEAD~1..HEAD",
+            "--strict",
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("review range command should run");
+
+    assert_eq!(output.status.code(), Some(1));
+    let json: Value = serde_json::from_slice(&output.stdout).expect("json output");
+    let strict_review = json["strict_review"].as_object().expect("strict review");
+    let findings = strict_review["findings"]
+        .as_array()
+        .expect("strict findings array");
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding["kind"] == "trace_drift")
+    );
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding["file"] == "../outside.rs")
+    );
+    assert!(findings.iter().any(|finding| {
+        finding["reason"]
+            .as_str()
+            .expect("strict reason")
+            .contains("must stay under workspace")
+    }));
 }
 
 #[test]
