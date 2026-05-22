@@ -48,12 +48,70 @@ export interface ValidationSnapshot {
   referenced_rules: ReferencedRule[];
 }
 
+export interface HistoricalIdSnapshot {
+  enabled: boolean;
+  available: boolean;
+  start_ref?: string | null;
+  ids_by_section: Record<SectionKind, string[]>;
+}
+
+export interface BrowserHistoryTrackedPath {
+  kind: string;
+  path: string;
+  owner_kind: string;
+  owner_id: string;
+  source: string;
+  language: string | null;
+  symbols: string[];
+}
+
+export interface BrowserHistoryLifecycleEvent {
+  event: string;
+  sha: string;
+  short_sha: string;
+  summary: string;
+  author: string;
+  authored_at: string;
+  path: string | null;
+  note: string | null;
+}
+
+export interface BrowserHistoryCommit {
+  sha: string;
+  short_sha: string;
+  summary: string;
+  author: string;
+  authored_at: string;
+  reasons: BrowserHistoryTrackedPath[];
+}
+
+export interface BrowserHistoryScope {
+  label: string;
+  revision_range: string;
+}
+
+export interface BrowserHistoryResponse {
+  id: string;
+  entity_kind: string;
+  title: string;
+  status: string;
+  repository_root: string;
+  kind: string;
+  include_related: boolean;
+  scope: BrowserHistoryScope | null;
+  path_filter: string | null;
+  tracked_paths: BrowserHistoryTrackedPath[];
+  lifecycle_events: BrowserHistoryLifecycleEvent[];
+  commits: BrowserHistoryCommit[];
+}
+
 export interface AppPayload {
   workspace_root: string;
   spec_root: string;
   app_server: AppServer;
   source_documents: SourceDocument[];
   validation: ValidationSnapshot;
+  historical_ids: HistoricalIdSnapshot;
 }
 
 export interface AppServer {
@@ -131,4 +189,12 @@ export interface BrowserWorkspace {
   sections: BrowserSection[];
   item_index: Map<string, BrowserIndexEntry>;
   validation: ValidationSnapshot;
+  historical_ids: HistoricalIdSnapshot;
+}
+
+export interface HistoricalIdSnapshot {
+  enabled: boolean;
+  available: boolean;
+  start_ref?: string | null;
+  ids_by_section: Record<SectionKind, string[]>;
 }

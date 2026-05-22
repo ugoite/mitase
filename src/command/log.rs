@@ -29,8 +29,6 @@ use super::{
 };
 
 const GIT_RECORD_SEPARATOR: u8 = 0x1e;
-const HISTORICAL_LOOKUP_MAX_COMMITS: usize = 1000;
-const GIT_BINARY_OVERRIDE_ENV: &str = "SYU_GIT_BINARY";
 const GIT_ENVIRONMENT_KEYS: [&str; 8] = [
     "GIT_ALTERNATE_OBJECT_DIRECTORIES",
     "GIT_CEILING_DIRECTORIES",
@@ -42,16 +40,8 @@ const GIT_ENVIRONMENT_KEYS: [&str; 8] = [
     "GIT_WORK_TREE",
 ];
 
-#[cfg(test)]
-use std::cell::RefCell;
-
-#[cfg(test)]
-thread_local! {
-    static TEST_GIT_BINARY_OVERRIDE: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
-}
-
 #[derive(Debug, Serialize)]
-struct JsonLogOutput {
+pub(crate) struct HistoryResponse {
     id: String,
     entity_kind: &'static str,
     title: String,
@@ -60,7 +50,7 @@ struct JsonLogOutput {
     kind: &'static str,
     include_related: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    scope: Option<JsonHistoryScope>,
+    scope: Option<HistoryScopeResponse>,
     #[serde(skip_serializing_if = "Option::is_none")]
     path_filter: Option<String>,
     tracked_paths: Vec<TrackedPath>,
@@ -69,8 +59,19 @@ struct JsonLogOutput {
     commits: Vec<MatchedCommit>,
 }
 
+pub(crate) struct HistoryRequest<'a> {
+    pub(crate) workspace: &'a Workspace,
+    pub(crate) repository_root: &'a Path,
+    pub(crate) id: &'a str,
+    pub(crate) kind: HistoryKind,
+    pub(crate) include_related: bool,
+    pub(crate) scope: Option<HistoryScope>,
+    pub(crate) path_filter: Option<&'a Path>,
+    pub(crate) limit: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct JsonHistoryScope {
+struct HistoryScopeResponse {
     label: String,
     revision_range: String,
 }
@@ -135,23 +136,12 @@ struct HistoryTargetRequest<'a> {
     workspace_root: &'a Path,
     id: &'a str,
     kind: HistoryKind,
-    scope: Option<&'a HistoryScope>,
     path_filter: Option<&'a Path>,
-}
-
-struct HistoryRenderRequest<'a> {
-    target: &'a HistoryTarget,
-    repository_root: &'a Path,
-    kind: HistoryKind,
-    include_related: bool,
     scope: Option<&'a HistoryScope>,
-    path_filter: Option<&'a Path>,
-    lifecycle_events: &'a [HistoryLifecycleEvent],
-    commits: &'a [MatchedCommit],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct HistoryScope {
+pub(crate) struct HistoryScope {
     label: String,
     revision_range: String,
 }
@@ -162,13 +152,6 @@ pub fn run_log_command(args: &LogArgs) -> Result<i32> {
     }
 
     let workspace = load_workspace(&args.workspace)?;
-    let lookup = WorkspaceLookup::new(&workspace);
-    let use_historical_test = std::env::var_os("SYU_TEST_RESOLVE_HISTORICAL_TARGET").is_some();
-    let historical_ids = if use_historical_test {
-        HistoricalIdIndex::default()
-    } else {
-        build_historical_id_index(&workspace.root, &workspace.config)?
-    };
     let path_filter = args
         .path
         .as_deref()
@@ -176,114 +159,82 @@ pub fn run_log_command(args: &LogArgs) -> Result<i32> {
         .transpose()?
         .filter(|path| !path.as_os_str().is_empty());
     let repository_root = resolve_git_repository_root(&workspace.root)?;
-    if use_historical_test {
-        let Some(kind) = lookup_kind_for_id(&args.id) else {
-            bail!("historical test helper only supports spec IDs");
-        };
-        let test_result = match resolve_historical_history_target(
-            &workspace,
-            &repository_root,
-            &args.id,
-            kind,
-            None,
-        )? {
-            ResolvedHistoryTarget::Historical {
-                entity_kind,
-                title,
-                lifecycle_events,
-                ..
-            } => HistoricalLookupTestResult {
-                entity_kind,
-                title,
-                lifecycle_events: lifecycle_events
-                    .into_iter()
-                    .map(|event| event.event.to_string())
-                    .collect(),
-            },
-            ResolvedHistoryTarget::Current { .. } => {
-                bail!("expected a historical target for `{}`", args.id)
-            }
-        };
-        println!(
+    let history = build_history_response(HistoryRequest {
+        workspace: &workspace,
+        repository_root: &repository_root,
+        id: &args.id,
+        kind: args.kind,
+        include_related: args.include_related,
+        scope: resolve_history_scope(
+            &workspace.root,
+            args.range.as_deref(),
+            args.merge_base_ref.as_deref(),
+        )?,
+        path_filter: path_filter.as_deref(),
+        limit: args.limit,
+    })?;
+
+    match args.format {
+        OutputFormat::Text => print!("{}", render_history_text(&history)),
+        OutputFormat::Json => println!(
             "{}",
-            serde_json::to_string_pretty(&serde_json::json!({
-                "entity_kind": test_result.entity_kind,
-                "title": test_result.title,
-                "status": "historical",
-                "lifecycle_events": test_result.lifecycle_events,
-            }))
-            .expect("serializing test log output to JSON should succeed")
-        );
-        return Ok(0);
+            serde_json::to_string_pretty(&history)
+                .expect("serializing log output to JSON should succeed")
+        ),
     }
-    let merge_base_ref = args.merge_base_ref.as_deref();
-    let scope = resolve_history_scope(&workspace.root, args.range.as_deref(), merge_base_ref)?;
+
+    Ok(0)
+}
+
+pub(crate) fn build_history_response(request: HistoryRequest<'_>) -> Result<HistoryResponse> {
+    let lookup = WorkspaceLookup::new(request.workspace);
+    let historical_ids =
+        build_historical_id_index(&request.workspace.root, &request.workspace.config)?;
     let mut view = build_history_target(HistoryTargetRequest {
         lookup,
         historical_ids,
-        workspace: &workspace,
-        repository_root: &repository_root,
-        workspace_root: &workspace.root,
-        id: &args.id,
-        kind: args.kind,
-        scope: scope.as_ref(),
-        path_filter: path_filter.as_deref(),
+        workspace: request.workspace,
+        repository_root: request.repository_root,
+        workspace_root: &request.workspace.root,
+        id: request.id,
+        kind: request.kind,
+        path_filter: request.path_filter,
+        scope: request.scope.as_ref(),
     })?;
-    if args.include_related && view.target.status == "current" {
+    if request.include_related && view.target.status != "historical" {
         let related = collect_related_tracked_paths(
-            &workspace,
-            &view.target.id,
-            args.kind,
-            path_filter.as_deref(),
+            request.workspace,
+            request.id,
+            request.kind,
+            request.path_filter,
         )?;
         view.target.tracked_paths.extend(related);
         dedupe_tracked_paths(&mut view.target.tracked_paths);
     }
     let commits = load_git_history(
-        &workspace.root,
-        args.limit,
+        &request.workspace.root,
+        request.limit,
         &view.target.tracked_paths,
-        scope.as_ref(),
+        request.scope.as_ref(),
     )?;
 
-    match args.format {
-        OutputFormat::Text => print!(
-            "{}",
-            render_history_text(HistoryRenderRequest {
-                target: &view.target,
-                repository_root: &repository_root,
-                kind: args.kind,
-                include_related: args.include_related,
-                scope: scope.as_ref(),
-                path_filter: path_filter.as_deref(),
-                lifecycle_events: &view.lifecycle_events,
-                commits: &commits,
-            })
-        ),
-        OutputFormat::Json => println!(
-            "{}",
-            serde_json::to_string_pretty(&JsonLogOutput {
-                id: view.target.id.clone(),
-                entity_kind: view.target.entity_kind,
-                title: view.target.title.clone(),
-                status: view.target.status,
-                repository_root: repository_root.display().to_string(),
-                kind: args.kind.label(),
-                include_related: args.include_related,
-                scope: scope.as_ref().map(|scope| JsonHistoryScope {
-                    label: scope.label.clone(),
-                    revision_range: scope.revision_range.clone(),
-                }),
-                path_filter: path_filter.map(|path| path.display().to_string()),
-                tracked_paths: view.target.tracked_paths.clone(),
-                lifecycle_events: view.lifecycle_events.clone(),
-                commits,
-            })
-            .expect("serializing log output to JSON should succeed")
-        ),
-    }
-
-    Ok(0)
+    Ok(HistoryResponse {
+        id: view.target.id,
+        entity_kind: view.target.entity_kind,
+        title: view.target.title,
+        status: view.target.status,
+        repository_root: request.repository_root.display().to_string(),
+        kind: request.kind.label(),
+        include_related: request.include_related,
+        scope: request.scope.map(|scope| HistoryScopeResponse {
+            label: scope.label,
+            revision_range: scope.revision_range,
+        }),
+        path_filter: request.path_filter.map(|path| path.display().to_string()),
+        tracked_paths: view.target.tracked_paths,
+        lifecycle_events: view.lifecycle_events,
+        commits,
+    })
 }
 
 fn build_history_target(request: HistoryTargetRequest<'_>) -> Result<HistoryView> {
@@ -464,7 +415,7 @@ fn resolve_historical_history_target<'a>(
     repository_root: &'a Path,
     id: &'a str,
     kind: LookupKind,
-    scope: Option<&HistoryScope>,
+    scope: Option<&'a HistoryScope>,
 ) -> Result<ResolvedHistoryTarget<'a>> {
     let section_root = match kind {
         LookupKind::Philosophy => workspace.spec_root.join("philosophy"),
@@ -482,11 +433,13 @@ fn resolve_historical_history_target<'a>(
             )
         })?
         .to_path_buf();
-    let discovery =
-        discover_historical_definition(repository_root, &section_relative, id, kind, scope)?;
+    let discovery = discover_historical_definition(repository_root, &section_relative, id, kind)?;
     let lifecycle_events = build_historical_lifecycle_events(
+        repository_root,
+        &section_relative,
+        id,
         discovery.definition_path.as_path(),
-        &discovery.commit_presences,
+        scope,
     )?;
 
     Ok(ResolvedHistoryTarget::Historical {
@@ -502,19 +455,6 @@ struct HistoricalDefinitionDiscovery {
     entity_kind: &'static str,
     title: String,
     definition_path: PathBuf,
-    commit_presences: Vec<HistoricalCommitPresence>,
-}
-
-struct HistoricalLookupTestResult {
-    entity_kind: &'static str,
-    title: String,
-    lifecycle_events: Vec<String>,
-}
-
-#[derive(Debug, Clone)]
-struct HistoricalCommitPresence {
-    commit: MatchedCommit,
-    paths: Vec<PathBuf>,
 }
 
 fn discover_historical_definition(
@@ -522,26 +462,23 @@ fn discover_historical_definition(
     section_relative: &Path,
     id: &str,
     kind: LookupKind,
-    scope: Option<&HistoryScope>,
 ) -> Result<HistoricalDefinitionDiscovery> {
-    let commit_presences =
-        load_historical_commit_presences(repository_root, section_relative, id, scope)?;
-
-    for presence in &commit_presences {
-        let Some(path) = presence.paths.iter().find(|path| is_yaml_document(path)) else {
-            continue;
-        };
-        let Some(contents) = git_show_file(repository_root, &presence.commit.sha, path)? else {
-            continue;
-        };
-        let title = historical_title_for_id(kind, &contents, id)
-            .unwrap_or_else(|| "historical definition".to_string());
-        return Ok(HistoricalDefinitionDiscovery {
-            entity_kind: historical_entity_kind(kind),
-            title,
-            definition_path: path.clone(),
-            commit_presences,
-        });
+    for record in load_git_history_records(repository_root, section_relative, &[], None)? {
+        for path in record.paths {
+            if !is_yaml_document(&path) {
+                continue;
+            }
+            let Some(contents) = git_show_file(repository_root, &record.commit.sha, &path)? else {
+                continue;
+            };
+            if let Some(title) = historical_title_for_id(kind, &contents, id) {
+                return Ok(HistoricalDefinitionDiscovery {
+                    entity_kind: historical_entity_kind(kind),
+                    title,
+                    definition_path: path,
+                });
+            }
+        }
     }
 
     bail!(
@@ -551,20 +488,36 @@ fn discover_historical_definition(
 }
 
 fn build_historical_lifecycle_events(
+    repository_root: &Path,
+    section_relative: &Path,
+    id: &str,
     definition_path: &Path,
-    commit_presences: &[HistoricalCommitPresence],
+    scope: Option<&HistoryScope>,
 ) -> Result<Vec<HistoryLifecycleEvent>> {
     let mut events = Vec::new();
     let mut seen_presence = false;
     let mut removed = false;
     let mut last_path = definition_path.to_path_buf();
 
-    for presence in commit_presences {
-        if presence.paths.is_empty() {
+    for record in load_git_history_records(repository_root, section_relative, &[], scope)? {
+        let present_paths = record
+            .paths
+            .iter()
+            .filter(|path| is_yaml_document(path))
+            .filter_map(|path| {
+                git_show_file(repository_root, &record.commit.sha, path)
+                    .ok()
+                    .flatten()
+                    .filter(|contents| contents.contains(id))
+                    .map(|_| path.clone())
+            })
+            .collect::<Vec<_>>();
+
+        if present_paths.is_empty() {
             if seen_presence && !removed {
                 events.push(history_event(
                     "removed",
-                    &presence.commit,
+                    &record,
                     Some(last_path.display().to_string()),
                     Some("deleted from the historical index".to_string()),
                 ));
@@ -573,8 +526,7 @@ fn build_historical_lifecycle_events(
             continue;
         }
 
-        let current_path = presence
-            .paths
+        let current_path = present_paths
             .last()
             .cloned()
             .expect("present path list should not be empty");
@@ -591,7 +543,7 @@ fn build_historical_lifecycle_events(
         if event_kind != "updated" {
             events.push(history_event(
                 event_kind,
-                &presence.commit,
+                &record,
                 Some(current_path.display().to_string()),
                 None,
             ));
@@ -607,17 +559,17 @@ fn build_historical_lifecycle_events(
 
 fn history_event(
     event: &'static str,
-    record: &MatchedCommit,
+    record: &GitHistoryRecord,
     path: Option<String>,
     note: Option<String>,
 ) -> HistoryLifecycleEvent {
     HistoryLifecycleEvent {
         event,
-        sha: record.sha.clone(),
-        short_sha: record.short_sha.clone(),
-        summary: record.summary.clone(),
-        author: record.author.clone(),
-        authored_at: record.authored_at.clone(),
+        sha: record.commit.sha.clone(),
+        short_sha: record.commit.short_sha.clone(),
+        summary: record.commit.summary.clone(),
+        author: record.commit.author.clone(),
+        authored_at: record.commit.authored_at.clone(),
         path,
         note,
     }
@@ -661,14 +613,12 @@ fn historical_title_for_id(kind: LookupKind, contents: &str, id: &str) -> Option
     }
 }
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct GitHistoryRecord {
     commit: MatchedCommit,
     paths: Vec<PathBuf>,
 }
 
-#[allow(dead_code)]
 fn load_git_history_records(
     repository_root: &Path,
     path: &Path,
@@ -705,43 +655,6 @@ fn load_git_history_records(
     parse_git_history_records(&output.stdout)
 }
 
-fn load_git_history_commits(
-    repository_root: &Path,
-    path: &Path,
-    scope: Option<&HistoryScope>,
-) -> Result<Vec<MatchedCommit>> {
-    let mut command = git_command(repository_root);
-    command.args([
-        "log",
-        "--reverse",
-        "--format=%x1E%H%x00%h%x00%an%x00%aI%x00%s",
-    ]);
-    if scope.is_none() {
-        let max_count = HISTORICAL_LOOKUP_MAX_COMMITS.to_string();
-        command.args(["--max-count", max_count.as_str()]);
-    }
-    if let Some(scope) = scope {
-        command.arg(&scope.revision_range);
-    }
-    command.arg("--");
-    command.arg(path);
-
-    let output = command
-        .output()
-        .with_context(|| format!("failed to run `git log` in `{}`", repository_root.display()))?;
-    if !output.status.success() {
-        bail!(
-            "failed to inspect git history for `{}` in `{}`: {}",
-            path.display(),
-            repository_root.display(),
-            String::from_utf8_lossy(&output.stderr).trim()
-        );
-    }
-
-    parse_git_history_commits(&output.stdout)
-}
-
-#[allow(dead_code)]
 fn parse_git_history_records(raw: &[u8]) -> Result<Vec<GitHistoryRecord>> {
     let mut records = Vec::new();
 
@@ -786,100 +699,6 @@ fn parse_git_history_records(raw: &[u8]) -> Result<Vec<GitHistoryRecord>> {
     Ok(records)
 }
 
-fn parse_git_history_commits(raw: &[u8]) -> Result<Vec<MatchedCommit>> {
-    let mut commits = Vec::new();
-
-    for record in raw.split(|byte| *byte == GIT_RECORD_SEPARATOR) {
-        if record.is_empty() {
-            continue;
-        }
-
-        let fields = record.split(|byte| *byte == 0).collect::<Vec<_>>();
-        if fields.len() < 5 {
-            bail!("unexpected `git log` output while parsing commit history");
-        }
-
-        commits.push(MatchedCommit {
-            sha: parse_git_field(fields[0])?,
-            short_sha: parse_git_field(fields[1])?,
-            author: parse_git_field(fields[2])?,
-            authored_at: parse_git_field(fields[3])?,
-            summary: parse_git_field(fields[4])?,
-            reasons: Vec::new(),
-        });
-    }
-
-    Ok(commits)
-}
-
-fn load_historical_commit_presences(
-    repository_root: &Path,
-    section_relative: &Path,
-    id: &str,
-    scope: Option<&HistoryScope>,
-) -> Result<Vec<HistoricalCommitPresence>> {
-    let mut presences = Vec::new();
-
-    for commit in load_git_history_commits(repository_root, section_relative, scope)? {
-        let paths =
-            git_grep_paths_containing_id(repository_root, &commit.sha, id, section_relative)?
-                .into_iter()
-                .filter(|path| is_yaml_document(path))
-                .collect::<Vec<_>>();
-        presences.push(HistoricalCommitPresence { commit, paths });
-    }
-
-    Ok(presences)
-}
-
-fn git_grep_paths_containing_id(
-    repository_root: &Path,
-    commit: &str,
-    id: &str,
-    section_relative: &Path,
-) -> Result<Vec<PathBuf>> {
-    let output = git_command(repository_root)
-        .args(["grep", "-F", "--name-only", "-z", id, commit, "--"])
-        .arg(section_relative)
-        .output()
-        .with_context(|| {
-            format!(
-                "failed to run `git grep` for historical id `{id}` at `{commit}` in `{}`",
-                repository_root.display()
-            )
-        })?;
-
-    match output.status.code() {
-        Some(0) => {}
-        Some(1) => return Ok(Vec::new()),
-        _ => {
-            bail!(
-                "failed to inspect historical id `{id}` at `{commit}` in `{}`: {}",
-                repository_root.display(),
-                String::from_utf8_lossy(&output.stderr).trim()
-            )
-        }
-    }
-
-    let mut paths = Vec::new();
-    for field in output.stdout.split(|byte| *byte == 0) {
-        if field.is_empty() {
-            continue;
-        }
-        let path =
-            String::from_utf8(field.to_vec()).context("git grep output should be valid UTF-8")?;
-        let path = path
-            .strip_prefix(&format!("{commit}:"))
-            .unwrap_or(path.as_str())
-            .trim();
-        if !path.is_empty() {
-            paths.push(PathBuf::from(path));
-        }
-    }
-
-    Ok(paths)
-}
-
 fn git_show_file(repository_root: &Path, commit: &str, path: &Path) -> Result<Option<String>> {
     let path_str = path.to_string_lossy().to_string();
     let output = git_command(repository_root)
@@ -907,7 +726,7 @@ fn is_yaml_document(path: &Path) -> bool {
     )
 }
 
-fn lookup_kind_for_id(id: &str) -> Option<LookupKind> {
+pub(crate) fn lookup_kind_for_id(id: &str) -> Option<LookupKind> {
     if id.starts_with("PHIL-") {
         return Some(LookupKind::Philosophy);
     }
@@ -1149,7 +968,7 @@ fn normalize_path_filter(workspace_root: &Path, path: &Path) -> Result<PathBuf> 
     Ok(normalized)
 }
 
-fn resolve_git_repository_root(workspace_root: &Path) -> Result<PathBuf> {
+pub(crate) fn resolve_git_repository_root(workspace_root: &Path) -> Result<PathBuf> {
     let output = git_command(workspace_root)
         .args(["rev-parse", "--show-toplevel"])
         .output()
@@ -1440,27 +1259,12 @@ fn sort_ready_commits(ready: &mut [String], commit_lookup: &BTreeMap<String, Mat
 }
 
 pub(crate) fn git_command(workspace_root: &Path) -> Command {
-    let git_binary = test_git_binary_override().unwrap_or_else(|| {
-        std::env::var_os(GIT_BINARY_OVERRIDE_ENV)
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("git"))
-    });
-    let mut command = Command::new(git_binary);
+    let mut command = Command::new("git");
     command.arg("-C").arg(workspace_root);
     for key in GIT_ENVIRONMENT_KEYS {
         command.env_remove(key);
     }
     command
-}
-
-#[cfg(test)]
-fn test_git_binary_override() -> Option<PathBuf> {
-    TEST_GIT_BINARY_OVERRIDE.with(|cell| cell.borrow().clone())
-}
-
-#[cfg(not(test))]
-fn test_git_binary_override() -> Option<PathBuf> {
-    None
 }
 
 pub(crate) fn resolve_git_range_changed_files(
@@ -1534,19 +1338,18 @@ fn parse_git_field(field: &[u8]) -> Result<String> {
         .to_string())
 }
 
-fn render_history_text(request: HistoryRenderRequest<'_>) -> String {
+fn render_history_text(request: &HistoryResponse) -> String {
     let mut output = String::new();
     writeln!(
         output,
         "History: {} {} — {}",
-        request.target.entity_kind, request.target.id, request.target.title
+        request.entity_kind, request.id, request.title
     )
     .expect("writing to String must succeed");
-    writeln!(output, "Repository: {}", request.repository_root.display())
+    writeln!(output, "Repository: {}", request.repository_root)
         .expect("writing to String must succeed");
-    writeln!(output, "Status: {}", request.target.status).expect("writing to String must succeed");
-    writeln!(output, "Selection: {}", request.kind.label())
-        .expect("writing to String must succeed");
+    writeln!(output, "Status: {}", request.status).expect("writing to String must succeed");
+    writeln!(output, "Selection: {}", request.kind).expect("writing to String must succeed");
     writeln!(
         output,
         "Related surface: {}",
@@ -1557,23 +1360,22 @@ fn render_history_text(request: HistoryRenderRequest<'_>) -> String {
         }
     )
     .expect("writing to String must succeed");
-    if let Some(scope) = request.scope {
+    if let Some(scope) = &request.scope {
         writeln!(output, "Scope: {}", scope.label).expect("writing to String must succeed");
     }
-    if let Some(path_filter) = request.path_filter {
-        writeln!(output, "Path filter: {}", path_filter.display())
-            .expect("writing to String must succeed");
+    if let Some(path_filter) = &request.path_filter {
+        writeln!(output, "Path filter: {}", path_filter).expect("writing to String must succeed");
     }
 
     writeln!(output, "Tracked paths:").expect("writing to String must succeed");
-    for tracked in &request.target.tracked_paths {
+    for tracked in &request.tracked_paths {
         writeln!(output, "- {}", render_tracked_path(tracked))
             .expect("writing to String must succeed");
     }
 
     if !request.lifecycle_events.is_empty() {
         writeln!(output, "Lifecycle:").expect("writing to String must succeed");
-        for event in request.lifecycle_events {
+        for event in &request.lifecycle_events {
             writeln!(
                 output,
                 "- {} {} {}",
@@ -1595,7 +1397,7 @@ fn render_history_text(request: HistoryRenderRequest<'_>) -> String {
     }
 
     writeln!(output, "Commits:").expect("writing to String must succeed");
-    for commit in request.commits {
+    for commit in &request.commits {
         writeln!(
             output,
             "- {} {} {}",
@@ -1664,6 +1466,7 @@ mod tests {
         fs,
         path::{Path, PathBuf},
         process::Command,
+        sync::{LazyLock, Mutex, MutexGuard},
     };
 
     use tempfile::tempdir;
@@ -1676,33 +1479,44 @@ mod tests {
     };
 
     use super::{
-        HistoryKind, HistoryScope, MatchedCommit, ResolvedHistoryTarget, TEST_GIT_BINARY_OVERRIDE,
-        TrackedPath, collect_trace_paths, commit_is_ancestor_of, discover_historical_definition,
-        git_show_file, load_git_history, load_git_history_records, lookup_kind_for_id,
-        normalize_path_filter, order_commits_by_repository_history, parse_git_history,
-        parse_git_history_records, render_history_text, resolve_historical_history_target,
-        resolve_history_scope, sort_commits_by_history_relationship, tracked_paths_for_feature,
+        HistoryKind, HistoryScope, MatchedCommit, ResolvedHistoryTarget, TrackedPath,
+        collect_trace_paths, commit_is_ancestor_of, discover_historical_definition, git_show_file,
+        load_git_history, load_git_history_records, lookup_kind_for_id, normalize_path_filter,
+        order_commits_by_repository_history, parse_git_history, parse_git_history_records,
+        render_history_text, resolve_historical_history_target, resolve_history_scope,
+        sort_commits_by_history_relationship, tracked_paths_for_feature,
         tracked_paths_for_requirement,
     };
 
-    fn set_test_git_binary_override(path: Option<PathBuf>) -> Option<PathBuf> {
-        TEST_GIT_BINARY_OVERRIDE.with(|cell| cell.replace(path))
-    }
+    static PATH_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
     struct PathGuard {
-        original: Option<PathBuf>,
+        original: std::ffi::OsString,
+        _lock: MutexGuard<'static, ()>,
     }
 
     impl PathGuard {
-        fn set_git_binary(path: &Path) -> Self {
-            let original = set_test_git_binary_override(Some(path.to_path_buf()));
-            Self { original }
+        fn set(paths: Vec<PathBuf>) -> Self {
+            let lock = PATH_LOCK.lock().unwrap_or_else(|err| err.into_inner());
+            let original = std::env::var_os("PATH").unwrap_or_default();
+            unsafe {
+                std::env::set_var(
+                    "PATH",
+                    std::env::join_paths(paths).expect("path should join"),
+                );
+            }
+            Self {
+                original,
+                _lock: lock,
+            }
         }
     }
 
     impl Drop for PathGuard {
         fn drop(&mut self) {
-            let _ = set_test_git_binary_override(self.original.clone());
+            unsafe {
+                std::env::set_var("PATH", &self.original);
+            }
         }
     }
 
@@ -1868,6 +1682,7 @@ mod tests {
 
     #[test]
     fn resolve_historical_history_target_covers_all_supported_kinds() {
+        let _lock = PATH_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let repo = tempdir().expect("tempdir should exist");
         init_test_git_repository(repo.path());
 
@@ -2013,6 +1828,7 @@ mod tests {
 
     #[test]
     fn resolve_historical_history_target_reports_out_of_repository_roots() {
+        let _lock = PATH_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let repo = tempdir().expect("tempdir should exist");
         let outside = tempdir().expect("tempdir should exist");
         let workspace = Workspace {
@@ -2040,6 +1856,7 @@ mod tests {
 
     #[test]
     fn discover_historical_definition_reports_missing_ids() {
+        let _lock = PATH_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let repo = tempdir().expect("tempdir should exist");
         init_test_git_repository(repo.path());
 
@@ -2056,7 +1873,6 @@ mod tests {
             Path::new("docs/syu/features"),
             "FEAT-HIST-MISSING-001",
             LookupKind::Feature,
-            None,
         )
         .expect_err("missing historical ids should fail");
         assert!(
@@ -2071,7 +1887,7 @@ mod tests {
         let repo = tempdir().expect("tempdir should exist");
         let fake_bin = tempdir().expect("tempdir should exist");
         write_fake_git_for_history_log_failure(fake_bin.path());
-        let _path_guard = PathGuard::set_git_binary(&fake_bin.path().join("git"));
+        let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
 
         let scope = HistoryScope {
             label: "range `HEAD~1..HEAD`".to_string(),
@@ -2110,7 +1926,7 @@ mod tests {
     fn git_show_file_reports_spawn_failures() {
         let repo = tempdir().expect("tempdir should exist");
         let fake_bin = tempdir().expect("tempdir should exist");
-        let _path_guard = PathGuard::set_git_binary(&fake_bin.path().join("git"));
+        let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
 
         let error = git_show_file(
             repo.path(),
@@ -2145,7 +1961,7 @@ mod tests {
     #[test]
     fn resolve_history_scope_reports_merge_base_failures() {
         let fake_bin = tempdir().expect("tempdir should exist");
-        let _path_guard = PathGuard::set_git_binary(&fake_bin.path().join("git"));
+        let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
         write_fake_git_for_scope_merge_base_failure(fake_bin.path());
 
         let error = resolve_history_scope(Path::new("/repo"), None, Some("origin/main"))
@@ -2157,7 +1973,7 @@ mod tests {
     #[test]
     fn resolve_history_scope_rejects_empty_merge_base_output() {
         let fake_bin = tempdir().expect("tempdir should exist");
-        let _path_guard = PathGuard::set_git_binary(&fake_bin.path().join("git"));
+        let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
         write_fake_git_for_scope_merge_base_empty_output(fake_bin.path());
 
         let error = resolve_history_scope(Path::new("/repo"), None, Some("origin/main"))
@@ -2168,7 +1984,7 @@ mod tests {
     #[test]
     fn resolve_history_scope_reports_spawn_failures() {
         let fake_bin = tempdir().expect("tempdir should exist");
-        let _path_guard = PathGuard::set_git_binary(&fake_bin.path().join("git"));
+        let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
 
         let error = resolve_history_scope(Path::new("/repo"), None, Some("origin/main"))
             .expect_err("missing git binary should fail");
@@ -2208,6 +2024,7 @@ mod tests {
 
     #[test]
     fn run_log_command_supports_related_surface_and_merge_base_scope() {
+        let _lock = PATH_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let workspace_root = tempdir().expect("tempdir should exist");
         write_related_workspace_fixture(workspace_root.path());
         init_test_git_repository(workspace_root.path());
@@ -2231,6 +2048,7 @@ mod tests {
 
     #[test]
     fn order_commits_by_repository_history_uses_candidate_ancestry() {
+        let _lock = PATH_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let repo = tempdir().expect("tempdir should exist");
         init_test_git_repository(repo.path());
 
@@ -2288,6 +2106,7 @@ mod tests {
 
     #[test]
     fn order_commits_by_repository_history_falls_back_when_merge_base_fails() {
+        let _lock = PATH_LOCK.lock().unwrap_or_else(|err| err.into_inner());
         let repo = tempdir().expect("tempdir should exist");
         init_test_git_repository(repo.path());
 
@@ -2361,7 +2180,7 @@ mod tests {
                 ("old-b", "old-a", false),
             ],
         );
-        let _path_guard = PathGuard::set_git_binary(&fake_bin.path().join("git"));
+        let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
 
         let commits = BTreeMap::from([
             (
@@ -2437,7 +2256,7 @@ mod tests {
                 ("mid-b", "mid-a", false),
             ],
         );
-        let _path_guard = PathGuard::set_git_binary(&fake_bin.path().join("git"));
+        let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
 
         let commits = BTreeMap::from([
             (
@@ -2512,7 +2331,7 @@ mod tests {
                 ("old-c", "old-a", true),
             ],
         );
-        let _path_guard = PathGuard::set_git_binary(&fake_bin.path().join("git"));
+        let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
 
         let mut commits = vec![
             MatchedCommit {
@@ -2558,7 +2377,11 @@ mod tests {
 
         let error = sort_commits_by_history_relationship(Path::new("/repo"), &mut commits)
             .expect_err("inconsistent ancestry should fail");
-        assert!(!error.to_string().is_empty());
+        assert!(
+            error
+                .to_string()
+                .contains("could not derive a stable candidate history order")
+        );
     }
 
     #[test]
@@ -2573,11 +2396,15 @@ mod tests {
     #[test]
     fn commit_is_ancestor_of_reports_spawn_failures() {
         let fake_bin = tempdir().expect("tempdir should exist");
-        let _path_guard = PathGuard::set_git_binary(&fake_bin.path().join("git"));
+        let _path_guard = PathGuard::set(vec![fake_bin.path().to_path_buf()]);
 
         let error = commit_is_ancestor_of(Path::new("/repo"), "old", "new", &mut BTreeMap::new())
             .expect_err("missing git binary should fail");
-        assert!(!error.to_string().is_empty());
+        assert!(
+            error
+                .to_string()
+                .contains("failed to run `git merge-base --is-ancestor`")
+        );
     }
 
     #[test]
@@ -2608,27 +2435,24 @@ mod tests {
 
     #[test]
     fn render_history_text_handles_empty_commit_lists() {
-        let target = super::HistoryTarget {
+        let rendered = render_history_text(&super::HistoryResponse {
             id: "REQ-LOG-001".to_string(),
             entity_kind: "requirement",
             title: "Requirement history".to_string(),
             status: "current",
+            repository_root: "/repo".to_string(),
+            kind: "definition",
+            include_related: false,
+            scope: None,
+            path_filter: Some("docs".to_string()),
             tracked_paths: vec![TrackedPath::definition(
                 "requirement",
                 "REQ-LOG-001",
                 "selected",
                 "docs/req.yaml",
             )],
-        };
-        let rendered = render_history_text(super::HistoryRenderRequest {
-            target: &target,
-            repository_root: Path::new("/repo"),
-            kind: HistoryKind::Definition,
-            include_related: false,
-            scope: None,
-            path_filter: Some(Path::new("docs")),
-            lifecycle_events: &[],
-            commits: &[],
+            lifecycle_events: vec![],
+            commits: vec![],
         });
         assert!(rendered.contains("Related surface: selected only"));
         assert!(rendered.contains("Path filter: docs"));
@@ -2637,30 +2461,27 @@ mod tests {
 
     #[test]
     fn render_history_text_lists_commit_reasons() {
-        let target = super::HistoryTarget {
+        let rendered = render_history_text(&super::HistoryResponse {
             id: "REQ-LOG-001".to_string(),
             entity_kind: "requirement",
             title: "Requirement history".to_string(),
             status: "current",
+            repository_root: "/repo".to_string(),
+            kind: "implementation",
+            include_related: true,
+            scope: Some(super::HistoryScopeResponse {
+                label: "merge-base(origin/main)..HEAD".to_string(),
+                revision_range: "abc123..HEAD".to_string(),
+            }),
+            path_filter: None,
             tracked_paths: vec![TrackedPath::definition(
                 "requirement",
                 "REQ-LOG-001",
                 "selected",
                 "docs/req.yaml",
             )],
-        };
-        let rendered = render_history_text(super::HistoryRenderRequest {
-            target: &target,
-            repository_root: Path::new("/repo"),
-            kind: HistoryKind::Implementation,
-            include_related: true,
-            scope: Some(&HistoryScope {
-                label: "merge-base(origin/main)..HEAD".to_string(),
-                revision_range: "abc123..HEAD".to_string(),
-            }),
-            path_filter: None,
-            lifecycle_events: &[],
-            commits: &[MatchedCommit {
+            lifecycle_events: vec![],
+            commits: vec![MatchedCommit {
                 sha: "abc".to_string(),
                 short_sha: "abc".to_string(),
                 summary: "feat: update history".to_string(),
@@ -2828,19 +2649,6 @@ mod tests {
         fs::write(
             &script_path,
             "#!/bin/sh\nset -eu\nif [ \"$3\" = \"log\" ]; then\n  echo 'synthetic git log failure' >&2\n  exit 1\nfi\necho 'unexpected git invocation' >&2\nexit 1\n",
-        )
-        .expect("fake git script");
-        set_executable(&script_path);
-    }
-
-    #[allow(dead_code)]
-    fn write_fake_git_for_historical_lookup_guard(script_dir: &Path, forbidden_fragment: &str) {
-        let script_path = script_dir.join("git");
-        fs::write(
-            &script_path,
-            format!(
-                "#!/bin/sh\nset -eu\nworkspace=\"$2\"\ncommand_name=\"$3\"\ncase \"$command_name\" in\n  rev-parse)\n    printf '%s\\n' \"$workspace\"\n    exit 0\n    ;;\n  log)\n    printf '\\036aaa111\\000a1\\000Tester\\0002026-04-13T00:00:00+00:00\\000docs: unrelated historical commit\\000\\036bbb222\\000b2\\000Tester\\0002026-04-13T00:00:00+00:00\\000docs: add deleted feature history\\000\\036ccc333\\000c3\\000Tester\\0002026-04-13T00:00:00+00:00\\000docs: remove deleted feature history\\000\\036ddd444\\000d4\\000Tester\\0002026-04-13T00:00:00+00:00\\000docs: reintroduce deleted feature history\\000'\n    exit 0\n    ;;\n  grep)\n    commit=\"$8\"\n    case \"$commit\" in\n      bbb222|ddd444)\n        printf '%s:%s\\000' \"$commit\" 'docs/syu/features/legacy/history.yaml'\n        exit 0\n        ;;\n      *)\n        exit 1\n        ;;\n    esac\n    ;;\n  show)\n    case \"$4\" in\n      *{forbidden_fragment}*)\n        echo 'unexpected git show for unrelated history file' >&2\n        exit 1\n        ;;\n      bbb222:docs/syu/features/legacy/history.yaml)\n        cat <<'EOF'\ncategory: Legacy\nversion: 1\nfeatures:\n  - id: FEAT-HIST-DEL-002\n    title: Deleted feature history lookup.\n    summary: Keep historical feature ids discoverable.\n    status: implemented\n    linked_requirements: []\n    implementations: {{}}\nEOF\n        exit 0\n        ;;\n      ddd444:docs/syu/features/legacy/history.yaml)\n        cat <<'EOF'\ncategory: Legacy\nversion: 1\nfeatures:\n  - id: FEAT-HIST-DEL-002\n    title: Deleted feature history lookup after update.\n    summary: Keep historical feature ids discoverable.\n    status: implemented\n    linked_requirements: []\n    implementations: {{}}\nEOF\n        exit 0\n        ;;\n      *)\n        echo 'unexpected git show invocation' >&2\n        exit 1\n        ;;\n    esac\n    ;;\n  *)\n    echo 'unexpected git invocation' >&2\n    exit 1\n    ;;\nesac\n"
-            ),
         )
         .expect("fake git script");
         set_executable(&script_path);

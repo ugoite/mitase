@@ -7,7 +7,8 @@ const appWorkspace = JSON.stringify(process.env.SYU_APP_E2E_WORKSPACE ?? ".");
 
 export default defineConfig({
   testDir: "./tests",
-  fullyParallel: true,
+  fullyParallel: false,
+  workers: process.env.CI ? 1 : undefined,
   use: {
     baseURL: appBaseUrl,
     headless: true,

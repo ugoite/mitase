@@ -32,7 +32,8 @@ The UI is divided into three areas:
 ![Annotated overview of the syu app layout](../../website/static/img/app-guide-overview.png)
 
 The screenshot above highlights the top tabs, the left sidebar, the main item
-detail panel, and the validation summary that stays visible while you browse.
+detail panel, the git-backed history panel, and the validation summary that
+stays visible while you browse.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -117,6 +118,11 @@ Selecting an item shows:
 - **Links panel** — the upstream and downstream relationships (e.g. which requirements a feature satisfies; which policies a requirement enforces)
 - **Traces panel** — the declared test and implementation traces, with file path and symbol name
 
+The browser also fetches a git history view for the selected item ID. That
+history panel shows the same lifecycle data that powers `syu log`, so current
+items can show their traced commits and deleted IDs can still surface creation,
+moves, removal, and redefinition attempts when historical data exists.
+
 ![Annotated feature detail view with linked requirements and implementation traces](../../website/static/img/app-guide-detail.png)
 
 ### Clicking links
@@ -126,6 +132,10 @@ Every linked ID in the Links panel is a button. Clicking it jumps directly to th
 For planned requirements and planned features, the detail panel also shows
 placeholder guidance instead of an empty traces section so contributors know what
 evidence still needs to be added before the item becomes implemented.
+
+When a selected item no longer exists in the current workspace, the history
+panel still resolves the deleted ID from the historical index and shows the
+matching lifecycle events instead of dropping you back to an unrelated item.
 
 ---
 
