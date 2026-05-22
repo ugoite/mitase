@@ -26,6 +26,7 @@ If a pull request already exists, pair this page with the
 | Inspect one spec item | `syu show FEAT-CHECK-001` | read the title, links, traces, and status for one philosophy, policy, requirement, or feature |
 | Expand the nearby graph | `syu relate FEAT-CHECK-001` | see linked policies, requirements, features, files, and symbols around one selector |
 | Review a PR range | `syu review --range origin/main...HEAD` | start with the affected philosophy, policy, requirement, and feature IDs, then drill into changed files with `show`, `relate`, or `log` |
+| Strictly review a PR range | `syu review --range origin/main...HEAD --strict --allowed-id FEAT-CHECK-001 --format json` | fail the range review on unowned, ambiguously owned, or out-of-scope changes while keeping structured findings for CI |
 | Guard a review range | `syu review --range origin/main...HEAD --allowed-id FEAT-CHECK-001` | block changes that step outside the named requirement or feature IDs and list the out-of-scope items |
 | Draft a temporary goal plan | `syu task scaffold request.yaml` | preview a bounded delivery artifact with goal, scope, tests, coverage, and completion checks without adding a fifth persistent spec layer |
 | Jump from code to the owning spec | `syu trace src/command/check.rs --symbol run_check_command` | start in code and resolve the traced requirement and feature chain |
