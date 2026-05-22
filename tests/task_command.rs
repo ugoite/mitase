@@ -1,8 +1,9 @@
 // REQ-CORE-028
 // REQ-CORE-029
 // REQ-CORE-030
+// REQ-CORE-031
 
-use std::fs;
+use std::{fs, path::Path, process::Command};
 
 use assert_cmd::cargo::CommandCargoExt;
 use tempfile::tempdir;
@@ -44,13 +45,18 @@ fn write_workspace(root: &std::path::Path) {
     )
     .expect("scope requirement doc");
     fs::write(
+        root.join("docs/syu/requirements/core/check.yaml"),
+        "category: Core Workspace\nprefix: REQ-CORE\nrequirements:\n  - id: REQ-CORE-031\n    title: Validate temporary Goal Plans against the current spec graph and git range\n    description: The task check command should validate Goal Plan conformance against changed files, linked spec IDs, required tests, and completion commands.\n    priority: medium\n    status: implemented\n    linked_policies:\n      - POL-001\n    linked_features:\n      - FEAT-TASK-004\n    tests:\n      rust:\n        - file: tests/task_command.rs\n          symbols:\n            - task_check_reports_pass_fail_results_for_goal_plans\n",
+    )
+    .expect("check requirement doc");
+    fs::write(
         root.join("docs/syu/features/features.yaml"),
         "version: 1\nupdated: \"2026-05\"\nfiles:\n  - kind: task\n    file: core/task.yaml\n  - kind: task\n    file: core/scaffold.yaml\n  - kind: task\n    file: core/scope.yaml\n",
     )
     .expect("feature registry");
     fs::write(
         root.join("docs/syu/features/core/task.yaml"),
-        "category: Task Planning CLI\nversion: 1\nfeatures:\n  - id: FEAT-TASK-001\n    title: Request artifact classification\n    summary: Classify captured request artifacts into create, change, or delete decisions using the current spec graph, with a short explanation and text or JSON output.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-028\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_classify_command\n  - id: FEAT-TASK-003\n    title: Request artifact scoping\n    summary: Map request artifacts onto candidate requirements, policies, philosophies, and features before planning begins.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-030\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_scope_command\n",
+        "category: Task Planning CLI\nversion: 1\nfeatures:\n  - id: FEAT-TASK-001\n    title: Request artifact classification\n    summary: Classify captured request artifacts into create, change, or delete decisions using the current spec graph, with a short explanation and text or JSON output.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-028\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_classify_command\n  - id: FEAT-TASK-003\n    title: Request artifact scoping\n    summary: Map request artifacts onto candidate requirements, policies, philosophies, and features before planning begins.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-030\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_scope_command\n  - id: FEAT-TASK-004\n    title: Goal Plan conformance checking\n    summary: Validate temporary Goal Plan artifacts against changed files, linked spec IDs, required tests, and declared completion commands before review.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-031\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_check_command\n            - load_goal_plan_artifact\n        - file: src/cli.rs\n          symbols:\n            - TaskArgs\n            - TaskCheckArgs\n",
     )
     .expect("feature doc");
     fs::write(
@@ -82,6 +88,81 @@ fn write_request(root: &std::path::Path, request: &str, affected_area: &str, lin
         ),
     )
     .expect("request");
+}
+
+fn git_output(root: &Path, args: &[&str]) -> String {
+    let output = Command::new("git")
+        .current_dir(root)
+        .args(args)
+        .output()
+        .expect("git command should run");
+    assert!(output.status.success(), "git {:?} failed", args);
+    String::from_utf8(output.stdout)
+        .expect("git output should be valid utf-8")
+        .trim()
+        .to_string()
+}
+
+fn git(root: &Path, args: &[&str]) {
+    let status = Command::new("git")
+        .current_dir(root)
+        .args(args)
+        .status()
+        .expect("git command should run");
+    assert!(status.success(), "git {:?} failed", args);
+}
+
+fn init_git_repo(root: &Path) {
+    git(root, &["init", "-b", "main"]);
+    git(root, &["config", "user.email", "syu@example.com"]);
+    git(root, &["config", "user.name", "syu"]);
+}
+
+fn commit_all(root: &Path, message: &str) {
+    git(root, &["add", "-A"]);
+    git(root, &["commit", "--quiet", "-m", message]);
+}
+
+fn write_goal_plan(path: &Path, contents: &str) {
+    fs::write(path, contents).expect("goal plan");
+}
+
+fn goal_plan_yaml(
+    linked_requirement: &str,
+    linked_feature: &str,
+    test_file: &str,
+    test_symbol: &str,
+    confidence: &str,
+) -> String {
+    format!(
+        "version: 1\nkind: syu.goal_plan\nsource:\n  mode: diff_inferred\n  range: origin/main...HEAD\n  confidence: {confidence}\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\n  non_goals:\n    - Add persistent task specs under spec.root\nspec_mapping:\n  persistent_items:\n    philosophies:\n      - PHIL-001\n    policies:\n      - POL-001\n    requirements:\n      - {linked_requirement}\n    features:\n      - {linked_feature}\n  spec_updates:\n    required: false\n    expected_updates: []\nimplementation_plan:\n  scope:\n    include:\n      - src/command/task.rs\n    exclude:\n      - docs/syu/**\n  steps:\n    - add a Goal Plan model\ntest_plan:\n  selection_mode: affected\n  required_tests:\n    rust:\n      - file: {test_file}\n        symbols:\n          - {test_symbol}\n  suggested_tests: {{}}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include:\n    - src/command/task.rs\n  exclude: []\ncompletion:\n  must_pass:\n    - syu validate .\n"
+    )
+}
+
+fn prepare_git_workspace(root: &Path, test_symbol: &str) {
+    write_workspace(root);
+    fs::create_dir_all(root.join("src/command")).expect("src dir");
+    fs::create_dir_all(root.join("tests")).expect("tests dir");
+    fs::write(
+        root.join("src/command/task.rs"),
+        "pub fn run_task_command() {}\n",
+    )
+    .expect("task source");
+    fs::write(
+        root.join("src/command/report.rs"),
+        "pub fn run_report_command() {}\n",
+    )
+    .expect("report source");
+    fs::write(
+        root.join("tests/task_command.rs"),
+        format!("fn {test_symbol}() {{}}\n"),
+    )
+    .expect("task tests");
+
+    init_git_repo(root);
+    commit_all(root, "base");
+    let base = git_output(root, &["rev-parse", "HEAD"]);
+    git(root, &["update-ref", "refs/remotes/origin/main", &base]);
 }
 
 #[test]
@@ -407,6 +488,303 @@ fn task_scaffold_rejects_delete_requests() {
     assert!(!output.status.success(), "delete scaffold should fail");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("only supports request artifacts"));
+}
+
+#[test]
+fn task_check_reports_pass_fail_results_for_goal_plans() {
+    let tempdir = tempdir().expect("tempdir");
+    prepare_git_workspace(tempdir.path(), "task_plan_generates_goal_from_request");
+
+    fs::write(
+        tempdir.path().join("src/command/task.rs"),
+        "pub fn run_task_command() {}\n// updated for goal plan check\n",
+    )
+    .expect("updated task source");
+    commit_all(tempdir.path(), "update task");
+
+    let plan = tempdir.path().join("goal-plan.yaml");
+    write_goal_plan(
+        &plan,
+        &goal_plan_yaml(
+            "REQ-CORE-031",
+            "FEAT-TASK-004",
+            "tests/task_command.rs",
+            "task_plan_generates_goal_from_request",
+            "high",
+        ),
+    );
+
+    let output = {
+        let mut command = Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args([
+            "task",
+            "check",
+            "goal-plan.yaml",
+            "--range",
+            "origin/main...HEAD",
+        ]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task check should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("goal plan: goal-plan.yaml"));
+    assert!(stdout.contains("git range: origin/main...HEAD"));
+    assert!(stdout.contains("status: passed"));
+    assert!(stdout.contains("findings: none"));
+}
+
+#[test]
+fn task_check_prints_json_output_for_goal_plans() {
+    let tempdir = tempdir().expect("tempdir");
+    prepare_git_workspace(tempdir.path(), "task_plan_generates_goal_from_request");
+
+    fs::write(
+        tempdir.path().join("src/command/task.rs"),
+        "pub fn run_task_command() {}\n// updated for goal plan check\n",
+    )
+    .expect("updated task source");
+    commit_all(tempdir.path(), "update task");
+
+    let plan = tempdir.path().join("goal-plan.yaml");
+    write_goal_plan(
+        &plan,
+        &goal_plan_yaml(
+            "REQ-CORE-031",
+            "FEAT-TASK-004",
+            "tests/task_command.rs",
+            "task_plan_generates_goal_from_request",
+            "high",
+        ),
+    );
+
+    let output = {
+        let mut command = Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args([
+            "task",
+            "check",
+            "goal-plan.yaml",
+            "--range",
+            "origin/main...HEAD",
+            "--format",
+            "json",
+        ]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task check should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("\"plan_path\": \"goal-plan.yaml\""));
+    assert!(stdout.contains("\"range\": \"origin/main...HEAD\""));
+    assert!(stdout.contains("\"passed\": true"));
+    assert!(stdout.contains("\"issue_count\": 0"));
+    assert!(stdout.contains("\"warning_count\": 0"));
+    assert!(stdout.contains("\"error_count\": 0"));
+}
+
+#[test]
+fn task_check_fails_for_out_of_scope_changed_files() {
+    let tempdir = tempdir().expect("tempdir");
+    prepare_git_workspace(tempdir.path(), "task_plan_generates_goal_from_request");
+
+    fs::write(
+        tempdir.path().join("src/command/report.rs"),
+        "pub fn run_report_command() {}\n// changed outside scope\n",
+    )
+    .expect("updated report source");
+    commit_all(tempdir.path(), "update report");
+
+    let plan = tempdir.path().join("goal-plan.yaml");
+    write_goal_plan(
+        &plan,
+        &goal_plan_yaml(
+            "REQ-CORE-031",
+            "FEAT-TASK-004",
+            "tests/task_command.rs",
+            "task_plan_generates_goal_from_request",
+            "high",
+        ),
+    );
+
+    let output = {
+        let mut command = Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args([
+            "task",
+            "check",
+            "goal-plan.yaml",
+            "--range",
+            "origin/main...HEAD",
+        ]);
+        command.output().expect("command should run")
+    };
+
+    assert!(!output.status.success(), "task check should fail");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("status: failed"));
+    assert!(stdout.contains("changed production file is outside the implementation scope"));
+    assert!(stdout.contains("src/command/report.rs"));
+}
+
+#[test]
+fn task_check_reports_unknown_linked_requirement_and_feature_ids() {
+    let tempdir = tempdir().expect("tempdir");
+    prepare_git_workspace(tempdir.path(), "task_plan_generates_goal_from_request");
+
+    fs::write(
+        tempdir.path().join("src/command/task.rs"),
+        "pub fn run_task_command() {}\n// updated for unknown-id check\n",
+    )
+    .expect("updated task source");
+    commit_all(tempdir.path(), "update task");
+
+    let plan = tempdir.path().join("goal-plan.yaml");
+    write_goal_plan(
+        &plan,
+        &goal_plan_yaml(
+            "REQ-MISSING-001",
+            "FEAT-MISSING-001",
+            "tests/task_command.rs",
+            "task_plan_generates_goal_from_request",
+            "high",
+        ),
+    );
+
+    let output = {
+        let mut command = Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args([
+            "task",
+            "check",
+            "goal-plan.yaml",
+            "--range",
+            "origin/main...HEAD",
+        ]);
+        command.output().expect("command should run")
+    };
+
+    assert!(!output.status.success(), "task check should fail");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("linked persistent spec ID does not exist"));
+    assert!(stdout.contains("REQ-MISSING-001"));
+    assert!(stdout.contains("FEAT-MISSING-001"));
+}
+
+#[test]
+fn task_check_reports_missing_required_test_files() {
+    let tempdir = tempdir().expect("tempdir");
+    prepare_git_workspace(tempdir.path(), "task_plan_generates_goal_from_request");
+
+    fs::write(
+        tempdir.path().join("src/command/task.rs"),
+        "pub fn run_task_command() {}\n// updated for missing-file check\n",
+    )
+    .expect("updated task source");
+    commit_all(tempdir.path(), "update task");
+
+    let plan = tempdir.path().join("goal-plan.yaml");
+    write_goal_plan(
+        &plan,
+        &goal_plan_yaml(
+            "REQ-CORE-031",
+            "FEAT-TASK-004",
+            "tests/missing.rs",
+            "missing_test",
+            "high",
+        ),
+    );
+
+    let output = {
+        let mut command = Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args([
+            "task",
+            "check",
+            "goal-plan.yaml",
+            "--range",
+            "origin/main...HEAD",
+        ]);
+        command.output().expect("command should run")
+    };
+
+    assert!(!output.status.success(), "task check should fail");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("required test file is missing"));
+    assert!(stdout.contains("tests/missing.rs"));
+}
+
+#[test]
+fn task_check_reports_missing_required_test_symbols() {
+    let tempdir = tempdir().expect("tempdir");
+    prepare_git_workspace(tempdir.path(), "task_plan_generates_goal_from_request");
+
+    fs::write(
+        tempdir.path().join("src/command/task.rs"),
+        "pub fn run_task_command() {}\n// updated for missing-symbol check\n",
+    )
+    .expect("updated task source");
+    commit_all(tempdir.path(), "update task");
+
+    let plan = tempdir.path().join("goal-plan.yaml");
+    write_goal_plan(
+        &plan,
+        &goal_plan_yaml(
+            "REQ-CORE-031",
+            "FEAT-TASK-004",
+            "tests/task_command.rs",
+            "task_plan_missing_symbol",
+            "high",
+        ),
+    );
+
+    let output = {
+        let mut command = Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args([
+            "task",
+            "check",
+            "goal-plan.yaml",
+            "--range",
+            "origin/main...HEAD",
+        ]);
+        command.output().expect("command should run")
+    };
+
+    assert!(!output.status.success(), "task check should fail");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("required test symbol is missing"));
+    assert!(stdout.contains("task_plan_missing_symbol"));
+}
+
+#[test]
+fn task_check_rejects_malformed_goal_plans() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+
+    let plan = tempdir.path().join("goal-plan.yaml");
+    write_goal_plan(
+        &plan,
+        "version: 1\nkind: syu.goal_plan\nsource:\n  mode: diff_inferred\n",
+    );
+
+    let output = {
+        let mut command = Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args([
+            "task",
+            "check",
+            "goal-plan.yaml",
+            "--range",
+            "origin/main...HEAD",
+        ]);
+        command.output().expect("command should run")
+    };
+
+    assert!(!output.status.success(), "malformed goal plan should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("failed to parse goal plan artifact"));
 }
 
 #[test]

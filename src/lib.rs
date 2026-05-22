@@ -7,11 +7,14 @@
 // FEAT-LSP-001
 // FEAT-TASK-001
 // FEAT-TASK-003
+// FEAT-TASK-004
+// FEAT-TASK-005
 // REQ-CORE-021
 // REQ-CORE-023
 // REQ-CORE-024
 // REQ-CORE-028
 // REQ-CORE-030
+// REQ-CORE-031
 
 pub mod cli;
 pub mod command;
@@ -167,7 +170,7 @@ mod tests {
     use crate::cli::{
         AddArgs, AppArgs, AuditArgs, Cli, Commands, CompletionArgs, ExplainArgs, HistoryKind,
         ListArgs, LogArgs, LookupKind, OutputFormat, RelateArgs, SearchArgs, ShowArgs, TaskArgs,
-        TaskClassifyArgs, TaskCommands, TaskScopeArgs, TemplatesArgs, TraceArgs,
+        TaskCheckArgs, TaskClassifyArgs, TaskCommands, TaskScopeArgs, TemplatesArgs, TraceArgs,
     };
     use clap_complete::Shell;
 
@@ -415,6 +418,34 @@ mod tests {
                     format,
                 })
             }) if request == Path::new("request.yaml")
+                && workspace == Path::new("workspace")
+                && format == OutputFormat::Json
+        ));
+        let check = super::dispatch(
+            Cli {
+                command: Some(Commands::Task(TaskArgs {
+                    command: TaskCommands::Check(TaskCheckArgs {
+                        plan: PathBuf::from("goal-plan.yaml"),
+                        range: "origin/main...HEAD".to_string(),
+                        workspace: PathBuf::from("workspace"),
+                        format: OutputFormat::Json,
+                    }),
+                })),
+            },
+            true,
+            true,
+        );
+        assert!(matches!(
+            check,
+            super::Dispatch::Task(crate::cli::TaskArgs {
+                command: TaskCommands::Check(TaskCheckArgs {
+                    plan,
+                    range,
+                    workspace,
+                    format,
+                })
+            }) if plan == Path::new("goal-plan.yaml")
+                && range == "origin/main...HEAD"
                 && workspace == Path::new("workspace")
                 && format == OutputFormat::Json
         ));
