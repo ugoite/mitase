@@ -501,6 +501,15 @@ function App() {
 
   const selectedItemTitle = currentItem?.title ?? currentHistory?.title ?? "No document selected";
 
+  const historicalSelection = useMemo(() => {
+    if (!workspace || !selectedItemId) {
+      return false;
+    }
+
+    const sectionIds = workspace.historical_ids.ids_by_section[selectedSection] ?? [];
+    return sectionIds.includes(selectedItemId) && !workspace.item_index.has(selectedItemId);
+  }, [selectedItemId, selectedSection, workspace]);
+
   const refreshState: RefreshState = refreshError
     ? "stale"
     : isRefreshing
@@ -1461,6 +1470,11 @@ function App() {
                 ) : currentHistory ? (
                   <p className="mt-2 text-sm text-slate-400">
                     Historical item resolved from the git-backed index.
+                  </p>
+                ) : historicalSelection ? (
+                  <p className="mt-2 text-sm text-slate-400">
+                    This ID only exists in the historical index and no longer has a current source
+                    document.
                   </p>
                 ) : null}
               </div>
