@@ -728,6 +728,11 @@ fn task_check_reports_missing_required_test_symbols() {
     commit_all(tempdir.path(), "update task");
 
     let plan = tempdir.path().join("goal-plan.yaml");
+    fs::write(
+        tempdir.path().join("tests/task_command.rs"),
+        "fn actual_test_name() {}\n// task_plan_missing_symbol\n",
+    )
+    .expect("updated task tests");
     write_goal_plan(
         &plan,
         &goal_plan_yaml(
@@ -756,6 +761,92 @@ fn task_check_reports_missing_required_test_symbols() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("required test symbol is missing"));
     assert!(stdout.contains("task_plan_missing_symbol"));
+}
+
+// REQ-CORE-031
+#[test]
+fn task_check_rejects_empty_required_test_symbols() {
+    let tempdir = tempdir().expect("tempdir");
+    prepare_git_workspace(tempdir.path(), "task_plan_generates_goal_from_request");
+
+    fs::write(
+        tempdir.path().join("src/command/task.rs"),
+        "pub fn run_task_command() {}\n// updated for empty-symbol check\n",
+    )
+    .expect("updated task source");
+    commit_all(tempdir.path(), "update task");
+
+    let plan = tempdir.path().join("goal-plan.yaml");
+    write_goal_plan(
+        &plan,
+        "version: 1\nkind: syu.goal_plan\nsource:\n  mode: diff_inferred\n  range: origin/main...HEAD\n  confidence: high\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\nspec_mapping:\n  persistent_items:\n    philosophies:\n      - PHIL-001\n    policies:\n      - POL-001\n    requirements:\n      - REQ-CORE-031\n    features:\n      - FEAT-TASK-004\n  spec_updates:\n    required: false\n    expected_updates: []\nimplementation_plan:\n  scope:\n    include:\n      - src/command/task.rs\n    exclude:\n      - docs/syu/**\n  steps:\n    - add a Goal Plan model\ntest_plan:\n  selection_mode: affected\n  required_tests:\n    rust:\n      - file: tests/task_command.rs\n        symbols:\n          - \"\"\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include:\n    - src/command/task.rs\n  exclude: []\ncompletion:\n  must_pass:\n    - syu validate .\n",
+    );
+
+    let output = {
+        let mut command = Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args([
+            "task",
+            "check",
+            "goal-plan.yaml",
+            "--range",
+            "origin/main...HEAD",
+        ]);
+        command.output().expect("command should run")
+    };
+
+    assert!(!output.status.success(), "task check should fail");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("required test symbol is empty"));
+}
+
+// REQ-CORE-031
+#[test]
+fn task_check_rejects_absolute_required_test_files_outside_workspace() {
+    let tempdir = tempdir().expect("tempdir");
+    prepare_git_workspace(tempdir.path(), "task_plan_generates_goal_from_request");
+
+    fs::write(
+        tempdir.path().join("src/command/task.rs"),
+        "pub fn run_task_command() {}\n// updated for absolute-path check\n",
+    )
+    .expect("updated task source");
+    commit_all(tempdir.path(), "update task");
+
+    let external = tempfile::tempdir().expect("external tempdir");
+    let external_test = external.path().join("outside.rs");
+    fs::write(&external_test, "fn task_plan_generates_goal_from_request() {}\n")
+        .expect("external test file");
+
+    let plan = tempdir.path().join("goal-plan.yaml");
+    write_goal_plan(
+        &plan,
+        &goal_plan_yaml(
+            "REQ-CORE-031",
+            "FEAT-TASK-004",
+            &external_test.display().to_string(),
+            "task_plan_generates_goal_from_request",
+            "high",
+        ),
+    );
+
+    let output = {
+        let mut command = Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args([
+            "task",
+            "check",
+            "goal-plan.yaml",
+            "--range",
+            "origin/main...HEAD",
+        ]);
+        command.output().expect("command should run")
+    };
+
+    assert!(!output.status.success(), "task check should fail");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("required test file must stay within the workspace"));
+    assert!(stdout.contains(&external_test.display().to_string()));
 }
 
 #[test]

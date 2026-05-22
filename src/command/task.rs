@@ -23,6 +23,7 @@ use crate::{
         LookupKind, OutputFormat, TaskArgs, TaskCheckArgs, TaskClassifyArgs, TaskCommands,
         TaskScaffoldArgs, TaskScopeArgs,
     },
+    language::adapter_for_language,
     model::{Issue, Severity},
     workspace::load_workspace,
 };
@@ -1368,12 +1369,11 @@ fn validate_goal_plan_test_reference(
     reference: &crate::model::TraceReference,
     issues: &mut Vec<Issue>,
 ) -> Result<()> {
-    let test_path = if reference.file.is_absolute() {
-        reference.file.clone()
-    } else {
-        workspace.root.join(&reference.file)
-    };
     let location = reference.file.display().to_string();
+    let test_path = match resolve_goal_plan_test_path(workspace, &reference.file, issues)? {
+        Some(path) => path,
+        None => return Ok(()),
+    };
     let contents = match fs::read_to_string(&test_path) {
         Ok(contents) => contents,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -1401,10 +1401,21 @@ fn validate_goal_plan_test_reference(
     };
 
     for symbol in &reference.symbols {
-        if symbol.trim() == "*" {
+        let symbol = symbol.trim();
+        if symbol == "*" {
             continue;
         }
-        if !contents.contains(symbol) {
+        if symbol.is_empty() {
+            issues.push(Issue::error(
+                "GOAL-TASK-PLAN-003",
+                "test_plan.required_tests",
+                Some(location.clone()),
+                "required test symbol is empty",
+                Some("Specify a test function, method, or symbol name.".to_string()),
+            ));
+            continue;
+        }
+        if !goal_plan_required_test_symbol_exists(language, &contents, symbol) {
             issues.push(Issue::error(
                 "GOAL-TASK-PLAN-003",
                 "test_plan.required_tests",
@@ -1436,6 +1447,73 @@ fn validate_goal_plan_test_reference(
     }
 
     Ok(())
+}
+
+fn resolve_goal_plan_test_path(
+    workspace: &crate::workspace::Workspace,
+    reference_file: &Path,
+    issues: &mut Vec<Issue>,
+) -> Result<Option<PathBuf>> {
+    let candidate = if reference_file.is_absolute() {
+        reference_file.to_path_buf()
+    } else {
+        workspace.root.join(reference_file)
+    };
+
+    let resolved = match fs::canonicalize(&candidate) {
+        Ok(path) => path,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            issues.push(Issue::error(
+                "GOAL-TASK-PLAN-003",
+                "test_plan.required_tests",
+                Some(reference_file.display().to_string()),
+                "required test file is missing",
+                Some(
+                    "Create the referenced test file or update the Goal Plan to point at an existing repository test."
+                        .to_string(),
+                ),
+            ));
+            return Ok(None);
+        }
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!(
+                    "failed to resolve required test file `{}`",
+                    reference_file.display()
+                )
+            });
+        }
+    };
+
+    if !resolved.starts_with(&workspace.root) {
+        issues.push(Issue::error(
+            "GOAL-TASK-PLAN-003",
+            "test_plan.required_tests",
+            Some(reference_file.display().to_string()),
+            "required test file must stay within the workspace",
+            Some(
+                "Point required tests at a repository file under the workspace root.".to_string(),
+            ),
+        ));
+        return Ok(None);
+    }
+
+    Ok(Some(resolved))
+}
+
+fn goal_plan_required_test_symbol_exists(language: &str, contents: &str, symbol: &str) -> bool {
+    adapter_for_language(language)
+        .map(|adapter| {
+            let mut patterns = adapter.patterns(symbol);
+            if patterns.len() > 1 {
+                patterns.pop();
+            }
+            patterns
+                .into_iter()
+                .filter_map(|pattern| Regex::new(&pattern).ok())
+                .any(|regex| regex.is_match(contents))
+        })
+        .unwrap_or_else(|| contents.contains(symbol))
 }
 
 fn build_globset(patterns: &[String]) -> Result<Option<GlobSet>> {
