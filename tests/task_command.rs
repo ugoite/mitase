@@ -815,8 +815,11 @@ fn task_check_rejects_absolute_required_test_files_outside_workspace() {
 
     let external = tempfile::tempdir().expect("external tempdir");
     let external_test = external.path().join("outside.rs");
-    fs::write(&external_test, "fn task_plan_generates_goal_from_request() {}\n")
-        .expect("external test file");
+    fs::write(
+        &external_test,
+        "fn task_plan_generates_goal_from_request() {}\n",
+    )
+    .expect("external test file");
 
     let plan = tempdir.path().join("goal-plan.yaml");
     write_goal_plan(

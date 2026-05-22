@@ -1491,9 +1491,7 @@ fn resolve_goal_plan_test_path(
             "test_plan.required_tests",
             Some(reference_file.display().to_string()),
             "required test file must stay within the workspace",
-            Some(
-                "Point required tests at a repository file under the workspace root.".to_string(),
-            ),
+            Some("Point required tests at a repository file under the workspace root.".to_string()),
         ));
         return Ok(None);
     }
