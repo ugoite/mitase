@@ -170,7 +170,8 @@ mod tests {
     use crate::cli::{
         AddArgs, AppArgs, AuditArgs, Cli, Commands, CompletionArgs, ExplainArgs, HistoryKind,
         ListArgs, LogArgs, LookupKind, OutputFormat, RelateArgs, SearchArgs, ShowArgs, TaskArgs,
-        TaskCheckArgs, TaskClassifyArgs, TaskCommands, TaskScopeArgs, TemplatesArgs, TraceArgs,
+        TaskCheckArgs, TaskClassifyArgs, TaskCommands, TaskPlanArgs, TaskPlanFormat,
+        TaskScopeArgs, TemplatesArgs, TraceArgs,
     };
     use clap_complete::Shell;
 
@@ -421,6 +422,38 @@ mod tests {
                 && workspace == Path::new("workspace")
                 && format == OutputFormat::Json
         ));
+        let plan = super::dispatch(
+            Cli {
+                command: Some(Commands::Task(TaskArgs {
+                    command: TaskCommands::Plan(TaskPlanArgs {
+                        request: PathBuf::from("request.yaml"),
+                        workspace: PathBuf::from("workspace"),
+                        output: Some(PathBuf::from(".syu/tasks/current.yaml")),
+                        format: TaskPlanFormat::Yaml,
+                    }),
+                })),
+            },
+            true,
+            true,
+        );
+        assert!(matches!(
+            plan,
+            super::Dispatch::Task(crate::cli::TaskArgs {
+                command: TaskCommands::Plan(TaskPlanArgs {
+                    request,
+                    workspace,
+                    output,
+                    format,
+                })
+            }) if request == Path::new("request.yaml")
+                && workspace == Path::new("workspace")
+                && output.as_deref() == Some(Path::new(".syu/tasks/current.yaml"))
+                && format == TaskPlanFormat::Yaml
+        ));
+    }
+
+    #[test]
+    fn dispatches_task_check_subcommands_without_rewriting_them() {
         let check = super::dispatch(
             Cli {
                 command: Some(Commands::Task(TaskArgs {
