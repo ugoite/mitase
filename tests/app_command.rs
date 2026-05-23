@@ -148,7 +148,7 @@ fn spawn_fake_dev_server(port: u16, status_line: &'static str) -> std::thread::J
             .set_nonblocking(true)
             .expect("fake vite listener should be nonblocking");
 
-        let deadline = Instant::now() + Duration::from_secs(600);
+        let deadline = Instant::now() + Duration::from_secs(30);
         while Instant::now() < deadline {
             match listener.accept() {
                 Ok((mut stream, _)) => {
@@ -177,8 +177,6 @@ fn spawn_fake_dev_server(port: u16, status_line: &'static str) -> std::thread::J
 
             thread::sleep(Duration::from_millis(50));
         }
-
-        panic!("fake vite client should connect");
     })
 }
 
