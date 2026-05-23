@@ -30,6 +30,7 @@ If a pull request already exists, pair this page with the
 | Guard a review range | `syu review --range origin/main...HEAD --allowed-id FEAT-CHECK-001` | block changes that step outside the named requirement or feature IDs and list the out-of-scope items |
 | Draft a temporary goal plan | `syu task scaffold request.yaml` | preview a bounded delivery artifact with goal, scope, tests, coverage, and completion checks without adding a fifth persistent spec layer |
 | Infer a goal plan from a diff | `syu task infer --range origin/main...HEAD` | derive a provisional Goal Plan from changed files, traced owners, evidence, and confidence before review |
+| Select tests from a goal plan | `syu task test-select goal-plan.yaml` | turn a temporary Goal Plan into justified Rust test commands before scoped coverage or CI runs |
 | Check a temporary goal plan | `syu task check goal-plan.yaml --range origin/main...HEAD` | validate a temporary Goal Plan against the changed files, linked spec IDs, required tests, and completion commands before review |
 | Jump from code to the owning spec | `syu trace src/command/check.rs --symbol run_check_command` | start in code and resolve the traced requirement and feature chain |
 | List items by layer | `syu list feature` | print list-shaped output instead of the browser-style explorer |
