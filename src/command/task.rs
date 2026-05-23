@@ -1172,7 +1172,7 @@ fn collect_linked_requirement_tests(
         .persistent_items
         .requirements
         .iter()
-        .filter_map(|item| lookup.requirement(&item))
+        .filter_map(|item| lookup.requirement(item))
     {
         let label = format!("declared by linked requirement {}", requirement.id);
         collect_goal_plan_test_references(lookup, &label, &requirement.tests, selected)?;
@@ -1183,7 +1183,7 @@ fn collect_linked_requirement_tests(
         .persistent_items
         .features
         .iter()
-        .filter_map(|item| lookup.feature(&item))
+        .filter_map(|item| lookup.feature(item))
     {
         for requirement_id in &feature.linked_requirements {
             if let Some(requirement) = lookup.requirement(requirement_id) {
