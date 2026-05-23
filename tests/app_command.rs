@@ -346,7 +346,12 @@ fn app_command_warns_on_non_loopback_binds_after_explicit_opt_in() {
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let port = reserve_port();
-    let child = Command::cargo_bin("syu")
+    let tempdir = tempdir().expect("tempdir should exist");
+    let stdout_path = tempdir.path().join("stdout.log");
+    let stderr_path = tempdir.path().join("stderr.log");
+    let stdout = fs::File::create(&stdout_path).expect("stdout log should open");
+    let stderr = fs::File::create(&stderr_path).expect("stderr log should open");
+    let mut child = Command::cargo_bin("syu")
         .expect("binary should build")
         .arg("app")
         .arg(fixture_path("passing"))
@@ -356,18 +361,19 @@ fn app_command_warns_on_non_loopback_binds_after_explicit_opt_in() {
         .arg("--port")
         .arg(port.to_string())
         .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdout(Stdio::from(stdout))
+        .stderr(Stdio::from(stderr))
         .spawn()
         .expect("app command should start");
 
     wait_for_server(port);
-
-    let output = shutdown_child_with_output(child);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let warning = "warning: syu app is bound to 0.0.0.0";
     let listening = format!("syu app listening on http://0.0.0.0:{port}");
+    wait_for_output_fragment(&stdout_path, &listening);
+
+    terminate_child(&mut child);
+    let stdout = fs::read_to_string(&stdout_path).expect("stdout should be readable");
+    let stderr = fs::read_to_string(&stderr_path).expect("stderr should be readable");
+    let warning = "warning: syu app is bound to 0.0.0.0";
     let warning_index = stdout
         .find(warning)
         .expect("stdout should include the public bind warning");
