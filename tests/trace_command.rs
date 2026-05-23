@@ -430,8 +430,38 @@ fn review_command_rejects_unknown_expected_ids() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr
-            .contains("scope guard id `REQ-NOT-REAL-001` does not match a requirement or feature")
+            .contains("scope guard id `REQ-NOT-REAL-001` does not match a philosophy, policy, requirement, or feature")
     );
+}
+
+#[test]
+fn trace_command_accepts_policy_and_philosophy_scope_ids() {
+    let workspace = init_git_fixture_workspace();
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .current_dir(workspace.path().join("workspace"))
+        .args([
+            "trace",
+            "--range",
+            "HEAD~1..HEAD",
+            "--allowed-id",
+            "POL-TRACE-001",
+            "--allowed-id",
+            "PHIL-TRACE-001",
+            "--format",
+            "json",
+        ])
+        .output()
+        .expect("trace range command should run");
+
+    assert_eq!(output.status.code(), Some(1));
+    let json: Value = serde_json::from_slice(&output.stdout).expect("json output");
+    let scope_guard = json["scope_guard"].as_object().expect("scope guard");
+    let allowed_ids = scope_guard["allowed_ids"]
+        .as_array()
+        .expect("allowed ids array");
+    assert!(allowed_ids.iter().any(|item| item["kind"] == "policy"));
+    assert!(allowed_ids.iter().any(|item| item["kind"] == "philosophy"));
 }
 
 #[test]
