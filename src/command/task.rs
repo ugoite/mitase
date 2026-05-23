@@ -1155,7 +1155,7 @@ fn collect_goal_plan_test_references(
                 language,
                 reference,
                 source_label.to_string(),
-            );
+            )?;
         }
     }
 
@@ -1204,33 +1204,37 @@ fn add_task_test_selection_reference(
     language: &str,
     reference: &crate::model::TraceReference,
     reason: String,
-) {
+) -> Result<()> {
     let file = normalize_relative_path(&reference.file)
         .display()
         .to_string();
     let entry = selected
         .entry(language.to_string())
         .or_default()
-        .entry(file)
+        .entry(file.clone())
         .or_default();
     entry.reasons.insert(reason);
 
-    if reference
-        .symbols
-        .iter()
-        .any(|symbol| matches!(symbol.trim(), "" | "*"))
-    {
+    if reference.symbols.iter().any(|symbol| symbol.trim() == "*") {
         entry.whole_file = true;
         entry.symbols.clear();
-        return;
+        return Ok(());
     }
 
+    let mut has_symbol = false;
     for symbol in &reference.symbols {
         let symbol = symbol.trim();
         if !symbol.is_empty() {
             entry.symbols.insert(symbol.to_string());
+            has_symbol = true;
         }
     }
+
+    if !has_symbol {
+        bail!("Goal Plan test selection for `{file}` must declare at least one symbol or `*`");
+    }
+
+    Ok(())
 }
 
 fn validate_goal_test_language(language: &str) -> Result<()> {
@@ -1256,7 +1260,7 @@ fn count_task_test_selection_entries(
             entries
                 .values()
                 .map(|entry| {
-                    if entry.whole_file || entry.symbols.is_empty() {
+                    if entry.whole_file {
                         1
                     } else {
                         entry.symbols.len()
@@ -1280,7 +1284,7 @@ fn build_task_test_selection_commands(
         for (file, entry) in files {
             let reason = format_task_test_selection_reason(&entry.reasons);
             let target = rust_test_target_name(file);
-            if broaden_to_file || entry.whole_file || entry.symbols.is_empty() {
+            if broaden_to_file || entry.whole_file {
                 commands.push(TaskTestSelectionCommand {
                     language: language.clone(),
                     command: format!("cargo test --test {target}"),
@@ -1373,7 +1377,12 @@ fn goal_plan_scope_is_ambiguous(scope: &GoalPlanScope) -> bool {
             || trimmed.contains("**")
             || trimmed.ends_with('/')
             || trimmed.contains('{')
+            || scope_pattern_has_glob_metacharacters(trimmed)
     })
+}
+
+fn scope_pattern_has_glob_metacharacters(pattern: &str) -> bool {
+    pattern.chars().any(|c| matches!(c, '*' | '?' | '['))
 }
 
 fn print_task_test_selection_text_output(plan_path: &Path, selection: &TaskTestSelectionPlan) {
@@ -4680,6 +4689,39 @@ mod tests {
             plan.warnings
                 .iter()
                 .any(|warning| warning.contains("No implementation scope could be inferred"))
+        );
+    }
+
+    #[test]
+    fn goal_plan_scope_treats_common_globs_as_ambiguous() {
+        let scope = super::GoalPlanScope {
+            include: vec!["src/*.rs".to_string(), "tests/?*.rs".to_string()],
+            exclude: Vec::new(),
+        };
+
+        assert!(super::goal_plan_scope_is_ambiguous(&scope));
+    }
+
+    #[test]
+    fn task_test_select_rejects_empty_symbol_lists() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        let path = tempdir.path().join("goal-plan.yaml");
+        fs::write(
+            &path,
+            "version: 1\nkind: syu.goal_plan\nsource:\n  mode: request_driven\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\nimplementation_plan:\n  scope:\n    include:\n      - src/command/task.rs\n    exclude:\n      - docs/syu/**\n  steps:\n    - add a Goal Plan model\ntest_plan:\n  selection_mode: affected\n  required_tests:\n    rust:\n      - file: src/command/task.rs\n        symbols: []\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include:\n    - src/command/task.rs\n  exclude: []\ncompletion:\n  must_pass:\n    - syu validate .\n",
+        )
+        .expect("goal plan");
+
+        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
+        let artifact = load_goal_plan_artifact(&path).expect("goal plan should load");
+        let error =
+            super::build_task_test_selection(&workspace, &artifact).expect_err("empty symbols");
+
+        assert!(
+            error
+                .to_string()
+                .contains("must declare at least one symbol or `*`")
         );
     }
 
