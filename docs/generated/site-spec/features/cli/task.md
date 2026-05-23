@@ -108,13 +108,16 @@ description: "Generated reference for docs/syu/features/cli/task.yaml"
         - **symbols**:
           - run_task_command
           - run_task_plan_command
+          - run_task_infer_command
           - build_goal_plan
+          - build_diff_inferred_goal_plan
           - GoalPlanArtifact
           - load_goal_plan_artifact
       - **file**: src/cli.rs
         - **symbols**:
           - TaskArgs
           - TaskPlanArgs
+          - TaskInferArgs
           - TaskPlanFormat
       - **file**: src/lib.rs
         - **symbols**:
@@ -130,6 +133,9 @@ description: "Generated reference for docs/syu/features/cli/task.yaml"
       - **file**: docs/guide/goal-plan-format.md
         - **symbols**:
           - syu.goal_plan
+      - **file**: docs/guide/command-card.md
+        - **symbols**:
+          - syu task infer --range origin/main...HEAD
 - **id**: FEAT-TASK-005
   - **title**: Goal Plan conformance checking
   - **summary**: Validate temporary Goal Plan artifacts against changed files, linked spec IDs, required tests, and declared completion commands before review.
@@ -258,13 +264,16 @@ features:
           symbols:
             - run_task_command
             - run_task_plan_command
+            - run_task_infer_command
             - build_goal_plan
+            - build_diff_inferred_goal_plan
             - GoalPlanArtifact
             - load_goal_plan_artifact
         - file: src/cli.rs
           symbols:
             - TaskArgs
             - TaskPlanArgs
+            - TaskInferArgs
             - TaskPlanFormat
         - file: src/lib.rs
           symbols:
@@ -280,6 +289,9 @@ features:
         - file: docs/guide/goal-plan-format.md
           symbols:
             - syu.goal_plan
+        - file: docs/guide/command-card.md
+          symbols:
+            - syu task infer --range origin/main...HEAD
   - id: FEAT-TASK-005
     title: Goal Plan conformance checking
     summary: Validate temporary Goal Plan artifacts against changed files, linked spec IDs, required tests, and declared completion commands before review.

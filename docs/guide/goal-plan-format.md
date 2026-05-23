@@ -30,11 +30,20 @@ kind: syu.goal_plan
 source:
   mode: request_driven
   request_artifact: request.yaml
+  confidence: medium
+  evidence:
+    changed_files:
+      - src/command/task.rs
+    traced_requirements:
+      - REQ-CORE-030
+    traced_features:
+      - FEAT-TASK-003
 
 goal:
   id: GOAL-001
   title: Keep temporary planning explicit
   statement: Capture the implementation plan without turning it into a fifth spec layer.
+  inferred: false
   non_goals:
     - Add a persistent task tree under spec.root
 
@@ -88,7 +97,9 @@ completion:
 - **source.request_artifact**: points at the request artifact when one exists.
 - **source.range**: records the diff range used for inferred plans.
 - **source.confidence**: records how certain an inferred plan is.
+- **source.evidence**: records the changed files and traced IDs that shaped a diff-inferred plan.
 - **goal**: states the implementation goal, the short title, and the non-goals.
+- **goal.inferred**: marks a goal that came from diff inference rather than request-driven planning.
 - **spec_mapping**: records which persistent spec items the plan may touch and
   whether spec updates are expected.
 - **implementation_plan**: lists the bounded file or symbol scope and the steps
