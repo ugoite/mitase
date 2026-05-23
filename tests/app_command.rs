@@ -116,7 +116,10 @@ fn shutdown_child(child: &mut Child) {
     child.kill().expect("child should terminate");
 
     let status = child.wait().expect("child should exit");
-    assert!(clean_shutdown(&status), "app command should exit cleanly");
+    assert!(
+        clean_shutdown(&status),
+        "app command should exit cleanly: {status:?}"
+    );
 }
 
 fn terminate_child(child: &mut Child) {
