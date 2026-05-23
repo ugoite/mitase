@@ -2863,7 +2863,7 @@ fn check_goal_plan(
             )),
         }
 
-        if artifact.goal.inferred != true {
+        if !artifact.goal.inferred {
             issues.push(Issue::warning(
                 "GOAL-TASK-PLAN-012",
                 "goal.inferred",
@@ -4113,8 +4113,13 @@ mod tests {
                 .any(|entry| entry.file.contains("src/command/task.rs"))
         );
 
-        let text =
-            render_goal_plan_output(&request, &plan, TaskPlanFormat::Text).expect("text render");
+        let text = render_goal_plan_output(
+            "request",
+            &request.display().to_string(),
+            &plan,
+            TaskPlanFormat::Text,
+        )
+        .expect("text render");
         assert!(text.contains("kind: syu.goal_plan"));
         assert!(text.contains("goal:"));
         assert!(text.contains("implementation plan:"));
@@ -4122,12 +4127,22 @@ mod tests {
         assert!(text.contains("coverage: changed_lines (threshold 100)"));
         assert!(text.contains("syu task check .syu/tasks/current.yaml --range origin/main...HEAD"));
 
-        let yaml =
-            render_goal_plan_output(&request, &plan, TaskPlanFormat::Yaml).expect("yaml render");
+        let yaml = render_goal_plan_output(
+            "request",
+            &request.display().to_string(),
+            &plan,
+            TaskPlanFormat::Yaml,
+        )
+        .expect("yaml render");
         assert!(yaml.contains("kind: syu.goal_plan"));
 
-        let json =
-            render_goal_plan_output(&request, &plan, TaskPlanFormat::Json).expect("json render");
+        let json = render_goal_plan_output(
+            "request",
+            &request.display().to_string(),
+            &plan,
+            TaskPlanFormat::Json,
+        )
+        .expect("json render");
         assert!(json.contains("\"kind\": \"syu.goal_plan\""));
 
         let output_path = tempdir.path().join(".syu/tasks/current.yaml");
