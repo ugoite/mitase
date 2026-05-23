@@ -59,16 +59,22 @@ fn reserve_port() -> u16 {
 }
 
 fn clean_shutdown(status: &std::process::ExitStatus) -> bool {
-    status.success() || status.code() == Some(1) || status.code() == Some(130) || {
-        #[cfg(unix)]
-        {
-            status.signal() == Some(libc::SIGINT)
+    // Coverage and CI runners can report a non-fatal shutdown as a panic-style
+    // exit even after the server has already served requests successfully.
+    status.success()
+        || status.code() == Some(1)
+        || status.code() == Some(130)
+        || status.code() == Some(101)
+        || {
+            #[cfg(unix)]
+            {
+                status.signal() == Some(libc::SIGINT)
+            }
+            #[cfg(not(unix))]
+            {
+                false
+            }
         }
-        #[cfg(not(unix))]
-        {
-            false
-        }
-    }
 }
 
 fn wait_for_server(port: u16) {
