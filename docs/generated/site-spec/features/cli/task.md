@@ -130,6 +130,35 @@ description: "Generated reference for docs/syu/features/cli/task.yaml"
       - **file**: docs/guide/goal-plan-format.md
         - **symbols**:
           - syu.goal_plan
+- **id**: FEAT-TASK-005
+  - **title**: Goal Plan conformance checking
+  - **summary**: Validate temporary Goal Plan artifacts against changed files, linked spec IDs, required tests, and declared completion commands before review.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-032
+  - **implementations**:
+    - **rust**:
+      - **file**: src/command/task.rs
+        - **symbols**:
+          - run_task_command
+          - run_task_check_command
+          - GoalPlanArtifact
+          - load_goal_plan_artifact
+      - **file**: src/cli.rs
+        - **symbols**:
+          - TaskArgs
+          - TaskCheckArgs
+      - **file**: src/lib.rs
+        - **symbols**:
+          - dispatch
+          - run_dispatch
+    - **markdown**:
+      - **file**: docs/guide/goal-plan-format.md
+        - **symbols**:
+          - syu.goal_plan
+      - **file**: docs/guide/command-card.md
+        - **symbols**:
+          - syu task check goal-plan.yaml --range origin/main...HEAD
 
 ## Source YAML
 
@@ -251,4 +280,33 @@ features:
         - file: docs/guide/goal-plan-format.md
           symbols:
             - syu.goal_plan
+  - id: FEAT-TASK-005
+    title: Goal Plan conformance checking
+    summary: Validate temporary Goal Plan artifacts against changed files, linked spec IDs, required tests, and declared completion commands before review.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-032
+    implementations:
+      rust:
+        - file: src/command/task.rs
+          symbols:
+            - run_task_command
+            - run_task_check_command
+            - GoalPlanArtifact
+            - load_goal_plan_artifact
+        - file: src/cli.rs
+          symbols:
+            - TaskArgs
+            - TaskCheckArgs
+        - file: src/lib.rs
+          symbols:
+            - dispatch
+            - run_dispatch
+      markdown:
+        - file: docs/guide/goal-plan-format.md
+          symbols:
+            - syu.goal_plan
+        - file: docs/guide/command-card.md
+          symbols:
+            - syu task check goal-plan.yaml --range origin/main...HEAD
 ```
