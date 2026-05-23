@@ -9,7 +9,7 @@ use std::{
     process::{Child, Command, Output, Stdio},
     sync::{Mutex, OnceLock},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tempfile::tempdir;
 
@@ -144,15 +144,41 @@ fn app_command_test_lock() -> &'static Mutex<()> {
 fn spawn_fake_dev_server(port: u16, status_line: &'static str) -> std::thread::JoinHandle<()> {
     let listener = TcpListener::bind(("127.0.0.1", port)).expect("fake vite listener should bind");
     thread::spawn(move || {
-        let (mut stream, _) = listener.accept().expect("fake vite client should connect");
-        let mut request = [0_u8; 512];
-        let _ = stream.read(&mut request);
-        write!(
-            stream,
-            "{status_line}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
-        )
-        .expect("fake vite response should write");
-        stream.flush().expect("fake vite response should flush");
+        listener
+            .set_nonblocking(true)
+            .expect("fake vite listener should be nonblocking");
+
+        let deadline = Instant::now() + Duration::from_secs(600);
+        while Instant::now() < deadline {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    let mut request = [0_u8; 512];
+                    let _ = stream.read(&mut request);
+                    let response = write!(
+                        stream,
+                        "{status_line}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    )
+                    .and_then(|_| stream.flush());
+
+                    match response {
+                        Ok(()) => return,
+                        Err(error)
+                            if matches!(
+                                error.kind(),
+                                std::io::ErrorKind::BrokenPipe
+                                    | std::io::ErrorKind::ConnectionReset
+                            ) => {}
+                        Err(error) => panic!("fake vite response should write: {error}"),
+                    }
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
+                Err(error) => panic!("fake vite client should connect: {error}"),
+            }
+
+            thread::sleep(Duration::from_millis(50));
+        }
+
+        panic!("fake vite client should connect");
     })
 }
 
