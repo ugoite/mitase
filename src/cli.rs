@@ -43,7 +43,8 @@ New here?
   8. syu task scope request.yaml      map a request artifact onto the current spec graph
   9. syu task scaffold request.yaml   preview planned requirement and feature updates from a request artifact
  10. syu task plan request.yaml      generate a temporary Goal Plan from a request artifact
- 11. syu task check goal-plan.yaml   validate a Goal Plan against a git range and the current spec graph";
+ 11. syu task infer --range ...      infer a provisional Goal Plan from a git diff
+ 12. syu task check goal-plan.yaml   validate a Goal Plan against a git range and the current spec graph";
 
 const APP_AFTER_HELP: &str = concat!(
     "After startup, open the printed URL in your browser.\n",
@@ -109,6 +110,14 @@ Examples:
 
 Use this when a scoped request is ready to become a temporary Goal Plan that stays outside the persistent spec tree while still mapping the request to existing philosophy, policy, requirement, and feature items.";
 
+const TASK_INFER_AFTER_HELP: &str = "\
+Examples:
+  syu task infer --range origin/main...HEAD
+  syu task infer --range origin/main...HEAD --format json
+  syu task infer --range origin/main...HEAD --output target/syu/inferred-goal.yaml
+
+Use this when implementation has already happened and you want syu to infer a provisional Goal Plan from the changed files, their traced owners, and nearby spec context without modifying persistent spec files.";
+
 const TASK_SCAFFOLD_AFTER_HELP: &str = "\
 Examples:
   syu task scaffold request.yaml
@@ -129,6 +138,7 @@ Examples:
   syu task scope request.yaml
   syu task scaffold request.yaml
   syu task plan request.yaml --output .syu/tasks/current.yaml
+  syu task infer --range origin/main...HEAD --output target/syu/inferred-goal.yaml
   syu task check .syu/tasks/current.yaml --range origin/main...HEAD
   syu task check target/syu/inferred-goal.yaml --range origin/main...HEAD --format json";
 
@@ -827,6 +837,11 @@ pub enum TaskCommands {
     )]
     Plan(TaskPlanArgs),
     #[command(
+        about = "Infer a provisional Goal Plan from a git diff",
+        after_help = TASK_INFER_AFTER_HELP
+    )]
+    Infer(TaskInferArgs),
+    #[command(
         about = "Preview planned requirement and feature scaffolds from a request artifact",
         after_help = TASK_SCAFFOLD_AFTER_HELP
     )]
@@ -881,6 +896,25 @@ pub struct TaskPlanArgs {
 
     #[arg(help = "Output format for the Goal Plan artifact or summary")]
     #[arg(long, value_enum, default_value_t = TaskPlanFormat::Text)]
+    pub format: TaskPlanFormat,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct TaskInferArgs {
+    #[arg(help = "Git revision range whose diff should be inferred into a Goal Plan")]
+    #[arg(long)]
+    pub range: String,
+
+    #[arg(help = WORKSPACE_HELP)]
+    #[arg(default_value = ".")]
+    pub workspace: PathBuf,
+
+    #[arg(help = "Write the inferred Goal Plan artifact to a file instead of stdout")]
+    #[arg(short, long)]
+    pub output: Option<PathBuf>,
+
+    #[arg(help = "Output format for the inferred Goal Plan artifact or summary")]
+    #[arg(long, value_enum, default_value_t = TaskPlanFormat::Yaml)]
     pub format: TaskPlanFormat,
 }
 

@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     cli::{
         LookupKind, OutputFormat, TaskArgs, TaskCheckArgs, TaskClassifyArgs, TaskCommands,
-        TaskPlanArgs, TaskPlanFormat, TaskScaffoldArgs, TaskScopeArgs,
+        TaskInferArgs, TaskPlanArgs, TaskPlanFormat, TaskScaffoldArgs, TaskScopeArgs,
     },
     coverage::normalize_relative_path,
     language::adapter_for_language,
@@ -80,6 +80,22 @@ struct GoalPlanArtifact {
 }
 
 #[allow(dead_code)]
+#[derive(Debug, Deserialize, Clone, Default)]
+#[serde(deny_unknown_fields)]
+struct GoalPlanSourceEvidence {
+    #[serde(default)]
+    changed_files: Vec<String>,
+    #[serde(default)]
+    traced_requirements: Vec<String>,
+    #[serde(default)]
+    traced_features: Vec<String>,
+    #[serde(default)]
+    traced_policies: Vec<String>,
+    #[serde(default)]
+    traced_philosophies: Vec<String>,
+}
+
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 struct GoalPlanSource {
@@ -87,9 +103,13 @@ struct GoalPlanSource {
     #[serde(default)]
     request_artifact: Option<String>,
     #[serde(default)]
+    classification: Option<String>,
+    #[serde(default)]
     range: Option<String>,
     #[serde(default)]
     confidence: Option<GoalPlanConfidence>,
+    #[serde(default)]
+    evidence: Option<GoalPlanSourceEvidence>,
 }
 
 impl Default for GoalPlanSource {
@@ -97,8 +117,10 @@ impl Default for GoalPlanSource {
         Self {
             mode: GoalPlanSourceMode::RequestDriven,
             request_artifact: None,
+            classification: None,
             range: None,
             confidence: None,
+            evidence: None,
         }
     }
 }
@@ -130,6 +152,8 @@ struct GoalPlanGoal {
     statement: String,
     #[serde(default)]
     non_goals: Vec<String>,
+    #[serde(default)]
+    inferred: bool,
 }
 
 #[allow(dead_code)]
@@ -314,6 +338,15 @@ struct JsonTaskPlanOutput {
 }
 
 #[derive(Debug, Serialize)]
+struct JsonTaskPlanSourceEvidence {
+    changed_files: Vec<String>,
+    traced_requirements: Vec<String>,
+    traced_features: Vec<String>,
+    traced_policies: Vec<String>,
+    traced_philosophies: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
 struct JsonScaffoldUpdate {
     kind: String,
     action: String,
@@ -326,9 +359,15 @@ struct JsonScaffoldUpdate {
 #[derive(Debug, Serialize)]
 struct JsonTaskPlanSource {
     mode: String,
-    request_artifact: String,
-    classification: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    request_artifact: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    classification: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    range: Option<String>,
     confidence: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    evidence: Option<JsonTaskPlanSourceEvidence>,
 }
 
 #[derive(Debug, Serialize)]
@@ -337,6 +376,12 @@ struct JsonTaskPlanGoal {
     title: String,
     statement: String,
     non_goals: Vec<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    inferred: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Debug, Serialize)]
@@ -486,6 +531,15 @@ struct ScaffoldPlan {
 }
 
 #[derive(Debug)]
+struct DiffInferenceOutcome {
+    scope: ScopeOutcome,
+    scope_entries: Vec<JsonTaskPlanScopeEntry>,
+    source: JsonTaskPlanSourceEvidence,
+    confidence: &'static str,
+    warnings: Vec<String>,
+}
+
+#[derive(Debug)]
 struct ScaffoldUpdate {
     kind: ScaffoldUpdateKind,
     action: ScaffoldAction,
@@ -533,6 +587,7 @@ pub fn run_task_command(args: &TaskArgs) -> Result<i32> {
         TaskCommands::Classify(classify) => run_task_classify_command(classify),
         TaskCommands::Scope(scope) => run_task_scope_command(scope),
         TaskCommands::Plan(plan) => run_task_plan_command(plan),
+        TaskCommands::Infer(infer) => run_task_infer_command(infer),
         TaskCommands::Scaffold(scaffold) => run_task_scaffold_command(scaffold),
         TaskCommands::Check(check) => run_task_check_command(check),
     }
@@ -702,13 +757,56 @@ pub fn run_task_plan_command(args: &TaskPlanArgs) -> Result<i32> {
         &args.request,
         args.output.as_deref(),
     )?;
-    let rendered = render_goal_plan_output(&args.request, &plan, args.format)?;
+    let rendered = render_goal_plan_output(
+        "request",
+        &args.request.display().to_string(),
+        &plan,
+        args.format,
+    )?;
 
     if let Some(_output) = &args.output {
         let resolved_output = resolved_output.expect("output path should be resolved");
         if resolved_output.starts_with(&workspace.spec_root) {
             eprintln!(
                 "warning: task plan output `{}` is inside spec.root `{}`; the plan is intended to stay outside the persistent spec tree",
+                resolved_output.display(),
+                workspace.spec_root.display()
+            );
+        }
+        if let Some(parent) = resolved_output.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&resolved_output, rendered)?;
+        println!("wrote goal plan to {}", resolved_output.display());
+    } else {
+        print!("{rendered}");
+        if !rendered.ends_with('\n') {
+            println!();
+        }
+    }
+
+    Ok(0)
+}
+
+pub fn run_task_infer_command(args: &TaskInferArgs) -> Result<i32> {
+    let workspace = load_workspace(&args.workspace)?;
+    let range = args.range.trim();
+    if range.is_empty() {
+        bail!("--range must not be empty");
+    }
+
+    let changed_files = resolve_git_range_changed_files(&workspace.root, range)?;
+    let plan =
+        build_diff_inferred_goal_plan(&workspace, range, &changed_files, args.output.as_deref())?;
+    let rendered = render_goal_plan_output("range", range, &plan, args.format)?;
+
+    if let Some(output) = &args.output {
+        let resolved_output = resolve_task_plan_output_path(&workspace.root, output);
+        if resolved_output.starts_with(&workspace.spec_root) {
+            bail!(
+                "inferred Goal Plan output `{}` must stay outside the persistent spec tree `{}`",
                 resolved_output.display(),
                 workspace.spec_root.display()
             );
@@ -769,9 +867,11 @@ fn build_goal_plan(
         classification: outcome.classification.classification.label().to_string(),
         source: JsonTaskPlanSource {
             mode: "request_driven".to_string(),
-            request_artifact: request_path.display().to_string(),
-            classification: outcome.classification.classification.label().to_string(),
+            request_artifact: Some(request_path.display().to_string()),
+            classification: Some(outcome.classification.classification.label().to_string()),
+            range: None,
             confidence: source_confidence.to_string(),
+            evidence: None,
         },
         goal: JsonTaskPlanGoal {
             id: "GOAL-TASK-PLAN-001".to_string(),
@@ -785,6 +885,7 @@ fn build_goal_plan(
                 "Do not add a fifth persistent spec layer.".to_string(),
                 "Do not skip validation or coverage checks.".to_string(),
             ],
+            inferred: false,
         },
         spec_mapping: JsonTaskPlanSpecMapping {
             persistent_items,
@@ -821,13 +922,25 @@ fn task_plan_completion_checks(output_path: Option<&Path>) -> Vec<String> {
     ]
 }
 
+fn inferred_goal_plan_completion_checks(range: &str, output_path: Option<&Path>) -> Vec<String> {
+    let plan_path = output_path
+        .map(|path| path.display().to_string())
+        .unwrap_or_else(|| "target/syu/inferred-goal.yaml".to_string());
+
+    vec![
+        format!("syu task check {plan_path} --range {range}"),
+        "syu validate .".to_string(),
+    ]
+}
+
 fn render_goal_plan_output(
-    request_path: &Path,
+    label_name: &str,
+    label_value: &str,
     plan: &JsonTaskPlanOutput,
     format: TaskPlanFormat,
 ) -> Result<String> {
     let output = match format {
-        TaskPlanFormat::Text => render_goal_plan_text_output(request_path, plan),
+        TaskPlanFormat::Text => render_goal_plan_text_output(label_name, label_value, plan),
         TaskPlanFormat::Yaml => serde_yaml::to_string(plan)
             .expect("serializing task plan output to YAML should succeed"),
         TaskPlanFormat::Json => serde_json::to_string_pretty(plan)
@@ -837,21 +950,58 @@ fn render_goal_plan_output(
     Ok(output)
 }
 
-fn render_goal_plan_text_output(request_path: &Path, plan: &JsonTaskPlanOutput) -> String {
+fn render_goal_plan_text_output(
+    label_name: &str,
+    label_value: &str,
+    plan: &JsonTaskPlanOutput,
+) -> String {
     let mut output = String::new();
     use std::fmt::Write as _;
 
-    writeln!(&mut output, "request: {}", request_path.display()).expect("write to string");
+    writeln!(&mut output, "{label_name}: {label_value}").expect("write to string");
     writeln!(&mut output, "version: {}", plan.version).expect("write to string");
     writeln!(&mut output, "kind: {}", plan.kind).expect("write to string");
+    writeln!(&mut output, "source mode: {}", plan.source.mode).expect("write to string");
     writeln!(&mut output, "classification: {}", plan.classification).expect("write to string");
     writeln!(&mut output, "source confidence: {}", plan.source.confidence)
         .expect("write to string");
+    if let Some(range) = &plan.source.range {
+        writeln!(&mut output, "source range: {range}").expect("write to string");
+    }
+    if let Some(evidence) = &plan.source.evidence {
+        writeln!(&mut output, "source evidence:").expect("write to string");
+        writeln!(&mut output, "  changed files:").expect("write to string");
+        if evidence.changed_files.is_empty() {
+            writeln!(&mut output, "    - none").expect("write to string");
+        } else {
+            for file in &evidence.changed_files {
+                writeln!(&mut output, "    - {file}").expect("write to string");
+            }
+        }
+        print_source_evidence_section(
+            &mut output,
+            "traced requirements",
+            &evidence.traced_requirements,
+        );
+        print_source_evidence_section(&mut output, "traced features", &evidence.traced_features);
+        print_source_evidence_section(&mut output, "traced policies", &evidence.traced_policies);
+        print_source_evidence_section(
+            &mut output,
+            "traced philosophies",
+            &evidence.traced_philosophies,
+        );
+    }
     writeln!(&mut output).expect("write to string");
     writeln!(&mut output, "goal:").expect("write to string");
     writeln!(&mut output, "  id: {}", plan.goal.id).expect("write to string");
     writeln!(&mut output, "  title: {}", plan.goal.title).expect("write to string");
     writeln!(&mut output, "  statement: {}", plan.goal.statement).expect("write to string");
+    writeln!(
+        &mut output,
+        "  inferred: {}",
+        if plan.goal.inferred { "yes" } else { "no" }
+    )
+    .expect("write to string");
     writeln!(&mut output, "  non-goals:").expect("write to string");
     for item in &plan.goal.non_goals {
         writeln!(&mut output, "    - {item}").expect("write to string");
@@ -957,6 +1107,767 @@ fn render_goal_plan_text_output(request_path: &Path, plan: &JsonTaskPlanOutput) 
     }
 
     output
+}
+
+fn print_source_evidence_section(output: &mut String, heading: &str, items: &[String]) {
+    use std::fmt::Write as _;
+
+    writeln!(output, "  {heading}:").expect("write to string");
+    if items.is_empty() {
+        writeln!(output, "    - none").expect("write to string");
+        return;
+    }
+
+    for item in items {
+        writeln!(output, "    - {item}").expect("write to string");
+    }
+}
+
+fn build_diff_inferred_goal_plan(
+    workspace: &crate::workspace::Workspace,
+    range: &str,
+    changed_files: &[PathBuf],
+    output_path: Option<&Path>,
+) -> Result<JsonTaskPlanOutput> {
+    let lookup = WorkspaceLookup::new(workspace);
+    let inference = infer_diff_plan(workspace, &lookup, range, changed_files)?;
+    let persistent_items = collect_task_plan_persistent_items(&lookup, &inference.scope)?;
+    let spec_update_reasons = determine_spec_update_reasons(&inference.scope, &persistent_items);
+    let spec_updates_required = !spec_update_reasons.is_empty() || inference.confidence != "high";
+    let test_plan = collect_task_plan_tests(&lookup, &persistent_items, &inference.scope)?;
+    let mut test_plan = test_plan;
+    test_plan.selection_mode = "affected".to_string();
+    let goal_title = build_inferred_goal_title(&inference.scope, changed_files, &lookup);
+    let goal_statement = build_inferred_goal_statement(
+        &inference.scope,
+        changed_files,
+        &persistent_items,
+        inference.confidence,
+    );
+
+    Ok(JsonTaskPlanOutput {
+        version: GOAL_PLAN_VERSION,
+        kind: "syu.goal_plan".to_string(),
+        request_path: range.to_string(),
+        request: format!("git diff {range}"),
+        classification: inference
+            .scope
+            .classification
+            .classification
+            .label()
+            .to_string(),
+        source: JsonTaskPlanSource {
+            mode: "diff_inferred".to_string(),
+            request_artifact: None,
+            classification: None,
+            range: Some(range.to_string()),
+            confidence: inference.confidence.to_string(),
+            evidence: Some(inference.source),
+        },
+        goal: JsonTaskPlanGoal {
+            id: "GOAL-INFERRED-001".to_string(),
+            title: goal_title,
+            statement: goal_statement,
+            non_goals: build_inferred_goal_non_goals(inference.confidence),
+            inferred: true,
+        },
+        spec_mapping: JsonTaskPlanSpecMapping {
+            persistent_items,
+            spec_updates_required,
+            spec_update_reasons,
+        },
+        implementation_plan: JsonTaskPlanImplementationPlan {
+            confidence: inference.confidence.to_string(),
+            scope: JsonTaskPlanScope {
+                include: inference.scope_entries,
+                exclude: vec!["docs/generated/**".to_string(), "target/**".to_string()],
+            },
+        },
+        test_plan,
+        coverage: JsonTaskPlanCoverage {
+            mode: "changed_lines".to_string(),
+            threshold: 100,
+        },
+        completion: JsonTaskPlanCompletion {
+            must_pass: inferred_goal_plan_completion_checks(range, output_path),
+        },
+        warnings: inference.warnings,
+    })
+}
+
+fn infer_diff_plan(
+    workspace: &crate::workspace::Workspace,
+    lookup: &WorkspaceLookup<'_>,
+    range: &str,
+    changed_files: &[PathBuf],
+) -> Result<DiffInferenceOutcome> {
+    let mut changed_file_strings = Vec::new();
+    let mut scope_entries = Vec::new();
+    let mut direct_items = BTreeMap::<String, SearchResult>::new();
+    let mut unowned_files = Vec::new();
+    let mut ambiguous_files = Vec::new();
+    let mut spec_files = Vec::new();
+
+    for file in changed_files {
+        let file_label = path_label(file);
+        changed_file_strings.push(file_label.clone());
+
+        let matches = collect_inferred_file_matches(workspace, lookup, file)?;
+        if matches.is_spec_file {
+            spec_files.push(file_label.clone());
+        }
+        if matches.is_unowned {
+            unowned_files.push(file_label.clone());
+        }
+        if matches.is_ambiguous {
+            ambiguous_files.push(file_label.clone());
+        }
+
+        scope_entries.push(matches.scope_entry);
+        for item in matches.direct_items {
+            direct_items.insert(item.id.clone(), item);
+        }
+    }
+
+    changed_file_strings.sort();
+    changed_file_strings.dedup();
+    scope_entries.sort_by(|left, right| left.file.cmp(&right.file));
+    scope_entries.dedup_by(|left, right| left.file == right.file && left.symbols == right.symbols);
+    unowned_files.sort();
+    unowned_files.dedup();
+    ambiguous_files.sort();
+    ambiguous_files.dedup();
+    spec_files.sort();
+    spec_files.dedup();
+
+    let direct_items = direct_items.into_values().collect::<Vec<_>>();
+    let related_items = collect_related_inference_items(lookup, &direct_items);
+    let related_and_direct = merge_inference_items(&direct_items, &related_items);
+    let classification = ClassificationOutcome {
+        classification: infer_requirement_action(&direct_items, &related_items),
+        reasons: build_inference_reasons(
+            &changed_file_strings,
+            &unowned_files,
+            &ambiguous_files,
+            &spec_files,
+            &direct_items,
+            &related_items,
+        ),
+        explicit_items: direct_items.clone(),
+        related_items: related_items.clone(),
+        request: format!("git diff {range}"),
+        context: RequestArtifactContext::default(),
+    };
+
+    let requirements =
+        collect_scoped_results(&direct_items, &related_and_direct, "requirement", 50);
+    let policies = collect_scoped_results(&direct_items, &related_and_direct, "policy", 50);
+    let philosophies = collect_scoped_results(&direct_items, &related_and_direct, "philosophy", 50);
+    let features = collect_feature_candidates(
+        lookup,
+        &direct_items,
+        &related_and_direct,
+        classification.classification,
+        50,
+    );
+
+    let scope = ScopeOutcome {
+        classification,
+        signals: ScopeSignals {
+            policy_discussion: !policies.is_empty(),
+            philosophy_discussion: !philosophies.is_empty(),
+            planned_feature_updates: features.iter().any(|feature| feature.planned_state_update)
+                || !spec_files.is_empty(),
+        },
+        requirements,
+        features,
+        policies,
+        philosophies,
+        notes: build_inference_notes(&unowned_files, &ambiguous_files, &spec_files),
+    };
+
+    let confidence = confidence_for_diff_inference(
+        &changed_file_strings,
+        &unowned_files,
+        &ambiguous_files,
+        &spec_files,
+        &scope,
+    );
+
+    let warnings =
+        build_inference_warnings(confidence, &unowned_files, &ambiguous_files, &spec_files);
+    let source = JsonTaskPlanSourceEvidence {
+        changed_files: changed_file_strings.clone(),
+        traced_requirements: collect_ids_by_kind(&scope.requirements),
+        traced_features: collect_feature_ids(&scope.features),
+        traced_policies: collect_ids_by_kind(&scope.policies),
+        traced_philosophies: collect_ids_by_kind(&scope.philosophies),
+    };
+
+    Ok(DiffInferenceOutcome {
+        scope,
+        source,
+        confidence,
+        warnings,
+        scope_entries,
+    })
+}
+
+#[derive(Debug)]
+struct InferredFileMatches {
+    direct_items: Vec<SearchResult>,
+    scope_entry: JsonTaskPlanScopeEntry,
+    is_spec_file: bool,
+    is_unowned: bool,
+    is_ambiguous: bool,
+}
+
+#[derive(Debug)]
+struct TracedItemMatch {
+    item: SearchResult,
+    symbols: BTreeSet<String>,
+}
+
+fn collect_inferred_file_matches(
+    workspace: &crate::workspace::Workspace,
+    lookup: &WorkspaceLookup<'_>,
+    file: &Path,
+) -> Result<InferredFileMatches> {
+    let file_label = path_label(file);
+    let mut direct_items = BTreeMap::<String, SearchResult>::new();
+    let mut symbols = BTreeSet::<String>::new();
+
+    for item in collect_spec_items_for_path(lookup, &file_label)? {
+        direct_items.insert(item.id.clone(), item);
+    }
+
+    for traced in collect_traced_items_for_path(workspace, file) {
+        symbols.extend(traced.symbols.iter().cloned());
+        direct_items.insert(traced.item.id.clone(), traced.item);
+    }
+
+    let is_spec_file = matches!(
+        file_label.as_str(),
+        label if label.starts_with("docs/syu/philosophy/")
+            || label.starts_with("docs/syu/policies/")
+            || label.starts_with("docs/syu/requirements/")
+            || label.starts_with("docs/syu/features/")
+    );
+    let direct_count = direct_items.len();
+    let is_unowned = direct_count == 0;
+    let is_ambiguous = direct_count > 1 && !is_shared_utility_path(file);
+
+    Ok(InferredFileMatches {
+        direct_items: direct_items.into_values().collect(),
+        scope_entry: JsonTaskPlanScopeEntry {
+            file: file_label,
+            symbols: symbols.into_iter().collect(),
+        },
+        is_spec_file,
+        is_unowned,
+        is_ambiguous,
+    })
+}
+
+fn collect_spec_items_for_path(
+    lookup: &WorkspaceLookup<'_>,
+    file_label: &str,
+) -> Result<Vec<SearchResult>> {
+    let mut items = Vec::new();
+    for kind in [
+        LookupKind::Philosophy,
+        LookupKind::Policy,
+        LookupKind::Requirement,
+        LookupKind::Feature,
+    ] {
+        for item in lookup.entries_with_document_paths(kind)? {
+            if item.document_path.as_deref() == Some(file_label) {
+                items.push(SearchResult {
+                    id: item.id,
+                    kind: kind.label(),
+                    title: item.title,
+                });
+            }
+        }
+    }
+
+    Ok(items)
+}
+
+fn collect_traced_items_for_path(
+    workspace: &crate::workspace::Workspace,
+    file: &Path,
+) -> Vec<TracedItemMatch> {
+    let normalized_file = normalize_relative_path(file);
+    let mut items = BTreeMap::<String, TracedItemMatch>::new();
+
+    for requirement in &workspace.requirements {
+        for references in requirement.tests.values() {
+            for reference in references {
+                if normalize_relative_path(&reference.file) != normalized_file {
+                    continue;
+                }
+                let entry =
+                    items
+                        .entry(requirement.id.clone())
+                        .or_insert_with(|| TracedItemMatch {
+                            item: SearchResult {
+                                id: requirement.id.clone(),
+                                kind: "requirement",
+                                title: requirement.title.clone(),
+                            },
+                            symbols: BTreeSet::new(),
+                        });
+                entry.symbols.extend(reference.symbols.iter().cloned());
+            }
+        }
+    }
+
+    for feature in &workspace.features {
+        for references in feature.implementations.values() {
+            for reference in references {
+                if normalize_relative_path(&reference.file) != normalized_file {
+                    continue;
+                }
+                let entry = items
+                    .entry(feature.id.clone())
+                    .or_insert_with(|| TracedItemMatch {
+                        item: SearchResult {
+                            id: feature.id.clone(),
+                            kind: "feature",
+                            title: feature.title.clone(),
+                        },
+                        symbols: BTreeSet::new(),
+                    });
+                entry.symbols.extend(reference.symbols.iter().cloned());
+            }
+        }
+    }
+
+    items.into_values().collect()
+}
+
+fn collect_related_inference_items(
+    lookup: &WorkspaceLookup<'_>,
+    direct_items: &[SearchResult],
+) -> Vec<SearchResult> {
+    let mut requirements = BTreeMap::<String, SearchResult>::new();
+    let mut features = BTreeMap::<String, SearchResult>::new();
+    let mut policies = BTreeMap::<String, SearchResult>::new();
+    let mut philosophies = BTreeMap::<String, SearchResult>::new();
+
+    for item in direct_items {
+        match item.kind {
+            "requirement" => {
+                insert_inference_item(&mut requirements, item);
+                if let Some(requirement) = lookup.requirement(&item.id) {
+                    for feature_id in &requirement.linked_features {
+                        insert_inference_lookup_item(
+                            &mut features,
+                            lookup,
+                            LookupKind::Feature,
+                            feature_id,
+                        );
+                    }
+                    collect_inference_requirement_context(
+                        lookup,
+                        requirement,
+                        &mut policies,
+                        &mut philosophies,
+                    );
+                }
+            }
+            "feature" => {
+                insert_inference_item(&mut features, item);
+                if let Some(feature) = lookup.feature(&item.id) {
+                    for requirement_id in &feature.linked_requirements {
+                        insert_inference_lookup_item(
+                            &mut requirements,
+                            lookup,
+                            LookupKind::Requirement,
+                            requirement_id,
+                        );
+                        if let Some(requirement) = lookup.requirement(requirement_id) {
+                            collect_inference_requirement_context(
+                                lookup,
+                                requirement,
+                                &mut policies,
+                                &mut philosophies,
+                            );
+                        }
+                    }
+                }
+            }
+            "policy" => {
+                insert_inference_item(&mut policies, item);
+                if let Some(policy) = lookup.policy(&item.id) {
+                    for philosophy_id in &policy.linked_philosophies {
+                        insert_inference_lookup_item(
+                            &mut philosophies,
+                            lookup,
+                            LookupKind::Philosophy,
+                            philosophy_id,
+                        );
+                    }
+                }
+            }
+            "philosophy" => {
+                insert_inference_item(&mut philosophies, item);
+            }
+            _ => {}
+        }
+    }
+
+    let mut items = requirements
+        .into_values()
+        .chain(features.into_values())
+        .chain(policies.into_values())
+        .chain(philosophies.into_values())
+        .collect::<Vec<_>>();
+    items.sort_by(|a, b| a.id.cmp(&b.id));
+    items
+}
+
+fn insert_inference_item(map: &mut BTreeMap<String, SearchResult>, item: &SearchResult) {
+    map.entry(item.id.clone()).or_insert_with(|| item.clone());
+}
+
+fn insert_inference_lookup_item(
+    map: &mut BTreeMap<String, SearchResult>,
+    lookup: &WorkspaceLookup<'_>,
+    kind: LookupKind,
+    id: &str,
+) {
+    if let Some(title) = lookup.title_for(kind, id) {
+        map.entry(id.to_string()).or_insert_with(|| SearchResult {
+            id: id.to_string(),
+            kind: kind.label(),
+            title: title.to_string(),
+        });
+    }
+}
+
+fn collect_inference_requirement_context(
+    lookup: &WorkspaceLookup<'_>,
+    requirement: &crate::model::Requirement,
+    policies: &mut BTreeMap<String, SearchResult>,
+    philosophies: &mut BTreeMap<String, SearchResult>,
+) {
+    for policy_id in &requirement.linked_policies {
+        insert_inference_lookup_item(policies, lookup, LookupKind::Policy, policy_id);
+        if let Some(policy) = lookup.policy(policy_id) {
+            for philosophy_id in &policy.linked_philosophies {
+                insert_inference_lookup_item(
+                    philosophies,
+                    lookup,
+                    LookupKind::Philosophy,
+                    philosophy_id,
+                );
+            }
+        }
+    }
+}
+
+fn merge_inference_items(left: &[SearchResult], right: &[SearchResult]) -> Vec<SearchResult> {
+    let mut items = BTreeMap::<String, SearchResult>::new();
+    for item in left.iter().chain(right.iter()) {
+        items.insert(item.id.clone(), item.clone());
+    }
+    items.into_values().collect()
+}
+
+fn infer_requirement_action(
+    direct_items: &[SearchResult],
+    related_items: &[SearchResult],
+) -> RequirementAction {
+    if direct_items.is_empty() && related_items.is_empty() {
+        RequirementAction::Create
+    } else {
+        RequirementAction::Change
+    }
+}
+
+fn build_inferred_goal_title(
+    scope: &ScopeOutcome,
+    changed_files: &[PathBuf],
+    lookup: &WorkspaceLookup<'_>,
+) -> String {
+    if let Some(feature) = scope.features.first() {
+        return format!("Extend {}", feature.title);
+    }
+    if let Some(requirement) = scope.requirements.first() {
+        return format!("Update {}", requirement.title);
+    }
+    if let Some(policy) = scope.policies.first() {
+        return format!("Update {}", policy.title);
+    }
+    if let Some(philosophy) = scope.philosophies.first() {
+        return format!("Update {}", philosophy.title);
+    }
+    if let Some(file) = changed_files.first() {
+        let file_label = path_label(file);
+        if let Ok(Some(title)) = infer_title_from_file_path(lookup, &file_label) {
+            return format!("Update {}", title);
+        }
+        return format!("Review diff for {}", file_label);
+    }
+
+    "Review inferred diff".to_string()
+}
+
+fn infer_title_from_file_path(
+    lookup: &WorkspaceLookup<'_>,
+    file_label: &str,
+) -> Result<Option<String>> {
+    for kind in [
+        LookupKind::Philosophy,
+        LookupKind::Policy,
+        LookupKind::Requirement,
+        LookupKind::Feature,
+    ] {
+        for item in lookup.entries_with_document_paths(kind)? {
+            if item.document_path.as_deref() == Some(file_label) {
+                return Ok(Some(item.title));
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+fn build_inferred_goal_statement(
+    scope: &ScopeOutcome,
+    changed_files: &[PathBuf],
+    persistent_items: &JsonTaskPlanPersistentItems,
+    confidence: &'static str,
+) -> String {
+    let file_summary = changed_files
+        .iter()
+        .map(|path| path_label(path.as_path()))
+        .take(5)
+        .collect::<Vec<_>>()
+        .join(", ");
+    let item_summary = summarize_persistent_item_ids(persistent_items);
+
+    if confidence == "low" {
+        format!(
+            "The diff appears to touch {} but the ownership evidence is weak enough that the plan should be reviewed before it is treated as certain.",
+            if item_summary.is_empty() {
+                file_summary
+            } else {
+                format!("{item_summary} and {file_summary}")
+            }
+        )
+    } else {
+        format!(
+            "The diff appears to update {}{}.",
+            if item_summary.is_empty() {
+                file_summary
+            } else {
+                item_summary
+            },
+            if scope.notes.is_empty() {
+                String::new()
+            } else {
+                format!(" with {}", scope.notes.join("; "))
+            }
+        )
+    }
+}
+
+fn summarize_persistent_item_ids(items: &JsonTaskPlanPersistentItems) -> String {
+    let mut ids = Vec::new();
+    ids.extend(items.philosophies.iter().map(|item| item.id.as_str()));
+    ids.extend(items.policies.iter().map(|item| item.id.as_str()));
+    ids.extend(items.requirements.iter().map(|item| item.id.as_str()));
+    ids.extend(items.features.iter().map(|item| item.id.as_str()));
+    ids.join(", ")
+}
+
+fn build_inferred_goal_non_goals(confidence: &'static str) -> Vec<String> {
+    let mut non_goals = vec![
+        "Do not modify persistent spec files.".to_string(),
+        "Do not promote the inferred goal plan into a permanent spec layer.".to_string(),
+    ];
+    if confidence == "low" {
+        non_goals.push(
+            "Do not treat ambiguous or unowned files as settled scope without review.".to_string(),
+        );
+    }
+    non_goals
+}
+
+fn build_inference_reasons(
+    changed_files: &[String],
+    unowned_files: &[String],
+    ambiguous_files: &[String],
+    spec_files: &[String],
+    direct_items: &[SearchResult],
+    related_items: &[SearchResult],
+) -> Vec<String> {
+    let mut reasons = Vec::new();
+    if !direct_items.is_empty() {
+        reasons.push(format!(
+            "direct trace ownership found for {}",
+            direct_items
+                .iter()
+                .map(|item| format!("{} {}", item.kind, item.id))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    if !related_items.is_empty() {
+        reasons.push(format!(
+            "related graph context expands to {}",
+            related_items
+                .iter()
+                .map(|item| format!("{} {}", item.kind, item.id))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    if !unowned_files.is_empty() {
+        reasons.push(format!(
+            "unowned files reduce confidence: {}",
+            unowned_files.join(", ")
+        ));
+    }
+    if !ambiguous_files.is_empty() {
+        reasons.push(format!(
+            "ambiguous ownership reduces confidence: {}",
+            ambiguous_files.join(", ")
+        ));
+    }
+    if !spec_files.is_empty() {
+        reasons.push(format!(
+            "spec files changed directly: {}",
+            spec_files.join(", ")
+        ));
+    }
+    if reasons.is_empty() {
+        reasons.push(format!(
+            "changed files were analyzed from {}",
+            changed_files.join(", ")
+        ));
+    }
+
+    reasons
+}
+
+fn build_inference_notes(
+    unowned_files: &[String],
+    ambiguous_files: &[String],
+    spec_files: &[String],
+) -> Vec<String> {
+    let mut notes = Vec::new();
+    if !unowned_files.is_empty() {
+        notes.push(format!(
+            "no trace ownership was found for {}",
+            unowned_files.join(", ")
+        ));
+    }
+    if !ambiguous_files.is_empty() {
+        notes.push(format!(
+            "ambiguous ownership needs review for {}",
+            ambiguous_files.join(", ")
+        ));
+    }
+    if !spec_files.is_empty() {
+        notes.push(format!(
+            "spec files were included in the diff: {}",
+            spec_files.join(", ")
+        ));
+    }
+    notes
+}
+
+fn build_inference_warnings(
+    confidence: &'static str,
+    unowned_files: &[String],
+    ambiguous_files: &[String],
+    spec_files: &[String],
+) -> Vec<String> {
+    let mut warnings = Vec::new();
+    if confidence == "low" {
+        if !unowned_files.is_empty() {
+            warnings.push(format!(
+                "Low confidence: no trace ownership was found for {}.",
+                unowned_files.join(", ")
+            ));
+        }
+        if !ambiguous_files.is_empty() {
+            warnings.push(format!(
+                "Low confidence: ambiguous ownership remains for {}.",
+                ambiguous_files.join(", ")
+            ));
+        }
+    } else if confidence == "medium" {
+        if !spec_files.is_empty() {
+            warnings.push(format!(
+                "Medium confidence: spec files changed directly in {}.",
+                spec_files.join(", ")
+            ));
+        }
+        if !ambiguous_files.is_empty() {
+            warnings.push(format!(
+                "Medium confidence: shared or ambiguous ownership was inferred for {}.",
+                ambiguous_files.join(", ")
+            ));
+        }
+    }
+    warnings
+}
+
+fn confidence_for_diff_inference(
+    changed_files: &[String],
+    unowned_files: &[String],
+    ambiguous_files: &[String],
+    spec_files: &[String],
+    scope: &ScopeOutcome,
+) -> &'static str {
+    if !unowned_files.is_empty() {
+        return "low";
+    }
+    if !spec_files.is_empty()
+        || changed_files.len() > 1
+        || changed_files
+            .iter()
+            .any(|file| is_shared_utility_path(Path::new(file)))
+    {
+        return "medium";
+    }
+    if !ambiguous_files.is_empty()
+        && !scope
+            .features
+            .iter()
+            .any(|feature| feature.status.eq_ignore_ascii_case("planned"))
+    {
+        return "low";
+    }
+    "high"
+}
+
+fn is_shared_utility_path(path: &Path) -> bool {
+    let rendered = path_label(path).to_lowercase();
+    rendered.contains("shared")
+        || rendered.contains("common")
+        || rendered.contains("util")
+        || rendered.contains("helper")
+        || rendered.contains("generated")
+}
+
+fn collect_ids_by_kind(items: &[SearchResult]) -> Vec<String> {
+    let mut ids = items.iter().map(|item| item.id.clone()).collect::<Vec<_>>();
+    ids.sort();
+    ids.dedup();
+    ids
+}
+
+fn collect_feature_ids(items: &[ScopeFeatureCandidate]) -> Vec<String> {
+    let mut ids = items.iter().map(|item| item.id.clone()).collect::<Vec<_>>();
+    ids.sort();
+    ids.dedup();
+    ids
 }
 
 fn print_plan_item_section(output: &mut String, heading: &str, items: &[JsonTaskPlanItem]) {
@@ -1950,6 +2861,43 @@ fn check_goal_plan(
                         .to_string(),
                 ),
             )),
+        }
+
+        if artifact.goal.inferred != true {
+            issues.push(Issue::warning(
+                "GOAL-TASK-PLAN-012",
+                "goal.inferred",
+                None,
+                "diff-inferred plan goal does not mark itself as inferred",
+                Some(
+                    "Set goal.inferred to true so readers can tell the plan was derived from a diff."
+                        .to_string(),
+                ),
+            ));
+        }
+
+        match artifact.source.evidence.as_ref() {
+            Some(evidence) if evidence.changed_files.is_empty() => issues.push(Issue::error(
+                "GOAL-TASK-PLAN-013",
+                "source.evidence.changed_files",
+                None,
+                "diff-inferred plan does not record any changed files",
+                Some(
+                    "Add the diff's changed files to source.evidence.changed_files so the inferred plan is explainable."
+                        .to_string(),
+                ),
+            )),
+            None => issues.push(Issue::error(
+                "GOAL-TASK-PLAN-013",
+                "source.evidence",
+                None,
+                "diff-inferred plan does not record evidence",
+                Some(
+                    "Add source.evidence with changed files and traced IDs so reviewers can validate the inference."
+                        .to_string(),
+                ),
+            )),
+            _ => {}
         }
     }
 

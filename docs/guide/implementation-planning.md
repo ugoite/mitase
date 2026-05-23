@@ -96,6 +96,10 @@ syu task scaffold request.yaml
 ```
 
 Use `syu task plan` when you need the temporary Goal Plan artifact itself.
+Use `syu task infer --range origin/main...HEAD` when implementation already
+exists and you want a provisional Goal Plan inferred from the changed files,
+their traced owners, and the current graph.
+
 That is the step that should capture the implementation plan, test plan,
 coverage target, completion checks, and any warnings that still need review.
 

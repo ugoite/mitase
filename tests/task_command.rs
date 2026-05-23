@@ -146,7 +146,7 @@ fn goal_plan_yaml(
     confidence: &str,
 ) -> String {
     format!(
-        "version: 1\nkind: syu.goal_plan\nsource:\n  mode: diff_inferred\n  range: origin/main...HEAD\n  confidence: {confidence}\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\n  non_goals:\n    - Add persistent task specs under spec.root\nspec_mapping:\n  persistent_items:\n    philosophies:\n      - PHIL-001\n    policies:\n      - POL-001\n    requirements:\n      - {linked_requirement}\n    features:\n      - {linked_feature}\n  spec_updates:\n    required: false\n    expected_updates: []\nimplementation_plan:\n  scope:\n    include:\n      - src/command/task.rs\n    exclude:\n      - docs/syu/**\n  steps:\n    - add a Goal Plan model\ntest_plan:\n  selection_mode: affected\n  required_tests:\n    rust:\n      - file: {test_file}\n        symbols:\n          - {test_symbol}\n  suggested_tests: {{}}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include:\n    - src/command/task.rs\n  exclude: []\ncompletion:\n  must_pass:\n    - syu validate .\n"
+        "version: 1\nkind: syu.goal_plan\nsource:\n  mode: diff_inferred\n  range: origin/main...HEAD\n  confidence: {confidence}\n  evidence:\n    changed_files:\n      - src/command/task.rs\n    traced_requirements:\n      - {linked_requirement}\n    traced_features:\n      - {linked_feature}\n    traced_policies:\n      - POL-001\n    traced_philosophies:\n      - PHIL-001\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\n  inferred: true\n  non_goals:\n    - Add persistent task specs under spec.root\nspec_mapping:\n  persistent_items:\n    philosophies:\n      - PHIL-001\n    policies:\n      - POL-001\n    requirements:\n      - {linked_requirement}\n    features:\n      - {linked_feature}\n  spec_updates:\n    required: false\n    expected_updates: []\nimplementation_plan:\n  scope:\n    include:\n      - src/command/task.rs\n    exclude:\n      - docs/syu/**\n  steps:\n    - add a Goal Plan model\ntest_plan:\n  selection_mode: affected\n  required_tests:\n    rust:\n      - file: {test_file}\n        symbols:\n          - {test_symbol}\n  suggested_tests: {{}}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include:\n    - src/command/task.rs\n  exclude: []\ncompletion:\n  must_pass:\n    - syu validate .\n"
     )
 }
 
@@ -174,6 +174,126 @@ fn prepare_git_workspace(root: &Path, test_symbol: &str) {
     commit_all(root, "base");
     let base = git_output(root, &["rev-parse", "HEAD"]);
     git(root, &["update-ref", "refs/remotes/origin/main", &base]);
+}
+
+fn write_infer_workspace(root: &Path) {
+    fs::write(
+        root.join("syu.yaml"),
+        "version: 1\nspec:\n  root: docs/syu\n",
+    )
+    .expect("workspace config");
+    fs::create_dir_all(root.join("docs/syu/philosophy")).expect("philosophy dir");
+    fs::create_dir_all(root.join("docs/syu/policies")).expect("policy dir");
+    fs::create_dir_all(root.join("docs/syu/requirements/core")).expect("requirements dir");
+    fs::create_dir_all(root.join("docs/syu/features/core")).expect("features dir");
+    fs::create_dir_all(root.join("src")).expect("src dir");
+    fs::create_dir_all(root.join("tests")).expect("tests dir");
+    fs::create_dir_all(root.join("notes")).expect("notes dir");
+
+    fs::write(
+        root.join("docs/syu/philosophy/foundation.yaml"),
+        "category: Philosophy\nversion: 1\nlanguage: en\nphilosophies:\n  - id: PHIL-INF-001\n    title: Keep diff inference explicit\n    product_design_principle: Inferred plans should cite the files that led to them.\n    coding_guideline: Prefer evidence over guesswork.\n    linked_policies:\n      - POL-INF-001\n",
+    )
+    .expect("philosophy doc");
+    fs::write(
+        root.join("docs/syu/policies/policies.yaml"),
+        "category: Policies\nversion: 1\nlanguage: en\npolicies:\n  - id: POL-INF-001\n    title: Diff inference must stay explainable\n    summary: Inferred Goal Plans should record evidence and confidence.\n    description: The infer command should preserve the changed files and traced IDs that shaped the result.\n    linked_philosophies:\n      - PHIL-INF-001\n    linked_requirements:\n      - REQ-INF-CLEAN\n      - REQ-INF-SHARED\n      - REQ-INF-AMBIG-A\n      - REQ-INF-AMBIG-B\n",
+    )
+    .expect("policy doc");
+
+    fs::write(
+        root.join("docs/syu/requirements/core/clean.yaml"),
+        "category: Core Requirements\nprefix: REQ-INF\nrequirements:\n  - id: REQ-INF-CLEAN\n    title: Infer a clean single-feature diff\n    description: The infer command should resolve one clear feature implementation into a provisional plan.\n    priority: medium\n    status: implemented\n    linked_policies:\n      - POL-INF-001\n    linked_features:\n      - FEAT-INF-CLEAN\n    tests:\n      rust:\n        - file: tests/clean_requirement.rs\n          symbols:\n            - clean_requirement_test\n",
+    )
+    .expect("clean requirement doc");
+    fs::write(
+        root.join("docs/syu/requirements/core/shared.yaml"),
+        "category: Core Requirements\nprefix: REQ-INF\nrequirements:\n  - id: REQ-INF-SHARED\n    title: Infer a shared utility diff\n    description: The infer command should stay explainable when the changed file looks like shared utility code.\n    priority: medium\n    status: implemented\n    linked_policies:\n      - POL-INF-001\n    linked_features:\n      - FEAT-INF-SHARED\n    tests:\n      rust:\n        - file: tests/shared_requirement.rs\n          symbols:\n            - shared_requirement_test\n",
+    )
+    .expect("shared requirement doc");
+    fs::write(
+        root.join("docs/syu/requirements/core/ambiguous-a.yaml"),
+        "category: Core Requirements\nprefix: REQ-INF\nrequirements:\n  - id: REQ-INF-AMBIG-A\n    title: Infer one side of an ambiguous diff\n    description: One feature owner should not claim the entire file when another feature also owns it.\n    priority: medium\n    status: implemented\n    linked_policies:\n      - POL-INF-001\n    linked_features:\n      - FEAT-INF-AMBIG-A\n    tests:\n      rust:\n        - file: tests/ambiguous_a_requirement.rs\n          symbols:\n            - ambiguous_a_requirement_test\n",
+    )
+    .expect("ambiguous requirement A doc");
+    fs::write(
+        root.join("docs/syu/requirements/core/ambiguous-b.yaml"),
+        "category: Core Requirements\nprefix: REQ-INF\nrequirements:\n  - id: REQ-INF-AMBIG-B\n    title: Infer the other side of an ambiguous diff\n    description: Another feature owner should keep the plan low confidence when the file is shared.\n    priority: medium\n    status: implemented\n    linked_policies:\n      - POL-INF-001\n    linked_features:\n      - FEAT-INF-AMBIG-B\n    tests:\n      rust:\n        - file: tests/ambiguous_b_requirement.rs\n          symbols:\n            - ambiguous_b_requirement_test\n",
+    )
+    .expect("ambiguous requirement B doc");
+
+    fs::write(
+        root.join("docs/syu/features/features.yaml"),
+        "version: 1\nupdated: \"2026-05\"\nfiles:\n  - kind: inference\n    file: core/clean.yaml\n  - kind: inference\n    file: core/shared.yaml\n  - kind: inference\n    file: core/ambiguous-a.yaml\n  - kind: inference\n    file: core/ambiguous-b.yaml\n",
+    )
+    .expect("feature registry");
+    fs::write(
+        root.join("docs/syu/features/core/clean.yaml"),
+        "category: Core Features\nversion: 1\nfeatures:\n  - id: FEAT-INF-CLEAN\n    title: Clean single-feature inference\n    summary: One feature implementation should infer cleanly.\n    status: implemented\n    linked_requirements:\n      - REQ-INF-CLEAN\n    implementations:\n      rust:\n        - file: src/clean.rs\n          symbols:\n            - clean_feature\n",
+    )
+    .expect("clean feature doc");
+    fs::write(
+        root.join("docs/syu/features/core/shared.yaml"),
+        "category: Core Features\nversion: 1\nfeatures:\n  - id: FEAT-INF-SHARED\n    title: Shared utility inference\n    summary: A shared utility file should still infer a provisional plan, but with lower confidence than a single-purpose feature.\n    status: implemented\n    linked_requirements:\n      - REQ-INF-SHARED\n    implementations:\n      rust:\n        - file: src/shared_util.rs\n          symbols:\n            - shared_helper\n",
+    )
+    .expect("shared feature doc");
+    fs::write(
+        root.join("docs/syu/features/core/ambiguous-a.yaml"),
+        "category: Core Features\nversion: 1\nfeatures:\n  - id: FEAT-INF-AMBIG-A\n    title: Ambiguous owner A\n    summary: The same file is also owned by another feature.\n    status: implemented\n    linked_requirements:\n      - REQ-INF-AMBIG-A\n    implementations:\n      rust:\n        - file: src/ambiguous.rs\n          symbols:\n            - ambiguous_feature_a\n",
+    )
+    .expect("ambiguous feature A doc");
+    fs::write(
+        root.join("docs/syu/features/core/ambiguous-b.yaml"),
+        "category: Core Features\nversion: 1\nfeatures:\n  - id: FEAT-INF-AMBIG-B\n    title: Ambiguous owner B\n    summary: The same file is also owned by another feature.\n    status: implemented\n    linked_requirements:\n      - REQ-INF-AMBIG-B\n    implementations:\n      rust:\n        - file: src/ambiguous.rs\n          symbols:\n            - ambiguous_feature_b\n",
+    )
+    .expect("ambiguous feature B doc");
+
+    fs::write(root.join("src/clean.rs"), "pub fn clean_feature() {}\n").expect("clean source");
+    fs::write(
+        root.join("src/shared_util.rs"),
+        "pub fn shared_helper() {}\n",
+    )
+    .expect("shared utility source");
+    fs::write(
+        root.join("src/ambiguous.rs"),
+        "pub fn ambiguous_feature_a() {}\npub fn ambiguous_feature_b() {}\n",
+    )
+    .expect("ambiguous source");
+
+    fs::write(
+        root.join("tests/clean_requirement.rs"),
+        "fn clean_requirement_test() {}\n",
+    )
+    .expect("clean test");
+    fs::write(
+        root.join("tests/shared_requirement.rs"),
+        "fn shared_requirement_test() {}\n",
+    )
+    .expect("shared test");
+    fs::write(
+        root.join("tests/ambiguous_a_requirement.rs"),
+        "fn ambiguous_a_requirement_test() {}\n",
+    )
+    .expect("ambiguous A test");
+    fs::write(
+        root.join("tests/ambiguous_b_requirement.rs"),
+        "fn ambiguous_b_requirement_test() {}\n",
+    )
+    .expect("ambiguous B test");
+
+    init_git_repo(root);
+    commit_all(root, "base");
+    let base = git_output(root, &["rev-parse", "HEAD"]);
+    git(root, &["update-ref", "refs/remotes/origin/main", &base]);
+}
+
+fn run_task_infer(root: &Path, extra_args: &[&str]) -> std::process::Output {
+    let mut command = std::process::Command::cargo_bin("syu").expect("binary should build");
+    command.current_dir(root);
+    let mut args = vec!["task", "infer", "--range", "origin/main...HEAD"];
+    args.extend_from_slice(extra_args);
+    command.args(args);
+    command.output().expect("command should run")
 }
 
 #[test]
@@ -596,6 +716,162 @@ fn task_scaffold_rejects_delete_requests() {
     assert!(!output.status.success(), "delete scaffold should fail");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("only supports request artifacts"));
+}
+
+#[test]
+fn task_infer_reports_high_confidence_for_a_clean_single_feature_diff() {
+    let tempdir = tempdir().expect("tempdir");
+    write_infer_workspace(tempdir.path());
+
+    fs::write(
+        tempdir.path().join("src/clean.rs"),
+        "pub fn clean_feature() {}\n// cleaned diff\n",
+    )
+    .expect("updated clean source");
+    commit_all(tempdir.path(), "update clean feature");
+
+    let output = run_task_infer(tempdir.path(), &[]);
+    assert!(output.status.success(), "task infer should succeed");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("mode: diff_inferred"));
+    assert!(stdout.contains("confidence: high"));
+    assert!(stdout.contains("inferred: true"));
+    assert!(stdout.contains("changed_files"));
+    assert!(stdout.contains("src/clean.rs"));
+    assert!(stdout.contains("FEAT-INF-CLEAN"));
+    assert!(stdout.contains("REQ-INF-CLEAN"));
+}
+
+#[test]
+fn task_infer_reports_medium_confidence_for_shared_utility_diffs() {
+    let tempdir = tempdir().expect("tempdir");
+    write_infer_workspace(tempdir.path());
+
+    fs::write(
+        tempdir.path().join("src/shared_util.rs"),
+        "pub fn shared_helper() {}\n// shared diff\n",
+    )
+    .expect("updated shared utility source");
+    commit_all(tempdir.path(), "update shared utility");
+
+    let output = run_task_infer(tempdir.path(), &[]);
+    assert!(output.status.success(), "task infer should succeed");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("confidence: medium"));
+    assert!(stdout.contains("src/shared_util.rs"));
+    assert!(stdout.contains("FEAT-INF-SHARED"));
+}
+
+#[test]
+fn task_infer_reports_low_confidence_for_unmapped_files() {
+    let tempdir = tempdir().expect("tempdir");
+    write_infer_workspace(tempdir.path());
+
+    fs::write(tempdir.path().join("notes/random.txt"), "unmapped change\n").expect("note");
+    commit_all(tempdir.path(), "add unmapped file");
+
+    let output = run_task_infer(tempdir.path(), &["--format", "json"]);
+    assert!(output.status.success(), "task infer should succeed");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("\"confidence\": \"low\""));
+    assert!(stdout.contains("\"changed_files\": ["));
+    assert!(stdout.contains("notes/random.txt"));
+    assert!(stdout.contains("no trace ownership was found"));
+}
+
+#[test]
+fn task_infer_reports_low_confidence_for_ambiguous_ownership() {
+    let tempdir = tempdir().expect("tempdir");
+    write_infer_workspace(tempdir.path());
+
+    fs::write(
+        tempdir.path().join("src/ambiguous.rs"),
+        "pub fn ambiguous_feature_a() {}\npub fn ambiguous_feature_b() {}\n// ambiguous diff\n",
+    )
+    .expect("updated ambiguous source");
+    commit_all(tempdir.path(), "update ambiguous file");
+
+    let output = run_task_infer(tempdir.path(), &["--format", "json"]);
+    assert!(output.status.success(), "task infer should succeed");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("\"confidence\": \"low\""));
+    assert!(stdout.contains("\"FEAT-INF-AMBIG-A\""));
+    assert!(stdout.contains("\"FEAT-INF-AMBIG-B\""));
+    assert!(stdout.contains("ambiguous ownership"));
+}
+
+#[test]
+fn task_infer_reports_medium_confidence_for_spec_only_and_mixed_diffs() {
+    let tempdir = tempdir().expect("tempdir");
+    write_infer_workspace(tempdir.path());
+
+    fs::write(
+        tempdir.path().join("docs/syu/features/core/clean.yaml"),
+        "category: Core Features\nversion: 1\nfeatures:\n  - id: FEAT-INF-CLEAN\n    title: Clean single-feature inference\n    summary: Updated feature spec only.\n    status: implemented\n    linked_requirements:\n      - REQ-INF-CLEAN\n    implementations:\n      rust:\n        - file: src/clean.rs\n          symbols:\n            - clean_feature\n",
+    )
+    .expect("updated clean feature doc");
+    commit_all(tempdir.path(), "update spec only");
+
+    let spec_only = run_task_infer(tempdir.path(), &[]);
+    assert!(spec_only.status.success(), "task infer should succeed");
+    let spec_stdout = String::from_utf8_lossy(&spec_only.stdout);
+    assert!(spec_stdout.contains("confidence: medium"));
+    assert!(spec_stdout.contains("docs/syu/features/core/clean.yaml"));
+
+    fs::write(
+        tempdir.path().join("src/clean.rs"),
+        "pub fn clean_feature() {}\n// mixed diff\n",
+    )
+    .expect("updated clean source");
+    commit_all(tempdir.path(), "update implementation too");
+
+    let mixed = run_task_infer(tempdir.path(), &[]);
+    assert!(mixed.status.success(), "task infer should succeed");
+    let mixed_stdout = String::from_utf8_lossy(&mixed.stdout);
+    assert!(mixed_stdout.contains("confidence: medium"));
+    assert!(mixed_stdout.contains("docs/syu/features/core/clean.yaml"));
+    assert!(mixed_stdout.contains("src/clean.rs"));
+}
+
+#[test]
+fn task_infer_is_deterministic_for_json_and_yaml_outputs() {
+    let tempdir = tempdir().expect("tempdir");
+    write_infer_workspace(tempdir.path());
+
+    fs::write(
+        tempdir.path().join("src/clean.rs"),
+        "pub fn clean_feature() {}\n// determinism diff\n",
+    )
+    .expect("updated clean source");
+    commit_all(tempdir.path(), "update clean feature for determinism");
+
+    let json_one = run_task_infer(tempdir.path(), &["--format", "json"]);
+    let json_two = run_task_infer(tempdir.path(), &["--format", "json"]);
+    assert!(json_one.status.success(), "first JSON infer should succeed");
+    assert!(
+        json_two.status.success(),
+        "second JSON infer should succeed"
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&json_one.stdout),
+        String::from_utf8_lossy(&json_two.stdout)
+    );
+
+    let yaml_one = run_task_infer(tempdir.path(), &["--format", "yaml"]);
+    let yaml_two = run_task_infer(tempdir.path(), &["--format", "yaml"]);
+    assert!(yaml_one.status.success(), "first YAML infer should succeed");
+    assert!(
+        yaml_two.status.success(),
+        "second YAML infer should succeed"
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&yaml_one.stdout),
+        String::from_utf8_lossy(&yaml_two.stdout)
+    );
 }
 
 #[test]
