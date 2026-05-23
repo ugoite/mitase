@@ -16,6 +16,7 @@ run_quality_gates() {
   cargo fmt --all --check
   cargo clippy --all-targets --all-features -- -D warnings
   cargo run -- validate .
+  bash scripts/ci/check-generated-docs-freshness.sh
 
   case "$mode" in
     fast)
@@ -24,7 +25,6 @@ run_quality_gates() {
       ;;
     full)
       cargo test
-      bash scripts/ci/check-generated-docs-freshness.sh
 
       mkdir -p target/quality
       cargo run -- report . --output target/quality/syu-report.md >/dev/null

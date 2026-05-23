@@ -77,9 +77,8 @@ dependency installs, and Playwright browser readiness for this checkout.
    `scripts/ci/quality-gates.sh fast` keeps the local pre-push path short and
    skips the embedded browser-app build, so it does not need `app/node_modules`
    ready. Use `scripts/ci/validate-app.sh` when you want the browser-specific
-   freshness checks.
-   The full gate also checks that the committed `docs/generated/` artifacts
-   are fresh and generates the repository report:
+   freshness checks. It also catches stale `docs/generated/` artifacts before
+   you queue a push. The full gate adds the repository report:
 
    ```bash
    scripts/ci/quality-gates.sh full
