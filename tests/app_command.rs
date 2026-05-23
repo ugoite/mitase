@@ -63,6 +63,7 @@ fn clean_shutdown(status: &std::process::ExitStatus) -> bool {
     // exit even after the server has already served requests successfully.
     status.success()
         || status.code() == Some(1)
+        || status.code() == Some(2)
         || status.code() == Some(130)
         || status.code() == Some(101)
         || {
