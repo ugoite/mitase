@@ -744,6 +744,21 @@ fn task_infer_reports_high_confidence_for_a_clean_single_feature_diff() {
 }
 
 #[test]
+fn task_infer_rejects_empty_diffs() {
+    let tempdir = tempdir().expect("tempdir");
+    write_infer_workspace(tempdir.path());
+
+    let output = run_task_infer(tempdir.path(), &[]);
+    assert!(
+        !output.status.success(),
+        "task infer should fail for empty diffs"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("does not include any changed files"));
+}
+
+#[test]
 fn task_infer_reports_medium_confidence_for_shared_utility_diffs() {
     let tempdir = tempdir().expect("tempdir");
     write_infer_workspace(tempdir.path());
@@ -762,6 +777,41 @@ fn task_infer_reports_medium_confidence_for_shared_utility_diffs() {
     assert!(stdout.contains("confidence: medium"));
     assert!(stdout.contains("src/shared_util.rs"));
     assert!(stdout.contains("FEAT-INF-SHARED"));
+}
+
+#[test]
+fn task_infer_keeps_spec_updates_optional_for_medium_confidence_planned_features() {
+    let tempdir = tempdir().expect("tempdir");
+    write_infer_workspace(tempdir.path());
+
+    fs::write(
+        tempdir.path().join("docs/syu/features/core/shared.yaml"),
+        "category: Core Features\nversion: 1\nfeatures:\n  - id: FEAT-INF-SHARED\n    title: Shared utility inference\n    summary: A shared utility file should still infer a provisional plan, but with lower confidence than a single-purpose feature.\n    status: planned\n    linked_requirements:\n      - REQ-INF-SHARED\n    implementations:\n      rust:\n        - file: src/shared_util.rs\n          symbols:\n            - shared_helper\n",
+    )
+    .expect("updated shared feature doc");
+    commit_all(tempdir.path(), "plan shared utility feature");
+    let planned_base = git_output(tempdir.path(), &["rev-parse", "HEAD"]);
+    git(
+        tempdir.path(),
+        &["update-ref", "refs/remotes/origin/main", &planned_base],
+    );
+
+    fs::write(
+        tempdir.path().join("src/shared_util.rs"),
+        "pub fn shared_helper() {}\n// shared diff\n",
+    )
+    .expect("updated shared utility source");
+    commit_all(tempdir.path(), "update planned shared utility");
+
+    let output = run_task_infer(tempdir.path(), &[]);
+    assert!(output.status.success(), "task infer should succeed");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("confidence: medium"));
+    assert!(
+        stdout.contains("spec_updates_required: false"),
+        "stdout was:\n{stdout}"
+    );
 }
 
 #[test]

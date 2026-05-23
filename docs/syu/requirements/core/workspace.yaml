@@ -741,6 +741,8 @@ requirements:
             - task_infer_reports_low_confidence_for_ambiguous_ownership
             - task_infer_reports_medium_confidence_for_spec_only_and_mixed_diffs
             - task_infer_is_deterministic_for_json_and_yaml_outputs
+            - task_infer_rejects_empty_diffs
+            - task_infer_keeps_spec_updates_optional_for_medium_confidence_planned_features
             - goal_plan_artifact_supports_request_driven_and_diff_inferred_sources
             - goal_plan_artifact_requires_the_goal_plan_marker
             - goal_plan_format_is_documented_as_temporary

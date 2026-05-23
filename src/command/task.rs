@@ -798,6 +798,9 @@ pub fn run_task_infer_command(args: &TaskInferArgs) -> Result<i32> {
     }
 
     let changed_files = resolve_git_range_changed_files(&workspace.root, range)?;
+    if changed_files.is_empty() {
+        bail!("--range `{range}` does not include any changed files");
+    }
     let plan =
         build_diff_inferred_goal_plan(&workspace, range, &changed_files, args.output.as_deref())?;
     let rendered = render_goal_plan_output("range", range, &plan, args.format)?;
@@ -1133,7 +1136,7 @@ fn build_diff_inferred_goal_plan(
     let inference = infer_diff_plan(workspace, &lookup, range, changed_files)?;
     let persistent_items = collect_task_plan_persistent_items(&lookup, &inference.scope)?;
     let spec_update_reasons = determine_spec_update_reasons(&inference.scope, &persistent_items);
-    let spec_updates_required = !spec_update_reasons.is_empty() || inference.confidence != "high";
+    let spec_updates_required = !spec_update_reasons.is_empty();
     let test_plan = collect_task_plan_tests(&lookup, &persistent_items, &inference.scope)?;
     let mut test_plan = test_plan;
     test_plan.selection_mode = "affected".to_string();
