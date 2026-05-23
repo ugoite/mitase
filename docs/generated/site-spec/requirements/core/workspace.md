@@ -639,6 +639,7 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
           - dispatch
           - run_dispatch
           - dispatches_task_subcommands_without_rewriting_them
+          - dispatches_task_check_subcommands_without_rewriting_them
       - **file**: tests/task_command.rs
         - **symbols**:
           - task_scaffold_prints_text_preview_for_new_planned_updates
@@ -685,6 +686,7 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
           - dispatch
           - run_dispatch
           - dispatches_task_subcommands_without_rewriting_them
+          - dispatches_task_check_subcommands_without_rewriting_them
       - **file**: tests/task_command.rs
         - **symbols**:
           - task_scope_prints_text_output_with_candidate_requirements_and_flags
@@ -781,6 +783,69 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       - **file**: docs/guide/goal-plan-format.md
         - **symbols**:
           - syu.goal_plan
+- **id**: REQ-CORE-032
+  - **title**: Validate temporary Goal Plans against the current spec graph and git range
+  - **description**:
+    - |
+      The CLI MUST provide a `task check` command that validates a temporary
+      Goal Plan against the changed files, linked spec IDs, required tests, and
+      completion commands before review or merge. The command SHOULD report the
+      validation status in text or JSON, SHOULD reject required test references
+      that point outside the workspace, and SHOULD reject required test symbols
+      that are empty or only appear in comments or string literals. Goal Plan
+      checks MUST keep their validation requirements separate from the generated
+      Goal Plan artifact so the plan can be authored before the conformance check
+      runs.
+  - **priority**: medium
+  - **status**: implemented
+  - **linked_policies**:
+    - POL-001
+    - POL-004
+  - **linked_features**:
+    - FEAT-TASK-005
+  - **tests**:
+    - **rust**:
+      - **file**: src/command/task.rs
+        - **symbols**:
+          - GoalPlanArtifact
+          - load_goal_plan_artifact
+          - run_task_check_command
+          - check_goal_plan
+          - validate_goal_plan_spec_ids
+          - validate_goal_plan_required_tests
+          - validate_goal_plan_test_reference
+          - resolve_goal_plan_test_path
+          - goal_plan_required_test_symbol_exists
+      - **file**: src/cli.rs
+        - **symbols**:
+          - TaskArgs
+          - TaskCheckArgs
+      - **file**: src/lib.rs
+        - **symbols**:
+          - dispatch
+          - run_dispatch
+          - dispatches_task_subcommands_without_rewriting_them
+      - **file**: tests/task_command.rs
+        - **symbols**:
+          - task_check_reports_pass_fail_results_for_goal_plans
+          - task_check_prints_json_output_for_goal_plans
+          - task_check_fails_for_out_of_scope_changed_files
+          - task_check_reports_unknown_linked_requirement_and_feature_ids
+          - task_check_reports_missing_required_test_files
+          - task_check_reports_missing_required_test_symbols
+          - task_check_rejects_empty_required_test_symbols
+          - task_check_rejects_absolute_required_test_files_outside_workspace
+          - task_check_rejects_malformed_goal_plans
+      - **file**: tests/help_command.rs
+        - **symbols**:
+          - task_check_help_mentions_goal_plans_and_json_output
+    - **markdown**:
+      - **file**: docs/guide/goal-plan-format.md
+        - **symbols**:
+          - syu.goal_plan
+      - **file**: docs/guide/command-card.md
+        - **symbols**:
+          - syu task check goal-plan.yaml --range origin/main...HEAD
 
 ## Source YAML
 
@@ -1395,6 +1460,7 @@ requirements:
             - dispatch
             - run_dispatch
             - dispatches_task_subcommands_without_rewriting_them
+            - dispatches_task_check_subcommands_without_rewriting_them
         - file: tests/task_command.rs
           symbols:
             - task_scaffold_prints_text_preview_for_new_planned_updates
@@ -1440,6 +1506,7 @@ requirements:
             - dispatch
             - run_dispatch
             - dispatches_task_subcommands_without_rewriting_them
+            - dispatches_task_check_subcommands_without_rewriting_them
         - file: tests/task_command.rs
           symbols:
             - task_scope_prints_text_output_with_candidate_requirements_and_flags
@@ -1535,4 +1602,66 @@ requirements:
         - file: docs/guide/goal-plan-format.md
           symbols:
             - syu.goal_plan
+  - id: REQ-CORE-032
+    title: Validate temporary Goal Plans against the current spec graph and git range
+    description: |
+      The CLI MUST provide a `task check` command that validates a temporary
+      Goal Plan against the changed files, linked spec IDs, required tests, and
+      completion commands before review or merge. The command SHOULD report the
+      validation status in text or JSON, SHOULD reject required test references
+      that point outside the workspace, and SHOULD reject required test symbols
+      that are empty or only appear in comments or string literals. Goal Plan
+      checks MUST keep their validation requirements separate from the generated
+      Goal Plan artifact so the plan can be authored before the conformance check
+      runs.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-001
+      - POL-004
+    linked_features:
+      - FEAT-TASK-005
+    tests:
+      rust:
+        - file: src/command/task.rs
+          symbols:
+            - GoalPlanArtifact
+            - load_goal_plan_artifact
+            - run_task_check_command
+            - check_goal_plan
+            - validate_goal_plan_spec_ids
+            - validate_goal_plan_required_tests
+            - validate_goal_plan_test_reference
+            - resolve_goal_plan_test_path
+            - goal_plan_required_test_symbol_exists
+        - file: src/cli.rs
+          symbols:
+            - TaskArgs
+            - TaskCheckArgs
+        - file: src/lib.rs
+          symbols:
+            - dispatch
+            - run_dispatch
+            - dispatches_task_subcommands_without_rewriting_them
+        - file: tests/task_command.rs
+          symbols:
+            - task_check_reports_pass_fail_results_for_goal_plans
+            - task_check_prints_json_output_for_goal_plans
+            - task_check_fails_for_out_of_scope_changed_files
+            - task_check_reports_unknown_linked_requirement_and_feature_ids
+            - task_check_reports_missing_required_test_files
+            - task_check_reports_missing_required_test_symbols
+            - task_check_rejects_empty_required_test_symbols
+            - task_check_rejects_absolute_required_test_files_outside_workspace
+            - task_check_rejects_malformed_goal_plans
+        - file: tests/help_command.rs
+          symbols:
+            - task_check_help_mentions_goal_plans_and_json_output
+      markdown:
+        - file: docs/guide/goal-plan-format.md
+          symbols:
+            - syu.goal_plan
+        - file: docs/guide/command-card.md
+          symbols:
+            - syu task check goal-plan.yaml --range origin/main...HEAD
 ```
