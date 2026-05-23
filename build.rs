@@ -35,18 +35,22 @@ fn main() {
 
     emit_build_version();
     println!("cargo:rerun-if-env-changed=SYU_SKIP_BROWSER_APP_BUILD");
-    fs::create_dir_all(&out_dir).expect("browser app dist directory should be creatable");
-
     let skip_browser_app_build = env::var_os("SYU_SKIP_BROWSER_APP_BUILD").is_some();
-    if !skip_browser_app_build
-        && let Err(error) = required_npm_version(&app_dir).and_then(|required_npm| {
+    if skip_browser_app_build {
+        if let Err(error) = write_skip_browser_bundle(&app_dir, &out_dir) {
+            panic!("{error}");
+        }
+    } else {
+        fs::create_dir_all(&out_dir).expect("browser app dist directory should be creatable");
+
+        if let Err(error) = required_npm_version(&app_dir).and_then(|required_npm| {
             ensure_pinned_npm_ready(&manifest_dir, &app_dir)
                 .and_then(|_| ensure_app_dependencies(&app_dir, &required_npm))
                 .and_then(|_| rebuild_browser_wasm_bindings(&manifest_dir, &app_dir))
                 .and_then(|_| build_browser_bundle(&app_dir, &out_dir))
-        })
-    {
-        panic!("{error}");
+        }) {
+            panic!("{error}");
+        }
     }
 }
 
@@ -300,6 +304,68 @@ fn remove_dir_if_exists(path: &Path, description: &str) -> Result<(), String> {
     }
 
     fs::remove_dir_all(path).map_err(|error| format!("failed to clear {description}: {error}"))
+}
+
+fn write_skip_browser_bundle(app_dir: &Path, out_dir: &Path) -> Result<(), String> {
+    remove_dir_if_exists(out_dir, "generated browser bundle")?;
+    fs::create_dir_all(out_dir)
+        .map_err(|error| format!("failed to create browser bundle output directory: {error}"))?;
+
+    let index = out_dir.join("index.html");
+    fs::write(
+        &index,
+        concat!(
+            "<!doctype html>\n",
+            "<html lang=\"en\">\n",
+            "  <head>\n",
+            "    <meta charset=\"UTF-8\" />\n",
+            "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n",
+            "    <title>syu app</title>\n",
+            "    <link rel=\"icon\" type=\"image/svg+xml\" href=\"/favicon.svg\" />\n",
+            "  </head>\n",
+            "  <body>\n",
+            "    <div id=\"root\"></div>\n",
+            "  </body>\n",
+            "</html>\n",
+        ),
+    )
+    .map_err(|error| format!("failed to write {}: {error}", index.display()))?;
+
+    let public_dir = app_dir.join("public");
+    if public_dir.is_dir() {
+        copy_dir_recursive(&public_dir, out_dir)?;
+    }
+
+    Ok(())
+}
+
+fn copy_dir_recursive(source: &Path, destination: &Path) -> Result<(), String> {
+    fs::create_dir_all(destination)
+        .map_err(|error| format!("failed to create {}: {error}", destination.display()))?;
+
+    for entry in fs::read_dir(source)
+        .map_err(|error| format!("failed to read {}: {error}", source.display()))?
+    {
+        let entry =
+            entry.map_err(|error| format!("failed to read {} entry: {error}", source.display()))?;
+        let entry_type = entry
+            .file_type()
+            .map_err(|error| format!("failed to inspect {}: {error}", entry.path().display()))?;
+        let destination_path = destination.join(entry.file_name());
+        if entry_type.is_dir() {
+            copy_dir_recursive(&entry.path(), &destination_path)?;
+        } else {
+            fs::copy(entry.path(), &destination_path).map_err(|error| {
+                format!(
+                    "failed to copy {} to {}: {error}",
+                    entry.path().display(),
+                    destination_path.display()
+                )
+            })?;
+        }
+    }
+
+    Ok(())
 }
 
 fn rebuild_browser_wasm_bindings(manifest_dir: &Path, app_dir: &Path) -> Result<(), String> {

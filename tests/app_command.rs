@@ -200,10 +200,6 @@ fn wait_for_output_fragment(path: &Path, fragment: &str) {
 // REQ-CORE-017
 #[test]
 fn app_command_serves_browser_ui_and_payload() {
-    if std::env::var_os("SYU_SKIP_BROWSER_APP_BUILD").is_some() {
-        return;
-    }
-
     let _guard = app_command_test_lock()
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());

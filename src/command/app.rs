@@ -2835,10 +2835,6 @@ mod tests {
 
     #[tokio::test]
     async fn static_routes_serve_embedded_app() {
-        if std::env::var_os("SYU_SKIP_BROWSER_APP_BUILD").is_some() {
-            return;
-        }
-
         let router = app_router(app_state(&fixture_root("passing")));
 
         let root = router
