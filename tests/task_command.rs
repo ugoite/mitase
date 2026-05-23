@@ -3,6 +3,7 @@
 // REQ-CORE-030
 // REQ-CORE-031
 // REQ-CORE-032
+// REQ-CORE-033
 
 use std::{fs, path::Path, process::Command};
 
@@ -56,8 +57,13 @@ fn write_workspace(root: &std::path::Path) {
     )
     .expect("check requirement doc");
     fs::write(
+        root.join("docs/syu/requirements/core/test-select.yaml"),
+        "category: Core Workspace\nprefix: REQ-CORE\nrequirements:\n  - id: REQ-CORE-033\n    title: Select tests from a Goal Plan before CI runs\n    description: The task test-select command should select required, suggested, and linked tests from a Goal Plan before scoped coverage begins.\n    priority: medium\n    status: planned\n    linked_policies:\n      - POL-001\n    linked_features:\n      - FEAT-TASK-006\n    tests:\n      rust:\n        - file: tests/task_selection.rs\n          symbols:\n            - task_test_select_uses_required_goal_plan_tests\n",
+    )
+    .expect("test-select requirement doc");
+    fs::write(
         root.join("docs/syu/features/features.yaml"),
-        "version: 1\nupdated: \"2026-05\"\nfiles:\n  - kind: task\n    file: core/task.yaml\n  - kind: task\n    file: core/scaffold.yaml\n  - kind: task\n    file: core/scope.yaml\n  - kind: task\n    file: core/plan.yaml\n",
+        "version: 1\nupdated: \"2026-05\"\nfiles:\n  - kind: task\n    file: core/task.yaml\n  - kind: task\n    file: core/scaffold.yaml\n  - kind: task\n    file: core/scope.yaml\n  - kind: task\n    file: core/plan.yaml\n  - kind: task\n    file: core/test-select.yaml\n",
     )
     .expect("feature registry");
     fs::write(
@@ -70,6 +76,11 @@ fn write_workspace(root: &std::path::Path) {
         "category: Core Workspace\nversion: 1\nfeatures:\n  - id: FEAT-TASK-004\n    title: Goal Plan generation\n    summary: Turn scoped request artifacts into temporary Goal Plans with implementation, test, coverage, and completion sections outside the persistent spec tree.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-031\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_plan_command\n",
     )
     .expect("plan feature doc");
+    fs::write(
+        root.join("docs/syu/features/core/test-select.yaml"),
+        "category: Core Workspace\nversion: 1\nfeatures:\n  - id: FEAT-TASK-006\n    title: Goal Plan test selection\n    summary: Turn Goal Plan test declarations into justified shell commands that CI can run before scoped coverage.\n    status: planned\n    linked_requirements:\n      - REQ-CORE-033\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_test_select_command\n            - build_task_test_selection\n        - file: src/cli.rs\n          symbols:\n            - TaskArgs\n            - TaskTestSelectArgs\n",
+    )
+    .expect("test-select feature doc");
     fs::write(
         root.join("docs/syu/features/core/scaffold.yaml"),
         "category: Core Workspace\nversion: 1\nfeatures:\n  - id: FEAT-TASK-002\n    title: Planned task scaffold preview\n    summary: Preview reviewable planned requirement and feature updates that follow the existing add and registry conventions.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-029\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_scaffold_command\n",
@@ -148,6 +159,113 @@ fn goal_plan_yaml(
     format!(
         "version: 1\nkind: syu.goal_plan\nsource:\n  mode: diff_inferred\n  range: origin/main...HEAD\n  confidence: {confidence}\n  evidence:\n    changed_files:\n      - src/command/task.rs\n    traced_requirements:\n      - {linked_requirement}\n    traced_features:\n      - {linked_feature}\n    traced_policies:\n      - POL-001\n    traced_philosophies:\n      - PHIL-001\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\n  inferred: true\n  non_goals:\n    - Add persistent task specs under spec.root\nspec_mapping:\n  persistent_items:\n    philosophies:\n      - PHIL-001\n    policies:\n      - POL-001\n    requirements:\n      - {linked_requirement}\n    features:\n      - {linked_feature}\n  spec_updates:\n    required: false\n    expected_updates: []\nimplementation_plan:\n  scope:\n    include:\n      - src/command/task.rs\n    exclude:\n      - docs/syu/**\n  steps:\n    - add a Goal Plan model\ntest_plan:\n  selection_mode: affected\n  required_tests:\n    rust:\n      - file: {test_file}\n        symbols:\n          - {test_symbol}\n  suggested_tests: {{}}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include:\n    - src/command/task.rs\n  exclude: []\ncompletion:\n  must_pass:\n    - syu validate .\n"
     )
+}
+
+fn task_test_selection_goal_plan_yaml(
+    selection_mode: &str,
+    source_confidence: Option<&str>,
+    required_tests: &[(&str, &str, &str)],
+    suggested_tests: &[(&str, &str, &str)],
+    linked_requirements: &[&str],
+    linked_features: &[&str],
+    source_changed_files: &[&str],
+) -> String {
+    let mut yaml = String::new();
+    use std::fmt::Write as _;
+
+    writeln!(&mut yaml, "version: 1").expect("write goal plan");
+    writeln!(&mut yaml, "kind: syu.goal_plan").expect("write goal plan");
+    writeln!(&mut yaml, "source:").expect("write goal plan");
+    writeln!(&mut yaml, "  mode: request_driven").expect("write goal plan");
+    if let Some(confidence) = source_confidence {
+        writeln!(&mut yaml, "  confidence: {confidence}").expect("write goal plan");
+    }
+    if !source_changed_files.is_empty() {
+        writeln!(&mut yaml, "  evidence:").expect("write goal plan");
+        writeln!(&mut yaml, "    changed_files:").expect("write goal plan");
+        for file in source_changed_files {
+            writeln!(&mut yaml, "      - {file}").expect("write goal plan");
+        }
+    }
+    writeln!(&mut yaml, "goal:").expect("write goal plan");
+    writeln!(&mut yaml, "  id: GOAL-TEST-SELECT-001").expect("write goal plan");
+    writeln!(&mut yaml, "  title: Select minimal tests from Goal Plans").expect("write goal plan");
+    writeln!(
+        &mut yaml,
+        "  statement: Turn Goal Plan test declarations into justified shell commands for CI."
+    )
+    .expect("write goal plan");
+    writeln!(&mut yaml, "  non_goals:").expect("write goal plan");
+    writeln!(&mut yaml, "    - Execute tests directly").expect("write goal plan");
+    writeln!(&mut yaml, "spec_mapping:").expect("write goal plan");
+    writeln!(&mut yaml, "  persistent_items:").expect("write goal plan");
+    if linked_requirements.is_empty() {
+        writeln!(&mut yaml, "    requirements: []").expect("write goal plan");
+    } else {
+        writeln!(&mut yaml, "    requirements:").expect("write goal plan");
+        for requirement in linked_requirements {
+            writeln!(&mut yaml, "      - {requirement}").expect("write goal plan");
+        }
+    }
+    if linked_features.is_empty() {
+        writeln!(&mut yaml, "    features: []").expect("write goal plan");
+    } else {
+        writeln!(&mut yaml, "    features:").expect("write goal plan");
+        for feature in linked_features {
+            writeln!(&mut yaml, "      - {feature}").expect("write goal plan");
+        }
+    }
+    writeln!(&mut yaml, "  spec_updates:").expect("write goal plan");
+    writeln!(&mut yaml, "    required: false").expect("write goal plan");
+    writeln!(&mut yaml, "    expected_updates: []").expect("write goal plan");
+    writeln!(&mut yaml, "implementation_plan:").expect("write goal plan");
+    writeln!(&mut yaml, "  scope:").expect("write goal plan");
+    writeln!(&mut yaml, "    include:").expect("write goal plan");
+    writeln!(&mut yaml, "      - src/command/task.rs").expect("write goal plan");
+    writeln!(&mut yaml, "    exclude:").expect("write goal plan");
+    writeln!(&mut yaml, "      - docs/syu/**").expect("write goal plan");
+    writeln!(&mut yaml, "  steps:").expect("write goal plan");
+    writeln!(
+        &mut yaml,
+        "    - synthesize a Goal Plan based test selection"
+    )
+    .expect("write goal plan");
+    writeln!(&mut yaml, "test_plan:").expect("write goal plan");
+    writeln!(&mut yaml, "  selection_mode: {selection_mode}").expect("write goal plan");
+    if required_tests.is_empty() {
+        writeln!(&mut yaml, "  required_tests: {{}}").expect("write goal plan");
+    } else {
+        writeln!(&mut yaml, "  required_tests:").expect("write goal plan");
+        write_test_selection_map(&mut yaml, required_tests);
+    }
+    if suggested_tests.is_empty() {
+        writeln!(&mut yaml, "  suggested_tests: {{}}").expect("write goal plan");
+    } else {
+        writeln!(&mut yaml, "  suggested_tests:").expect("write goal plan");
+        write_test_selection_map(&mut yaml, suggested_tests);
+    }
+    writeln!(&mut yaml, "coverage:").expect("write goal plan");
+    writeln!(&mut yaml, "  mode: changed_lines").expect("write goal plan");
+    writeln!(&mut yaml, "  threshold: 100").expect("write goal plan");
+    writeln!(&mut yaml, "  include:").expect("write goal plan");
+    writeln!(&mut yaml, "    - src/command/task.rs").expect("write goal plan");
+    writeln!(&mut yaml, "  exclude: []").expect("write goal plan");
+    writeln!(&mut yaml, "completion:").expect("write goal plan");
+    writeln!(&mut yaml, "  must_pass:").expect("write goal plan");
+    writeln!(&mut yaml, "    - syu validate .").expect("write goal plan");
+
+    yaml
+}
+
+fn write_test_selection_map(yaml: &mut String, tests: &[(&str, &str, &str)]) {
+    use std::fmt::Write as _;
+
+    for (language, file, symbol) in tests {
+        writeln!(yaml, "    {language}:").expect("write goal plan");
+        writeln!(yaml, "      - file: {file}").expect("write goal plan");
+        writeln!(yaml, "        symbols:").expect("write goal plan");
+        writeln!(yaml, "          - {symbol}").expect("write goal plan");
+    }
 }
 
 fn prepare_git_workspace(root: &Path, test_symbol: &str) {
@@ -582,6 +700,253 @@ fn task_plan_warns_when_output_is_inside_spec_root() {
     assert!(stderr.contains("warning: task plan output"));
     assert!(stderr.contains("inside spec.root"));
     assert!(tempdir.path().join("docs/syu/plans/current.yaml").exists());
+}
+
+#[test]
+fn task_test_select_prints_required_test_commands() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_goal_plan(
+        &tempdir.path().join("goal-plan.yaml"),
+        &task_test_selection_goal_plan_yaml(
+            "minimal",
+            Some("high"),
+            &[(
+                "rust",
+                "tests/task_selection.rs",
+                "task_test_select_uses_required_goal_plan_tests",
+            )],
+            &[],
+            &[],
+            &[],
+            &[],
+        ),
+    );
+
+    let output = {
+        let mut command = Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "test-select", "goal-plan.yaml"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task test-select should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("selection mode: minimal"));
+    assert!(stdout.contains("escalation: goal"));
+    assert!(stdout.contains(
+        "cargo test --test task_selection task_test_select_uses_required_goal_plan_tests"
+    ));
+    assert!(stdout.contains("required by goal plan"));
+}
+
+#[test]
+fn task_test_select_prints_suggested_acceptance_checks() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_goal_plan(
+        &tempdir.path().join("goal-plan.yaml"),
+        &task_test_selection_goal_plan_yaml(
+            "minimal",
+            Some("high"),
+            &[],
+            &[(
+                "rust",
+                "tests/task_selection.rs",
+                "task_test_select_uses_suggested_goal_plan_tests",
+            )],
+            &[],
+            &[],
+            &[],
+        ),
+    );
+
+    let output = {
+        let mut command = Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "test-select", "goal-plan.yaml"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task test-select should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains(
+        "cargo test --test task_selection task_test_select_uses_suggested_goal_plan_tests"
+    ));
+    assert!(stdout.contains("suggested by goal plan"));
+}
+
+#[test]
+fn task_test_select_includes_linked_feature_tests() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_goal_plan(
+        &tempdir.path().join("goal-plan.yaml"),
+        &task_test_selection_goal_plan_yaml(
+            "minimal",
+            Some("high"),
+            &[],
+            &[],
+            &[],
+            &["FEAT-TASK-005"],
+            &[],
+        ),
+    );
+
+    let output = {
+        let mut command = Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "test-select", "goal-plan.yaml"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task test-select should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains(
+        "cargo test --test task_command task_check_reports_pass_fail_results_for_goal_plans"
+    ));
+    assert!(
+        stdout.contains("declared by linked feature FEAT-TASK-005 via requirement REQ-CORE-032")
+    );
+}
+
+#[test]
+fn task_test_select_broadens_to_file_level_commands_for_medium_confidence() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_goal_plan(
+        &tempdir.path().join("goal-plan.yaml"),
+        &task_test_selection_goal_plan_yaml(
+            "minimal",
+            Some("medium"),
+            &[(
+                "rust",
+                "tests/task_selection.rs",
+                "task_test_select_uses_required_goal_plan_tests",
+            )],
+            &[],
+            &[],
+            &[],
+            &[],
+        ),
+    );
+
+    let output = {
+        let mut command = Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "test-select", "goal-plan.yaml"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task test-select should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("escalation: affected"));
+    assert!(stdout.contains("cargo test --test task_selection"));
+    assert!(stdout.contains("broadened to file-level Rust test binary"));
+}
+
+#[test]
+fn task_test_select_falls_back_when_no_test_declarations_exist() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_goal_plan(
+        &tempdir.path().join("goal-plan.yaml"),
+        &task_test_selection_goal_plan_yaml("minimal", Some("high"), &[], &[], &[], &[], &[]),
+    );
+
+    let output = {
+        let mut command = Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "test-select", "goal-plan.yaml"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task test-select should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("escalation: full"));
+    assert!(stdout.contains("cargo test"));
+    assert!(stdout.contains("falls back to the full Rust test suite"));
+}
+
+#[test]
+fn task_test_select_rejects_unknown_language_adapters() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_goal_plan(
+        &tempdir.path().join("goal-plan.yaml"),
+        &task_test_selection_goal_plan_yaml(
+            "minimal",
+            Some("high"),
+            &[("brainfuck", "tests/task_selection.bf", "lolspeak")],
+            &[],
+            &[],
+            &[],
+            &[],
+        ),
+    );
+
+    let output = {
+        let mut command = Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "test-select", "goal-plan.yaml"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(!output.status.success(), "task test-select should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("unknown test language adapter `brainfuck`"));
+}
+
+#[test]
+fn task_test_select_is_deterministic_for_json_output() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_goal_plan(
+        &tempdir.path().join("goal-plan.yaml"),
+        &task_test_selection_goal_plan_yaml(
+            "minimal",
+            Some("high"),
+            &[(
+                "rust",
+                "tests/task_selection.rs",
+                "task_test_select_uses_required_goal_plan_tests",
+            )],
+            &[(
+                "rust",
+                "tests/task_selection.rs",
+                "task_test_select_uses_suggested_goal_plan_tests",
+            )],
+            &["REQ-CORE-033"],
+            &["FEAT-TASK-006"],
+            &[],
+        ),
+    );
+
+    let first = {
+        let mut command = Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "test-select", "goal-plan.yaml", "--format", "json"]);
+        command.output().expect("command should run")
+    };
+    let second = {
+        let mut command = Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "test-select", "goal-plan.yaml", "--format", "json"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(
+        first.status.success(),
+        "first task test-select should succeed"
+    );
+    assert!(
+        second.status.success(),
+        "second task test-select should succeed"
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&first.stdout),
+        String::from_utf8_lossy(&second.stdout)
+    );
 }
 
 #[test]

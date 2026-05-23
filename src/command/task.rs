@@ -22,6 +22,7 @@ use crate::{
     cli::{
         LookupKind, OutputFormat, TaskArgs, TaskCheckArgs, TaskClassifyArgs, TaskCommands,
         TaskInferArgs, TaskPlanArgs, TaskPlanFormat, TaskScaffoldArgs, TaskScopeArgs,
+        TaskTestSelectArgs,
     },
     coverage::normalize_relative_path,
     language::adapter_for_language,
@@ -321,6 +322,29 @@ struct JsonTaskCheckOutput {
 }
 
 #[derive(Debug, Serialize)]
+struct JsonTaskTestSelectOutput {
+    goal_id: String,
+    goal_title: String,
+    selection_mode: String,
+    commands: Vec<JsonTaskTestSelectCommand>,
+    escalation: JsonTaskTestSelectEscalation,
+    warnings: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonTaskTestSelectCommand {
+    language: String,
+    command: String,
+    reason: String,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonTaskTestSelectEscalation {
+    level: String,
+    reason: String,
+}
+
+#[derive(Debug, Serialize)]
 struct JsonTaskPlanOutput {
     version: u32,
     kind: String,
@@ -540,6 +564,36 @@ struct DiffInferenceOutcome {
 }
 
 #[derive(Debug)]
+struct TaskTestSelectionPlan {
+    goal_id: String,
+    goal_title: String,
+    selection_mode: String,
+    commands: Vec<TaskTestSelectionCommand>,
+    escalation: TaskTestSelectionEscalation,
+    warnings: Vec<String>,
+}
+
+#[derive(Debug)]
+struct TaskTestSelectionCommand {
+    language: String,
+    command: String,
+    reason: String,
+}
+
+#[derive(Debug)]
+struct TaskTestSelectionEscalation {
+    level: String,
+    reason: String,
+}
+
+#[derive(Debug, Default)]
+struct TaskTestSelectionEntry {
+    symbols: BTreeSet<String>,
+    reasons: BTreeSet<String>,
+    whole_file: bool,
+}
+
+#[derive(Debug)]
 struct ScaffoldUpdate {
     kind: ScaffoldUpdateKind,
     action: ScaffoldAction,
@@ -587,6 +641,7 @@ pub fn run_task_command(args: &TaskArgs) -> Result<i32> {
         TaskCommands::Classify(classify) => run_task_classify_command(classify),
         TaskCommands::Scope(scope) => run_task_scope_command(scope),
         TaskCommands::Plan(plan) => run_task_plan_command(plan),
+        TaskCommands::TestSelect(select) => run_task_test_select_command(select),
         TaskCommands::Infer(infer) => run_task_infer_command(infer),
         TaskCommands::Scaffold(scaffold) => run_task_scaffold_command(scaffold),
         TaskCommands::Check(check) => run_task_check_command(check),
@@ -790,6 +845,41 @@ pub fn run_task_plan_command(args: &TaskPlanArgs) -> Result<i32> {
     Ok(0)
 }
 
+pub fn run_task_test_select_command(args: &TaskTestSelectArgs) -> Result<i32> {
+    let workspace = load_workspace(&args.workspace)?;
+    let artifact = load_goal_plan_artifact(&args.plan)?;
+    let selection = build_task_test_selection(&workspace, &artifact)?;
+
+    match args.format {
+        OutputFormat::Text => print_task_test_selection_text_output(&args.plan, &selection),
+        OutputFormat::Json => println!(
+            "{}",
+            serde_json::to_string_pretty(&JsonTaskTestSelectOutput {
+                goal_id: selection.goal_id,
+                goal_title: selection.goal_title,
+                selection_mode: selection.selection_mode,
+                commands: selection
+                    .commands
+                    .into_iter()
+                    .map(|command| JsonTaskTestSelectCommand {
+                        language: command.language,
+                        command: command.command,
+                        reason: command.reason,
+                    })
+                    .collect(),
+                escalation: JsonTaskTestSelectEscalation {
+                    level: selection.escalation.level,
+                    reason: selection.escalation.reason,
+                },
+                warnings: selection.warnings,
+            })
+            .expect("serializing task test selection output to JSON should succeed")
+        ),
+    }
+
+    Ok(0)
+}
+
 pub fn run_task_infer_command(args: &TaskInferArgs) -> Result<i32> {
     let workspace = load_workspace(&args.workspace)?;
     let range = args.range.trim();
@@ -934,6 +1024,389 @@ fn inferred_goal_plan_completion_checks(range: &str, output_path: Option<&Path>)
         format!("syu task check {plan_path} --range {range}"),
         "syu validate .".to_string(),
     ]
+}
+
+fn build_task_test_selection(
+    workspace: &crate::workspace::Workspace,
+    artifact: &GoalPlanArtifact,
+) -> Result<TaskTestSelectionPlan> {
+    let lookup = WorkspaceLookup::new(workspace);
+    let mut selected = BTreeMap::<String, BTreeMap<String, TaskTestSelectionEntry>>::new();
+    let mut warnings = Vec::new();
+
+    collect_goal_plan_test_references(
+        &lookup,
+        "required by goal plan",
+        &artifact.test_plan.required_tests,
+        &mut selected,
+    )?;
+    collect_goal_plan_test_references(
+        &lookup,
+        "suggested by goal plan",
+        &artifact.test_plan.suggested_tests,
+        &mut selected,
+    )?;
+    collect_linked_requirement_tests(&lookup, artifact, &mut selected)?;
+
+    let selection_mode = goal_plan_selection_mode_label(artifact.test_plan.selection_mode);
+    let selected_test_count = count_task_test_selection_entries(&selected);
+    let medium_confidence = matches!(artifact.source.confidence, Some(GoalPlanConfidence::Medium));
+    let shared_utilities_changed = goal_plan_mentions_shared_utilities(artifact);
+    let scope_ambiguous = goal_plan_scope_is_ambiguous(&artifact.implementation_plan.scope);
+
+    let escalation = if selected_test_count == 0 {
+        warnings.push(
+            "Goal Plan does not declare required or suggested tests, so the selection falls back to the full Rust test suite.".to_string(),
+        );
+        TaskTestSelectionEscalation {
+            level: "full".to_string(),
+            reason: "Goal Plan does not declare required or suggested tests".to_string(),
+        }
+    } else if matches!(
+        artifact.test_plan.selection_mode,
+        GoalPlanSelectionMode::Full
+    ) || scope_ambiguous
+    {
+        if scope_ambiguous {
+            warnings.push(
+                "Goal Plan scope is ambiguous, so the selection falls back to the full Rust test suite.".to_string(),
+            );
+        }
+        TaskTestSelectionEscalation {
+            level: "full".to_string(),
+            reason: if matches!(
+                artifact.test_plan.selection_mode,
+                GoalPlanSelectionMode::Full
+            ) {
+                "Goal Plan requests full test selection".to_string()
+            } else {
+                "Goal Plan scope is ambiguous".to_string()
+            },
+        }
+    } else if matches!(
+        artifact.test_plan.selection_mode,
+        GoalPlanSelectionMode::Affected
+    ) || medium_confidence
+        || shared_utilities_changed
+    {
+        if medium_confidence {
+            warnings.push(
+                "Goal Plan source confidence is medium, so the selection broadens to file-level Rust test binaries.".to_string(),
+            );
+        }
+        if shared_utilities_changed {
+            warnings.push(
+                "Goal Plan evidence touches shared utility files, so the selection broadens to file-level Rust test binaries.".to_string(),
+            );
+        }
+        TaskTestSelectionEscalation {
+            level: "affected".to_string(),
+            reason: join_task_test_selection_reasons(&[
+                matches!(
+                    artifact.test_plan.selection_mode,
+                    GoalPlanSelectionMode::Affected
+                )
+                .then_some("Goal Plan already requests affected test selection"),
+                medium_confidence.then_some("Goal Plan source confidence is medium"),
+                shared_utilities_changed
+                    .then_some("Goal Plan evidence touches shared utility files"),
+            ]),
+        }
+    } else {
+        TaskTestSelectionEscalation {
+            level: "goal".to_string(),
+            reason: "Goal Plan supplies explicit test declarations".to_string(),
+        }
+    };
+
+    let commands = if escalation.level == "full" {
+        vec![TaskTestSelectionCommand {
+            language: "rust".to_string(),
+            command: "cargo test".to_string(),
+            reason: escalation.reason.clone(),
+        }]
+    } else if escalation.level == "affected" {
+        build_task_test_selection_commands(&selected, true)
+    } else {
+        build_task_test_selection_commands(&selected, false)
+    };
+
+    Ok(TaskTestSelectionPlan {
+        goal_id: artifact.goal.id.clone(),
+        goal_title: artifact.goal.title.clone(),
+        selection_mode: selection_mode.to_string(),
+        commands,
+        escalation,
+        warnings,
+    })
+}
+
+fn collect_goal_plan_test_references(
+    _lookup: &WorkspaceLookup<'_>,
+    source_label: &str,
+    tests: &BTreeMap<String, Vec<crate::model::TraceReference>>,
+    selected: &mut BTreeMap<String, BTreeMap<String, TaskTestSelectionEntry>>,
+) -> Result<()> {
+    for (language, references) in tests {
+        validate_goal_test_language(language)?;
+        for reference in references {
+            add_task_test_selection_reference(
+                selected,
+                language,
+                reference,
+                source_label.to_string(),
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+fn collect_linked_requirement_tests(
+    lookup: &WorkspaceLookup<'_>,
+    artifact: &GoalPlanArtifact,
+    selected: &mut BTreeMap<String, BTreeMap<String, TaskTestSelectionEntry>>,
+) -> Result<()> {
+    for requirement in artifact
+        .spec_mapping
+        .persistent_items
+        .requirements
+        .iter()
+        .filter_map(|item| lookup.requirement(item))
+    {
+        let label = format!("declared by linked requirement {}", requirement.id);
+        collect_goal_plan_test_references(lookup, &label, &requirement.tests, selected)?;
+    }
+
+    for feature in artifact
+        .spec_mapping
+        .persistent_items
+        .features
+        .iter()
+        .filter_map(|item| lookup.feature(item))
+    {
+        for requirement_id in &feature.linked_requirements {
+            if let Some(requirement) = lookup.requirement(requirement_id) {
+                let label = format!(
+                    "declared by linked feature {} via requirement {}",
+                    feature.id, requirement.id
+                );
+                collect_goal_plan_test_references(lookup, &label, &requirement.tests, selected)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn add_task_test_selection_reference(
+    selected: &mut BTreeMap<String, BTreeMap<String, TaskTestSelectionEntry>>,
+    language: &str,
+    reference: &crate::model::TraceReference,
+    reason: String,
+) -> Result<()> {
+    let file = normalize_relative_path(&reference.file)
+        .display()
+        .to_string();
+    let entry = selected
+        .entry(language.to_string())
+        .or_default()
+        .entry(file.clone())
+        .or_default();
+    entry.reasons.insert(reason);
+
+    if reference.symbols.iter().any(|symbol| symbol.trim() == "*") {
+        entry.whole_file = true;
+        entry.symbols.clear();
+        return Ok(());
+    }
+
+    let mut has_symbol = false;
+    for symbol in &reference.symbols {
+        let symbol = symbol.trim();
+        if !symbol.is_empty() {
+            entry.symbols.insert(symbol.to_string());
+            has_symbol = true;
+        }
+    }
+
+    if !has_symbol {
+        bail!("Goal Plan test selection for `{file}` must declare at least one symbol or `*`");
+    }
+
+    Ok(())
+}
+
+fn validate_goal_test_language(language: &str) -> Result<()> {
+    if language.eq_ignore_ascii_case("rust") {
+        return Ok(());
+    }
+
+    if adapter_for_language(language).is_some() {
+        bail!(
+            "unsupported test language `{language}`; only rust test selection is implemented today"
+        );
+    }
+
+    bail!("unknown test language adapter `{language}`")
+}
+
+fn count_task_test_selection_entries(
+    selected: &BTreeMap<String, BTreeMap<String, TaskTestSelectionEntry>>,
+) -> usize {
+    selected
+        .values()
+        .map(|entries| {
+            entries
+                .values()
+                .map(|entry| {
+                    if entry.whole_file {
+                        1
+                    } else {
+                        entry.symbols.len()
+                    }
+                })
+                .sum::<usize>()
+        })
+        .sum()
+}
+
+fn build_task_test_selection_commands(
+    selected: &BTreeMap<String, BTreeMap<String, TaskTestSelectionEntry>>,
+    broaden_to_file: bool,
+) -> Vec<TaskTestSelectionCommand> {
+    let mut commands = Vec::new();
+
+    for (language, files) in selected {
+        if !language.eq_ignore_ascii_case("rust") {
+            continue;
+        }
+        for (file, entry) in files {
+            let reason = format_task_test_selection_reason(&entry.reasons);
+            let target = rust_test_target_name(file);
+            if broaden_to_file || entry.whole_file {
+                commands.push(TaskTestSelectionCommand {
+                    language: language.clone(),
+                    command: format!("cargo test --test {target}"),
+                    reason: if broaden_to_file {
+                        format!("{reason}; broadened to file-level Rust test binary")
+                    } else {
+                        reason
+                    },
+                });
+                continue;
+            }
+
+            for symbol in &entry.symbols {
+                commands.push(TaskTestSelectionCommand {
+                    language: language.clone(),
+                    command: format!("cargo test --test {target} {symbol}"),
+                    reason: reason.clone(),
+                });
+            }
+        }
+    }
+
+    commands.sort_by(|left, right| left.command.cmp(&right.command));
+    commands
+}
+
+fn format_task_test_selection_reason(reasons: &BTreeSet<String>) -> String {
+    if reasons.is_empty() {
+        return "Goal Plan declares this test".to_string();
+    }
+
+    reasons.iter().cloned().collect::<Vec<_>>().join("; ")
+}
+
+fn join_task_test_selection_reasons(reasons: &[Option<&str>]) -> String {
+    let mut values = Vec::new();
+    for reason in reasons.iter().copied().flatten() {
+        values.push(reason.to_string());
+    }
+
+    if values.is_empty() {
+        "Goal Plan declares explicit test selection".to_string()
+    } else {
+        values.join("; ")
+    }
+}
+
+fn goal_plan_selection_mode_label(mode: GoalPlanSelectionMode) -> &'static str {
+    match mode {
+        GoalPlanSelectionMode::Minimal => "minimal",
+        GoalPlanSelectionMode::Affected => "affected",
+        GoalPlanSelectionMode::Full => "full",
+    }
+}
+
+fn rust_test_target_name(file: &str) -> String {
+    Path::new(file)
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("test")
+        .to_string()
+}
+
+fn goal_plan_mentions_shared_utilities(artifact: &GoalPlanArtifact) -> bool {
+    artifact
+        .source
+        .evidence
+        .as_ref()
+        .map(|evidence| {
+            evidence.changed_files.iter().any(|file| {
+                let lower = file.to_ascii_lowercase();
+                lower.contains("shared")
+                    || lower.contains("util")
+                    || lower.contains("common")
+                    || lower.contains("helper")
+            })
+        })
+        .unwrap_or(false)
+}
+
+fn goal_plan_scope_is_ambiguous(scope: &GoalPlanScope) -> bool {
+    if scope.include.is_empty() {
+        return true;
+    }
+
+    scope.include.iter().any(|pattern| {
+        let trimmed = pattern.trim();
+        trimmed == "*"
+            || trimmed == "**"
+            || trimmed.contains("**")
+            || trimmed.ends_with('/')
+            || trimmed.contains('{')
+            || scope_pattern_has_glob_metacharacters(trimmed)
+    })
+}
+
+fn scope_pattern_has_glob_metacharacters(pattern: &str) -> bool {
+    pattern.chars().any(|c| matches!(c, '*' | '?' | '['))
+}
+
+fn print_task_test_selection_text_output(plan_path: &Path, selection: &TaskTestSelectionPlan) {
+    println!("goal plan: {}", plan_path.display());
+    println!("goal id: {}", selection.goal_id);
+    println!("goal title: {}", selection.goal_title);
+    println!("selection mode: {}", selection.selection_mode);
+    println!("escalation: {}", selection.escalation.level);
+    println!("  reason: {}", selection.escalation.reason);
+    println!("commands:");
+    if selection.commands.is_empty() {
+        println!("- none");
+    } else {
+        for command in &selection.commands {
+            println!("- {}: {}", command.language, command.command);
+            println!("  reason: {}", command.reason);
+        }
+    }
+    if !selection.warnings.is_empty() {
+        println!("warnings:");
+        for warning in &selection.warnings {
+            println!("- {warning}");
+        }
+    }
 }
 
 fn render_goal_plan_output(
@@ -3615,7 +4088,7 @@ mod tests {
 
     use crate::cli::{
         OutputFormat, TaskArgs, TaskCheckArgs, TaskClassifyArgs, TaskCommands, TaskPlanArgs,
-        TaskPlanFormat, TaskScaffoldArgs, TaskScopeArgs,
+        TaskPlanFormat, TaskScaffoldArgs, TaskScopeArgs, TaskTestSelectArgs,
     };
 
     use super::{
@@ -4064,6 +4537,11 @@ mod tests {
             output: None,
             format: TaskPlanFormat::Text,
         });
+        let _ = TaskCommands::TestSelect(TaskTestSelectArgs {
+            plan: PathBuf::from("goal-plan.yaml"),
+            workspace: PathBuf::from("."),
+            format: OutputFormat::Text,
+        });
         let _ = TaskCommands::Scaffold(TaskScaffoldArgs {
             request: PathBuf::from("request.yaml"),
             workspace: PathBuf::from("."),
@@ -4211,6 +4689,39 @@ mod tests {
             plan.warnings
                 .iter()
                 .any(|warning| warning.contains("No implementation scope could be inferred"))
+        );
+    }
+
+    #[test]
+    fn goal_plan_scope_treats_common_globs_as_ambiguous() {
+        let scope = super::GoalPlanScope {
+            include: vec!["src/*.rs".to_string(), "tests/?*.rs".to_string()],
+            exclude: Vec::new(),
+        };
+
+        assert!(super::goal_plan_scope_is_ambiguous(&scope));
+    }
+
+    #[test]
+    fn task_test_select_rejects_empty_symbol_lists() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        let path = tempdir.path().join("goal-plan.yaml");
+        fs::write(
+            &path,
+            "version: 1\nkind: syu.goal_plan\nsource:\n  mode: request_driven\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\nimplementation_plan:\n  scope:\n    include:\n      - src/command/task.rs\n    exclude:\n      - docs/syu/**\n  steps:\n    - add a Goal Plan model\ntest_plan:\n  selection_mode: affected\n  required_tests:\n    rust:\n      - file: src/command/task.rs\n        symbols: []\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include:\n    - src/command/task.rs\n  exclude: []\ncompletion:\n  must_pass:\n    - syu validate .\n",
+        )
+        .expect("goal plan");
+
+        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
+        let artifact = load_goal_plan_artifact(&path).expect("goal plan should load");
+        let error =
+            super::build_task_test_selection(&workspace, &artifact).expect_err("empty symbols");
+
+        assert!(
+            error
+                .to_string()
+                .contains("must declare at least one symbol or `*`")
         );
     }
 

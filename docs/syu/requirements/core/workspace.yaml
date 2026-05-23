@@ -827,3 +827,74 @@ requirements:
         - file: docs/guide/command-card.md
           symbols:
             - syu task check goal-plan.yaml --range origin/main...HEAD
+  - id: REQ-CORE-033
+    title: Select tests from a Goal Plan before scoped coverage runs
+    description: |
+      The CLI MUST provide a `task test-select` command that reads a temporary
+      Goal Plan and turns the required, suggested, and linked Rust test
+      declarations into justified shell commands before scoped coverage or CI
+      runs. The command SHOULD support text and JSON output, SHOULD explain why
+      each selected test was chosen, SHOULD broaden to affected file-level Rust
+      test binaries when the Goal Plan confidence is medium or when shared
+      utilities are changed, and SHOULD fall back to a broader Rust test
+      selection when the Goal Plan does not declare enough test information.
+      The command MUST reject non-Rust languages until additional adapters are
+      implemented, and the test-selection schema MUST stay language-aware so
+      future Python, TypeScript, Go, Java, Ruby, and other adapters can be
+      added later without changing the artifact shape.
+    priority: medium
+    status: implemented
+    linked_policies:
+      - POL-001
+      - POL-004
+    linked_features:
+      - FEAT-TASK-006
+    tests:
+      rust:
+        - file: src/command/task.rs
+          symbols:
+            - TaskTestSelectionPlan
+            - TaskTestSelectionCommand
+            - TaskTestSelectionEscalation
+            - build_task_test_selection
+            - collect_goal_plan_test_references
+            - collect_linked_requirement_tests
+            - add_task_test_selection_reference
+            - validate_goal_test_language
+            - count_task_test_selection_entries
+            - build_task_test_selection_commands
+            - format_task_test_selection_reason
+            - join_task_test_selection_reasons
+            - goal_plan_selection_mode_label
+            - rust_test_target_name
+            - goal_plan_mentions_shared_utilities
+            - goal_plan_scope_is_ambiguous
+            - print_task_test_selection_text_output
+        - file: src/cli.rs
+          symbols:
+            - TaskArgs
+            - TaskTestSelectArgs
+        - file: src/lib.rs
+          symbols:
+            - dispatch
+            - run_dispatch
+            - dispatches_task_subcommands_without_rewriting_them
+        - file: tests/task_command.rs
+          symbols:
+            - task_test_select_prints_required_test_commands
+            - task_test_select_prints_suggested_acceptance_checks
+            - task_test_select_includes_linked_feature_tests
+            - task_test_select_broadens_to_file_level_commands_for_medium_confidence
+            - task_test_select_falls_back_when_no_test_declarations_exist
+            - task_test_select_rejects_unknown_language_adapters
+            - task_test_select_is_deterministic_for_json_output
+        - file: tests/help_command.rs
+          symbols:
+            - task_test_select_help_mentions_goal_plans_and_json_output
+      markdown:
+        - file: docs/guide/goal-plan-format.md
+          symbols:
+            - syu.goal_plan
+        - file: docs/guide/command-card.md
+          symbols:
+            - syu task test-select goal-plan.yaml
