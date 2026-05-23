@@ -23,6 +23,7 @@ validate_changed() {
 
   repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
   cd "$repo_root"
+  export SYU_SKIP_BROWSER_APP_BUILD=1
 
   if (($# > 0)); then
     files=("$@")
