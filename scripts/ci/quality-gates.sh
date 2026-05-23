@@ -10,6 +10,9 @@ run_quality_gates() {
   repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
   cd "$repo_root"
 
+  # Generic repository gates intentionally skip the embedded browser-app build.
+  export SYU_SKIP_BROWSER_APP_BUILD=1
+
   cargo fmt --all --check
   cargo clippy --all-targets --all-features -- -D warnings
   cargo run -- validate .
