@@ -128,18 +128,6 @@ fn terminate_child(child: &mut Child) {
     child.wait().expect("child should exit");
 }
 
-fn shutdown_child_with_output(child: Child) -> Output {
-    #[cfg(unix)]
-    unsafe {
-        libc::kill(child.id() as i32, libc::SIGINT);
-    }
-
-    #[cfg(not(unix))]
-    child.kill().expect("child should terminate");
-
-    child.wait_with_output().expect("child should exit")
-}
-
 fn app_command_test_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
