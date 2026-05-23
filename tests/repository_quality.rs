@@ -151,7 +151,11 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(ci_workflow.contains("ci-required:"));
     assert!(ci_workflow.contains("scripts/ci/quality-gates.sh fast"));
     assert!(ci_workflow.contains("scripts/ci/quality-gates.sh full"));
-    assert!(ci_workflow.contains("scripts/ci/coverage.sh pr"));
+    assert!(ci_workflow.contains(
+        "cargo run --quiet -- task infer --range origin/main...HEAD --output target/syu/goal.yaml"
+    ));
+    assert!(ci_workflow.contains("cargo run --quiet -- task test-select target/syu/goal.yaml --format json > target/syu/selected-tests.json"));
+    assert!(ci_workflow.contains("scripts/ci/coverage.sh pr --goal target/syu/goal.yaml"));
     assert!(ci_workflow.contains("scripts/ci/coverage.sh lcov"));
     assert!(ci_workflow.contains("shell: bash"));
     assert!(ci_workflow.contains("hooks=("));
@@ -198,6 +202,10 @@ fn repository_declares_coverage_reporting_without_percentage_gate() {
     assert!(coverage_script.contains("generate_lcov"));
     assert!(coverage_script.contains("report_lcov_coverage"));
     assert!(coverage_script.contains("enforce_diff_coverage"));
+    assert!(coverage_script.contains("--goal"));
+    assert!(coverage_script.contains("--format"));
+    assert!(coverage_script.contains("goal-scoped coverage failed"));
+    assert!(coverage_script.contains("Changed production files outside goal scope"));
     assert!(!coverage_script.contains("LINE_THRESHOLD=100"));
     assert!(!coverage_script.contains("--fail-under-lines 100"));
     assert!(coverage_script.contains("cargo llvm-cov"));
@@ -225,7 +233,10 @@ fn repository_declares_coverage_reporting_without_percentage_gate() {
     assert!(ci_workflow.contains("coverage-pr:"));
     assert!(ci_workflow.contains("coverage-full:"));
     assert!(ci_workflow.contains("scripts/ci/coverage.sh lcov"));
-    assert!(ci_workflow.contains("scripts/ci/coverage.sh pr"));
+    assert!(ci_workflow.contains("scripts/ci/coverage.sh pr --goal target/syu/goal.yaml"));
+    assert!(ci_workflow.contains(
+        "cargo run --quiet -- task infer --range origin/main...HEAD --output target/syu/goal.yaml"
+    ));
     assert!(ci_workflow.contains("cargo-llvm-cov"));
     assert!(ci_workflow.contains("target/coverage/spec-coverage-summary.md"));
 }

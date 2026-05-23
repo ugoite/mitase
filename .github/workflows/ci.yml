@@ -122,8 +122,17 @@ jobs:
         with:
           tool: cargo-nextest
 
+      - name: Prepare goal-scoped coverage artifacts
+        shell: bash
+        env:
+          SYU_SKIP_BROWSER_APP_BUILD: 1
+        run: |
+          mkdir -p target/syu
+          cargo run --quiet -- task infer --range origin/main...HEAD --output target/syu/goal.yaml
+          cargo run --quiet -- task test-select target/syu/goal.yaml --format json > target/syu/selected-tests.json
+
       - name: Run PR coverage gate
-        run: scripts/ci/coverage.sh pr
+        run: scripts/ci/coverage.sh pr --goal target/syu/goal.yaml
 
       - name: Upload nextest JUnit on failure
         if: failure()
