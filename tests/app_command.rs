@@ -62,8 +62,8 @@ fn clean_shutdown(status: &std::process::ExitStatus) -> bool {
     // Coverage and CI runners can report a non-fatal shutdown as a panic-style
     // exit even after the server has already served requests successfully.
     status.success()
-        || status.code() == Some(130)
         || status.code() == Some(1)
+        || status.code() == Some(130)
         || status.code() == Some(101)
         || {
             #[cfg(unix)]
