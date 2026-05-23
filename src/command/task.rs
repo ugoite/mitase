@@ -1,6 +1,7 @@
 // FEAT-TASK-001
 // FEAT-TASK-003
 // FEAT-TASK-004
+// FEAT-TASK-005
 // REQ-CORE-028
 // REQ-CORE-029
 // REQ-CORE-030
@@ -13,23 +14,26 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use crate::{
     cli::{
-        LookupKind, OutputFormat, TaskArgs, TaskClassifyArgs, TaskCommands, TaskPlanArgs,
-        TaskPlanFormat, TaskScaffoldArgs, TaskScopeArgs,
+        LookupKind, OutputFormat, TaskArgs, TaskCheckArgs, TaskClassifyArgs, TaskCommands,
+        TaskPlanArgs, TaskPlanFormat, TaskScaffoldArgs, TaskScopeArgs,
     },
     coverage::normalize_relative_path,
+    language::adapter_for_language,
+    model::{Issue, Severity},
     workspace::load_workspace,
 };
 
+use super::issue_text::{TextIssueFormat, format_text_issue};
+use super::log::resolve_git_range_changed_files;
 use super::lookup::{SearchResult, WorkspaceEntity, WorkspaceLookup};
 
 const REQUEST_ARTIFACT_VERSION: u32 = 1;
-#[cfg(test)]
-#[allow(dead_code)]
 const GOAL_PLAN_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -58,9 +62,9 @@ struct RequestArtifact {
     context: RequestArtifactContext,
 }
 
-#[cfg(test)]
 #[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 struct GoalPlanArtifact {
     version: u32,
     kind: String,
@@ -75,9 +79,9 @@ struct GoalPlanArtifact {
     completion: GoalPlanCompletion,
 }
 
-#[cfg(test)]
 #[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 struct GoalPlanSource {
     mode: GoalPlanSourceMode,
     #[serde(default)]
@@ -88,8 +92,6 @@ struct GoalPlanSource {
     confidence: Option<GoalPlanConfidence>,
 }
 
-#[cfg(test)]
-#[allow(dead_code)]
 impl Default for GoalPlanSource {
     fn default() -> Self {
         Self {
@@ -101,8 +103,6 @@ impl Default for GoalPlanSource {
     }
 }
 
-#[cfg(test)]
-#[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 enum GoalPlanSourceMode {
@@ -113,8 +113,6 @@ enum GoalPlanSourceMode {
     DiffInferred,
 }
 
-#[cfg(test)]
-#[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 enum GoalPlanConfidence {
@@ -123,9 +121,9 @@ enum GoalPlanConfidence {
     Low,
 }
 
-#[cfg(test)]
 #[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 struct GoalPlanGoal {
     id: String,
     title: String,
@@ -134,9 +132,9 @@ struct GoalPlanGoal {
     non_goals: Vec<String>,
 }
 
-#[cfg(test)]
 #[allow(dead_code)]
 #[derive(Debug, Deserialize, Default, Clone)]
+#[serde(deny_unknown_fields)]
 struct GoalPlanSpecMapping {
     #[serde(default)]
     persistent_items: GoalPlanPersistentItems,
@@ -144,9 +142,8 @@ struct GoalPlanSpecMapping {
     spec_updates: GoalPlanSpecUpdates,
 }
 
-#[cfg(test)]
-#[allow(dead_code)]
 #[derive(Debug, Deserialize, Default, Clone)]
+#[serde(deny_unknown_fields)]
 struct GoalPlanPersistentItems {
     #[serde(default)]
     philosophies: Vec<String>,
@@ -158,9 +155,9 @@ struct GoalPlanPersistentItems {
     features: Vec<String>,
 }
 
-#[cfg(test)]
 #[allow(dead_code)]
 #[derive(Debug, Deserialize, Default, Clone)]
+#[serde(deny_unknown_fields)]
 struct GoalPlanSpecUpdates {
     #[serde(default)]
     required: bool,
@@ -168,18 +165,18 @@ struct GoalPlanSpecUpdates {
     expected_updates: Vec<String>,
 }
 
-#[cfg(test)]
 #[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 struct GoalPlanImplementationPlan {
     scope: GoalPlanScope,
     #[serde(default)]
     steps: Vec<String>,
 }
 
-#[cfg(test)]
 #[allow(dead_code)]
 #[derive(Debug, Deserialize, Default, Clone)]
+#[serde(deny_unknown_fields)]
 struct GoalPlanScope {
     #[serde(default)]
     include: Vec<String>,
@@ -187,19 +184,17 @@ struct GoalPlanScope {
     exclude: Vec<String>,
 }
 
-#[cfg(test)]
 #[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 struct GoalPlanTestPlan {
     selection_mode: GoalPlanSelectionMode,
     #[serde(default)]
-    required_tests: BTreeMap<String, Vec<String>>,
+    required_tests: BTreeMap<String, Vec<crate::model::TraceReference>>,
     #[serde(default)]
-    suggested_tests: BTreeMap<String, Vec<String>>,
+    suggested_tests: BTreeMap<String, Vec<crate::model::TraceReference>>,
 }
 
-#[cfg(test)]
-#[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 enum GoalPlanSelectionMode {
@@ -212,9 +207,9 @@ enum GoalPlanSelectionMode {
     Full,
 }
 
-#[cfg(test)]
 #[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 struct GoalPlanCoverage {
     mode: GoalPlanCoverageMode,
     threshold: u32,
@@ -224,8 +219,6 @@ struct GoalPlanCoverage {
     exclude: Vec<String>,
 }
 
-#[cfg(test)]
-#[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 enum GoalPlanCoverageMode {
@@ -238,9 +231,9 @@ enum GoalPlanCoverageMode {
     Full,
 }
 
-#[cfg(test)]
 #[allow(dead_code)]
 #[derive(Debug, Deserialize, Default, Clone)]
+#[serde(deny_unknown_fields)]
 struct GoalPlanCompletion {
     #[serde(default)]
     must_pass: Vec<String>,
@@ -289,6 +282,18 @@ struct JsonTaskScaffoldOutput {
     reasons: Vec<String>,
     updates: Vec<JsonScaffoldUpdate>,
     context: JsonRequestArtifactContext,
+}
+
+#[derive(Debug, Serialize)]
+struct JsonTaskCheckOutput {
+    plan_path: String,
+    range: String,
+    passed: bool,
+    changed_files: Vec<String>,
+    issue_count: usize,
+    warning_count: usize,
+    error_count: usize,
+    issues: Vec<Issue>,
 }
 
 #[derive(Debug, Serialize)]
@@ -409,6 +414,36 @@ struct JsonScopeSignals {
 }
 
 #[derive(Debug)]
+struct GoalPlanCheckReport {
+    plan_path: String,
+    range: String,
+    changed_files: Vec<String>,
+    issues: Vec<Issue>,
+}
+
+impl GoalPlanCheckReport {
+    fn passed(&self) -> bool {
+        self.issues
+            .iter()
+            .all(|issue| issue.severity != Severity::Error)
+    }
+
+    fn warning_count(&self) -> usize {
+        self.issues
+            .iter()
+            .filter(|issue| issue.severity == Severity::Warning)
+            .count()
+    }
+
+    fn error_count(&self) -> usize {
+        self.issues
+            .iter()
+            .filter(|issue| issue.severity == Severity::Error)
+            .count()
+    }
+}
+
+#[derive(Debug)]
 struct ScopeOutcome {
     classification: ClassificationOutcome,
     signals: ScopeSignals,
@@ -499,6 +534,7 @@ pub fn run_task_command(args: &TaskArgs) -> Result<i32> {
         TaskCommands::Scope(scope) => run_task_scope_command(scope),
         TaskCommands::Plan(plan) => run_task_plan_command(plan),
         TaskCommands::Scaffold(scaffold) => run_task_scaffold_command(scaffold),
+        TaskCommands::Check(check) => run_task_check_command(check),
     }
 }
 
@@ -616,6 +652,38 @@ pub fn run_task_scaffold_command(args: &TaskScaffoldArgs) -> Result<i32> {
     }
 
     Ok(0)
+}
+
+pub fn run_task_check_command(args: &TaskCheckArgs) -> Result<i32> {
+    let workspace = load_workspace(&args.workspace)?;
+    let range = args.range.trim();
+    if range.is_empty() {
+        bail!("--range must not be empty");
+    }
+
+    let artifact = load_goal_plan_artifact(&args.plan)?;
+    let mut report = check_goal_plan(&workspace, &artifact, range)?;
+    report.plan_path = args.plan.display().to_string();
+
+    match args.format {
+        OutputFormat::Text => print_task_check_text_output(&args.plan, &report),
+        OutputFormat::Json => println!(
+            "{}",
+            serde_json::to_string_pretty(&JsonTaskCheckOutput {
+                plan_path: report.plan_path.clone(),
+                range: range.to_string(),
+                passed: report.passed(),
+                changed_files: report.changed_files.clone(),
+                issue_count: report.issues.len(),
+                warning_count: report.warning_count(),
+                error_count: report.error_count(),
+                issues: report.issues.clone(),
+            })
+            .expect("serializing task check output to JSON should succeed")
+        ),
+    }
+
+    Ok(if report.passed() { 0 } else { 1 })
 }
 
 pub fn run_task_plan_command(args: &TaskPlanArgs) -> Result<i32> {
@@ -1234,8 +1302,6 @@ fn load_request_artifact(path: &PathBuf) -> Result<RequestArtifact> {
     Ok(artifact)
 }
 
-#[cfg(test)]
-#[allow(dead_code)]
 fn load_goal_plan_artifact(path: &PathBuf) -> Result<GoalPlanArtifact> {
     let raw = fs::read_to_string(path)
         .with_context(|| format!("failed to read goal plan artifact `{}`", path.display()))?;
@@ -1756,6 +1822,426 @@ fn print_scaffold_text_output(
     }
 }
 
+fn print_task_check_text_output(plan_path: &Path, report: &GoalPlanCheckReport) {
+    println!("goal plan: {}", plan_path.display());
+    println!("git range: {}", report.range);
+    println!(
+        "status: {}",
+        if report.passed() { "passed" } else { "failed" }
+    );
+    println!();
+    println!("changed files:");
+    if report.changed_files.is_empty() {
+        println!("- none");
+    } else {
+        for file in &report.changed_files {
+            println!("- {file}");
+        }
+    }
+    println!();
+    if report.issues.is_empty() {
+        println!("findings: none");
+        return;
+    }
+
+    println!("findings:");
+    for issue in &report.issues {
+        for line in format_text_issue(issue, TextIssueFormat::Validate) {
+            println!("{line}");
+        }
+    }
+}
+
+fn check_goal_plan(
+    workspace: &crate::workspace::Workspace,
+    artifact: &GoalPlanArtifact,
+    range: &str,
+) -> Result<GoalPlanCheckReport> {
+    let lookup = WorkspaceLookup::new(workspace);
+    let changed_files = resolve_git_range_changed_files(&workspace.root, range)?;
+    let changed_file_strings = changed_files
+        .iter()
+        .map(|path| path_label(path))
+        .collect::<Vec<_>>();
+    let mut issues = Vec::new();
+
+    if artifact.implementation_plan.scope.include.is_empty() {
+        issues.push(Issue::error(
+            "GOAL-TASK-PLAN-004",
+            "implementation_plan.scope.include",
+            None,
+            "implementation scope does not declare any include patterns",
+            Some(
+                "Add the files or directories that this Goal Plan is allowed to change so range checks can evaluate scope accurately."
+                    .to_string(),
+            ),
+        ));
+    }
+
+    if artifact.implementation_plan.steps.is_empty() {
+        issues.push(Issue::warning(
+            "GOAL-TASK-PLAN-005",
+            "implementation_plan.steps",
+            None,
+            "implementation plan does not list any steps",
+            Some(
+                "List the bounded steps reviewers should expect before the implementation is complete."
+                    .to_string(),
+            ),
+        ));
+    }
+
+    if artifact.test_plan.required_tests.is_empty() {
+        issues.push(Issue::warning(
+            "GOAL-TASK-PLAN-006",
+            "test_plan.required_tests",
+            None,
+            "required tests are not declared",
+            Some(
+                "Add the repository tests that must be present before the plan can be considered complete."
+                    .to_string(),
+            ),
+        ));
+    }
+
+    if artifact.completion.must_pass.is_empty() {
+        issues.push(Issue::error(
+            "GOAL-TASK-PLAN-007",
+            "completion.must_pass",
+            None,
+            "required completion commands are not declared",
+            Some(
+                "List the commands reviewers or automation should require before accepting the plan."
+                    .to_string(),
+            ),
+        ));
+    }
+
+    if matches!(artifact.source.mode, GoalPlanSourceMode::DiffInferred) {
+        match artifact.source.confidence {
+            Some(GoalPlanConfidence::High) => {}
+            Some(GoalPlanConfidence::Medium) => issues.push(Issue::warning(
+                "GOAL-TASK-PLAN-008",
+                "source.confidence",
+                None,
+                "diff-inferred plan source confidence is medium",
+                Some(
+                    "Treat medium confidence as a review signal and make the risky sections explicit."
+                        .to_string(),
+                ),
+            )),
+            Some(GoalPlanConfidence::Low) => issues.push(Issue::warning(
+                "GOAL-TASK-PLAN-009",
+                "source.confidence",
+                None,
+                "diff-inferred plan source confidence is low",
+                Some(
+                    "Revisit the inferred plan before review because the source confidence is low."
+                        .to_string(),
+                ),
+            )),
+            None => issues.push(Issue::warning(
+                "GOAL-TASK-PLAN-010",
+                "source.confidence",
+                None,
+                "diff-inferred plan source does not declare confidence",
+                Some(
+                    "Add source.confidence so reviewers know how reliable the inferred plan is."
+                        .to_string(),
+                ),
+            )),
+        }
+    }
+
+    if let Some(source_range) = artifact.source.range.as_deref()
+        && matches!(artifact.source.mode, GoalPlanSourceMode::DiffInferred)
+        && source_range.trim() != range
+    {
+        issues.push(Issue::warning(
+            "GOAL-TASK-PLAN-011",
+            "source.range",
+            None,
+            "plan source range does not match the requested git range",
+            Some(
+                "Rebuild or update the Goal Plan so its recorded range matches the check input."
+                    .to_string(),
+            ),
+        ));
+    }
+
+    let include_matcher = build_globset(&artifact.implementation_plan.scope.include)?;
+    let exclude_matcher = build_globset(&artifact.implementation_plan.scope.exclude)?;
+    if !artifact.implementation_plan.scope.include.is_empty() {
+        for file in &changed_files {
+            if !path_matches_scope(file, include_matcher.as_ref(), exclude_matcher.as_ref()) {
+                let file_string = path_label(file);
+                let production_path = is_production_path(file);
+                let issue = if production_path {
+                    Issue::error(
+                        "GOAL-TASK-PLAN-001",
+                        "implementation_plan.scope",
+                        Some(file_string.clone()),
+                        "changed production file is outside the implementation scope",
+                        Some(
+                            "Update implementation_plan.scope.include/exclude or move the change into the listed scope."
+                                .to_string(),
+                        ),
+                    )
+                } else {
+                    Issue::warning(
+                        "GOAL-TASK-PLAN-001",
+                        "implementation_plan.scope",
+                        Some(file_string),
+                        "changed file is outside the implementation scope",
+                        Some(
+                            "Confirm whether the file should be included in the plan or excluded from the change set."
+                                .to_string(),
+                        ),
+                    )
+                };
+                issues.push(issue);
+            }
+        }
+    }
+
+    validate_goal_plan_spec_ids(&lookup, artifact, &mut issues);
+    validate_goal_plan_required_tests(workspace, artifact, &mut issues)?;
+
+    Ok(GoalPlanCheckReport {
+        plan_path: String::new(),
+        range: range.to_string(),
+        changed_files: changed_file_strings,
+        issues,
+    })
+}
+
+fn validate_goal_plan_spec_ids(
+    lookup: &WorkspaceLookup<'_>,
+    artifact: &GoalPlanArtifact,
+    issues: &mut Vec<Issue>,
+) {
+    for id in artifact
+        .spec_mapping
+        .persistent_items
+        .philosophies
+        .iter()
+        .chain(artifact.spec_mapping.persistent_items.policies.iter())
+        .chain(artifact.spec_mapping.persistent_items.requirements.iter())
+        .chain(artifact.spec_mapping.persistent_items.features.iter())
+    {
+        if lookup.find(id).is_none() {
+            issues.push(Issue::error(
+                "GOAL-TASK-PLAN-002",
+                "spec_mapping.persistent_items",
+                Some(id.clone()),
+                "linked persistent spec ID does not exist",
+                Some(
+                    "Fix the Goal Plan or add the missing spec item before the plan is reviewed."
+                        .to_string(),
+                ),
+            ));
+        }
+    }
+}
+
+fn validate_goal_plan_required_tests(
+    workspace: &crate::workspace::Workspace,
+    artifact: &GoalPlanArtifact,
+    issues: &mut Vec<Issue>,
+) -> Result<()> {
+    for (language, references) in &artifact.test_plan.required_tests {
+        for reference in references {
+            validate_goal_plan_test_reference(workspace, language, reference, issues)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_goal_plan_test_reference(
+    workspace: &crate::workspace::Workspace,
+    language: &str,
+    reference: &crate::model::TraceReference,
+    issues: &mut Vec<Issue>,
+) -> Result<()> {
+    let location = reference.file.display().to_string();
+    let test_path = match resolve_goal_plan_test_path(workspace, &reference.file, issues)? {
+        Some(path) => path,
+        None => return Ok(()),
+    };
+    let contents = match fs::read_to_string(&test_path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            issues.push(Issue::error(
+                "GOAL-TASK-PLAN-003",
+                "test_plan.required_tests",
+                Some(location.clone()),
+                "required test file is missing",
+                Some(
+                    "Create the referenced test file or update the Goal Plan to point at an existing repository test."
+                        .to_string(),
+                ),
+            ));
+            return Ok(());
+        }
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!(
+                    "failed to read required test file `{}` for language `{}`",
+                    reference.file.display(),
+                    language
+                )
+            });
+        }
+    };
+
+    for symbol in &reference.symbols {
+        let symbol = symbol.trim();
+        if symbol == "*" {
+            continue;
+        }
+        if symbol.is_empty() {
+            issues.push(Issue::error(
+                "GOAL-TASK-PLAN-003",
+                "test_plan.required_tests",
+                Some(location.clone()),
+                "required test symbol is empty",
+                Some("Specify a test function, method, or symbol name.".to_string()),
+            ));
+            continue;
+        }
+        if !goal_plan_required_test_symbol_exists(language, &contents, symbol) {
+            issues.push(Issue::error(
+                "GOAL-TASK-PLAN-003",
+                "test_plan.required_tests",
+                Some(format!("{location}::{symbol}")),
+                "required test symbol is missing",
+                Some(
+                    "Add the named test function, method, or symbol to the referenced test file."
+                        .to_string(),
+                ),
+            ));
+        }
+    }
+
+    for snippet in &reference.doc_contains {
+        if snippet.trim() == "*" {
+            continue;
+        }
+        if !contents.contains(snippet) {
+            issues.push(Issue::error(
+                "GOAL-TASK-PLAN-003",
+                "test_plan.required_tests",
+                Some(format!("{location}::{snippet}")),
+                "required test text is missing",
+                Some(
+                    "Add the expected documentation text to the referenced test file.".to_string(),
+                ),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn resolve_goal_plan_test_path(
+    workspace: &crate::workspace::Workspace,
+    reference_file: &Path,
+    issues: &mut Vec<Issue>,
+) -> Result<Option<PathBuf>> {
+    let candidate = if reference_file.is_absolute() {
+        reference_file.to_path_buf()
+    } else {
+        workspace.root.join(reference_file)
+    };
+
+    let resolved = match fs::canonicalize(&candidate) {
+        Ok(path) => path,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            issues.push(Issue::error(
+                "GOAL-TASK-PLAN-003",
+                "test_plan.required_tests",
+                Some(reference_file.display().to_string()),
+                "required test file is missing",
+                Some(
+                    "Create the referenced test file or update the Goal Plan to point at an existing repository test."
+                        .to_string(),
+                ),
+            ));
+            return Ok(None);
+        }
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!(
+                    "failed to resolve required test file `{}`",
+                    reference_file.display()
+                )
+            });
+        }
+    };
+
+    if !resolved.starts_with(&workspace.root) {
+        issues.push(Issue::error(
+            "GOAL-TASK-PLAN-003",
+            "test_plan.required_tests",
+            Some(reference_file.display().to_string()),
+            "required test file must stay within the workspace",
+            Some("Point required tests at a repository file under the workspace root.".to_string()),
+        ));
+        return Ok(None);
+    }
+
+    Ok(Some(resolved))
+}
+
+fn goal_plan_required_test_symbol_exists(language: &str, contents: &str, symbol: &str) -> bool {
+    adapter_for_language(language)
+        .map(|adapter| {
+            let mut patterns = adapter.patterns(symbol);
+            if patterns.len() > 1 {
+                patterns.pop();
+            }
+            patterns
+                .into_iter()
+                .filter_map(|pattern| Regex::new(&pattern).ok())
+                .any(|regex| regex.is_match(contents))
+        })
+        .unwrap_or_else(|| contents.contains(symbol))
+}
+
+fn build_globset(patterns: &[String]) -> Result<Option<GlobSet>> {
+    if patterns.is_empty() {
+        return Ok(None);
+    }
+
+    let mut builder = GlobSetBuilder::new();
+    for pattern in patterns {
+        builder.add(Glob::new(pattern).with_context(|| format!("invalid scope glob `{pattern}`"))?);
+    }
+
+    Ok(Some(
+        builder.build().context("failed to build scope glob set")?,
+    ))
+}
+
+fn path_matches_scope(path: &Path, include: Option<&GlobSet>, exclude: Option<&GlobSet>) -> bool {
+    let included = include.is_none_or(|set| set.is_match(path));
+    let excluded = exclude.is_some_and(|set| set.is_match(path));
+    included && !excluded
+}
+
+fn is_production_path(path: &Path) -> bool {
+    let rendered = path_label(path);
+    rendered.starts_with("src/")
+        || rendered.starts_with("app/")
+        || rendered.starts_with("crates/")
+        || rendered.starts_with("examples/")
+        || rendered.starts_with("website/")
+        || rendered.starts_with("repo/")
+        || rendered.starts_with("scripts/")
+        || matches!(rendered.as_str(), "build.rs" | "Cargo.toml" | "Cargo.lock")
+}
+
 fn print_items(heading: &str, items: &[SearchResult]) {
     println!("{heading}:");
     if items.is_empty() {
@@ -2177,8 +2663,8 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::cli::{
-        OutputFormat, TaskArgs, TaskClassifyArgs, TaskCommands, TaskPlanArgs, TaskPlanFormat,
-        TaskScaffoldArgs, TaskScopeArgs,
+        OutputFormat, TaskArgs, TaskCheckArgs, TaskClassifyArgs, TaskCommands, TaskPlanArgs,
+        TaskPlanFormat, TaskScaffoldArgs, TaskScopeArgs,
     };
 
     use super::{
@@ -2245,10 +2731,10 @@ mod tests {
         )
         .expect("scope requirement doc");
         fs::write(
-            root.join("docs/syu/requirements/core/plan.yaml"),
-            "category: Core Workspace\nprefix: REQ-CORE\nrequirements:\n  - id: REQ-CORE-031\n    title: Generate temporary Goal Plans from scoped requests\n    description: The task plan command should turn a scoped request artifact into a temporary Goal Plan while keeping persistent spec files untouched.\n    priority: medium\n    status: planned\n    linked_policies:\n      - POL-001\n    linked_features:\n      - FEAT-TASK-004\n    tests: {}\n",
+            root.join("docs/syu/requirements/core/check.yaml"),
+            "category: Core Workspace\nprefix: REQ-CORE\nrequirements:\n  - id: REQ-CORE-032\n    title: Validate temporary Goal Plans against the current spec graph and git range\n    description: The task check command should validate Goal Plan conformance against changed files, linked spec IDs, required tests, and completion commands.\n    priority: medium\n    status: implemented\n    linked_policies:\n      - POL-001\n    linked_features:\n      - FEAT-TASK-005\n    tests:\n      rust:\n        - file: tests/task_command.rs\n          symbols:\n            - task_check_reports_pass_fail_results_for_goal_plans\n",
         )
-        .expect("plan requirement doc");
+        .expect("check requirement doc");
         fs::write(
             root.join("docs/syu/features/features.yaml"),
             "version: 1\nupdated: \"2026-05\"\nfiles:\n  - kind: task\n    file: core/task.yaml\n  - kind: task\n    file: core/scaffold.yaml\n  - kind: task\n    file: core/scope.yaml\n  - kind: task\n    file: core/plan.yaml\n",
@@ -2256,9 +2742,14 @@ mod tests {
         .expect("feature registry");
         fs::write(
             root.join("docs/syu/features/core/task.yaml"),
-            "category: Task Planning CLI\nversion: 1\nfeatures:\n  - id: FEAT-TASK-001\n    title: Request artifact classification\n    summary: Classify planned request artifacts into create, change, or delete decisions using the current spec graph and a brief explanation.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-028\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_classify_command\n        - file: src/cli.rs\n          symbols:\n            - TaskArgs\n            - TaskClassifyArgs\n  - id: FEAT-TASK-003\n    title: Request artifact scoping\n    summary: Map request artifacts onto candidate requirements, policies, philosophies, and features before planning begins.\n    status: planned\n    linked_requirements:\n      - REQ-CORE-030\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_scope_command\n        - file: src/cli.rs\n          symbols:\n            - TaskArgs\n            - TaskScopeArgs\n",
+            "category: Task Planning CLI\nversion: 1\nfeatures:\n  - id: FEAT-TASK-001\n    title: Request artifact classification\n    summary: Classify planned request artifacts into create, change, or delete decisions using the current spec graph and a brief explanation.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-028\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_classify_command\n        - file: src/cli.rs\n          symbols:\n            - TaskArgs\n            - TaskClassifyArgs\n  - id: FEAT-TASK-003\n    title: Request artifact scoping\n    summary: Map request artifacts onto candidate requirements, policies, philosophies, and features before planning begins.\n    status: planned\n    linked_requirements:\n      - REQ-CORE-030\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_scope_command\n        - file: src/cli.rs\n          symbols:\n            - TaskArgs\n            - TaskScopeArgs\n  - id: FEAT-TASK-005\n    title: Goal Plan conformance checking\n    summary: Validate temporary Goal Plan artifacts against changed files, linked spec IDs, required tests, and declared completion commands before review.\n    status: implemented\n    linked_requirements:\n      - REQ-CORE-032\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_check_command\n            - load_goal_plan_artifact\n        - file: src/cli.rs\n          symbols:\n            - TaskArgs\n            - TaskCheckArgs\n        - file: src/lib.rs\n          symbols:\n            - dispatch\n            - run_dispatch\n",
         )
         .expect("feature doc");
+        fs::write(
+            root.join("docs/syu/requirements/core/plan.yaml"),
+            "category: Core Workspace\nprefix: REQ-CORE\nrequirements:\n  - id: REQ-CORE-031\n    title: Generate temporary Goal Plans from scoped requests\n    description: The task plan command should turn a scoped request artifact into a temporary Goal Plan while keeping persistent spec files untouched.\n    priority: medium\n    status: planned\n    linked_policies:\n      - POL-001\n    linked_features:\n      - FEAT-TASK-004\n    tests: {}\n",
+        )
+        .expect("plan requirement doc");
         fs::write(
             root.join("docs/syu/features/core/plan.yaml"),
             "category: Core Workspace\nversion: 1\nfeatures:\n  - id: FEAT-TASK-004\n    title: Goal Plan generation\n    summary: Turn scoped request artifacts into temporary Goal Plans with implementation, test, coverage, and completion sections outside the persistent spec tree.\n    status: planned\n    linked_requirements:\n      - REQ-CORE-031\n    implementations:\n      rust:\n        - file: src/command/task.rs\n          symbols:\n            - run_task_command\n            - run_task_plan_command\n        - file: src/cli.rs\n          symbols:\n            - TaskArgs\n            - TaskPlanArgs\n",
@@ -2525,7 +3016,7 @@ mod tests {
         );
         assert_eq!(
             super::next_available_scaffold_id(&lookup, crate::cli::LookupKind::Feature, "task"),
-            "FEAT-TASK-005"
+            "FEAT-TASK-006"
         );
         assert_eq!(
             super::next_available_scaffold_id(
@@ -2605,7 +3096,7 @@ mod tests {
     }
 
     #[test]
-    fn run_task_command_dispatches_classify_scope_and_scaffold() {
+    fn run_task_command_dispatches_classify_scope_scaffold_and_check() {
         let _ = TaskCommands::Classify(TaskClassifyArgs {
             request: PathBuf::from("request.yaml"),
             workspace: PathBuf::from("."),
@@ -2624,6 +3115,12 @@ mod tests {
         });
         let _ = TaskCommands::Scaffold(TaskScaffoldArgs {
             request: PathBuf::from("request.yaml"),
+            workspace: PathBuf::from("."),
+            format: OutputFormat::Text,
+        });
+        let _ = TaskCommands::Check(TaskCheckArgs {
+            plan: PathBuf::from("goal-plan.yaml"),
+            range: "origin/main...HEAD".to_string(),
             workspace: PathBuf::from("."),
             format: OutputFormat::Text,
         });
@@ -2757,7 +3254,7 @@ mod tests {
         let path = tempdir.path().join("goal-plan.yaml");
         fs::write(
             &path,
-            "version: 1\nkind: syu.goal_plan\nsource:\n  mode: request_driven\n  request_artifact: request.yaml\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\n  non_goals:\n    - Add persistent task specs under spec.root\nspec_mapping:\n  persistent_items:\n    philosophies:\n      - PHIL-001\n    policies:\n      - POL-001\n    requirements:\n      - REQ-CORE-030\n    features:\n      - FEAT-TASK-003\n  spec_updates:\n    required: false\n    expected_updates: []\nimplementation_plan:\n  scope:\n    include:\n      - src/command/task.rs\n    exclude:\n      - docs/syu/**\n  steps:\n    - add a Goal Plan model\n    - document the temporary artifact locations\ntest_plan:\n  selection_mode: affected\n  required_tests:\n    rust:\n      - tests/task_command.rs\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include:\n    - src/command/task.rs\n  exclude: []\ncompletion:\n  must_pass:\n    - syu validate .\n",
+            "version: 1\nkind: syu.goal_plan\nsource:\n  mode: request_driven\n  request_artifact: request.yaml\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\n  non_goals:\n    - Add persistent task specs under spec.root\nspec_mapping:\n  persistent_items:\n    philosophies:\n      - PHIL-001\n    policies:\n      - POL-001\n    requirements:\n      - REQ-CORE-030\n    features:\n      - FEAT-TASK-003\n  spec_updates:\n    required: false\n    expected_updates: []\nimplementation_plan:\n  scope:\n    include:\n      - src/command/task.rs\n    exclude:\n      - docs/syu/**\n  steps:\n    - add a Goal Plan model\n    - document the temporary artifact locations\ntest_plan:\n  selection_mode: affected\n  required_tests:\n    rust:\n      - file: tests/task_command.rs\n        symbols:\n          - task_plan_generates_goal_from_request\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include:\n    - src/command/task.rs\n  exclude: []\ncompletion:\n  must_pass:\n    - syu validate .\n",
         )
         .expect("goal plan");
 
@@ -2777,7 +3274,7 @@ mod tests {
 
         fs::write(
             &path,
-            "version: 1\nkind: syu.goal_plan\nsource:\n  mode: diff_inferred\n  range: origin/main...HEAD\n  confidence: high\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\n  non_goals:\n    - Add persistent task specs under spec.root\nspec_mapping:\n  persistent_items:\n    philosophies:\n      - PHIL-001\n    policies:\n      - POL-001\n    requirements:\n      - REQ-CORE-030\n    features:\n      - FEAT-TASK-003\n  spec_updates:\n    required: false\n    expected_updates: []\nimplementation_plan:\n  scope:\n    include:\n      - src/command/task.rs\n    exclude:\n      - docs/syu/**\n  steps:\n    - add a Goal Plan model\n    - document the temporary artifact locations\ntest_plan:\n  selection_mode: affected\n  required_tests:\n    rust:\n      - tests/task_command.rs\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include:\n    - src/command/task.rs\n  exclude: []\ncompletion:\n  must_pass:\n    - syu validate .\n",
+            "version: 1\nkind: syu.goal_plan\nsource:\n  mode: diff_inferred\n  range: origin/main...HEAD\n  confidence: high\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\n  non_goals:\n    - Add persistent task specs under spec.root\nspec_mapping:\n  persistent_items:\n    philosophies:\n      - PHIL-001\n    policies:\n      - POL-001\n    requirements:\n      - REQ-CORE-030\n    features:\n      - FEAT-TASK-003\n  spec_updates:\n    required: false\n    expected_updates: []\nimplementation_plan:\n  scope:\n    include:\n      - src/command/task.rs\n    exclude:\n      - docs/syu/**\n  steps:\n    - add a Goal Plan model\n    - document the temporary artifact locations\ntest_plan:\n  selection_mode: affected\n  required_tests:\n    rust:\n      - file: tests/task_command.rs\n        symbols:\n          - task_plan_generates_goal_from_request\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include:\n    - src/command/task.rs\n  exclude: []\ncompletion:\n  must_pass:\n    - syu validate .\n",
         )
         .expect("goal plan");
 

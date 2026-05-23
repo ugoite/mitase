@@ -62,7 +62,9 @@ test_plan:
   selection_mode: affected
   required_tests:
     rust:
-      - tests/task_command.rs
+      - file: tests/task_command.rs
+        symbols:
+          - task_plan_generates_goal_from_request
   suggested_tests: {}
 
 coverage:
@@ -92,7 +94,8 @@ completion:
 - **implementation_plan**: lists the bounded file or symbol scope and the steps
   to complete the work.
 - **test_plan**: records the test selection mode plus required and suggested
-  checks.
+  checks, including file and symbol references when a plan needs explicit test
+  coverage.
 - **coverage**: states the coverage expectation for the changed surface.
 - **completion**: lists the checks that must pass before the work is complete.
 

@@ -8,6 +8,7 @@
 // FEAT-TASK-001
 // FEAT-TASK-003
 // FEAT-TASK-004
+// FEAT-TASK-005
 // REQ-CORE-021
 // REQ-CORE-023
 // REQ-CORE-024
@@ -169,7 +170,8 @@ mod tests {
     use crate::cli::{
         AddArgs, AppArgs, AuditArgs, Cli, Commands, CompletionArgs, ExplainArgs, HistoryKind,
         ListArgs, LogArgs, LookupKind, OutputFormat, RelateArgs, SearchArgs, ShowArgs, TaskArgs,
-        TaskClassifyArgs, TaskCommands, TaskPlanArgs, TaskScopeArgs, TemplatesArgs, TraceArgs,
+        TaskCheckArgs, TaskClassifyArgs, TaskCommands, TaskPlanArgs, TaskPlanFormat, TaskScopeArgs,
+        TemplatesArgs, TraceArgs,
     };
     use clap_complete::Shell;
 
@@ -427,7 +429,7 @@ mod tests {
                         request: PathBuf::from("request.yaml"),
                         workspace: PathBuf::from("workspace"),
                         output: Some(PathBuf::from(".syu/tasks/current.yaml")),
-                        format: crate::cli::TaskPlanFormat::Yaml,
+                        format: TaskPlanFormat::Yaml,
                     }),
                 })),
             },
@@ -446,7 +448,39 @@ mod tests {
             }) if request == Path::new("request.yaml")
                 && workspace == Path::new("workspace")
                 && output.as_deref() == Some(Path::new(".syu/tasks/current.yaml"))
-                && format == crate::cli::TaskPlanFormat::Yaml
+                && format == TaskPlanFormat::Yaml
+        ));
+    }
+
+    #[test]
+    fn dispatches_task_check_subcommands_without_rewriting_them() {
+        let check = super::dispatch(
+            Cli {
+                command: Some(Commands::Task(TaskArgs {
+                    command: TaskCommands::Check(TaskCheckArgs {
+                        plan: PathBuf::from("goal-plan.yaml"),
+                        range: "origin/main...HEAD".to_string(),
+                        workspace: PathBuf::from("workspace"),
+                        format: OutputFormat::Json,
+                    }),
+                })),
+            },
+            true,
+            true,
+        );
+        assert!(matches!(
+            check,
+            super::Dispatch::Task(crate::cli::TaskArgs {
+                command: TaskCommands::Check(TaskCheckArgs {
+                    plan,
+                    range,
+                    workspace,
+                    format,
+                })
+            }) if plan == Path::new("goal-plan.yaml")
+                && range == "origin/main...HEAD"
+                && workspace == Path::new("workspace")
+                && format == OutputFormat::Json
         ));
     }
 

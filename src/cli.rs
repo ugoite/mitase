@@ -18,6 +18,7 @@
 // FEAT-DOCTOR-001
 // FEAT-TASK-003
 // FEAT-TASK-004
+// FEAT-TASK-005
 // REQ-CORE-001
 // REQ-CORE-030
 // REQ-CORE-031
@@ -41,7 +42,8 @@ New here?
   7. syu task classify request.yaml  classify a request artifact against the current spec graph
   8. syu task scope request.yaml      map a request artifact onto the current spec graph
   9. syu task scaffold request.yaml   preview planned requirement and feature updates from a request artifact
-  10. syu task plan request.yaml      generate a temporary Goal Plan from a request artifact";
+ 10. syu task plan request.yaml      generate a temporary Goal Plan from a request artifact
+ 11. syu task check goal-plan.yaml   validate a Goal Plan against a git range and the current spec graph";
 
 const APP_AFTER_HELP: &str = concat!(
     "After startup, open the printed URL in your browser.\n",
@@ -114,12 +116,21 @@ Examples:
 
 Use this after `syu task scope` and `syu task classify` when you want reviewable planned requirement, feature, and temporary Goal Plan updates that stay aligned with the existing `syu add` document and registry conventions.";
 
+const TASK_CHECK_AFTER_HELP: &str = "\
+Examples:
+  syu task check .syu/tasks/current.yaml --range origin/main...HEAD
+  syu task check target/syu/inferred-goal.yaml --range origin/main...HEAD --format json
+
+Use this when you already have a Goal Plan artifact and want a static conformance check against the changed files, linked spec IDs, required tests, and completion commands before review or merge.";
+
 const TASK_AFTER_HELP: &str = "\
 Examples:
   syu task classify request.yaml
   syu task scope request.yaml
   syu task scaffold request.yaml
-  syu task plan request.yaml --output .syu/tasks/current.yaml";
+  syu task plan request.yaml --output .syu/tasks/current.yaml
+  syu task check .syu/tasks/current.yaml --range origin/main...HEAD
+  syu task check target/syu/inferred-goal.yaml --range origin/main...HEAD --format json";
 
 const WORKSPACE_HELP: &str = "Workspace root or any child directory; syu walks upward to find syu.yaml and the configured spec tree";
 
@@ -317,7 +328,7 @@ pub enum Commands {
     )]
     Completion(CompletionArgs),
     #[command(
-        about = "Classify, scope, scaffold, or plan request-driven task planning work",
+        about = "Classify, scope, scaffold, plan, or check request-driven task planning work",
         after_help = TASK_AFTER_HELP
     )]
     Task(TaskArgs),
@@ -820,6 +831,11 @@ pub enum TaskCommands {
         after_help = TASK_SCAFFOLD_AFTER_HELP
     )]
     Scaffold(TaskScaffoldArgs),
+    #[command(
+        about = "Validate a Goal Plan against the current spec graph and a git range",
+        after_help = TASK_CHECK_AFTER_HELP
+    )]
+    Check(TaskCheckArgs),
 }
 
 #[derive(Debug, Clone, Args)]
@@ -878,6 +894,24 @@ pub struct TaskScaffoldArgs {
     pub workspace: PathBuf,
 
     #[arg(help = "Output format for the scaffold preview")]
+    #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct TaskCheckArgs {
+    #[arg(help = "Goal Plan artifact to validate")]
+    pub plan: PathBuf,
+
+    #[arg(help = "Git revision range to compare against the plan scope")]
+    #[arg(long)]
+    pub range: String,
+
+    #[arg(help = WORKSPACE_HELP)]
+    #[arg(default_value = ".")]
+    pub workspace: PathBuf,
+
+    #[arg(help = "Output format for the Goal Plan check")]
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
     pub format: OutputFormat,
 }
@@ -1000,9 +1034,9 @@ impl ValidationGenreFilter {
 #[cfg(test)]
 mod tests {
     use super::{
-        Cli, CompletionArgs, LookupKind, StarterTemplate, TaskArgs, TaskClassifyArgs, TaskCommands,
-        TaskPlanArgs, TaskScaffoldArgs, TaskScopeArgs, ValidationGenreFilter,
-        ValidationSeverityFilter,
+        Cli, CompletionArgs, LookupKind, StarterTemplate, TaskArgs, TaskCheckArgs,
+        TaskClassifyArgs, TaskCommands, TaskPlanArgs, TaskScaffoldArgs, TaskScopeArgs,
+        ValidationGenreFilter, ValidationSeverityFilter,
     };
     use crate::command::init::{starter_template_example_commands, starter_template_names};
     use clap::Parser;
@@ -1181,6 +1215,37 @@ mod tests {
                     format,
                 }),
             })) if request == std::path::Path::new("request.yaml")
+                && workspace == std::path::Path::new(".")
+                && format == super::OutputFormat::Json
+        ));
+    }
+
+    #[test]
+    fn task_check_args_parse_plan_paths_range_and_json_format() {
+        let cli = Cli::try_parse_from([
+            "syu",
+            "task",
+            "check",
+            "goal-plan.yaml",
+            "--range",
+            "origin/main...HEAD",
+            ".",
+            "--format",
+            "json",
+        ])
+        .expect("task check args should parse");
+
+        assert!(matches!(
+            cli.command,
+            Some(super::Commands::Task(TaskArgs {
+                command: TaskCommands::Check(TaskCheckArgs {
+                    plan,
+                    range,
+                    workspace,
+                    format,
+                }),
+            })) if plan == std::path::Path::new("goal-plan.yaml")
+                && range == "origin/main...HEAD"
                 && workspace == std::path::Path::new(".")
                 && format == super::OutputFormat::Json
         ));
