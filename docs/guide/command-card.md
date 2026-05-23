@@ -29,6 +29,7 @@ If a pull request already exists, pair this page with the
 | Strictly review a PR range | `syu review --range origin/main...HEAD --strict --allowed-id FEAT-CHECK-001 --format json` | fail the range review on unowned, ambiguously owned, or out-of-scope changes while keeping structured findings for CI |
 | Guard a review range | `syu review --range origin/main...HEAD --allowed-id FEAT-CHECK-001` | block changes that step outside the named requirement or feature IDs and list the out-of-scope items |
 | Draft a temporary goal plan | `syu task scaffold request.yaml` | preview a bounded delivery artifact with goal, scope, tests, coverage, and completion checks without adding a fifth persistent spec layer |
+| Check a temporary goal plan | `syu task check goal-plan.yaml --range origin/main...HEAD` | validate a temporary Goal Plan against the changed files, linked spec IDs, required tests, and completion commands before review |
 | Jump from code to the owning spec | `syu trace src/command/check.rs --symbol run_check_command` | start in code and resolve the traced requirement and feature chain |
 | List items by layer | `syu list feature` | print list-shaped output instead of the browser-style explorer |
 | Search by keyword or ID | `syu search validation --kind feature` | find the right spec item before `show`, `relate`, or `log` |
