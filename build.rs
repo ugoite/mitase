@@ -34,6 +34,7 @@ fn main() {
     emit_watch_recursive(&shared_core_dir.join("src"));
 
     emit_build_version();
+    println!("cargo:rerun-if-env-changed=SYU_SKIP_BROWSER_APP_BUILD");
     fs::create_dir_all(&out_dir).expect("browser app dist directory should be creatable");
 
     let skip_browser_app_build = env::var_os("SYU_SKIP_BROWSER_APP_BUILD").is_some();

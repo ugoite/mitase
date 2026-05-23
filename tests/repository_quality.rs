@@ -65,6 +65,7 @@ fn repository_declares_precommit_and_quality_gates() {
     let precommit = read_file(".pre-commit-config.yaml");
     let install_precommit = read_file("scripts/install-precommit.sh");
     let quality_script = read_file("scripts/ci/quality-gates.sh");
+    let validate_changed_script = read_file("scripts/dev/validate-changed.sh");
     let branch_push_workflow = read_file(".github/workflows/branch-push.yml");
     let maintenance_workflow = read_file(".github/workflows/maintenance.yml");
     let validate_app_script = read_file("scripts/ci/validate-app.sh");
@@ -85,12 +86,15 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(quality_script.contains("run_quality_gates"));
     assert!(quality_script.contains("fast"));
     assert!(quality_script.contains("full"));
+    assert!(quality_script.contains("SYU_SKIP_BROWSER_APP_BUILD=1"));
     assert!(quality_script.contains("cargo fmt --all --check"));
     assert!(quality_script.contains("cargo clippy --all-targets --all-features -- -D warnings"));
     assert!(quality_script.contains("cargo test --lib --bins -- --skip command::log::tests::"));
     assert!(quality_script.contains("cargo test"));
     assert!(quality_script.contains("cargo run -- validate ."));
     assert!(quality_script.contains("check-generated-docs-freshness.sh"));
+    assert!(validate_changed_script.contains("SYU_SKIP_BROWSER_APP_BUILD=1"));
+    assert!(validate_changed_script.contains("cargo run -- validate ."));
     assert!(branch_push_workflow.contains("duplicate-check:"));
     assert!(branch_push_workflow.contains("has_open_pr"));
     assert!(branch_push_workflow.contains("scripts/ci/quality-gates.sh fast"));
@@ -200,6 +204,7 @@ fn repository_declares_coverage_reporting_without_percentage_gate() {
     assert!(coverage_script.contains("generate_spec_coverage_summary"));
     assert!(coverage_script.contains("target/coverage/spec-coverage-summary.md"));
     assert!(coverage_script.contains("GITHUB_STEP_SUMMARY"));
+    assert!(coverage_script.contains("SYU_SKIP_BROWSER_APP_BUILD=1"));
 
     assert!(spec_summary_script.contains("FEAT-QUALITY-001"));
     assert!(spec_summary_script.contains("Coverage by requirement and feature"));
@@ -1355,6 +1360,7 @@ fn repository_ships_browser_app() {
     assert!(build_script.contains("browser app dependencies are not ready"));
     assert!(build_script.contains("fresh clone or fresh worktree"));
     assert!(build_script.contains("Cargo intentionally does not run a networked npm install"));
+    assert!(build_script.contains("rerun-if-env-changed=SYU_SKIP_BROWSER_APP_BUILD"));
     assert!(build_script.contains("build:wasm"));
     assert!(build_script.contains("--outDir"));
     assert!(build_script.contains("shared_core_dir"));
