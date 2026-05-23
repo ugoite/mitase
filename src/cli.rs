@@ -43,8 +43,9 @@ New here?
   8. syu task scope request.yaml      map a request artifact onto the current spec graph
   9. syu task scaffold request.yaml   preview planned requirement and feature updates from a request artifact
  10. syu task plan request.yaml      generate a temporary Goal Plan from a request artifact
- 11. syu task infer --range ...      infer a provisional Goal Plan from a git diff
- 12. syu task check goal-plan.yaml   validate a Goal Plan against a git range and the current spec graph";
+ 11. syu task test-select goal-plan.yaml select tests from a Goal Plan before scoped coverage runs
+ 12. syu task infer --range ...      infer a provisional Goal Plan from a git diff
+ 13. syu task check goal-plan.yaml   validate a Goal Plan against a git range and the current spec graph";
 
 const APP_AFTER_HELP: &str = concat!(
     "After startup, open the printed URL in your browser.\n",
@@ -110,6 +111,13 @@ Examples:
 
 Use this when a scoped request is ready to become a temporary Goal Plan that stays outside the persistent spec tree while still mapping the request to existing philosophy, policy, requirement, and feature items.";
 
+const TASK_TEST_SELECT_AFTER_HELP: &str = "\
+Examples:
+  syu task test-select goal-plan.yaml
+  syu task test-select goal-plan.yaml --format json
+
+Use this when you already have a Goal Plan and want a justified test selection plan with shell commands before scoped coverage or CI runs.";
+
 const TASK_INFER_AFTER_HELP: &str = "\
 Examples:
   syu task infer --range origin/main...HEAD
@@ -138,6 +146,7 @@ Examples:
   syu task scope request.yaml
   syu task scaffold request.yaml
   syu task plan request.yaml --output .syu/tasks/current.yaml
+  syu task test-select goal-plan.yaml
   syu task infer --range origin/main...HEAD --output target/syu/inferred-goal.yaml
   syu task check .syu/tasks/current.yaml --range origin/main...HEAD
   syu task check target/syu/inferred-goal.yaml --range origin/main...HEAD --format json";
@@ -338,7 +347,7 @@ pub enum Commands {
     )]
     Completion(CompletionArgs),
     #[command(
-        about = "Classify, scope, scaffold, plan, or check request-driven task planning work",
+        about = "Classify, scope, scaffold, plan, select tests, infer, or check request-driven task planning work",
         after_help = TASK_AFTER_HELP
     )]
     Task(TaskArgs),
@@ -837,6 +846,11 @@ pub enum TaskCommands {
     )]
     Plan(TaskPlanArgs),
     #[command(
+        about = "Select a justified test plan from a Goal Plan",
+        after_help = TASK_TEST_SELECT_AFTER_HELP
+    )]
+    TestSelect(TaskTestSelectArgs),
+    #[command(
         about = "Infer a provisional Goal Plan from a git diff",
         after_help = TASK_INFER_AFTER_HELP
     )]
@@ -897,6 +911,20 @@ pub struct TaskPlanArgs {
     #[arg(help = "Output format for the Goal Plan artifact or summary")]
     #[arg(long, value_enum, default_value_t = TaskPlanFormat::Text)]
     pub format: TaskPlanFormat,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct TaskTestSelectArgs {
+    #[arg(help = "Goal Plan artifact to turn into a test selection plan")]
+    pub plan: PathBuf,
+
+    #[arg(help = WORKSPACE_HELP)]
+    #[arg(default_value = ".")]
+    pub workspace: PathBuf,
+
+    #[arg(help = "Output format for the test selection plan")]
+    #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
+    pub format: OutputFormat,
 }
 
 #[derive(Debug, Clone, Args)]
@@ -1070,7 +1098,7 @@ mod tests {
     use super::{
         Cli, CompletionArgs, LookupKind, StarterTemplate, TaskArgs, TaskCheckArgs,
         TaskClassifyArgs, TaskCommands, TaskPlanArgs, TaskScaffoldArgs, TaskScopeArgs,
-        ValidationGenreFilter, ValidationSeverityFilter,
+        TaskTestSelectArgs, ValidationGenreFilter, ValidationSeverityFilter,
     };
     use crate::command::init::{starter_template_example_commands, starter_template_names};
     use clap::Parser;
@@ -1224,6 +1252,33 @@ mod tests {
                 && workspace == std::path::Path::new(".")
                 && output.as_deref() == Some(std::path::Path::new(".syu/tasks/current.yaml"))
                 && format == super::TaskPlanFormat::Yaml
+        ));
+    }
+
+    #[test]
+    fn task_test_select_args_parse_goal_plan_paths_and_json_format() {
+        let cli = Cli::try_parse_from([
+            "syu",
+            "task",
+            "test-select",
+            "goal-plan.yaml",
+            ".",
+            "--format",
+            "json",
+        ])
+        .expect("task test-select args should parse");
+
+        assert!(matches!(
+            cli.command,
+            Some(super::Commands::Task(TaskArgs {
+                command: TaskCommands::TestSelect(TaskTestSelectArgs {
+                    plan,
+                    workspace,
+                    format,
+                }),
+            })) if plan == std::path::Path::new("goal-plan.yaml")
+                && workspace == std::path::Path::new(".")
+                && format == super::OutputFormat::Json
         ));
     }
 
