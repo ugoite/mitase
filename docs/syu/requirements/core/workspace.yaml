@@ -709,7 +709,9 @@ requirements:
             - GoalPlanArtifact
             - load_goal_plan_artifact
             - run_task_plan_command
+            - run_task_infer_command
             - build_goal_plan
+            - build_diff_inferred_goal_plan
             - render_goal_plan_output
             - resolve_task_plan_output_path
             - goal_plan_builder_renders_outputs_and_writes_files
@@ -721,6 +723,7 @@ requirements:
           symbols:
             - TaskArgs
             - TaskPlanArgs
+            - TaskInferArgs
             - TaskPlanFormat
         - file: src/lib.rs
           symbols:
@@ -732,6 +735,14 @@ requirements:
             - task_plan_prints_text_output_and_writes_goal_plan_file
             - task_plan_prints_json_output_with_scope_and_test_sections
             - task_plan_warns_when_output_is_inside_spec_root
+            - task_infer_reports_high_confidence_for_a_clean_single_feature_diff
+            - task_infer_reports_medium_confidence_for_shared_utility_diffs
+            - task_infer_reports_low_confidence_for_unmapped_files
+            - task_infer_reports_low_confidence_for_ambiguous_ownership
+            - task_infer_reports_medium_confidence_for_spec_only_and_mixed_diffs
+            - task_infer_is_deterministic_for_json_and_yaml_outputs
+            - task_infer_rejects_empty_diffs
+            - task_infer_keeps_spec_updates_optional_for_medium_confidence_planned_features
             - goal_plan_artifact_supports_request_driven_and_diff_inferred_sources
             - goal_plan_artifact_requires_the_goal_plan_marker
             - goal_plan_format_is_documented_as_temporary
@@ -747,9 +758,13 @@ requirements:
         - file: docs/guide/implementation-planning.md
           symbols:
             - syu task plan
+            - syu task infer --range origin/main...HEAD
         - file: docs/guide/goal-plan-format.md
           symbols:
             - syu.goal_plan
+        - file: docs/guide/command-card.md
+          symbols:
+            - syu task infer --range origin/main...HEAD
   - id: REQ-CORE-032
     title: Validate temporary Goal Plans against the current spec graph and git range
     description: |
