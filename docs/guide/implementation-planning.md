@@ -96,6 +96,8 @@ syu task scaffold request.yaml
 ```
 
 Use `syu task plan` when you need the temporary Goal Plan artifact itself.
+Use `syu task test-select` when you already have a Goal Plan and want the
+smallest defensible test command set before scoped coverage or CI runs.
 Use `syu task infer --range origin/main...HEAD` when implementation already
 exists and you want a provisional Goal Plan inferred from the changed files,
 their traced owners, and the current graph.
@@ -114,6 +116,7 @@ the concrete files and run validation:
 ```bash
 syu trace src/command/check.rs --symbol run_check_command
 syu log FEAT-CHECK-001 --kind implementation --path src/command
+syu task test-select goal-plan.yaml
 syu validate .
 ```
 

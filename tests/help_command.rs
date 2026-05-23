@@ -35,6 +35,7 @@ fn root_help_includes_start_here_guidance() {
     assert!(stdout.contains("syu task scope request.yaml"));
     assert!(stdout.contains("syu task check goal-plan.yaml"));
     assert!(stdout.contains("syu task plan request.yaml"));
+    assert!(stdout.contains("syu task test-select goal-plan.yaml"));
     assert!(stdout.contains("syu task check goal-plan.yaml"));
     assert!(stdout.contains(
         "Browse the specification in your terminal (interactive prompts or text output)"
@@ -74,6 +75,7 @@ fn workspace_help_uses_current_directory_default_consistently() {
         &["task", "classify"][..],
         &["task", "scope"][..],
         &["task", "plan"][..],
+        &["task", "test-select"][..],
         &["relate"][..],
         &["log"][..],
         &["audit"][..],
@@ -300,6 +302,23 @@ fn task_help_mentions_request_artifacts_and_json_output() {
     assert!(stdout.contains("--format"));
     assert!(stdout.contains("syu task classify request.yaml"));
     assert!(stdout.contains("syu task classify request.yaml --format json"));
+}
+
+#[test]
+fn task_test_select_help_mentions_goal_plans_and_json_output() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args(["task", "test-select", "--help"])
+        .output()
+        .expect("help should render");
+
+    assert!(output.status.success(), "task help should succeed");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Goal Plan"));
+    assert!(stdout.contains("--format"));
+    assert!(stdout.contains("syu task test-select goal-plan.yaml"));
+    assert!(stdout.contains("syu task test-select goal-plan.yaml --format json"));
 }
 
 #[test]

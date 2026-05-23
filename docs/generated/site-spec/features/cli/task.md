@@ -158,13 +158,41 @@ description: "Generated reference for docs/syu/features/cli/task.yaml"
         - **symbols**:
           - dispatch
           - run_dispatch
-    - **markdown**:
+  - **markdown**:
       - **file**: docs/guide/goal-plan-format.md
         - **symbols**:
           - syu.goal_plan
       - **file**: docs/guide/command-card.md
         - **symbols**:
           - syu task check goal-plan.yaml --range origin/main...HEAD
+- **id**: FEAT-TASK-006
+  - **title**: Goal Plan test selection
+  - **summary**: Turn Goal Plan test declarations into justified shell commands for CI before scoped coverage runs.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-033
+  - **implementations**:
+    - **rust**:
+      - **file**: src/command/task.rs
+        - **symbols**:
+          - run_task_command
+          - run_task_test_select_command
+          - build_task_test_selection
+      - **file**: src/cli.rs
+        - **symbols**:
+          - TaskArgs
+          - TaskTestSelectArgs
+      - **file**: src/lib.rs
+        - **symbols**:
+          - dispatch
+          - run_dispatch
+    - **markdown**:
+      - **file**: docs/guide/goal-plan-format.md
+        - **symbols**:
+          - syu.goal_plan
+      - **file**: docs/guide/command-card.md
+        - **symbols**:
+          - syu task test-select goal-plan.yaml
 
 ## Source YAML
 
@@ -321,4 +349,32 @@ features:
         - file: docs/guide/command-card.md
           symbols:
             - syu task check goal-plan.yaml --range origin/main...HEAD
+  - id: FEAT-TASK-006
+    title: Goal Plan test selection
+    summary: Turn Goal Plan test declarations into justified shell commands for CI before scoped coverage runs.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-033
+    implementations:
+      rust:
+        - file: src/command/task.rs
+          symbols:
+            - run_task_command
+            - run_task_test_select_command
+            - build_task_test_selection
+        - file: src/cli.rs
+          symbols:
+            - TaskArgs
+            - TaskTestSelectArgs
+        - file: src/lib.rs
+          symbols:
+            - dispatch
+            - run_dispatch
+      markdown:
+        - file: docs/guide/goal-plan-format.md
+          symbols:
+            - syu.goal_plan
+        - file: docs/guide/command-card.md
+          symbols:
+            - syu task test-select goal-plan.yaml
 ```

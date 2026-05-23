@@ -244,6 +244,7 @@ policies:
       - REQ-CORE-030
       - REQ-CORE-031
       - REQ-CORE-032
+      - REQ-CORE-033
 
   - id: POL-002
     title: Validation should explain the current state instead of only failing
@@ -332,6 +333,7 @@ policies:
       - REQ-CORE-030
       - REQ-CORE-031
       - REQ-CORE-032
+      - REQ-CORE-033
 
   - id: POL-005
     title: Documentation and examples must lower adoption friction
