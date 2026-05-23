@@ -74,9 +74,9 @@ dependency installs, and Playwright browser readiness for this checkout.
    cargo run -- validate .
    ```
 
-   `scripts/ci/quality-gates.sh fast` keeps the local pre-push path short.
-   The full gate also checks that the committed `docs/generated/` artifacts
-   are fresh and generates the repository report:
+   `scripts/ci/quality-gates.sh fast` keeps the local pre-push path short and
+   now catches stale `docs/generated/` artifacts before you queue a push. The
+   full gate adds the repository report:
 
    ```bash
    scripts/ci/quality-gates.sh full
