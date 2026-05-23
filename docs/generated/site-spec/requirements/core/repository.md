@@ -253,6 +253,10 @@ requirements:
         - file: tests/repository_quality.rs
           symbols:
             - repository_declares_coverage_reporting_without_percentage_gate
+        - file: tests/coverage_script.rs
+          symbols:
+            - pr_goal_coverage_reports_json_success_for_covered_in_scope_changes
+            - pr_goal_coverage_fails_for_uncovered_and_out_of_scope_changes
         - file: tests/spec_coverage_summary_script.rs
           symbols:
             - '*'
