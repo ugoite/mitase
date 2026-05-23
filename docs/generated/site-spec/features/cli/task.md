@@ -158,7 +158,7 @@ description: "Generated reference for docs/syu/features/cli/task.yaml"
         - **symbols**:
           - dispatch
           - run_dispatch
-  - **markdown**:
+    - **markdown**:
       - **file**: docs/guide/goal-plan-format.md
         - **symbols**:
           - syu.goal_plan

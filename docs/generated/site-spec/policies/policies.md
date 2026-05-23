@@ -48,6 +48,7 @@ description: "Generated reference for docs/syu/policies/policies.yaml"
     - REQ-CORE-030
     - REQ-CORE-031
     - REQ-CORE-032
+    - REQ-CORE-033
 - **id**: POL-002
   - **title**: Validation should explain the current state instead of only failing
   - **summary**: Errors, reports, and browsing should make the layered model legible even when the workspace is broken.
@@ -136,6 +137,7 @@ description: "Generated reference for docs/syu/policies/policies.yaml"
     - REQ-CORE-030
     - REQ-CORE-031
     - REQ-CORE-032
+    - REQ-CORE-033
 - **id**: POL-005
   - **title**: Documentation and examples must lower adoption friction
   - **summary**: Guides, reports, sites, and examples are part of the product surface.
