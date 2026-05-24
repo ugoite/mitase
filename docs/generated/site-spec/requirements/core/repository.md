@@ -61,6 +61,9 @@ description: "Generated reference for docs/syu/requirements/core/repository.yaml
         - **symbols**:
           - repository_declares_goal_selected_pr_tests_without_line_based_gating
           - repository_declares_manual_coverage_reporting_without_ci_gating
+      - **file**: tests/task_command.rs
+        - **symbols**:
+          - task_test_select_maps_command_source_files_to_command_targets
       - **file**: tests/coverage_script.rs
         - **symbols**:
           - pr_goal_coverage_reports_json_success_for_covered_in_scope_changes
@@ -260,6 +263,9 @@ requirements:
           symbols:
             - repository_declares_goal_selected_pr_tests_without_line_based_gating
             - repository_declares_manual_coverage_reporting_without_ci_gating
+        - file: tests/task_command.rs
+          symbols:
+            - task_test_select_maps_command_source_files_to_command_targets
         - file: tests/coverage_script.rs
           symbols:
             - pr_goal_coverage_reports_json_success_for_covered_in_scope_changes

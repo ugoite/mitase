@@ -12,7 +12,8 @@ run_goal_tests() {
   repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
   cd "$repo_root"
 
-  export SYU_SKIP_BROWSER_APP_BUILD=1
+  scripts/ci/pinned-npm.sh install app
+  npm --prefix app ci
 
   mkdir -p "$(dirname "$goal_plan_path")"
 
@@ -30,15 +31,24 @@ plan = json.loads(selected_tests_path.read_text(encoding="utf-8"))
 goal_id = plan.get("goal_id", "<unknown>")
 goal_title = plan.get("goal_title", "<unknown>")
 commands = plan.get("commands", [])
+unique_commands = []
+seen_commands = set()
 
-if not commands:
+for item in commands:
+    command = item["command"]
+    if command in seen_commands:
+        continue
+    seen_commands.add(command)
+    unique_commands.append(item)
+
+if not unique_commands:
     raise SystemExit(f"no goal-selected test commands were produced for {goal_id}")
 
 print(f"goal: {goal_id} - {goal_title}")
 print(f"selection mode: {plan.get('selection_mode', '<unknown>')}")
 print(f"escalation: {plan.get('escalation', {}).get('level', '<unknown>')}")
 
-for item in commands:
+for item in unique_commands:
     command = item["command"]
     reason = item.get("reason", "")
     language = item.get("language", "")

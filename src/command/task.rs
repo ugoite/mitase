@@ -1349,6 +1349,9 @@ fn build_task_test_selection_commands(
             let reason = format_task_test_selection_reason(&entry.reasons);
             let target = rust_test_target_name(file);
             if broaden_to_file || entry.whole_file {
+                let Some(target) = target else {
+                    continue;
+                };
                 commands.push(TaskTestSelectionCommand {
                     language: language.clone(),
                     command: format!("cargo test --test {target}"),
@@ -1360,6 +1363,10 @@ fn build_task_test_selection_commands(
                 });
                 continue;
             }
+
+            let Some(target) = target else {
+                continue;
+            };
 
             for symbol in &entry.symbols {
                 commands.push(TaskTestSelectionCommand {
@@ -1442,12 +1449,31 @@ fn goal_plan_selection_mode_label(mode: GoalPlanSelectionMode) -> &'static str {
     }
 }
 
-fn rust_test_target_name(file: &str) -> String {
-    Path::new(file)
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .unwrap_or("test")
-        .to_string()
+fn rust_test_target_name(file: &str) -> Option<String> {
+    let path = Path::new(file);
+    let stem = path.file_stem().and_then(|stem| stem.to_str())?;
+
+    if file.starts_with("src/command/") {
+        match stem {
+            "lookup" | "mod" | "prompt" | "completion" | "issue_text" => return None,
+            _ => {}
+        }
+        return Some(format!("{stem}_command"));
+    }
+
+    match file {
+        "src/lib.rs" | "src/main.rs" => Some("main_binary".to_string()),
+        "src/coverage.rs" => Some("coverage_script".to_string()),
+        "src/report.rs" => Some("report_command".to_string()),
+        "src/workspace.rs" => Some("workspace_discovery_command".to_string()),
+        _ => {
+            if path.starts_with("tests") {
+                Some(stem.to_string())
+            } else {
+                None
+            }
+        }
+    }
 }
 
 fn goal_plan_mentions_shared_utilities(artifact: &GoalPlanArtifact) -> bool {

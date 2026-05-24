@@ -957,6 +957,35 @@ fn task_test_select_accepts_known_non_rust_language_adapters() {
 }
 
 #[test]
+fn task_test_select_maps_command_source_files_to_command_targets() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_goal_plan(
+        &tempdir.path().join("goal-plan.yaml"),
+        &task_test_selection_goal_plan_yaml(
+            "minimal",
+            Some("high"),
+            &[("rust", "src/command/task.rs", "run_task_command")],
+            &[],
+            &[],
+            &[],
+            &[],
+        ),
+    );
+
+    let output = {
+        let mut command = Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "test-select", "goal-plan.yaml"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task test-select should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("cargo test --test task_command run_task_command"));
+}
+
+#[test]
 fn task_test_select_is_deterministic_for_json_output() {
     let tempdir = tempdir().expect("tempdir");
     write_workspace(tempdir.path());

@@ -105,12 +105,6 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
 
-      - name: Install browser app dependencies
-        shell: bash
-        run: |
-          scripts/ci/pinned-npm.sh install app
-          npm --prefix app ci
-
       - name: Run goal-selected tests
         run: scripts/ci/run-goal-tests.sh
 

@@ -193,10 +193,11 @@ fn repository_declares_goal_selected_pr_tests_without_line_based_gating() {
 
     assert!(goal_tests_script.contains("FEAT-QUALITY-001"));
     assert!(goal_tests_script.contains("run_goal_tests"));
+    assert!(goal_tests_script.contains("scripts/ci/pinned-npm.sh install app"));
+    assert!(goal_tests_script.contains("npm --prefix app ci"));
     assert!(goal_tests_script.contains("cargo run --quiet -- task infer"));
     assert!(goal_tests_script.contains("cargo run --quiet -- task test-select"));
     assert!(goal_tests_script.contains("selected-tests.json"));
-    assert!(goal_tests_script.contains("SYU_SKIP_BROWSER_APP_BUILD=1"));
 
     assert!(ci_workflow.contains("goal-tests:"));
     assert!(ci_workflow.contains("scripts/ci/run-goal-tests.sh"));
