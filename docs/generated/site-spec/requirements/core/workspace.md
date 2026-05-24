@@ -749,7 +749,6 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
           - resolve_task_plan_output_path
           - goal_plan_builder_renders_outputs_and_writes_files
           - goal_plan_builder_marks_low_confidence_and_warns_when_scope_is_sparse
-          - goal_plan_artifact_supports_request_driven_and_diff_inferred_sources
           - goal_plan_artifact_defaults_to_request_driven_source_when_omitted
           - goal_plan_artifact_requires_the_goal_plan_marker
       - **file**: src/cli.rs
@@ -1656,7 +1655,6 @@ requirements:
             - resolve_task_plan_output_path
             - goal_plan_builder_renders_outputs_and_writes_files
             - goal_plan_builder_marks_low_confidence_and_warns_when_scope_is_sparse
-            - goal_plan_artifact_supports_request_driven_and_diff_inferred_sources
             - goal_plan_artifact_defaults_to_request_driven_source_when_omitted
             - goal_plan_artifact_requires_the_goal_plan_marker
         - file: src/cli.rs
