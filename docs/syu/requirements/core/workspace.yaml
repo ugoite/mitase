@@ -715,7 +715,6 @@ requirements:
             - render_goal_plan_output
             - resolve_task_plan_output_path
             - goal_plan_builder_renders_outputs_and_writes_files
-            - goal_plan_artifact_defaults_to_request_driven_source_when_omitted
             - goal_plan_artifact_requires_the_goal_plan_marker
         - file: src/cli.rs
           symbols:

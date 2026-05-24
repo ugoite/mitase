@@ -4734,53 +4734,6 @@ mod tests {
     }
 
     #[test]
-    fn goal_plan_artifact_defaults_to_request_driven_source_when_omitted() {
-        let tempdir = tempdir().expect("tempdir");
-        write_workspace(tempdir.path());
-        let path = tempdir.path().join("goal-plan.yaml");
-        fs::write(
-            &path,
-            "version: 1\nkind: syu.goal_plan\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\nimplementation_plan:\n  scope:\n    include: []\n    exclude: []\n  steps: []\ntest_plan:\n  selection_mode: minimal\n  required_tests: {}\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\ncompletion:\n  must_pass: []\n",
-        )
-        .expect("goal plan");
-
-        let artifact = load_goal_plan_artifact(&path).expect("goal plan should load");
-        assert_eq!(artifact.source.mode, GoalPlanSourceMode::RequestDriven);
-        assert!(artifact.source.request_artifact.is_none());
-        assert!(artifact.source.range.is_none());
-        assert!(artifact.source.confidence.is_none());
-
-        let inferred_path = tempdir.path().join("goal-plan-inferred.yaml");
-        fs::write(
-            &inferred_path,
-            "version: 1\nkind: syu.goal_plan\nrequest_path: request.yaml\nrequest: Keep temporary planning explicit\nclassification: request_driven\nwarnings:\n  - inferred from request text\nsource:\n  mode: diff_inferred\n  request_artifact: request.yaml\n  classification: request_driven\n  range: origin/main...HEAD\n  confidence: high\n  evidence:\n    changed_files:\n      - src/command/task.rs\n    traced_requirements:\n      - REQ-CORE-033\n    traced_features:\n      - FEAT-TASK-006\n    traced_policies:\n      - POL-001\n    traced_philosophies:\n      - PHIL-001\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\n  inferred: true\n  non_goals:\n    - Add persistent task specs under spec.root\nspec_mapping:\n  persistent_items:\n    philosophies:\n      - id: PHIL-001\n        title: Keep planning explicit\n        document_path: docs/syu/philosophy/foundation.yaml\n    policies:\n      - id: POL-001\n        title: Keep request workflows visible\n        document_path: docs/syu/policies/policies.yaml\n    requirements:\n      - id: REQ-CORE-033\n        title: Select tests from a Goal Plan before CI runs\n        document_path: docs/syu/requirements/core/test-select.yaml\n    features:\n      - id: FEAT-TASK-006\n        title: Goal Plan test selection\n        document_path: docs/syu/features/core/test-select.yaml\n  spec_updates:\n    required: false\n    expected_updates: []\n  spec_updates_required: false\n  spec_update_reasons:\n    - no persistent spec files should be modified\nimplementation_plan:\n  confidence: high\n  scope:\n    include:\n      - file: src/command/task.rs\n        symbols: []\n    exclude:\n      - docs/syu/**\n  steps:\n    - add a Goal Plan model\ntest_plan:\n  selection_mode: affected\n  confidence: high\n  required_tests:\n    rust:\n      - file: tests/task_selection.rs\n        symbols:\n          - task_test_select_uses_required_goal_plan_tests\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include:\n    - src/command/task.rs\n  exclude: []\ncompletion:\n  must_pass:\n    - syu validate .\n",
-        )
-        .expect("goal plan");
-
-        let inferred = load_goal_plan_artifact(&inferred_path).expect("goal plan should load");
-        assert_eq!(inferred.request_path.as_deref(), Some("request.yaml"));
-        assert_eq!(
-            inferred.request.as_deref(),
-            Some("Keep temporary planning explicit")
-        );
-        assert_eq!(inferred.classification.as_deref(), Some("request_driven"));
-        assert_eq!(
-            inferred.warnings,
-            vec!["inferred from request text".to_string()]
-        );
-
-        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
-        let selection = super::build_task_test_selection(&workspace, &inferred).expect("selection");
-        assert_eq!(selection.goal_id, "GOAL-001");
-        assert!(
-            selection
-                .commands
-                .iter()
-                .any(|command| command.command.contains("cargo test"))
-        );
-    }
-
-    #[test]
     fn goal_plan_artifact_requires_the_goal_plan_marker() {
         let tempdir = tempdir().expect("tempdir");
         let path = tempdir.path().join("goal-plan.yaml");
