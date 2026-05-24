@@ -849,6 +849,7 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
           - task_check_rejects_empty_required_test_symbols
           - task_check_rejects_absolute_required_test_files_outside_workspace
           - task_check_rejects_malformed_goal_plans
+          - task_test_select_rejects_empty_symbol_lists
       - **file**: tests/help_command.rs
         - **symbols**:
           - task_check_help_mentions_goal_plans_and_json_output
