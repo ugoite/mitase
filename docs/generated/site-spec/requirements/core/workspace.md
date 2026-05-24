@@ -845,6 +845,8 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
           - task_check_reports_unknown_linked_requirement_and_feature_ids
           - task_check_reports_missing_required_test_files
           - task_check_reports_missing_required_test_symbols
+          - task_check_reports_low_confidence_and_range_mismatch_warnings
+          - task_check_reports_missing_source_confidence_and_structured_items
           - task_check_rejects_empty_required_test_symbols
           - task_check_rejects_absolute_required_test_files_outside_workspace
           - task_check_rejects_malformed_goal_plans
@@ -1749,6 +1751,8 @@ requirements:
             - task_check_reports_unknown_linked_requirement_and_feature_ids
             - task_check_reports_missing_required_test_files
             - task_check_reports_missing_required_test_symbols
+            - task_check_reports_low_confidence_and_range_mismatch_warnings
+            - task_check_reports_missing_source_confidence_and_structured_items
             - task_check_rejects_empty_required_test_symbols
             - task_check_rejects_absolute_required_test_files_outside_workspace
             - task_check_rejects_malformed_goal_plans
