@@ -87,8 +87,7 @@ jobs:
       - name: Run full quality gates
         run: scripts/ci/quality-gates.sh full
 
-  coverage-pr:
-    if: github.event_name == 'pull_request'
+  goal-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -112,87 +111,17 @@ jobs:
           scripts/ci/pinned-npm.sh install app
           npm --prefix app ci
 
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/cache-cargo-install-action@v3
-        with:
-          tool: cargo-llvm-cov
+      - name: Run goal-selected tests
+        run: scripts/ci/run-goal-tests.sh
 
-      - name: Install cargo-nextest
-        uses: taiki-e/cache-cargo-install-action@v3
-        with:
-          tool: cargo-nextest
-
-      - name: Prepare goal-scoped coverage artifacts
-        shell: bash
-        env:
-          SYU_SKIP_BROWSER_APP_BUILD: 1
-        run: |
-          mkdir -p target/syu
-          cargo run --quiet -- task infer --range origin/main...HEAD --output target/syu/goal.yaml
-          cargo run --quiet -- task test-select target/syu/goal.yaml --format json > target/syu/selected-tests.json
-
-      - name: Run PR coverage gate
-        run: scripts/ci/coverage.sh pr --goal target/syu/goal.yaml
-
-      - name: Upload nextest JUnit on failure
+      - name: Upload goal test artifacts
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: nextest-junit
-          path: target/nextest/**/junit.xml
-
-      - name: Upload coverage artifact
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: lcov
+          name: goal-tests
           path: |
-            target/coverage/lcov.info
-            target/coverage/spec-coverage-summary.md
-
-  coverage-full:
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Rust
-        uses: ./.github/actions/setup-rust
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "25"
-          cache: npm
-          cache-dependency-path: app/package-lock.json
-
-      - name: Install browser app dependencies
-        shell: bash
-        run: |
-          scripts/ci/pinned-npm.sh install app
-          npm --prefix app ci
-
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/cache-cargo-install-action@v3
-        with:
-          tool: cargo-llvm-cov
-
-      - name: Install cargo-nextest
-        uses: taiki-e/cache-cargo-install-action@v3
-        with:
-          tool: cargo-nextest
-
-      - name: Run line coverage
-        run: scripts/ci/coverage.sh lcov
-
-      - name: Upload coverage artifact
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: lcov
-          path: |
-            target/coverage/lcov.info
-            target/coverage/spec-coverage-summary.md
+            target/syu/goal.yaml
+            target/syu/selected-tests.json
 
   actionlint:
     runs-on: ubuntu-latest
@@ -423,8 +352,7 @@ jobs:
       - file-hygiene
       - quality-fast
       - quality-full
-      - coverage-pr
-      - coverage-full
+      - goal-tests
       - actionlint
       - dependency-review
       - spec-linkage

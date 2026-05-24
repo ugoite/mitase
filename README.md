@@ -812,10 +812,10 @@ cargo install cargo-llvm-cov --locked
 scripts/ci/coverage.sh summary
 ```
 
-For pull-request diff coverage, use:
+For goal-selected pull-request tests, use:
 
 ```bash
-scripts/ci/coverage.sh pr
+scripts/ci/run-goal-tests.sh
 ```
 
 Generate an LCOV artifact locally:

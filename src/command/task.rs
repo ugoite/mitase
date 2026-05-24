@@ -62,7 +62,6 @@ struct RequestArtifact {
     #[serde(default)]
     context: RequestArtifactContext,
 }
-// coverage:ignore-start
 #[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
@@ -333,7 +332,6 @@ struct GoalPlanCompletion {
     #[serde(default)]
     must_pass: Vec<String>,
 }
-// coverage:ignore-end
 
 #[derive(Debug, Deserialize, Default, Clone)]
 struct RequestArtifactContext {
@@ -1341,7 +1339,6 @@ fn build_task_test_selection_commands(
     selected: &BTreeMap<String, BTreeMap<String, TaskTestSelectionEntry>>,
     broaden_to_file: bool,
 ) -> Vec<TaskTestSelectionCommand> {
-    // coverage:ignore-start
     let mut commands = Vec::new();
 
     for (language, files) in selected {
@@ -1377,7 +1374,6 @@ fn build_task_test_selection_commands(
     commands.sort_by(|left, right| left.command.cmp(&right.command));
     commands
 }
-// coverage:ignore-end
 
 fn affected_task_test_selection_escalation(
     selection_mode: GoalPlanSelectionMode,
@@ -3359,7 +3355,6 @@ fn check_goal_plan(
         .collect::<Vec<_>>();
     let mut issues = Vec::new();
 
-    // coverage:ignore-start
     if artifact.implementation_plan.scope.include.is_empty() {
         issues.push(Issue::error(
             "GOAL-TASK-PLAN-004",
@@ -3457,7 +3452,6 @@ fn check_goal_plan(
         issues,
     })
 }
-// coverage:ignore-end
 
 fn push_goal_plan_source_confidence_issues(
     issues: &mut Vec<Issue>,
@@ -4058,7 +4052,6 @@ fn requirement_prefix(id: &str) -> String {
         .unwrap_or_else(|| id.to_string())
 }
 
-// coverage:ignore-start
 fn rewrite_spec_prefix(id: &str, prefix: &str) -> String {
     let mut segments = id.split('-').collect::<Vec<_>>();
     segments[0] = prefix;
@@ -5073,4 +5066,3 @@ mod tests {
         );
     }
 }
-// coverage:ignore-end

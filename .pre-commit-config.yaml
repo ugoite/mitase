@@ -37,9 +37,9 @@ repos:
         stages:
           - pre-push
           - manual
-      - id: syu-coverage-gate
-        name: syu-coverage-gate
-        entry: scripts/dev/check-pr-coverage.sh
+      - id: syu-goal-tests
+        name: syu-goal-tests
+        entry: scripts/ci/run-goal-tests.sh
         language: system
         pass_filenames: false
         files: ^(syu\.yaml|docs/syu/|docs/generated/|crates/|src/|tests/|app/|website/)

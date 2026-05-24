@@ -41,12 +41,14 @@ description: "Generated reference for docs/syu/requirements/core/repository.yaml
           - repository_declares_precommit_and_quality_gates
           - repository_keeps_node_majors_aligned_across_docs_packages_and_ci
 - **id**: REQ-CORE-006
-  - **title**: Report coverage in CI without gating on percentage
+  - **title**: Run goal-selected tests in CI without line-based gating
   - **description**:
     - |
-      The repository MUST measure and report Rust line coverage in CI using a
-      repeatable command so regressions in verification logic remain visible,
-      but it MUST NOT block merges on a minimum coverage percentage.
+      The repository MUST infer a Goal Plan from pull request diffs, select
+      tests from that plan, and execute those tests in CI so PR validation stays
+      goal-oriented. The repository MAY still provide manual coverage-reporting
+      commands for local inspection, but CI MUST NOT gate merges on line-based
+      coverage percentages or diff coverage.
   - **priority**: high
   - **status**: implemented
   - **linked_policies**:
@@ -57,7 +59,8 @@ description: "Generated reference for docs/syu/requirements/core/repository.yaml
     - **rust**:
       - **file**: tests/repository_quality.rs
         - **symbols**:
-          - repository_declares_coverage_reporting_without_percentage_gate
+          - repository_declares_goal_selected_pr_tests_without_line_based_gating
+          - repository_declares_manual_coverage_reporting_without_ci_gating
       - **file**: tests/coverage_script.rs
         - **symbols**:
           - pr_goal_coverage_reports_json_success_for_covered_in_scope_changes
@@ -238,11 +241,13 @@ requirements:
             - repository_declares_precommit_and_quality_gates
             - repository_keeps_node_majors_aligned_across_docs_packages_and_ci
   - id: REQ-CORE-006
-    title: Report coverage in CI without gating on percentage
+    title: Run goal-selected tests in CI without line-based gating
     description: |
-      The repository MUST measure and report Rust line coverage in CI using a
-      repeatable command so regressions in verification logic remain visible,
-      but it MUST NOT block merges on a minimum coverage percentage.
+      The repository MUST infer a Goal Plan from pull request diffs, select
+      tests from that plan, and execute those tests in CI so PR validation stays
+      goal-oriented. The repository MAY still provide manual coverage-reporting
+      commands for local inspection, but CI MUST NOT gate merges on line-based
+      coverage percentages or diff coverage.
     priority: high
     status: implemented
     linked_policies:
@@ -253,7 +258,8 @@ requirements:
       rust:
         - file: tests/repository_quality.rs
           symbols:
-            - repository_declares_coverage_reporting_without_percentage_gate
+            - repository_declares_goal_selected_pr_tests_without_line_based_gating
+            - repository_declares_manual_coverage_reporting_without_ci_gating
         - file: tests/coverage_script.rs
           symbols:
             - pr_goal_coverage_reports_json_success_for_covered_in_scope_changes
