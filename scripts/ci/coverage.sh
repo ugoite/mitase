@@ -225,6 +225,23 @@ def load_goal_plan() -> dict | None:
         raise RuntimeError(f"goal plan `{goal_plan_path}` must parse to a mapping")
     return goal_plan
 
+def normalize_scope_patterns(raw_patterns: list) -> list[str]:
+    patterns: list[str] = []
+    for entry in raw_patterns:
+        if isinstance(entry, str):
+            patterns.append(entry)
+            continue
+        if isinstance(entry, dict):
+            file = entry.get("file")
+            if isinstance(file, str) and file.strip():
+                patterns.append(file)
+                continue
+            raise RuntimeError(
+                "goal plan implementation scope entries must declare a file path"
+            )
+        patterns.append(str(entry))
+    return patterns
+
 def render_text_report(
     *,
     goal_id: str | None,
@@ -300,7 +317,8 @@ goal_plan = load_goal_plan()
 goal = goal_plan.get("goal", {}) if goal_plan else {}
 implementation_plan = goal_plan.get("implementation_plan", {}) if goal_plan else {}
 scope = implementation_plan.get("scope", {}) if isinstance(implementation_plan, dict) else {}
-include_patterns = list(scope.get("include", [])) if isinstance(scope, dict) else []
+raw_include_patterns = list(scope.get("include", [])) if isinstance(scope, dict) else []
+include_patterns = normalize_scope_patterns(raw_include_patterns)
 exclude_patterns = list(scope.get("exclude", [])) if isinstance(scope, dict) else []
 plan_steps = []
 if goal_plan:

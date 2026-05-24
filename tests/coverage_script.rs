@@ -233,7 +233,7 @@ fn pr_goal_coverage_reports_json_success_for_covered_in_scope_changes() {
     fs::create_dir_all(goal_plan.parent().expect("goal plan parent")).expect("goal dir");
     fs::write(
         &goal_plan,
-        r#"{"version":1,"kind":"syu.goal_plan","goal":{"id":"GOAL-001","title":"Keep coverage goal explicit","statement":"Keep PR coverage tied to a Goal Plan."},"implementation_plan":{"scope":{"include":["src/lib.rs"],"exclude":[]},"steps":["keep the changed line covered"]},"test_plan":{"selection_mode":"affected","required_tests":{"rust":[{"file":"tests/helper.rs","symbols":["*"]}]},"suggested_tests":{}},"coverage":{"mode":"changed_lines","threshold":100,"include":["src/lib.rs"],"exclude":[]},"completion":{"must_pass":["syu validate ."]}}"#,
+        r#"{"version":1,"kind":"syu.goal_plan","goal":{"id":"GOAL-001","title":"Keep coverage goal explicit","statement":"Keep PR coverage tied to a Goal Plan."},"implementation_plan":{"scope":{"include":[{"file":"src/lib.rs","symbols":[]}],"exclude":[]},"steps":["keep the changed line covered"]},"test_plan":{"selection_mode":"affected","required_tests":{"rust":[{"file":"tests/helper.rs","symbols":["*"]}]},"suggested_tests":{}},"coverage":{"mode":"changed_lines","threshold":100,"include":["src/lib.rs"],"exclude":[]},"completion":{"must_pass":["syu validate ."]}}"#,
     )
     .expect("goal plan");
 
@@ -322,7 +322,7 @@ fn pr_goal_coverage_fails_for_uncovered_and_out_of_scope_changes() {
     fs::create_dir_all(goal_plan.parent().expect("goal plan parent")).expect("goal dir");
     fs::write(
         &goal_plan,
-        r#"{"version":1,"kind":"syu.goal_plan","goal":{"id":"GOAL-001","title":"Keep coverage goal explicit","statement":"Keep PR coverage tied to a Goal Plan."},"implementation_plan":{"scope":{"include":["src/lib.rs"],"exclude":["docs/generated/**"]},"steps":["keep the changed line covered","keep outside-scope files out of the scope"]},"test_plan":{"selection_mode":"affected","required_tests":{"rust":[{"file":"tests/helper.rs","symbols":["*"]}]},"suggested_tests":{}},"coverage":{"mode":"changed_lines","threshold":100,"include":["src/lib.rs"],"exclude":[]},"completion":{"must_pass":["syu validate ."]}}"#,
+        r#"{"version":1,"kind":"syu.goal_plan","goal":{"id":"GOAL-001","title":"Keep coverage goal explicit","statement":"Keep PR coverage tied to a Goal Plan."},"implementation_plan":{"scope":{"include":[{"file":"src/lib.rs","symbols":[]}],"exclude":["docs/generated/**"]},"steps":["keep the changed line covered","keep outside-scope files out of the scope"]},"test_plan":{"selection_mode":"affected","required_tests":{"rust":[{"file":"tests/helper.rs","symbols":["*"]}]},"suggested_tests":{}},"coverage":{"mode":"changed_lines","threshold":100,"include":["src/lib.rs"],"exclude":[]},"completion":{"must_pass":["syu validate ."]}}"#,
     )
     .expect("goal plan");
 
