@@ -78,9 +78,9 @@ fn repository_declares_precommit_and_quality_gates() {
 
     assert!(precommit.contains("FEAT-QUALITY-001"));
     assert!(precommit.contains("shellcheck"));
+    assert!(precommit.contains("syu-goal-tests"));
     assert!(precommit.contains("syu-validate-changed"));
     assert!(precommit.contains("syu-quality-gates"));
-    assert!(precommit.contains("syu-coverage-gate"));
 
     assert!(quality_script.contains("FEAT-QUALITY-001"));
     assert!(quality_script.contains("run_quality_gates"));
@@ -138,8 +138,7 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(ci_workflow.contains("file-hygiene:"));
     assert!(ci_workflow.contains("quality-fast:"));
     assert!(ci_workflow.contains("quality-full:"));
-    assert!(ci_workflow.contains("coverage-pr:"));
-    assert!(ci_workflow.contains("coverage-full:"));
+    assert!(ci_workflow.contains("goal-tests:"));
     assert!(ci_workflow.contains("actionlint:"));
     assert!(ci_workflow.contains("dependency-review:"));
     assert!(ci_workflow.contains("squash-history-spec-ids:"));
@@ -151,8 +150,8 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(ci_workflow.contains("ci-required:"));
     assert!(ci_workflow.contains("scripts/ci/quality-gates.sh fast"));
     assert!(ci_workflow.contains("scripts/ci/quality-gates.sh full"));
-    assert!(ci_workflow.contains("scripts/ci/coverage.sh pr"));
-    assert!(ci_workflow.contains("scripts/ci/coverage.sh lcov"));
+    assert!(ci_workflow.contains("scripts/ci/run-goal-tests.sh"));
+    assert!(ci_workflow.contains("Upload goal test artifacts"));
     assert!(ci_workflow.contains("shell: bash"));
     assert!(ci_workflow.contains("hooks=("));
     assert!(ci_workflow.contains("pre-commit run --all-files \"$hook\""));
@@ -188,23 +187,45 @@ fn repository_declares_precommit_and_quality_gates() {
 
 #[test]
 // REQ-CORE-006
-fn repository_declares_coverage_reporting_without_percentage_gate() {
+fn repository_declares_goal_selected_pr_tests_without_line_based_gating() {
+    let goal_tests_script = read_file("scripts/ci/run-goal-tests.sh");
+    let ci_workflow = read_file(".github/workflows/ci.yml");
+
+    assert!(goal_tests_script.contains("FEAT-QUALITY-001"));
+    assert!(goal_tests_script.contains("run_goal_tests"));
+    assert!(goal_tests_script.contains("scripts/ci/pinned-npm.sh install app"));
+    assert!(goal_tests_script.contains("npm --prefix app ci"));
+    assert!(goal_tests_script.contains("cargo run --quiet -- task infer"));
+    assert!(goal_tests_script.contains("cargo run --quiet -- task test-select"));
+    assert!(goal_tests_script.contains("selected-tests.json"));
+
+    assert!(ci_workflow.contains("goal-tests:"));
+    assert!(ci_workflow.contains("scripts/ci/run-goal-tests.sh"));
+    assert!(ci_workflow.contains("Upload goal test artifacts"));
+    assert!(!ci_workflow.contains("coverage-pr:"));
+    assert!(!ci_workflow.contains("coverage-full:"));
+    assert!(!ci_workflow.contains("cargo-llvm-cov"));
+    assert!(!ci_workflow.contains("cargo-nextest"));
+    assert!(!ci_workflow.contains("scripts/ci/coverage.sh pr"));
+    assert!(!ci_workflow.contains("scripts/ci/coverage.sh lcov"));
+}
+
+#[test]
+// REQ-CORE-006
+fn repository_declares_manual_coverage_reporting_without_ci_gating() {
     let coverage_script = read_file("scripts/ci/coverage.sh");
     let spec_summary_script = read_file("scripts/ci/write-spec-coverage-summary.py");
-    let ci_workflow = read_file(".github/workflows/ci.yml");
 
     assert!(coverage_script.contains("FEAT-QUALITY-001"));
     assert!(coverage_script.contains("run_coverage"));
     assert!(coverage_script.contains("generate_lcov"));
     assert!(coverage_script.contains("report_lcov_coverage"));
-    assert!(coverage_script.contains("enforce_diff_coverage"));
-    assert!(!coverage_script.contains("LINE_THRESHOLD=100"));
-    assert!(!coverage_script.contains("--fail-under-lines 100"));
-    assert!(coverage_script.contains("cargo llvm-cov"));
     assert!(coverage_script.contains("generate_spec_coverage_summary"));
     assert!(coverage_script.contains("target/coverage/spec-coverage-summary.md"));
     assert!(coverage_script.contains("GITHUB_STEP_SUMMARY"));
     assert!(coverage_script.contains("SYU_SKIP_BROWSER_APP_BUILD=1"));
+    assert!(!coverage_script.contains("LINE_THRESHOLD=100"));
+    assert!(!coverage_script.contains("--fail-under-lines 100"));
 
     assert!(spec_summary_script.contains("FEAT-QUALITY-001"));
     assert!(spec_summary_script.contains("Coverage by requirement and feature"));
@@ -221,13 +242,6 @@ fn repository_declares_coverage_reporting_without_percentage_gate() {
         !spec_summary_script.contains("\"show\","),
         "coverage summary generation should not shell out through repeated `syu show` calls"
     );
-
-    assert!(ci_workflow.contains("coverage-pr:"));
-    assert!(ci_workflow.contains("coverage-full:"));
-    assert!(ci_workflow.contains("scripts/ci/coverage.sh lcov"));
-    assert!(ci_workflow.contains("scripts/ci/coverage.sh pr"));
-    assert!(ci_workflow.contains("cargo-llvm-cov"));
-    assert!(ci_workflow.contains("target/coverage/spec-coverage-summary.md"));
 }
 
 #[test]
@@ -846,6 +860,7 @@ fn repository_declares_documentation_guides() {
     assert!(generated_docs_freshness.contains("check_generated_docs_freshness"));
     assert!(generated_docs_freshness.contains("python3 scripts/generate-site-docs.py"));
     assert!(generated_docs_freshness.contains("docs/generated/syu-report.md"));
+    assert!(generated_docs_freshness.contains("SYU_SKIP_BROWSER_APP_BUILD=1"));
     assert!(generated_docs_freshness.contains("git --no-pager diff --stat -- docs/generated"));
     assert!(ci_workflow.contains("./.github/actions/build-docs-site"));
     assert!(docs_build_action.contains("FEAT-DOCS-002"));
@@ -1095,7 +1110,7 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(contributing.contains("--playwright"));
     assert!(contributing.contains("--all"));
     assert!(contributing.contains("GitHub uses the PR title as the squash commit headline"));
-    assert!(contributing.contains("requirement/feature coverage summary"));
+    assert!(contributing.contains("scripts/ci/run-goal-tests.sh"));
     assert!(contributing.contains("Linked issue or specification"));
     assert!(contributing.contains("Closes #123"));
     assert!(contributing.contains("merge queue lands the change on `main`"));
@@ -1193,15 +1208,16 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(setup_rust_action.contains("Restore Rust cache"));
     assert!(setup_rust_action.contains("Swatinem/rust-cache@v2"));
     assert!(ci_workflow.contains("taiki-e/cache-cargo-install-action@v3"));
-    assert!(ci_workflow.contains("tool: cargo-llvm-cov"));
-    assert!(ci_workflow.contains("tool: cargo-nextest"));
     assert!(ci_workflow.contains("tool: wasm-pack"));
     assert!(release_artifacts.contains("libc6-dev-arm64-cross"));
     assert!(ci_workflow.contains("merge_group:"));
     assert!(ci_workflow.contains("quality-fast:"));
     assert!(ci_workflow.contains("quality-full:"));
-    assert!(ci_workflow.contains("coverage-pr:"));
-    assert!(ci_workflow.contains("coverage-full:"));
+    assert!(ci_workflow.contains("goal-tests:"));
+    assert!(ci_workflow.contains("scripts/ci/run-goal-tests.sh"));
+    assert!(ci_workflow.contains("Upload goal test artifacts"));
+    assert!(!ci_workflow.contains("coverage-pr:"));
+    assert!(!ci_workflow.contains("coverage-full:"));
     assert!(ci_workflow.contains("browser-app:"));
     assert!(ci_workflow.contains("ci-required:"));
     assert!(ci_workflow.contains("Set up Python with pip cache"));

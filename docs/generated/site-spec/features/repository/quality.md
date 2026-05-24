@@ -19,7 +19,7 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
 
 - **id**: FEAT-QUALITY-001
   - **title**: Repository quality automation
-  - **summary**: Keep self-validation, dependency hygiene across Rust, GitHub Actions, the docs site, and the browser app, code scanning, and merge-queue-safe CI execution split into fast branch feedback, PR confidence, merge-queue enforcement, and maintenance checks.
+  - **summary**: Keep self-validation, dependency hygiene across Rust, GitHub Actions, the docs site, the browser app, goal-selected PR tests, code scanning, and merge-queue-safe CI execution split into fast branch feedback, PR confidence, merge-queue enforcement, and maintenance checks.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-005
@@ -43,9 +43,11 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
       - **file**: scripts/ci/coverage.sh
         - **symbols**:
           - configure_llvm_tools
-          - enforce_diff_coverage
           - report_lcov_coverage
           - run_coverage
+      - **file**: scripts/ci/run-goal-tests.sh
+        - **symbols**:
+          - run_goal_tests
       - **file**: scripts/ci/check-generated-docs-freshness.sh
         - **symbols**:
           - check_generated_docs_freshness
@@ -74,17 +76,16 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
     - **yaml**:
       - **file**: .pre-commit-config.yaml
         - **symbols**:
+          - syu-goal-tests
           - syu-validate-changed
           - syu-quality-gates
-          - syu-coverage-gate
       - **file**: .github/workflows/ci.yml
         - **symbols**:
           - merge_group
           - file-hygiene
           - quality-fast
           - quality-full
-          - coverage-pr
-          - coverage-full
+          - goal-tests
           - actionlint
           - dependency-review
           - spec-linkage
@@ -96,7 +97,6 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
           - ci-required
           - ./.github/actions/setup-rust
           - taiki-e/cache-cargo-install-action@v3
-          - tool: cargo-llvm-cov
           - Set up Python with pip cache
           - cache-dependency-path: app/package-lock.json
           - Cache pre-commit hooks
@@ -107,8 +107,7 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
           - Review dependency changes
           - scripts/ci/quality-gates.sh fast
           - scripts/ci/quality-gates.sh full
-          - scripts/ci/coverage.sh pr
-          - scripts/ci/coverage.sh lcov
+          - scripts/ci/run-goal-tests.sh
       - **file**: .github/workflows/branch-push.yml
         - **symbols**:
           - duplicate-check
@@ -165,7 +164,7 @@ version: 1
 features:
   - id: FEAT-QUALITY-001
     title: Repository quality automation
-    summary: Keep self-validation, dependency hygiene across Rust, GitHub Actions, the docs site, and the browser app, code scanning, and merge-queue-safe CI execution split into fast branch feedback, PR confidence, merge-queue enforcement, and maintenance checks.
+    summary: Keep self-validation, dependency hygiene across Rust, GitHub Actions, the docs site, the browser app, goal-selected PR tests, code scanning, and merge-queue-safe CI execution split into fast branch feedback, PR confidence, merge-queue enforcement, and maintenance checks.
     status: implemented
     linked_requirements:
       - REQ-CORE-005
@@ -189,9 +188,11 @@ features:
         - file: scripts/ci/coverage.sh
           symbols:
             - configure_llvm_tools
-            - enforce_diff_coverage
             - report_lcov_coverage
             - run_coverage
+        - file: scripts/ci/run-goal-tests.sh
+          symbols:
+            - run_goal_tests
         - file: scripts/ci/check-generated-docs-freshness.sh
           symbols:
             - check_generated_docs_freshness
@@ -220,17 +221,16 @@ features:
       yaml:
         - file: .pre-commit-config.yaml
           symbols:
+            - syu-goal-tests
             - syu-validate-changed
             - syu-quality-gates
-            - syu-coverage-gate
         - file: .github/workflows/ci.yml
           symbols:
             - merge_group
             - file-hygiene
             - quality-fast
             - quality-full
-            - coverage-pr
-            - coverage-full
+            - goal-tests
             - actionlint
             - dependency-review
             - spec-linkage
@@ -242,7 +242,6 @@ features:
             - ci-required
             - "./.github/actions/setup-rust"
             - taiki-e/cache-cargo-install-action@v3
-            - "tool: cargo-llvm-cov"
             - Set up Python with pip cache
             - "cache-dependency-path: app/package-lock.json"
             - Cache pre-commit hooks
@@ -253,8 +252,7 @@ features:
             - Review dependency changes
             - "scripts/ci/quality-gates.sh fast"
             - "scripts/ci/quality-gates.sh full"
-            - "scripts/ci/coverage.sh pr"
-            - "scripts/ci/coverage.sh lcov"
+            - "scripts/ci/run-goal-tests.sh"
         - file: .github/workflows/branch-push.yml
           symbols:
             - duplicate-check

@@ -18,16 +18,22 @@ if [[ -z "${GH_TOKEN:-}" ]]; then
   exit 1
 fi
 
-pr_payload="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")"
-files_payload="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files")"
+pr_payload_file="$(mktemp)"
+files_payload_file="$(mktemp)"
+trap 'rm -f "$pr_payload_file" "$files_payload_file"' EXIT
 
-python3 - <<'PY' "$pr_payload" "$files_payload"
+gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" >"$pr_payload_file"
+gh api --paginate "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" >"$files_payload_file"
+
+python3 - <<'PY' "$pr_payload_file" "$files_payload_file"
 import json
 import re
 import sys
 
-pr = json.loads(sys.argv[1])
-files = json.loads(sys.argv[2])
+with open(sys.argv[1], encoding="utf-8") as pr_file:
+    pr = json.load(pr_file)
+with open(sys.argv[2], encoding="utf-8") as files_file:
+    files = json.load(files_file)
 
 touches_self_spec = any(file["filename"].startswith("docs/syu/") for file in files)
 if not touches_self_spec:
