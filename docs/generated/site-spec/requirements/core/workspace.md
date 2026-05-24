@@ -922,6 +922,7 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
           - task_test_select_broadens_to_file_level_commands_for_medium_confidence
           - task_test_select_falls_back_when_no_test_declarations_exist
           - task_test_select_rejects_unknown_language_adapters
+          - task_test_select_accepts_known_non_rust_language_adapters
           - task_test_select_is_deterministic_for_json_output
       - **file**: tests/help_command.rs
         - **symbols**:
@@ -1826,6 +1827,7 @@ requirements:
             - task_test_select_broadens_to_file_level_commands_for_medium_confidence
             - task_test_select_falls_back_when_no_test_declarations_exist
             - task_test_select_rejects_unknown_language_adapters
+            - task_test_select_accepts_known_non_rust_language_adapters
             - task_test_select_is_deterministic_for_json_output
         - file: tests/help_command.rs
           symbols:
