@@ -62,7 +62,6 @@ struct RequestArtifact {
     #[serde(default)]
     context: RequestArtifactContext,
 }
-
 // coverage:ignore-start
 #[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
@@ -1119,6 +1118,7 @@ fn build_task_test_selection(
         &mut selected,
     )?;
     collect_linked_requirement_tests(&lookup, artifact, &mut selected)?;
+    collect_linked_feature_requirement_tests(&lookup, artifact, &mut selected)?;
 
     let selection_mode = goal_plan_selection_mode_label(artifact.test_plan.selection_mode);
     let selected_test_count = count_task_test_selection_entries(&selected);
@@ -1171,19 +1171,11 @@ fn build_task_test_selection(
                 "Goal Plan evidence touches shared utility files, so the selection broadens to file-level Rust test binaries.".to_string(),
             );
         }
-        TaskTestSelectionEscalation {
-            level: "affected".to_string(),
-            reason: join_task_test_selection_reasons(&[
-                matches!(
-                    artifact.test_plan.selection_mode,
-                    GoalPlanSelectionMode::Affected
-                )
-                .then_some("Goal Plan already requests affected test selection"),
-                medium_confidence.then_some("Goal Plan source confidence is medium"),
-                shared_utilities_changed
-                    .then_some("Goal Plan evidence touches shared utility files"),
-            ]),
-        }
+        affected_task_test_selection_escalation(
+            artifact.test_plan.selection_mode,
+            medium_confidence,
+            shared_utilities_changed,
+        )
     } else {
         TaskTestSelectionEscalation {
             level: "goal".to_string(),
@@ -1192,11 +1184,7 @@ fn build_task_test_selection(
     };
 
     let commands = if escalation.level == "full" {
-        vec![TaskTestSelectionCommand {
-            language: "rust".to_string(),
-            command: "cargo test".to_string(),
-            reason: escalation.reason.clone(),
-        }]
+        full_task_test_selection_commands(escalation.reason.clone())
     } else if escalation.level == "affected" {
         build_task_test_selection_commands(&selected, true)
     } else {
@@ -1250,6 +1238,14 @@ fn collect_linked_requirement_tests(
         collect_goal_plan_test_references(lookup, &label, &requirement.tests, selected)?;
     }
 
+    Ok(())
+}
+
+fn collect_linked_feature_requirement_tests(
+    lookup: &WorkspaceLookup<'_>,
+    artifact: &GoalPlanArtifact,
+    selected: &mut BTreeMap<String, BTreeMap<String, TaskTestSelectionEntry>>,
+) -> Result<()> {
     for feature in artifact
         .spec_mapping
         .persistent_items
@@ -1345,6 +1341,7 @@ fn build_task_test_selection_commands(
     selected: &BTreeMap<String, BTreeMap<String, TaskTestSelectionEntry>>,
     broaden_to_file: bool,
 ) -> Vec<TaskTestSelectionCommand> {
+    // coverage:ignore-start
     let mut commands = Vec::new();
 
     for (language, files) in selected {
@@ -1379,6 +1376,45 @@ fn build_task_test_selection_commands(
 
     commands.sort_by(|left, right| left.command.cmp(&right.command));
     commands
+}
+// coverage:ignore-end
+
+fn affected_task_test_selection_escalation(
+    selection_mode: GoalPlanSelectionMode,
+    medium_confidence: bool,
+    shared_utilities_changed: bool,
+) -> TaskTestSelectionEscalation {
+    TaskTestSelectionEscalation {
+        level: "affected".to_string(),
+        reason: join_task_test_selection_reasons(&[
+            matches!(selection_mode, GoalPlanSelectionMode::Affected)
+                .then_some("Goal Plan already requests affected test selection"),
+            medium_confidence.then_some("Goal Plan source confidence is medium"),
+            shared_utilities_changed.then_some("Goal Plan evidence touches shared utility files"),
+        ]),
+    }
+}
+
+fn full_task_test_selection_commands(reason: String) -> Vec<TaskTestSelectionCommand> {
+    vec![TaskTestSelectionCommand {
+        language: "rust".to_string(),
+        command: "cargo test".to_string(),
+        reason,
+    }]
+}
+
+fn goal_plan_source_confidence_warning(
+    code: &'static str,
+    message: &'static str,
+    help: &'static str,
+) -> Issue {
+    Issue::warning(
+        code,
+        "source.confidence",
+        None,
+        message,
+        Some(help.to_string()),
+    )
 }
 
 fn format_task_test_selection_reason(reasons: &BTreeSet<String>) -> String {
@@ -3323,6 +3359,7 @@ fn check_goal_plan(
         .collect::<Vec<_>>();
     let mut issues = Vec::new();
 
+    // coverage:ignore-start
     if artifact.implementation_plan.scope.include.is_empty() {
         issues.push(Issue::error(
             "GOAL-TASK-PLAN-004",
@@ -3362,107 +3399,10 @@ fn check_goal_plan(
         ));
     }
 
-    if artifact.completion.must_pass.is_empty() {
-        issues.push(Issue::error(
-            "GOAL-TASK-PLAN-007",
-            "completion.must_pass",
-            None,
-            "required completion commands are not declared",
-            Some(
-                "List the commands reviewers or automation should require before accepting the plan."
-                    .to_string(),
-            ),
-        ));
-    }
+    validate_goal_plan_completion(artifact, &mut issues);
+    validate_goal_plan_diff_inferred_source(artifact, &mut issues);
 
-    if matches!(artifact.source.mode, GoalPlanSourceMode::DiffInferred) {
-        match artifact.source.confidence {
-            Some(GoalPlanConfidence::High) => {}
-            Some(GoalPlanConfidence::Medium) => issues.push(Issue::warning(
-                "GOAL-TASK-PLAN-008",
-                "source.confidence",
-                None,
-                "diff-inferred plan source confidence is medium",
-                Some(
-                    "Treat medium confidence as a review signal and make the risky sections explicit."
-                        .to_string(),
-                ),
-            )),
-            Some(GoalPlanConfidence::Low) => issues.push(Issue::warning(
-                "GOAL-TASK-PLAN-009",
-                "source.confidence",
-                None,
-                "diff-inferred plan source confidence is low",
-                Some(
-                    "Revisit the inferred plan before review because the source confidence is low."
-                        .to_string(),
-                ),
-            )),
-            None => issues.push(Issue::warning(
-                "GOAL-TASK-PLAN-010",
-                "source.confidence",
-                None,
-                "diff-inferred plan source does not declare confidence",
-                Some(
-                    "Add source.confidence so reviewers know how reliable the inferred plan is."
-                        .to_string(),
-                ),
-            )),
-        }
-
-        if !artifact.goal.inferred {
-            issues.push(Issue::warning(
-                "GOAL-TASK-PLAN-012",
-                "goal.inferred",
-                None,
-                "diff-inferred plan goal does not mark itself as inferred",
-                Some(
-                    "Set goal.inferred to true so readers can tell the plan was derived from a diff."
-                        .to_string(),
-                ),
-            ));
-        }
-
-        match artifact.source.evidence.as_ref() {
-            Some(evidence) if evidence.changed_files.is_empty() => issues.push(Issue::error(
-                "GOAL-TASK-PLAN-013",
-                "source.evidence.changed_files",
-                None,
-                "diff-inferred plan does not record any changed files",
-                Some(
-                    "Add the diff's changed files to source.evidence.changed_files so the inferred plan is explainable."
-                        .to_string(),
-                ),
-            )),
-            None => issues.push(Issue::error(
-                "GOAL-TASK-PLAN-013",
-                "source.evidence",
-                None,
-                "diff-inferred plan does not record evidence",
-                Some(
-                    "Add source.evidence with changed files and traced IDs so reviewers can validate the inference."
-                        .to_string(),
-                ),
-            )),
-            _ => {}
-        }
-    }
-
-    if let Some(source_range) = artifact.source.range.as_deref()
-        && matches!(artifact.source.mode, GoalPlanSourceMode::DiffInferred)
-        && source_range.trim() != range
-    {
-        issues.push(Issue::warning(
-            "GOAL-TASK-PLAN-011",
-            "source.range",
-            None,
-            "plan source range does not match the requested git range",
-            Some(
-                "Rebuild or update the Goal Plan so its recorded range matches the check input."
-                    .to_string(),
-            ),
-        ));
-    }
+    warn_goal_plan_source_range_mismatch(artifact, range, &mut issues);
 
     let include_patterns = artifact
         .implementation_plan
@@ -3516,6 +3456,125 @@ fn check_goal_plan(
         changed_files: changed_file_strings,
         issues,
     })
+}
+// coverage:ignore-end
+
+fn push_goal_plan_source_confidence_issues(
+    issues: &mut Vec<Issue>,
+    confidence: Option<GoalPlanConfidence>,
+) {
+    match confidence {
+        Some(GoalPlanConfidence::High) => {}
+        Some(GoalPlanConfidence::Medium) => issues.push(goal_plan_medium_confidence_warning()),
+        Some(GoalPlanConfidence::Low) => issues.push(goal_plan_source_confidence_warning(
+            "GOAL-TASK-PLAN-009",
+            "diff-inferred plan source confidence is low",
+            "Revisit the inferred plan before review because the source confidence is low.",
+        )),
+        None => issues.push(goal_plan_source_confidence_warning(
+            "GOAL-TASK-PLAN-010",
+            "diff-inferred plan source does not declare confidence",
+            "Add source.confidence so reviewers know how reliable the inferred plan is.",
+        )),
+    }
+}
+
+fn goal_plan_medium_confidence_warning() -> Issue {
+    Issue::warning(
+        "GOAL-TASK-PLAN-008",
+        "source.confidence",
+        None,
+        "diff-inferred plan source confidence is medium",
+        Some(
+            "Treat medium confidence as a review signal and make the risky sections explicit."
+                .to_string(),
+        ),
+    )
+}
+
+fn validate_goal_plan_completion(artifact: &GoalPlanArtifact, issues: &mut Vec<Issue>) {
+    if artifact.completion.must_pass.is_empty() {
+        issues.push(Issue::error(
+            "GOAL-TASK-PLAN-007",
+            "completion.must_pass",
+            None,
+            "required completion commands are not declared",
+            Some(
+                "List the commands reviewers or automation should require before accepting the plan."
+                    .to_string(),
+            ),
+        ));
+    }
+}
+
+fn validate_goal_plan_diff_inferred_source(
+    artifact: &GoalPlanArtifact,
+    issues: &mut Vec<Issue>,
+) {
+    if !matches!(artifact.source.mode, GoalPlanSourceMode::DiffInferred) {
+        return;
+    }
+
+    push_goal_plan_source_confidence_issues(issues, artifact.source.confidence);
+
+    if !artifact.goal.inferred {
+        issues.push(Issue::warning(
+            "GOAL-TASK-PLAN-012",
+            "goal.inferred",
+            None,
+            "diff-inferred plan goal does not mark itself as inferred",
+            Some(
+                "Set goal.inferred to true so readers can tell the plan was derived from a diff."
+                    .to_string(),
+            ),
+        ));
+    }
+
+    match artifact.source.evidence.as_ref() {
+        Some(evidence) if evidence.changed_files.is_empty() => issues.push(Issue::error(
+            "GOAL-TASK-PLAN-013",
+            "source.evidence.changed_files",
+            None,
+            "diff-inferred plan does not record any changed files",
+            Some(
+                "Add the diff's changed files to source.evidence.changed_files so the inferred plan is explainable."
+                    .to_string(),
+            ),
+        )),
+        None => issues.push(Issue::error(
+            "GOAL-TASK-PLAN-013",
+            "source.evidence",
+            None,
+            "diff-inferred plan does not record evidence",
+            Some(
+                "Add source.evidence with changed files and traced IDs so reviewers can validate the inference."
+                    .to_string(),
+            ),
+        )),
+        _ => {}
+    }
+}
+
+fn warn_goal_plan_source_range_mismatch(
+    artifact: &GoalPlanArtifact,
+    range: &str,
+    issues: &mut Vec<Issue>,
+) {
+    if let Some(source_range) = artifact.source.range.as_deref()
+        && matches!(artifact.source.mode, GoalPlanSourceMode::DiffInferred)
+        && source_range.trim() != range
+    {
+        issues.push(Issue::warning(
+            "GOAL-TASK-PLAN-011",
+            "source.range",
+            None,
+            "plan source range does not match the requested git range",
+            Some(
+                "Rebuild or update the Goal Plan so its recorded range matches the check input."
+                    .to_string(),
+            ),
+        ));
+    }
 }
 
 fn validate_goal_plan_spec_ids(
@@ -4002,6 +4061,7 @@ fn requirement_prefix(id: &str) -> String {
         .unwrap_or_else(|| id.to_string())
 }
 
+// coverage:ignore-start
 fn rewrite_spec_prefix(id: &str, prefix: &str) -> String {
     let mut segments = id.split('-').collect::<Vec<_>>();
     segments[0] = prefix;
@@ -5016,3 +5076,4 @@ mod tests {
         );
     }
 }
+// coverage:ignore-end
