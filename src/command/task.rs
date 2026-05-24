@@ -70,6 +70,12 @@ struct GoalPlanArtifact {
     version: u32,
     kind: String,
     #[serde(default)]
+    request_path: Option<String>,
+    #[serde(default)]
+    request: Option<String>,
+    #[serde(default)]
+    classification: Option<String>,
+    #[serde(default)]
     source: GoalPlanSource,
     goal: GoalPlanGoal,
     #[serde(default)]
@@ -78,6 +84,8 @@ struct GoalPlanArtifact {
     test_plan: GoalPlanTestPlan,
     coverage: GoalPlanCoverage,
     completion: GoalPlanCompletion,
+    #[serde(default)]
+    warnings: Vec<String>,
 }
 
 #[allow(dead_code)]
@@ -4759,6 +4767,15 @@ mod tests {
         assert_eq!(artifact.source.mode, GoalPlanSourceMode::DiffInferred);
         assert_eq!(artifact.source.range.as_deref(), Some("origin/main...HEAD"));
         assert_eq!(artifact.source.confidence, Some(GoalPlanConfidence::High));
+        assert_eq!(artifact.request_path.as_deref(), Some("origin/main...HEAD"));
+        assert_eq!(
+            artifact.request.as_deref(),
+            Some("git diff origin/main...HEAD")
+        );
+        assert_eq!(
+            artifact.classification.as_deref(),
+            Some("requirement_change")
+        );
     }
 
     #[test]
