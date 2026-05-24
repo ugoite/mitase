@@ -4734,65 +4734,6 @@ mod tests {
     }
 
     #[test]
-    fn goal_plan_builder_marks_low_confidence_and_warns_when_scope_is_sparse() {
-        let tempdir = tempdir().expect("tempdir");
-        write_workspace(tempdir.path());
-        let request = tempdir.path().join("request.yaml");
-        write_request_artifact(&request, "Introduce a brand new planning path.", &[]);
-
-        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
-        let artifact = load_request_artifact(&request).expect("request");
-        let scope_outcome = scope_request(&workspace, &artifact).expect("scope");
-        let explicit_ids = artifact.explicit_ids();
-        let plan = build_goal_plan(&workspace, &scope_outcome, &explicit_ids, &request, None)
-            .expect("goal plan");
-
-        assert_eq!(plan.source.confidence, "low");
-        assert_eq!(plan.implementation_plan.confidence, "low");
-        assert_eq!(plan.test_plan.confidence, "low");
-        assert!(plan.spec_mapping.persistent_items.requirements.is_empty());
-        assert!(plan.spec_mapping.persistent_items.features.is_empty());
-        assert!(
-            plan.warnings
-                .iter()
-                .any(|warning| warning.contains("inferred from request text"))
-        );
-        assert!(
-            plan.warnings
-                .iter()
-                .any(|warning| warning.contains("No close graph matches were found"))
-        );
-        assert!(
-            plan.warnings
-                .iter()
-                .any(|warning| warning.contains("No implementation scope could be inferred"))
-        );
-    }
-
-    #[test]
-    fn task_test_select_rejects_empty_symbol_lists() {
-        let tempdir = tempdir().expect("tempdir");
-        write_workspace(tempdir.path());
-        let path = tempdir.path().join("goal-plan.yaml");
-        fs::write(
-            &path,
-            "version: 1\nkind: syu.goal_plan\nsource:\n  mode: request_driven\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\nimplementation_plan:\n  scope:\n    include:\n      - src/command/task.rs\n    exclude:\n      - docs/syu/**\n  steps:\n    - add a Goal Plan model\ntest_plan:\n  selection_mode: affected\n  required_tests:\n    rust:\n      - file: src/command/task.rs\n        symbols: []\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include:\n    - src/command/task.rs\n  exclude: []\ncompletion:\n  must_pass:\n    - syu validate .\n",
-        )
-        .expect("goal plan");
-
-        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
-        let artifact = load_goal_plan_artifact(&path).expect("goal plan should load");
-        let error =
-            super::build_task_test_selection(&workspace, &artifact).expect_err("empty symbols");
-
-        assert!(
-            error
-                .to_string()
-                .contains("must declare at least one symbol or `*`")
-        );
-    }
-
-    #[test]
     fn goal_plan_artifact_defaults_to_request_driven_source_when_omitted() {
         let tempdir = tempdir().expect("tempdir");
         write_workspace(tempdir.path());

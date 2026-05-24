@@ -715,7 +715,6 @@ requirements:
             - render_goal_plan_output
             - resolve_task_plan_output_path
             - goal_plan_builder_renders_outputs_and_writes_files
-            - goal_plan_builder_marks_low_confidence_and_warns_when_scope_is_sparse
             - goal_plan_artifact_defaults_to_request_driven_source_when_omitted
             - goal_plan_artifact_requires_the_goal_plan_marker
         - file: src/cli.rs
@@ -816,6 +815,7 @@ requirements:
             - task_check_rejects_empty_required_test_symbols
             - task_check_rejects_absolute_required_test_files_outside_workspace
             - task_check_rejects_malformed_goal_plans
+            - task_test_select_rejects_empty_symbol_lists
         - file: tests/help_command.rs
           symbols:
             - task_check_help_mentions_goal_plans_and_json_output

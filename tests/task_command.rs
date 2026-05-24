@@ -898,6 +898,27 @@ fn task_test_select_rejects_unknown_language_adapters() {
 }
 
 #[test]
+fn task_test_select_rejects_empty_symbol_lists() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_goal_plan(
+        &tempdir.path().join("goal-plan.yaml"),
+        "version: 1\nkind: syu.goal_plan\nsource:\n  mode: request_driven\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\nimplementation_plan:\n  scope:\n    include:\n      - src/command/task.rs\n    exclude:\n      - docs/syu/**\n  steps:\n    - add a Goal Plan model\ntest_plan:\n  selection_mode: affected\n  required_tests:\n    rust:\n      - file: src/command/task.rs\n        symbols: []\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include:\n    - src/command/task.rs\n  exclude: []\ncompletion:\n  must_pass:\n    - syu validate .\n",
+    );
+
+    let output = {
+        let mut command = Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "test-select", "goal-plan.yaml"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(!output.status.success(), "task test-select should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("must declare at least one symbol or `*`"));
+}
+
+#[test]
 fn task_test_select_accepts_known_non_rust_language_adapters() {
     let tempdir = tempdir().expect("tempdir");
     write_workspace(tempdir.path());
@@ -1721,13 +1742,22 @@ fn task_check_rejects_malformed_goal_plans() {
 #[test]
 // REQ-CORE-031
 fn goal_plan_artifact_supports_request_driven_and_diff_inferred_sources() {
-    let guide = fs::read_to_string("docs/guide/goal-plan-format.md")
-        .expect("goal plan guide should be readable");
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
 
-    assert!(guide.contains("syu.goal_plan"));
-    assert!(guide.contains("request_driven"));
-    assert!(guide.contains("diff-inferred"));
-    assert!(guide.contains("confidence"));
+    write_goal_plan(
+        &tempdir.path().join("goal-plan.yaml"),
+        "version: 1\nkind: syu.goal_plan\nrequest_path: request.yaml\nrequest: Keep temporary planning explicit\nclassification: request_driven\nwarnings:\n  - inferred from request text\nsource:\n  mode: diff_inferred\n  request_artifact: request.yaml\n  classification: request_driven\n  range: origin/main...HEAD\n  confidence: high\n  evidence:\n    changed_files:\n      - src/command/task.rs\n    traced_requirements:\n      - REQ-CORE-033\n    traced_features:\n      - FEAT-TASK-006\n    traced_policies:\n      - POL-001\n    traced_philosophies:\n      - PHIL-001\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\n  inferred: true\n  non_goals:\n    - Add persistent task specs under spec.root\nspec_mapping:\n  persistent_items:\n    philosophies:\n      - id: PHIL-001\n        title: Keep planning explicit\n        document_path: docs/syu/philosophy/foundation.yaml\n    policies:\n      - id: POL-001\n        title: Keep request workflows visible\n        document_path: docs/syu/policies/policies.yaml\n    requirements:\n      - id: REQ-CORE-033\n        title: Select tests from a Goal Plan before CI runs\n        document_path: docs/syu/requirements/core/test-select.yaml\n    features:\n      - id: FEAT-TASK-006\n        title: Goal Plan test selection\n        document_path: docs/syu/features/core/test-select.yaml\n  spec_updates:\n    required: false\n    expected_updates: []\n  spec_updates_required: false\n  spec_update_reasons:\n    - no persistent spec files should be modified\nimplementation_plan:\n  confidence: high\n  scope:\n    include:\n      - file: src/command/task.rs\n        symbols: []\n    exclude:\n      - docs/syu/**\n  steps:\n    - add a Goal Plan model\ntest_plan:\n  selection_mode: affected\n  confidence: high\n  required_tests:\n    rust:\n      - file: tests/task_selection.rs\n        symbols:\n          - task_test_select_uses_required_goal_plan_tests\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include:\n    - src/command/task.rs\n  exclude: []\ncompletion:\n  must_pass:\n    - syu validate .\n",
+    );
+
+    let output = {
+        let mut command = Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "test-select", "goal-plan.yaml", "--format", "json"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task test-select should succeed");
 }
 
 #[test]
