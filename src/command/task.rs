@@ -179,13 +179,41 @@ struct GoalPlanSpecMapping {
 #[serde(deny_unknown_fields)]
 struct GoalPlanPersistentItems {
     #[serde(default)]
-    philosophies: Vec<String>,
+    philosophies: Vec<GoalPlanPersistentItem>,
     #[serde(default)]
-    policies: Vec<String>,
+    policies: Vec<GoalPlanPersistentItem>,
     #[serde(default)]
-    requirements: Vec<String>,
+    requirements: Vec<GoalPlanPersistentItem>,
     #[serde(default)]
-    features: Vec<String>,
+    features: Vec<GoalPlanPersistentItem>,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Clone)]
+#[serde(untagged)]
+enum GoalPlanPersistentItem {
+    Id(String),
+    Item(GoalPlanPersistentItemDetails),
+}
+
+impl GoalPlanPersistentItem {
+    fn id(&self) -> &str {
+        match self {
+            GoalPlanPersistentItem::Id(id) => id,
+            GoalPlanPersistentItem::Item(item) => &item.id,
+        }
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+struct GoalPlanPersistentItemDetails {
+    id: String,
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    document_path: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -1180,7 +1208,7 @@ fn collect_linked_requirement_tests(
         .persistent_items
         .requirements
         .iter()
-        .filter_map(|item| lookup.requirement(item))
+        .filter_map(|item| lookup.requirement(item.id()))
     {
         let label = format!("declared by linked requirement {}", requirement.id);
         collect_goal_plan_test_references(lookup, &label, &requirement.tests, selected)?;
@@ -1191,7 +1219,7 @@ fn collect_linked_requirement_tests(
         .persistent_items
         .features
         .iter()
-        .filter_map(|item| lookup.feature(item))
+        .filter_map(|item| lookup.feature(item.id()))
     {
         for requirement_id in &feature.linked_requirements {
             if let Some(requirement) = lookup.requirement(requirement_id) {
@@ -3461,11 +3489,12 @@ fn validate_goal_plan_spec_ids(
         .chain(artifact.spec_mapping.persistent_items.requirements.iter())
         .chain(artifact.spec_mapping.persistent_items.features.iter())
     {
+        let id = id.id();
         if lookup.find(id).is_none() {
             issues.push(Issue::error(
                 "GOAL-TASK-PLAN-002",
                 "spec_mapping.persistent_items",
-                Some(id.clone()),
+                Some(id.to_string()),
                 "linked persistent spec ID does not exist",
                 Some(
                     "Fix the Goal Plan or add the missing spec item before the plan is reviewed."
@@ -4739,7 +4768,7 @@ mod tests {
         let path = tempdir.path().join("goal-plan.yaml");
         fs::write(
             &path,
-            "version: 1\nkind: syu.goal_plan\nsource:\n  mode: request_driven\n  request_artifact: request.yaml\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\n  non_goals:\n    - Add persistent task specs under spec.root\nspec_mapping:\n  persistent_items:\n    philosophies:\n      - PHIL-001\n    policies:\n      - POL-001\n    requirements:\n      - REQ-CORE-030\n    features:\n      - FEAT-TASK-003\n  spec_updates:\n    required: false\n    expected_updates: []\nimplementation_plan:\n  scope:\n    include:\n      - src/command/task.rs\n    exclude:\n      - docs/syu/**\n  steps:\n    - add a Goal Plan model\n    - document the temporary artifact locations\ntest_plan:\n  selection_mode: affected\n  required_tests:\n    rust:\n      - file: tests/task_command.rs\n        symbols:\n          - task_plan_generates_goal_from_request\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include:\n    - src/command/task.rs\n  exclude: []\ncompletion:\n  must_pass:\n    - syu validate .\n",
+            "version: 1\nkind: syu.goal_plan\nsource:\n  mode: request_driven\n  request_artifact: request.yaml\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\n  non_goals:\n    - Add persistent task specs under spec.root\nspec_mapping:\n  persistent_items:\n    philosophies:\n      - id: PHIL-001\n        title: Keep temporary planning explicit\n        document_path: docs/syu/philosophies/core/plan.yaml\n    policies:\n      - id: POL-001\n        title: Keep temporary planning explicit\n        document_path: docs/syu/policies/core/plan.yaml\n    requirements:\n      - id: REQ-CORE-030\n        title: Request artifact scoping\n        document_path: docs/syu/requirements/core/scope.yaml\n    features:\n      - id: FEAT-TASK-003\n        title: Request artifact scoping\n        document_path: docs/syu/features/core/scope.yaml\n  spec_updates:\n    required: false\n    expected_updates: []\nimplementation_plan:\n  scope:\n    include:\n      - src/command/task.rs\n    exclude:\n      - docs/syu/**\n  steps:\n    - add a Goal Plan model\n    - document the temporary artifact locations\ntest_plan:\n  selection_mode: affected\n  required_tests:\n    rust:\n      - file: tests/task_command.rs\n        symbols:\n          - task_plan_generates_goal_from_request\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include:\n    - src/command/task.rs\n  exclude: []\ncompletion:\n  must_pass:\n    - syu validate .\n",
         )
         .expect("goal plan");
 
@@ -4759,7 +4788,7 @@ mod tests {
 
         fs::write(
             &path,
-            "version: 1\nkind: syu.goal_plan\nrequest_path: origin/main...HEAD\nrequest: git diff origin/main...HEAD\nclassification: requirement_change\nsource:\n  mode: diff_inferred\n  range: origin/main...HEAD\n  confidence: high\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\n  non_goals:\n    - Add persistent task specs under spec.root\nspec_mapping:\n  persistent_items:\n    philosophies:\n      - PHIL-001\n    policies:\n      - POL-001\n    requirements:\n      - REQ-CORE-030\n    features:\n      - FEAT-TASK-003\n  spec_updates:\n    required: false\n    expected_updates: []\nimplementation_plan:\n  scope:\n    include:\n      - src/command/task.rs\n    exclude:\n      - docs/syu/**\n  steps:\n    - add a Goal Plan model\n    - document the temporary artifact locations\ntest_plan:\n  selection_mode: affected\n  required_tests:\n    rust:\n      - file: tests/task_command.rs\n        symbols:\n          - task_plan_generates_goal_from_request\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include:\n    - src/command/task.rs\n  exclude: []\ncompletion:\n  must_pass:\n    - syu validate .\n",
+            "version: 1\nkind: syu.goal_plan\nrequest_path: origin/main...HEAD\nrequest: git diff origin/main...HEAD\nclassification: requirement_change\nsource:\n  mode: diff_inferred\n  range: origin/main...HEAD\n  confidence: high\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\n  non_goals:\n    - Add persistent task specs under spec.root\nspec_mapping:\n  persistent_items:\n    philosophies:\n      - id: PHIL-001\n        title: Keep temporary planning explicit\n        document_path: docs/syu/philosophies/core/plan.yaml\n    policies:\n      - id: POL-001\n        title: Keep temporary planning explicit\n        document_path: docs/syu/policies/core/plan.yaml\n    requirements:\n      - id: REQ-CORE-030\n        title: Request artifact scoping\n        document_path: docs/syu/requirements/core/scope.yaml\n    features:\n      - id: FEAT-TASK-003\n        title: Request artifact scoping\n        document_path: docs/syu/features/core/scope.yaml\n  spec_updates:\n    required: false\n    expected_updates: []\nimplementation_plan:\n  scope:\n    include:\n      - src/command/task.rs\n    exclude:\n      - docs/syu/**\n  steps:\n    - add a Goal Plan model\n    - document the temporary artifact locations\ntest_plan:\n  selection_mode: affected\n  required_tests:\n    rust:\n      - file: tests/task_command.rs\n        symbols:\n          - task_plan_generates_goal_from_request\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include:\n    - src/command/task.rs\n  exclude: []\ncompletion:\n  must_pass:\n    - syu validate .\n",
         )
         .expect("goal plan");
 
