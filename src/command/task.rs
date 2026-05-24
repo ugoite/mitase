@@ -3507,10 +3507,7 @@ fn validate_goal_plan_completion(artifact: &GoalPlanArtifact, issues: &mut Vec<I
     }
 }
 
-fn validate_goal_plan_diff_inferred_source(
-    artifact: &GoalPlanArtifact,
-    issues: &mut Vec<Issue>,
-) {
+fn validate_goal_plan_diff_inferred_source(artifact: &GoalPlanArtifact, issues: &mut Vec<Issue>) {
     if !matches!(artifact.source.mode, GoalPlanSourceMode::DiffInferred) {
         return;
     }
