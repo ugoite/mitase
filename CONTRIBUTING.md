@@ -94,12 +94,12 @@ dependency installs, and Playwright browser readiness for this checkout.
    CI scripts that affect Rust flows)
 
    ```bash
-   scripts/ci/coverage.sh pr
+   scripts/ci/run-goal-tests.sh
    ```
 
-   That command enforces changed-line coverage for pull requests and emits a
-   requirement/feature coverage summary. Use `scripts/ci/coverage.sh summary`
-   when you want the full 100% repository coverage gate locally.
+   That command infers a Goal Plan, selects the tests that should cover the
+   change, and runs them locally. Use `scripts/ci/coverage.sh summary` when you
+   want the full 100% repository coverage gate locally.
 
 3. **Browser app, WASM, or checked-in `app/dist` bundle** (`app/src`,
    `app/wasm`, browser build config, or generated browser assets)
