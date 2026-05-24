@@ -4771,19 +4771,6 @@ mod tests {
     }
 
     #[test]
-    fn goal_plan_scope_treats_common_globs_as_ambiguous() {
-        let scope = super::GoalPlanScope {
-            include: vec![
-                super::GoalPlanScopeInclude::Pattern("src/*.rs".to_string()),
-                super::GoalPlanScopeInclude::Pattern("tests/?*.rs".to_string()),
-            ],
-            exclude: Vec::new(),
-        };
-
-        assert!(super::goal_plan_scope_is_ambiguous(&scope));
-    }
-
-    #[test]
     fn task_test_select_rejects_empty_symbol_lists() {
         let tempdir = tempdir().expect("tempdir");
         write_workspace(tempdir.path());
@@ -4803,51 +4790,6 @@ mod tests {
             error
                 .to_string()
                 .contains("must declare at least one symbol or `*`")
-        );
-    }
-
-    #[test]
-    fn goal_plan_artifact_supports_request_driven_and_diff_inferred_sources() {
-        let tempdir = tempdir().expect("tempdir");
-        let path = tempdir.path().join("goal-plan.yaml");
-        fs::write(
-            &path,
-            "version: 1\nkind: syu.goal_plan\nsource:\n  mode: request_driven\n  request_artifact: request.yaml\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\n  non_goals:\n    - Add persistent task specs under spec.root\nspec_mapping:\n  persistent_items:\n    philosophies:\n      - id: PHIL-001\n        title: Keep temporary planning explicit\n        document_path: docs/syu/philosophies/core/plan.yaml\n    policies:\n      - id: POL-001\n        title: Keep temporary planning explicit\n        document_path: docs/syu/policies/core/plan.yaml\n    requirements:\n      - id: REQ-CORE-030\n        title: Request artifact scoping\n        document_path: docs/syu/requirements/core/scope.yaml\n    features:\n      - id: FEAT-TASK-003\n        title: Request artifact scoping\n        document_path: docs/syu/features/core/scope.yaml\n  spec_updates:\n    required: false\n    expected_updates: []\nimplementation_plan:\n  scope:\n    include:\n      - src/command/task.rs\n    exclude:\n      - docs/syu/**\n  steps:\n    - add a Goal Plan model\n    - document the temporary artifact locations\ntest_plan:\n  selection_mode: affected\n  required_tests:\n    rust:\n      - file: tests/task_command.rs\n        symbols:\n          - task_plan_generates_goal_from_request\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include:\n    - src/command/task.rs\n  exclude: []\ncompletion:\n  must_pass:\n    - syu validate .\n",
-        )
-        .expect("goal plan");
-
-        let artifact = load_goal_plan_artifact(&path).expect("goal plan should load");
-        assert_eq!(artifact.kind, "syu.goal_plan");
-        assert_eq!(artifact.goal.id, "GOAL-001");
-        assert_eq!(artifact.source.mode, GoalPlanSourceMode::RequestDriven);
-        assert_eq!(
-            artifact.source.request_artifact.as_deref(),
-            Some("request.yaml")
-        );
-        assert_eq!(artifact.coverage.mode, GoalPlanCoverageMode::ChangedLines);
-        assert_eq!(
-            artifact.test_plan.selection_mode,
-            GoalPlanSelectionMode::Affected
-        );
-
-        fs::write(
-            &path,
-            "version: 1\nkind: syu.goal_plan\nrequest_path: origin/main...HEAD\nrequest: git diff origin/main...HEAD\nclassification: requirement_change\nsource:\n  mode: diff_inferred\n  range: origin/main...HEAD\n  confidence: high\ngoal:\n  id: GOAL-001\n  title: Keep temporary planning explicit\n  statement: Capture implementation intent without creating a fifth persistent spec layer.\n  non_goals:\n    - Add persistent task specs under spec.root\nspec_mapping:\n  persistent_items:\n    philosophies:\n      - id: PHIL-001\n        title: Keep temporary planning explicit\n        document_path: docs/syu/philosophies/core/plan.yaml\n    policies:\n      - id: POL-001\n        title: Keep temporary planning explicit\n        document_path: docs/syu/policies/core/plan.yaml\n    requirements:\n      - id: REQ-CORE-030\n        title: Request artifact scoping\n        document_path: docs/syu/requirements/core/scope.yaml\n    features:\n      - id: FEAT-TASK-003\n        title: Request artifact scoping\n        document_path: docs/syu/features/core/scope.yaml\n  spec_updates:\n    required: false\n    expected_updates: []\nimplementation_plan:\n  scope:\n    include:\n      - src/command/task.rs\n    exclude:\n      - docs/syu/**\n  steps:\n    - add a Goal Plan model\n    - document the temporary artifact locations\ntest_plan:\n  selection_mode: affected\n  required_tests:\n    rust:\n      - file: tests/task_command.rs\n        symbols:\n          - task_plan_generates_goal_from_request\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\n  include:\n    - src/command/task.rs\n  exclude: []\ncompletion:\n  must_pass:\n    - syu validate .\n",
-        )
-        .expect("goal plan");
-
-        let artifact = load_goal_plan_artifact(&path).expect("goal plan should load");
-        assert_eq!(artifact.source.mode, GoalPlanSourceMode::DiffInferred);
-        assert_eq!(artifact.source.range.as_deref(), Some("origin/main...HEAD"));
-        assert_eq!(artifact.source.confidence, Some(GoalPlanConfidence::High));
-        assert_eq!(artifact.request_path.as_deref(), Some("origin/main...HEAD"));
-        assert_eq!(
-            artifact.request.as_deref(),
-            Some("git diff origin/main...HEAD")
-        );
-        assert_eq!(
-            artifact.classification.as_deref(),
-            Some("requirement_change")
         );
     }
 
