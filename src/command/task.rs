@@ -173,6 +173,10 @@ struct GoalPlanSpecMapping {
     persistent_items: GoalPlanPersistentItems,
     #[serde(default)]
     spec_updates: GoalPlanSpecUpdates,
+    #[serde(default)]
+    spec_updates_required: bool,
+    #[serde(default)]
+    spec_update_reasons: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Default, Clone)]
@@ -217,6 +221,32 @@ struct GoalPlanPersistentItemDetails {
 }
 
 #[allow(dead_code)]
+#[derive(Debug, Deserialize, Clone)]
+#[serde(untagged)]
+enum GoalPlanScopeInclude {
+    Pattern(String),
+    Entry(GoalPlanScopeIncludeDetails),
+}
+
+impl GoalPlanScopeInclude {
+    fn pattern(&self) -> &str {
+        match self {
+            GoalPlanScopeInclude::Pattern(pattern) => pattern,
+            GoalPlanScopeInclude::Entry(entry) => &entry.file,
+        }
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+struct GoalPlanScopeIncludeDetails {
+    file: String,
+    #[serde(default)]
+    symbols: Vec<String>,
+}
+
+#[allow(dead_code)]
 #[derive(Debug, Deserialize, Default, Clone)]
 #[serde(deny_unknown_fields)]
 struct GoalPlanSpecUpdates {
@@ -230,6 +260,8 @@ struct GoalPlanSpecUpdates {
 #[derive(Debug, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 struct GoalPlanImplementationPlan {
+    #[serde(default)]
+    confidence: Option<GoalPlanConfidence>,
     scope: GoalPlanScope,
     #[serde(default)]
     steps: Vec<String>,
@@ -240,7 +272,7 @@ struct GoalPlanImplementationPlan {
 #[serde(deny_unknown_fields)]
 struct GoalPlanScope {
     #[serde(default)]
-    include: Vec<String>,
+    include: Vec<GoalPlanScopeInclude>,
     #[serde(default)]
     exclude: Vec<String>,
 }
@@ -250,6 +282,8 @@ struct GoalPlanScope {
 #[serde(deny_unknown_fields)]
 struct GoalPlanTestPlan {
     selection_mode: GoalPlanSelectionMode,
+    #[serde(default)]
+    confidence: Option<GoalPlanConfidence>,
     #[serde(default)]
     required_tests: BTreeMap<String, Vec<crate::model::TraceReference>>,
     #[serde(default)]
@@ -1279,9 +1313,7 @@ fn validate_goal_test_language(language: &str) -> Result<()> {
     }
 
     if adapter_for_language(language).is_some() {
-        bail!(
-            "unsupported test language `{language}`; only rust test selection is implemented today"
-        );
+        return Ok(());
     }
 
     bail!("unknown test language adapter `{language}`")
@@ -1407,6 +1439,7 @@ fn goal_plan_scope_is_ambiguous(scope: &GoalPlanScope) -> bool {
     }
 
     scope.include.iter().any(|pattern| {
+        let pattern = pattern.pattern();
         let trimmed = pattern.trim();
         trimmed == "*"
             || trimmed == "**"
@@ -3429,7 +3462,15 @@ fn check_goal_plan(
         ));
     }
 
-    let include_matcher = build_globset(&artifact.implementation_plan.scope.include)?;
+    let include_patterns = artifact
+        .implementation_plan
+        .scope
+        .include
+        .iter()
+        .map(GoalPlanScopeInclude::pattern)
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    let include_matcher = build_globset(&include_patterns)?;
     let exclude_matcher = build_globset(&artifact.implementation_plan.scope.exclude)?;
     if !artifact.implementation_plan.scope.include.is_empty() {
         for file in &changed_files {
@@ -4732,7 +4773,10 @@ mod tests {
     #[test]
     fn goal_plan_scope_treats_common_globs_as_ambiguous() {
         let scope = super::GoalPlanScope {
-            include: vec!["src/*.rs".to_string(), "tests/?*.rs".to_string()],
+            include: vec![
+                super::GoalPlanScopeInclude::Pattern("src/*.rs".to_string()),
+                super::GoalPlanScopeInclude::Pattern("tests/?*.rs".to_string()),
+            ],
             exclude: Vec::new(),
         };
 

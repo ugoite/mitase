@@ -898,6 +898,44 @@ fn task_test_select_rejects_unknown_language_adapters() {
 }
 
 #[test]
+fn task_test_select_accepts_known_non_rust_language_adapters() {
+    let tempdir = tempdir().expect("tempdir");
+    write_workspace(tempdir.path());
+    write_goal_plan(
+        &tempdir.path().join("goal-plan.yaml"),
+        &task_test_selection_goal_plan_yaml(
+            "minimal",
+            Some("high"),
+            &[
+                (
+                    "rust",
+                    "tests/task_selection.rs",
+                    "task_test_select_uses_required_goal_plan_tests",
+                ),
+                ("go", "tests/task_selection.go", "TestReqTraceGo"),
+                ("javascript", "tests/task_selection.js", "testReqTraceJs"),
+            ],
+            &[],
+            &["REQ-CORE-033"],
+            &["FEAT-TASK-006"],
+            &["src/command/task.rs"],
+        ),
+    );
+
+    let output = {
+        let mut command = Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args(["task", "test-select", "goal-plan.yaml", "--format", "json"]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task test-select should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("cargo test"));
+    assert!(stdout.contains("task_test_select_uses_required_goal_plan_tests"));
+}
+
+#[test]
 fn task_test_select_is_deterministic_for_json_output() {
     let tempdir = tempdir().expect("tempdir");
     write_workspace(tempdir.path());
