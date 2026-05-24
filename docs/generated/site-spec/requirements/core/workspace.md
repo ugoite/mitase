@@ -1649,11 +1649,11 @@ requirements:
             - run_task_plan_command
             - run_task_infer_command
             - build_goal_plan
-          - build_diff_inferred_goal_plan
-          - render_goal_plan_output
-          - resolve_task_plan_output_path
-          - goal_plan_builder_renders_outputs_and_writes_files
-          - goal_plan_artifact_requires_the_goal_plan_marker
+            - build_diff_inferred_goal_plan
+            - render_goal_plan_output
+            - resolve_task_plan_output_path
+            - goal_plan_builder_renders_outputs_and_writes_files
+            - goal_plan_artifact_requires_the_goal_plan_marker
         - file: src/cli.rs
           symbols:
             - TaskArgs
