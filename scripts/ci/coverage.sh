@@ -188,6 +188,31 @@ def is_generated_path(path: Path) -> bool:
     raw = path.as_posix()
     return raw.startswith("docs/generated/") or raw.startswith("target/") or "/generated/" in raw
 
+def ignored_task_coverage_lines(path: Path) -> set[int]:
+    if path.as_posix() != "src/command/task.rs":
+        return set()
+
+    try:
+        source_lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return set()
+
+    ignored_lines: set[int] = set()
+    ignore = False
+    for line_number, line in enumerate(source_lines, start=1):
+        stripped = line.strip()
+        if stripped == "// coverage:ignore-start":
+            ignore = True
+            ignored_lines.add(line_number)
+            continue
+        if stripped == "// coverage:ignore-end":
+            ignored_lines.add(line_number)
+            ignore = False
+            continue
+        if ignore:
+            ignored_lines.add(line_number)
+    return ignored_lines
+
 def path_matches(pattern: str, path: Path) -> bool:
     return path.as_posix() == pattern or path.match(pattern)
 
@@ -340,12 +365,10 @@ for path, line_numbers in diff_lines.items():
     if is_test_path(path) or is_generated_path(path):
         continue
     if path.as_posix() == "src/command/task.rs":
-        # Goal Plan artifacts and the task planning CLI intentionally define a
-        # lot of structured data. The PR gate already exercises this file via
-        # dedicated task tests, so keep the changed-line gate focused on
-        # executable code instead of field declarations that lcov can flag as
-        # uncovered noise.
-        continue
+        ignored_lines = ignored_task_coverage_lines(path)
+        line_numbers = [line for line in line_numbers if line not in ignored_lines]
+        if not line_numbers:
+            continue
     if goal_plan and not path_in_scope(path, include_patterns, exclude_patterns):
         outside_scope.append((path, sorted(line_numbers)))
         continue

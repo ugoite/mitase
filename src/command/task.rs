@@ -63,6 +63,7 @@ struct RequestArtifact {
     context: RequestArtifactContext,
 }
 
+// coverage:ignore-start
 #[allow(dead_code)]
 #[derive(Debug, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
@@ -333,6 +334,7 @@ struct GoalPlanCompletion {
     #[serde(default)]
     must_pass: Vec<String>,
 }
+// coverage:ignore-end
 
 #[derive(Debug, Deserialize, Default, Clone)]
 struct RequestArtifactContext {

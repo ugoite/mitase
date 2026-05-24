@@ -353,3 +353,75 @@ fn pr_goal_coverage_fails_for_uncovered_and_out_of_scope_changes() {
     assert!(!stdout.contains("tests/helper.rs"));
     assert!(!stdout.contains("docs/generated/generated.rs"));
 }
+
+#[test]
+// REQ-CORE-006
+fn pr_goal_coverage_ignores_marked_task_data_model_sections() {
+    let tempdir = tempdir().expect("tempdir");
+    copy_coverage_scripts(tempdir.path());
+    write_fixture_workspace(tempdir.path());
+    fs::create_dir_all(tempdir.path().join("src/command")).expect("task dir");
+    fs::write(
+        tempdir.path().join("src/command/task.rs"),
+        "pub fn run_task_command() -> u32 { 1 }\n// coverage:ignore-start\npub const GENERATED_TITLE: &str = \"generated\";\n// coverage:ignore-end\n",
+    )
+    .expect("task base");
+    init_git_repo(tempdir.path());
+    commit_all(tempdir.path(), "base");
+    update_origin_main(tempdir.path());
+
+    fs::write(
+        tempdir.path().join("src/command/task.rs"),
+        "pub fn run_task_command() -> u32 { 1 }\n// coverage:ignore-start\npub const GENERATED_TITLE: &str = \"updated\";\n// coverage:ignore-end\n",
+    )
+    .expect("task update");
+    commit_all(tempdir.path(), "task update");
+
+    let bin_dir = tempdir.path().join("bin");
+    fs::create_dir_all(&bin_dir).expect("bin dir");
+    let lcov_contents = format!(
+        "TN:\nSF:{}\nDA:1,1\nend_of_record\n",
+        tempdir.path().join("src/command/task.rs").display()
+    );
+    write_mock_cargo(
+        &bin_dir,
+        tempdir.path(),
+        &lcov_contents,
+        r#"{"requirement":[{"id":"REQ-CORE-001","document_path":"docs/syu/requirements/core/requirement.yaml"}],"feature":[{"id":"FEAT-CORE-001","document_path":"docs/syu/features/core/feature.yaml"}]}"#,
+    );
+
+    let goal_plan = tempdir.path().join("target/syu/goal.yaml");
+    fs::create_dir_all(goal_plan.parent().expect("goal plan parent")).expect("goal dir");
+    fs::write(
+        &goal_plan,
+        r#"{"version":1,"kind":"syu.goal_plan","goal":{"id":"GOAL-001","title":"Keep coverage goal explicit","statement":"Keep PR coverage tied to a Goal Plan."},"implementation_plan":{"scope":{"include":[{"file":"src/command/task.rs","symbols":[]}],"exclude":[]},"steps":["keep the changed line covered"]},"test_plan":{"selection_mode":"affected","required_tests":{"rust":[{"file":"tests/helper.rs","symbols":["*"]}]},"suggested_tests":{}},"coverage":{"mode":"changed_lines","threshold":100,"include":["src/command/task.rs"],"exclude":[]},"completion":{"must_pass":["syu validate ."]}}"#,
+    )
+    .expect("goal plan");
+
+    let output = run_coverage(
+        tempdir.path(),
+        &bin_dir,
+        &[
+            "pr",
+            "--goal",
+            goal_plan.to_str().expect("utf-8"),
+            "--format",
+            "json",
+        ],
+    );
+
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let json: Value = serde_json::from_slice(&output.stdout).expect("json output");
+    assert_eq!(json["status"], "passed");
+    assert!(
+        json["missing_changed_line_coverage"]
+            .as_array()
+            .expect("array")
+            .is_empty()
+    );
+}
