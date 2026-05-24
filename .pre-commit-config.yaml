@@ -39,6 +39,15 @@ repos:
           - manual
       - id: syu-coverage-gate
         name: syu-coverage-gate
+        entry: scripts/dev/check-pr-coverage.sh
+        language: system
+        pass_filenames: false
+        files: ^(syu\.yaml|docs/syu/|docs/generated/|crates/|src/|tests/|app/|website/)
+        stages:
+          - pre-push
+          - manual
+      - id: syu-coverage-summary
+        name: syu-coverage-summary
         entry: scripts/ci/coverage.sh summary
         language: system
         pass_filenames: false

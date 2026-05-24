@@ -1394,6 +1394,164 @@ fn task_check_reports_pass_fail_results_for_goal_plans() {
 }
 
 #[test]
+fn task_check_reports_low_confidence_and_range_mismatch_warnings() {
+    let tempdir = tempdir().expect("tempdir");
+    prepare_git_workspace(tempdir.path(), "task_plan_generates_goal_from_request");
+
+    fs::write(
+        tempdir.path().join("src/command/task.rs"),
+        "pub fn run_task_command() {}\n// updated for goal plan warning coverage\n",
+    )
+    .expect("updated task source");
+    commit_all(tempdir.path(), "update task");
+
+    let plan = tempdir.path().join("goal-plan.yaml");
+    let plan_yaml = goal_plan_yaml(
+        "REQ-CORE-033",
+        "FEAT-TASK-006",
+        "tests/task_command.rs",
+        "task_plan_generates_goal_from_request",
+        "low",
+    )
+    .replace("origin/main...HEAD", "origin/main...feature");
+    write_goal_plan(&plan, &plan_yaml);
+
+    let output = {
+        let mut command = Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args([
+            "task",
+            "check",
+            "goal-plan.yaml",
+            "--range",
+            "origin/main...HEAD",
+        ]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task check should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("diff-inferred plan source confidence is low"));
+    assert!(stdout.contains("plan source range does not match the requested git range"));
+}
+
+#[test]
+fn task_check_reports_missing_source_confidence_and_structured_items() {
+    let tempdir = tempdir().expect("tempdir");
+    prepare_git_workspace(tempdir.path(), "task_plan_generates_goal_from_request");
+
+    fs::write(
+        tempdir.path().join("src/command/task.rs"),
+        "pub fn run_task_command() {}\n// updated for structured goal plan coverage\n",
+    )
+    .expect("updated task source");
+    commit_all(tempdir.path(), "update task");
+
+    let plan = tempdir.path().join("goal-plan.yaml");
+    let plan_yaml = r#"version: 1
+kind: syu.goal_plan
+request_path: request.yaml
+request: Keep temporary planning explicit
+classification: request_driven
+warnings:
+  - inferred from request text
+source:
+  mode: diff_inferred
+  request_artifact: request.yaml
+  classification: request_driven
+  range: origin/main...HEAD
+  evidence:
+    changed_files:
+      - src/command/task.rs
+    traced_requirements:
+      - REQ-CORE-031
+    traced_features:
+      - FEAT-TASK-004
+    traced_policies:
+      - POL-001
+    traced_philosophies:
+      - PHIL-001
+goal:
+  id: GOAL-001
+  title: Keep temporary planning explicit
+  statement: Capture implementation intent without creating a fifth persistent spec layer.
+  inferred: true
+  non_goals:
+    - Add persistent task specs under spec.root
+spec_mapping:
+  persistent_items:
+    philosophies:
+      - id: PHIL-001
+        title: Keep planning explicit
+        document_path: docs/syu/philosophy/foundation.yaml
+    policies:
+      - id: POL-001
+        title: Keep request workflows visible
+        document_path: docs/syu/policies/policies.yaml
+    requirements:
+      - id: REQ-CORE-031
+        title: Generate temporary Goal Plans from scoped requests
+        document_path: docs/syu/requirements/core/plan.yaml
+    features:
+      - id: FEAT-TASK-004
+        title: Goal Plan generation
+        document_path: docs/syu/features/core/plan.yaml
+  spec_updates:
+    required: false
+    expected_updates: []
+  spec_updates_required: false
+  spec_update_reasons:
+    - no persistent spec files should be modified
+implementation_plan:
+  confidence: high
+  scope:
+    include:
+      - file: src/command/task.rs
+        symbols: []
+    exclude:
+      - docs/syu/**
+  steps:
+    - add a Goal Plan model
+test_plan:
+  selection_mode: affected
+  confidence: high
+  required_tests:
+    rust:
+      - file: tests/task_command.rs
+        symbols:
+          - task_plan_generates_goal_from_request
+  suggested_tests: {}
+coverage:
+  mode: changed_lines
+  threshold: 100
+  include:
+    - src/command/task.rs
+  exclude: []
+completion:
+  must_pass:
+    - syu validate .
+"#;
+    write_goal_plan(&plan, plan_yaml);
+
+    let output = {
+        let mut command = Command::cargo_bin("syu").expect("binary should build");
+        command.current_dir(tempdir.path());
+        command.args([
+            "task",
+            "check",
+            "goal-plan.yaml",
+            "--range",
+            "origin/main...HEAD",
+        ]);
+        command.output().expect("command should run")
+    };
+
+    assert!(output.status.success(), "task check should succeed");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("diff-inferred plan source does not declare confidence"));
+}
+
+#[test]
 fn task_check_prints_json_output_for_goal_plans() {
     let tempdir = tempdir().expect("tempdir");
     prepare_git_workspace(tempdir.path(), "task_plan_generates_goal_from_request");

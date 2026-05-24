@@ -92,7 +92,11 @@ list_json={list_json:?}
 
 if [[ "$1" == "llvm-cov" ]]; then
   shift
-  if [[ "$1" != "nextest" ]]; then
+  if [[ "$1" == "nextest" ]]; then
+    shift
+  elif [[ "$1" == "test" ]]; then
+    shift
+  else
     printf 'unexpected cargo llvm-cov invocation: %s\n' "$*" >&2
     exit 1
   fi

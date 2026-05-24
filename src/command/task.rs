@@ -4158,8 +4158,10 @@ fn extract_spec_ids(text: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use std::{
+        collections::BTreeMap,
         fs,
         path::{Path, PathBuf},
+        process::Command,
     };
 
     use tempfile::tempdir;
@@ -4168,12 +4170,18 @@ mod tests {
         OutputFormat, TaskArgs, TaskCheckArgs, TaskClassifyArgs, TaskCommands, TaskPlanArgs,
         TaskPlanFormat, TaskScaffoldArgs, TaskScopeArgs, TaskTestSelectArgs,
     };
+    use crate::model::TraceReference;
 
     use super::{
-        ClassificationOutcome, RequirementAction, SearchResult, WorkspaceLookup, build_goal_plan,
-        build_scaffold_plan, classify_request, collect_feature_candidates, load_goal_plan_artifact,
-        load_request_artifact, render_goal_plan_output, resolve_task_plan_output_path,
-        run_task_command, scope_request,
+        ClassificationOutcome, GoalPlanArtifact, GoalPlanCompletion, GoalPlanConfidence,
+        GoalPlanCoverage, GoalPlanCoverageMode, GoalPlanGoal, GoalPlanImplementationPlan,
+        GoalPlanPersistentItem, GoalPlanPersistentItemDetails, GoalPlanPersistentItems,
+        GoalPlanScope, GoalPlanScopeInclude, GoalPlanScopeIncludeDetails, GoalPlanSelectionMode,
+        GoalPlanSource, GoalPlanSourceEvidence, GoalPlanSpecMapping, GoalPlanSpecUpdates,
+        GoalPlanTestPlan, RequirementAction, SearchResult, WorkspaceLookup, build_goal_plan,
+        build_scaffold_plan, check_goal_plan, classify_request, collect_feature_candidates,
+        collect_linked_requirement_tests, load_goal_plan_artifact, load_request_artifact,
+        render_goal_plan_output, resolve_task_plan_output_path, run_task_command, scope_request,
     };
 
     fn write_request_artifact(path: &Path, request: &str, linked_ids: &[&str]) {
@@ -4193,6 +4201,54 @@ mod tests {
             ),
         )
         .expect("request artifact should write");
+    }
+
+    fn init_git_repo(root: &Path) {
+        let status = Command::new("git")
+            .current_dir(root)
+            .args(["init", "-b", "main"])
+            .status()
+            .expect("git init should run");
+        assert!(status.success(), "git init failed");
+
+        let status = Command::new("git")
+            .current_dir(root)
+            .args(["config", "user.email", "syu@example.com"])
+            .status()
+            .expect("git config should run");
+        assert!(status.success(), "git config user.email failed");
+
+        let status = Command::new("git")
+            .current_dir(root)
+            .args(["config", "user.name", "syu"])
+            .status()
+            .expect("git config should run");
+        assert!(status.success(), "git config user.name failed");
+    }
+
+    fn commit_all(root: &Path, message: &str) {
+        let status = Command::new("git")
+            .current_dir(root)
+            .args(["add", "-A"])
+            .status()
+            .expect("git add should run");
+        assert!(status.success(), "git add failed");
+
+        let status = Command::new("git")
+            .current_dir(root)
+            .args(["commit", "--quiet", "-m", message])
+            .status()
+            .expect("git commit should run");
+        assert!(status.success(), "git commit failed");
+    }
+
+    fn update_origin_main(root: &Path) {
+        let status = Command::new("git")
+            .current_dir(root)
+            .args(["update-ref", "refs/remotes/origin/main", "HEAD"])
+            .status()
+            .expect("git update-ref should run");
+        assert!(status.success(), "git update-ref failed");
     }
 
     fn write_workspace(root: &Path) {
@@ -4316,7 +4372,7 @@ mod tests {
         let request = tempdir.path().join("request.yaml");
         write_request_artifact(
             &request,
-            "Create a new request summary for the upcoming planning flow.",
+            "create a new request summary for the upcoming planning flow.",
             &[],
         );
 
@@ -4329,6 +4385,213 @@ mod tests {
                 .reasons
                 .iter()
                 .any(|reason| reason.contains("create-oriented language"))
+        );
+    }
+
+    #[test]
+    fn classify_request_detects_all_create_keywords() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        let request = tempdir.path().join("request.yaml");
+        write_request_artifact(
+            &request,
+            "create add introduce new implement support build a request summary for planning.",
+            &[],
+        );
+
+        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
+        let artifact = load_request_artifact(&request).expect("request");
+        let outcome = classify_request(&workspace, &artifact).expect("classification");
+        assert_eq!(outcome.classification, RequirementAction::Create);
+        assert!(
+            outcome
+                .reasons
+                .iter()
+                .any(|reason| reason.contains("create-oriented language"))
+        );
+    }
+
+    #[test]
+    fn check_goal_plan_handles_structured_items_and_source_confidence_variants() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        fs::create_dir_all(tempdir.path().join("src/command")).expect("src dir");
+        fs::create_dir_all(tempdir.path().join("tests")).expect("tests dir");
+        fs::write(
+            tempdir.path().join("src/command/task.rs"),
+            "pub fn run_task_command() {}\n",
+        )
+        .expect("task source");
+        fs::write(
+            tempdir.path().join("tests/task_command.rs"),
+            "fn task_plan_generates_goal_from_request() {}\n",
+        )
+        .expect("task test");
+        init_git_repo(tempdir.path());
+        commit_all(tempdir.path(), "base");
+        update_origin_main(tempdir.path());
+        fs::write(
+            tempdir.path().join("src/command/task.rs"),
+            "pub fn run_task_command() {}\n// updated for structured goal plan coverage\n",
+        )
+        .expect("updated task source");
+        commit_all(tempdir.path(), "update task");
+
+        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
+        let workspace_root = tempdir.path().to_path_buf();
+        let build_artifact = |confidence: Option<GoalPlanConfidence>| {
+            GoalPlanArtifact {
+                version: 1,
+                kind: "syu.goal_plan".to_string(),
+                request_path: Some("request.yaml".to_string()),
+                request: Some("Keep temporary planning explicit".to_string()),
+                classification: Some("request_driven".to_string()),
+                warnings: vec!["inferred from request text".to_string()],
+                source: GoalPlanSource {
+                    mode: super::GoalPlanSourceMode::DiffInferred,
+                    request_artifact: Some("request.yaml".to_string()),
+                    classification: Some("request_driven".to_string()),
+                    range: Some("origin/main...HEAD".to_string()),
+                    confidence,
+                    evidence: Some(GoalPlanSourceEvidence {
+                        changed_files: vec!["src/command/task.rs".to_string()],
+                        traced_requirements: vec!["REQ-CORE-032".to_string()],
+                        traced_features: vec!["FEAT-TASK-005".to_string()],
+                        traced_policies: vec!["POL-001".to_string()],
+                        traced_philosophies: vec!["PHIL-001".to_string()],
+                    }),
+                },
+                goal: GoalPlanGoal {
+                    id: "GOAL-001".to_string(),
+                    title: "Keep temporary planning explicit".to_string(),
+                    statement:
+                        "Capture implementation intent without creating a fifth persistent spec layer."
+                            .to_string(),
+                    non_goals: vec!["Add persistent task specs under spec.root".to_string()],
+                    inferred: true,
+                },
+                spec_mapping: GoalPlanSpecMapping {
+                    persistent_items: GoalPlanPersistentItems {
+                        philosophies: vec![GoalPlanPersistentItem::Item(
+                            GoalPlanPersistentItemDetails {
+                                id: "PHIL-001".to_string(),
+                                title: Some("Keep planning explicit".to_string()),
+                                document_path: Some(
+                                    "docs/syu/philosophy/foundation.yaml".to_string(),
+                                ),
+                            },
+                        )],
+                        policies: vec![GoalPlanPersistentItem::Item(GoalPlanPersistentItemDetails {
+                            id: "POL-001".to_string(),
+                            title: Some("Keep request workflows visible".to_string()),
+                            document_path: Some("docs/syu/policies/policies.yaml".to_string()),
+                        })],
+                        requirements: vec![GoalPlanPersistentItem::Item(
+                            GoalPlanPersistentItemDetails {
+                                id: "REQ-CORE-032".to_string(),
+                                title: Some(
+                                    "Validate temporary Goal Plans against the current spec graph and git range"
+                                        .to_string(),
+                                ),
+                                document_path: Some(
+                                    "docs/syu/requirements/core/check.yaml".to_string(),
+                                ),
+                            },
+                        )],
+                        features: vec![GoalPlanPersistentItem::Item(GoalPlanPersistentItemDetails {
+                            id: "FEAT-TASK-005".to_string(),
+                            title: Some("Goal Plan conformance checking".to_string()),
+                            document_path: Some("docs/syu/features/core/task.yaml".to_string()),
+                        })],
+                    },
+                    spec_updates: GoalPlanSpecUpdates {
+                        required: false,
+                        expected_updates: Vec::new(),
+                    },
+                    spec_updates_required: false,
+                    spec_update_reasons: vec![
+                        "no persistent spec files should be modified".to_string(),
+                    ],
+                },
+                implementation_plan: GoalPlanImplementationPlan {
+                    confidence: Some(GoalPlanConfidence::High),
+                    scope: GoalPlanScope {
+                        include: vec![GoalPlanScopeInclude::Entry(GoalPlanScopeIncludeDetails {
+                            file: "src/command/task.rs".to_string(),
+                            symbols: Vec::new(),
+                        })],
+                        exclude: vec!["docs/syu/**".to_string()],
+                    },
+                    steps: vec!["add a Goal Plan model".to_string()],
+                },
+                test_plan: GoalPlanTestPlan {
+                    selection_mode: GoalPlanSelectionMode::Affected,
+                    confidence: Some(GoalPlanConfidence::High),
+                    required_tests: BTreeMap::from([(
+                        "rust".to_string(),
+                        vec![TraceReference {
+                            file: workspace_root.join("tests/task_command.rs"),
+                            symbols: vec![
+                                "task_check_reports_pass_fail_results_for_goal_plans".to_string(),
+                            ],
+                            doc_contains: Vec::new(),
+                            method: None,
+                            path: None,
+                        }],
+                    )]),
+                    suggested_tests: BTreeMap::new(),
+                },
+                coverage: GoalPlanCoverage {
+                    mode: GoalPlanCoverageMode::ChangedLines,
+                    threshold: 100,
+                    include: vec!["src/command/task.rs".to_string()],
+                    exclude: Vec::new(),
+                },
+                completion: GoalPlanCompletion {
+                    must_pass: vec!["syu validate .".to_string()],
+                },
+            }
+        };
+
+        let artifact_low = build_artifact(Some(GoalPlanConfidence::Low));
+        assert_eq!(
+            artifact_low.spec_mapping.persistent_items.requirements[0].id(),
+            "REQ-CORE-032"
+        );
+        assert_eq!(
+            artifact_low.implementation_plan.scope.include[0].pattern(),
+            "src/command/task.rs"
+        );
+
+        let lookup = WorkspaceLookup::new(&workspace);
+        let mut selected = BTreeMap::new();
+        collect_linked_requirement_tests(&lookup, &artifact_low, &mut selected)
+            .expect("linked test collection");
+        assert!(
+            !selected.is_empty(),
+            "linked requirement test references should be collected"
+        );
+
+        let low_confidence_report =
+            check_goal_plan(&workspace, &artifact_low, "origin/main...HEAD")
+                .expect("low confidence report");
+        assert!(
+            low_confidence_report
+                .issues
+                .iter()
+                .any(|issue| issue.message.contains("low")),
+            "expected a low-confidence warning"
+        );
+
+        let missing_confidence_report =
+            check_goal_plan(&workspace, &build_artifact(None), "origin/main...HEAD")
+                .expect("missing confidence report");
+        assert!(
+            missing_confidence_report
+                .issues
+                .iter()
+                .any(|issue| issue.message.contains("does not declare confidence")),
+            "expected a missing-confidence warning"
         );
     }
 
