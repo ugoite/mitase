@@ -19,7 +19,7 @@ The preferred request-driven flow is:
 3. `syu task scaffold request.yaml`
 4. `syu task plan request.yaml`
 5. implementation
-6. `syu task check goal-plan.yaml`
+6. `syu task check goal-plan.yaml --range origin/main...HEAD`
 
 If the work already exists in a diff and you need to reconstruct the temporary
 artifact, use the fallback:

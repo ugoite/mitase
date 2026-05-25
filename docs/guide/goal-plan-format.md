@@ -37,7 +37,7 @@ When the request still needs shaping, use the planning commands in order:
 3. `syu task scaffold request.yaml`
 4. `syu task plan request.yaml`
 5. implementation
-6. `syu task check goal-plan.yaml`
+6. `syu task check goal-plan.yaml --range origin/main...HEAD`
 
 That flow keeps the intake, the spec adjacency check, the reviewable preview,
 and the temporary Goal Plan separate from one another.
