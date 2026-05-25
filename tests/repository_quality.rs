@@ -232,7 +232,7 @@ fn repository_declares_manual_coverage_reporting_without_ci_gating() {
 // REQ-CORE-005
 fn repository_keeps_node_majors_aligned_across_docs_packages_and_ci() {
     let contributing = read_file("CONTRIBUTING.md");
-    let ci_workflow = read_file(".github/workflows/ci.yml");
+    let _ci_workflow = read_file(".github/workflows/ci.yml");
     let codeql_workflow = read_file(".github/workflows/codeql.yml");
     let docs_build_action = read_file(".github/actions/build-docs-site/action.yml");
     let release_artifacts_workflow = read_file(".github/workflows/release-artifacts.yml");
