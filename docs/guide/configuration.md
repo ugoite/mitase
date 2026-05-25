@@ -67,9 +67,6 @@ validate:
   require_non_orphaned_items: true
   require_reciprocal_links: true
   require_symbol_trace_coverage: false
-app:
-  bind: 127.0.0.1
-  port: 3000
 runtimes:
   python:
     command: auto
@@ -208,7 +205,7 @@ Controls which repository-relative generated directories `syu` skips while
 building the strict symbol-coverage inventory.
 
 By default this list excludes common build outputs such as `build/`,
-`coverage/`, `dist/`, `target/`, `app/dist`, and the checked-in
+`coverage/`, `dist/`, `target/`, and the checked-in
 `tests/fixtures/workspaces/` repositories without hiding authored nested paths
 like `src/build/`.
 
@@ -218,22 +215,6 @@ That keeps generated assets from failing `SYU-trace-id-001` just because they
 do not carry inline IDs or adjacent ownership manifests. Set the list to `[]`
 when you intentionally want generated outputs to participate in both strict
 coverage inventory and ownership enforcement.
-
-### `app.bind`
-
-Controls the default address that `syu app` binds to.
-
-Use `127.0.0.1` for a localhost-only browser app or `0.0.0.0` when a demo or
-container workflow needs the server to be reachable from outside the process.
-When the configured address is non-loopback, `syu app` still requires the
-explicit `--allow-remote` flag before it starts serving workspace data.
-
-### `app.port`
-
-Controls the default port that `syu app` binds to.
-
-CLI flags still override the config so temporary port conflicts can be resolved
-without editing the repository.
 
 ### `report.output`
 
@@ -294,16 +275,6 @@ For report output paths, CLI flags override config:
 2. `report.output`
 3. stdout
 
-For the browser app, CLI flags override config:
-
-1. `--bind`
-2. `app.bind`
-3. `127.0.0.1`
-
-1. `--port`
-2. `app.port`
-3. `3000`
-
 ## Wildcard file ownership
 
 Traces may use `symbols: ['*']` when one requirement or feature intentionally
@@ -334,8 +305,6 @@ want strict ownership checks without enumerating every public symbol by hand.
   wants public APIs and tests to remain fully owned by the spec
 - set `report.output` when your repository checks in one stable report artifact
   path
-- set `app.bind` and `app.port` only when your team really has a stable local
-  browser-app convention worth checking in
 - set `report.output` when your repository checks in one stable report artifact
   path
 - treat runtime overrides as environment-specific, not project-specific, unless

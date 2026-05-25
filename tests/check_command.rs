@@ -176,8 +176,8 @@ fn check_command_accepts_passing_workspace() {
         "success output should include next-step guidance: {stdout}"
     );
     assert!(
-        stdout.contains("syu app "),
-        "next-step block should mention syu app: {stdout}"
+        stdout.contains("syu browse "),
+        "next-step block should mention syu browse: {stdout}"
     );
 }
 
@@ -199,7 +199,6 @@ fn check_command_preserves_default_workspace_dot_in_next_steps() {
     );
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("syu app ."));
     assert!(stdout.contains("syu browse ."));
     assert!(stdout.contains("syu report ."));
     assert!(stdout.contains("syu show <ID> ."));
@@ -224,7 +223,6 @@ fn check_command_prints_workspace_aware_next_steps_for_explicit_paths() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let workspace_arg = expected_workspace_arg(&fixture_path("passing"));
-    assert!(stdout.contains(&format!("syu app {workspace_arg}")));
     assert!(stdout.contains(&format!("syu browse {workspace_arg}")));
     assert!(stdout.contains(&format!("syu report {workspace_arg}")));
     assert!(stdout.contains(&format!("syu show <ID> {workspace_arg}")));
@@ -332,7 +330,6 @@ fn check_command_reports_missing_definition_links() {
     );
     assert!(stdout.contains("--severity error"));
     assert!(stdout.contains("--genre graph"));
-    assert!(stdout.contains("syu app "));
 }
 
 #[test]

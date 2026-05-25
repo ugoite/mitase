@@ -68,7 +68,6 @@ fn repository_declares_precommit_and_quality_gates() {
     let validate_changed_script = read_file("scripts/dev/validate-changed.sh");
     let branch_push_workflow = read_file(".github/workflows/branch-push.yml");
     let maintenance_workflow = read_file(".github/workflows/maintenance.yml");
-    let validate_app_script = read_file("scripts/ci/validate-app.sh");
     let validate_website_script = read_file("scripts/ci/validate-website.sh");
     let install_docs_site_deps_script = read_file("scripts/ci/install-docs-site-deps.sh");
     let contributor_bootstrap_script = read_file("scripts/ci/bootstrap-contributor-tooling.sh");
@@ -86,14 +85,12 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(quality_script.contains("run_quality_gates"));
     assert!(quality_script.contains("fast"));
     assert!(quality_script.contains("full"));
-    assert!(quality_script.contains("SYU_SKIP_BROWSER_APP_BUILD=1"));
     assert!(quality_script.contains("cargo fmt --all --check"));
     assert!(quality_script.contains("cargo clippy --all-targets --all-features -- -D warnings"));
     assert!(quality_script.contains("cargo test --lib --bins -- --skip command::log::tests::"));
     assert!(quality_script.contains("cargo test"));
     assert!(quality_script.contains("cargo run -- validate ."));
     assert!(quality_script.contains("check-generated-docs-freshness.sh"));
-    assert!(validate_changed_script.contains("SYU_SKIP_BROWSER_APP_BUILD=1"));
     assert!(validate_changed_script.contains("cargo run -- validate ."));
     assert!(branch_push_workflow.contains("duplicate-check:"));
     assert!(branch_push_workflow.contains("has_open_pr"));
@@ -102,24 +99,16 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(maintenance_workflow.contains("npm-audit:"));
     assert!(maintenance_workflow.contains("schedule:"));
     assert!(maintenance_workflow.contains("0 6 * * 1"));
-    assert!(validate_app_script.contains("FEAT-QUALITY-001"));
-    assert!(validate_app_script.contains("validate_app"));
-    assert!(validate_app_script.contains("scripts/ci/quality-gates.sh"));
-    assert!(validate_app_script.contains("check-browser-app-freshness.sh"));
-    assert!(validate_app_script.contains("npm --prefix app run test:e2e"));
     assert!(validate_website_script.contains("FEAT-QUALITY-001"));
     assert!(validate_website_script.contains("validate_website"));
     assert!(validate_website_script.contains("scripts/ci/quality-gates.sh"));
     assert!(validate_website_script.contains("install-docs-site-deps.sh"));
     assert!(validate_website_script.contains("npm --prefix website run build"));
     assert!(contributor_bootstrap_script.contains("FEAT-CONTRIB-004"));
-    assert!(contributor_bootstrap_script.contains("scripts/ci/pinned-npm.sh install app"));
     assert!(contributor_bootstrap_script.contains("scripts/ci/pinned-npm.sh install website"));
     assert!(contributor_bootstrap_script.contains("bash scripts/ci/install-docs-site-deps.sh"));
     assert!(contributor_bootstrap_script.contains("npm --prefix editors/vscode ci"));
-    assert!(contributor_bootstrap_script.contains("playwright install --with-deps chromium"));
     assert!(contributor_bootstrap_script.contains("current shell's Node major"));
-    assert!(contributor_bootstrap_script.contains("app/.nvmrc"));
     assert!(contributor_bootstrap_script.contains("website/.nvmrc"));
     assert!(contributor_bootstrap_script.contains("--all"));
     assert!(install_docs_site_deps_script.contains("Branch switches can leave behind"));
@@ -143,7 +132,6 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(ci_workflow.contains("dependency-review:"));
     assert!(ci_workflow.contains("squash-history-spec-ids:"));
     assert!(ci_workflow.contains("spec-linkage:"));
-    assert!(ci_workflow.contains("browser-app:"));
     assert!(ci_workflow.contains("installer-smoke:"));
     assert!(ci_workflow.contains("installed-binary-smoke:"));
     assert!(ci_workflow.contains("docs-site:"));
@@ -169,13 +157,11 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(contributing.contains("npm audit"));
     assert!(contributing.contains("Contributors do **not** need to run manual audits"));
     assert!(contributing.contains("check-generated-docs-freshness.sh"));
-    assert!(contributing.contains("scripts/ci/validate-app.sh"));
     assert!(contributing.contains("scripts/ci/validate-website.sh"));
     assert!(contributing.contains("docs/generated/"));
     assert!(contributing.contains("python3 -m site --user-base"));
     assert!(contributing.contains("If you installed `pre-commit` with"));
     assert!(contributing.contains("pipx environment --value PIPX_BIN_DIR"));
-    assert!(contributing.contains("scripts/ci/check-browser-app-freshness.sh"));
 
     assert!(repo_config.contains("FEAT-CHECK-001"));
     assert!(repo_config.contains("FEAT-REPORT-001"));
@@ -193,8 +179,6 @@ fn repository_declares_goal_selected_pr_tests_without_line_based_gating() {
 
     assert!(goal_tests_script.contains("FEAT-QUALITY-001"));
     assert!(goal_tests_script.contains("run_goal_tests"));
-    assert!(goal_tests_script.contains("scripts/ci/pinned-npm.sh install app"));
-    assert!(goal_tests_script.contains("npm --prefix app ci"));
     assert!(goal_tests_script.contains("cargo run --quiet -- task infer"));
     assert!(goal_tests_script.contains("cargo run --quiet -- task test-select"));
     assert!(goal_tests_script.contains("selected-tests.json"));
@@ -252,44 +236,28 @@ fn repository_keeps_node_majors_aligned_across_docs_packages_and_ci() {
     let codeql_workflow = read_file(".github/workflows/codeql.yml");
     let docs_build_action = read_file(".github/actions/build-docs-site/action.yml");
     let release_artifacts_workflow = read_file(".github/workflows/release-artifacts.yml");
-    let app_nvmrc = read_file("app/.nvmrc");
     let website_nvmrc = read_file("website/.nvmrc");
-    let app_package = read_json("app/package.json");
     let website_package = read_json("website/package.json");
 
-    let app_major = app_nvmrc.trim();
     let website_major = website_nvmrc.trim();
-    let app_next_major = app_major
-        .parse::<u32>()
-        .expect("app Node major should parse")
-        + 1;
     let website_next_major = website_major
         .parse::<u32>()
         .expect("website Node major should parse")
         + 1;
-    let app_engine = format!(">={app_major} <{app_next_major}");
     let website_engine = format!(">={website_major} <{website_next_major}");
 
-    assert_eq!(app_major, "25");
     assert_eq!(website_major, "20");
-    assert_eq!(
-        app_package["engines"]["node"].as_str(),
-        Some(app_engine.as_str())
-    );
     assert_eq!(
         website_package["engines"]["node"].as_str(),
         Some(website_engine.as_str())
     );
-    assert_eq!(app_package["packageManager"].as_str(), Some("npm@11.8.0"));
     assert_eq!(
         website_package["packageManager"].as_str(),
         Some("npm@11.8.0")
     );
 
-    assert!(contributing.contains("use **Node 25** for `app/`"));
     assert!(contributing.contains("use **Node 20** for `website/`"));
 
-    assert!(ci_workflow.contains("node-version: \"25\""));
     assert!(docs_build_action.contains("node-version: \"20\""));
     assert!(codeql_workflow.contains("node-version: \"25\""));
     assert!(release_artifacts_workflow.contains("node-version: \"25\""));
@@ -325,8 +293,6 @@ fn repository_declares_release_automation() {
     assert!(release_artifacts.contains("install-syu.sh"));
     assert!(release_artifacts.contains("release-notes:"));
     assert!(release_artifacts.contains("release-track-notes.sh"));
-    assert!(release_artifacts.contains("scripts/ci/pinned-npm.sh install app"));
-    assert!(release_artifacts.contains("npm --prefix app ci"));
     assert!(release_artifacts.contains("attestations: write"));
     assert!(release_artifacts.contains("id-token: write"));
     assert!(release_artifacts.contains("actions/attest-build-provenance@v4"));
@@ -347,7 +313,6 @@ fn repository_declares_release_automation() {
     assert!(!release_config.contains("\"skip-changelog\": true"));
     assert!(release_config.contains("\"changelog-type\": \"github\""));
     assert!(!release_config.contains("\"initial-version\""));
-    assert!(release_config.contains("\"file\": \"app/package.json\""));
     assert!(release_config.contains("\"file\": \"website/package.json\""));
     assert!(release_config.contains("\"file\": \"editors/vscode/package.json\""));
     assert!(release_config.contains("\"file\": \"crates/syu-core/Cargo.toml\""));
@@ -716,12 +681,9 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("[troubleshooting](./troubleshooting.md)"));
     assert!(getting_started.contains("live [validation report]"));
     assert!(node_workflow.contains("# Repository Node workflow"));
-    assert!(node_workflow.contains("| Browser app (`app/`) |"));
     assert!(node_workflow.contains("| Docs site (`website/`) |"));
     assert!(node_workflow.contains("| VS Code extension (`editors/vscode/`) |"));
     assert!(node_workflow.contains("devcontainer installs `node:lts`"));
-    assert!(node_workflow.contains("nvm use \"$(cat app/.nvmrc)\""));
-    assert!(node_workflow.contains("scripts/ci/pinned-npm.sh install app"));
     assert!(node_workflow.contains("bash scripts/ci/install-docs-site-deps.sh"));
     assert!(node_workflow.contains("scripts/ci/pinned-npm.sh install editors/vscode"));
     assert!(command_card.contains("# syu command card"));
@@ -733,7 +695,7 @@ fn repository_declares_documentation_guides() {
     assert!(command_card.contains("syu report ."));
     assert!(command_card.contains("syu review --range origin/main...HEAD"));
     assert!(command_card.contains("scan for likely overlap"));
-    assert!(command_card.contains("syu app ."));
+    assert!(!command_card.contains("syu app ."));
     assert!(command_card.contains("[reviewer workflow](./reviewer-workflow.md)"));
     assert!(vscode_guide.contains("CLI-backed first"));
     assert!(vscode_guide.contains("Still uses the CLI directly"));
@@ -835,7 +797,6 @@ fn repository_declares_documentation_guides() {
     assert!(merge_queue_playbook.contains("gh-readonly-queue/main/pr-123-<sha>"));
     assert!(reviewer_workflow.contains("full integration gate"));
     assert!(configuration.contains("validate.default_fix"));
-    assert!(configuration.contains("--allow-remote"));
     assert!(configuration.contains("trace-adapter-support.md"));
     assert!(configuration.contains("validate.allow_planned"));
     assert!(
@@ -1118,13 +1079,9 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(contributing.contains("scripts/ci/quality-gates.sh"));
     assert!(contributing.contains("scripts/ci/check-generated-docs-freshness.sh"));
     assert!(contributing.contains("docs/generated/"));
-    assert!(contributing.contains("scripts/ci/check-browser-app-freshness.sh"));
-    assert!(contributing.contains("scripts/ci/pinned-npm.sh install app"));
-    assert!(contributing.contains("cargo run -- app . --dev-server"));
     assert!(contributing.contains("scripts/ci/bootstrap-contributor-tooling.sh"));
     assert!(contributing.contains("matches the current shell major"));
     assert!(contributing.contains("--vscode"));
-    assert!(contributing.contains("--playwright"));
     assert!(contributing.contains("--all"));
     assert!(contributing.contains("GitHub uses the PR title as the squash commit headline"));
     assert!(contributing.contains("scripts/ci/run-goal-tests.sh"));
@@ -1132,13 +1089,7 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(contributing.contains("Closes #123"));
     assert!(contributing.contains("merge queue lands the change on `main`"));
     assert!(contributing.contains(shared_merge_queue_guidance));
-    assert!(contributing.contains("app/dist"));
-    assert!(contributing.contains("bash .devcontainer/setup-browser-tooling.sh"));
-    assert!(contributing.contains("npm run build:wasm"));
     assert!(contributing.contains("npm run check"));
-    assert!(contributing.contains("npx --prefix app playwright install --with-deps chromium"));
-    assert!(contributing.contains("npm --prefix app run test:e2e"));
-    assert!(contributing.contains("app/playwright.config.ts"));
     assert!(contributing.contains("install-docs-site-deps.sh"));
     assert!(contributing.contains("npm --prefix website ci"));
     assert!(contributing.contains("npm --prefix website run start"));
@@ -1148,9 +1099,6 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(contributing.contains("devcontainer/Codespaces post-create step"));
     assert!(contributing.contains(".devcontainer/post-create.sh"));
     assert!(contributing.contains("cargo-llvm-cov"));
-    assert!(contributing.contains("wasm-pack"));
-    assert!(contributing.contains("Playwright Chromium"));
-    assert!(contributing.contains("local browser-app work"));
     assert!(contributing.contains("does **not** install `website/` docs-site dependencies"));
     assert!(contributing.contains("GitHub Pages"));
     assert!(contributing.contains("release track"));
@@ -1217,7 +1165,6 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     let docs_build_action = read_file(".github/actions/build-docs-site/action.yml");
     let docs_lock = read_file("website/package-lock.json");
     let release_artifacts = read_file(".github/workflows/release-artifacts.yml");
-    let browser_app_freshness = read_file("scripts/ci/check-browser-app-freshness.sh");
     let merge_queue_watchdog_script = read_file("scripts/ci/check-merge-queue-health.sh");
     let merge_queue_reenroll = read_file("scripts/ci/requeue-dropped-merge-queue-prs.sh");
     let dependabot = read_file(".github/dependabot.yml");
@@ -1227,7 +1174,6 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(ci_workflow.contains("permissions:"));
     assert!(ci_workflow.contains("./.github/actions/setup-rust"));
     assert!(setup_rust_action.contains("actions/setup-node@v6"));
-    assert!(setup_rust_action.contains("cache-dependency-path: app/package-lock.json"));
     assert!(setup_rust_action.contains("tool: wasm-pack"));
     assert!(setup_rust_action.contains("Restore Rust cache"));
     assert!(setup_rust_action.contains("Swatinem/rust-cache@v2"));
@@ -1242,7 +1188,6 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(ci_workflow.contains("Upload goal test artifacts"));
     assert!(!ci_workflow.contains("coverage-pr:"));
     assert!(!ci_workflow.contains("coverage-full:"));
-    assert!(ci_workflow.contains("browser-app:"));
     assert!(ci_workflow.contains("ci-required:"));
     assert!(ci_workflow.contains("Set up Python with pip cache"));
     assert!(ci_workflow.contains("cache: pip"));
@@ -1250,11 +1195,7 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(ci_workflow.contains("Cache pre-commit hooks"));
     assert!(ci_workflow.contains("actions/cache@v5"));
     assert!(ci_workflow.contains("~/.cache/pre-commit"));
-    assert!(ci_workflow.contains("cache-dependency-path: app/package-lock.json"));
     assert!(ci_workflow.contains("Set up Rust for fast quality gates"));
-    assert!(ci_workflow.contains("Install browser app dependencies"));
-    assert!(ci_workflow.contains("npm --prefix app ci"));
-    assert!(browser_app_freshness.contains("npm ci"));
     assert!(ci_workflow.contains("docs-site:"));
     assert!(ci_workflow.contains("./.github/actions/build-docs-site"));
     assert!(docs_build_action.contains("actions/setup-node@v6"));
@@ -1356,95 +1297,12 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(dependabot.contains("FEAT-QUALITY-001"));
     assert!(dependabot.contains("package-ecosystem: cargo"));
     assert!(dependabot.contains("package-ecosystem: github-actions"));
-    assert!(dependabot.matches("package-ecosystem: npm").count() >= 2);
+    assert!(dependabot.matches("package-ecosystem: npm").count() >= 1);
     assert!(dependabot.contains("target-branch: main"));
     assert!(dependabot.contains("rust-crates"));
     assert!(dependabot.contains("github-actions"));
     assert!(dependabot.contains("directory: /website"));
-    assert!(dependabot.contains("directory: /app"));
     assert!(dependabot.contains("docs-site-npm"));
-    assert!(dependabot.contains("browser-app-npm"));
-}
-
-#[test]
-// REQ-CORE-017
-fn repository_ships_browser_app() {
-    let ci_workflow = read_file(".github/workflows/ci.yml");
-    let docs_build_action = read_file(".github/actions/build-docs-site/action.yml");
-    let build_script = read_file("build.rs");
-    let app_gitignore = read_file("app/.gitignore");
-    let app_package = read_file("app/package.json");
-    let app_source = read_file("app/src/App.tsx");
-    let app_vite = read_file("app/vite.config.ts");
-    let app_playwright = read_file("app/tests/browser-app.spec.ts");
-    let app_wasm = read_file("app/wasm/src/lib.rs");
-    let bundle_freshness = read_file("scripts/ci/check-browser-app-freshness.sh");
-    let pinned_npm = read_file("scripts/ci/pinned-npm.sh");
-    let readme = read_file("README.md");
-    let shared_core = read_file("crates/syu-core/src/lib.rs");
-
-    assert!(ci_workflow.contains("browser-app:"));
-    assert!(ci_workflow.contains("Build browser app bundle"));
-    assert!(ci_workflow.contains("scripts/ci/pinned-npm.sh install app"));
-    assert!(ci_workflow.contains("scripts/ci/check-browser-app-freshness.sh"));
-    assert!(ci_workflow.contains("if: success()"));
-    assert!(
-        ci_workflow.contains(
-            "browser-app-dist-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}"
-        )
-    );
-    assert!(build_script.contains("syu-app-dist"));
-    assert!(build_script.contains("scripts/ci/pinned-npm.sh install app"));
-    assert!(build_script.contains("scripts/ci/pinned-npm.sh"));
-    assert!(build_script.contains(".arg(\"check\")"));
-    assert!(build_script.contains("browser app dependencies are not ready"));
-    assert!(build_script.contains("fresh clone or fresh worktree"));
-    assert!(build_script.contains("Cargo intentionally does not run a networked npm install"));
-    assert!(build_script.contains("rerun-if-env-changed=SYU_SKIP_BROWSER_APP_BUILD"));
-    assert!(build_script.contains("build:wasm"));
-    assert!(build_script.contains("--outDir"));
-    assert!(build_script.contains("shared_core_dir"));
-    assert!(build_script.contains("scripts"));
-    assert!(build_script.contains("remove_dir_if_exists"));
-    assert!(!build_script.contains("install browser app dependencies with `npm ci`"));
-    assert!(app_package.contains("\"packageManager\": \"npm@11.8.0\""));
-    assert!(app_package.contains("\"vite-plus\""));
-    assert!(app_package.contains("\"@playwright/test\""));
-    assert!(app_gitignore.contains("dist"));
-    assert!(app_gitignore.contains("src/wasm"));
-    assert!(app_source.contains("FEAT-APP-001"));
-    assert!(app_source.contains("philosophy"));
-    assert!(app_source.contains("requirements"));
-    assert!(app_vite.contains("@tailwindcss/vite"));
-    assert!(app_playwright.contains("REQ-CORE-017"));
-    assert!(app_playwright.contains("FEAT-CHECK-001"));
-    assert!(app_wasm.contains("FEAT-APP-001"));
-    assert!(bundle_freshness.contains("FEAT-QUALITY-001"));
-    assert!(bundle_freshness.contains("ensure_app_dependencies"));
-    assert!(bundle_freshness.contains("clear_generated_browser_outputs"));
-    assert!(bundle_freshness.contains("pinned-npm.sh"));
-    assert!(bundle_freshness.contains("npm ci"));
-    assert!(bundle_freshness.contains("check_browser_app_freshness"));
-    assert!(bundle_freshness.contains("npm run build:wasm"));
-    assert!(bundle_freshness.contains("npm run build"));
-    assert!(bundle_freshness.contains("rm -rf src/wasm dist"));
-    assert!(bundle_freshness.contains("Browser app Wasm bridge was not regenerated"));
-    assert!(!bundle_freshness.contains("[[ -d node_modules ]]"));
-    assert!(docs_build_action.contains("scripts/ci/pinned-npm.sh install website"));
-    assert!(docs_build_action.contains("bash scripts/ci/install-docs-site-deps.sh"));
-    assert!(pinned_npm.contains("FEAT-QUALITY-001"));
-    assert!(pinned_npm.contains("packageManager"));
-    assert!(pinned_npm.contains("npm install --global"));
-    assert!(pinned_npm.contains("Run 'scripts/ci/pinned-npm.sh install"));
-    assert!(readme.contains("generates the embedded"));
-    assert!(readme.contains("scripts/ci/pinned-npm.sh install app"));
-    assert!(readme.contains("Cargo no longer runs `npm ci` for you during normal builds."));
-    assert!(readme.contains("fresh clone or fresh worktree"));
-    assert!(readme.contains("offline, hermetic, and security-sensitive environments"));
-    assert!(readme.contains("check-browser-app-freshness.sh"));
-    assert!(readme.contains("regenerates the local"));
-    assert!(readme.contains("app/dist"));
-    assert!(shared_core.contains("FEAT-APP-001"));
 }
 
 #[test]

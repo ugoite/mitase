@@ -1897,11 +1897,6 @@ fn render_text_report(
         writeln!(&mut output, "What to do next:").expect("writing to String must succeed");
         writeln!(
             &mut output,
-            "  syu app {workspace_arg}        open the browser UI to explore your workspace"
-        )
-        .expect("writing to String must succeed");
-        writeln!(
-            &mut output,
             "  syu browse {workspace_arg}     browse interactively in the terminal"
         )
         .expect("writing to String must succeed");
@@ -1935,7 +1930,7 @@ fn render_text_report(
         .expect("writing to String must succeed");
         writeln!(
             &mut output,
-            "  syu app {workspace_arg}                 open the browser UI to inspect the same workspace graph visually"
+            "  syu browse {workspace_arg}                browse interactively in the terminal"
         )
         .expect("writing to String must succeed");
     }

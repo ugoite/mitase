@@ -119,10 +119,12 @@ items:
       - coverage
       - dist
       - target
+      - app
       - app/build
       - app/coverage
       - app/dist
       - app/target
+      - src/command/app.rs
       - tests/fixtures/workspaces
     summary: Exact repository-relative directories that strict symbol coverage skips.
     description: |
