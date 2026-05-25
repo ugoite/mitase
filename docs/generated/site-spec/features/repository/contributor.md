@@ -63,10 +63,8 @@ description: "Generated reference for docs/syu/features/repository/contributor.y
           - FEAT-CONTRIB-002
           - GitHub Flow
           - .worktrees/
-          - scripts/ci/pinned-npm.sh install app
           - scripts/ci/pinned-npm.sh install website
           - scripts/ci/quality-gates.sh
-          - scripts/ci/validate-app.sh
           - scripts/ci/validate-website.sh
       - **file**: .github/pull_request_template.md
         - **symbols**:
@@ -111,7 +109,7 @@ description: "Generated reference for docs/syu/features/repository/contributor.y
           - main
 - **id**: FEAT-CONTRIB-004
   - **title**: Optional contributor tooling bootstrap
-  - **summary**: Prepare optional browser-app, docs-site, and editor npm surfaces from one checked-in entrypoint while keeping heavyweight extras opt-in.
+  - **summary**: Prepare optional docs-site and editor npm surfaces from one checked-in entrypoint while keeping heavyweight extras opt-in.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-013
@@ -121,10 +119,8 @@ description: "Generated reference for docs/syu/features/repository/contributor.y
         - **symbols**:
           - FEAT-CONTRIB-004
           - usage
-          - install_app_deps
           - install_website_deps
           - install_vscode_deps
-          - install_playwright_browser
           - print_next_steps
           - main
     - **markdown**:
@@ -132,7 +128,6 @@ description: "Generated reference for docs/syu/features/repository/contributor.y
         - **symbols**:
           - scripts/ci/bootstrap-contributor-tooling.sh
           - --vscode
-          - --playwright
           - --all
 
 ## Source YAML
@@ -189,10 +184,8 @@ features:
             - FEAT-CONTRIB-002
             - GitHub Flow
             - .worktrees/
-            - scripts/ci/pinned-npm.sh install app
             - scripts/ci/pinned-npm.sh install website
             - scripts/ci/quality-gates.sh
-            - scripts/ci/validate-app.sh
             - scripts/ci/validate-website.sh
         - file: .github/pull_request_template.md
           symbols:
@@ -239,7 +232,7 @@ features:
 
   - id: FEAT-CONTRIB-004
     title: Optional contributor tooling bootstrap
-    summary: Prepare optional browser-app, docs-site, and editor npm surfaces from one checked-in entrypoint while keeping heavyweight extras opt-in.
+    summary: Prepare optional docs-site and editor npm surfaces from one checked-in entrypoint while keeping heavyweight extras opt-in.
     status: implemented
     linked_requirements:
       - REQ-CORE-013
@@ -249,10 +242,8 @@ features:
           symbols:
             - FEAT-CONTRIB-004
             - usage
-            - install_app_deps
             - install_website_deps
             - install_vscode_deps
-            - install_playwright_browser
             - print_next_steps
             - main
       markdown:
@@ -260,6 +251,5 @@ features:
           symbols:
             - scripts/ci/bootstrap-contributor-tooling.sh
             - --vscode
-            - --playwright
             - --all
 ```

@@ -61,8 +61,6 @@ description: "Generated reference for docs/syu/features/documentation/docs.yaml"
           - validate.require_non_orphaned_items
           - validate.require_reciprocal_links
           - validate.require_symbol_trace_coverage
-          - app.bind
-          - app.port
           - report.output
           - runtimes.python.command
       - **file**: docs/guide/implementation-planning.md
@@ -165,8 +163,6 @@ features:
             - validate.require_non_orphaned_items
             - validate.require_reciprocal_links
             - validate.require_symbol_trace_coverage
-            - app.bind
-            - app.port
             - report.output
             - runtimes.python.command
         - file: docs/guide/implementation-planning.md

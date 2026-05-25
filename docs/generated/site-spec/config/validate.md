@@ -148,10 +148,12 @@ description: "Generated reference for docs/syu/config/validate.yaml"
     - coverage
     - dist
     - target
+    - app
     - app/build
     - app/coverage
     - app/dist
     - app/target
+    - src/command/app.rs
     - tests/fixtures/workspaces
   - **summary**: Exact repository-relative directories that strict symbol coverage skips.
   - **description**:
@@ -293,10 +295,12 @@ items:
       - coverage
       - dist
       - target
+      - app
       - app/build
       - app/coverage
       - app/dist
       - app/target
+      - src/command/app.rs
       - tests/fixtures/workspaces
     summary: Exact repository-relative directories that strict symbol coverage skips.
     description: |

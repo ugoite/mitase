@@ -67,7 +67,6 @@ description: "Generated reference for docs/syu/policies/policies.yaml"
     - REQ-CORE-004
     - REQ-CORE-010
     - REQ-CORE-015
-    - REQ-CORE-017
     - REQ-CORE-018
     - REQ-CORE-019
     - REQ-CORE-022
@@ -121,7 +120,6 @@ description: "Generated reference for docs/syu/policies/policies.yaml"
     - REQ-CORE-011
     - REQ-CORE-012
     - REQ-CORE-015
-    - REQ-CORE-017
     - REQ-CORE-018
     - REQ-CORE-019
     - REQ-CORE-020
@@ -155,7 +153,6 @@ description: "Generated reference for docs/syu/policies/policies.yaml"
     - REQ-CORE-010
     - REQ-CORE-012
     - REQ-CORE-016
-    - REQ-CORE-017
     - REQ-CORE-022
     - REQ-CORE-025
 - **id**: POL-006
@@ -265,7 +262,6 @@ policies:
       - REQ-CORE-004
       - REQ-CORE-010
       - REQ-CORE-015
-      - REQ-CORE-017
       - REQ-CORE-018
       - REQ-CORE-019
       - REQ-CORE-022
@@ -319,7 +315,6 @@ policies:
       - REQ-CORE-011
       - REQ-CORE-012
       - REQ-CORE-015
-      - REQ-CORE-017
       - REQ-CORE-018
       - REQ-CORE-019
       - REQ-CORE-020
@@ -353,7 +348,6 @@ policies:
       - REQ-CORE-010
       - REQ-CORE-012
       - REQ-CORE-016
-      - REQ-CORE-017
       - REQ-CORE-022
       - REQ-CORE-025
 
