@@ -54,18 +54,17 @@ scripts/ci/bootstrap-contributor-tooling.sh
 ```
 
 Without flags, the script installs only the surfaces whose checked-in `.nvmrc`
-matches the current shell major. In this repository that means Node 25 selects
-the browser app, while Node 20 selects the docs site plus the VS Code
-extension. Add `--vscode` when you are working on `editors/vscode/`,
-`--playwright` when you want local end-to-end browser coverage, or `--all`
-when you intentionally want every checked-in optional npm surface ready at
-once.
+matches the current shell major. In this repository that means Node 20 selects
+the docs site plus the VS Code extension. Add `--website` when you are working
+on `website/`, `--vscode` when you are working on `editors/vscode/`, or
+`--all` when you intentionally want every checked-in optional npm surface ready
+at once.
 
 <!-- FEAT-DOCTOR-001 -->
 
 Before you choose a branch below, run `syu doctor .` when you want one quick
 summary of the current Rust toolchain, Node/npm expectations, optional
-dependency installs, and Playwright browser readiness for this checkout.
+dependency installs for this checkout.
 
 1. **Every change**
 
@@ -75,10 +74,8 @@ dependency installs, and Playwright browser readiness for this checkout.
    ```
 
    `scripts/ci/quality-gates.sh fast` keeps the local pre-push path short and
-   skips the embedded browser-app build, so it does not need `app/node_modules`
-   ready. Use `scripts/ci/validate-app.sh` when you want the browser-specific
-   freshness checks. It also catches stale `docs/generated/` artifacts before
-   you queue a push. The full gate adds the repository report:
+   catches stale `docs/generated/` artifacts before you queue a push. The full
+   gate adds the repository report:
 
    ```bash
    scripts/ci/quality-gates.sh full
@@ -101,83 +98,7 @@ dependency installs, and Playwright browser readiness for this checkout.
    change, and runs them locally. Use `scripts/ci/coverage.sh summary` when you
    want the full 100% repository coverage gate locally.
 
-3. **Browser app, WASM, or checked-in `app/dist` bundle** (`app/src`,
-   `app/wasm`, browser build config, or generated browser assets)
-
-   For the CI-aligned happy path, run:
-
-    ```bash
-    scripts/ci/validate-app.sh
-    ```
-
-    For the fastest UI iteration loop, keep the Vite dev server running and
-    point `syu app` at it explicitly:
-
-    ```bash
-    npm --prefix app run dev
-    cargo run -- app . --dev-server
-    ```
-
-    `scripts/ci/validate-app.sh` starts with the shared repository gates and then
-   runs the browser-specific checks below. In the devcontainer or Codespaces,
-   install the browser tooling first with:
-
-   ```bash
-   bash .devcontainer/setup-browser-tooling.sh
-   ```
-
-   Outside the devcontainer, or when you only need the raw follow-up steps,
-   install the browser app dependencies with:
-
-    ```bash
-    scripts/ci/pinned-npm.sh install app
-    npm --prefix app ci
-    ```
-
-    Or prepare the same app dependencies together with the docs site through:
-
-    ```bash
-    scripts/ci/bootstrap-contributor-tooling.sh --app
-    ```
-
-Normal Cargo-driven builds no longer run that install step for you. If you are
-in a fresh clone or fresh worktree and the embedded browser app dependencies are
-missing or stale, `build.rs` stops and points back to the commands above so
-Rust-only or docs-only work does not silently mutate your `app/node_modules`
-tree.
-
-   Then run the same freshness flow CI uses:
-
-   ```bash
-   scripts/ci/check-browser-app-freshness.sh
-   ```
-
-   That script clears any locally generated browser outputs, reruns
-   `npm run build:wasm`, then runs `npm run check` and `npm run build`. It
-   leaves a fresh local `app/src/wasm` bridge plus an `app/dist/` artifact
-   behind for inspection without checking either generated output into git.
-
-   When the change affects browser behavior, routing, or Playwright coverage,
-   also install the local browser once and run the end-to-end suite:
-
-   ```bash
-   scripts/ci/validate-app.sh --e2e
-   ```
-
-   The wrapper expands to:
-
-   ```bash
-   npx --prefix app playwright install --with-deps chromium
-   npm --prefix app run test:e2e
-   ```
-
-   `scripts/ci/validate-app.sh --e2e` also installs Playwright Chromium and runs
-   `npm --prefix app run test:e2e`, which uses `app/playwright.config.ts` to
-   launch `cargo run -- app .` automatically. The devcontainer/Codespaces
-   post-create step keeps this browser setup opt-in so docs-only or Rust-only
-   contributors do not pay for it by default.
-
-4. **Documentation site** (`website/`)
+3. **Documentation site** (`website/`)
 
    For the CI-aligned happy path, run:
 
@@ -193,7 +114,7 @@ tree.
     bash scripts/ci/install-docs-site-deps.sh
     ```
 
-    Or prepare the docs site together with the browser-app defaults through:
+    Or prepare the docs site together with the VS Code extension through:
 
     ```bash
     scripts/ci/bootstrap-contributor-tooling.sh --website
@@ -223,43 +144,38 @@ tree.
    After the shared gates, `scripts/ci/validate-website.sh` runs the same
    install and build sequence as `.github/actions/build-docs-site`.
 
-5. **Docs-only edits outside `website/`, `app/`, or Rust logic**
+4. **Docs-only edits outside `website/` or Rust logic**
 
    Stop after the shared gates only when your change does not feed the docs
    site. If you touched `README.md`, files under `docs/guide/` or
    `docs/generated/site-spec/`, or docs-site build inputs such as
    `scripts/generate-site-docs.py` or `.github/actions/build-docs-site`, also
-   run branch 4's docs-site build.
+   run branch 3's docs-site build.
 
 ### Node.js version strategy
 
-For the contributor-facing quick matrix, switching rules, and app/docs/editor
+For the contributor-facing quick matrix, switching rules, and docs/editor
 commands in one place, start with [`docs/guide/node-workflow.md`](docs/guide/node-workflow.md).
 
-The repository intentionally uses different Node.js majors for different
-surfaces:
+The repository intentionally uses Node.js 20 for the optional npm surfaces:
 
-- **Browser app and browser-adjacent CI jobs use Node 25.** That is the runtime
-  used in `ci/npm-audit` for `app/` and in the `check-msrv` job that still
-  bootstraps the browser toolchain.
 - **Docs-site automation uses Node 20.** The shared
   `.github/actions/build-docs-site` action pins the Docusaurus build to Node 20,
-  and `ci/npm-audit` uses the same major for `website/`.
+  and `scripts/ci/bootstrap-contributor-tooling.sh` uses the same major for
+  `website/` and `editors/vscode/`.
 
 When you work locally, match the Node major to the surface you are changing:
 
-- use **Node 25** for `app/`, browser-app freshness checks, Playwright, and
-  other browser-tooling work
-- use **Node 20** for `website/` and docs-site builds
+- use **Node 20** for `website/` and `editors/vscode/`
 
 The checked-in source of truth now lives in each package directory:
-`app/.nvmrc` plus `app/package.json#engines`, and `website/.nvmrc` plus
-`website/package.json#engines`.
+`website/.nvmrc` plus `website/package.json#engines`, and
+`editors/vscode/.nvmrc` plus `editors/vscode/package.json#engines`.
 
 If you switch between both in one shell session, use a version manager such as
-`nvm`, `fnm`, or `Volta` so the browser app and docs site each run on the same
-major that CI expects. Both checked-in Node surfaces also record the expected
-npm release in `package.json` via the `packageManager` field.
+`nvm`, `fnm`, or `Volta` so the docs site and VS Code extension each run on the
+same major that CI expects. Both checked-in Node surfaces also record the
+expected npm release in `package.json` via the `packageManager` field.
 
 ### Rust version
 
@@ -291,10 +207,7 @@ The devcontainer/Codespaces post-create step runs
 it provisions. That script:
 
 - installs `cargo-llvm-cov` for `scripts/ci/coverage.sh summary`
-- installs `wasm-pack` plus the `app/` dependencies for local browser-app work,
-  `scripts/ci/check-browser-app-freshness.sh`, and
-  `npm --prefix app run test:e2e`
-- installs Playwright Chromium for `npm --prefix app run test:e2e`
+- installs `wasm-pack` for the shared repository toolchain
 - runs `scripts/install-precommit.sh` so local hooks match the contributor path
 
 Read the script output or this section when you want to map setup time to the
@@ -307,7 +220,7 @@ on the docs site.
 Dependency advisories are checked automatically on a weekly schedule (every Monday
 at 06:00 UTC) via the CI workflow. The scheduled run only executes the
 `dependency-audit` job (`cargo audit`) and the `npm-audit` job (`npm audit`
-against both `app/` and `website/`), so the rest of CI is not rerun weekly.
+against both `website/` and `editors/vscode/`), so the rest of CI is not rerun weekly.
 Contributors do **not** need to run manual audits — failed scheduled runs are
 reported via the default GitHub Actions failure notification for maintainers.
 
