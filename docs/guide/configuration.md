@@ -10,7 +10,6 @@ under `docs/syu/config/`:
 - `docs/syu/config/overview.yaml`
 - `docs/syu/config/spec.yaml`
 - `docs/syu/config/validate.yaml`
-- `docs/syu/config/app.yaml`
 - `docs/syu/config/report.yaml`
 - `docs/syu/config/runtimes.yaml`
 

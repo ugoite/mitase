@@ -444,7 +444,6 @@ fn repository_declares_documentation_guides() {
     let readme = read_file("README.md");
     let concepts = read_file("docs/guide/concepts.md");
     let anti_patterns = read_file("docs/guide/spec-antipatterns.md");
-    let app_guide = read_file("docs/guide/app.md");
     let examples_and_templates = read_file("docs/guide/examples-and-templates.md");
     let merge_queue_playbook = read_file("docs/guide/merge-queue-playbook.md");
     let getting_started = read_file("docs/guide/getting-started.md");
@@ -540,7 +539,6 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("syu show"));
     assert!(readme.contains("syu show REQ-001"));
     assert!(!readme.contains("syu show REQ-CORE-015"));
-    assert!(readme.contains("syu app"));
     assert!(readme.contains("examples/csharp-fallback"));
     assert!(readme.contains("examples/go-only"));
     assert!(readme.contains("examples/java-only"));
@@ -551,7 +549,6 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("CONTRIBUTING.md"));
     assert!(readme.contains("Contributing and local development"));
     assert!(readme.contains("Documentation site"));
-    assert!(readme.contains("Browser app"));
     assert!(readme.contains("scripts/install-precommit.sh"));
     assert!(readme.contains("https://ugoite.github.io/syu/"));
     assert!(readme.contains("docs/syu/config/"));
@@ -572,18 +569,6 @@ fn repository_declares_documentation_guides() {
     assert!(anti_patterns.contains("Policy that only repeats another layer"));
     assert!(anti_patterns.contains("When to merge, split, or rename spec items"));
     assert!(anti_patterns.contains("green-but-messy spec"));
-    assert!(app_guide.contains("Status badge"));
-    assert!(app_guide.contains("README chooser on GitHub"));
-    assert!(app_guide.contains("## Search shortcuts"));
-    assert!(app_guide.contains("ArrowDown"));
-    assert!(app_guide.contains("Escape"));
-    assert!(app_guide.contains("the item's YAML `status:` field"));
-    assert!(app_guide.contains("--allow-remote"));
-    assert!(app_guide.contains("--dev-server"));
-    assert!(app_guide.contains("npm --prefix app run dev"));
-    assert!(app_guide.contains("../../website/static/img/app-guide-overview.png"));
-    assert!(!app_guide.contains("](/img/"));
-    assert!(!app_guide.contains("`planned`, `implemented`, or `deprecated`"));
     assert!(getting_started.contains("New to `syu`?"));
     assert!(getting_started.contains("Need a different level of guidance?"));
     assert!(getting_started.contains("[command card](./command-card.md)"));
@@ -643,7 +628,6 @@ fn repository_declares_documentation_guides() {
     assert!(getting_started.contains("review change history for one requirement or feature"));
     assert!(getting_started.contains("syu list feature"));
     assert!(getting_started.contains("syu show REQ-001"));
-    assert!(getting_started.contains("syu app ."));
     assert!(getting_started.contains("install-syu.sh"));
     assert!(getting_started.contains("SYU_VERSION=alpha"));
     assert!(getting_started.contains("--spec-root"));
