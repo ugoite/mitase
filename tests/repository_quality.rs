@@ -486,6 +486,7 @@ fn repository_declares_documentation_guides() {
     let existing_repository = read_file("docs/guide/existing-repository.md");
     let implementation_planning = read_file("docs/guide/implementation-planning.md");
     let request_artifact_format = read_file("docs/guide/request-artifact-format.md");
+    let goal_plan_format = read_file("docs/guide/goal-plan-format.md");
     let node_workflow = read_file("docs/guide/node-workflow.md");
     let lsp_guide = read_file("docs/guide/lsp.md");
     let command_card = read_file("docs/guide/command-card.md");
@@ -740,6 +741,13 @@ fn repository_declares_documentation_guides() {
     assert!(vscode_guide.contains("hover is the first capability"));
     assert!(command_card.contains("[LSP guide](./lsp.md)"));
     assert!(command_card.contains("`syu lsp`"));
+    assert!(command_card.contains("syu task classify request.yaml"));
+    assert!(command_card.contains("syu task scope request.yaml"));
+    assert!(command_card.contains("syu task scaffold request.yaml"));
+    assert!(command_card.contains("syu task plan request.yaml"));
+    assert!(
+        command_card.contains("classify -> scope -> scaffold -> plan -> implementation -> check")
+    );
     assert!(lsp_guide.contains("JSON-RPC 2.0 over stdio"));
     assert!(lsp_guide.contains("textDocument/hover"));
     assert!(lsp_guide.contains("workspaceFolders"));
@@ -760,6 +768,8 @@ fn repository_declares_documentation_guides() {
     assert!(implementation_planning.contains("When to use it"));
     assert!(implementation_planning.contains("When not to use it"));
     assert!(implementation_planning.contains("create, expand, or delete"));
+    assert!(implementation_planning.contains("syu task classify request.yaml"));
+    assert!(implementation_planning.contains("syu task infer --range origin/main...HEAD"));
     let tutorial = read_file("docs/guide/tutorial.md");
     assert!(tutorial.contains("Want a different entry point?"));
     assert!(tutorial.contains("[getting started](./getting-started.md)"));
@@ -786,6 +796,12 @@ fn repository_declares_documentation_guides() {
     assert!(request_artifact_format.contains("linked_ids"));
     assert!(request_artifact_format.contains("request: >"));
     assert!(request_artifact_format.contains("Expand syu validate --fix"));
+    assert!(request_artifact_format.contains("problem statement into a request artifact"));
+    assert!(goal_plan_format.contains("The normal path is request-driven"));
+    assert!(goal_plan_format.contains("Diff-inferred fallback"));
+    assert!(goal_plan_format.contains("PR-scoped coverage target"));
+    assert!(goal_plan_format.contains("The merge queue and the main branch"));
+    assert!(goal_plan_format.contains("Goal Plans are intentionally temporary"));
     assert!(trace_adapter_support.contains("# Trace adapter capability matrix"));
     assert!(trace_adapter_support.contains("validate.require_symbol_trace_coverage"));
     assert!(trace_adapter_support.contains("TypeScript / JavaScript"));
@@ -817,6 +833,7 @@ fn repository_declares_documentation_guides() {
     assert!(merge_queue_playbook.contains("All comments must be resolved"));
     assert!(merge_queue_playbook.contains("gh pr merge 123 --auto --squash"));
     assert!(merge_queue_playbook.contains("gh-readonly-queue/main/pr-123-<sha>"));
+    assert!(reviewer_workflow.contains("full integration gate"));
     assert!(configuration.contains("validate.default_fix"));
     assert!(configuration.contains("--allow-remote"));
     assert!(configuration.contains("trace-adapter-support.md"));
@@ -1153,6 +1170,13 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(squash_title_script.contains("GitHub squash merges use the PR title"));
     assert!(squash_title_script.contains("local git history traceable"));
     assert!(pr_template.contains("Linked issue or specification"));
+    assert!(pr_template.contains("Goal Plan"));
+    assert!(pr_template.contains("This PR was implemented from a request-generated Goal Plan."));
+    assert!(pr_template.contains("This PR uses an inferred Goal Plan."));
+    assert!(pr_template.contains("This PR intentionally requires broader/full validation."));
+    assert!(pr_template.contains("Goal Plan path or summary:"));
+    assert!(pr_template.contains("Selected test scope:"));
+    assert!(pr_template.contains("Coverage scope:"));
 
     assert!(pr_link_script.contains("FEAT-CONTRIB-002"));
     assert!(pr_link_script.contains("docs/syu/"));

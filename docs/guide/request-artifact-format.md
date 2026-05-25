@@ -57,3 +57,9 @@ follow from that decision. `syu task plan request.yaml` can then turn the
 scoped request into a temporary Goal Plan artifact that stays outside the
 persistent spec tree while still keeping the implementation, test, coverage,
 and completion work visible.
+
+When the request comes from an issue template, a maintainer can copy the
+problem statement into a request artifact, preserve the linked IDs and
+constraints, and then run the request-driven flow above. That keeps issue
+intake separate from temporary delivery planning without turning the request
+note into another persistent spec layer.

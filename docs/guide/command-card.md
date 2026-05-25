@@ -18,6 +18,13 @@ If a pull request already exists, pair this page with the
 | Check local readiness | `syu doctor .` | confirm the Rust, Node, and browser-app dependencies are ready before you scaffold or validate |
 | Scaffold a workspace | `syu init .` | create the default four-layer tree in the current directory |
 | Scaffold with another starter | `syu init . --template rust-only` | begin from a language-shaped or docs-first layout instead of the generic starter |
+| Classify a request | `syu task classify request.yaml` | decide whether the request is a create, change, or delete before planning starts |
+| Scope a request | `syu task scope request.yaml` | map the request onto the current philosophy, policy, requirement, and feature graph |
+| Scaffold planned updates | `syu task scaffold request.yaml` | preview the planned requirement and feature edits once the request is scoped |
+| Draft a temporary goal plan | `syu task plan request.yaml` | turn a scoped request into a temporary Goal Plan without adding a fifth persistent spec layer |
+| Select tests from a goal plan | `syu task test-select goal-plan.yaml` | turn a temporary Goal Plan into justified Rust test commands before scoped coverage or CI runs |
+| Infer a goal plan from a diff | `syu task infer --range origin/main...HEAD` | derive a provisional Goal Plan from changed files, traced owners, evidence, and confidence before review |
+| Check a temporary goal plan | `syu task check goal-plan.yaml --range origin/main...HEAD` | validate a temporary Goal Plan against the changed files, linked spec IDs, required tests, and completion commands before review |
 | Check the workspace | `syu validate .` | run the full graph, trace, and coverage validation pass |
 | Focus one validation view | `syu validate . --id FEAT-CHECK-001` | keep the visible output anchored on one requirement or feature after the normal validation run |
 | Focus trace failures first | `syu validate . --genre trace` | inspect trace-specific problems before reading the full validation output |
@@ -28,10 +35,6 @@ If a pull request already exists, pair this page with the
 | Review a PR range | `syu review --range origin/main...HEAD` | start with the affected philosophy, policy, requirement, and feature IDs, then drill into changed files with `show`, `relate`, or `log` |
 | Strictly review a PR range | `syu review --range origin/main...HEAD --strict --allowed-id FEAT-CHECK-001 --format json` | fail the range review on unowned, ambiguously owned, or out-of-scope changes while keeping structured findings for CI |
 | Guard a review range | `syu review --range origin/main...HEAD --allowed-id FEAT-CHECK-001` | block changes that step outside the named requirement or feature IDs and list the out-of-scope items |
-| Draft a temporary goal plan | `syu task scaffold request.yaml` | preview a bounded delivery artifact with goal, scope, tests, coverage, and completion checks without adding a fifth persistent spec layer |
-| Infer a goal plan from a diff | `syu task infer --range origin/main...HEAD` | derive a provisional Goal Plan from changed files, traced owners, evidence, and confidence before review |
-| Select tests from a goal plan | `syu task test-select goal-plan.yaml` | turn a temporary Goal Plan into justified Rust test commands before scoped coverage or CI runs |
-| Check a temporary goal plan | `syu task check goal-plan.yaml --range origin/main...HEAD` | validate a temporary Goal Plan against the changed files, linked spec IDs, required tests, and completion commands before review |
 | Jump from code to the owning spec | `syu trace src/command/check.rs --symbol run_check_command` | start in code and resolve the traced requirement and feature chain |
 | List items by layer | `syu list feature` | print list-shaped output instead of the browser-style explorer |
 | Search by keyword or ID | `syu search validation --kind feature` | find the right spec item before `show`, `relate`, or `log` |
@@ -92,6 +95,10 @@ syu report .
   checked-in starter and example matrix.
 - Use [goal plan format](./goal-plan-format.md) when you need a temporary
   delivery artifact instead of a persistent spec item.
+- For request-driven planning, the shortest useful sequence is
+  `classify -> scope -> scaffold -> plan -> implementation -> check`. Use `infer`
+  only when the implementation already exists and you need to reconstruct the
+  temporary Goal Plan from the diff.
 - Use [LSP guide](./lsp.md) when you are connecting `syu` to an editor client
   over stdio instead of using the checked-in VS Code extension directly.
 - Use [configuration](./configuration.md) when you need validation and runtime
