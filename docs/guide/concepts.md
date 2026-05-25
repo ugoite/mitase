@@ -94,6 +94,25 @@ Without features, requirements never connect to running software.
 repository can explain itself from ideals down to code and tests without being
 tied to a single implementation language.
 
+## Goal Plans
+
+Goal Plans are temporary delivery artifacts that sit outside the four
+persistent layers. They capture the request, scope, test selection, coverage
+expectation, and completion checks for one bounded piece of work.
+
+They may live in a task file, a PR body, an issue body, or a CI artifact, but
+they should not be stored under `spec.root` as if they were a fifth durable
+spec layer.
+
+Prefer request-driven planning when the request is still being shaped:
+classify it, scope it, scaffold the planned updates, and then turn it into a
+Goal Plan. Use diff-inferred planning only as a fallback when the code already
+changed and the plan has to be reconstructed from the diff.
+
+For pull requests, Goal Plans describe the smallest justified test and coverage
+scope. They do not replace the repository's full integration gates, which stay
+with merge queue and main-branch validation.
+
 ## Authoring guidelines
 
 ### Write philosophy for stability
