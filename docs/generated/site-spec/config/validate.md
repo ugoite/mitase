@@ -148,28 +148,22 @@ description: "Generated reference for docs/syu/config/validate.yaml"
     - coverage
     - dist
     - target
-    - app
-    - app/build
-    - app/coverage
-    - app/dist
-    - app/target
-    - src/command/app.rs
     - tests/fixtures/workspaces
   - **summary**: Exact repository-relative directories that strict symbol coverage skips.
   - **description**:
     - |
       These paths are matched exactly against repository-relative directories
       while `syu` inventories public symbols and tests for strict ownership
-      checks. The defaults skip common build outputs such as `app/dist`,
-      repository-root `build/`, `coverage/`, `dist/`, and `target/`, plus the
-      checked-in `tests/fixtures/workspaces/` sample repositories, without
-      hiding authored nested paths like `src/build/`. The same list also opts
-      those generated paths out of the extra inline or sidecar ownership
-      breadcrumb enforced by `validate.trace_ownership_mode`, so generated
-      artifacts do not fail `SYU-trace-id-001` just because they lack checked-in
-      IDs or adjacent ownership manifests. Set this list to `[]` when you
-      intentionally want generated artifacts to count toward strict trace
-      coverage and ownership enforcement too.
+      checks. The defaults skip common build outputs such as repository-root
+      `build/`, `coverage/`, `dist/`, and `target/`, plus the checked-in
+      `tests/fixtures/workspaces/` sample repositories, without hiding authored
+      nested paths like `src/build/`. The same list also opts those generated
+      paths out of the extra inline or sidecar ownership breadcrumb enforced by
+      `validate.trace_ownership_mode`, so generated artifacts do not fail
+      `SYU-trace-id-001` just because they lack checked-in IDs or adjacent
+      ownership manifests. Set this list to `[]` when you intentionally want
+      generated artifacts to count toward strict trace coverage and ownership
+      enforcement too.
 
 ## Source YAML
 
@@ -295,25 +289,19 @@ items:
       - coverage
       - dist
       - target
-      - app
-      - app/build
-      - app/coverage
-      - app/dist
-      - app/target
-      - src/command/app.rs
       - tests/fixtures/workspaces
     summary: Exact repository-relative directories that strict symbol coverage skips.
     description: |
       These paths are matched exactly against repository-relative directories
       while `syu` inventories public symbols and tests for strict ownership
-      checks. The defaults skip common build outputs such as `app/dist`,
-      repository-root `build/`, `coverage/`, `dist/`, and `target/`, plus the
-      checked-in `tests/fixtures/workspaces/` sample repositories, without
-      hiding authored nested paths like `src/build/`. The same list also opts
-      those generated paths out of the extra inline or sidecar ownership
-      breadcrumb enforced by `validate.trace_ownership_mode`, so generated
-      artifacts do not fail `SYU-trace-id-001` just because they lack checked-in
-      IDs or adjacent ownership manifests. Set this list to `[]` when you
-      intentionally want generated artifacts to count toward strict trace
-      coverage and ownership enforcement too.
+      checks. The defaults skip common build outputs such as repository-root
+      `build/`, `coverage/`, `dist/`, and `target/`, plus the checked-in
+      `tests/fixtures/workspaces/` sample repositories, without hiding authored
+      nested paths like `src/build/`. The same list also opts those generated
+      paths out of the extra inline or sidecar ownership breadcrumb enforced by
+      `validate.trace_ownership_mode`, so generated artifacts do not fail
+      `SYU-trace-id-001` just because they lack checked-in IDs or adjacent
+      ownership manifests. Set this list to `[]` when you intentionally want
+      generated artifacts to count toward strict trace coverage and ownership
+      enforcement too.
 ```

@@ -111,7 +111,7 @@ fn bootstrap_default_on_node_20_installs_docs_and_vscode() {
         String::from_utf8_lossy(&output.stderr)
     );
     let log = fs::read_to_string(&log_path).expect("bootstrap log");
-    assert!(!log.contains("app"));
+    assert!(!log.contains("PINNED install app"));
     assert!(log.contains("PINNED install website"));
     assert!(log.contains("INSTALL_DOCS_SITE_DEPS"));
     assert!(log.contains("PINNED install editors/vscode"));
