@@ -13,6 +13,20 @@ Use a GitHub closing keyword (`Closes #123`, `Fixes #123`, or `Resolves #123`) w
 
 If you list requirement or feature IDs here, include the same IDs in the PR title so the squash commit headline preserves them in `git log`.
 
+## Goal Plan
+
+- [ ] This PR was implemented from a request-generated Goal Plan.
+- [ ] This PR uses an inferred Goal Plan.
+- [ ] This PR intentionally requires broader/full validation.
+
+Goal Plan path or summary:
+
+Linked persistent spec IDs:
+
+Selected test scope:
+
+Coverage scope:
+
 ## Validation
 
 - [ ] `scripts/ci/quality-gates.sh`
