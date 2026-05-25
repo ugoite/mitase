@@ -261,6 +261,11 @@ assuming the PR description stayed complete after rebases or queue updates.
 `syu log --merge-base-ref origin/main` is the quickest way to ask for the
 history slice that matters since the review branch diverged from main.
 
+Use scoped Goal Plan tests and coverage to keep the PR reviewable, but treat
+the merge queue and main branch as the full integration gate. A PR can be
+small enough for focused validation and still require the repository-wide
+checks before it is considered landed.
+
 ## Merge-queue and long-lived branch review
 
 Use this variant when the branch has been rebased repeatedly, queued for merge,

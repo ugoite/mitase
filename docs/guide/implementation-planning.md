@@ -12,6 +12,21 @@ format](./goal-plan-format.md).
 The goal plan format is temporary by design and should not become a fifth
 persistent spec layer.
 
+The preferred request-driven flow is:
+
+1. `syu task classify request.yaml`
+2. `syu task scope request.yaml`
+3. `syu task scaffold request.yaml`
+4. `syu task plan request.yaml`
+5. implementation
+6. `syu task check goal-plan.yaml --range origin/main...HEAD`
+
+If the work already exists in a diff and you need to reconstruct the temporary
+artifact, use the fallback:
+
+1. `syu task infer --range origin/main...HEAD`
+2. `syu task check goal-plan.yaml --range origin/main...HEAD`
+
 ## When to use it
 
 - A request has enough detail to turn into planned requirements or features.
@@ -101,6 +116,10 @@ smallest defensible test command set before scoped coverage or CI runs.
 Use `syu task infer --range origin/main...HEAD` when implementation already
 exists and you want a provisional Goal Plan inferred from the changed files,
 their traced owners, and the current graph.
+
+That is the boundary between the request-driven flow and the diff-inferred
+fallback. The first path is the normal contributor path; the second is for
+reconstructing a plan from existing implementation.
 
 That is the step that should capture the implementation plan, test plan,
 coverage target, completion checks, and any warnings that still need review.
