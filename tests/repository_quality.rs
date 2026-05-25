@@ -207,7 +207,7 @@ fn repository_declares_manual_coverage_reporting_without_ci_gating() {
     assert!(coverage_script.contains("generate_spec_coverage_summary"));
     assert!(coverage_script.contains("target/coverage/spec-coverage-summary.md"));
     assert!(coverage_script.contains("GITHUB_STEP_SUMMARY"));
-    assert!(coverage_script.contains("SYU_SKIP_BROWSER_APP_BUILD=1"));
+    assert!(!coverage_script.contains("SYU_SKIP_BROWSER_APP_BUILD=1"));
     assert!(!coverage_script.contains("LINE_THRESHOLD=100"));
     assert!(!coverage_script.contains("--fail-under-lines 100"));
 
@@ -316,7 +316,7 @@ fn repository_declares_release_automation() {
     assert!(release_config.contains("\"file\": \"website/package.json\""));
     assert!(release_config.contains("\"file\": \"editors/vscode/package.json\""));
     assert!(release_config.contains("\"file\": \"crates/syu-core/Cargo.toml\""));
-    assert!(release_config.contains("\"file\": \"app/wasm/Cargo.toml\""));
+    assert!(!release_config.contains("\"file\": \"app/wasm/Cargo.toml\""));
     assert!(release_config.contains("\"file\": \"examples/rust-only/syu.yaml\""));
     assert!(release_config.contains("\"file\": \"examples/browser-ui/syu.yaml\""));
     assert!(release_config.contains("\"file\": \"examples/csharp-fallback/syu.yaml\""));
@@ -822,7 +822,7 @@ fn repository_declares_documentation_guides() {
     assert!(generated_docs_freshness.contains("check_generated_docs_freshness"));
     assert!(generated_docs_freshness.contains("python3 scripts/generate-site-docs.py"));
     assert!(generated_docs_freshness.contains("docs/generated/syu-report.md"));
-    assert!(generated_docs_freshness.contains("SYU_SKIP_BROWSER_APP_BUILD=1"));
+    assert!(!generated_docs_freshness.contains("SYU_SKIP_BROWSER_APP_BUILD=1"));
     assert!(generated_docs_freshness.contains("git --no-pager diff --stat -- docs/generated"));
     assert!(ci_workflow.contains("./.github/actions/build-docs-site"));
     assert!(docs_build_action.contains("FEAT-DOCS-002"));
@@ -1073,7 +1073,6 @@ fn repository_declares_contribution_workflow_assets() {
     assert!(contributing.contains("Closes #123"));
     assert!(contributing.contains("merge queue lands the change on `main`"));
     assert!(contributing.contains(shared_merge_queue_guidance));
-    assert!(contributing.contains("npm run check"));
     assert!(contributing.contains("install-docs-site-deps.sh"));
     assert!(contributing.contains("npm --prefix website ci"));
     assert!(contributing.contains("npm --prefix website run start"));

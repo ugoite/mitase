@@ -137,16 +137,6 @@
         },
         {
           "type": "generic",
-          "file": "app/wasm/Cargo.toml",
-          "replacers": [
-            {
-              "search": "name = \"syu-app-wasm\"\nversion = \"(?<version>.*)\"",
-              "replace": "name = \"syu-app-wasm\"\nversion = \"{{version}}\""
-            }
-          ]
-        },
-        {
-          "type": "generic",
           "file": "examples/rust-only/syu.yaml",
           "replacers": [
             {
