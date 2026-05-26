@@ -25,7 +25,7 @@ cd examples/generic
 syu validate .
 syu list requirement
 syu show REQ-001
-syu app .
+syu browse .
 ```
 
 ## GenericAcceptanceChecklist

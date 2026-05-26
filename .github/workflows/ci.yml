@@ -98,13 +98,6 @@ jobs:
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "25"
-          cache: npm
-          cache-dependency-path: app/package-lock.json
-
       - name: Run goal-selected tests
         run: scripts/ci/run-goal-tests.sh
 
@@ -182,49 +175,6 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: scripts/ci/check-squash-title-spec-ids.sh
 
-  browser-app:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "25"
-          cache: npm
-          cache-dependency-path: app/package-lock.json
-
-      - name: Align npm with app/package.json
-        shell: bash
-        run: scripts/ci/pinned-npm.sh install app
-
-      - name: Set up Rust
-        uses: ./.github/actions/setup-rust
-        with:
-          targets: wasm32-unknown-unknown
-
-      - name: Build browser app bundle
-        run: scripts/ci/check-browser-app-freshness.sh
-
-      - name: Upload browser app dist
-        if: success()
-        uses: actions/upload-artifact@v7
-        with:
-          # Keep a stable prefix for discovery while tying each artifact to one run.
-          name: browser-app-dist-run-${{ github.run_id }}-attempt-${{ github.run_attempt }}
-          path: app/dist
-          if-no-files-found: error
-
-      - name: Install Playwright browsers
-        working-directory: app
-        run: npx playwright install --with-deps chromium
-
-      - name: Run Playwright E2E tests
-        working-directory: app
-        run: npm run test:e2e
-        env:
-          CI: "true"
-
   installer-smoke:
     if: github.event_name != 'pull_request'
     strategy:
@@ -267,19 +217,6 @@ jobs:
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "25"
-          cache: npm
-          cache-dependency-path: app/package-lock.json
-
-      - name: Install browser app dependencies
-        shell: bash
-        run: |
-          scripts/ci/pinned-npm.sh install app
-          npm --prefix app ci
-
       - name: Set up Python with pip cache
         uses: actions/setup-python@v6
         with:
@@ -306,26 +243,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "25"
-          cache: npm
-          cache-dependency-path: app/package-lock.json
-
-      - name: Install browser app dependencies
-        shell: bash
-        run: |
-          scripts/ci/pinned-npm.sh install app
-          npm --prefix app ci
-
-      - name: Install stable toolchain for wasm-pack bootstrap
+      - name: Install stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Install wasm-pack
-        uses: taiki-e/cache-cargo-install-action@v3
-        with:
-          tool: wasm-pack
 
       - name: Install MSRV toolchain
         uses: dtolnay/rust-toolchain@master
@@ -351,7 +270,6 @@ jobs:
       - dependency-review
       - spec-linkage
       - squash-history-spec-ids
-      - browser-app
       - installer-smoke
       - installed-binary-smoke
       - docs-site

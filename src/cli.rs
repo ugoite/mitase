@@ -1,5 +1,4 @@
 // FEAT-DOCS-001
-// FEAT-APP-001
 // FEAT-ADD-001
 // FEAT-LOG-001
 // FEAT-RELATE-001
@@ -38,20 +37,13 @@ New here?
   3. syu init .      scaffold a workspace in the current directory
   4. syu validate .  check the layered spec and traceability
   5. syu browse .    explore the spec in your terminal
-  6. syu app .       start the local browser UI server
-  7. syu task classify request.yaml  classify a request artifact against the current spec graph
-  8. syu task scope request.yaml      map a request artifact onto the current spec graph
-  9. syu task scaffold request.yaml   preview planned requirement and feature updates from a request artifact
- 10. syu task plan request.yaml      generate a temporary Goal Plan from a request artifact
- 11. syu task test-select goal-plan.yaml select tests from a Goal Plan before scoped coverage runs
- 12. syu task infer --range ...      infer a provisional Goal Plan from a git diff
- 13. syu task check goal-plan.yaml   validate a Goal Plan against a git range and the current spec graph";
-
-const APP_AFTER_HELP: &str = concat!(
-    "After startup, open the printed URL in your browser.\n",
-    "Use GET /health for readiness checks once the app is serving.\n",
-    "Press Ctrl-C to stop the local app server."
-);
+  6. syu task classify request.yaml  classify a request artifact against the current spec graph
+  7. syu task scope request.yaml      map a request artifact onto the current spec graph
+  8. syu task scaffold request.yaml   preview planned requirement and feature updates from a request artifact
+  9. syu task plan request.yaml      generate a temporary Goal Plan from a request artifact
+ 10. syu task test-select goal-plan.yaml select tests from a Goal Plan before scoped coverage runs
+ 11. syu task infer --range ...      infer a provisional Goal Plan from a git diff
+ 12. syu task check goal-plan.yaml   validate a Goal Plan against a git range and the current spec graph";
 
 const DOCTOR_AFTER_HELP: &str = "\
 Examples:
@@ -60,7 +52,7 @@ Examples:
 
 Use this before local contributor checks when you want one summary of the current
 Rust toolchain, Node/npm expectations, optional package-surface dependency state,
-and Playwright browser readiness.";
+and local install readiness.";
 
 // FEAT-INIT-006
 const TEMPLATES_AFTER_HELP: &str = "\
@@ -314,11 +306,6 @@ pub enum Commands {
         after_help = TRACE_AFTER_HELP
     )]
     Trace(TraceArgs),
-    #[command(
-        about = "Start a local HTTP server and browser UI for workspace exploration, then print the URL to open in your browser",
-        after_help = APP_AFTER_HELP
-    )]
-    App(AppArgs),
     #[command(
         about = "Inspect local contributor-tooling readiness for this workspace",
         after_help = DOCTOR_AFTER_HELP
@@ -599,29 +586,6 @@ pub struct RelateArgs {
     #[arg(help = "Output format for the related graph")]
     #[arg(long, value_enum, default_value_t = OutputFormat::Text)]
     pub format: OutputFormat,
-}
-
-#[derive(Debug, Clone, Args)]
-pub struct AppArgs {
-    #[arg(help = WORKSPACE_HELP)]
-    #[arg(default_value = ".")]
-    pub workspace: PathBuf,
-
-    #[arg(help = "IP address to bind the local app server to (default: app.bind or 127.0.0.1)")]
-    #[arg(long)]
-    pub bind: Option<String>,
-
-    #[arg(help = "Port to bind the local app server to (default: app.port or 3000)")]
-    #[arg(short, long)]
-    pub port: Option<u16>,
-
-    #[arg(help = "Allow syu app to bind to a non-loopback address such as 0.0.0.0")]
-    #[arg(long, action = ArgAction::SetTrue)]
-    pub allow_remote: bool,
-
-    #[arg(help = "Load frontend assets from the local app dev server at http://127.0.0.1:4173")]
-    #[arg(long, action = ArgAction::SetTrue)]
-    pub dev_server: bool,
 }
 
 #[derive(Debug, Clone, Args)]

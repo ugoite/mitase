@@ -15,7 +15,6 @@ knowledge.
 
 | Surface | Checked-in source of truth | Use this Node major | Typical commands |
 | --- | --- | --- | --- |
-| Browser app (`app/`) | `app/.nvmrc`, `app/package.json#engines` | **Node 25** | `scripts/ci/pinned-npm.sh install app`, `npm --prefix app ci`, `scripts/ci/check-browser-app-freshness.sh`, `npm --prefix app run test:e2e` |
 | Docs site (`website/`) | `website/.nvmrc`, `website/package.json#engines` | **Node 20** | `bash scripts/ci/install-docs-site-deps.sh`, `npm --prefix website run start`, `npm --prefix website run build` |
 | VS Code extension (`editors/vscode/`) | `editors/vscode/.nvmrc`, `editors/vscode/package.json#engines` | **Node 20** | `scripts/ci/pinned-npm.sh install editors/vscode`, `npm --prefix editors/vscode ci`, `npm --prefix editors/vscode test` |
 
@@ -33,35 +32,11 @@ correct.
 When you switch tasks, switch Node first. Pick the one command that matches the
 surface you are about to touch:
 
-- Browser app: `nvm use "$(cat app/.nvmrc)"`
 - Docs site: `nvm use "$(cat website/.nvmrc)"`
 - VS Code extension: `nvm use "$(cat editors/vscode/.nvmrc)"`
 
 `fnm`, `Volta`, or another version manager are equally fine; the important part
 is matching the checked-in major for the surface you are about to touch.
-
-## Browser app work
-
-Use **Node 25** for anything under `app/`, browser-app freshness checks,
-Playwright, or Cargo commands that embed the browser app.
-
-From the repository root:
-
-```bash
-nvm use "$(cat app/.nvmrc)"
-scripts/ci/pinned-npm.sh install app
-npm --prefix app ci
-```
-
-Use the local browser flow when you change app behavior:
-
-```bash
-scripts/ci/check-browser-app-freshness.sh
-scripts/ci/validate-app.sh --e2e
-```
-
-If `app/node_modules` is missing or stale, `build.rs` fails on purpose instead
-of silently running a networked install inside a normal Cargo build.
 
 ## Docs-site work
 
@@ -94,15 +69,13 @@ npm --prefix editors/vscode test
 ```
 
 If you are editing the extension and the docs site in the same session, you can
-stay on Node 20 for both. Switch back to Node 25 before returning to browser-app
-tasks.
+stay on Node 20 for both.
 
 ## Fast switching rules
 
-1. Changing `app/` or running Playwright? Use **Node 25**.
-2. Changing `website/` or docs-site build inputs? Use **Node 20**.
-3. Changing `editors/vscode/`? Use **Node 20**.
-4. Unsure which major wins? Follow the package directory you are executing from,
+1. Changing `website/` or docs-site build inputs? Use **Node 20**.
+2. Changing `editors/vscode/`? Use **Node 20**.
+3. Unsure which major wins? Follow the package directory you are executing from,
    then confirm with that surface's `.nvmrc` and `package.json#engines`.
 
 If you want the full contributor gate matrix after switching runtimes, return to

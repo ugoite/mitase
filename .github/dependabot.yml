@@ -48,19 +48,3 @@ updates:
       docs-site-npm:
         patterns:
           - "*"
-
-  - package-ecosystem: npm
-    directory: /app
-    target-branch: main
-    schedule:
-      interval: weekly
-      day: monday
-      time: "04:15"
-    open-pull-requests-limit: 10
-    commit-message:
-      prefix: chore
-      include: scope
-    groups:
-      browser-app-npm:
-        patterns:
-          - "*"

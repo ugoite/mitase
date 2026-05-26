@@ -119,54 +119,6 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       - **file**: src/command/browse.rs
         - **symbols**:
           - *
-- **id**: REQ-CORE-017
-  - **title**: Serve a local browser app backed by shared Rust and WebAssembly logic
-  - **description**:
-    - |
-      The `app` command MUST start a local server that lets contributors inspect
-      the current workspace in a browser. The UI MUST expose tabs for
-      philosophy, policies, features, and requirements; keep file- and
-      folder-oriented subnavigation for each layer; show linked items and
-      current validation issues even when the workspace is imperfect; and reuse
-      browser-safe Rust logic through WebAssembly instead of reimplementing the
-      layered model only in JavaScript. When `syu.yaml` defines app defaults,
-      `syu app` MUST use `app.bind` and `app.port` unless CLI flags override
-      them. When `app.bind` or `--bind` selects a non-loopback address, `syu
-      app` MUST require an explicit `--allow-remote` opt-in before it starts.
-      When the workspace argument (or default current directory) points inside a
-      workspace, `syu app` MUST walk parent directories until it finds
-      `syu.yaml`. The startup output MUST also tell users which workspace root
-      was selected, which local URL to open in a browser, and how to stop the
-      server cleanly.
-  - **priority**: medium
-  - **status**: implemented
-  - **linked_policies**:
-    - POL-002
-    - POL-004
-    - POL-005
-  - **linked_features**:
-    - FEAT-APP-001
-  - **tests**:
-    - **rust**:
-      - **file**: src/lib.rs
-        - **symbols**:
-          - dispatches_app_subcommands_without_rewriting_them
-      - **file**: tests/repository_quality.rs
-        - **symbols**:
-          - repository_ships_browser_app
-      - **file**: tests/app_command.rs
-        - **symbols**:
-          - *
-      - **file**: tests/help_command.rs
-        - **symbols**:
-          - app_help_mentions_remote_bind_opt_in
-      - **file**: src/command/app.rs
-        - **symbols**:
-          - *
-    - **typescript**:
-      - **file**: app/tests/browser-app.spec.ts
-        - **symbols**:
-          - *
 - **id**: REQ-CORE-018
   - **title**: Provide non-interactive list and show CLI commands
   - **description**:
@@ -222,7 +174,7 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
     - |
       The CLI MUST provide a lightweight `search` command that matches
       philosophies, policies, requirements, and features by ID, title, summary,
-      or description without requiring the browser app. The command SHOULD
+      or description without requiring a browser UI. The command SHOULD
       support optional kind scoping, SHOULD offer JSON output for automation,
       and SHOULD continue working when validation issues exist so long as the
       workspace itself still loads. When the workspace argument points at a
@@ -495,12 +447,12 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       Rust/Cargo toolchain, and SHOULD compare the current runtime versions
       against checked-in expectations such as `Cargo.toml`, `.nvmrc`, and
       `package.json#packageManager` where those files exist. For repository
-      surfaces that carry optional local setup state, such as the browser app,
-      docs site, or Playwright browser cache, the command SHOULD report whether
-      the local install looks missing or stale and SHOULD print the next command a
-      contributor should run to fix it. The command SHOULD offer JSON output for
-      automation and SHOULD keep working outside a fully valid workspace so long
-      as the starting path exists.
+      surfaces that carry optional local setup state, such as the docs site or
+      browser-test cache, the command SHOULD report whether the local install
+      looks missing or stale and SHOULD print the next command a contributor
+      should run to fix it. The command SHOULD offer JSON output for automation
+      and SHOULD keep working outside a fully valid workspace so long as the
+      starting path exists.
   - **priority**: medium
   - **status**: implemented
   - **linked_policies**:
@@ -1041,53 +993,6 @@ requirements:
         - file: src/command/browse.rs
           symbols:
             - '*'
-  - id: REQ-CORE-017
-    title: Serve a local browser app backed by shared Rust and WebAssembly logic
-    description: |
-      The `app` command MUST start a local server that lets contributors inspect
-      the current workspace in a browser. The UI MUST expose tabs for
-      philosophy, policies, features, and requirements; keep file- and
-      folder-oriented subnavigation for each layer; show linked items and
-      current validation issues even when the workspace is imperfect; and reuse
-      browser-safe Rust logic through WebAssembly instead of reimplementing the
-      layered model only in JavaScript. When `syu.yaml` defines app defaults,
-      `syu app` MUST use `app.bind` and `app.port` unless CLI flags override
-      them. When `app.bind` or `--bind` selects a non-loopback address, `syu
-      app` MUST require an explicit `--allow-remote` opt-in before it starts.
-      When the workspace argument (or default current directory) points inside a
-      workspace, `syu app` MUST walk parent directories until it finds
-      `syu.yaml`. The startup output MUST also tell users which workspace root
-      was selected, which local URL to open in a browser, and how to stop the
-      server cleanly.
-    priority: medium
-    status: implemented
-    linked_policies:
-      - POL-002
-      - POL-004
-      - POL-005
-    linked_features:
-      - FEAT-APP-001
-    tests:
-      rust:
-        - file: src/lib.rs
-          symbols:
-            - dispatches_app_subcommands_without_rewriting_them
-        - file: tests/repository_quality.rs
-          symbols:
-            - repository_ships_browser_app
-        - file: tests/app_command.rs
-          symbols:
-            - '*'
-        - file: tests/help_command.rs
-          symbols:
-            - app_help_mentions_remote_bind_opt_in
-        - file: src/command/app.rs
-          symbols:
-            - '*'
-      typescript:
-        - file: app/tests/browser-app.spec.ts
-          symbols:
-            - '*'
   - id: REQ-CORE-018
     title: Provide non-interactive list and show CLI commands
     description: |
@@ -1141,7 +1046,7 @@ requirements:
     description: |
       The CLI MUST provide a lightweight `search` command that matches
       philosophies, policies, requirements, and features by ID, title, summary,
-      or description without requiring the browser app. The command SHOULD
+      or description without requiring a browser UI. The command SHOULD
       support optional kind scoping, SHOULD offer JSON output for automation,
       and SHOULD continue working when validation issues exist so long as the
       workspace itself still loads. When the workspace argument points at a
@@ -1407,12 +1312,12 @@ requirements:
       Rust/Cargo toolchain, and SHOULD compare the current runtime versions
       against checked-in expectations such as `Cargo.toml`, `.nvmrc`, and
       `package.json#packageManager` where those files exist. For repository
-      surfaces that carry optional local setup state, such as the browser app,
-      docs site, or Playwright browser cache, the command SHOULD report whether
-      the local install looks missing or stale and SHOULD print the next command a
-      contributor should run to fix it. The command SHOULD offer JSON output for
-      automation and SHOULD keep working outside a fully valid workspace so long
-      as the starting path exists.
+      surfaces that carry optional local setup state, such as the docs site or
+      browser-test cache, the command SHOULD report whether the local install
+      looks missing or stale and SHOULD print the next command a contributor
+      should run to fix it. The command SHOULD offer JSON output for automation
+      and SHOULD keep working outside a fully valid workspace so long as the
+      starting path exists.
     priority: medium
     status: implemented
     linked_policies:

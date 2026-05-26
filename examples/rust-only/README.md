@@ -24,7 +24,7 @@ cd examples/rust-only
 syu validate .
 syu list requirement
 syu show REQ-RUST-001
-syu app .
+syu browse .
 ```
 
 A successful `syu validate .` produces output similar to:
