@@ -39,6 +39,7 @@ description: "Generated reference for docs/syu/requirements/core/repository.yaml
       - **file**: tests/repository_quality.rs
         - **symbols**:
           - repository_declares_precommit_and_quality_gates
+          - repository_does_not_ship_removed_browser_app_surface
           - repository_keeps_node_majors_aligned_across_docs_packages_and_ci
 - **id**: REQ-CORE-006
   - **title**: Run goal-selected tests in CI without line-based gating
@@ -242,6 +243,7 @@ requirements:
         - file: tests/repository_quality.rs
           symbols:
             - repository_declares_precommit_and_quality_gates
+            - repository_does_not_ship_removed_browser_app_surface
             - repository_keeps_node_majors_aligned_across_docs_packages_and_ci
   - id: REQ-CORE-006
     title: Run goal-selected tests in CI without line-based gating

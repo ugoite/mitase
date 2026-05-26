@@ -1,4 +1,4 @@
-// FEAT-APP-001
+// FEAT-BROWSE-001
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -634,8 +634,8 @@ mod tests {
                 },
                 SourceDocument {
                     section: SectionKind::Features,
-                    path: "browser/app.yaml".to_string(),
-                    content: "category: App\nversion: 1\nfeatures:\n  - id: FEAT-001\n    title: Browser app\n    summary: Explore layers in the browser.\n    status: implemented\n    linked_requirements:\n      - REQ-001\n    implementations:\n      openapi:\n        - file: api/openapi.yaml\n          method: get\n          path: /pets/{petId}\n          symbols: []\n      rust:\n        - file: src/command/app.rs\n          symbols:\n            - run_app_command\n".to_string(),
+                    path: "cli/browse.yaml".to_string(),
+                    content: "category: Browse\nversion: 1\nfeatures:\n  - id: FEAT-001\n    title: Browse workspace definitions\n    summary: Explore layers from the terminal.\n    status: implemented\n    linked_requirements:\n      - REQ-001\n    implementations:\n      openapi:\n        - file: api/openapi.yaml\n          method: get\n          path: /pets/{petId}\n          symbols: []\n      rust:\n        - file: src/command/browse.rs\n          symbols:\n            - run_browse_command\n".to_string(),
                 },
             ],
             validation: sample_validation(),
@@ -654,7 +654,7 @@ mod tests {
                 .item_index
                 .get("FEAT-001")
                 .map(|entry| entry.document_path.as_str()),
-            Some("browser/app.yaml")
+            Some("cli/browse.yaml")
         );
         assert_eq!(workspace.validation.issues.len(), 1);
         assert_eq!(

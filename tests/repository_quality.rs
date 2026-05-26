@@ -316,6 +316,8 @@ fn repository_declares_release_automation() {
     assert!(release_config.contains("\"file\": \"website/package.json\""));
     assert!(release_config.contains("\"file\": \"editors/vscode/package.json\""));
     assert!(release_config.contains("\"file\": \"crates/syu-core/Cargo.toml\""));
+    assert!(!release_config.contains("\"file\": \"docs/guide/app.md\""));
+    assert!(!release_config.contains("\"file\": \"app/package.json\""));
     assert!(!release_config.contains("\"file\": \"app/wasm/Cargo.toml\""));
     assert!(release_config.contains("\"file\": \"examples/rust-only/syu.yaml\""));
     assert!(release_config.contains("\"file\": \"examples/browser-ui/syu.yaml\""));
@@ -776,6 +778,7 @@ fn repository_declares_documentation_guides() {
     assert!(merge_queue_playbook.contains("gh pr merge 123 --auto --squash"));
     assert!(merge_queue_playbook.contains("gh-readonly-queue/main/pr-123-<sha>"));
     assert!(reviewer_workflow.contains("full integration gate"));
+    assert!(!reviewer_workflow.contains("REQ-CORE-017"));
     assert!(configuration.contains("validate.default_fix"));
     assert!(configuration.contains("trace-adapter-support.md"));
     assert!(configuration.contains("validate.allow_planned"));
@@ -868,6 +871,23 @@ fn repository_declares_documentation_guides() {
     assert!(troubleshooting.contains("[spec anti-patterns guide](./spec-antipatterns.md)"));
     assert!(troubleshooting.contains("--dry-run"));
     assert!(existing_repository.contains("--dry-run"));
+}
+
+#[test]
+// REQ-CORE-005
+fn repository_does_not_ship_removed_browser_app_surface() {
+    assert!(!repo_root().join("app").exists());
+
+    let release_config = read_file("release-please-config.json");
+    let reviewer_workflow = read_file("docs/guide/reviewer-workflow.md");
+    let syu_core = read_file("crates/syu-core/src/lib.rs");
+
+    assert!(!release_config.contains("docs/guide/app.md"));
+    assert!(!release_config.contains("app/package.json"));
+    assert!(!reviewer_workflow.contains("REQ-CORE-017"));
+    assert!(!syu_core.contains("browser/app.yaml"));
+    assert!(!syu_core.contains("src/command/app.rs"));
+    assert!(!syu_core.contains("Browser app"));
 }
 
 #[test]
