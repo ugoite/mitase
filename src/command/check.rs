@@ -6537,7 +6537,7 @@ mod tests {
     #[test]
     fn verify_trace_reference_skips_inline_ownership_for_ignored_generated_paths() {
         let tempdir = tempdir().expect("tempdir should exist");
-        let path = tempdir.path().join("app/dist/assets/generated.js");
+        let path = tempdir.path().join("dist/assets/generated.js");
         fs::create_dir_all(path.parent().expect("generated dir")).expect("generated dir");
         fs::write(
             &path,
@@ -6546,7 +6546,7 @@ mod tests {
         .expect("generated file should exist");
 
         let reference = TraceReference {
-            file: PathBuf::from("app/dist/assets/generated.js"),
+            file: PathBuf::from("dist/assets/generated.js"),
             symbols: vec!["generatedBundle".to_string()],
             doc_contains: Vec::new(),
             method: None,
@@ -6574,7 +6574,7 @@ mod tests {
     #[test]
     fn verify_trace_reference_can_opt_generated_paths_back_into_inline_ownership() {
         let tempdir = tempdir().expect("tempdir should exist");
-        let path = tempdir.path().join("app/dist/assets/generated.js");
+        let path = tempdir.path().join("dist/assets/generated.js");
         fs::create_dir_all(path.parent().expect("generated dir")).expect("generated dir");
         fs::write(
             &path,
@@ -6583,7 +6583,7 @@ mod tests {
         .expect("generated file should exist");
 
         let reference = TraceReference {
-            file: PathBuf::from("app/dist/assets/generated.js"),
+            file: PathBuf::from("dist/assets/generated.js"),
             symbols: vec!["generatedBundle".to_string()],
             doc_contains: Vec::new(),
             method: None,
@@ -6788,7 +6788,7 @@ mod tests {
     #[test]
     fn verify_trace_reference_skips_sidecar_ownership_for_ignored_generated_paths() {
         let tempdir = tempdir().expect("tempdir should exist");
-        let path = tempdir.path().join("app/dist/assets/generated.js");
+        let path = tempdir.path().join("dist/assets/generated.js");
         fs::create_dir_all(path.parent().expect("generated dir")).expect("generated dir");
         fs::write(
             &path,
@@ -6807,7 +6807,7 @@ mod tests {
             TraceRole::FeatureImplementation,
             "typescript",
             &TraceReference {
-                file: PathBuf::from("app/dist/assets/generated.js"),
+                file: PathBuf::from("dist/assets/generated.js"),
                 symbols: vec!["generatedBundle".to_string()],
                 doc_contains: Vec::new(),
                 method: None,

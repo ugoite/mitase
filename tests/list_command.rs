@@ -423,7 +423,7 @@ fn list_command_with_path_uses_absolute_document_paths_for_external_spec_roots()
     fs::write(
         workspace_root.join("syu.yaml"),
         format!(
-            "version: {version}\nspec:\n  root: {spec_root}\nvalidate:\n  default_fix: false\n  allow_planned: true\n  require_non_orphaned_items: true\n  require_reciprocal_links: true\n  require_symbol_trace_coverage: false\napp:\n  bind: 127.0.0.1\n  port: 3000\nruntimes:\n  python:\n    command: auto\n  node:\n    command: auto\n",
+            "version: {version}\nspec:\n  root: {spec_root}\nvalidate:\n  default_fix: false\n  allow_planned: true\n  require_non_orphaned_items: true\n  require_reciprocal_links: true\n  require_symbol_trace_coverage: false\nruntimes:\n  python:\n    command: auto\n  node:\n    command: auto\n",
             version = env!("CARGO_PKG_VERSION"),
             spec_root = spec_root.display(),
         ),

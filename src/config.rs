@@ -404,10 +404,6 @@ mod tests {
                 std::path::PathBuf::from("coverage"),
                 std::path::PathBuf::from("dist"),
                 std::path::PathBuf::from("target"),
-                std::path::PathBuf::from("app/build"),
-                std::path::PathBuf::from("app/coverage"),
-                std::path::PathBuf::from("app/dist"),
-                std::path::PathBuf::from("app/target"),
                 std::path::PathBuf::from("tests/fixtures/workspaces"),
             ]
         );
@@ -454,11 +450,12 @@ mod tests {
         assert!(rendered.contains("trace_ownership_mode: mapping"));
         assert!(rendered.contains("symbol_trace_coverage_ignored_paths:"));
         assert!(rendered.contains("- build"));
-        assert!(rendered.contains("- app/dist"));
+        assert!(rendered.contains("- dist"));
         assert!(rendered.contains("- tests/fixtures/workspaces"));
         assert!(!rendered.contains("report:"));
-        assert!(rendered.contains("bind: 127.0.0.1"));
-        assert!(rendered.contains("port: 3000"));
+        assert!(rendered.contains("runtimes:"));
+        assert!(rendered.contains("python:"));
+        assert!(rendered.contains("node:"));
         assert!(rendered.contains("command: auto"));
     }
 
