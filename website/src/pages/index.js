@@ -60,8 +60,8 @@ const chooseYourPath = [
   {
     title: 'Visual explorer',
     description:
-      'Take the browser-first path when you want graphical spec navigation before learning the full text-first CLI flow.',
-    to: '/docs/guide/app'
+      'Compare template-backed and example-backed paths when you want to see the main shapes before choosing one.',
+    to: '/docs/guide/examples-and-templates'
   },
   {
     title: 'Reviewer workflow',
