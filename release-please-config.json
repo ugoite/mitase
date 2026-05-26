@@ -63,16 +63,6 @@
         },
         {
           "type": "generic",
-          "file": "docs/guide/app.md",
-          "replacers": [
-            {
-              "search": "<!-- x-release-please-start-version -->\n```json\n{\"status\":\"ok\",\"version\":\"(?<version>.*)\"}\n```\n<!-- x-release-please-end -->",
-              "replace": "<!-- x-release-please-start-version -->\n```json\n{\"status\":\"ok\",\"version\":\"{{version}}\"}\n```\n<!-- x-release-please-end -->"
-            }
-          ]
-        },
-        {
-          "type": "generic",
           "file": "docs/syu/features/features.yaml",
           "replacers": [
             {
@@ -92,16 +82,6 @@
             {
               "search": "version: \"(?<version>.*)\"",
               "replace": "version: \"{{version}}\""
-            }
-          ]
-        },
-        {
-          "type": "generic",
-          "file": "app/package.json",
-          "replacers": [
-            {
-              "search": "\"version\": \"(?<version>.*)\"",
-              "replace": "\"version\": \"{{version}}\""
             }
           ]
         },
@@ -132,16 +112,6 @@
             {
               "search": "name = \"syu-core\"\nversion = \"(?<version>.*)\"",
               "replace": "name = \"syu-core\"\nversion = \"{{version}}\""
-            }
-          ]
-        },
-        {
-          "type": "generic",
-          "file": "app/wasm/Cargo.toml",
-          "replacers": [
-            {
-              "search": "name = \"syu-app-wasm\"\nversion = \"(?<version>.*)\"",
-              "replace": "name = \"syu-app-wasm\"\nversion = \"{{version}}\""
             }
           ]
         },

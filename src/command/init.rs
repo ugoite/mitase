@@ -240,9 +240,7 @@ fn run_init_command_with_prompt_io(args: &InitArgs, prompt_io: &mut impl PromptI
                 path_label(&feature_path)
             );
             println!("  2. Run `syu validate {workspace_arg}` to check your spec for consistency");
-            println!(
-                "  3. Run `syu browse {workspace_arg}` for terminal exploration, or `syu app {workspace_arg}` for the browser UI"
-            );
+            println!("  3. Run `syu browse {workspace_arg}` for terminal exploration");
             println!("  4. Commit the generated files to version control");
             println!(
                 "  Need a different starter next time? Run `syu templates` before another `syu init`."

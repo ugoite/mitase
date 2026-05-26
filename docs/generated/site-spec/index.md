@@ -7,13 +7,11 @@ This section is generated from the YAML source under `docs/syu/`.
 
 ## Available documents
 
-- [Configuration / App](config/app)
 - [Configuration / Overview](config/overview)
 - [Configuration / Report](config/report)
 - [Configuration / Runtimes](config/runtimes)
 - [Configuration / Spec](config/spec)
 - [Configuration / Validate](config/validate)
-- [Browser App / App](features/browser/app)
 - [Authoring Add CLI / Add](features/cli/add)
 - [Audit CLI / Audit](features/cli/audit)
 - [Interactive CLI / Browse](features/cli/browse)

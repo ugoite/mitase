@@ -38,7 +38,7 @@ npm test
 syu validate .
 syu list requirement
 syu show REQ-TS-001
-syu app .
+syu browse .
 ```
 
 A successful `syu validate .` produces output similar to:

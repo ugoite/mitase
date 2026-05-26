@@ -30,7 +30,6 @@ fn root_help_includes_start_here_guidance() {
     assert!(stdout.contains("syu init ."));
     assert!(stdout.contains("syu validate ."));
     assert!(stdout.contains("syu browse ."));
-    assert!(stdout.contains("syu app ."));
     assert!(stdout.contains("syu task classify request.yaml"));
     assert!(stdout.contains("syu task scope request.yaml"));
     assert!(stdout.contains("syu task check goal-plan.yaml"));
@@ -40,22 +39,6 @@ fn root_help_includes_start_here_guidance() {
     assert!(stdout.contains(
         "Browse the specification in your terminal (interactive prompts or text output)"
     ));
-    assert!(stdout.contains("Start a local HTTP server and browser UI for workspace exploration"));
-}
-
-#[test]
-fn app_help_mentions_remote_bind_opt_in() {
-    let output = Command::cargo_bin("syu")
-        .expect("binary should build")
-        .args(["app", "--help"])
-        .output()
-        .expect("help should render");
-
-    assert!(output.status.success(), "app help should succeed");
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("--allow-remote"));
-    assert!(stdout.contains("non-loopback address"));
 }
 
 #[test]
@@ -66,7 +49,6 @@ fn workspace_help_uses_current_directory_default_consistently() {
         &["search"][..],
         &["trace"][..],
         &["review"][..],
-        &["app"][..],
         &["doctor"][..],
         &["validate"][..],
         &["check"][..],

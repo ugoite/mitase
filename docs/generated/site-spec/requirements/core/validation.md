@@ -131,8 +131,8 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       TypeScript/JavaScript) in repository source and test roots to belong to
       some feature or requirement respectively. That inventory MUST ignore
       configured repository-relative generated paths, defaulting to common
-      build outputs such as `app/dist`, `build/`, `coverage/`, `dist/`, and
-      `target/` without hiding authored nested directories like `src/build/`.
+      build outputs such as `build/`, `coverage/`, `dist/`, and `target/`
+      without hiding authored nested directories like `src/build/`.
   - **priority**: high
   - **status**: implemented
   - **linked_policies**:
@@ -384,8 +384,8 @@ requirements:
       TypeScript/JavaScript) in repository source and test roots to belong to
       some feature or requirement respectively. That inventory MUST ignore
       configured repository-relative generated paths, defaulting to common
-      build outputs such as `app/dist`, `build/`, `coverage/`, `dist/`, and
-      `target/` without hiding authored nested directories like `src/build/`.
+      build outputs such as `build/`, `coverage/`, `dist/`, and `target/`
+      without hiding authored nested directories like `src/build/`.
     priority: high
     status: implemented
     linked_policies:

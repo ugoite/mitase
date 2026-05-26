@@ -15,7 +15,7 @@ If a pull request already exists, pair this page with the
 | --- | --- | --- |
 | Install or verify the CLI | `syu --version` | confirm the installed binary is on your `PATH` before you start editing a workspace |
 | Compare starter layouts | `syu templates` | choose between docs-first, language-first, or polyglot scaffolds before `init` |
-| Check local readiness | `syu doctor .` | confirm the Rust, Node, and browser-app dependencies are ready before you scaffold or validate |
+| Check local readiness | `syu doctor .` | confirm the Rust and Node dependencies are ready before you scaffold or validate |
 | Scaffold a workspace | `syu init .` | create the default four-layer tree in the current directory |
 | Scaffold with another starter | `syu init . --template rust-only` | begin from a language-shaped or docs-first layout instead of the generic starter |
 | Classify a request | `syu task classify request.yaml` | decide whether the request is a create, change, or delete before planning starts |
@@ -40,7 +40,6 @@ If a pull request already exists, pair this page with the
 | Search by keyword or ID | `syu search validation --kind feature` | find the right spec item before `show`, `relate`, or `log` |
 | Review traced history | `syu log FEAT-CHECK-001 --kind implementation --path src/command` | inspect recent git history for the currently traced surface, or fall back to the historical index when an ID was deleted |
 | Browse in the terminal | `syu browse .` | explore the graph interactively without leaving the shell |
-| Browse in the browser | `syu app .` | use the local browser UI for visual navigation, tabs, and validation context |
 | Start the editor protocol server | `syu lsp` | connect an editor client over stdio when you want the current hover-only LSP surface |
 
 ## Reviewer loop
