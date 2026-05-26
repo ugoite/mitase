@@ -29,7 +29,7 @@ cd examples/csharp-fallback
 syu validate .
 syu list feature
 syu show REQ-CSHARP-001
-syu app .
+syu browse .
 ```
 
 A successful `syu validate .` produces output similar to:

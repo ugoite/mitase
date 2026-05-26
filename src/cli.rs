@@ -1,5 +1,4 @@
 // FEAT-DOCS-001
-// FEAT-APP-001
 // FEAT-ADD-001
 // FEAT-LOG-001
 // FEAT-RELATE-001
@@ -53,7 +52,7 @@ Examples:
 
 Use this before local contributor checks when you want one summary of the current
 Rust toolchain, Node/npm expectations, optional package-surface dependency state,
-and Playwright browser readiness.";
+and local install readiness.";
 
 // FEAT-INIT-006
 const TEMPLATES_AFTER_HELP: &str = "\

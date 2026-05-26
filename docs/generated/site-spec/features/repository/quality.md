@@ -88,7 +88,6 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
           - docs-site
           - ci-required
           - ./.github/actions/setup-rust
-          - taiki-e/cache-cargo-install-action@v3
           - Set up Python with pip cache
           - Cache pre-commit hooks
           - actions/cache@v5
@@ -221,7 +220,6 @@ features:
             - docs-site
             - ci-required
             - "./.github/actions/setup-rust"
-            - taiki-e/cache-cargo-install-action@v3
             - Set up Python with pip cache
             - Cache pre-commit hooks
             - actions/cache@v5

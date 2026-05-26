@@ -243,13 +243,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install stable toolchain for wasm-pack bootstrap
+      - name: Install stable Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Install wasm-pack
-        uses: taiki-e/cache-cargo-install-action@v3
-        with:
-          tool: wasm-pack
 
       - name: Install MSRV toolchain
         uses: dtolnay/rust-toolchain@master

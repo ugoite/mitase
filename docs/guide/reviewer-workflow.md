@@ -315,8 +315,8 @@ not when the tool invents a second workflow beside Git.
 
 - Start with [getting started](./getting-started.md) when you are still learning
   the command names themselves.
-- Start with the [browser app guide](./app.md) when review is easier in a visual
-  graph than in terminal output.
+- Start with `syu browse .` when review is easier in a visual graph than in
+  terminal output.
 - Start with [troubleshooting](./troubleshooting.md) when validation is already
   failing and you need rule-by-rule repair guidance more than review workflow
   advice.

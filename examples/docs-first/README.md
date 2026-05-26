@@ -35,7 +35,7 @@ syu list feature
 syu show REQ-DOCS-001
 syu show FEAT-DOCS-002
 syu browse .
-syu app .
+syu browse .
 ```
 
 A successful `syu validate .` produces output similar to:
@@ -66,6 +66,6 @@ traceability: requirements=2/2 traces validated; features=2/2 traces validated
 - `syu browse .` keeps the docs-first example readable from the terminal: start
   with `feature`, open `FEAT-DOCS-001`, and verify that the shell trace and the
   wildcard-owned YAML file stay easy to inspect without a larger codebase.
-- `syu app .` shows the same two features visually, including the trace panels
-  for `scripts/publish-docs.sh` and `config/navigation.yaml`, so the newcomer
-  path is not limited to raw YAML inspection.
+- `syu browse .` shows the same two features in the terminal, including the
+  trace panels for `scripts/publish-docs.sh` and `config/navigation.yaml`, so
+  the newcomer path is not limited to raw YAML inspection.

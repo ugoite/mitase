@@ -2,7 +2,7 @@
 // REQ-CORE-026
 
 use std::{
-    env, fs,
+    fs,
     path::{Path, PathBuf},
     process::Command,
     time::SystemTime,
@@ -119,17 +119,10 @@ fn build_doctor_report(workspace: &Path) -> Result<DoctorReport> {
     checks.extend(rust_toolchain_checks(&workspace_root));
     checks.extend(surface_checks(
         &workspace_root,
-        "app",
-        "Browser app",
-        "scripts/ci/pinned-npm.sh install app && scripts/ci/pinned-npm.sh exec app -- ci",
-    ));
-    checks.extend(surface_checks(
-        &workspace_root,
         "website",
         "Docs site",
         "scripts/ci/pinned-npm.sh install website && scripts/ci/pinned-npm.sh exec website -- ci",
     ));
-    checks.push(playwright_check(&workspace_root));
 
     let summary = DoctorSummary::from_checks(&checks);
     Ok(DoctorReport {
@@ -401,12 +394,6 @@ fn surface_dependency_check(
     }
 }
 
-fn playwright_check(workspace_root: &Path) -> DoctorCheck {
-    let app_root = workspace_root.join("app");
-    let chromium_path = find_playwright_chromium();
-    build_playwright_check(&app_root, chromium_path.as_deref())
-}
-
 fn print_text_report(report: &DoctorReport) {
     println!("workspace: {}", report.workspace_root.display());
     println!(
@@ -506,30 +493,6 @@ fn dependency_install_needs_refresh(
         (Some(lockfile_time), Some(marker_time)) => lockfile_time > marker_time,
         _ => true,
     }
-}
-
-fn find_playwright_chromium() -> Option<PathBuf> {
-    playwright_cache_roots()
-        .into_iter()
-        .find(|root| root.is_dir())
-        .and_then(|root| find_playwright_chromium_in(&root))
-}
-
-fn playwright_cache_roots() -> Vec<PathBuf> {
-    playwright_cache_roots_from(
-        env::var_os("PLAYWRIGHT_BROWSERS_PATH")
-            .filter(|value| !value.is_empty())
-            .map(PathBuf::from),
-        home_dir(),
-        env::var_os("LOCALAPPDATA").map(PathBuf::from),
-    )
-}
-
-fn home_dir() -> Option<PathBuf> {
-    home_dir_from(
-        env::var_os("HOME").map(PathBuf::from),
-        env::var_os("USERPROFILE").map(PathBuf::from),
-    )
 }
 
 const fn cargo_executable() -> &'static str {
@@ -664,99 +627,8 @@ fn build_npm_check(
     }
 }
 
-fn build_playwright_check(app_root: &Path, chromium_path: Option<&Path>) -> DoctorCheck {
-    if !app_root.join("package.json").is_file() {
-        return DoctorCheck {
-            id: "playwright-chromium",
-            label: "Playwright Chromium",
-            status: DoctorStatus::Skipped,
-            message: format!(
-                "`{}` is not present",
-                app_root.join("package.json").display()
-            ),
-            fix: None,
-        };
-    }
-
-    if !app_root.join("node_modules").is_dir() {
-        return DoctorCheck {
-            id: "playwright-chromium",
-            label: "Playwright Chromium",
-            status: DoctorStatus::Warning,
-            message: "app dependencies are missing, so browser readiness cannot be checked yet"
-                .to_string(),
-            fix: Some(
-                "Run `scripts/ci/pinned-npm.sh install app && scripts/ci/pinned-npm.sh exec app -- ci` first."
-                    .to_string(),
-            ),
-        };
-    }
-
-    if let Some(path) = chromium_path {
-        DoctorCheck {
-            id: "playwright-chromium",
-            label: "Playwright Chromium",
-            status: DoctorStatus::Ok,
-            message: format!(
-                "found an installed Chromium bundle under `{}`",
-                path.display()
-            ),
-            fix: None,
-        }
-    } else {
-        DoctorCheck {
-            id: "playwright-chromium",
-            label: "Playwright Chromium",
-            status: DoctorStatus::Warning,
-            message:
-                "no installed Playwright Chromium bundle was found in the standard cache locations"
-                    .to_string(),
-            fix: Some(
-                "Run `scripts/ci/pinned-npm.sh install app && scripts/ci/pinned-npm.sh exec app -- exec playwright install --with-deps chromium`.".to_string(),
-            ),
-        }
-    }
-}
-
-fn playwright_cache_roots_from(
-    custom: Option<PathBuf>,
-    home: Option<PathBuf>,
-    local_app_data: Option<PathBuf>,
-) -> Vec<PathBuf> {
-    let mut roots = Vec::new();
-    if let Some(custom) = custom {
-        roots.push(custom);
-    }
-
-    if let Some(home) = home {
-        roots.push(home.join(".cache/ms-playwright"));
-        roots.push(home.join("Library/Caches/ms-playwright"));
-    }
-
-    if let Some(local_app_data) = local_app_data {
-        roots.push(local_app_data.join("ms-playwright"));
-    }
-
-    roots
-}
-
-fn home_dir_from(home: Option<PathBuf>, userprofile: Option<PathBuf>) -> Option<PathBuf> {
-    home.or(userprofile)
-}
-
-fn find_playwright_chromium_in(root: &Path) -> Option<PathBuf> {
-    fs::read_dir(root).ok()?.find_map(|entry| {
-        let path = entry.ok()?.path();
-        let name = path.file_name()?.to_str()?;
-        (path.is_dir() && name.starts_with("chromium")).then_some(path)
-    })
-}
-
 fn surface_check_id(surface: &'static str, kind: &'static str) -> &'static str {
     match (surface, kind) {
-        ("app", "node") => "app-node",
-        ("app", "npm") => "app-npm",
-        ("app", "deps") => "app-deps",
         ("website", "node") => "website-node",
         ("website", "npm") => "website-npm",
         ("website", "deps") => "website-deps",
@@ -766,9 +638,6 @@ fn surface_check_id(surface: &'static str, kind: &'static str) -> &'static str {
 
 fn surface_label(prefix: &'static str, suffix: &'static str) -> &'static str {
     match (prefix, suffix) {
-        ("Browser app", "Node") => "Browser app Node",
-        ("Browser app", "npm") => "Browser app npm",
-        ("Browser app", "dependencies") => "Browser app dependencies",
         ("Docs site", "Node") => "Docs site Node",
         ("Docs site", "npm") => "Docs site npm",
         ("Docs site", "dependencies") => "Docs site dependencies",
@@ -789,10 +658,9 @@ mod tests {
     use super::{
         DeserializePackageMetadata, DoctorArgs, DoctorCheck, DoctorStatus, DoctorSummary,
         PackageMetadata, build_doctor_report, build_node_check, build_npm_check,
-        build_playwright_check, build_rust_msrv_check, cargo_executable, command_version,
-        dependency_install_needs_refresh, expected_npm_version, find_playwright_chromium_in,
-        home_dir_from, modified_time, npm_executable, parse_major_version, parse_numeric_version,
-        playwright_cache_roots_from, read_rust_version, run_doctor_command, shell_workspace_arg,
+        build_rust_msrv_check, cargo_executable, command_version, dependency_install_needs_refresh,
+        expected_npm_version, modified_time, npm_executable, parse_major_version,
+        parse_numeric_version, read_rust_version, run_doctor_command, shell_workspace_arg,
         surface_check_id, surface_checks, surface_dependency_check, surface_label,
         version_at_least, workspace_config_check,
     };
@@ -891,10 +759,8 @@ mod tests {
 
     #[test]
     fn surface_ids_and_labels_cover_known_surfaces() {
-        assert_eq!(surface_check_id("app", "node"), "app-node");
         assert_eq!(surface_check_id("website", "deps"), "website-deps");
         assert_eq!(surface_check_id("other", "node"), "surface-check");
-        assert_eq!(surface_label("Browser app", "Node"), "Browser app Node");
         assert_eq!(
             surface_label("Docs site", "dependencies"),
             "Docs site dependencies"
@@ -969,14 +835,14 @@ mod tests {
     #[test]
     fn surface_dependency_check_covers_skipped_warning_and_ok_paths() {
         let tempdir = tempdir().expect("tempdir");
-        let surface_root = tempdir.path().join("app");
+        let surface_root = tempdir.path().join("website");
         fs::create_dir_all(&surface_root).expect("surface root");
 
-        let skipped = surface_dependency_check("Browser app", "app", &surface_root, "install");
+        let skipped = surface_dependency_check("Docs site", "website", &surface_root, "install");
         assert_eq!(skipped.status, DoctorStatus::Skipped);
 
         fs::write(surface_root.join("package-lock.json"), "{}\n").expect("lockfile");
-        let warning = surface_dependency_check("Browser app", "app", &surface_root, "install");
+        let warning = surface_dependency_check("Docs site", "website", &surface_root, "install");
         assert_eq!(warning.status, DoctorStatus::Warning);
         assert!(
             warning
@@ -988,14 +854,14 @@ mod tests {
         fs::create_dir_all(surface_root.join("node_modules")).expect("node_modules");
         std::thread::sleep(Duration::from_millis(5));
         fs::write(surface_root.join("node_modules/.package-lock.json"), "{}\n").expect("marker");
-        let ok = surface_dependency_check("Browser app", "app", &surface_root, "install");
+        let ok = surface_dependency_check("Docs site", "website", &surface_root, "install");
         assert_eq!(ok.status, DoctorStatus::Ok);
     }
 
     #[test]
     fn surface_checks_skip_when_package_json_is_missing() {
         let tempdir = tempdir().expect("tempdir");
-        let checks = surface_checks(tempdir.path(), "app", "Browser app", "install");
+        let checks = surface_checks(tempdir.path(), "website", "Docs site", "install");
         assert_eq!(checks.len(), 3);
         assert!(
             checks
@@ -1007,15 +873,15 @@ mod tests {
     #[test]
     fn surface_checks_report_invalid_package_metadata_as_an_error() {
         let tempdir = tempdir().expect("tempdir");
-        let app_root = tempdir.path().join("app");
-        fs::create_dir_all(&app_root).expect("app root");
-        fs::write(app_root.join("package.json"), "{invalid").expect("invalid package");
-        fs::write(app_root.join(".nvmrc"), "25\n").expect("nvmrc");
+        let website_root = tempdir.path().join("website");
+        fs::create_dir_all(&website_root).expect("website root");
+        fs::write(website_root.join("package.json"), "{invalid").expect("invalid package");
+        fs::write(website_root.join(".nvmrc"), "20\n").expect("nvmrc");
 
-        let checks = surface_checks(tempdir.path(), "app", "Browser app", "install");
+        let checks = surface_checks(tempdir.path(), "website", "Docs site", "install");
         let npm_check = checks
             .iter()
-            .find(|check| check.id == "app-npm")
+            .find(|check| check.id == "website-npm")
             .expect("npm check should exist");
 
         assert_eq!(npm_check.status, DoctorStatus::Error);
@@ -1102,14 +968,14 @@ mod tests {
         assert_eq!(error.status, DoctorStatus::Error);
 
         let node_without_expectation = build_node_check(
-            "Browser app",
-            "app",
+            "Docs site",
+            "website",
             None,
-            Path::new("app/.nvmrc"),
-            "v25.0.0",
+            Path::new("website/.nvmrc"),
+            "v20.0.0",
         );
         assert_eq!(node_without_expectation.status, DoctorStatus::Ok);
-        assert_eq!(node_without_expectation.message, "found v25.0.0");
+        assert_eq!(node_without_expectation.message, "found v20.0.0");
 
         let npm_warning = build_npm_check(
             "Docs site",
@@ -1127,10 +993,10 @@ mod tests {
         );
 
         let npm_without_expectation = build_npm_check(
-            "Browser app",
-            "app",
+            "Docs site",
+            "website",
             None,
-            Path::new("app/package.json"),
+            Path::new("website/package.json"),
             "11.8.0",
         );
         assert_eq!(npm_without_expectation.status, DoctorStatus::Ok);
@@ -1138,76 +1004,7 @@ mod tests {
     }
 
     #[test]
-    fn playwright_helpers_cover_cache_and_status_variants() {
-        let tempdir = tempdir().expect("tempdir");
-        let app_root = tempdir.path().join("app");
-
-        let skipped = build_playwright_check(&app_root, None);
-        assert_eq!(skipped.status, DoctorStatus::Skipped);
-
-        fs::create_dir_all(&app_root).expect("app root");
-        fs::write(app_root.join("package.json"), "{ \"name\": \"doctor\" }\n").expect("package");
-        let warning = build_playwright_check(&app_root, None);
-        assert_eq!(warning.status, DoctorStatus::Warning);
-        assert!(warning.message.contains("app dependencies are missing"));
-        assert!(
-            warning
-                .fix
-                .as_deref()
-                .is_some_and(|fix| fix.contains("pinned-npm.sh exec app -- ci"))
-        );
-
-        fs::create_dir_all(app_root.join("node_modules")).expect("node_modules");
-        let no_cache = build_playwright_check(&app_root, None);
-        assert_eq!(no_cache.status, DoctorStatus::Warning);
-        assert!(
-            no_cache
-                .message
-                .contains("no installed Playwright Chromium bundle")
-        );
-        assert!(
-            no_cache
-                .fix
-                .as_deref()
-                .is_some_and(|fix| fix.contains("pinned-npm.sh exec app -- exec playwright"))
-        );
-
-        let chromium = tempdir.path().join("pw-cache/chromium-1000");
-        fs::create_dir_all(&chromium).expect("chromium");
-        let ok = build_playwright_check(&app_root, Some(&chromium));
-        assert_eq!(ok.status, DoctorStatus::Ok);
-
-        let broken_marker = app_root.join("node_modules/.package-lock.json");
-        #[cfg(unix)]
-        std::os::unix::fs::symlink(app_root.join("missing"), &broken_marker).expect("symlink");
-        #[cfg(windows)]
-        fs::write(&broken_marker, "{}\n").expect("marker");
-        let _ = modified_time(&app_root.join("missing"));
-    }
-
-    #[test]
     fn filesystem_and_env_helpers_cover_fallback_paths() {
-        let custom = PathBuf::from("/tmp/playwright");
-        let home = PathBuf::from("/tmp/home");
-        let local_app_data = PathBuf::from("/tmp/local");
-        assert_eq!(
-            playwright_cache_roots_from(
-                Some(custom.clone()),
-                Some(home.clone()),
-                Some(local_app_data.clone())
-            ),
-            vec![
-                custom,
-                home.join(".cache/ms-playwright"),
-                home.join("Library/Caches/ms-playwright"),
-                local_app_data.join("ms-playwright")
-            ]
-        );
-        assert_eq!(
-            home_dir_from(None, Some(PathBuf::from("/tmp/profile"))),
-            Some(PathBuf::from("/tmp/profile"))
-        );
-        assert_eq!(home_dir_from(None, None), None);
         assert!(modified_time(Path::new("/definitely/missing")).is_none());
         assert!(dependency_install_needs_refresh(None, None));
         assert!(!cargo_executable().is_empty());
@@ -1233,9 +1030,9 @@ mod tests {
     }
 
     #[test]
-    fn surface_dependency_and_playwright_finders_cover_edge_cases() {
+    fn surface_dependency_finder_covers_edge_cases() {
         let tempdir = tempdir().expect("tempdir");
-        let surface_root = tempdir.path().join("app");
+        let surface_root = tempdir.path().join("website");
         fs::create_dir_all(surface_root.join("node_modules")).expect("node_modules");
         fs::write(surface_root.join("package-lock.json"), "{}\n").expect("lockfile");
         #[cfg(unix)]
@@ -1246,17 +1043,8 @@ mod tests {
         .expect("symlink");
         #[cfg(windows)]
         fs::write(surface_root.join("node_modules/.package-lock.json"), "{}\n").expect("marker");
-        let warning = surface_dependency_check("Browser app", "app", &surface_root, "install");
+        let warning = surface_dependency_check("Docs site", "website", &surface_root, "install");
         assert_eq!(warning.status, DoctorStatus::Warning);
-
-        let root = tempdir.path().join("pw-root");
-        fs::create_dir_all(&root).expect("root");
-        fs::write(root.join("notes.txt"), "ignore\n").expect("file");
-        fs::create_dir_all(root.join("chromium-1234")).expect("chromium");
-        assert_eq!(
-            find_playwright_chromium_in(&root),
-            Some(root.join("chromium-1234"))
-        );
     }
 
     fn write_mock_command(dir: &Path, name: &str, body: &str) -> PathBuf {

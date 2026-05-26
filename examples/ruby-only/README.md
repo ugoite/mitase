@@ -25,7 +25,7 @@ cd examples/ruby-only
 syu validate .
 syu list requirement
 syu show REQ-RB-001
-syu app .
+syu browse .
 ```
 
 A successful `syu validate .` produces output similar to:

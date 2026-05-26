@@ -207,7 +207,6 @@ The devcontainer/Codespaces post-create step runs
 it provisions. That script:
 
 - installs `cargo-llvm-cov` for `scripts/ci/coverage.sh summary`
-- installs `wasm-pack` for the shared repository toolchain
 - runs `scripts/install-precommit.sh` so local hooks match the contributor path
 
 Read the script output or this section when you want to map setup time to the

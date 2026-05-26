@@ -174,7 +174,7 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
     - |
       The CLI MUST provide a lightweight `search` command that matches
       philosophies, policies, requirements, and features by ID, title, summary,
-      or description without requiring the browser app. The command SHOULD
+      or description without requiring a browser UI. The command SHOULD
       support optional kind scoping, SHOULD offer JSON output for automation,
       and SHOULD continue working when validation issues exist so long as the
       workspace itself still loads. When the workspace argument points at a
@@ -447,12 +447,12 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       Rust/Cargo toolchain, and SHOULD compare the current runtime versions
       against checked-in expectations such as `Cargo.toml`, `.nvmrc`, and
       `package.json#packageManager` where those files exist. For repository
-      surfaces that carry optional local setup state, such as the browser app,
-      docs site, or Playwright browser cache, the command SHOULD report whether
-      the local install looks missing or stale and SHOULD print the next command a
-      contributor should run to fix it. The command SHOULD offer JSON output for
-      automation and SHOULD keep working outside a fully valid workspace so long
-      as the starting path exists.
+      surfaces that carry optional local setup state, such as the docs site or
+      browser-test cache, the command SHOULD report whether the local install
+      looks missing or stale and SHOULD print the next command a contributor
+      should run to fix it. The command SHOULD offer JSON output for automation
+      and SHOULD keep working outside a fully valid workspace so long as the
+      starting path exists.
   - **priority**: medium
   - **status**: implemented
   - **linked_policies**:
@@ -1046,7 +1046,7 @@ requirements:
     description: |
       The CLI MUST provide a lightweight `search` command that matches
       philosophies, policies, requirements, and features by ID, title, summary,
-      or description without requiring the browser app. The command SHOULD
+      or description without requiring a browser UI. The command SHOULD
       support optional kind scoping, SHOULD offer JSON output for automation,
       and SHOULD continue working when validation issues exist so long as the
       workspace itself still loads. When the workspace argument points at a
@@ -1312,12 +1312,12 @@ requirements:
       Rust/Cargo toolchain, and SHOULD compare the current runtime versions
       against checked-in expectations such as `Cargo.toml`, `.nvmrc`, and
       `package.json#packageManager` where those files exist. For repository
-      surfaces that carry optional local setup state, such as the browser app,
-      docs site, or Playwright browser cache, the command SHOULD report whether
-      the local install looks missing or stale and SHOULD print the next command a
-      contributor should run to fix it. The command SHOULD offer JSON output for
-      automation and SHOULD keep working outside a fully valid workspace so long
-      as the starting path exists.
+      surfaces that carry optional local setup state, such as the docs site or
+      browser-test cache, the command SHOULD report whether the local install
+      looks missing or stale and SHOULD print the next command a contributor
+      should run to fix it. The command SHOULD offer JSON output for automation
+      and SHOULD keep working outside a fully valid workspace so long as the
+      starting path exists.
     priority: medium
     status: implemented
     linked_policies:

@@ -259,8 +259,8 @@ fn repository_keeps_node_majors_aligned_across_docs_packages_and_ci() {
     assert!(contributing.contains("use **Node 20** for `website/`"));
 
     assert!(docs_build_action.contains("node-version: \"20\""));
-    assert!(codeql_workflow.contains("node-version: \"25\""));
-    assert!(release_artifacts_workflow.contains("node-version: \"25\""));
+    assert!(!codeql_workflow.contains("node-version: \"25\""));
+    assert!(!release_artifacts_workflow.contains("node-version: \"25\""));
 }
 
 #[test]
@@ -396,10 +396,7 @@ fn repository_declares_installer_contract() {
     assert!(installed_binary_smoke.contains("FEAT-QUALITY-001"));
     assert!(installed_binary_smoke.contains("cargo install --path"));
     assert!(installed_binary_smoke.contains("--locked"));
-    assert!(installed_binary_smoke.contains("wait_for_app_url"));
-    assert!(installed_binary_smoke.contains("wait_for_app_payload"));
-    assert!(installed_binary_smoke.contains("print_app_diagnostics"));
-    assert!(installed_binary_smoke.contains("api/app-data.json"));
+    assert!(installed_binary_smoke.contains("browse \"$workspace\" --non-interactive"));
     assert!(mock_registry.contains("FEAT-INSTALL-001"));
     assert!(mock_registry.contains("build_artifacts"));
 
@@ -489,7 +486,6 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("Trace adapter matrix"));
     assert!(readme.contains("docs/guide/tutorial.md"));
     assert!(readme.contains("docs/guide/migration.md"));
-    assert!(readme.contains("docs/guide/app.md"));
     assert!(readme.contains("docs/guide/reviewer-workflow.md"));
     assert!(readme.contains("docs/guide/node-workflow.md"));
     assert!(readme.contains("docs/guide/lsp.md"));
@@ -500,7 +496,7 @@ fn repository_declares_documentation_guides() {
     assert!(readme.contains("do **not** already know the four-layer model"));
     assert!(readme.contains("**Getting started**"));
     assert!(readme.contains("**Migration / upgrade**"));
-    assert!(readme.contains("**Visual explorer**"));
+    assert!(!readme.contains("**Visual explorer**"));
     assert!(readme.contains("**Reviewer workflow**"));
     assert!(readme.contains("**Contributor runtime setup**"));
     assert!(readme.contains("guided `doctor → init → validate → browse` path"));
@@ -926,21 +922,13 @@ fn repository_ships_vscode_extension() {
 fn repository_declares_devcontainer_configuration() {
     let devcontainer = read_file(".devcontainer/devcontainer.json");
     let post_create = read_file(".devcontainer/post-create.sh");
-    let browser_setup = read_file(".devcontainer/setup-browser-tooling.sh");
     assert!(devcontainer.contains("FEAT-CONTRIB-001"));
     assert!(devcontainer.contains("bash .devcontainer/post-create.sh"));
     assert!(devcontainer.contains("ghcr.io/devcontainers/features/python:1"));
     assert!(post_create.contains("FEAT-CONTRIB-001"));
     assert!(post_create.contains("cargo install cargo-llvm-cov --locked"));
-    assert!(post_create.contains("cargo install wasm-pack --locked"));
     assert!(post_create.contains("scripts/install-precommit.sh"));
     assert!(post_create.contains("CONTRIBUTING.md#local-checks"));
-    assert!(post_create.contains("bash .devcontainer/setup-browser-tooling.sh"));
-    assert!(post_create.contains("stay opt-in"));
-    assert!(browser_setup.contains("FEAT-CONTRIB-001"));
-    assert!(browser_setup.contains("npm --prefix app ci"));
-    assert!(browser_setup.contains("playwright install --with-deps chromium"));
-    assert!(browser_setup.contains("local app builds"));
 }
 
 #[test]
@@ -1156,12 +1144,9 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(ci_workflow.contains("cancel-in-progress: true"));
     assert!(ci_workflow.contains("permissions:"));
     assert!(ci_workflow.contains("./.github/actions/setup-rust"));
-    assert!(setup_rust_action.contains("actions/setup-node@v6"));
-    assert!(setup_rust_action.contains("tool: wasm-pack"));
     assert!(setup_rust_action.contains("Restore Rust cache"));
     assert!(setup_rust_action.contains("Swatinem/rust-cache@v2"));
-    assert!(ci_workflow.contains("taiki-e/cache-cargo-install-action@v3"));
-    assert!(ci_workflow.contains("tool: wasm-pack"));
+    assert!(!ci_workflow.contains("taiki-e/cache-cargo-install-action@v3"));
     assert!(release_artifacts.contains("libc6-dev-arm64-cross"));
     assert!(ci_workflow.contains("merge_group:"));
     assert!(ci_workflow.contains("quality-fast:"));
@@ -1197,10 +1182,8 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
     assert!(codeql_workflow.contains("merge_group:"));
     assert!(codeql_workflow.contains("security-events: write"));
     assert!(codeql_workflow.contains("codeql-required"));
-    assert!(codeql_workflow.contains("actions/setup-node@v6"));
     assert!(codeql_workflow.contains("dtolnay/rust-toolchain@stable"));
     assert!(codeql_workflow.contains("Swatinem/rust-cache@v2"));
-    assert!(codeql_workflow.contains("tool: wasm-pack"));
     assert!(codeql_workflow.contains("github/codeql-action/init@v4"));
     assert!(codeql_workflow.contains("github/codeql-action/autobuild@v4"));
     assert!(codeql_workflow.contains("github/codeql-action/analyze@v4"));
@@ -1274,8 +1257,6 @@ fn repository_declares_dependency_hygiene_and_ci_caching() {
 
     assert!(release_artifacts.contains("Restore Rust cache"));
     assert!(release_artifacts.contains("Swatinem/rust-cache@v2"));
-    assert!(release_artifacts.contains("actions/setup-node@v6"));
-    assert!(release_artifacts.contains("tool: wasm-pack"));
 
     assert!(dependabot.contains("FEAT-QUALITY-001"));
     assert!(dependabot.contains("package-ecosystem: cargo"));

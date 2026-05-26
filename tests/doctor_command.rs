@@ -16,7 +16,6 @@ fn write_doctor_workspace() -> tempfile::TempDir {
     fs::create_dir_all(docs_root.join("policies")).expect("policies dir");
     fs::create_dir_all(docs_root.join("requirements")).expect("requirements dir");
     fs::create_dir_all(docs_root.join("features/cli")).expect("feature dir");
-    fs::create_dir_all(tempdir.path().join("app/node_modules")).expect("app node_modules");
     fs::create_dir_all(tempdir.path().join("website/node_modules")).expect("website node_modules");
     fs::create_dir_all(tempdir.path().join("nested/work/tree")).expect("nested dir");
 
@@ -56,19 +55,6 @@ fn write_doctor_workspace() -> tempfile::TempDir {
         "[package]\nrust-version = \"1.88\"\n",
     )
     .expect("cargo toml");
-    fs::write(
-        tempdir.path().join("app/package.json"),
-        "{\n  \"name\": \"doctor-app\",\n  \"private\": true,\n  \"packageManager\": \"npm@11.8.0\"\n}\n",
-    )
-    .expect("app package");
-    fs::write(tempdir.path().join("app/.nvmrc"), "25\n").expect("app nvmrc");
-    fs::write(tempdir.path().join("app/package-lock.json"), "{}\n").expect("app lockfile");
-    fs::write(
-        tempdir.path().join("app/node_modules/.package-lock.json"),
-        "{}\n",
-    )
-    .expect("app marker");
-
     fs::write(
         tempdir.path().join("website/package.json"),
         "{\n  \"name\": \"doctor-website\",\n  \"private\": true,\n  \"packageManager\": \"npm@11.8.0\"\n}\n",
@@ -129,13 +115,9 @@ fn doctor_command_reports_known_checks_in_json_output() {
         "rustc-version",
         "cargo-version",
         "rust-msrv",
-        "app-node",
-        "app-npm",
-        "app-deps",
         "website-node",
         "website-npm",
         "website-deps",
-        "playwright-chromium",
     ] {
         assert!(
             ids.contains(&expected),
@@ -156,9 +138,7 @@ fn doctor_command_renders_text_summary() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("workspace:"));
     assert!(stdout.contains("summary:"));
-    assert!(stdout.contains("Browser app Node"));
     assert!(stdout.contains("Docs site dependencies"));
-    assert!(stdout.contains("Playwright Chromium"));
 }
 
 #[test]
@@ -183,9 +163,6 @@ fn doctor_command_uses_subprocess_env_for_runtime_checks() {
         "printf '11.8.0\\n'\nexit 0\n",
     );
 
-    let cache_root = workspace.path().join("pw-cache");
-    fs::create_dir_all(cache_root.join("chromium-1000")).expect("chromium cache");
-
     let output = Command::cargo_bin("syu")
         .expect("binary should build")
         .args([
@@ -195,7 +172,6 @@ fn doctor_command_uses_subprocess_env_for_runtime_checks() {
             "json",
         ])
         .env("PATH", &tools_dir)
-        .env("PLAYWRIGHT_BROWSERS_PATH", &cache_root)
         .output()
         .expect("doctor command should run");
 
@@ -207,11 +183,10 @@ fn doctor_command_uses_subprocess_env_for_runtime_checks() {
         "{json:#}"
     );
     assert_eq!(
-        status_for_check(&json, "playwright-chromium"),
-        Some("ok"),
+        status_for_check(&json, "website-node"),
+        Some("warning"),
         "{json:#}"
     );
-    assert_eq!(status_for_check(&json, "app-node"), Some("ok"), "{json:#}");
 }
 
 #[test]
@@ -229,7 +204,6 @@ fn doctor_command_reports_missing_toolchains_without_leaking_env() {
             "json",
         ])
         .env("PATH", &empty_bin)
-        .env_remove("PLAYWRIGHT_BROWSERS_PATH")
         .output()
         .expect("doctor command should run");
 
