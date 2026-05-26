@@ -37,8 +37,15 @@ fn init_command_bootstraps_a_workspace_that_validate_accepts() {
         .expect("feature should exist");
 
     assert!(config.contains(env!("CARGO_PKG_VERSION")));
-    assert_eq!(parsed_config["app"]["bind"].as_str(), Some("127.0.0.1"));
-    assert_eq!(parsed_config["app"]["port"].as_u64(), Some(3000));
+    assert!(parsed_config.get("app").is_none());
+    assert_eq!(
+        parsed_config["runtimes"]["python"]["command"].as_str(),
+        Some("auto")
+    );
+    assert_eq!(
+        parsed_config["runtimes"]["node"]["command"].as_str(),
+        Some("auto")
+    );
     assert_eq!(
         parsed_config["validate"]["require_reciprocal_links"].as_bool(),
         Some(true)
@@ -679,7 +686,6 @@ fn init_command_prints_workspace_aware_next_steps_for_explicit_paths() {
     let workspace_arg = format!("'{}'", workspace.display());
     assert!(stdout.contains(&format!("Run `syu validate {workspace_arg}`")));
     assert!(stdout.contains(&format!("Run `syu browse {workspace_arg}`")));
-    assert!(stdout.contains(&format!("`syu app {workspace_arg}`")));
     assert!(stdout.contains("Run `syu templates` before another `syu init`"));
     assert!(stdout.contains(&format!("{}/", workspace.join("docs/syu").display())));
 }

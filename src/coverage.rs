@@ -3045,12 +3045,12 @@ mod tests {
     fn file_discovery_skips_configured_repository_relative_generated_paths() {
         let tempdir = tempdir().expect("tempdir");
         let src_root = tempdir.path().join("src");
-        let app_root = tempdir.path().join("app/dist");
+        let dist_root = tempdir.path().join("dist");
         let target_root = tempdir.path().join("target");
         fs::create_dir_all(src_root.join("nested")).expect("nested");
         fs::create_dir_all(src_root.join("build")).expect("build");
         fs::create_dir_all(src_root.join("target")).expect("nested target");
-        fs::create_dir_all(&app_root).expect("app dist");
+        fs::create_dir_all(&dist_root).expect("dist");
         fs::create_dir_all(&target_root).expect("root target");
 
         let keep_root = src_root.join("lib.rs");
@@ -3061,7 +3061,7 @@ mod tests {
         fs::write(&keep_nested, "pub fn keep_nested() {}\n").expect("keep nested");
         fs::write(&keep_build, "pub fn keep_build() {}\n").expect("keep build");
         fs::write(&keep_target, "pub fn keep_target() {}\n").expect("keep target");
-        fs::write(app_root.join("generated.rs"), "pub fn ignored_dist() {}\n").expect("dist file");
+        fs::write(dist_root.join("generated.rs"), "pub fn ignored_dist() {}\n").expect("dist file");
         fs::write(
             target_root.join("generated.rs"),
             "pub fn ignored_target() {}\n",
@@ -3069,7 +3069,7 @@ mod tests {
         .expect("target file");
 
         let mut files = Vec::new();
-        let ignored_paths = BTreeSet::from([PathBuf::from("app/dist"), PathBuf::from("target")]);
+        let ignored_paths = BTreeSet::from([PathBuf::from("dist"), PathBuf::from("target")]);
         collect_files_recursive_by_extension(
             tempdir.path(),
             tempdir.path(),
@@ -3152,13 +3152,13 @@ mod tests {
     #[test]
     fn ignored_generated_paths_match_nested_entries_without_hiding_authored_nested_dirs() {
         let ignored_paths = BTreeSet::from([
-            PathBuf::from("app/dist"),
+            PathBuf::from("dist"),
             PathBuf::from("build"),
             PathBuf::from("target"),
         ]);
 
         assert!(path_matches_ignored_generated_directory(
-            Path::new("app/dist/assets/index.js"),
+            Path::new("dist/assets/index.js"),
             &ignored_paths
         ));
         assert!(path_matches_ignored_generated_directory(

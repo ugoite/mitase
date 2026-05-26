@@ -54,7 +54,7 @@ cd examples/team-scale
 syu validate .
 syu list feature
 syu show REQ-TEAM-AUDIT-001
-syu app .
+syu browse .
 ```
 
 A successful `syu validate .` produces output similar to:

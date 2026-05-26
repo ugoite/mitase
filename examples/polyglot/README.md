@@ -28,7 +28,7 @@ cd examples/polyglot
 syu validate .
 syu list requirement
 syu show REQ-MIX-001
-syu app .
+syu browse .
 ```
 
 A successful `syu validate .` produces output similar to:

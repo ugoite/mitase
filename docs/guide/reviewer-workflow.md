@@ -171,7 +171,7 @@ After you know the owning ID and traced files, inspect their recent Git history:
 
 ```bash
 syu log FEAT-CHECK-001 --kind implementation --path src/command
-syu log REQ-CORE-017 --include-related --merge-base-ref origin/main
+syu log REQ-CORE-018 --include-related --merge-base-ref origin/main
 ```
 
 Use `syu log` when review needs historical context:
@@ -201,8 +201,8 @@ before concluding that review coverage is complete.
 For requirement-oriented review, swap to definition or test history instead:
 
 ```bash
-syu log REQ-CORE-017 --kind definition
-syu log REQ-CORE-017 --kind test
+syu log REQ-CORE-018 --kind definition
+syu log REQ-CORE-018 --kind test
 ```
 
 ## 5. Close the loop with a focused validation pass
@@ -315,8 +315,8 @@ not when the tool invents a second workflow beside Git.
 
 - Start with [getting started](./getting-started.md) when you are still learning
   the command names themselves.
-- Start with the [browser app guide](./app.md) when review is easier in a visual
-  graph than in terminal output.
+- Start with `syu browse .` when review is easier in a visual graph than in
+  terminal output.
 - Start with [troubleshooting](./troubleshooting.md) when validation is already
   failing and you need rule-by-rule repair guidance more than review workflow
   advice.

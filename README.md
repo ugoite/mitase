@@ -40,7 +40,7 @@ Pick the newcomer path that matches what you need next:
   install-to-`syu validate .` path in about 5 minutes.
 - **Command card**: open [`docs/guide/command-card.md`](docs/guide/command-card.md)
   when you already know the model and want one compact guide page for the core
-  install / init / validate / browse / app / review commands.
+  install / init / validate / browse / review commands.
 - **Tutorial**: follow [`docs/guide/tutorial.md`](docs/guide/tutorial.md) when you
   learn best from a realistic repository story, want more narrative context than
   Quick start, and do not mind a longer walkthrough.
@@ -54,9 +54,6 @@ Pick the newcomer path that matches what you need next:
 - **Migration / upgrade**: open [`docs/guide/migration.md`](docs/guide/migration.md)
   when you already have a `syu` workspace and want the release-specific steps
   for moving between alpha versions safely.
-- **Visual explorer**: start with [`docs/guide/app.md`](docs/guide/app.md) or run
-  `syu app .` when you want graphical spec navigation before learning the full
-  text-first CLI flow.
 - **Reviewer workflow**: open
   [`docs/guide/reviewer-workflow.md`](docs/guide/reviewer-workflow.md) when a
   PR already exists and you want one concrete loop for moving between spec IDs,
@@ -65,11 +62,11 @@ Pick the newcomer path that matches what you need next:
 - **Contributor runtime setup**: open
   [`docs/guide/node-workflow.md`](docs/guide/node-workflow.md) when you are
   contributing to this repository and need one place to see which Node major
-  the browser app, docs site, and VS Code extension expect today.
+  the docs site and VS Code extension expect today.
 <!-- FEAT-DOCTOR-001 -->
 - **Local readiness check**: run `syu doctor .` when you want one CLI summary of
   the current Rust toolchain, Node/npm expectations, optional dependency
-  installs, and Playwright browser readiness before the contributor checks.
+  installs, and local readiness before the contributor checks.
 - **Trace adapter matrix**: open
   [`docs/guide/trace-adapter-support.md`](docs/guide/trace-adapter-support.md)
   when you already have a workspace and need a capability reference for which
@@ -87,7 +84,6 @@ Keep the detailed guides close:
 - [`docs/guide/command-card.md`](docs/guide/command-card.md)
 - [`docs/guide/tutorial.md`](docs/guide/tutorial.md)
 - [`docs/guide/migration.md`](docs/guide/migration.md)
-- [`docs/guide/app.md`](docs/guide/app.md)
 - [`docs/guide/reviewer-workflow.md`](docs/guide/reviewer-workflow.md)
 - [`docs/guide/node-workflow.md`](docs/guide/node-workflow.md)
 - [`docs/guide/lsp.md`](docs/guide/lsp.md)
@@ -269,11 +265,10 @@ feature documents so they link back to the new requirement.
 
 ```bash
 syu validate .                       # 3. Check everything is linked
-syu app .                            # 4. Browse in the browser
+syu browse .                         # 4. Browse in the terminal
 ```
 
-Use `syu browse .` when you want terminal-first exploration, or `syu app .`
-when you want the local browser UI.
+Use `syu browse .` when you want terminal-first exploration.
 
 ```bash
 syu init .
@@ -288,7 +283,6 @@ syu audit .
 syu log REQ-CORE-002
 syu relate REQ-001
 syu trace src/command/check.rs --symbol run_check_command
-syu app .
 syu report . --output reports/syu.md
 ```
 
@@ -475,7 +469,6 @@ Use this quick chooser when you know the task but not yet the subcommand:
 | inspect everything connected to one ID, symbol, or file | `syu relate TARGET` | expands upstream/downstream links plus traced files and symbols for review |
 | explain whether one ID, file, or symbol still fits the connected chain | `syu explain TARGET` | turns the graph into a focused assessment with traces and obvious gaps |
 | review what changed for one spec item in Git history | `syu log ID` | projects the traced definition and implementation paths onto checked-in commits |
-| prefer a browser-first view for demos or visual navigation | `syu app .` | serves the same workspace graph in the local browser UI |
 
 ### `syu browse`
 
@@ -601,25 +594,6 @@ syu trace src/command/check.rs --symbol run_check_command
 syu trace tests/report_command.rs path/to/workspace --format json
 ```
 
-### `syu app`
-
-Start a local browser app for the current workspace:
-
-```bash
-syu app .
-syu app . --bind 127.0.0.1 --port 3000
-```
-
-After startup, `syu app` prints the local URL to open in your browser and a
-`Ctrl-C` reminder for stopping the server.
-
-The browser app serves a VitePlus / React / Tailwind UI and uses Rust plus
-WebAssembly to build the layered browser view from the live workspace data.
-When `syu.yaml` defines `app.bind` or `app.port`, `syu app` uses those defaults
-unless the CLI flags override them.
-Choose `syu app` when you want a browser-first view of the same workspace graph
-that `syu browse` shows in the terminal.
-
 ### `syu report`
 
 Generate a Markdown validation report:
@@ -636,21 +610,6 @@ Set `report.output` in `syu.yaml` when a repository wants that checked-in path
 to become the default, while keeping `--output` available for one-off overrides.
 Contributors can refresh that report and the checked-in site-spec pages together
 with `scripts/ci/check-generated-docs-freshness.sh`.
-
-## Browser app
-
-Use [`syu app`](#syu-app) when you want a local browser UI for searching the
-four-layer graph, following links across related documents, and sharing the
-same live workspace data that `syu browse` exposes in the terminal.
-
-```bash
-syu app .
-syu app . --bind 127.0.0.1 --port 3000
-```
-
-For a visual tour with annotated screenshots, see the
-[browser UI guide](docs/guide/app.md). Contributor-only implementation and
-build details live under [Browser app development](#browser-app-development).
 
 ## VS Code extension
 
@@ -682,9 +641,6 @@ validate:
   require_non_orphaned_items: true
   require_reciprocal_links: true
   require_symbol_trace_coverage: false
-app:
-  bind: 127.0.0.1
-  port: 3000
 runtimes:
   python:
     command: auto
@@ -703,7 +659,6 @@ Key behaviors:
 - `validate.require_symbol_trace_coverage` opt-in checks that public Rust, Python, Go, Java, C#, Kotlin, and TypeScript/JavaScript symbols belong to features and tests belong to requirements, with Ruby covered by the same inventory rules, while still skipping configured repository-relative generated paths
 - `validate.historical_ids.enabled` rejects reuse of IDs that were deleted in Git history unless you disable it for a migration
 - `report.output` sets the default `syu report` destination while `--output` still takes precedence
-- `app.bind` and `app.port` define the default local browser-app address and port unless `--bind` / `--port` override them
 - `report.output` sets the default `syu report` destination while `--output` still takes precedence
 - `runtimes.*.command` can be set to `auto` or an explicit executable name/path
 
@@ -835,50 +790,6 @@ pre-commit run --all-files --hook-stage pre-push
 If you prefer to install `pre-commit` manually, `pipx install pre-commit` or
 `python -m pip install --user pre-commit` also work.
 
-### Browser app development
-
-The repository keeps the source UI in `app/` and generates the embedded
-production bundle during Rust builds, so `syu app` still works from installed
-binaries without checking `app/dist/` into `main`.
-
-Use the checked-in Node 25 version from `app/package.json` and `app/.nvmrc`
-when working in `app/`; that is the local contributor expectation, not only a
-CI matrix detail. For the repo-wide app/docs/editor version map, use the
-[repository Node workflow guide](docs/guide/node-workflow.md). Before you run
-the install commands below, switch your shell to that Node major with a version
-manager such as `nvm`, `fnm`, or `Volta` using the checked-in `app/.nvmrc`.
-Before you run Cargo commands that embed the browser app, provision the app
-dependencies intentionally from the repository root:
-
-```bash
-scripts/ci/pinned-npm.sh install app
-npm --prefix app ci
-```
-
-If you prefer the checked-in bootstrap entrypoint for the same app-only setup,
-switch to Node 25 first and use:
-
-```bash
-scripts/ci/bootstrap-contributor-tooling.sh --app
-```
-
-Cargo no longer runs `npm ci` for you during normal builds. If you are in a
-fresh clone or fresh worktree and `app/node_modules` is missing or stale,
-`build.rs` stops and points back to the commands above so offline, hermetic, and security-sensitive environments do not hide a networked package-manager install inside an ordinary Rust build.
-
-When contributors change browser app sources or build inputs, they should run
-`scripts/ci/check-browser-app-freshness.sh`. That flow regenerates the local
-`app/src/wasm` bridge, typechecks the browser app, and builds a fresh local
-`app/dist/` artifact the same way CI does before uploading it.
-
-```bash
-scripts/ci/pinned-npm.sh install app
-npm --prefix app ci
-npm --prefix app run build:wasm
-npm --prefix app run build
-cargo run -- app .
-```
-
 ## Documentation site
 
 The repository ships a Docusaurus site rooted at `website/` that renders the
@@ -905,8 +816,7 @@ scripts/ci/bootstrap-contributor-tooling.sh
 
 Without flags, the bootstrap only installs the surfaces that match the current
 shell major from the checked-in `.nvmrc` files. In this repository that means
-Node 25 selects the browser app, while Node 20 selects the docs site plus the
-VS Code extension.
+Node 20 selects the docs site plus the VS Code extension.
 
 The install script removes `website/node_modules` first so repeated docs-site
 setup stays deterministic across branch switches and reused worktrees.

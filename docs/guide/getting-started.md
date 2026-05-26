@@ -19,7 +19,7 @@ Need a different level of guidance?
   compact command card.
 - Open the [command card](./command-card.md) when you already understand the
   model and want one docs-site page that keeps the core install / doctor / init /
-  validate / report / browse / app / review commands close at hand.
+  validate / report / browse / review commands close at hand.
 - Follow [existing repository adoption](./existing-repository.md) when the
   repository already has code and history and you want to add `syu` without
   treating it like a blank workspace.
@@ -468,7 +468,6 @@ syu validate .
 syu browse .
 syu list feature
 syu show REQ-001
-syu app .
 ```
 
 Use `syu list` when you want list-shaped output that can be narrowed to one
@@ -490,7 +489,6 @@ If you only remember the task and not the command name yet, use this chooser:
 | inspect everything connected to one ID, file, or symbol | `syu relate TARGET` | expands nearby links, traced files, and symbols to show the surrounding context |
 | explain one ID, file, or symbol against the connected chain | `syu explain TARGET` | summarizes the connected chain, traces, and obvious gaps in one focused view |
 | review change history for one requirement or feature | `syu log ID` | follows the checked-in definition plus traced evidence through Git history |
-| switch to a browser-first workflow | `syu app .` | shows the same workspace graph in the local browser UI |
 
 Use JSON when integrating with automation:
 
@@ -560,7 +558,6 @@ syu report . --output reports/syu.md
 
 The repository includes complete examples:
 
-- `examples/browser-ui`
 - `examples/rust-only`
 - `examples/python-only`
 - `examples/ruby-only`
@@ -608,7 +605,6 @@ example-backed, or both, see the
 - Review [configuration](./configuration.md) before tightening validation in a real repository
 - Use the [reviewer workflow guide](./reviewer-workflow.md) when a PR already exists and you want one trace/relate/log loop to inspect it
 - Check the [trace adapter capability matrix](./trace-adapter-support.md) before depending on `doc_contains` or strict ownership coverage in a mixed-language codebase
-- Read the [syu app browser guide](./app.md) to learn how to navigate the browser UI
 - Check the [troubleshooting guide](./troubleshooting.md) when `syu validate` returns an unfamiliar error code
 - If you run `syu report`, your own project can generate a local Markdown report.
   The checked-in `docs/generated/` links below exist in the `syu` repository itself,

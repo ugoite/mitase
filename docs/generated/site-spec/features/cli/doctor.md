@@ -19,7 +19,7 @@ description: "Generated reference for docs/syu/features/cli/doctor.yaml"
 
 - **id**: FEAT-DOCTOR-001
   - **title**: Contributor readiness doctor command
-  - **summary**: Report the current Rust, Node, npm, dependency-install, and Playwright readiness state before local contributor checks begin.
+  - **summary**: Report the current Rust, Node, npm, dependency-install, and local readiness state for docs-site and VS Code contributor checks.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-026
@@ -56,7 +56,7 @@ version: 1
 features:
   - id: FEAT-DOCTOR-001
     title: Contributor readiness doctor command
-    summary: Report the current Rust, Node, npm, dependency-install, and Playwright readiness state before local contributor checks begin.
+    summary: Report the current Rust, Node, npm, dependency-install, and local readiness state for docs-site and VS Code contributor checks.
     status: implemented
     linked_requirements:
       - REQ-CORE-026

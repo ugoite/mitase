@@ -7,7 +7,7 @@ is_relevant_path() {
   local path="$1"
 
   case "$path" in
-    syu.yaml|docs/syu/*|crates/*|src/*|tests/*|app/*|website/*)
+    syu.yaml|docs/syu/*|crates/*|src/*|tests/*|website/*)
       return 0
       ;;
     *)
@@ -23,8 +23,6 @@ validate_changed() {
 
   repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
   cd "$repo_root"
-  export SYU_SKIP_BROWSER_APP_BUILD=1
-
   if (($# > 0)); then
     files=("$@")
   else
