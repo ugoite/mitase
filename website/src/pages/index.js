@@ -60,8 +60,8 @@ const chooseYourPath = [
   {
     title: 'Visual explorer',
     description:
-      'Take the browser-first path when you want graphical spec navigation before learning the full text-first CLI flow.',
-    to: '/docs/guide/app'
+      'Compare template-backed and example-backed paths when you want to see the main shapes before choosing one.',
+    to: '/docs/guide/examples-and-templates'
   },
   {
     title: 'Reviewer workflow',
@@ -109,14 +109,8 @@ const journeys = [
   {
     title: 'Keep a command card open',
     description:
-      'Use one compact docs-site page for the core install, init, validate, browse, app, and reviewer commands.',
+      'Use one compact docs-site page for the core install, init, validate, browse, and reviewer commands.',
     to: '/docs/guide/command-card'
-  },
-  {
-    title: 'Explore the browser UI',
-    description:
-      'Take the visual-first path through `syu app` when you want tabs, trace links, and validation context in one browser view.',
-    to: '/docs/guide/app'
   },
   {
     title: 'Follow a full tutorial',

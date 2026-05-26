@@ -44,6 +44,7 @@ impl HistoricalIdIndex {
         self.deleted_by_value.get(id)
     }
 
+    #[allow(dead_code)]
     pub(crate) fn snapshot(&self) -> HistoricalIdSnapshot {
         HistoricalIdSnapshot {
             enabled: self.enabled,

@@ -81,7 +81,6 @@ enum Dispatch {
     Explain(cli::ExplainArgs),
     Relate(cli::RelateArgs),
     Trace(cli::TraceArgs),
-    App(cli::AppArgs),
     Doctor(cli::DoctorArgs),
     PrintHelp,
     Validate(cli::ValidateArgs),
@@ -105,7 +104,6 @@ fn dispatch(cli: cli::Cli, stdin_is_terminal: bool, stdout_is_terminal: bool) ->
         Some(cli::Commands::Explain(args)) => Dispatch::Explain(args),
         Some(cli::Commands::Relate(args)) => Dispatch::Relate(args),
         Some(cli::Commands::Trace(args)) => Dispatch::Trace(args),
-        Some(cli::Commands::App(args)) => Dispatch::App(args),
         Some(cli::Commands::Doctor(args)) => Dispatch::Doctor(args),
         None if stdin_is_terminal && stdout_is_terminal => {
             Dispatch::Browse(cli::BrowseArgs::default())
@@ -133,7 +131,6 @@ fn run_dispatch(dispatch: Dispatch) -> Result<i32> {
         Dispatch::Explain(args) => command::explain::run_explain_command(&args),
         Dispatch::Relate(args) => command::relate::run_relate_command(&args),
         Dispatch::Trace(args) => command::trace::run_trace_command(&args),
-        Dispatch::App(args) => command::app::run_app_command(&args),
         Dispatch::Doctor(args) => command::doctor::run_doctor_command(&args),
         Dispatch::PrintHelp => {
             let mut command = cli::Cli::command();
@@ -168,8 +165,8 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use crate::cli::{
-        AddArgs, AppArgs, AuditArgs, Cli, Commands, CompletionArgs, ExplainArgs, HistoryKind,
-        ListArgs, LogArgs, LookupKind, OutputFormat, RelateArgs, SearchArgs, ShowArgs, TaskArgs,
+        AddArgs, AuditArgs, Cli, Commands, CompletionArgs, ExplainArgs, HistoryKind, ListArgs,
+        LogArgs, LookupKind, OutputFormat, RelateArgs, SearchArgs, ShowArgs, TaskArgs,
         TaskCheckArgs, TaskClassifyArgs, TaskCommands, TaskPlanArgs, TaskPlanFormat, TaskScopeArgs,
         TemplatesArgs, TraceArgs,
     };
@@ -192,30 +189,6 @@ mod tests {
         let code = super::run_dispatch(super::Dispatch::PrintHelp)
             .expect("print help dispatch should succeed");
         assert_eq!(code, 0);
-    }
-
-    #[test]
-    // REQ-CORE-017
-    fn dispatches_app_subcommands_without_rewriting_them() {
-        let action = super::dispatch(
-            Cli {
-                command: Some(Commands::App(AppArgs {
-                    workspace: PathBuf::from("workspace"),
-                    bind: Some("127.0.0.1".to_string()),
-                    port: Some(4173),
-                    allow_remote: false,
-                    dev_server: false,
-                })),
-            },
-            true,
-            true,
-        );
-
-        assert!(matches!(
-            action,
-            super::Dispatch::App(crate::cli::AppArgs { workspace, port, .. })
-                if workspace == Path::new("workspace") && port == Some(4173)
-        ));
     }
 
     #[test]

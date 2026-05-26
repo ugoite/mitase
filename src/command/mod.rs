@@ -3,7 +3,6 @@ use std::path::Path;
 // FEAT-BROWSE-001
 
 pub mod add;
-pub mod app;
 pub mod audit;
 pub mod browse;
 pub mod check;

@@ -2,7 +2,7 @@
 
 <!-- FEAT-DOCS-001 -->
 
-This tutorial walks through building a small, realistic workspace from scratch. By the end you will have a four-layer spec (philosophy → policy → requirement → feature), a passing `syu validate .`, and a browsable `syu app .`.
+This tutorial walks through building a small, realistic workspace from scratch. By the end you will have a four-layer spec (philosophy → policy → requirement → feature), a passing `syu validate .`, and a browsable `syu browse .`.
 
 Want a different entry point?
 
@@ -240,7 +240,6 @@ workspace: /absolute/path/to/filestore
 definitions: philosophies=1 policies=1 requirements=1 features=1
 ...
 What to do next:
-  syu app /absolute/path/to/filestore
   syu browse /absolute/path/to/filestore
 ```
 
@@ -323,15 +322,14 @@ syu browse .
 
 ---
 
-## 9. Open the browser UI
+## 9. Explore in the terminal
 
 ```bash
-syu app .
+syu browse .
 ```
 
-This serves a local web UI at `http://localhost:<port>` (the port is printed on
-startup). The UI shows the four layers as tabs, displays validation badges next
-to each section, and lets you click through linked items.
+This keeps the same workspace graph visible in the terminal while you continue
+editing the repository.
 
 ---
 

@@ -20,7 +20,6 @@ fn write_executable(path: &Path, contents: &str) {
 
 fn write_fixture_repo(root: &Path) {
     fs::create_dir_all(root.join("scripts/ci")).expect("scripts dir");
-    fs::create_dir_all(root.join("app")).expect("app dir");
     fs::create_dir_all(root.join("website")).expect("website dir");
     fs::create_dir_all(root.join("editors/vscode")).expect("vscode dir");
 
@@ -45,7 +44,6 @@ set -euo pipefail
 printf 'INSTALL_DOCS_SITE_DEPS\n' >>"$BOOTSTRAP_LOG"
 "#,
     );
-    fs::write(root.join("app/.nvmrc"), "25\n").expect("app nvmrc");
     fs::write(root.join("website/.nvmrc"), "20\n").expect("website nvmrc");
     fs::write(root.join("editors/vscode/.nvmrc"), "20\n").expect("vscode nvmrc");
 }
@@ -80,44 +78,6 @@ printf 'NPX %s\n' "$*" >>"$BOOTSTRAP_LOG"
 "#,
     );
     bin_dir
-}
-
-#[test]
-// REQ-CORE-013
-fn bootstrap_default_on_node_25_installs_app_only() {
-    let tempdir = tempdir().expect("tempdir");
-    write_fixture_repo(tempdir.path());
-    let bin_dir = write_mock_bin(tempdir.path());
-    let log_path = tempdir.path().join("bootstrap.log");
-
-    let output = Command::new("bash")
-        .arg(
-            tempdir
-                .path()
-                .join("scripts/ci/bootstrap-contributor-tooling.sh"),
-        )
-        .current_dir(tempdir.path())
-        .env(
-            "PATH",
-            format!("{}:{}", bin_dir.display(), std::env::var("PATH").unwrap()),
-        )
-        .env("BOOTSTRAP_LOG", &log_path)
-        .env("NODE_MAJOR", "25")
-        .output()
-        .expect("script should run");
-
-    assert!(
-        output.status.success(),
-        "stdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let log = fs::read_to_string(&log_path).expect("bootstrap log");
-    assert!(log.contains("PINNED install app"));
-    assert!(log.contains("NPM --prefix app ci"));
-    assert!(!log.contains("website"));
-    assert!(!log.contains("editors/vscode"));
-    assert!(!log.contains("INSTALL_DOCS_SITE_DEPS"));
 }
 
 #[test]
@@ -190,6 +150,5 @@ fn bootstrap_default_rejects_unmatched_node_major() {
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("Current Node major 18 does not match"));
-    assert!(stderr.contains("Node 25"));
     assert!(stderr.contains("Node 20"));
 }

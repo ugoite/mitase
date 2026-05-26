@@ -1,4 +1,3 @@
-// FEAT-APP-001
 // FEAT-CHECK-001
 // FEAT-REPORT-001
 // REQ-CORE-009
@@ -31,8 +30,6 @@ pub struct SyuConfig {
     #[serde(default, skip_serializing_if = "ReportConfig::is_default")]
     pub report: ReportConfig,
     #[serde(default)]
-    pub app: AppConfig,
-    #[serde(default)]
     pub runtimes: RuntimeConfigSet,
 }
 
@@ -43,7 +40,6 @@ impl Default for SyuConfig {
             spec: SpecConfig::default(),
             validate: ValidateConfig::default(),
             report: ReportConfig::default(),
-            app: AppConfig::default(),
             runtimes: RuntimeConfigSet::default(),
         }
     }
@@ -123,24 +119,6 @@ impl Default for HistoricalIdsConfig {
         Self {
             enabled: default_historical_ids_enabled(),
             start_ref: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
-pub struct AppConfig {
-    #[serde(default = "default_app_bind")]
-    pub bind: String,
-    #[serde(default = "default_app_port")]
-    pub port: u16,
-}
-
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            bind: default_app_bind(),
-            port: default_app_port(),
         }
     }
 }
@@ -242,23 +220,11 @@ fn default_symbol_trace_coverage_ignored_paths() -> Vec<PathBuf> {
         "coverage",
         "dist",
         "target",
-        "app/build",
-        "app/coverage",
-        "app/dist",
-        "app/target",
         "tests/fixtures/workspaces",
     ]
     .into_iter()
     .map(PathBuf::from)
     .collect()
-}
-
-fn default_app_bind() -> String {
-    "127.0.0.1".to_string()
-}
-
-fn default_app_port() -> u16 {
-    3000
 }
 
 fn default_runtime_command() -> String {
@@ -393,16 +359,10 @@ mod tests {
                 std::path::PathBuf::from("coverage"),
                 std::path::PathBuf::from("dist"),
                 std::path::PathBuf::from("target"),
-                std::path::PathBuf::from("app/build"),
-                std::path::PathBuf::from("app/coverage"),
-                std::path::PathBuf::from("app/dist"),
-                std::path::PathBuf::from("app/target"),
                 std::path::PathBuf::from("tests/fixtures/workspaces"),
             ]
         );
         assert_eq!(loaded.config.report.output, None);
-        assert_eq!(loaded.config.app.bind, "127.0.0.1");
-        assert_eq!(loaded.config.app.port, 3000);
     }
 
     #[test]
@@ -411,7 +371,7 @@ mod tests {
         fs::write(
             tempdir.path().join(CONFIG_FILE_NAME),
             format!(
-                "version: {version}\nspec:\n  root: spec/contracts\nvalidate:\n  default_fix: true\n  allow_planned: false\n  require_non_orphaned_items: false\n  require_reciprocal_links: false\n  require_symbol_trace_coverage: true\n  historical_ids:\n    enabled: false\n    start_ref: origin/main\n  trace_ownership_mode: sidecar\nreport:\n  output: docs/generated/syu-report.md\napp:\n  bind: 0.0.0.0\n  port: 4321\nruntimes:\n  python:\n    command: python3\n  node:\n    command: node\n",
+                "version: {version}\nspec:\n  root: spec/contracts\nvalidate:\n  default_fix: true\n  allow_planned: false\n  require_non_orphaned_items: false\n  require_reciprocal_links: false\n  require_symbol_trace_coverage: true\n  historical_ids:\n    enabled: false\n    start_ref: origin/main\n  trace_ownership_mode: sidecar\nreport:\n  output: docs/generated/syu-report.md\nruntimes:\n  python:\n    command: python3\n  node:\n    command: node\n",
                 version = current_cli_version()
             ),
         )
@@ -444,10 +404,6 @@ mod tests {
                 std::path::PathBuf::from("coverage"),
                 std::path::PathBuf::from("dist"),
                 std::path::PathBuf::from("target"),
-                std::path::PathBuf::from("app/build"),
-                std::path::PathBuf::from("app/coverage"),
-                std::path::PathBuf::from("app/dist"),
-                std::path::PathBuf::from("app/target"),
                 std::path::PathBuf::from("tests/fixtures/workspaces"),
             ]
         );
@@ -455,8 +411,6 @@ mod tests {
             loaded.config.report.output,
             Some(std::path::PathBuf::from("docs/generated/syu-report.md"))
         );
-        assert_eq!(loaded.config.app.bind, "0.0.0.0");
-        assert_eq!(loaded.config.app.port, 4321);
         assert_eq!(loaded.config.runtimes.python.command, "python3");
     }
 
@@ -496,11 +450,12 @@ mod tests {
         assert!(rendered.contains("trace_ownership_mode: mapping"));
         assert!(rendered.contains("symbol_trace_coverage_ignored_paths:"));
         assert!(rendered.contains("- build"));
-        assert!(rendered.contains("- app/dist"));
+        assert!(rendered.contains("- dist"));
         assert!(rendered.contains("- tests/fixtures/workspaces"));
         assert!(!rendered.contains("report:"));
-        assert!(rendered.contains("bind: 127.0.0.1"));
-        assert!(rendered.contains("port: 3000"));
+        assert!(rendered.contains("runtimes:"));
+        assert!(rendered.contains("python:"));
+        assert!(rendered.contains("node:"));
         assert!(rendered.contains("command: auto"));
     }
 

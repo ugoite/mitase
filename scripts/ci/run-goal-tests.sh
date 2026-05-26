@@ -12,9 +12,6 @@ run_goal_tests() {
   repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
   cd "$repo_root"
 
-  scripts/ci/pinned-npm.sh install app
-  npm --prefix app ci
-
   mkdir -p "$(dirname "$goal_plan_path")"
 
   cargo run --quiet -- task infer --range "$range" --output "$goal_plan_path"

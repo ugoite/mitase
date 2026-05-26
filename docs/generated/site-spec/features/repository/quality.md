@@ -19,7 +19,7 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
 
 - **id**: FEAT-QUALITY-001
   - **title**: Repository quality automation
-  - **summary**: Keep self-validation, dependency hygiene across Rust, GitHub Actions, the docs site, the browser app, goal-selected PR tests, code scanning, and merge-queue-safe CI execution split into fast branch feedback, PR confidence, merge-queue enforcement, and maintenance checks.
+  - **summary**: Keep self-validation, dependency hygiene across Rust, GitHub Actions, the docs site, goal-selected PR tests, code scanning, and merge-queue-safe CI execution split into fast branch feedback, PR confidence, merge-queue enforcement, and maintenance checks.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-005
@@ -33,10 +33,6 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
       - **file**: scripts/dev/validate-changed.sh
         - **symbols**:
           - validate_changed
-      - **file**: scripts/ci/validate-app.sh
-        - **symbols**:
-          - run_optional_e2e
-          - validate_app
       - **file**: scripts/ci/validate-website.sh
         - **symbols**:
           - validate_website
@@ -51,9 +47,6 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
       - **file**: scripts/ci/check-generated-docs-freshness.sh
         - **symbols**:
           - check_generated_docs_freshness
-      - **file**: scripts/ci/check-browser-app-freshness.sh
-        - **symbols**:
-          - check_browser_app_freshness
       - **file**: scripts/ci/check-merge-queue-health.sh
         - **symbols**:
           - load_required_merge_queue_workflows
@@ -90,20 +83,15 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
           - dependency-review
           - spec-linkage
           - squash-history-spec-ids
-          - browser-app
           - installer-smoke
           - installed-binary-smoke
           - docs-site
           - ci-required
           - ./.github/actions/setup-rust
-          - taiki-e/cache-cargo-install-action@v3
           - Set up Python with pip cache
-          - cache-dependency-path: app/package-lock.json
           - Cache pre-commit hooks
           - actions/cache@v5
           - ~/.cache/pre-commit
-          - scripts/ci/pinned-npm.sh install app
-          - Build browser app bundle
           - Review dependency changes
           - scripts/ci/quality-gates.sh fast
           - scripts/ci/quality-gates.sh full
@@ -153,7 +141,6 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
           - package-ecosystem
           - target-branch
           - directory: /website
-          - directory: /app
 
 ## Source YAML
 
@@ -164,7 +151,7 @@ version: 1
 features:
   - id: FEAT-QUALITY-001
     title: Repository quality automation
-    summary: Keep self-validation, dependency hygiene across Rust, GitHub Actions, the docs site, the browser app, goal-selected PR tests, code scanning, and merge-queue-safe CI execution split into fast branch feedback, PR confidence, merge-queue enforcement, and maintenance checks.
+    summary: Keep self-validation, dependency hygiene across Rust, GitHub Actions, the docs site, goal-selected PR tests, code scanning, and merge-queue-safe CI execution split into fast branch feedback, PR confidence, merge-queue enforcement, and maintenance checks.
     status: implemented
     linked_requirements:
       - REQ-CORE-005
@@ -178,10 +165,6 @@ features:
         - file: scripts/dev/validate-changed.sh
           symbols:
             - validate_changed
-        - file: scripts/ci/validate-app.sh
-          symbols:
-            - run_optional_e2e
-            - validate_app
         - file: scripts/ci/validate-website.sh
           symbols:
             - validate_website
@@ -196,9 +179,6 @@ features:
         - file: scripts/ci/check-generated-docs-freshness.sh
           symbols:
             - check_generated_docs_freshness
-        - file: scripts/ci/check-browser-app-freshness.sh
-          symbols:
-            - check_browser_app_freshness
         - file: scripts/ci/check-merge-queue-health.sh
           symbols:
             - load_required_merge_queue_workflows
@@ -235,20 +215,15 @@ features:
             - dependency-review
             - spec-linkage
             - squash-history-spec-ids
-            - browser-app
             - installer-smoke
             - installed-binary-smoke
             - docs-site
             - ci-required
             - "./.github/actions/setup-rust"
-            - taiki-e/cache-cargo-install-action@v3
             - Set up Python with pip cache
-            - "cache-dependency-path: app/package-lock.json"
             - Cache pre-commit hooks
             - actions/cache@v5
             - "~/.cache/pre-commit"
-            - scripts/ci/pinned-npm.sh install app
-            - Build browser app bundle
             - Review dependency changes
             - "scripts/ci/quality-gates.sh fast"
             - "scripts/ci/quality-gates.sh full"
@@ -298,5 +273,4 @@ features:
             - package-ecosystem
             - target-branch
             - "directory: /website"
-            - "directory: /app"
 ```

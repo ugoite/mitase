@@ -42,7 +42,6 @@ check_generated_docs_freshness() {
   trap 'rm -f "${before_snapshot:-}" "${after_snapshot:-}"' EXIT
 
   cd "$repo_root"
-  export SYU_SKIP_BROWSER_APP_BUILD=1
   snapshot_generated_docs >"$before_snapshot"
   python3 scripts/generate-site-docs.py
   cargo run --quiet -- report . --output docs/generated/syu-report.md >/dev/null
