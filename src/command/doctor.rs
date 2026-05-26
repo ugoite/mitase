@@ -123,6 +123,12 @@ fn build_doctor_report(workspace: &Path) -> Result<DoctorReport> {
         "Docs site",
         "scripts/ci/pinned-npm.sh install website && scripts/ci/pinned-npm.sh exec website -- ci",
     ));
+    checks.extend(surface_checks(
+        &workspace_root,
+        "editors/vscode",
+        "VS Code extension",
+        "scripts/ci/pinned-npm.sh install editors/vscode && scripts/ci/pinned-npm.sh exec editors/vscode -- ci",
+    ));
 
     let summary = DoctorSummary::from_checks(&checks);
     Ok(DoctorReport {
@@ -297,7 +303,7 @@ fn surface_node_check(
             label: surface_label(label_prefix, "Node"),
             status: DoctorStatus::Error,
             message,
-            fix: Some("Install Node.js before running browser or docs-site workflows.".to_string()),
+            fix: Some("Install Node.js before running docs-site or VS Code workflows.".to_string()),
         },
     }
 }
@@ -337,7 +343,7 @@ fn surface_npm_check(
             label: surface_label(label_prefix, "npm"),
             status: DoctorStatus::Error,
             message,
-            fix: Some("Install npm before running browser or docs-site workflows.".to_string()),
+            fix: Some("Install npm before running docs-site or VS Code workflows.".to_string()),
         },
     }
 }
@@ -632,6 +638,9 @@ fn surface_check_id(surface: &'static str, kind: &'static str) -> &'static str {
         ("website", "node") => "website-node",
         ("website", "npm") => "website-npm",
         ("website", "deps") => "website-deps",
+        ("editors/vscode", "node") => "vscode-node",
+        ("editors/vscode", "npm") => "vscode-npm",
+        ("editors/vscode", "deps") => "vscode-deps",
         _ => "surface-check",
     }
 }
@@ -641,6 +650,9 @@ fn surface_label(prefix: &'static str, suffix: &'static str) -> &'static str {
         ("Docs site", "Node") => "Docs site Node",
         ("Docs site", "npm") => "Docs site npm",
         ("Docs site", "dependencies") => "Docs site dependencies",
+        ("VS Code extension", "Node") => "VS Code extension Node",
+        ("VS Code extension", "npm") => "VS Code extension npm",
+        ("VS Code extension", "dependencies") => "VS Code extension dependencies",
         _ => "Surface check",
     }
 }
@@ -760,10 +772,15 @@ mod tests {
     #[test]
     fn surface_ids_and_labels_cover_known_surfaces() {
         assert_eq!(surface_check_id("website", "deps"), "website-deps");
+        assert_eq!(surface_check_id("editors/vscode", "node"), "vscode-node");
         assert_eq!(surface_check_id("other", "node"), "surface-check");
         assert_eq!(
             surface_label("Docs site", "dependencies"),
             "Docs site dependencies"
+        );
+        assert_eq!(
+            surface_label("VS Code extension", "dependencies"),
+            "VS Code extension dependencies"
         );
         assert_eq!(surface_label("Other", "Node"), "Surface check");
     }
@@ -867,6 +884,35 @@ mod tests {
             checks
                 .iter()
                 .all(|check| check.status == DoctorStatus::Skipped)
+        );
+    }
+
+    #[test]
+    fn surface_checks_cover_vs_code_extension() {
+        let tempdir = tempdir().expect("tempdir");
+        let vscode_root = tempdir.path().join("editors/vscode");
+        fs::create_dir_all(&vscode_root).expect("vscode root");
+        fs::write(vscode_root.join("package.json"), "{invalid").expect("invalid package");
+        fs::write(vscode_root.join(".nvmrc"), "20\n").expect("nvmrc");
+
+        let checks = surface_checks(
+            tempdir.path(),
+            "editors/vscode",
+            "VS Code extension",
+            "install",
+        );
+        let npm_check = checks
+            .iter()
+            .find(|check| check.id == "vscode-npm")
+            .expect("npm check should exist");
+
+        assert_eq!(checks.len(), 3);
+        assert_eq!(npm_check.status, DoctorStatus::Error);
+        assert!(
+            npm_check
+                .fix
+                .as_deref()
+                .is_some_and(|fix| fix.contains("pinned npm requirement"))
         );
     }
 

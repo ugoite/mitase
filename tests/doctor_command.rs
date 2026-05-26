@@ -17,6 +17,8 @@ fn write_doctor_workspace() -> tempfile::TempDir {
     fs::create_dir_all(docs_root.join("requirements")).expect("requirements dir");
     fs::create_dir_all(docs_root.join("features/cli")).expect("feature dir");
     fs::create_dir_all(tempdir.path().join("website/node_modules")).expect("website node_modules");
+    fs::create_dir_all(tempdir.path().join("editors/vscode/node_modules"))
+        .expect("vscode node_modules");
     fs::create_dir_all(tempdir.path().join("nested/work/tree")).expect("nested dir");
 
     fs::write(
@@ -69,6 +71,24 @@ fn write_doctor_workspace() -> tempfile::TempDir {
         "{}\n",
     )
     .expect("website marker");
+    fs::write(
+        tempdir.path().join("editors/vscode/package.json"),
+        "{\n  \"name\": \"doctor-vscode\",\n  \"private\": true,\n  \"packageManager\": \"npm@11.8.0\"\n}\n",
+    )
+    .expect("vscode package");
+    fs::write(tempdir.path().join("editors/vscode/.nvmrc"), "20\n").expect("vscode nvmrc");
+    fs::write(
+        tempdir.path().join("editors/vscode/package-lock.json"),
+        "{}\n",
+    )
+    .expect("vscode lockfile");
+    fs::write(
+        tempdir
+            .path()
+            .join("editors/vscode/node_modules/.package-lock.json"),
+        "{}\n",
+    )
+    .expect("vscode marker");
 
     tempdir
 }
@@ -118,6 +138,9 @@ fn doctor_command_reports_known_checks_in_json_output() {
         "website-node",
         "website-npm",
         "website-deps",
+        "vscode-node",
+        "vscode-npm",
+        "vscode-deps",
     ] {
         assert!(
             ids.contains(&expected),
@@ -139,6 +162,7 @@ fn doctor_command_renders_text_summary() {
     assert!(stdout.contains("workspace:"));
     assert!(stdout.contains("summary:"));
     assert!(stdout.contains("Docs site dependencies"));
+    assert!(stdout.contains("VS Code extension dependencies"));
 }
 
 #[test]
@@ -184,6 +208,11 @@ fn doctor_command_uses_subprocess_env_for_runtime_checks() {
     );
     assert_eq!(
         status_for_check(&json, "website-node"),
+        Some("warning"),
+        "{json:#}"
+    );
+    assert_eq!(
+        status_for_check(&json, "vscode-node"),
         Some("warning"),
         "{json:#}"
     );
