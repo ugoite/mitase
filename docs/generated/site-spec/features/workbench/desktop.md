@@ -1,0 +1,56 @@
+---
+title: "Workbench / Desktop"
+description: "Generated reference for docs/syu/features/workbench/desktop.yaml"
+---
+
+> Generated from `docs/syu/features/workbench/desktop.yaml`.
+
+## Parsed content
+
+### Category
+
+- Workbench
+
+### Version
+
+- 1
+
+### Features
+
+- **id**: FEAT-WORKBENCH-007
+  - **title**: Shared browser and desktop Workbench
+  - **summary**: Keep the browser and desktop Workbench aligned through a Rust-native UI and server architecture that share one request, goal, assignment, and evidence model.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-WORKBENCH-006
+    - REQ-WORKBENCH-007
+  - **implementations**:
+    - **markdown**:
+      - **file**: docs/guide/workbench.md
+        - **symbols**:
+          - browser and desktop
+          - Rust-native UI
+          - server architecture
+
+## Source YAML
+
+```yaml
+category: Workbench
+version: 1
+
+features:
+  - id: FEAT-WORKBENCH-007
+    title: Shared browser and desktop Workbench
+    summary: Keep the browser and desktop Workbench aligned through a Rust-native UI and server architecture that share one request, goal, assignment, and evidence model.
+    status: implemented
+    linked_requirements:
+      - REQ-WORKBENCH-006
+      - REQ-WORKBENCH-007
+    implementations:
+      markdown:
+        - file: docs/guide/workbench.md
+          symbols:
+            - browser and desktop
+            - Rust-native UI
+            - server architecture
+```

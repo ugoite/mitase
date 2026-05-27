@@ -78,6 +78,12 @@ description: "Generated reference for docs/syu/features/documentation/docs.yaml"
           - repository_constraints
           - linked_ids
           - Expand syu validate --fix
+      - **file**: docs/guide/workbench.md
+        - **symbols**:
+          - Request
+          - Goal Plan
+          - assignment
+          - evidence
 - **id**: FEAT-DOCS-002
   - **title**: Docusaurus documentation site
   - **summary**: Render and publish the checked-in docs tree as a documentation site without maintaining a separate content source.
@@ -180,6 +186,12 @@ features:
             - repository_constraints
             - linked_ids
             - Expand syu validate --fix
+        - file: docs/guide/workbench.md
+          symbols:
+            - Request
+            - Goal Plan
+            - assignment
+            - evidence
 
   - id: FEAT-DOCS-002
     title: Docusaurus documentation site

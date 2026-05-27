@@ -9,6 +9,10 @@ start with [request artifact format](./request-artifact-format.md). If you need
 a temporary delivery artifact instead of a persistent spec item, use [goal plan
 format](./goal-plan-format.md).
 
+If the request is really about the Workbench product flow, read
+[workbench](./workbench.md) first so the request-to-completion sequence stays
+visible while you plan the spec changes.
+
 The goal plan format is temporary by design and should not become a fifth
 persistent spec layer.
 
