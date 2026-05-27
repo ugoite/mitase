@@ -47,6 +47,20 @@ description: "Generated reference for docs/syu/features/features.yaml"
   - **file**: cli/report.yaml
 - **kind**: vscode
   - **file**: editor/vscode.yaml
+- **kind**: workbench
+  - **file**: workbench/shell.yaml
+- **kind**: workbench
+  - **file**: workbench/actions.yaml
+- **kind**: workbench
+  - **file**: workbench/goal-splitter.yaml
+- **kind**: workbench
+  - **file**: workbench/branch-scope.yaml
+- **kind**: workbench
+  - **file**: workbench/evidence.yaml
+- **kind**: workbench
+  - **file**: workbench/assignment.yaml
+- **kind**: workbench
+  - **file**: workbench/desktop.yaml
 - **kind**: docs
   - **file**: documentation/docs.yaml
 - **kind**: skills
@@ -99,6 +113,20 @@ files:
     file: cli/report.yaml
   - kind: vscode
     file: editor/vscode.yaml
+  - kind: workbench
+    file: workbench/shell.yaml
+  - kind: workbench
+    file: workbench/actions.yaml
+  - kind: workbench
+    file: workbench/goal-splitter.yaml
+  - kind: workbench
+    file: workbench/branch-scope.yaml
+  - kind: workbench
+    file: workbench/evidence.yaml
+  - kind: workbench
+    file: workbench/assignment.yaml
+  - kind: workbench
+    file: workbench/desktop.yaml
   - kind: docs
     file: documentation/docs.yaml
   - kind: skills

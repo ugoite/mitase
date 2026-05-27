@@ -63,6 +63,12 @@ features:
             - repository_constraints
             - linked_ids
             - Expand syu validate --fix
+        - file: docs/guide/workbench.md
+          symbols:
+            - Request
+            - Goal Plan
+            - assignment
+            - evidence
 
   - id: FEAT-DOCS-002
     title: Docusaurus documentation site
