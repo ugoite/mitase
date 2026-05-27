@@ -155,6 +155,13 @@ description: "Generated reference for docs/syu/policies/policies.yaml"
     - REQ-CORE-016
     - REQ-CORE-022
     - REQ-CORE-025
+    - REQ-WORKBENCH-001
+    - REQ-WORKBENCH-002
+    - REQ-WORKBENCH-003
+    - REQ-WORKBENCH-004
+    - REQ-WORKBENCH-005
+    - REQ-WORKBENCH-006
+    - REQ-WORKBENCH-007
 - **id**: POL-006
   - **title**: The self-hosted repository should demonstrate polyglot, contributor-friendly use
   - **summary**: `syu` should prove that its model works in the kind of mixed repositories it claims to support.
@@ -350,6 +357,13 @@ policies:
       - REQ-CORE-016
       - REQ-CORE-022
       - REQ-CORE-025
+      - REQ-WORKBENCH-001
+      - REQ-WORKBENCH-002
+      - REQ-WORKBENCH-003
+      - REQ-WORKBENCH-004
+      - REQ-WORKBENCH-005
+      - REQ-WORKBENCH-006
+      - REQ-WORKBENCH-007
 
   - id: POL-006
     title: The self-hosted repository should demonstrate polyglot, contributor-friendly use
