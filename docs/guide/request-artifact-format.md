@@ -6,6 +6,10 @@ Use this guide when you want a small, repeatable request record before you edit
 the spec tree. If the change is already a concrete spec diff, raw spec edits are
 usually enough.
 
+Workbench requests can use the same artifact before they move into
+classification, scope, scaffold preview, Goal Plan generation, assignment, and
+evidence collection.
+
 ## When to use it
 
 - A request needs to be handed around before the spec changes.
