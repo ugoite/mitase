@@ -6,6 +6,10 @@ Use this guide when a request has already been scoped and you need a temporary
 delivery artifact that stays outside the persistent spec tree. Goal Plans are
 planning artifacts, not another long-lived spec layer.
 
+In the Workbench flow, Goal Plans sit between scaffold preview and assignment
+so the user can keep the delivery plan temporary while still making the work
+goal-centered and reviewable.
+
 The normal path is request-driven: classify the request, scope it against the
 current graph, scaffold the planned edits, and then turn that result into a
 Goal Plan. If implementation already happened, `syu task infer` can rebuild a

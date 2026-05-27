@@ -8,6 +8,8 @@ fastest reminder of the core commands without hopping between multiple guides.
 If you still need the first-run story, use [getting started](./getting-started.md).
 If a pull request already exists, pair this page with the
 [reviewer workflow](./reviewer-workflow.md).
+If the request is about the Workbench product flow, pair this page with
+[workbench](./workbench.md).
 
 ## Core command chooser
 
@@ -94,6 +96,8 @@ syu report .
   checked-in starter and example matrix.
 - Use [goal plan format](./goal-plan-format.md) when you need a temporary
   delivery artifact instead of a persistent spec item.
+- Use [workbench](./workbench.md) when you want the request, goal, assignment,
+  and evidence story spelled out before you touch the underlying commands.
 - For request-driven planning, the shortest useful sequence is
   `classify -> scope -> scaffold -> plan -> implementation -> check`. Use `infer`
   only when the implementation already exists and you need to reconstruct the
