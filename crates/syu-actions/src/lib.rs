@@ -267,12 +267,164 @@ pub fn search_items(
 ) -> Result<SearchReport> {
     let workspace = syu::workspace::load_workspace(workspace.as_ref())?;
     let query = query.trim().to_lowercase();
-    let results = collect_items(&workspace, kind)
-        .into_iter()
-        .filter(|item| {
-            item.id.to_lowercase().contains(&query) || item.title.to_lowercase().contains(&query)
-        })
-        .collect();
+    let results = match kind {
+        Some(LookupKind::Philosophy) => workspace
+            .philosophies
+            .iter()
+            .filter(|item| {
+                matches_search(
+                    &query,
+                    &[
+                        item.id.as_str(),
+                        item.title.as_str(),
+                        item.product_design_principle.as_str(),
+                        item.coding_guideline.as_str(),
+                    ],
+                )
+            })
+            .map(|item| ItemSummary {
+                kind: "philosophy",
+                id: item.id.clone(),
+                title: item.title.clone(),
+            })
+            .collect(),
+        Some(LookupKind::Policy) => workspace
+            .policies
+            .iter()
+            .filter(|item| {
+                matches_search(
+                    &query,
+                    &[
+                        item.id.as_str(),
+                        item.title.as_str(),
+                        item.summary.as_str(),
+                        item.description.as_str(),
+                    ],
+                )
+            })
+            .map(|item| ItemSummary {
+                kind: "policy",
+                id: item.id.clone(),
+                title: item.title.clone(),
+            })
+            .collect(),
+        Some(LookupKind::Requirement) => workspace
+            .requirements
+            .iter()
+            .filter(|item| {
+                matches_search(
+                    &query,
+                    &[
+                        item.id.as_str(),
+                        item.title.as_str(),
+                        item.description.as_str(),
+                    ],
+                )
+            })
+            .map(|item| ItemSummary {
+                kind: "requirement",
+                id: item.id.clone(),
+                title: item.title.clone(),
+            })
+            .collect(),
+        Some(LookupKind::Feature) => workspace
+            .features
+            .iter()
+            .filter(|item| {
+                matches_search(
+                    &query,
+                    &[item.id.as_str(), item.title.as_str(), item.summary.as_str()],
+                )
+            })
+            .map(|item| ItemSummary {
+                kind: "feature",
+                id: item.id.clone(),
+                title: item.title.clone(),
+            })
+            .collect(),
+        None => {
+            let mut results = Vec::new();
+            results.extend(
+                workspace
+                    .philosophies
+                    .iter()
+                    .filter(|item| {
+                        matches_search(
+                            &query,
+                            &[
+                                item.id.as_str(),
+                                item.title.as_str(),
+                                item.product_design_principle.as_str(),
+                                item.coding_guideline.as_str(),
+                            ],
+                        )
+                    })
+                    .map(|item| ItemSummary {
+                        kind: "philosophy",
+                        id: item.id.clone(),
+                        title: item.title.clone(),
+                    }),
+            );
+            results.extend(
+                workspace
+                    .policies
+                    .iter()
+                    .filter(|item| {
+                        matches_search(
+                            &query,
+                            &[
+                                item.id.as_str(),
+                                item.title.as_str(),
+                                item.summary.as_str(),
+                                item.description.as_str(),
+                            ],
+                        )
+                    })
+                    .map(|item| ItemSummary {
+                        kind: "policy",
+                        id: item.id.clone(),
+                        title: item.title.clone(),
+                    }),
+            );
+            results.extend(
+                workspace
+                    .features
+                    .iter()
+                    .filter(|item| {
+                        matches_search(
+                            &query,
+                            &[item.id.as_str(), item.title.as_str(), item.summary.as_str()],
+                        )
+                    })
+                    .map(|item| ItemSummary {
+                        kind: "feature",
+                        id: item.id.clone(),
+                        title: item.title.clone(),
+                    }),
+            );
+            results.extend(
+                workspace
+                    .requirements
+                    .iter()
+                    .filter(|item| {
+                        matches_search(
+                            &query,
+                            &[
+                                item.id.as_str(),
+                                item.title.as_str(),
+                                item.description.as_str(),
+                            ],
+                        )
+                    })
+                    .map(|item| ItemSummary {
+                        kind: "requirement",
+                        id: item.id.clone(),
+                        title: item.title.clone(),
+                    }),
+            );
+            results
+        }
+    };
 
     Ok(SearchReport {
         workspace_root: workspace.root.display().to_string(),
@@ -394,6 +546,13 @@ fn find_any_item(workspace: &syu::workspace::Workspace, id: &str) -> Option<Item
             id: item.id.clone(),
             title: item.title.clone(),
         })
+}
+
+fn matches_search(query: &str, fields: &[&str]) -> bool {
+    fields
+        .iter()
+        .filter(|value| !value.is_empty())
+        .any(|value| value.to_lowercase().contains(query))
 }
 
 fn find_item(
