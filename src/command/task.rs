@@ -3853,15 +3853,18 @@ mod tests {
         TaskPlanFormat, TaskScaffoldArgs, TaskScopeArgs, TaskTestSelectArgs,
     };
     use crate::model::TraceReference;
-
-    use super::{
+    use syu_task_model::{
         ClassificationOutcome, GoalPlanArtifact, GoalPlanCompletion, GoalPlanConfidence,
         GoalPlanCoverage, GoalPlanCoverageMode, GoalPlanGoal, GoalPlanImplementationPlan,
         GoalPlanPersistentItem, GoalPlanPersistentItemDetails, GoalPlanPersistentItems,
         GoalPlanScope, GoalPlanScopeInclude, GoalPlanScopeIncludeDetails, GoalPlanSelectionMode,
-        GoalPlanSource, GoalPlanSourceEvidence, GoalPlanSpecMapping, GoalPlanSpecUpdates,
-        GoalPlanTestPlan, RequirementAction, SearchResult, WorkspaceLookup, build_goal_plan,
-        build_scaffold_plan, check_goal_plan, classify_request, collect_feature_candidates,
+        GoalPlanSource, GoalPlanSourceEvidence, GoalPlanSourceMode, GoalPlanSpecMapping,
+        GoalPlanSpecUpdates, GoalPlanTestPlan,
+    };
+
+    use super::{
+        RequirementAction, SearchResult, WorkspaceLookup, build_goal_plan, build_scaffold_plan,
+        check_goal_plan, classify_request, collect_feature_candidates,
         collect_linked_requirement_tests, load_goal_plan_artifact, load_request_artifact,
         render_goal_plan_output, resolve_task_plan_output_path, run_task_command, scope_request,
     };
@@ -4130,7 +4133,7 @@ mod tests {
                 classification: Some("request_driven".to_string()),
                 warnings: vec!["inferred from request text".to_string()],
                 source: GoalPlanSource {
-                    mode: super::GoalPlanSourceMode::DiffInferred,
+                    mode: GoalPlanSourceMode::DiffInferred,
                     request_artifact: Some("request.yaml".to_string()),
                     classification: Some("request_driven".to_string()),
                     range: Some("origin/main...HEAD".to_string()),
