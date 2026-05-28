@@ -24,6 +24,29 @@ description: "Generated reference for docs/syu/features/workbench/actions.yaml"
   - **linked_requirements**:
     - REQ-WORKBENCH-002
   - **implementations**:
+    - **rust**:
+      - **file**: crates/syu-actions/src/lib.rs
+        - **symbols**:
+          - classify_request
+          - scope_request
+          - scaffold_request
+          - generate_goal_plan
+          - infer_goal_plan_from_diff
+          - select_goal_tests
+          - check_goal_plan
+          - validate_workspace
+          - browse_workspace
+          - list_items
+          - show_item
+          - search_items
+          - audit_workspace
+          - trace_selector
+          - trace_range
+          - relate_selector
+          - relate_range
+          - explain_selector
+          - history_for_item
+          - doctor_workspace
     - **markdown**:
       - **file**: docs/guide/workbench.md
         - **symbols**:
@@ -46,6 +69,29 @@ features:
     linked_requirements:
       - REQ-WORKBENCH-002
     implementations:
+      rust:
+        - file: crates/syu-actions/src/lib.rs
+          symbols:
+            - classify_request
+            - scope_request
+            - scaffold_request
+            - generate_goal_plan
+            - infer_goal_plan_from_diff
+            - select_goal_tests
+            - check_goal_plan
+            - validate_workspace
+            - browse_workspace
+            - list_items
+            - show_item
+            - search_items
+            - audit_workspace
+            - trace_selector
+            - trace_range
+            - relate_selector
+            - relate_range
+            - explain_selector
+            - history_for_item
+            - doctor_workspace
       markdown:
         - file: docs/guide/workbench.md
           symbols:
