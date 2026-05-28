@@ -17,17 +17,12 @@ use anyhow::{Context, Result, bail};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use regex::Regex;
 use serde::Serialize;
-#[allow(unused_imports)]
 use syu_task_model::{
-    ClassificationOutcome, GoalPlanArtifact, GoalPlanCheckReport, GoalPlanCompletion,
-    GoalPlanConfidence, GoalPlanCoverage, GoalPlanCoverageMode, GoalPlanGoal,
-    GoalPlanImplementationPlan, GoalPlanPersistentItem, GoalPlanPersistentItemDetails,
-    GoalPlanPersistentItems, GoalPlanScope, GoalPlanScopeInclude, GoalPlanScopeIncludeDetails,
-    GoalPlanSelectionMode, GoalPlanSource, GoalPlanSourceEvidence, GoalPlanSourceMode,
-    GoalPlanSpecMapping, GoalPlanSpecUpdates, GoalPlanTestPlan, RequestArtifact,
-    RequestArtifactContext, RequestClassification as RequirementAction, ScaffoldAction,
-    ScaffoldPlan, ScaffoldUpdate, ScaffoldUpdateKind, ScopeFeatureCandidate, ScopeOutcome,
-    ScopeSignals, SearchResult as TaskSearchResult, TaskTestSelectionCommand,
+    ClassificationOutcome, GoalPlanArtifact, GoalPlanCheckReport, GoalPlanConfidence,
+    GoalPlanScope, GoalPlanScopeInclude, GoalPlanSelectionMode, GoalPlanSourceMode,
+    RequestArtifact, RequestArtifactContext, RequestClassification as RequirementAction,
+    ScaffoldAction, ScaffoldPlan, ScaffoldUpdate, ScaffoldUpdateKind, ScopeFeatureCandidate,
+    ScopeOutcome, ScopeSignals, SearchResult as TaskSearchResult, TaskTestSelectionCommand,
     TaskTestSelectionEscalation, TaskTestSelectionPlan,
 };
 
