@@ -17,6 +17,7 @@ use anyhow::{Context, Result, bail};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use regex::Regex;
 use serde::Serialize;
+#[allow(unused_imports)]
 use syu_task_model::{
     ClassificationOutcome, GoalPlanArtifact, GoalPlanCheckReport, GoalPlanCompletion,
     GoalPlanConfidence, GoalPlanCoverage, GoalPlanCoverageMode, GoalPlanGoal,
