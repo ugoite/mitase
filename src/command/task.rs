@@ -16,7 +16,15 @@ use std::{
 use anyhow::{Context, Result, bail};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use regex::Regex;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
+use syu_task_model::{
+    ClassificationOutcome, GoalPlanArtifact, GoalPlanCheckReport, GoalPlanConfidence,
+    GoalPlanScope, GoalPlanScopeInclude, GoalPlanSelectionMode, GoalPlanSourceMode,
+    RequestArtifact, RequestArtifactContext, RequestClassification as RequirementAction,
+    ScaffoldAction, ScaffoldPlan, ScaffoldUpdate, ScaffoldUpdateKind, ScopeFeatureCandidate,
+    ScopeOutcome, ScopeSignals, SearchResult as TaskSearchResult, TaskTestSelectionCommand,
+    TaskTestSelectionEscalation, TaskTestSelectionPlan,
+};
 
 use crate::{
     cli::{
@@ -26,7 +34,7 @@ use crate::{
     },
     coverage::normalize_relative_path,
     language::adapter_for_language,
-    model::{Issue, Severity},
+    model::Issue,
     workspace::load_workspace,
 };
 
@@ -37,320 +45,14 @@ use super::lookup::{SearchResult, WorkspaceEntity, WorkspaceLookup};
 const REQUEST_ARTIFACT_VERSION: u32 = 1;
 const GOAL_PLAN_VERSION: u32 = 1;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum RequirementAction {
-    Create,
-    Change,
-    Delete,
-}
-
-impl RequirementAction {
-    const fn label(self) -> &'static str {
-        match self {
-            Self::Create => "requirement_create",
-            Self::Change => "requirement_change",
-            Self::Delete => "requirement_delete",
-        }
-    }
-}
-
-#[derive(Debug, Deserialize, Clone)]
-struct RequestArtifact {
-    version: u32,
-    request: String,
-    #[serde(default)]
-    context: RequestArtifactContext,
-}
-#[allow(dead_code)]
-#[derive(Debug, Deserialize, Clone)]
-#[serde(deny_unknown_fields)]
-struct GoalPlanArtifact {
-    version: u32,
-    kind: String,
-    #[serde(default)]
-    request_path: Option<String>,
-    #[serde(default)]
-    request: Option<String>,
-    #[serde(default)]
-    classification: Option<String>,
-    #[serde(default)]
-    source: GoalPlanSource,
-    goal: GoalPlanGoal,
-    #[serde(default)]
-    spec_mapping: GoalPlanSpecMapping,
-    implementation_plan: GoalPlanImplementationPlan,
-    test_plan: GoalPlanTestPlan,
-    coverage: GoalPlanCoverage,
-    completion: GoalPlanCompletion,
-    #[serde(default)]
-    warnings: Vec<String>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Deserialize, Clone, Default)]
-#[serde(deny_unknown_fields)]
-struct GoalPlanSourceEvidence {
-    #[serde(default)]
-    changed_files: Vec<String>,
-    #[serde(default)]
-    traced_requirements: Vec<String>,
-    #[serde(default)]
-    traced_features: Vec<String>,
-    #[serde(default)]
-    traced_policies: Vec<String>,
-    #[serde(default)]
-    traced_philosophies: Vec<String>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Deserialize, Clone)]
-#[serde(deny_unknown_fields)]
-struct GoalPlanSource {
-    mode: GoalPlanSourceMode,
-    #[serde(default)]
-    request_artifact: Option<String>,
-    #[serde(default)]
-    classification: Option<String>,
-    #[serde(default)]
-    range: Option<String>,
-    #[serde(default)]
-    confidence: Option<GoalPlanConfidence>,
-    #[serde(default)]
-    evidence: Option<GoalPlanSourceEvidence>,
-}
-
-impl Default for GoalPlanSource {
-    fn default() -> Self {
-        Self {
-            mode: GoalPlanSourceMode::RequestDriven,
-            request_artifact: None,
-            classification: None,
-            range: None,
-            confidence: None,
-            evidence: None,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
-enum GoalPlanSourceMode {
-    #[default]
-    #[serde(rename = "request_driven")]
-    RequestDriven,
-    #[serde(rename = "diff_inferred")]
-    DiffInferred,
-}
-
-#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-enum GoalPlanConfidence {
-    High,
-    Medium,
-    Low,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Deserialize, Clone)]
-#[serde(deny_unknown_fields)]
-struct GoalPlanGoal {
-    id: String,
-    title: String,
-    statement: String,
-    #[serde(default)]
-    non_goals: Vec<String>,
-    #[serde(default)]
-    inferred: bool,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Deserialize, Default, Clone)]
-#[serde(deny_unknown_fields)]
-struct GoalPlanSpecMapping {
-    #[serde(default)]
-    persistent_items: GoalPlanPersistentItems,
-    #[serde(default)]
-    spec_updates: GoalPlanSpecUpdates,
-    #[serde(default)]
-    spec_updates_required: bool,
-    #[serde(default)]
-    spec_update_reasons: Vec<String>,
-}
-
-#[derive(Debug, Deserialize, Default, Clone)]
-#[serde(deny_unknown_fields)]
-struct GoalPlanPersistentItems {
-    #[serde(default)]
-    philosophies: Vec<GoalPlanPersistentItem>,
-    #[serde(default)]
-    policies: Vec<GoalPlanPersistentItem>,
-    #[serde(default)]
-    requirements: Vec<GoalPlanPersistentItem>,
-    #[serde(default)]
-    features: Vec<GoalPlanPersistentItem>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Deserialize, Clone)]
-#[serde(untagged)]
-enum GoalPlanPersistentItem {
-    Id(String),
-    Item(GoalPlanPersistentItemDetails),
-}
-
-impl GoalPlanPersistentItem {
-    fn id(&self) -> &str {
-        match self {
-            GoalPlanPersistentItem::Id(id) => id,
-            GoalPlanPersistentItem::Item(item) => &item.id,
-        }
-    }
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Deserialize, Clone)]
-#[serde(deny_unknown_fields)]
-struct GoalPlanPersistentItemDetails {
-    id: String,
-    #[serde(default)]
-    title: Option<String>,
-    #[serde(default)]
-    document_path: Option<String>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Deserialize, Clone)]
-#[serde(untagged)]
-enum GoalPlanScopeInclude {
-    Pattern(String),
-    Entry(GoalPlanScopeIncludeDetails),
-}
-
-impl GoalPlanScopeInclude {
-    fn pattern(&self) -> &str {
-        match self {
-            GoalPlanScopeInclude::Pattern(pattern) => pattern,
-            GoalPlanScopeInclude::Entry(entry) => &entry.file,
-        }
-    }
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Deserialize, Clone)]
-#[serde(deny_unknown_fields)]
-struct GoalPlanScopeIncludeDetails {
-    file: String,
-    #[serde(default)]
-    symbols: Vec<String>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Deserialize, Default, Clone)]
-#[serde(deny_unknown_fields)]
-struct GoalPlanSpecUpdates {
-    #[serde(default)]
-    required: bool,
-    #[serde(default)]
-    expected_updates: Vec<String>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Deserialize, Clone)]
-#[serde(deny_unknown_fields)]
-struct GoalPlanImplementationPlan {
-    #[serde(default)]
-    confidence: Option<GoalPlanConfidence>,
-    scope: GoalPlanScope,
-    #[serde(default)]
-    steps: Vec<String>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Deserialize, Default, Clone)]
-#[serde(deny_unknown_fields)]
-struct GoalPlanScope {
-    #[serde(default)]
-    include: Vec<GoalPlanScopeInclude>,
-    #[serde(default)]
-    exclude: Vec<String>,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Deserialize, Clone)]
-#[serde(deny_unknown_fields)]
-struct GoalPlanTestPlan {
-    selection_mode: GoalPlanSelectionMode,
-    #[serde(default)]
-    confidence: Option<GoalPlanConfidence>,
-    #[serde(default)]
-    required_tests: BTreeMap<String, Vec<crate::model::TraceReference>>,
-    #[serde(default)]
-    suggested_tests: BTreeMap<String, Vec<crate::model::TraceReference>>,
-}
-
-#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
-enum GoalPlanSelectionMode {
-    #[default]
-    #[serde(rename = "minimal")]
-    Minimal,
-    #[serde(rename = "affected")]
-    Affected,
-    #[serde(rename = "full")]
-    Full,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Deserialize, Clone)]
-#[serde(deny_unknown_fields)]
-struct GoalPlanCoverage {
-    mode: GoalPlanCoverageMode,
-    threshold: u32,
-    #[serde(default)]
-    include: Vec<String>,
-    #[serde(default)]
-    exclude: Vec<String>,
-}
-
-#[derive(Debug, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
-#[serde(rename_all = "snake_case")]
-enum GoalPlanCoverageMode {
-    #[default]
-    #[serde(rename = "changed_lines")]
-    ChangedLines,
-    #[serde(rename = "affected")]
-    Affected,
-    #[serde(rename = "full")]
-    Full,
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Deserialize, Default, Clone)]
-#[serde(deny_unknown_fields)]
-struct GoalPlanCompletion {
-    #[serde(default)]
-    must_pass: Vec<String>,
-}
-
-#[derive(Debug, Deserialize, Default, Clone)]
-struct RequestArtifactContext {
-    #[serde(default)]
-    affected_area: Option<String>,
-    #[serde(default)]
-    repository_constraints: Vec<String>,
-    #[serde(default)]
-    linked_ids: Vec<String>,
-}
-
 #[derive(Debug, Serialize)]
 struct JsonTaskClassifyOutput {
     request_path: String,
     request: String,
     classification: String,
     reasons: Vec<String>,
-    explicit_items: Vec<SearchResult>,
-    related_items: Vec<SearchResult>,
+    explicit_items: Vec<TaskSearchResult>,
+    related_items: Vec<TaskSearchResult>,
     context: JsonRequestArtifactContext,
 }
 
@@ -361,10 +63,10 @@ struct JsonTaskScopeOutput {
     classification: String,
     reasons: Vec<String>,
     signals: JsonScopeSignals,
-    requirements: Vec<SearchResult>,
+    requirements: Vec<TaskSearchResult>,
     features: Vec<ScopeFeatureCandidate>,
-    policies: Vec<SearchResult>,
-    philosophies: Vec<SearchResult>,
+    policies: Vec<TaskSearchResult>,
+    philosophies: Vec<TaskSearchResult>,
     context: JsonRequestArtifactContext,
 }
 
@@ -550,79 +252,6 @@ struct JsonScopeSignals {
     philosophy_discussion: bool,
     planned_feature_updates: bool,
 }
-
-#[derive(Debug)]
-struct GoalPlanCheckReport {
-    plan_path: String,
-    range: String,
-    changed_files: Vec<String>,
-    issues: Vec<Issue>,
-}
-
-impl GoalPlanCheckReport {
-    fn passed(&self) -> bool {
-        self.issues
-            .iter()
-            .all(|issue| issue.severity != Severity::Error)
-    }
-
-    fn warning_count(&self) -> usize {
-        self.issues
-            .iter()
-            .filter(|issue| issue.severity == Severity::Warning)
-            .count()
-    }
-
-    fn error_count(&self) -> usize {
-        self.issues
-            .iter()
-            .filter(|issue| issue.severity == Severity::Error)
-            .count()
-    }
-}
-
-#[derive(Debug)]
-struct ScopeOutcome {
-    classification: ClassificationOutcome,
-    signals: ScopeSignals,
-    requirements: Vec<SearchResult>,
-    features: Vec<ScopeFeatureCandidate>,
-    policies: Vec<SearchResult>,
-    philosophies: Vec<SearchResult>,
-    notes: Vec<String>,
-}
-
-#[derive(Debug)]
-struct ClassificationOutcome {
-    classification: RequirementAction,
-    reasons: Vec<String>,
-    explicit_items: Vec<SearchResult>,
-    related_items: Vec<SearchResult>,
-    request: String,
-    context: RequestArtifactContext,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct ScopeSignals {
-    policy_discussion: bool,
-    philosophy_discussion: bool,
-    planned_feature_updates: bool,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct ScopeFeatureCandidate {
-    id: String,
-    title: String,
-    status: String,
-    linked_requirements: Vec<String>,
-    planned_state_update: bool,
-}
-
-#[derive(Debug)]
-struct ScaffoldPlan {
-    updates: Vec<ScaffoldUpdate>,
-}
-
 #[derive(Debug)]
 struct DiffInferenceOutcome {
     scope: ScopeOutcome,
@@ -632,77 +261,11 @@ struct DiffInferenceOutcome {
     warnings: Vec<String>,
 }
 
-#[derive(Debug)]
-struct TaskTestSelectionPlan {
-    goal_id: String,
-    goal_title: String,
-    selection_mode: String,
-    commands: Vec<TaskTestSelectionCommand>,
-    escalation: TaskTestSelectionEscalation,
-    warnings: Vec<String>,
-}
-
-#[derive(Debug)]
-struct TaskTestSelectionCommand {
-    language: String,
-    command: String,
-    reason: String,
-}
-
-#[derive(Debug)]
-struct TaskTestSelectionEscalation {
-    level: String,
-    reason: String,
-}
-
 #[derive(Debug, Default)]
 struct TaskTestSelectionEntry {
     symbols: BTreeSet<String>,
     reasons: BTreeSet<String>,
     whole_file: bool,
-}
-
-#[derive(Debug)]
-struct ScaffoldUpdate {
-    kind: ScaffoldUpdateKind,
-    action: ScaffoldAction,
-    path: String,
-    id: Option<String>,
-    contents: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ScaffoldUpdateKind {
-    Requirement,
-    Feature,
-    FeatureRegistry,
-}
-
-impl ScaffoldUpdateKind {
-    const fn label(self) -> &'static str {
-        match self {
-            Self::Requirement => "requirement",
-            Self::Feature => "feature",
-            Self::FeatureRegistry => "feature registry",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ScaffoldAction {
-    Create,
-    Update,
-    Append,
-}
-
-impl ScaffoldAction {
-    const fn label(self) -> &'static str {
-        match self {
-            Self::Create => "create",
-            Self::Update => "update",
-            Self::Append => "append",
-        }
-    }
 }
 
 pub fn run_task_command(args: &TaskArgs) -> Result<i32> {
@@ -1848,6 +1411,8 @@ fn infer_diff_plan(
     let direct_items = direct_items.into_values().collect::<Vec<_>>();
     let related_items = collect_related_inference_items(lookup, &direct_items);
     let related_and_direct = merge_inference_items(&direct_items, &related_items);
+    let direct_task_items = to_task_search_results(&direct_items);
+    let related_task_items = to_task_search_results(&related_items);
     let classification = ClassificationOutcome {
         classification: infer_requirement_action(&direct_items, &related_items),
         reasons: build_inference_reasons(
@@ -1858,16 +1423,30 @@ fn infer_diff_plan(
             &direct_items,
             &related_items,
         ),
-        explicit_items: direct_items.clone(),
-        related_items: related_items.clone(),
+        explicit_items: direct_task_items,
+        related_items: related_task_items,
         request: format!("git diff {range}"),
         context: RequestArtifactContext::default(),
     };
 
-    let requirements =
-        collect_scoped_results(&direct_items, &related_and_direct, "requirement", 50);
-    let policies = collect_scoped_results(&direct_items, &related_and_direct, "policy", 50);
-    let philosophies = collect_scoped_results(&direct_items, &related_and_direct, "philosophy", 50);
+    let requirements = to_task_search_results(&collect_scoped_results(
+        &direct_items,
+        &related_and_direct,
+        "requirement",
+        50,
+    ));
+    let policies = to_task_search_results(&collect_scoped_results(
+        &direct_items,
+        &related_and_direct,
+        "policy",
+        50,
+    ));
+    let philosophies = to_task_search_results(&collect_scoped_results(
+        &direct_items,
+        &related_and_direct,
+        "philosophy",
+        50,
+    ));
     let features = collect_feature_candidates(
         lookup,
         &direct_items,
@@ -2461,8 +2040,11 @@ fn is_shared_utility_path(path: &Path) -> bool {
         || rendered.contains("generated")
 }
 
-fn collect_ids_by_kind(items: &[SearchResult]) -> Vec<String> {
-    let mut ids = items.iter().map(|item| item.id.clone()).collect::<Vec<_>>();
+fn collect_ids_by_kind<T: SearchResultView>(items: &[T]) -> Vec<String> {
+    let mut ids = items
+        .iter()
+        .map(|item| item.id().to_string())
+        .collect::<Vec<_>>();
     ids.sort();
     ids.dedup();
     ids
@@ -2533,7 +2115,7 @@ fn collect_task_plan_persistent_items(
             title: result.title.clone(),
             document_path: lookup.document_path_for_id(&result.id)?,
         };
-        match result.kind {
+        match result.kind.as_str() {
             "philosophy" => items.philosophies.push(item),
             "policy" => items.policies.push(item),
             "requirement" => items.requirements.push(item),
@@ -2856,6 +2438,8 @@ fn classify_request(
     let mut related_items = collect_related_items(&lookup, &artifact.request);
     merge_related_items(&mut related_items, lookup.search(&analysis_text, None));
     related_items.truncate(5);
+    let explicit_task_items = to_task_search_results(&explicit_items);
+    let related_task_items = to_task_search_results(&related_items);
 
     let mut reasons = Vec::new();
     if delete_hits > 0 {
@@ -2927,8 +2511,8 @@ fn classify_request(
     Ok(ClassificationOutcome {
         classification,
         reasons,
-        explicit_items,
-        related_items,
+        explicit_items: explicit_task_items,
+        related_items: related_task_items,
         request: artifact.request.clone(),
         context: artifact.context.clone(),
     })
@@ -2946,9 +2530,24 @@ fn scope_request(
     let explicit_items = collect_explicit_items(&lookup, &explicit_ids);
     let search_results = lookup.search(&analysis_text, None);
 
-    let requirements = collect_scoped_results(&explicit_items, &search_results, "requirement", 5);
-    let policies = collect_scoped_results(&explicit_items, &search_results, "policy", 5);
-    let philosophies = collect_scoped_results(&explicit_items, &search_results, "philosophy", 5);
+    let requirements = to_task_search_results(&collect_scoped_results(
+        &explicit_items,
+        &search_results,
+        "requirement",
+        5,
+    ));
+    let policies = to_task_search_results(&collect_scoped_results(
+        &explicit_items,
+        &search_results,
+        "policy",
+        5,
+    ));
+    let philosophies = to_task_search_results(&collect_scoped_results(
+        &explicit_items,
+        &search_results,
+        "philosophy",
+        5,
+    ));
     let features = collect_feature_candidates(
         &lookup,
         &explicit_items,
@@ -3113,37 +2712,6 @@ fn build_scaffold_plan(
     Ok(ScaffoldPlan { updates })
 }
 
-impl RequestArtifact {
-    fn analysis_text(&self) -> String {
-        let mut text = String::new();
-        text.push_str(&self.request);
-        if let Some(affected_area) = &self.context.affected_area {
-            text.push('\n');
-            text.push_str(affected_area);
-        }
-        for constraint in &self.context.repository_constraints {
-            text.push('\n');
-            text.push_str(constraint);
-        }
-        for id in &self.context.linked_ids {
-            text.push('\n');
-            text.push_str(id);
-        }
-        text
-    }
-
-    fn explicit_ids(&self) -> Vec<String> {
-        let mut ids = self.context.linked_ids.clone();
-        ids.extend(extract_spec_ids(&self.request));
-        if let Some(affected_area) = &self.context.affected_area {
-            ids.extend(extract_spec_ids(affected_area));
-        }
-        ids.sort();
-        ids.dedup();
-        ids
-    }
-}
-
 fn collect_explicit_items(lookup: &WorkspaceLookup<'_>, ids: &[String]) -> Vec<SearchResult> {
     let mut items = BTreeMap::<String, SearchResult>::new();
     for id in ids {
@@ -3245,6 +2813,18 @@ fn item_to_search_result(item: WorkspaceEntity<'_>) -> SearchResult {
             title: item.title.clone(),
         },
     }
+}
+
+fn to_task_search_result(item: &SearchResult) -> TaskSearchResult {
+    TaskSearchResult {
+        id: item.id.clone(),
+        kind: item.kind.to_string(),
+        title: item.title.clone(),
+    }
+}
+
+fn to_task_search_results(items: &[SearchResult]) -> Vec<TaskSearchResult> {
+    items.iter().map(to_task_search_result).collect()
 }
 
 fn print_classify_text_output(request_path: &Path, outcome: &ClassificationOutcome) {
@@ -3822,7 +3402,41 @@ fn is_production_path(path: &Path) -> bool {
         || matches!(rendered.as_str(), "build.rs" | "Cargo.toml" | "Cargo.lock")
 }
 
-fn print_items(heading: &str, items: &[SearchResult]) {
+trait SearchResultView {
+    fn id(&self) -> &str;
+    fn kind(&self) -> &str;
+    fn title(&self) -> &str;
+}
+
+impl SearchResultView for SearchResult {
+    fn id(&self) -> &str {
+        &self.id
+    }
+
+    fn kind(&self) -> &str {
+        self.kind
+    }
+
+    fn title(&self) -> &str {
+        self.title.as_str()
+    }
+}
+
+impl SearchResultView for TaskSearchResult {
+    fn id(&self) -> &str {
+        &self.id
+    }
+
+    fn kind(&self) -> &str {
+        self.kind.as_str()
+    }
+
+    fn title(&self) -> &str {
+        self.title.as_str()
+    }
+}
+
+fn print_items<T: SearchResultView>(heading: &str, items: &[T]) {
     println!("{heading}:");
     if items.is_empty() {
         println!("- none");
@@ -3830,7 +3444,7 @@ fn print_items(heading: &str, items: &[SearchResult]) {
     }
 
     for item in items {
-        println!("- {}\t{}\t{}", item.id, item.kind, item.title);
+        println!("- {}\t{}\t{}", item.id(), item.kind(), item.title());
     }
 }
 
@@ -4223,16 +3837,6 @@ fn describe_keyword_hits(text: &str, keywords: &[&str]) -> String {
         .join(", ")
 }
 
-fn extract_spec_ids(text: &str) -> Vec<String> {
-    static SPEC_ID_RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
-    let re = SPEC_ID_RE.get_or_init(|| {
-        Regex::new(r"\b(?:PHIL|POL|REQ|FEAT)-[A-Z0-9][A-Z0-9-]*\b")
-            .expect("spec id regex should compile")
-    });
-
-    re.find_iter(text).map(|m| m.as_str().to_string()).collect()
-}
-
 #[cfg(test)]
 mod tests {
     use std::{
@@ -4249,15 +3853,18 @@ mod tests {
         TaskPlanFormat, TaskScaffoldArgs, TaskScopeArgs, TaskTestSelectArgs,
     };
     use crate::model::TraceReference;
-
-    use super::{
+    use syu_task_model::{
         ClassificationOutcome, GoalPlanArtifact, GoalPlanCompletion, GoalPlanConfidence,
         GoalPlanCoverage, GoalPlanCoverageMode, GoalPlanGoal, GoalPlanImplementationPlan,
         GoalPlanPersistentItem, GoalPlanPersistentItemDetails, GoalPlanPersistentItems,
         GoalPlanScope, GoalPlanScopeInclude, GoalPlanScopeIncludeDetails, GoalPlanSelectionMode,
-        GoalPlanSource, GoalPlanSourceEvidence, GoalPlanSpecMapping, GoalPlanSpecUpdates,
-        GoalPlanTestPlan, RequirementAction, SearchResult, WorkspaceLookup, build_goal_plan,
-        build_scaffold_plan, check_goal_plan, classify_request, collect_feature_candidates,
+        GoalPlanSource, GoalPlanSourceEvidence, GoalPlanSourceMode, GoalPlanSpecMapping,
+        GoalPlanSpecUpdates, GoalPlanTestPlan,
+    };
+
+    use super::{
+        RequirementAction, SearchResult, WorkspaceLookup, build_goal_plan, build_scaffold_plan,
+        check_goal_plan, classify_request, collect_feature_candidates,
         collect_linked_requirement_tests, load_goal_plan_artifact, load_request_artifact,
         render_goal_plan_output, resolve_task_plan_output_path, run_task_command, scope_request,
     };
@@ -4526,7 +4133,7 @@ mod tests {
                 classification: Some("request_driven".to_string()),
                 warnings: vec!["inferred from request text".to_string()],
                 source: GoalPlanSource {
-                    mode: super::GoalPlanSourceMode::DiffInferred,
+                    mode: GoalPlanSourceMode::DiffInferred,
                     request_artifact: Some("request.yaml".to_string()),
                     classification: Some("request_driven".to_string()),
                     range: Some("origin/main...HEAD".to_string()),

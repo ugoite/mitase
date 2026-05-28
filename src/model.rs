@@ -6,6 +6,10 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use crate::rules::ReferencedRule;
 
+pub use syu_domain::{
+    GitRange, Issue, LanguageName, Severity, SpecId, SpecKind, TraceReference, WorkspaceRoot,
+};
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PhilosophyDocument {
@@ -109,20 +113,6 @@ pub struct Feature {
     pub implementations: BTreeMap<String, Vec<TraceReference>>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct TraceReference {
-    pub file: PathBuf,
-    #[serde(default, alias = "tests", alias = "functions")]
-    pub symbols: Vec<String>,
-    #[serde(default, alias = "docs", alias = "docstrings")]
-    pub doc_contains: Vec<String>,
-    #[serde(default)]
-    pub method: Option<String>,
-    #[serde(default)]
-    pub path: Option<String>,
-}
-
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 pub struct OwnershipManifest {
@@ -192,59 +182,6 @@ impl CheckResult {
         self.issues
             .iter()
             .all(|issue| issue.severity != Severity::Error)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Severity {
-    Error,
-    Warning,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct Issue {
-    pub code: String,
-    pub severity: Severity,
-    pub subject: String,
-    pub location: Option<String>,
-    pub message: String,
-    pub suggestion: Option<String>,
-}
-
-impl Issue {
-    pub fn error(
-        code: impl Into<String>,
-        subject: impl Into<String>,
-        location: Option<String>,
-        message: impl Into<String>,
-        suggestion: Option<String>,
-    ) -> Self {
-        Self {
-            code: code.into(),
-            severity: Severity::Error,
-            subject: subject.into(),
-            location,
-            message: message.into(),
-            suggestion,
-        }
-    }
-
-    pub fn warning(
-        code: impl Into<String>,
-        subject: impl Into<String>,
-        location: Option<String>,
-        message: impl Into<String>,
-        suggestion: Option<String>,
-    ) -> Self {
-        Self {
-            code: code.into(),
-            severity: Severity::Warning,
-            subject: subject.into(),
-            location,
-            message: message.into(),
-            suggestion,
-        }
     }
 }
 
