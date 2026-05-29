@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use serde::Serialize;
 use std::{
     collections::BTreeMap,
@@ -266,14 +266,18 @@ pub fn search_items(
     kind: Option<LookupKind>,
 ) -> Result<SearchReport> {
     let workspace = syu::workspace::load_workspace(workspace.as_ref())?;
-    let query = query.trim().to_lowercase();
+    let query = query.trim();
+    if query.is_empty() {
+        bail!("search query must not be empty or whitespace");
+    }
+    let normalized_query = query.to_lowercase();
     let results = match kind {
         Some(LookupKind::Philosophy) => workspace
             .philosophies
             .iter()
             .filter(|item| {
                 matches_search(
-                    &query,
+                    &normalized_query,
                     &[
                         item.id.as_str(),
                         item.title.as_str(),
@@ -293,7 +297,7 @@ pub fn search_items(
             .iter()
             .filter(|item| {
                 matches_search(
-                    &query,
+                    &normalized_query,
                     &[
                         item.id.as_str(),
                         item.title.as_str(),
@@ -313,7 +317,7 @@ pub fn search_items(
             .iter()
             .filter(|item| {
                 matches_search(
-                    &query,
+                    &normalized_query,
                     &[
                         item.id.as_str(),
                         item.title.as_str(),
@@ -332,7 +336,7 @@ pub fn search_items(
             .iter()
             .filter(|item| {
                 matches_search(
-                    &query,
+                    &normalized_query,
                     &[item.id.as_str(), item.title.as_str(), item.summary.as_str()],
                 )
             })
@@ -350,7 +354,7 @@ pub fn search_items(
                     .iter()
                     .filter(|item| {
                         matches_search(
-                            &query,
+                            &normalized_query,
                             &[
                                 item.id.as_str(),
                                 item.title.as_str(),
@@ -371,7 +375,7 @@ pub fn search_items(
                     .iter()
                     .filter(|item| {
                         matches_search(
-                            &query,
+                            &normalized_query,
                             &[
                                 item.id.as_str(),
                                 item.title.as_str(),
@@ -392,7 +396,7 @@ pub fn search_items(
                     .iter()
                     .filter(|item| {
                         matches_search(
-                            &query,
+                            &normalized_query,
                             &[item.id.as_str(), item.title.as_str(), item.summary.as_str()],
                         )
                     })
@@ -408,7 +412,7 @@ pub fn search_items(
                     .iter()
                     .filter(|item| {
                         matches_search(
-                            &query,
+                            &normalized_query,
                             &[
                                 item.id.as_str(),
                                 item.title.as_str(),
@@ -612,5 +616,43 @@ fn find_item(
                     ("status".to_string(), item.status.clone()),
                 ]),
             }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LookupKind, search_items};
+    use std::path::PathBuf;
+
+    fn fixture_path(name: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/workspaces")
+            .join(name)
+    }
+
+    #[test]
+    fn search_items_preserves_trimmed_query_and_matches_case_insensitively() {
+        let report = search_items(fixture_path("passing"), "  Trace  ", None)
+            .expect("search should succeed");
+
+        assert_eq!(report.query, "Trace");
+        assert!(
+            report
+                .results
+                .iter()
+                .any(|item| item.id == "FEAT-TRACE-002" && item.kind == "feature")
+        );
+    }
+
+    #[test]
+    fn search_items_rejects_blank_queries() {
+        let error = search_items(fixture_path("passing"), "   ", Some(LookupKind::Feature))
+            .expect_err("blank query should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("search query must not be empty or whitespace")
+        );
     }
 }
