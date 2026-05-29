@@ -161,6 +161,7 @@ pub struct BranchScopeEvidence {
     pub direct_items: Vec<SearchResult>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub related_items: Vec<SearchResult>,
+    pub has_planned_features: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -199,7 +200,7 @@ impl BranchScopeReport {
             &evidence.unowned_files,
             &evidence.ambiguous_files,
             &evidence.spec_files,
-            !evidence.related_items.is_empty(),
+            evidence.has_planned_features,
         );
 
         let mut affected_items = evidence.spec_items.clone();

@@ -1434,32 +1434,6 @@ fn infer_diff_plan(
                 .map(|item| to_affected_spec_item(item, false)),
         )
         .collect::<Vec<_>>();
-    let branch_scope = BranchScopeReport::from_evidence(BranchScopeEvidence {
-        range: range.to_string(),
-        changed_files: changed_file_reports.clone(),
-        trace_ownership: changed_file_reports.clone(),
-        spec_items,
-        required_tests: Vec::new(),
-        linked_tests: Vec::new(),
-        include_patterns: scope_entries
-            .iter()
-            .map(|entry| entry.file.clone())
-            .collect(),
-        exclude_patterns: vec!["docs/generated/**".to_string(), "target/**".to_string()],
-        allowed_ids: Vec::new(),
-        unowned_files: unowned_files.clone(),
-        ambiguous_files: ambiguous_files.clone(),
-        spec_files: spec_files.clone(),
-        direct_items: direct_items
-            .iter()
-            .map(to_branch_scope_search_result)
-            .collect(),
-        related_items: related_items
-            .iter()
-            .map(to_branch_scope_search_result)
-            .collect(),
-        out_of_scope_changes: Vec::new(),
-    });
     let direct_task_items = to_task_search_results(&direct_items);
     let related_task_items = to_task_search_results(&related_items);
     let classification = ClassificationOutcome {
@@ -1518,6 +1492,37 @@ fn infer_diff_plan(
         philosophies,
         notes: build_inference_notes(&unowned_files, &ambiguous_files, &spec_files),
     };
+
+    let branch_scope = BranchScopeReport::from_evidence(BranchScopeEvidence {
+        range: range.to_string(),
+        changed_files: changed_file_reports.clone(),
+        trace_ownership: changed_file_reports.clone(),
+        spec_items,
+        required_tests: Vec::new(),
+        linked_tests: Vec::new(),
+        include_patterns: scope_entries
+            .iter()
+            .map(|entry| entry.file.clone())
+            .collect(),
+        exclude_patterns: vec!["docs/generated/**".to_string(), "target/**".to_string()],
+        allowed_ids: Vec::new(),
+        unowned_files: unowned_files.clone(),
+        ambiguous_files: ambiguous_files.clone(),
+        spec_files: spec_files.clone(),
+        direct_items: direct_items
+            .iter()
+            .map(to_branch_scope_search_result)
+            .collect(),
+        related_items: related_items
+            .iter()
+            .map(to_branch_scope_search_result)
+            .collect(),
+        has_planned_features: scope
+            .features
+            .iter()
+            .any(|feature| feature.status.eq_ignore_ascii_case("planned")),
+        out_of_scope_changes: Vec::new(),
+    });
 
     let confidence = branch_scope.confidence.label();
     let warnings = branch_scope.warnings.clone();
