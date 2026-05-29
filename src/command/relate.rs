@@ -22,77 +22,85 @@ use super::{
     lookup::{EntitySummary, WorkspaceEntity, WorkspaceLookup},
 };
 
+// FEAT-RELATE-001
 #[derive(Debug, Clone, Serialize)]
-pub(crate) struct JsonRelateOutput {
-    pub(crate) selection: SelectionSummary,
-    pub(crate) direct_matches: DirectMatches,
-    pub(crate) philosophies: Vec<RelatedNode>,
-    pub(crate) policies: Vec<RelatedNode>,
-    pub(crate) requirements: Vec<RelatedNode>,
-    pub(crate) features: Vec<RelatedNode>,
-    pub(crate) traces: Vec<RelatedTrace>,
-    pub(crate) gaps: Vec<Gap>,
+pub struct JsonRelateOutput {
+    pub selection: SelectionSummary,
+    pub direct_matches: DirectMatches,
+    pub philosophies: Vec<RelatedNode>,
+    pub policies: Vec<RelatedNode>,
+    pub requirements: Vec<RelatedNode>,
+    pub features: Vec<RelatedNode>,
+    pub traces: Vec<RelatedTrace>,
+    pub gaps: Vec<Gap>,
 }
 
+// FEAT-RELATE-001
 #[derive(Debug, Serialize)]
-struct JsonRelateRangeOutput {
-    range: String,
-    philosophies: Vec<RelatedNode>,
-    policies: Vec<RelatedNode>,
-    requirements: Vec<RelatedNode>,
-    features: Vec<RelatedNode>,
-    traces: Vec<RelatedTrace>,
-    gaps: Vec<Gap>,
-    summary: RelateRangeSummary,
+pub struct JsonRelateRangeOutput {
+    pub range: String,
+    pub philosophies: Vec<RelatedNode>,
+    pub policies: Vec<RelatedNode>,
+    pub requirements: Vec<RelatedNode>,
+    pub features: Vec<RelatedNode>,
+    pub traces: Vec<RelatedTrace>,
+    pub gaps: Vec<Gap>,
+    pub summary: RelateRangeSummary,
 }
 
+// FEAT-RELATE-001
 #[derive(Debug, Serialize)]
-struct RelateRangeSummary {
-    total_files: usize,
-    total_philosophies: usize,
-    total_policies: usize,
-    total_requirements: usize,
-    total_features: usize,
+pub struct RelateRangeSummary {
+    pub total_files: usize,
+    pub total_philosophies: usize,
+    pub total_policies: usize,
+    pub total_requirements: usize,
+    pub total_features: usize,
 }
 
+// FEAT-RELATE-001
 #[derive(Debug, Clone, Serialize)]
-pub(crate) struct SelectionSummary {
-    pub(crate) kind: &'static str,
-    pub(crate) query: String,
+pub struct SelectionSummary {
+    pub kind: &'static str,
+    pub query: String,
 }
 
+// FEAT-RELATE-001
 #[derive(Debug, Clone, Default, Serialize)]
-pub(crate) struct DirectMatches {
-    pub(crate) definitions: Vec<RelatedNode>,
-    pub(crate) traces: Vec<RelatedTrace>,
+pub struct DirectMatches {
+    pub definitions: Vec<RelatedNode>,
+    pub traces: Vec<RelatedTrace>,
 }
 
+// FEAT-RELATE-001
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct RelatedNode {
-    pub(crate) kind: &'static str,
-    pub(crate) id: String,
-    pub(crate) title: String,
-    pub(crate) document_path: String,
+pub struct RelatedNode {
+    pub kind: &'static str,
+    pub id: String,
+    pub title: String,
+    pub document_path: String,
 }
 
+// FEAT-RELATE-001
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct RelatedTrace {
-    pub(crate) owner_kind: &'static str,
-    pub(crate) owner_id: String,
-    pub(crate) relation_kind: &'static str,
-    pub(crate) language: String,
-    pub(crate) file: String,
-    pub(crate) symbols: Vec<String>,
-    pub(crate) method: Option<String>,
-    pub(crate) path: Option<String>,
-    pub(crate) direct_match: bool,
+pub struct RelatedTrace {
+    pub owner_kind: &'static str,
+    pub owner_id: String,
+    pub relation_kind: &'static str,
+    pub language: String,
+    pub file: String,
+    pub symbols: Vec<String>,
+    pub method: Option<String>,
+    pub path: Option<String>,
+    pub direct_match: bool,
 }
 
+// FEAT-RELATE-001
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct Gap {
-    pub(crate) kind: &'static str,
-    pub(crate) id: String,
-    pub(crate) message: String,
+pub struct Gap {
+    pub kind: &'static str,
+    pub id: String,
+    pub message: String,
 }
 
 #[derive(Debug, Clone)]
@@ -264,10 +272,8 @@ fn collect_related_ids_for_changed_files(
 
     combined_ids
 }
-pub(crate) fn build_relation_report(
-    workspace: &Workspace,
-    selector: &str,
-) -> Result<JsonRelateOutput> {
+// FEAT-RELATE-001
+pub fn build_relation_report(workspace: &Workspace, selector: &str) -> Result<JsonRelateOutput> {
     let lookup = WorkspaceLookup::new(workspace);
     let catalog = RelationCatalog::load(lookup)?;
     let selection = resolve_selection(workspace, lookup, &catalog, selector)?;
@@ -282,6 +288,64 @@ pub(crate) fn build_relation_report(
         features: catalog.nodes_for(LookupKind::Feature, &related_ids.features),
         traces: collect_related_traces(workspace, &related_ids, &selection.source),
         gaps: collect_gaps(workspace, &related_ids),
+    })
+}
+
+// FEAT-RELATE-001
+pub fn build_relation_range_report(
+    workspace: &Workspace,
+    range: &str,
+) -> Result<JsonRelateRangeOutput> {
+    let changed_files = resolve_git_range_changed_files(&workspace.root, range)?;
+
+    if changed_files.is_empty() {
+        return Ok(JsonRelateRangeOutput {
+            range: range.to_string(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+            traces: Vec::new(),
+            gaps: Vec::new(),
+            summary: RelateRangeSummary {
+                total_files: 0,
+                total_philosophies: 0,
+                total_policies: 0,
+                total_requirements: 0,
+                total_features: 0,
+            },
+        });
+    }
+
+    let lookup = WorkspaceLookup::new(workspace);
+    let catalog = RelationCatalog::load(lookup)?;
+    let combined_ids = collect_related_ids_for_changed_files(workspace, &catalog, &changed_files);
+    let expanded_ids = expand_related_ids(workspace, combined_ids);
+
+    Ok(JsonRelateRangeOutput {
+        range: range.to_string(),
+        philosophies: catalog.nodes_for(LookupKind::Philosophy, &expanded_ids.philosophies),
+        policies: catalog.nodes_for(LookupKind::Policy, &expanded_ids.policies),
+        requirements: catalog.nodes_for(LookupKind::Requirement, &expanded_ids.requirements),
+        features: catalog.nodes_for(LookupKind::Feature, &expanded_ids.features),
+        traces: collect_related_traces(
+            workspace,
+            &expanded_ids,
+            &SelectionSource::RangePaths {
+                paths: changed_files
+                    .iter()
+                    .map(|path| path.display().to_string())
+                    .collect(),
+            },
+        ),
+        gaps: collect_gaps(workspace, &expanded_ids),
+        summary: RelateRangeSummary {
+            total_files: changed_files.len(),
+            total_philosophies: expanded_ids.philosophies.len(),
+            total_policies: expanded_ids.policies.len(),
+            total_requirements: expanded_ids.requirements.len(),
+            total_features: expanded_ids.features.len(),
+        },
     })
 }
 

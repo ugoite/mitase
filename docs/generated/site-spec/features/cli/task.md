@@ -29,6 +29,7 @@ description: "Generated reference for docs/syu/features/cli/task.yaml"
         - **symbols**:
           - run_task_command
           - run_task_classify_command
+          - classify_request
       - **file**: src/cli.rs
         - **symbols**:
           - TaskArgs
@@ -81,6 +82,7 @@ description: "Generated reference for docs/syu/features/cli/task.yaml"
         - **symbols**:
           - run_task_command
           - run_task_scope_command
+          - scope_request
       - **file**: src/cli.rs
         - **symbols**:
           - TaskArgs
@@ -111,6 +113,10 @@ description: "Generated reference for docs/syu/features/cli/task.yaml"
           - run_task_infer_command
           - build_goal_plan
           - build_diff_inferred_goal_plan
+          - JsonTaskPlanOutput
+          - JsonTaskPlanSourceEvidence
+          - JsonTaskPlanScopeEntry
+          - DiffInferenceOutcome
           - GoalPlanArtifact
           - load_goal_plan_artifact
       - **file**: src/cli.rs
@@ -148,6 +154,7 @@ description: "Generated reference for docs/syu/features/cli/task.yaml"
         - **symbols**:
           - run_task_command
           - run_task_check_command
+          - check_goal_plan
           - GoalPlanArtifact
           - load_goal_plan_artifact
       - **file**: src/cli.rs
@@ -213,6 +220,7 @@ features:
           symbols:
             - run_task_command
             - run_task_classify_command
+            - classify_request
         - file: src/cli.rs
           symbols:
             - TaskArgs
@@ -265,6 +273,7 @@ features:
           symbols:
             - run_task_command
             - run_task_scope_command
+            - scope_request
         - file: src/cli.rs
           symbols:
             - TaskArgs
@@ -295,6 +304,10 @@ features:
             - run_task_infer_command
             - build_goal_plan
             - build_diff_inferred_goal_plan
+            - JsonTaskPlanOutput
+            - JsonTaskPlanSourceEvidence
+            - JsonTaskPlanScopeEntry
+            - DiffInferenceOutcome
             - GoalPlanArtifact
             - load_goal_plan_artifact
         - file: src/cli.rs
@@ -332,6 +345,7 @@ features:
           symbols:
             - run_task_command
             - run_task_check_command
+            - check_goal_plan
             - GoalPlanArtifact
             - load_goal_plan_artifact
         - file: src/cli.rs

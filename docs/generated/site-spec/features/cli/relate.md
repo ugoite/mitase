@@ -29,10 +29,19 @@ description: "Generated reference for docs/syu/features/cli/relate.yaml"
         - **symbols**:
           - run_relate_command
           - build_relation_report
+          - build_relation_range_report
           - resolve_selection
           - expand_related_ids
           - collect_related_traces
           - collect_gaps
+          - JsonRelateOutput
+          - JsonRelateRangeOutput
+          - RelateRangeSummary
+          - SelectionSummary
+          - DirectMatches
+          - RelatedNode
+          - RelatedTrace
+          - Gap
       - **file**: src/cli.rs
         - **symbols**:
           - RelateArgs
@@ -61,10 +70,19 @@ features:
           symbols:
             - run_relate_command
             - build_relation_report
+            - build_relation_range_report
             - resolve_selection
             - expand_related_ids
             - collect_related_traces
             - collect_gaps
+            - JsonRelateOutput
+            - JsonRelateRangeOutput
+            - RelateRangeSummary
+            - SelectionSummary
+            - DirectMatches
+            - RelatedNode
+            - RelatedTrace
+            - Gap
         - file: src/cli.rs
           symbols:
             - RelateArgs

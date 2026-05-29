@@ -18,8 +18,9 @@ use crate::{
     },
 };
 
+// FEAT-SEARCH-001
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) struct EntitySummary {
+pub struct EntitySummary {
     pub id: String,
     pub title: String,
     #[serde(skip_serializing_if = "Option::is_none")]
