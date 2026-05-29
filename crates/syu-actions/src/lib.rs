@@ -77,9 +77,7 @@ pub struct ExplainReport {
 }
 
 pub fn validate_workspace(workspace: impl AsRef<Path>) -> ValidationReport {
-    let workspace = syu::workspace::load_workspace(workspace.as_ref())
-        .expect("workspace should load before validation");
-    syu::command::check::collect_check_result_from_workspace(&workspace)
+    syu::command::check::collect_check_result(workspace.as_ref())
 }
 
 pub fn doctor_workspace(workspace: impl AsRef<Path>) -> Result<DoctorReport> {
