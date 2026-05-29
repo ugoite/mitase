@@ -24,7 +24,7 @@ use super::{
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
-enum TraceLookupStatus {
+pub enum TraceLookupStatus {
     Owned,
     Partial,
     Unowned,
@@ -74,104 +74,104 @@ impl MatchMode {
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq, PartialOrd, Ord)]
-struct TraceOwnerMatch {
-    kind: &'static str,
-    id: String,
-    title: String,
-    trace_role: String,
-    language: String,
-    file: String,
-    declared_symbols: Vec<String>,
+pub struct TraceOwnerMatch {
+    pub kind: &'static str,
+    pub id: String,
+    pub title: String,
+    pub trace_role: String,
+    pub language: String,
+    pub file: String,
+    pub declared_symbols: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    method: Option<String>,
+    pub method: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    path: Option<String>,
+    pub path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    matched_symbol: Option<String>,
-    match_mode: &'static str,
+    pub matched_symbol: Option<String>,
+    pub match_mode: &'static str,
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct TraceLookupOutput {
-    file: String,
+pub struct TraceLookupOutput {
+    pub file: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    symbol: Option<String>,
-    status: TraceLookupStatus,
-    matched_owners: Vec<TraceOwnerMatch>,
-    file_only_owners: Vec<TraceOwnerMatch>,
-    requirements: Vec<EntitySummary>,
-    features: Vec<EntitySummary>,
-    policies: Vec<EntitySummary>,
-    philosophies: Vec<EntitySummary>,
+    pub symbol: Option<String>,
+    pub status: TraceLookupStatus,
+    pub matched_owners: Vec<TraceOwnerMatch>,
+    pub file_only_owners: Vec<TraceOwnerMatch>,
+    pub requirements: Vec<EntitySummary>,
+    pub features: Vec<EntitySummary>,
+    pub policies: Vec<EntitySummary>,
+    pub philosophies: Vec<EntitySummary>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct TraceRangeOutput {
-    range: String,
-    files: Vec<TraceLookupOutput>,
-    skipped_files: Vec<TraceSkippedFile>,
-    summary: TraceRangeSummary,
+pub struct TraceRangeOutput {
+    pub range: String,
+    pub files: Vec<TraceLookupOutput>,
+    pub skipped_files: Vec<TraceSkippedFile>,
+    pub summary: TraceRangeSummary,
     #[serde(skip_serializing_if = "Option::is_none")]
-    scope_guard: Option<TraceRangeScopeGuard>,
+    pub scope_guard: Option<TraceRangeScopeGuard>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    strict_review: Option<TraceRangeReviewOutput>,
+    pub strict_review: Option<TraceRangeReviewOutput>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct TraceRangeEntityGroup {
-    requirements: Vec<EntitySummary>,
-    features: Vec<EntitySummary>,
-    policies: Vec<EntitySummary>,
-    philosophies: Vec<EntitySummary>,
+pub struct TraceRangeEntityGroup {
+    pub requirements: Vec<EntitySummary>,
+    pub features: Vec<EntitySummary>,
+    pub policies: Vec<EntitySummary>,
+    pub philosophies: Vec<EntitySummary>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct TraceRangeIdSummary {
-    direct: TraceRangeEntityGroup,
-    indirect: TraceRangeEntityGroup,
+pub struct TraceRangeIdSummary {
+    pub direct: TraceRangeEntityGroup,
+    pub indirect: TraceRangeEntityGroup,
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct TraceRangeSummary {
-    changed_files_total: usize,
-    inspected_files: usize,
-    skipped_files: usize,
-    owned_files: usize,
-    partial_files: usize,
-    unowned_files: usize,
-    total_requirements: usize,
-    total_features: usize,
-    total_policies: usize,
-    total_philosophies: usize,
-    ids: TraceRangeIdSummary,
+pub struct TraceRangeSummary {
+    pub changed_files_total: usize,
+    pub inspected_files: usize,
+    pub skipped_files: usize,
+    pub owned_files: usize,
+    pub partial_files: usize,
+    pub unowned_files: usize,
+    pub total_requirements: usize,
+    pub total_features: usize,
+    pub total_policies: usize,
+    pub total_philosophies: usize,
+    pub ids: TraceRangeIdSummary,
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct TraceRangeScopeGuard {
-    allowed_ids: Vec<TraceScopeGuardItem>,
-    out_of_scope_items: Vec<TraceScopeGuardViolation>,
+pub struct TraceRangeScopeGuard {
+    pub allowed_ids: Vec<TraceScopeGuardItem>,
+    pub out_of_scope_items: Vec<TraceScopeGuardViolation>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct TraceRangeReviewOutput {
-    enabled: bool,
-    failed: bool,
-    findings: Vec<TraceRangeReviewFinding>,
+pub struct TraceRangeReviewOutput {
+    pub enabled: bool,
+    pub failed: bool,
+    pub findings: Vec<TraceRangeReviewFinding>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct TraceRangeReviewFinding {
-    kind: TraceRangeReviewFindingKind,
-    file: String,
+pub struct TraceRangeReviewFinding {
+    pub kind: TraceRangeReviewFindingKind,
+    pub file: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    owners: Vec<TraceScopeGuardOwner>,
+    pub owners: Vec<TraceScopeGuardOwner>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    reason: Option<String>,
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "snake_case")]
-enum TraceRangeReviewFindingKind {
+pub enum TraceRangeReviewFindingKind {
     Unowned,
     AmbiguousOwnership,
     OutOfScope,
@@ -179,32 +179,32 @@ enum TraceRangeReviewFindingKind {
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct TraceScopeGuardItem {
-    kind: String,
-    id: String,
-    title: String,
+pub struct TraceScopeGuardItem {
+    pub kind: String,
+    pub id: String,
+    pub title: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct TraceScopeGuardOwner {
-    kind: String,
-    id: String,
-    title: String,
+pub struct TraceScopeGuardOwner {
+    pub kind: String,
+    pub id: String,
+    pub title: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct TraceScopeGuardViolation {
-    file: String,
+pub struct TraceScopeGuardViolation {
+    pub file: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    owners: Vec<TraceScopeGuardOwner>,
+    pub owners: Vec<TraceScopeGuardOwner>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    reason: Option<String>,
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct TraceSkippedFile {
-    file: String,
-    reason: String,
+pub struct TraceSkippedFile {
+    pub file: String,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -221,13 +221,8 @@ pub fn run_trace_command(args: &TraceArgs) -> Result<i32> {
         if args.symbol.is_some() {
             bail!("--symbol cannot be used with --range");
         }
-        return run_trace_range(
-            &workspace,
-            range,
-            args.format,
-            args.strict,
-            &args.allowed_id,
-        );
+        let report = trace_range(&workspace, range, args.strict, &args.allowed_id)?;
+        return render_trace_range_output(range, report, args.format);
     }
 
     let Some(file) = &args.file else {
@@ -244,7 +239,7 @@ pub fn run_trace_command(args: &TraceArgs) -> Result<i32> {
 
     let workspace = load_workspace(&args.workspace)?;
     let normalized_file = normalize_lookup_file(&workspace, file)?;
-    let output = lookup_trace(&workspace, &normalized_file, symbol);
+    let output = trace_selector(&workspace, &normalized_file, symbol)?;
 
     match args.format {
         OutputFormat::Text => print!("{}", render_text_output(&output)),
@@ -258,78 +253,90 @@ pub fn run_trace_command(args: &TraceArgs) -> Result<i32> {
     Ok(0)
 }
 
-fn run_trace_range(
+fn render_trace_range_output(
+    range: &str,
+    report: TraceRangeOutput,
+    format: OutputFormat,
+) -> Result<i32> {
+    let guard_failed = report
+        .scope_guard
+        .as_ref()
+        .is_some_and(|guard| !guard.out_of_scope_items.is_empty());
+    let strict_failed = report
+        .strict_review
+        .as_ref()
+        .is_some_and(|review| review.failed);
+
+    match format {
+        OutputFormat::Text => {
+            print!(
+                "{}",
+                render_range_text(
+                    range,
+                    &report.files,
+                    &report.skipped_files,
+                    &report.summary,
+                    report.scope_guard.as_ref(),
+                    report.strict_review.as_ref(),
+                )
+            );
+        }
+        OutputFormat::Json => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&report)
+                    .expect("serializing trace range output to JSON should succeed")
+            );
+        }
+    }
+
+    Ok(if guard_failed || strict_failed { 1 } else { 0 })
+}
+
+pub fn trace_range(
     workspace: &Workspace,
     range: &str,
-    format: OutputFormat,
     strict: bool,
     allowed_ids: &[String],
-) -> Result<i32> {
+) -> Result<TraceRangeOutput> {
     let changed_files = resolve_git_range_changed_files(&workspace.root, range)?;
 
     if changed_files.is_empty() {
-        let summary = TraceRangeSummary {
-            changed_files_total: 0,
-            inspected_files: 0,
-            skipped_files: 0,
-            owned_files: 0,
-            partial_files: 0,
-            unowned_files: 0,
-            total_requirements: 0,
-            total_features: 0,
-            total_policies: 0,
-            total_philosophies: 0,
-            ids: TraceRangeIdSummary {
-                direct: TraceRangeEntityGroup {
-                    requirements: Vec::new(),
-                    features: Vec::new(),
-                    policies: Vec::new(),
-                    philosophies: Vec::new(),
-                },
-                indirect: TraceRangeEntityGroup {
-                    requirements: Vec::new(),
-                    features: Vec::new(),
-                    policies: Vec::new(),
-                    philosophies: Vec::new(),
-                },
-            },
-        };
         let scope_guard = collect_trace_scope_guard(workspace, &[], &[], allowed_ids)?;
         let strict_review = collect_trace_review_output(&[], &[], scope_guard.as_ref(), strict);
-        let guard_failed = scope_guard
-            .as_ref()
-            .is_some_and(|guard| !guard.out_of_scope_items.is_empty());
-        let strict_failed = strict_review.as_ref().is_some_and(|review| review.failed);
-        match format {
-            OutputFormat::Text => {
-                print!(
-                    "{}",
-                    render_range_text(
-                        range,
-                        &[],
-                        &[],
-                        &summary,
-                        scope_guard.as_ref(),
-                        strict_review.as_ref(),
-                    )
-                );
-            }
-            OutputFormat::Json => {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&TraceRangeOutput {
-                        range: range.to_string(),
-                        files: Vec::new(),
-                        skipped_files: Vec::new(),
-                        summary,
-                        scope_guard,
-                        strict_review,
-                    })
-                    .expect("serializing empty trace range output to JSON should succeed")
-                );
-            }
-        }
-        return Ok(if guard_failed || strict_failed { 1 } else { 0 });
+        return Ok(TraceRangeOutput {
+            range: range.to_string(),
+            files: Vec::new(),
+            skipped_files: Vec::new(),
+            summary: TraceRangeSummary {
+                changed_files_total: 0,
+                inspected_files: 0,
+                skipped_files: 0,
+                owned_files: 0,
+                partial_files: 0,
+                unowned_files: 0,
+                total_requirements: 0,
+                total_features: 0,
+                total_policies: 0,
+                total_philosophies: 0,
+                ids: TraceRangeIdSummary {
+                    direct: TraceRangeEntityGroup {
+                        requirements: Vec::new(),
+                        features: Vec::new(),
+                        policies: Vec::new(),
+                        philosophies: Vec::new(),
+                    },
+                    indirect: TraceRangeEntityGroup {
+                        requirements: Vec::new(),
+                        features: Vec::new(),
+                        policies: Vec::new(),
+                        philosophies: Vec::new(),
+                    },
+                },
+            },
+            scope_guard,
+            strict_review,
+        });
     }
 
     let (results, skipped) = collect_trace_range_outputs(workspace, &changed_files);
@@ -338,38 +345,14 @@ fn run_trace_range(
     let scope_guard = collect_trace_scope_guard(workspace, &results, &skipped, allowed_ids)?;
     let strict_review =
         collect_trace_review_output(&results, &skipped, scope_guard.as_ref(), strict);
-    let guard_failed = scope_guard
-        .as_ref()
-        .is_some_and(|guard| !guard.out_of_scope_items.is_empty());
-    let strict_failed = strict_review.as_ref().is_some_and(|review| review.failed);
-
-    match format {
-        OutputFormat::Text => print!(
-            "{}",
-            render_range_text(
-                range,
-                &results,
-                &skipped,
-                &summary,
-                scope_guard.as_ref(),
-                strict_review.as_ref(),
-            )
-        ),
-        OutputFormat::Json => println!(
-            "{}",
-            serde_json::to_string_pretty(&TraceRangeOutput {
-                range: range.to_string(),
-                files: results,
-                skipped_files: skipped,
-                summary,
-                scope_guard,
-                strict_review,
-            })
-            .expect("serializing trace range output to JSON should succeed")
-        ),
-    }
-
-    Ok(if guard_failed || strict_failed { 1 } else { 0 })
+    Ok(TraceRangeOutput {
+        range: range.to_string(),
+        files: results,
+        skipped_files: skipped,
+        summary,
+        scope_guard,
+        strict_review,
+    })
 }
 
 fn compute_range_summary(
@@ -962,6 +945,14 @@ fn normalize_lookup_file(workspace: &Workspace, file: &Path) -> Result<PathBuf> 
         );
     }
     Ok(normalized)
+}
+
+pub fn trace_selector(
+    workspace: &Workspace,
+    file: &Path,
+    symbol: Option<&str>,
+) -> Result<TraceLookupOutput> {
+    Ok(lookup_trace(workspace, file, symbol))
 }
 
 fn lookup_trace(workspace: &Workspace, file: &Path, symbol: Option<&str>) -> TraceLookupOutput {

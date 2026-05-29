@@ -20,7 +20,7 @@ use crate::{
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
-enum DoctorStatus {
+pub enum DoctorStatus {
     Ok,
     Warning,
     Error,
@@ -39,14 +39,14 @@ impl DoctorStatus {
 }
 
 #[derive(Debug, Serialize)]
-struct DoctorReport {
+pub struct DoctorReport {
     workspace_root: PathBuf,
     summary: DoctorSummary,
     checks: Vec<DoctorCheck>,
 }
 
 #[derive(Debug, Default, Serialize)]
-struct DoctorSummary {
+pub struct DoctorSummary {
     ok: usize,
     warning: usize,
     error: usize,
@@ -54,7 +54,7 @@ struct DoctorSummary {
 }
 
 #[derive(Debug, Serialize)]
-struct DoctorCheck {
+pub struct DoctorCheck {
     id: &'static str,
     label: &'static str,
     status: DoctorStatus,
@@ -111,7 +111,7 @@ pub fn run_doctor_command(args: &DoctorArgs) -> Result<i32> {
     Ok(if report.summary.error > 0 { 1 } else { 0 })
 }
 
-fn build_doctor_report(workspace: &Path) -> Result<DoctorReport> {
+pub fn build_doctor_report(workspace: &Path) -> Result<DoctorReport> {
     let workspace_root = resolve_workspace_root(workspace)?;
     let mut checks = Vec::new();
 

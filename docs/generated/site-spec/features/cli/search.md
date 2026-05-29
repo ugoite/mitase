@@ -33,6 +33,7 @@ description: "Generated reference for docs/syu/features/cli/search.yaml"
           - search
           - extend_search_results
           - field_matches_query
+          - EntitySummary
       - **file**: src/cli.rs
         - **symbols**:
           - SearchArgs
@@ -60,6 +61,7 @@ features:
             - search
             - extend_search_results
             - field_matches_query
+            - EntitySummary
         - file: src/cli.rs
           symbols:
             - SearchArgs

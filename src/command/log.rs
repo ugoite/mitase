@@ -40,77 +40,83 @@ const GIT_ENVIRONMENT_KEYS: [&str; 8] = [
     "GIT_WORK_TREE",
 ];
 
+// FEAT-LOG-001
 #[derive(Debug, Serialize)]
-pub(crate) struct HistoryResponse {
-    id: String,
-    entity_kind: &'static str,
-    title: String,
-    status: &'static str,
-    repository_root: String,
-    kind: &'static str,
-    include_related: bool,
+pub struct HistoryResponse {
+    pub id: String,
+    pub entity_kind: &'static str,
+    pub title: String,
+    pub status: &'static str,
+    pub repository_root: String,
+    pub kind: &'static str,
+    pub include_related: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    scope: Option<HistoryScopeResponse>,
+    pub scope: Option<HistoryScopeResponse>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    path_filter: Option<String>,
-    tracked_paths: Vec<TrackedPath>,
+    pub path_filter: Option<String>,
+    pub tracked_paths: Vec<TrackedPath>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    lifecycle_events: Vec<HistoryLifecycleEvent>,
-    commits: Vec<MatchedCommit>,
+    pub lifecycle_events: Vec<HistoryLifecycleEvent>,
+    pub commits: Vec<MatchedCommit>,
 }
 
-pub(crate) struct HistoryRequest<'a> {
-    pub(crate) workspace: &'a Workspace,
-    pub(crate) repository_root: &'a Path,
-    pub(crate) id: &'a str,
-    pub(crate) kind: HistoryKind,
-    pub(crate) include_related: bool,
-    pub(crate) scope: Option<HistoryScope>,
-    pub(crate) path_filter: Option<&'a Path>,
-    pub(crate) limit: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct HistoryScopeResponse {
-    label: String,
-    revision_range: String,
+// FEAT-LOG-001
+pub struct HistoryRequest<'a> {
+    pub workspace: &'a Workspace,
+    pub repository_root: &'a Path,
+    pub id: &'a str,
+    pub kind: HistoryKind,
+    pub include_related: bool,
+    pub scope: Option<HistoryScope>,
+    pub path_filter: Option<&'a Path>,
+    pub limit: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct TrackedPath {
-    kind: &'static str,
-    path: String,
-    owner_kind: &'static str,
-    owner_id: String,
-    source: &'static str,
+// FEAT-LOG-001
+pub struct HistoryScopeResponse {
+    pub label: String,
+    pub revision_range: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+// FEAT-LOG-001
+pub struct TrackedPath {
+    pub kind: &'static str,
+    pub path: String,
+    pub owner_kind: &'static str,
+    pub owner_id: String,
+    pub source: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
-    language: Option<String>,
+    pub language: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    symbols: Vec<String>,
+    pub symbols: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct MatchedCommit {
-    sha: String,
-    short_sha: String,
-    summary: String,
-    author: String,
-    authored_at: String,
-    reasons: Vec<TrackedPath>,
+// FEAT-LOG-001
+pub struct MatchedCommit {
+    pub sha: String,
+    pub short_sha: String,
+    pub summary: String,
+    pub author: String,
+    pub authored_at: String,
+    pub reasons: Vec<TrackedPath>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-struct HistoryLifecycleEvent {
-    event: &'static str,
-    sha: String,
-    short_sha: String,
-    summary: String,
-    author: String,
-    authored_at: String,
+// FEAT-LOG-001
+pub struct HistoryLifecycleEvent {
+    pub event: &'static str,
+    pub sha: String,
+    pub short_sha: String,
+    pub summary: String,
+    pub author: String,
+    pub authored_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    path: Option<String>,
+    pub path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    note: Option<String>,
+    pub note: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -141,9 +147,10 @@ struct HistoryTargetRequest<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct HistoryScope {
-    label: String,
-    revision_range: String,
+// FEAT-LOG-001
+pub struct HistoryScope {
+    pub label: String,
+    pub revision_range: String,
 }
 
 pub fn run_log_command(args: &LogArgs) -> Result<i32> {
@@ -186,7 +193,8 @@ pub fn run_log_command(args: &LogArgs) -> Result<i32> {
     Ok(0)
 }
 
-pub(crate) fn build_history_response(request: HistoryRequest<'_>) -> Result<HistoryResponse> {
+// FEAT-LOG-001
+pub fn build_history_response(request: HistoryRequest<'_>) -> Result<HistoryResponse> {
     let lookup = WorkspaceLookup::new(request.workspace);
     let historical_ids =
         build_historical_id_index(&request.workspace.root, &request.workspace.config)?;
