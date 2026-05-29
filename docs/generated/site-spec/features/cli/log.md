@@ -31,6 +31,14 @@ description: "Generated reference for docs/syu/features/cli/log.yaml"
           - build_history_target
           - load_git_history
           - parse_git_history
+          - build_history_response
+          - HistoryRequest
+          - HistoryResponse
+          - HistoryScope
+          - HistoryScopeResponse
+          - HistoryLifecycleEvent
+          - MatchedCommit
+          - TrackedPath
       - **file**: src/command/lookup.rs
         - **symbols**:
           - document_path_for_id
@@ -65,6 +73,14 @@ features:
             - build_history_target
             - load_git_history
             - parse_git_history
+            - build_history_response
+            - HistoryRequest
+            - HistoryResponse
+            - HistoryScope
+            - HistoryScopeResponse
+            - HistoryLifecycleEvent
+            - MatchedCommit
+            - TrackedPath
         - file: src/command/lookup.rs
           symbols:
             - document_path_for_id

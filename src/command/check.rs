@@ -566,7 +566,7 @@ pub fn collect_check_result(workspace_path: &Path) -> CheckResult {
     }
 }
 
-pub(crate) fn collect_check_result_from_workspace(workspace: &Workspace) -> CheckResult {
+pub fn collect_check_result_from_workspace(workspace: &Workspace) -> CheckResult {
     collect_check_result_from_workspace_with_mode(workspace, false)
 }
 

@@ -1013,6 +1013,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "syu-actions"
+version = "0.0.1-alpha.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "syu",
+ "syu-domain",
+ "syu-task-model",
+]
+
+[[package]]
 name = "syu-core"
 version = "0.0.1-alpha.8"
 dependencies = [

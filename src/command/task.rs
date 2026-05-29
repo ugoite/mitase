@@ -92,6 +92,7 @@ struct JsonTaskCheckOutput {
     issues: Vec<Issue>,
 }
 
+// FEAT-TASK-003
 #[derive(Debug, Serialize)]
 struct JsonTaskTestSelectOutput {
     goal_id: String,
@@ -115,8 +116,9 @@ struct JsonTaskTestSelectEscalation {
     reason: String,
 }
 
+// FEAT-TASK-004
 #[derive(Debug, Serialize)]
-struct JsonTaskPlanOutput {
+pub struct JsonTaskPlanOutput {
     version: u32,
     kind: String,
     request_path: String,
@@ -132,8 +134,9 @@ struct JsonTaskPlanOutput {
     warnings: Vec<String>,
 }
 
+// FEAT-TASK-004
 #[derive(Debug, Serialize)]
-struct JsonTaskPlanSourceEvidence {
+pub struct JsonTaskPlanSourceEvidence {
     changed_files: Vec<String>,
     traced_requirements: Vec<String>,
     traced_features: Vec<String>,
@@ -213,11 +216,12 @@ struct JsonTaskPlanScope {
     exclude: Vec<String>,
 }
 
+// FEAT-TASK-004
 #[derive(Debug, Serialize)]
-struct JsonTaskPlanScopeEntry {
-    file: String,
+pub struct JsonTaskPlanScopeEntry {
+    pub file: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    symbols: Vec<String>,
+    pub symbols: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -252,13 +256,14 @@ struct JsonScopeSignals {
     philosophy_discussion: bool,
     planned_feature_updates: bool,
 }
+// FEAT-TASK-004
 #[derive(Debug)]
-struct DiffInferenceOutcome {
-    scope: ScopeOutcome,
-    scope_entries: Vec<JsonTaskPlanScopeEntry>,
-    source: JsonTaskPlanSourceEvidence,
-    confidence: &'static str,
-    warnings: Vec<String>,
+pub struct DiffInferenceOutcome {
+    pub scope: ScopeOutcome,
+    pub scope_entries: Vec<JsonTaskPlanScopeEntry>,
+    pub source: JsonTaskPlanSourceEvidence,
+    pub confidence: &'static str,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Default)]
@@ -553,7 +558,8 @@ pub fn run_task_infer_command(args: &TaskInferArgs) -> Result<i32> {
     Ok(0)
 }
 
-fn build_goal_plan(
+// FEAT-TASK-004
+pub fn build_goal_plan(
     workspace: &crate::workspace::Workspace,
     outcome: &ScopeOutcome,
     explicit_ids: &[String],
@@ -658,7 +664,8 @@ fn inferred_goal_plan_completion_checks(range: &str, output_path: Option<&Path>)
     ]
 }
 
-fn build_task_test_selection(
+// FEAT-TASK-005
+pub fn build_task_test_selection(
     workspace: &crate::workspace::Workspace,
     artifact: &GoalPlanArtifact,
 ) -> Result<TaskTestSelectionPlan> {
@@ -1291,7 +1298,8 @@ fn print_source_evidence_section(output: &mut String, heading: &str, items: &[St
     }
 }
 
-fn build_diff_inferred_goal_plan(
+// FEAT-TASK-004
+pub fn build_diff_inferred_goal_plan(
     workspace: &crate::workspace::Workspace,
     range: &str,
     changed_files: &[PathBuf],
@@ -2422,7 +2430,8 @@ fn load_goal_plan_artifact(path: &PathBuf) -> Result<GoalPlanArtifact> {
     Ok(artifact)
 }
 
-fn classify_request(
+// FEAT-TASK-003
+pub fn classify_request(
     workspace: &crate::workspace::Workspace,
     artifact: &RequestArtifact,
 ) -> Result<ClassificationOutcome> {
@@ -2518,7 +2527,8 @@ fn classify_request(
     })
 }
 
-fn scope_request(
+// FEAT-TASK-003
+pub fn scope_request(
     workspace: &crate::workspace::Workspace,
     artifact: &RequestArtifact,
 ) -> Result<ScopeOutcome> {
@@ -2619,7 +2629,8 @@ fn scope_request(
     })
 }
 
-fn build_scaffold_plan(
+// FEAT-TASK-004
+pub fn build_scaffold_plan(
     workspace: &crate::workspace::Workspace,
     outcome: &ClassificationOutcome,
     explicit_ids: &[String],
@@ -2948,7 +2959,8 @@ fn print_task_check_text_output(plan_path: &Path, report: &GoalPlanCheckReport) 
     }
 }
 
-fn check_goal_plan(
+// FEAT-TASK-005
+pub fn check_goal_plan(
     workspace: &crate::workspace::Workspace,
     artifact: &GoalPlanArtifact,
     range: &str,
