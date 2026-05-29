@@ -1,6 +1,7 @@
 [workspace]
 members = [
     ".",
+    "crates/syu-actions",
     "crates/syu-domain",
     "crates/syu-task-model",
 ]
