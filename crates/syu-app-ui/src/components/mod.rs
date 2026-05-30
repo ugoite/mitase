@@ -6,5 +6,8 @@ pub use primitives::{
     IconButton, Panel, ScopeChip, StatusDot,
 };
 pub use shell::{
-    AppShell, CommandPalette, EvidencePanel, GoalCanvas, GoalRail, StatusBar, WorkspacePulse,
+    AppShell, CommandPalette, EvidencePanel, GoalCanvas, GoalDependencyView, GoalPlanCanvas,
+    GoalPlanExportPanel, GoalRail, GoalScopePanel, GoalTestPlanPanel, RequestClassificationPanel,
+    RequestContextEditor, RequestIntakeCanvas, RequestScopePanel, ScaffoldPreviewPanel, StatusBar,
+    WorkspacePulse,
 };

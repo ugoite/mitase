@@ -7,7 +7,10 @@ pub mod model;
 use dioxus::prelude::{Asset, asset};
 
 pub use components::{
-    AppShell, CommandPalette, EvidencePanel, GoalCanvas, GoalRail, StatusBar, WorkspacePulse,
+    AppShell, CommandPalette, EvidencePanel, GoalCanvas, GoalDependencyView, GoalPlanCanvas,
+    GoalPlanExportPanel, GoalRail, GoalScopePanel, GoalTestPlanPanel, RequestClassificationPanel,
+    RequestContextEditor, RequestIntakeCanvas, RequestScopePanel, ScaffoldPreviewPanel, StatusBar,
+    WorkspacePulse,
 };
 pub use model::{
     CommandPaletteEntry, WorkbenchActionRunPreview, WorkbenchUiState, build_demo_state,

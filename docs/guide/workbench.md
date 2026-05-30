@@ -21,6 +21,23 @@ Request
   → completion check
 ```
 
+## Request Intake and Goal Splitter
+
+Request Intake is the focused Workbench canvas for turning a plain text request
+into a temporary Workbench planning artifact. The request flow should remain
+goal-centered: the user can inspect classification, relevant workspace/spec
+context, scope, and scaffold preview before generating a Goal Plan.
+
+The Goal Splitter renders the generated Goal Plan as one or more reviewable Goal
+cards. Each card should keep non-goals, linked persistent spec items, required
+spec updates, include/exclude scope, implementation steps, required or suggested
+tests, completion commands, and evidence expectations visible. These Goal Plans
+are temporary Workbench planning artifacts under `.syu/workbench/requests/` and
+`.syu/workbench/goals/` until the user explicitly exports or commits them.
+
+Goal Plan YAML exported from the Workbench must stay compatible with
+`syu task check`; the UI must not invent a separate Goal Plan format.
+
 ## What each step means
 
 - Request: capture the user intent, constraints, and expected outcome.
@@ -62,7 +79,10 @@ The registry should make these availability rules explicit:
 
 - no request means `request.scope` is unavailable;
 - an active request makes `request.classify` available;
+- an active request makes `request.scope`, `request.scaffold`, and
+  `request.plan` visible from the same command palette registry;
 - an active Goal Plan makes `goal.test_select` available;
+- an active Goal Plan makes `goal.check` available for evidence-ready review;
 - a loaded branch scope makes `branch.infer_goal` available;
 - mutating actions require confirmation metadata;
 - AI-eligible actions require a bounded scope.

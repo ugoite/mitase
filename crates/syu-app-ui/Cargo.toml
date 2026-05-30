@@ -9,6 +9,7 @@ license = "MIT"
 [dependencies]
 dioxus = { version = "0.7.9", features = ["asset", "html", "macro"] }
 manganis = "0.7.9"
+syu-task-model = { path = "../syu-task-model" }
 syu-workbench = { path = "../syu-workbench" }
 
 [dev-dependencies]
