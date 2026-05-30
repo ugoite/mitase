@@ -36,6 +36,36 @@ Request
 - Completion check: compare the result against the goal plan and required
   evidence before closing the loop.
 
+## Command palette registry
+
+The Workbench UI should render actions from a registry instead of hardcoding
+workflow buttons. The command palette registry should be exposed by
+`WorkbenchActionRegistry`, and the registry needs to expose title, description, required
+state, input schema, mutability, risk, output event, evidence kind, and AI
+eligibility so the same action list can drive both browser and desktop views.
+
+The core state surface is:
+
+- `WorkbenchState`
+- `WorkspaceSnapshot`
+- `ActiveRequestState`
+- `ActiveGoalState`
+- `GoalListState`
+- `BranchScopeState`
+- `EvidenceTimelineState`
+- `AssignmentState`
+- `JobState`
+- `CommandPaletteState`
+
+The registry should make these availability rules explicit:
+
+- no request means `request.scope` is unavailable;
+- an active request makes `request.classify` available;
+- an active Goal Plan makes `goal.test_select` available;
+- a loaded branch scope makes `branch.infer_goal` available;
+- mutating actions require confirmation metadata;
+- AI-eligible actions require a bounded scope.
+
 ## Why it exists
 
 The Workbench keeps large changes reviewable by making the request, goal,
