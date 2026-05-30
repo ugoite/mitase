@@ -134,14 +134,13 @@ impl GoalListState {
     }
 
     pub fn active_goal(&self) -> Option<&ActiveGoalState> {
-        if let Some(selected_goal_id) = &self.selected_goal_id {
-            if let Some(goal) = self
+        if let Some(selected_goal_id) = &self.selected_goal_id
+            && let Some(goal) = self
                 .active
                 .iter()
                 .find(|goal| &goal.goal_id == selected_goal_id)
-            {
-                return Some(goal);
-            }
+        {
+            return Some(goal);
         }
         self.active.first()
     }
@@ -775,13 +774,13 @@ impl WorkbenchServer {
         let spec_root = self.inner.config.spec_root.clone();
         let mut watcher =
             notify::recommended_watcher(move |result: Result<notify::Event, notify::Error>| {
-                if let Ok(event) = result {
-                    if matches!(
+                if let Ok(event) = result
+                    && matches!(
                         event.kind,
                         EventKind::Any | EventKind::Create(_) | EventKind::Modify(_)
-                    ) {
-                        let _ = reload_tx.send(());
-                    }
+                    )
+                {
+                    let _ = reload_tx.send(());
                 }
             })
             .context("failed to create filesystem watcher")?;
