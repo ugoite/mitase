@@ -881,6 +881,10 @@ async fn branch_scope(
     let report = build_branch_scope(&server.inner.config.workspace_root, &query.range)
         .await
         .map_err(|_| axum::http::StatusCode::BAD_REQUEST)?;
+    {
+        let mut state = server.inner.state.write().await;
+        state.branch_scope = Some(report.clone());
+    }
     server
         .inner
         .events
@@ -1591,6 +1595,27 @@ async fn execute_action(
 ) -> Result<ActionRunResponse> {
     let request = serde_json::from_value::<RequestArtifact>(body.clone()).ok();
     let event = match action_id {
+        "request.new" => {
+            let request = request.context("request artifact required")?;
+            let state = ActiveRequestState {
+                request_path: None,
+                artifact: Some(request.clone()),
+                classification: None,
+                scope: None,
+                scaffold: None,
+            };
+            {
+                let mut workbench_state = server.inner.state.write().await;
+                workbench_state.request = Some(state.clone());
+            }
+            ActionRunResponse {
+                action_id: action_id.to_string(),
+                event: WorkbenchEvent::RequestCreated {
+                    request: request.request.clone(),
+                },
+                result: serde_json::to_value(state)?,
+            }
+        }
         "request.classify" => {
             let request = request.context("request artifact required")?;
             let outcome = classify_request(server, &request).await;
@@ -1652,6 +1677,10 @@ async fn execute_action(
                 .and_then(Value::as_str)
                 .unwrap_or("origin/main...HEAD");
             let report = build_branch_scope(&server.inner.config.workspace_root, range).await?;
+            {
+                let mut state = server.inner.state.write().await;
+                state.branch_scope = Some(report.clone());
+            }
             ActionRunResponse {
                 action_id: action_id.to_string(),
                 event: WorkbenchEvent::BranchScopeUpdated {
@@ -1906,6 +1935,53 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         assert_eq!(json["range"], "HEAD...HEAD");
         assert!(json["changed_files"].as_array().is_some());
+
+        let snapshot = server.inner.state.read().await.clone();
+        assert_eq!(
+            snapshot
+                .branch_scope
+                .as_ref()
+                .map(|report| report.range.as_str()),
+            Some("HEAD...HEAD")
+        );
+    }
+
+    #[tokio::test]
+    async fn request_new_action_persists_active_request() {
+        let server = test_server();
+        let body = serde_json::json!({
+            "version": 1,
+            "request": "Create a new active request",
+            "context": {
+                "linked_ids": ["REQ-WORKBENCH-001"]
+            }
+        });
+        let (status, json) = json_response(
+            server.router(),
+            Request::builder()
+                .method("POST")
+                .uri("/api/actions/request.new/run")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .expect("request"),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            json["result"]["artifact"]["request"],
+            "Create a new active request"
+        );
+
+        let snapshot = server.inner.state.read().await.clone();
+        assert_eq!(
+            snapshot
+                .request
+                .as_ref()
+                .and_then(|request| request.artifact.as_ref())
+                .map(|artifact| artifact.request.as_str()),
+            Some("Create a new active request")
+        );
     }
 
     #[tokio::test]
