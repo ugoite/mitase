@@ -37,9 +37,12 @@ use crate::{
     model::Issue,
     workspace::load_workspace,
 };
+use syu_code_intel::{
+    AffectedSpecItem, BranchScopeEvidence, BranchScopeReport, ChangedFileReport, OwnershipStatus,
+    resolve_git_range_changed_files,
+};
 
 use super::issue_text::{TextIssueFormat, format_text_issue};
-use super::log::resolve_git_range_changed_files;
 use super::lookup::{SearchResult, WorkspaceEntity, WorkspaceLookup};
 
 const REQUEST_ARTIFACT_VERSION: u32 = 1;
@@ -264,6 +267,7 @@ pub struct DiffInferenceOutcome {
     pub source: JsonTaskPlanSourceEvidence,
     pub confidence: &'static str,
     pub warnings: Vec<String>,
+    pub branch_scope: BranchScopeReport,
 }
 
 #[derive(Debug, Default)]
@@ -1379,6 +1383,7 @@ fn infer_diff_plan(
 ) -> Result<DiffInferenceOutcome> {
     let mut changed_file_strings = Vec::new();
     let mut scope_entries = Vec::new();
+    let mut changed_file_reports = Vec::new();
     let mut direct_items = BTreeMap::<String, SearchResult>::new();
     let mut unowned_files = Vec::new();
     let mut ambiguous_files = Vec::new();
@@ -1399,6 +1404,7 @@ fn infer_diff_plan(
             ambiguous_files.push(file_label.clone());
         }
 
+        changed_file_reports.push(matches.file_report);
         scope_entries.push(matches.scope_entry);
         for item in matches.direct_items {
             direct_items.insert(item.id.clone(), item);
@@ -1419,6 +1425,15 @@ fn infer_diff_plan(
     let direct_items = direct_items.into_values().collect::<Vec<_>>();
     let related_items = collect_related_inference_items(lookup, &direct_items);
     let related_and_direct = merge_inference_items(&direct_items, &related_items);
+    let spec_items = direct_items
+        .iter()
+        .map(|item| to_affected_spec_item(item, true))
+        .chain(
+            related_items
+                .iter()
+                .map(|item| to_affected_spec_item(item, false)),
+        )
+        .collect::<Vec<_>>();
     let direct_task_items = to_task_search_results(&direct_items);
     let related_task_items = to_task_search_results(&related_items);
     let classification = ClassificationOutcome {
@@ -1478,16 +1493,39 @@ fn infer_diff_plan(
         notes: build_inference_notes(&unowned_files, &ambiguous_files, &spec_files),
     };
 
-    let confidence = confidence_for_diff_inference(
-        &changed_file_strings,
-        &unowned_files,
-        &ambiguous_files,
-        &spec_files,
-        &scope,
-    );
+    let branch_scope = BranchScopeReport::from_evidence(BranchScopeEvidence {
+        range: range.to_string(),
+        changed_files: changed_file_reports.clone(),
+        trace_ownership: changed_file_reports.clone(),
+        spec_items,
+        required_tests: Vec::new(),
+        linked_tests: Vec::new(),
+        include_patterns: scope_entries
+            .iter()
+            .map(|entry| entry.file.clone())
+            .collect(),
+        exclude_patterns: vec!["docs/generated/**".to_string(), "target/**".to_string()],
+        allowed_ids: Vec::new(),
+        unowned_files: unowned_files.clone(),
+        ambiguous_files: ambiguous_files.clone(),
+        spec_files: spec_files.clone(),
+        direct_items: direct_items
+            .iter()
+            .map(to_branch_scope_search_result)
+            .collect(),
+        related_items: related_items
+            .iter()
+            .map(to_branch_scope_search_result)
+            .collect(),
+        has_planned_features: scope
+            .features
+            .iter()
+            .any(|feature| feature.status.eq_ignore_ascii_case("planned")),
+        out_of_scope_changes: Vec::new(),
+    });
 
-    let warnings =
-        build_inference_warnings(confidence, &unowned_files, &ambiguous_files, &spec_files);
+    let confidence = branch_scope.confidence.label();
+    let warnings = branch_scope.warnings.clone();
     let source = JsonTaskPlanSourceEvidence {
         changed_files: changed_file_strings.clone(),
         traced_requirements: collect_ids_by_kind(&scope.requirements),
@@ -1502,12 +1540,14 @@ fn infer_diff_plan(
         confidence,
         warnings,
         scope_entries,
+        branch_scope,
     })
 }
 
 #[derive(Debug)]
 struct InferredFileMatches {
     direct_items: Vec<SearchResult>,
+    file_report: ChangedFileReport,
     scope_entry: JsonTaskPlanScopeEntry,
     is_spec_file: bool,
     is_unowned: bool,
@@ -1518,6 +1558,24 @@ struct InferredFileMatches {
 struct TracedItemMatch {
     item: SearchResult,
     symbols: BTreeSet<String>,
+}
+
+fn to_affected_spec_item(item: &SearchResult, direct: bool) -> AffectedSpecItem {
+    AffectedSpecItem {
+        kind: item.kind.to_string(),
+        id: item.id.clone(),
+        title: item.title.clone(),
+        document_path: None,
+        direct,
+    }
+}
+
+fn to_branch_scope_search_result(item: &SearchResult) -> syu_task_model::SearchResult {
+    syu_task_model::SearchResult {
+        id: item.id.clone(),
+        kind: item.kind.to_string(),
+        title: item.title.clone(),
+    }
 }
 
 fn collect_inferred_file_matches(
@@ -1548,9 +1606,27 @@ fn collect_inferred_file_matches(
     let direct_count = direct_items.len();
     let is_unowned = direct_count == 0;
     let is_ambiguous = direct_count > 1 && !is_shared_utility_path(file);
+    let status = if is_unowned {
+        OwnershipStatus::Unowned
+    } else if is_ambiguous || is_shared_utility_path(file) || direct_count > 1 {
+        OwnershipStatus::Partial
+    } else {
+        OwnershipStatus::Owned
+    };
+    let owners = direct_items
+        .values()
+        .map(|item| to_affected_spec_item(item, true))
+        .collect::<Vec<_>>();
 
     Ok(InferredFileMatches {
         direct_items: direct_items.into_values().collect(),
+        file_report: ChangedFileReport {
+            file: file_label.clone(),
+            symbols: symbols.iter().cloned().collect(),
+            owners,
+            status,
+            is_spec_file,
+        },
         scope_entry: JsonTaskPlanScopeEntry {
             file: file_label,
             symbols: symbols.into_iter().collect(),
@@ -1971,72 +2047,6 @@ fn build_inference_notes(
         ));
     }
     notes
-}
-
-fn build_inference_warnings(
-    confidence: &'static str,
-    unowned_files: &[String],
-    ambiguous_files: &[String],
-    spec_files: &[String],
-) -> Vec<String> {
-    let mut warnings = Vec::new();
-    if confidence == "low" {
-        if !unowned_files.is_empty() {
-            warnings.push(format!(
-                "Low confidence: no trace ownership was found for {}.",
-                unowned_files.join(", ")
-            ));
-        }
-        if !ambiguous_files.is_empty() {
-            warnings.push(format!(
-                "Low confidence: ambiguous ownership remains for {}.",
-                ambiguous_files.join(", ")
-            ));
-        }
-    } else if confidence == "medium" {
-        if !spec_files.is_empty() {
-            warnings.push(format!(
-                "Medium confidence: spec files changed directly in {}.",
-                spec_files.join(", ")
-            ));
-        }
-        if !ambiguous_files.is_empty() {
-            warnings.push(format!(
-                "Medium confidence: shared or ambiguous ownership was inferred for {}.",
-                ambiguous_files.join(", ")
-            ));
-        }
-    }
-    warnings
-}
-
-fn confidence_for_diff_inference(
-    changed_files: &[String],
-    unowned_files: &[String],
-    ambiguous_files: &[String],
-    spec_files: &[String],
-    scope: &ScopeOutcome,
-) -> &'static str {
-    if !unowned_files.is_empty() {
-        return "low";
-    }
-    if !spec_files.is_empty()
-        || changed_files.len() > 1
-        || changed_files
-            .iter()
-            .any(|file| is_shared_utility_path(Path::new(file)))
-    {
-        return "medium";
-    }
-    if !ambiguous_files.is_empty()
-        && !scope
-            .features
-            .iter()
-            .any(|feature| feature.status.eq_ignore_ascii_case("planned"))
-    {
-        return "low";
-    }
-    "high"
 }
 
 fn is_shared_utility_path(path: &Path) -> bool {
