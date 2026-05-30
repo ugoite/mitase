@@ -1286,7 +1286,7 @@ fn task_infer_reports_low_confidence_for_unmapped_files() {
 }
 
 #[test]
-fn task_infer_reports_low_confidence_for_ambiguous_ownership() {
+fn task_infer_reports_medium_confidence_for_ambiguous_ownership() {
     let tempdir = tempdir().expect("tempdir");
     write_infer_workspace(tempdir.path());
 
@@ -1301,7 +1301,7 @@ fn task_infer_reports_low_confidence_for_ambiguous_ownership() {
     assert!(output.status.success(), "task infer should succeed");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("\"confidence\": \"low\""));
+    assert!(stdout.contains("\"confidence\": \"medium\""));
     assert!(stdout.contains("\"FEAT-INF-AMBIG-A\""));
     assert!(stdout.contains("\"FEAT-INF-AMBIG-B\""));
     assert!(stdout.contains("ambiguous ownership"));

@@ -128,7 +128,9 @@ pub fn flatten_symbols(file: &str, symbols: &[String]) -> Vec<ChangedSymbolRepor
 
 #[cfg(test)]
 mod tests {
-    use super::{BranchScopeConfidence, confidence_for_branch_scope, resolve_git_range_changed_files};
+    use super::{
+        BranchScopeConfidence, confidence_for_branch_scope, resolve_git_range_changed_files,
+    };
     use std::{fs, path::Path};
     use tempfile::tempdir;
 
