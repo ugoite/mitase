@@ -662,6 +662,26 @@ pub struct WorkbenchActionAvailability {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct WorkbenchApiPayload {
+    pub state: WorkbenchState,
+    pub actions: Vec<WorkbenchAction>,
+    pub availability: Vec<WorkbenchActionAvailability>,
+}
+
+impl WorkbenchApiPayload {
+    pub fn new(state: WorkbenchState) -> Self {
+        let registry = WorkbenchActionRegistry::standard();
+        let actions = registry.actions().to_vec();
+        let availability = registry.availability(&state);
+        Self {
+            state,
+            actions,
+            availability,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct WorkbenchAction {
     pub id: WorkbenchActionId,
     pub title: String,
@@ -969,6 +989,10 @@ pub fn workbench_action_registry() -> WorkbenchActionRegistry {
     WorkbenchActionRegistry::standard()
 }
 
+pub fn workbench_api_payload(state: WorkbenchState) -> WorkbenchApiPayload {
+    WorkbenchApiPayload::new(state)
+}
+
 fn registry_actions() -> &'static [WorkbenchAction] {
     static REGISTRY: OnceLock<Vec<WorkbenchAction>> = OnceLock::new();
     REGISTRY.get_or_init(build_registry).as_slice()
@@ -1118,5 +1142,19 @@ mod tests {
                 action.id.label()
             );
         }
+    }
+
+    #[test]
+    fn api_payload_exposes_actions_and_availability() {
+        let payload = workbench_api_payload(WorkbenchState::default());
+
+        assert_eq!(payload.actions.len(), workbench_actions().len());
+        assert_eq!(payload.availability.len(), payload.actions.len());
+        assert!(
+            payload
+                .availability
+                .iter()
+                .any(|availability| availability.id == WorkbenchActionId::RequestScope)
+        );
     }
 }
