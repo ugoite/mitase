@@ -190,7 +190,7 @@ impl WorkbenchUiState {
             .evidence_timeline
             .entries
             .last()
-            .map(|entry| evidence_summary(entry))
+            .map(evidence_summary)
             .unwrap_or_else(|| "evidence placeholder".to_string());
         let next_action = self
             .visible_actions()
@@ -211,20 +211,22 @@ impl WorkbenchUiState {
 }
 
 pub fn build_demo_state() -> WorkbenchUiState {
-    let mut state = WorkbenchState::default();
-    state.workspace = Some(syu_workbench::WorkspaceSnapshot {
-        workspace_root: std::path::PathBuf::from("/workspace/syu"),
-        spec_root: std::path::PathBuf::from("/workspace/syu/docs/syu"),
-        branch: Some("issue-738-workbench-ui".to_string()),
-        validation_summary: Some("green".to_string()),
-    });
-    state.request = Some(ActiveRequestState::default());
-    state.goals = GoalListState {
-        active: vec![ActiveGoalState {
-            goal_id: "goal-1".to_string(),
-            ..ActiveGoalState::default()
-        }],
-        selected_goal_id: Some("goal-1".to_string()),
+    let mut state = WorkbenchState {
+        workspace: Some(syu_workbench::WorkspaceSnapshot {
+            workspace_root: std::path::PathBuf::from("/workspace/syu"),
+            spec_root: std::path::PathBuf::from("/workspace/syu/docs/syu"),
+            branch: Some("issue-738-workbench-ui".to_string()),
+            validation_summary: Some("green".to_string()),
+        }),
+        request: Some(ActiveRequestState::default()),
+        goals: GoalListState {
+            active: vec![ActiveGoalState {
+                goal_id: "goal-1".to_string(),
+                ..ActiveGoalState::default()
+            }],
+            selected_goal_id: Some("goal-1".to_string()),
+        },
+        ..WorkbenchState::default()
     };
     state.evidence_timeline.entries.push(EvidenceEntry {
         kind: WorkbenchEvidenceKind::ValidationReport,
