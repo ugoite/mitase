@@ -16,11 +16,9 @@ use crate::{
     model::{Feature, Requirement, TraceReference},
     workspace::{Workspace, load_workspace},
 };
+use syu_code_intel::resolve_git_range_changed_files;
 
-use super::{
-    log::resolve_git_range_changed_files,
-    lookup::{EntitySummary, WorkspaceEntity, WorkspaceLookup},
-};
+use super::lookup::{EntitySummary, WorkspaceEntity, WorkspaceLookup};
 
 // FEAT-RELATE-001
 #[derive(Debug, Clone, Serialize)]

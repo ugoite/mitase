@@ -1001,6 +1001,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "syn",
+ "syu-code-intel",
  "syu-core",
  "syu-domain",
  "syu-task-model",
@@ -1021,6 +1022,16 @@ dependencies = [
  "syu",
  "syu-domain",
  "syu-task-model",
+]
+
+[[package]]
+name = "syu-code-intel"
+version = "0.0.1-alpha.8"
+dependencies = [
+ "anyhow",
+ "serde",
+ "syu-task-model",
+ "tempfile",
 ]
 
 [[package]]

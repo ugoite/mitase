@@ -720,7 +720,7 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
           - task_infer_reports_high_confidence_for_a_clean_single_feature_diff
           - task_infer_reports_medium_confidence_for_shared_utility_diffs
           - task_infer_reports_low_confidence_for_unmapped_files
-          - task_infer_reports_low_confidence_for_ambiguous_ownership
+          - task_infer_reports_medium_confidence_for_ambiguous_ownership
           - task_infer_reports_medium_confidence_for_spec_only_and_mixed_diffs
           - task_infer_is_deterministic_for_json_and_yaml_outputs
           - task_infer_rejects_empty_diffs
@@ -1580,7 +1580,7 @@ requirements:
             - task_infer_reports_high_confidence_for_a_clean_single_feature_diff
             - task_infer_reports_medium_confidence_for_shared_utility_diffs
             - task_infer_reports_low_confidence_for_unmapped_files
-            - task_infer_reports_low_confidence_for_ambiguous_ownership
+            - task_infer_reports_medium_confidence_for_ambiguous_ownership
             - task_infer_reports_medium_confidence_for_spec_only_and_mixed_diffs
             - task_infer_is_deterministic_for_json_and_yaml_outputs
             - task_infer_rejects_empty_diffs
