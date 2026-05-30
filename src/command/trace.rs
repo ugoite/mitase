@@ -16,11 +16,9 @@ use crate::{
     model::{Feature, Requirement, TraceReference},
     workspace::{Workspace, load_workspace},
 };
+use syu_code_intel::resolve_git_range_changed_files;
 
-use super::{
-    log::resolve_git_range_changed_files,
-    lookup::{EntitySummary, WorkspaceLookup},
-};
+use super::lookup::{EntitySummary, WorkspaceLookup};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
