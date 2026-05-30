@@ -25,13 +25,16 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
       strip. Users SHOULD be able to launch request, goal, scope, assignment,
       and evidence actions from the same keyboard-first surface, and the UI
       SHOULD keep the active goal centered in view while rendering actions from
-      the registry rather than hardcoded buttons.
+      the registry rather than hardcoded buttons. The first Workbench shell
+      SHOULD be visually intentional from the start, using centralized design
+      tokens and reusable classes rather than throwaway handwritten CSS.
   - **priority**: medium
   - **status**: implemented
   - **linked_policies**:
     - POL-005
   - **linked_features**:
     - FEAT-WORKBENCH-SHELL-001
+    - FEAT-WORKBENCH-DESIGN-TOKENS-001
   - **tests**:
     - **markdown**:
       - **file**: docs/guide/workbench.md
@@ -39,6 +42,13 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
           - command-palette-first
           - command palette registry
           - WorkbenchActionRegistry
+    - **rust**:
+      - **file**: tests/workbench_smoke.rs
+        - **symbols**:
+          - app_shell_renders_workbench_pulse_before_the_side_panels
+          - command_palette_renders_disabled_reason_for_unavailable_actions
+          - goal_canvas_renders_a_read_only_action_preview_placeholder
+          - evidence_panel_renders_placeholder_when_empty
 - **id**: REQ-WORKBENCH-002
   - **title**: Request, Goal, Evidence, and Assignment model
   - **description**:
@@ -47,13 +57,17 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
       as explicit artifacts instead of hiding them inside a generic task list.
       The model SHOULD make it clear which request a goal came from, which
       evidence supports progress, who is responsible for the current step, and
-      which typed action produced the current transition.
+      which typed action produced the current transition. Evidence status SHOULD
+      have stable UI tokens and reusable presentation hooks so later timeline
+      views can reuse the same visual language without inventing a second set of
+      colors or badge semantics.
   - **priority**: medium
   - **status**: implemented
   - **linked_policies**:
     - POL-005
   - **linked_features**:
     - FEAT-WORKBENCH-COMMAND-PALETTE-001
+    - FEAT-WORKBENCH-DESIGN-TOKENS-001
     - FEAT-WORKBENCH-003
     - FEAT-WORKBENCH-005
   - **tests**:
@@ -64,6 +78,12 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
           - ActiveRequestState
           - ActiveGoalState
           - AssignmentState
+    - **rust**:
+      - **file**: tests/workbench_smoke.rs
+        - **symbols**:
+          - filters_actions_by_query
+          - read_only_action_returns_placeholder_preview
+          - registry_loaded_from_server_payload
 - **id**: REQ-WORKBENCH-003
   - **title**: Goal splitting for large change requests
   - **description**:
@@ -187,13 +207,16 @@ requirements:
       strip. Users SHOULD be able to launch request, goal, scope, assignment,
       and evidence actions from the same keyboard-first surface, and the UI
       SHOULD keep the active goal centered in view while rendering actions from
-      the registry rather than hardcoded buttons.
+      the registry rather than hardcoded buttons. The first Workbench shell
+      SHOULD be visually intentional from the start, using centralized design
+      tokens and reusable classes rather than throwaway handwritten CSS.
     priority: medium
     status: implemented
     linked_policies:
       - POL-005
     linked_features:
       - FEAT-WORKBENCH-SHELL-001
+      - FEAT-WORKBENCH-DESIGN-TOKENS-001
     tests:
       markdown:
         - file: docs/guide/workbench.md
@@ -201,6 +224,13 @@ requirements:
             - command-palette-first
             - command palette registry
             - WorkbenchActionRegistry
+      rust:
+        - file: tests/workbench_smoke.rs
+          symbols:
+            - app_shell_renders_workbench_pulse_before_the_side_panels
+            - command_palette_renders_disabled_reason_for_unavailable_actions
+            - goal_canvas_renders_a_read_only_action_preview_placeholder
+            - evidence_panel_renders_placeholder_when_empty
   - id: REQ-WORKBENCH-002
     title: Request, Goal, Evidence, and Assignment model
     description: |
@@ -208,13 +238,17 @@ requirements:
       as explicit artifacts instead of hiding them inside a generic task list.
       The model SHOULD make it clear which request a goal came from, which
       evidence supports progress, who is responsible for the current step, and
-      which typed action produced the current transition.
+      which typed action produced the current transition. Evidence status SHOULD
+      have stable UI tokens and reusable presentation hooks so later timeline
+      views can reuse the same visual language without inventing a second set of
+      colors or badge semantics.
     priority: medium
     status: implemented
     linked_policies:
       - POL-005
     linked_features:
       - FEAT-WORKBENCH-COMMAND-PALETTE-001
+      - FEAT-WORKBENCH-DESIGN-TOKENS-001
       - FEAT-WORKBENCH-003
       - FEAT-WORKBENCH-005
     tests:
@@ -225,6 +259,12 @@ requirements:
             - ActiveRequestState
             - ActiveGoalState
             - AssignmentState
+      rust:
+        - file: tests/workbench_smoke.rs
+          symbols:
+            - filters_actions_by_query
+            - read_only_action_returns_placeholder_preview
+            - registry_loaded_from_server_payload
   - id: REQ-WORKBENCH-003
     title: Goal splitting for large change requests
     description: |

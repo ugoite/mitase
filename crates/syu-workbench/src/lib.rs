@@ -226,6 +226,7 @@ pub enum WorkbenchActionInputSchema {
     ValidationRequest,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkbenchActionInput {
@@ -263,6 +264,7 @@ pub enum WorkbenchActionInput {
     },
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkbenchActionResult {
@@ -349,14 +351,13 @@ impl GoalListState {
     }
 
     pub fn active_goal(&self) -> Option<&ActiveGoalState> {
-        if let Some(selected_goal_id) = &self.selected_goal_id {
-            if let Some(goal) = self
+        if let Some(selected_goal_id) = &self.selected_goal_id
+            && let Some(goal) = self
                 .active
                 .iter()
                 .find(|goal| &goal.goal_id == selected_goal_id)
-            {
-                return Some(goal);
-            }
+        {
+            return Some(goal);
         }
 
         self.active.first()
@@ -370,14 +371,13 @@ impl GoalListState {
             });
         }
 
-        if let Some(selected_goal_id) = &self.selected_goal_id {
-            if let Some(index) = self
+        if let Some(selected_goal_id) = &self.selected_goal_id
+            && let Some(index) = self
                 .active
                 .iter()
                 .position(|goal| &goal.goal_id == selected_goal_id)
-            {
-                return &mut self.active[index];
-            }
+        {
+            return &mut self.active[index];
         }
 
         &mut self.active[0]

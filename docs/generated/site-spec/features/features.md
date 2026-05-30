@@ -50,6 +50,8 @@ description: "Generated reference for docs/syu/features/features.yaml"
 - **kind**: workbench
   - **file**: workbench/shell.yaml
 - **kind**: workbench
+  - **file**: workbench/design-tokens.yaml
+- **kind**: workbench
   - **file**: workbench/actions.yaml
 - **kind**: workbench
   - **file**: workbench/goal-splitter.yaml
@@ -117,6 +119,8 @@ files:
     file: editor/vscode.yaml
   - kind: workbench
     file: workbench/shell.yaml
+  - kind: workbench
+    file: workbench/design-tokens.yaml
   - kind: workbench
     file: workbench/actions.yaml
   - kind: workbench
