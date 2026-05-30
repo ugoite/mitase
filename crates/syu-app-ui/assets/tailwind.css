@@ -1,0 +1,29 @@
+@theme {
+  --color-background: oklch(0.16 0.015 250);
+  --color-foreground: oklch(0.97 0.01 250);
+  --color-panel: oklch(0.21 0.02 250);
+  --color-panel-muted: oklch(0.27 0.02 250);
+  --color-border: oklch(0.34 0.02 250);
+  --color-command: oklch(0.24 0.02 250);
+  --color-command-active: oklch(0.36 0.06 167);
+  --color-goal: oklch(0.76 0.16 146);
+  --color-goal-active: oklch(0.86 0.13 146);
+  --color-scope-in: oklch(0.79 0.1 230);
+  --color-scope-out: oklch(0.74 0.14 28);
+  --color-evidence-pass: oklch(0.79 0.13 146);
+  --color-evidence-warn: oklch(0.84 0.14 90);
+  --color-evidence-fail: oklch(0.73 0.17 27);
+  --color-evidence-pending: oklch(0.8 0.08 220);
+}
+
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-foreground);
+}
+
+body {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
