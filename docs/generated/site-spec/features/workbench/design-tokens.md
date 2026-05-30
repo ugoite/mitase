@@ -49,6 +49,10 @@ description: "Generated reference for docs/syu/features/workbench/design-tokens.
           - COMMAND_ITEM
           - EVIDENCE_CARD
           - EMPTY_STATE
+      - **file**: tests/workbench_smoke.rs
+        - **symbols**:
+          - app_shell_renders_workbench_pulse_before_the_side_panels
+          - goal_canvas_renders_a_read_only_action_preview_placeholder
 
 ## Source YAML
 
@@ -89,4 +93,8 @@ features:
             - COMMAND_ITEM
             - EVIDENCE_CARD
             - EMPTY_STATE
+        - file: tests/workbench_smoke.rs
+          symbols:
+            - app_shell_renders_workbench_pulse_before_the_side_panels
+            - goal_canvas_renders_a_read_only_action_preview_placeholder
 ```

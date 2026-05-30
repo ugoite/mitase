@@ -42,6 +42,13 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
           - command-palette-first
           - command palette registry
           - WorkbenchActionRegistry
+    - **rust**:
+      - **file**: tests/workbench_smoke.rs
+        - **symbols**:
+          - app_shell_renders_workbench_pulse_before_the_side_panels
+          - command_palette_renders_disabled_reason_for_unavailable_actions
+          - goal_canvas_renders_a_read_only_action_preview_placeholder
+          - evidence_panel_renders_placeholder_when_empty
 - **id**: REQ-WORKBENCH-002
   - **title**: Request, Goal, Evidence, and Assignment model
   - **description**:
@@ -71,6 +78,12 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
           - ActiveRequestState
           - ActiveGoalState
           - AssignmentState
+    - **rust**:
+      - **file**: tests/workbench_smoke.rs
+        - **symbols**:
+          - filters_actions_by_query
+          - read_only_action_returns_placeholder_preview
+          - registry_loaded_from_server_payload
 - **id**: REQ-WORKBENCH-003
   - **title**: Goal splitting for large change requests
   - **description**:
@@ -211,6 +224,13 @@ requirements:
             - command-palette-first
             - command palette registry
             - WorkbenchActionRegistry
+      rust:
+        - file: tests/workbench_smoke.rs
+          symbols:
+            - app_shell_renders_workbench_pulse_before_the_side_panels
+            - command_palette_renders_disabled_reason_for_unavailable_actions
+            - goal_canvas_renders_a_read_only_action_preview_placeholder
+            - evidence_panel_renders_placeholder_when_empty
   - id: REQ-WORKBENCH-002
     title: Request, Goal, Evidence, and Assignment model
     description: |
@@ -239,6 +259,12 @@ requirements:
             - ActiveRequestState
             - ActiveGoalState
             - AssignmentState
+      rust:
+        - file: tests/workbench_smoke.rs
+          symbols:
+            - filters_actions_by_query
+            - read_only_action_returns_placeholder_preview
+            - registry_loaded_from_server_payload
   - id: REQ-WORKBENCH-003
     title: Goal splitting for large change requests
     description: |

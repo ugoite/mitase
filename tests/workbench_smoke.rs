@@ -1,0 +1,101 @@
+use dioxus::prelude::*;
+use dioxus_ssr::render_element;
+use syu_app_ui::{
+    AppShell, CommandPalette, EvidencePanel, GoalCanvas, WorkbenchUiState, build_demo_state,
+};
+use syu_workbench::{
+    WorkbenchActionId, WorkbenchActionRegistry, WorkbenchApiPayload, WorkbenchState,
+};
+
+#[test]
+fn app_shell_renders_workbench_pulse_before_the_side_panels() {
+    let html = render_element(rsx! {
+        AppShell { ui: build_demo_state() }
+    });
+
+    assert!(html.contains("Workbench Pulse"));
+    assert!(html.contains("Goal Rail"));
+    assert!(html.contains("Evidence"));
+    assert!(html.contains("Command Palette"));
+}
+
+#[test]
+fn command_palette_renders_disabled_reason_for_unavailable_actions() {
+    let mut ui = WorkbenchUiState::from_state(WorkbenchState::default());
+    ui.set_query("goal");
+
+    let html = render_element(rsx! {
+        CommandPalette { ui: ui.clone() }
+    });
+
+    assert!(html.contains("disabled: missing active_goal_plan"));
+    assert!(html.contains("goal.check"));
+}
+
+#[test]
+fn goal_canvas_renders_a_read_only_action_preview_placeholder() {
+    let mut ui = build_demo_state();
+    ui.run_read_only_action(WorkbenchActionId::HistoryShow);
+
+    let html = render_element(rsx! {
+        GoalCanvas { ui }
+    });
+
+    let pulse = html.find("Workbench Pulse").expect("pulse should render");
+    let preview = html
+        .find("Read-only action placeholder")
+        .expect("preview should render");
+
+    assert!(pulse < preview);
+    assert!(html.contains("Read-only action placeholder"));
+    assert!(html.contains("Evidence placeholder"));
+}
+
+#[test]
+fn evidence_panel_renders_placeholder_when_empty() {
+    let ui = WorkbenchUiState::from_state(WorkbenchState::default());
+
+    let html = render_element(rsx! {
+        EvidencePanel { ui }
+    });
+
+    assert!(html.contains("Evidence placeholder"));
+}
+
+#[test]
+fn filters_actions_by_query() {
+    let mut ui = WorkbenchUiState::from_state(WorkbenchState::default());
+    ui.payload = WorkbenchApiPayload::new(WorkbenchState::default());
+    ui.command_query = "history".to_string();
+
+    let visible = ui.visible_actions();
+
+    assert!(!visible.is_empty());
+    assert!(
+        visible
+            .iter()
+            .all(|entry| entry.action.id.label().contains("history")
+                || entry.action.title.to_lowercase().contains("history"))
+    );
+}
+
+#[test]
+fn read_only_action_returns_placeholder_preview() {
+    let ui = build_demo_state();
+
+    let preview = ui.action_preview(WorkbenchActionId::HistoryShow).unwrap();
+
+    assert!(preview.result_summary.contains("placeholder"));
+    assert!(preview.evidence_summary.contains("Evidence placeholder"));
+}
+
+#[test]
+fn registry_loaded_from_server_payload() {
+    let state = WorkbenchState::default();
+    let payload = WorkbenchApiPayload::new(state);
+
+    assert_eq!(
+        payload.actions.len(),
+        WorkbenchActionRegistry::standard().actions().len()
+    );
+}

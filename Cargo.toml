@@ -46,9 +46,13 @@ url = "2.5.7"
 
 [dev-dependencies]
 assert_cmd = "2.2.2"
+dioxus = { version = "0.7.9", features = ["asset", "html", "macro"] }
+dioxus-ssr = "0.7.9"
 libc = "0.2.186"
 tempfile = "3.23.0"
 tower = { version = "0.5.2", features = ["util"] }
+syu-app-ui = { path = "crates/syu-app-ui" }
+syu-workbench = { path = "crates/syu-workbench" }
 
 [build-dependencies]
 serde_json = "1.0.150"
