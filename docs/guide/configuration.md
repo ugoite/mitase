@@ -10,6 +10,7 @@ under `docs/syu/config/`:
 - `docs/syu/config/overview.yaml`
 - `docs/syu/config/spec.yaml`
 - `docs/syu/config/validate.yaml`
+- `docs/syu/config/workbench.yaml`
 - `docs/syu/config/report.yaml`
 - `docs/syu/config/runtimes.yaml`
 
@@ -66,6 +67,9 @@ validate:
   require_non_orphaned_items: true
   require_reciprocal_links: true
   require_symbol_trace_coverage: false
+workbench:
+  bind: 127.0.0.1
+  port: 3000
 runtimes:
   python:
     command: auto
@@ -214,6 +218,24 @@ That keeps generated assets from failing `SYU-trace-id-001` just because they
 do not carry inline IDs or adjacent ownership manifests. Set the list to `[]`
 when you intentionally want generated outputs to participate in both strict
 coverage inventory and ownership enforcement.
+
+### `workbench.bind`
+
+Sets the default listener address for `syu workbench`.
+
+- `127.0.0.1`: the Workbench binds only to the local machine by default
+- any other IP address: requires an explicit `--allow-remote-bind` launch flag
+
+Keep the default loopback value unless you deliberately want the server to be
+reachable from another host.
+
+### `workbench.port`
+
+Sets the default TCP port for `syu workbench`.
+
+Use one repository-native port so browser and desktop clients can point to the
+same typed API surface. The command-line `--port` flag still overrides the
+config value for ad hoc runs.
 
 ### `report.output`
 

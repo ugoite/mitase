@@ -269,6 +269,12 @@ pub enum Commands {
     )]
     Browse(BrowseArgs),
     #[command(
+        visible_alias = "app",
+        about = "Run the Workbench server for browser and desktop clients",
+        after_help = WORKBENCH_AFTER_HELP
+    )]
+    Workbench(WorkbenchArgs),
+    #[command(
         about = "List philosophies, policies, requirements, or features",
         after_help = LIST_AFTER_HELP
     )]
@@ -713,6 +719,35 @@ pub struct ReportArgs {
     #[arg(help = "Write the Markdown report to a file instead of stdout")]
     #[arg(short, long)]
     pub output: Option<PathBuf>,
+}
+
+const WORKBENCH_AFTER_HELP: &str = "\
+Examples:
+  syu workbench .
+  syu app . --bind 127.0.0.1 --port 3000
+  syu workbench . --bind 0.0.0.0 --allow-remote-bind
+
+Use `workbench.bind` and `workbench.port` from `syu.yaml` for the default
+listener settings. Remote binds stay opt-in so the server does not expose the
+workspace accidentally.";
+
+#[derive(Debug, Clone, Args)]
+pub struct WorkbenchArgs {
+    #[arg(help = WORKSPACE_HELP)]
+    #[arg(default_value = ".")]
+    pub workspace: PathBuf,
+
+    #[arg(help = "Override the configured bind address")]
+    #[arg(long)]
+    pub bind: Option<String>,
+
+    #[arg(help = "Override the configured port")]
+    #[arg(long)]
+    pub port: Option<u16>,
+
+    #[arg(help = "Allow binding outside localhost and 127.0.0.1")]
+    #[arg(long, action = ArgAction::SetTrue)]
+    pub allow_remote_bind: bool,
 }
 
 #[derive(Debug, Clone, Args)]
