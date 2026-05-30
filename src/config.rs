@@ -27,6 +27,8 @@ pub struct SyuConfig {
     pub spec: SpecConfig,
     #[serde(default)]
     pub validate: ValidateConfig,
+    #[serde(default)]
+    pub workbench: WorkbenchConfig,
     #[serde(default, skip_serializing_if = "ReportConfig::is_default")]
     pub report: ReportConfig,
     #[serde(default)]
@@ -39,6 +41,7 @@ impl Default for SyuConfig {
             version: default_version(),
             spec: SpecConfig::default(),
             validate: ValidateConfig::default(),
+            workbench: WorkbenchConfig::default(),
             report: ReportConfig::default(),
             runtimes: RuntimeConfigSet::default(),
         }
@@ -152,6 +155,24 @@ pub struct RuntimeConfig {
     pub command: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct WorkbenchConfig {
+    #[serde(default = "default_workbench_bind")]
+    pub bind: String,
+    #[serde(default = "default_workbench_port")]
+    pub port: u16,
+}
+
+impl Default for WorkbenchConfig {
+    fn default() -> Self {
+        Self {
+            bind: default_workbench_bind(),
+            port: default_workbench_port(),
+        }
+    }
+}
+
 impl Default for RuntimeConfig {
     fn default() -> Self {
         Self {
@@ -229,6 +250,14 @@ fn default_symbol_trace_coverage_ignored_paths() -> Vec<PathBuf> {
 
 fn default_runtime_command() -> String {
     "auto".to_string()
+}
+
+fn default_workbench_bind() -> String {
+    "127.0.0.1".to_string()
+}
+
+fn default_workbench_port() -> u16 {
+    3000
 }
 
 pub fn config_path(workspace_root: &Path) -> PathBuf {
@@ -362,6 +391,8 @@ mod tests {
                 std::path::PathBuf::from("tests/fixtures/workspaces"),
             ]
         );
+        assert_eq!(loaded.config.workbench.bind, "127.0.0.1");
+        assert_eq!(loaded.config.workbench.port, 3000);
         assert_eq!(loaded.config.report.output, None);
     }
 
@@ -411,6 +442,8 @@ mod tests {
             loaded.config.report.output,
             Some(std::path::PathBuf::from("docs/generated/syu-report.md"))
         );
+        assert_eq!(loaded.config.workbench.bind, "127.0.0.1");
+        assert_eq!(loaded.config.workbench.port, 3000);
         assert_eq!(loaded.config.runtimes.python.command, "python3");
     }
 
@@ -452,6 +485,9 @@ mod tests {
         assert!(rendered.contains("- build"));
         assert!(rendered.contains("- dist"));
         assert!(rendered.contains("- tests/fixtures/workspaces"));
+        assert!(rendered.contains("workbench:"));
+        assert!(rendered.contains("bind: 127.0.0.1"));
+        assert!(rendered.contains("port: 3000"));
         assert!(!rendered.contains("report:"));
         assert!(rendered.contains("runtimes:"));
         assert!(rendered.contains("python:"));

@@ -4,6 +4,7 @@ members = [
     "crates/syu-actions",
     "crates/syu-code-intel",
     "crates/syu-domain",
+    "crates/syu-workbench-server",
     "crates/syu-workbench",
     "crates/syu-task-model",
 ]
@@ -35,6 +36,7 @@ syu-domain = { path = "crates/syu-domain" }
 syu-code-intel = { path = "crates/syu-code-intel" }
 syu-task-model = { path = "crates/syu-task-model" }
 syu-core = { path = "crates/syu-core" }
+syu-workbench-server = { path = "crates/syu-workbench-server" }
 syn = { version = "2.0.117", features = ["full"] }
 tokio = { version = "1.52.3", features = ["macros", "net", "rt-multi-thread", "signal"] }
 tree-sitter = "0.26.9"

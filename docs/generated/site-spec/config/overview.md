@@ -33,7 +33,7 @@ description: "Generated reference for docs/syu/config/overview.yaml"
 
 - spec.yaml
 - validate.yaml
-- app.yaml
+- workbench.yaml
 - report.yaml
 - runtimes.yaml
 
@@ -63,7 +63,7 @@ guidance:
 sections:
   - spec.yaml
   - validate.yaml
-  - app.yaml
+  - workbench.yaml
   - report.yaml
   - runtimes.yaml
 items:
