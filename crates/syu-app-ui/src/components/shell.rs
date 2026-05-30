@@ -112,11 +112,7 @@ pub fn CommandPalette(
                                 let action_id = entry.action.id;
                                 ui.selected_action_id == Some(action_id)
                             },
-                            onclick: {
-                                let on_select_action = on_select_action.clone();
-                                let action_id = entry.action.id;
-                                move |_| on_select_action.call(action_id)
-                            },
+                            onclick: move |_| on_select_action.call(entry.action.id),
                         }
                     }
                 }

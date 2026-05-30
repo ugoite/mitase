@@ -1,8 +1,6 @@
 use dioxus::prelude::*;
 use dioxus_ssr::render_element;
-use syu_app_ui::{
-    AppShell, CommandPalette, EvidencePanel, GoalCanvas, WorkbenchUiState, build_demo_state,
-};
+use syu_app_ui::{AppShell, EvidencePanel, GoalCanvas, WorkbenchUiState, build_demo_state};
 use syu_workbench::{
     WorkbenchActionId, WorkbenchActionRegistry, WorkbenchApiPayload, WorkbenchState,
 };
@@ -25,7 +23,7 @@ fn command_palette_renders_disabled_reason_for_unavailable_actions() {
     ui.set_query("goal");
 
     let html = render_element(rsx! {
-        CommandPalette { ui: ui.clone() }
+        AppShell { ui }
     });
 
     assert!(html.contains("disabled: missing active_goal_plan"));
