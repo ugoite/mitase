@@ -37,6 +37,8 @@ files:
   - kind: workbench
     file: workbench/shell.yaml
   - kind: workbench
+    file: workbench/design-tokens.yaml
+  - kind: workbench
     file: workbench/actions.yaml
   - kind: workbench
     file: workbench/goal-splitter.yaml

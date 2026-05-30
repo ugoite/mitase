@@ -36,6 +36,19 @@ description: "Generated reference for docs/syu/features/workbench/actions.yaml"
           - WorkbenchActionResult
           - WorkbenchState
           - CommandPaletteState
+      - **file**: crates/syu-app-ui/src/model.rs
+        - **symbols**:
+          - WorkbenchUiState
+          - CommandPaletteEntry
+      - **file**: crates/syu-app-ui/src/components/shell.rs
+        - **symbols**:
+          - CommandPalette
+          - GoalCanvas
+      - **file**: tests/workbench_smoke.rs
+        - **symbols**:
+          - filters_actions_by_query
+          - read_only_action_returns_placeholder_preview
+          - registry_loaded_from_server_payload
       - **file**: crates/syu-actions/src/lib.rs
         - **symbols**:
           - classify_request
@@ -92,6 +105,19 @@ features:
             - WorkbenchActionResult
             - WorkbenchState
             - CommandPaletteState
+        - file: crates/syu-app-ui/src/model.rs
+          symbols:
+            - WorkbenchUiState
+            - CommandPaletteEntry
+        - file: crates/syu-app-ui/src/components/shell.rs
+          symbols:
+            - CommandPalette
+            - GoalCanvas
+        - file: tests/workbench_smoke.rs
+          symbols:
+            - filters_actions_by_query
+            - read_only_action_returns_placeholder_preview
+            - registry_loaded_from_server_payload
         - file: crates/syu-actions/src/lib.rs
           symbols:
             - classify_request
