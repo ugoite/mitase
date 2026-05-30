@@ -1275,45 +1275,6 @@ pub(crate) fn git_command(workspace_root: &Path) -> Command {
     command
 }
 
-pub(crate) fn resolve_git_range_changed_files(
-    workspace_root: &Path,
-    range: &str,
-) -> Result<Vec<PathBuf>> {
-    let output = git_command(workspace_root)
-        .args(["diff", "--name-only", "--relative", range])
-        .output()
-        .with_context(|| {
-            format!(
-                "failed to run `git diff --name-only` for range `{}` in `{}`",
-                range,
-                workspace_root.display()
-            )
-        })?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!(
-            "git range `{}` is not valid in `{}`:\n{}",
-            range,
-            workspace_root.display(),
-            stderr.trim()
-        );
-    }
-
-    let files_str =
-        String::from_utf8(output.stdout).context("git diff output should be valid UTF-8")?;
-
-    let mut files = Vec::new();
-    for line in files_str.lines() {
-        let line = line.trim();
-        if !line.is_empty() {
-            files.push(PathBuf::from(line));
-        }
-    }
-
-    Ok(files)
-}
-
 fn parse_git_history(raw: &[u8]) -> Result<Vec<MatchedCommit>> {
     let mut commits = Vec::new();
 
