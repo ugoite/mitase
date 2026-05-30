@@ -3,6 +3,7 @@ members = [
     ".",
     "crates/syu-actions",
     "crates/syu-code-intel",
+    "crates/syu-app-ui",
     "crates/syu-domain",
     "crates/syu-workbench-server",
     "crates/syu-workbench",

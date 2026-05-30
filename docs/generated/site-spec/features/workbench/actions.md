@@ -36,6 +36,14 @@ description: "Generated reference for docs/syu/features/workbench/actions.yaml"
           - WorkbenchActionResult
           - WorkbenchState
           - CommandPaletteState
+      - **file**: crates/syu-app-ui/src/model.rs
+        - **symbols**:
+          - WorkbenchUiState
+          - CommandPaletteEntry
+      - **file**: crates/syu-app-ui/src/components/shell.rs
+        - **symbols**:
+          - CommandPalette
+          - GoalCanvas
       - **file**: crates/syu-actions/src/lib.rs
         - **symbols**:
           - classify_request
@@ -92,6 +100,14 @@ features:
             - WorkbenchActionResult
             - WorkbenchState
             - CommandPaletteState
+        - file: crates/syu-app-ui/src/model.rs
+          symbols:
+            - WorkbenchUiState
+            - CommandPaletteEntry
+        - file: crates/syu-app-ui/src/components/shell.rs
+          symbols:
+            - CommandPalette
+            - GoalCanvas
         - file: crates/syu-actions/src/lib.rs
           symbols:
             - classify_request

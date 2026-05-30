@@ -39,6 +39,7 @@ This section is generated from the YAML source under `docs/syu/`.
 - [Workbench / Actions](features/workbench/actions)
 - [Workbench / Assignment](features/workbench/assignment)
 - [Workbench / Branch Scope](features/workbench/branch-scope)
+- [Workbench / Design Tokens](features/workbench/design-tokens)
 - [Workbench / Desktop](features/workbench/desktop)
 - [Workbench / Evidence](features/workbench/evidence)
 - [Workbench / Goal Splitter](features/workbench/goal-splitter)

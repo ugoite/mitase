@@ -19,7 +19,7 @@ description: "Generated reference for docs/syu/features/workbench/shell.yaml"
 
 - **id**: FEAT-WORKBENCH-SHELL-001
   - **title**: Command-palette Workbench shell
-  - **summary**: Open the Workbench around a command palette and goal-centered surface that launches request, goal, scope, assignment, and evidence actions without a fixed tab strip, using the typed Workbench state machine and action registry as the source of truth.
+  - **summary**: Open the Workbench around a command palette and goal-centered surface that launches request, goal, scope, assignment, and evidence actions without a fixed tab strip, using the typed Workbench state machine, action registry, and Dioxus shell components as the source of truth.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-WORKBENCH-001
@@ -33,6 +33,15 @@ description: "Generated reference for docs/syu/features/workbench/shell.yaml"
           - CommandPaletteState
           - WorkbenchActionRegistry
           - WorkbenchActionAvailability
+      - **file**: crates/syu-app-ui/src/lib.rs
+        - **symbols**:
+          - AppShell
+          - CommandPalette
+          - WorkspacePulse
+          - GoalRail
+          - GoalCanvas
+          - EvidencePanel
+          - StatusBar
     - **markdown**:
       - **file**: docs/guide/workbench.md
         - **symbols**:
@@ -50,7 +59,7 @@ version: 1
 features:
   - id: FEAT-WORKBENCH-SHELL-001
     title: Command-palette Workbench shell
-    summary: Open the Workbench around a command palette and goal-centered surface that launches request, goal, scope, assignment, and evidence actions without a fixed tab strip, using the typed Workbench state machine and action registry as the source of truth.
+    summary: Open the Workbench around a command palette and goal-centered surface that launches request, goal, scope, assignment, and evidence actions without a fixed tab strip, using the typed Workbench state machine, action registry, and Dioxus shell components as the source of truth.
     status: implemented
     linked_requirements:
       - REQ-WORKBENCH-001
@@ -64,6 +73,15 @@ features:
             - CommandPaletteState
             - WorkbenchActionRegistry
             - WorkbenchActionAvailability
+        - file: crates/syu-app-ui/src/lib.rs
+          symbols:
+            - AppShell
+            - CommandPalette
+            - WorkspacePulse
+            - GoalRail
+            - GoalCanvas
+            - EvidencePanel
+            - StatusBar
       markdown:
         - file: docs/guide/workbench.md
           symbols:
