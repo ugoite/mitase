@@ -17,8 +17,8 @@ description: "Generated reference for docs/syu/features/workbench/actions.yaml"
 
 ### Features
 
-- **id**: FEAT-WORKBENCH-002
-  - **title**: Workbench action model
+- **id**: FEAT-WORKBENCH-COMMAND-PALETTE-001
+  - **title**: Workbench command palette registry
   - **summary**: Keep request, goal, evidence, and assignment actions explicit so users can see which artifact is being created, updated, or handed off, and drive them from a typed registry instead of hardcoded UI flow.
   - **status**: implemented
   - **linked_requirements**:
@@ -73,8 +73,8 @@ category: Workbench
 version: 1
 
 features:
-  - id: FEAT-WORKBENCH-002
-    title: Workbench action model
+  - id: FEAT-WORKBENCH-COMMAND-PALETTE-001
+    title: Workbench command palette registry
     summary: Keep request, goal, evidence, and assignment actions explicit so users can see which artifact is being created, updated, or handed off, and drive them from a typed registry instead of hardcoded UI flow.
     status: implemented
     linked_requirements:

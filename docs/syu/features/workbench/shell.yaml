@@ -2,7 +2,7 @@ category: Workbench
 version: 1
 
 features:
-  - id: FEAT-WORKBENCH-001
+  - id: FEAT-WORKBENCH-SHELL-001
     title: Command-palette Workbench shell
     summary: Open the Workbench around a command palette and goal-centered surface that launches request, goal, scope, assignment, and evidence actions without a fixed tab strip, using the typed Workbench state machine and action registry as the source of truth.
     status: implemented

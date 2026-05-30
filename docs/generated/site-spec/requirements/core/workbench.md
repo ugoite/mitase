@@ -31,7 +31,7 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
   - **linked_policies**:
     - POL-005
   - **linked_features**:
-    - FEAT-WORKBENCH-001
+    - FEAT-WORKBENCH-SHELL-001
   - **tests**:
     - **markdown**:
       - **file**: docs/guide/workbench.md
@@ -53,7 +53,7 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
   - **linked_policies**:
     - POL-005
   - **linked_features**:
-    - FEAT-WORKBENCH-002
+    - FEAT-WORKBENCH-COMMAND-PALETTE-001
     - FEAT-WORKBENCH-003
     - FEAT-WORKBENCH-005
   - **tests**:
@@ -140,7 +140,7 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
   - **linked_policies**:
     - POL-005
   - **linked_features**:
-    - FEAT-WORKBENCH-001
+    - FEAT-WORKBENCH-SHELL-001
     - FEAT-WORKBENCH-007
   - **tests**:
     - **markdown**:
@@ -162,7 +162,7 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
   - **linked_policies**:
     - POL-005
   - **linked_features**:
-    - FEAT-WORKBENCH-001
+    - FEAT-WORKBENCH-SHELL-001
     - FEAT-WORKBENCH-007
   - **tests**:
     - **markdown**:
@@ -191,7 +191,7 @@ requirements:
     linked_policies:
       - POL-005
     linked_features:
-      - FEAT-WORKBENCH-001
+      - FEAT-WORKBENCH-SHELL-001
     tests:
       markdown:
         - file: docs/guide/workbench.md
@@ -212,7 +212,7 @@ requirements:
     linked_policies:
       - POL-005
     linked_features:
-      - FEAT-WORKBENCH-002
+      - FEAT-WORKBENCH-COMMAND-PALETTE-001
       - FEAT-WORKBENCH-003
       - FEAT-WORKBENCH-005
     tests:
@@ -295,7 +295,7 @@ requirements:
     linked_policies:
       - POL-005
     linked_features:
-      - FEAT-WORKBENCH-001
+      - FEAT-WORKBENCH-SHELL-001
       - FEAT-WORKBENCH-007
     tests:
       markdown:
@@ -316,7 +316,7 @@ requirements:
     linked_policies:
       - POL-005
     linked_features:
-      - FEAT-WORKBENCH-001
+      - FEAT-WORKBENCH-SHELL-001
       - FEAT-WORKBENCH-007
     tests:
       markdown:
