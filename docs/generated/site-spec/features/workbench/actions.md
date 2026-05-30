@@ -19,12 +19,23 @@ description: "Generated reference for docs/syu/features/workbench/actions.yaml"
 
 - **id**: FEAT-WORKBENCH-002
   - **title**: Workbench action model
-  - **summary**: Keep request, goal, evidence, and assignment actions explicit so users can see which artifact is being created, updated, or handed off.
+  - **summary**: Keep request, goal, evidence, and assignment actions explicit so users can see which artifact is being created, updated, or handed off, and drive them from a typed registry instead of hardcoded UI flow.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-WORKBENCH-002
   - **implementations**:
     - **rust**:
+      - **file**: crates/syu-workbench/src/lib.rs
+        - **symbols**:
+          - WorkbenchAction
+          - WorkbenchActionAvailability
+          - WorkbenchActionContext
+          - WorkbenchActionId
+          - WorkbenchActionInput
+          - WorkbenchActionRegistry
+          - WorkbenchActionResult
+          - WorkbenchState
+          - CommandPaletteState
       - **file**: crates/syu-actions/src/lib.rs
         - **symbols**:
           - classify_request
@@ -50,10 +61,10 @@ description: "Generated reference for docs/syu/features/workbench/actions.yaml"
     - **markdown**:
       - **file**: docs/guide/workbench.md
         - **symbols**:
-          - Request
-          - Goal Plan
-          - assignment
-          - evidence
+          - command palette registry
+          - WorkbenchState
+          - request.scope
+          - goal.test_select
 
 ## Source YAML
 
@@ -64,12 +75,23 @@ version: 1
 features:
   - id: FEAT-WORKBENCH-002
     title: Workbench action model
-    summary: Keep request, goal, evidence, and assignment actions explicit so users can see which artifact is being created, updated, or handed off.
+    summary: Keep request, goal, evidence, and assignment actions explicit so users can see which artifact is being created, updated, or handed off, and drive them from a typed registry instead of hardcoded UI flow.
     status: implemented
     linked_requirements:
       - REQ-WORKBENCH-002
     implementations:
       rust:
+        - file: crates/syu-workbench/src/lib.rs
+          symbols:
+            - WorkbenchAction
+            - WorkbenchActionAvailability
+            - WorkbenchActionContext
+            - WorkbenchActionId
+            - WorkbenchActionInput
+            - WorkbenchActionRegistry
+            - WorkbenchActionResult
+            - WorkbenchState
+            - CommandPaletteState
         - file: crates/syu-actions/src/lib.rs
           symbols:
             - classify_request
@@ -95,8 +117,8 @@ features:
       markdown:
         - file: docs/guide/workbench.md
           symbols:
-            - Request
-            - Goal Plan
-            - assignment
-            - evidence
+            - command palette registry
+            - WorkbenchState
+            - request.scope
+            - goal.test_select
 ```

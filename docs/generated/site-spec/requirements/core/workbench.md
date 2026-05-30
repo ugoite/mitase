@@ -24,7 +24,8 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
       The Workbench MUST open around a command palette instead of a fixed tab
       strip. Users SHOULD be able to launch request, goal, scope, assignment,
       and evidence actions from the same keyboard-first surface, and the UI
-      SHOULD keep the active goal centered in view.
+      SHOULD keep the active goal centered in view while rendering actions from
+      the registry rather than hardcoded buttons.
   - **priority**: medium
   - **status**: implemented
   - **linked_policies**:
@@ -36,8 +37,8 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
       - **file**: docs/guide/workbench.md
         - **symbols**:
           - command-palette-first
-          - goal-centered
-          - browser and desktop
+          - command palette registry
+          - WorkbenchActionRegistry
 - **id**: REQ-WORKBENCH-002
   - **title**: Request, Goal, Evidence, and Assignment model
   - **description**:
@@ -45,7 +46,8 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
       The Workbench MUST represent requests, goals, evidence, and assignments
       as explicit artifacts instead of hiding them inside a generic task list.
       The model SHOULD make it clear which request a goal came from, which
-      evidence supports progress, and who is responsible for the current step.
+      evidence supports progress, who is responsible for the current step, and
+      which typed action produced the current transition.
   - **priority**: medium
   - **status**: implemented
   - **linked_policies**:
@@ -58,10 +60,10 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
     - **markdown**:
       - **file**: docs/guide/workbench.md
         - **symbols**:
-          - Request
-          - Goal Plan
-          - assignment
-          - evidence
+          - WorkbenchState
+          - ActiveRequestState
+          - ActiveGoalState
+          - AssignmentState
 - **id**: REQ-WORKBENCH-003
   - **title**: Goal splitting for large change requests
   - **description**:
@@ -182,7 +184,8 @@ requirements:
       The Workbench MUST open around a command palette instead of a fixed tab
       strip. Users SHOULD be able to launch request, goal, scope, assignment,
       and evidence actions from the same keyboard-first surface, and the UI
-      SHOULD keep the active goal centered in view.
+      SHOULD keep the active goal centered in view while rendering actions from
+      the registry rather than hardcoded buttons.
     priority: medium
     status: implemented
     linked_policies:
@@ -194,15 +197,16 @@ requirements:
         - file: docs/guide/workbench.md
           symbols:
             - command-palette-first
-            - goal-centered
-            - browser and desktop
+            - command palette registry
+            - WorkbenchActionRegistry
   - id: REQ-WORKBENCH-002
     title: Request, Goal, Evidence, and Assignment model
     description: |
       The Workbench MUST represent requests, goals, evidence, and assignments
       as explicit artifacts instead of hiding them inside a generic task list.
       The model SHOULD make it clear which request a goal came from, which
-      evidence supports progress, and who is responsible for the current step.
+      evidence supports progress, who is responsible for the current step, and
+      which typed action produced the current transition.
     priority: medium
     status: implemented
     linked_policies:
@@ -215,10 +219,10 @@ requirements:
       markdown:
         - file: docs/guide/workbench.md
           symbols:
-            - Request
-            - Goal Plan
-            - assignment
-            - evidence
+            - WorkbenchState
+            - ActiveRequestState
+            - ActiveGoalState
+            - AssignmentState
   - id: REQ-WORKBENCH-003
     title: Goal splitting for large change requests
     description: |

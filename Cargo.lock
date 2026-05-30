@@ -1062,6 +1062,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "syu-workbench"
+version = "0.0.1-alpha.0"
+dependencies = [
+ "serde",
+ "syu-actions",
+ "syu-code-intel",
+ "syu-task-model",
+]
+
+[[package]]
 name = "tempfile"
 version = "3.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
