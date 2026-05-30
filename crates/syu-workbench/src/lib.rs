@@ -344,7 +344,22 @@ pub struct GoalListState {
 
 impl GoalListState {
     pub fn has_active_goal_plan(&self) -> bool {
-        self.active.iter().any(|goal| goal.goal_plan.is_some())
+        self.active_goal()
+            .is_some_and(|goal| goal.goal_plan.is_some())
+    }
+
+    pub fn active_goal(&self) -> Option<&ActiveGoalState> {
+        if let Some(selected_goal_id) = &self.selected_goal_id {
+            if let Some(goal) = self
+                .active
+                .iter()
+                .find(|goal| &goal.goal_id == selected_goal_id)
+            {
+                return Some(goal);
+            }
+        }
+
+        self.active.first()
     }
 
     pub fn active_goal_mut(&mut self) -> &mut ActiveGoalState {
@@ -574,12 +589,7 @@ impl WorkbenchState {
                     .get_or_insert_with(WorkspaceSnapshot::default)
                     .validation_summary = Some(format!("{} issues", report.issues.len()));
             }
-            WorkbenchActionResult::HistoryResponse(response) => {
-                self.evidence_timeline.entries.push(EvidenceEntry {
-                    kind: WorkbenchEvidenceKind::HistoryResponse,
-                    summary: format!("history returned {} commits", response.commits.len()),
-                    action_id: Some(action_id),
-                });
+            WorkbenchActionResult::HistoryResponse(_) => {
             }
             WorkbenchActionResult::AssignmentState(assignment) => {
                 self.assignment = Some(assignment.clone());
@@ -1080,6 +1090,95 @@ mod tests {
             action(WorkbenchActionId::GoalTestSelect).availability(&state.action_context());
 
         assert!(availability.available);
+    }
+
+    #[test]
+    fn goal_test_select_uses_the_selected_goal_only() {
+        let mut state = WorkbenchState::default();
+        state.goals.active.push(ActiveGoalState {
+            goal_id: "goal-1".to_string(),
+            goal_plan: Some(GoalPlanArtifact {
+                version: 1,
+                kind: "goal_plan".to_string(),
+                request_path: None,
+                request: None,
+                classification: None,
+                source: Default::default(),
+                goal: syu_task_model::GoalPlanGoal {
+                    id: "goal-1".to_string(),
+                    title: "Goal".to_string(),
+                    statement: "Do the thing".to_string(),
+                    non_goals: Vec::new(),
+                    inferred: false,
+                },
+                spec_mapping: Default::default(),
+                implementation_plan: syu_task_model::GoalPlanImplementationPlan {
+                    confidence: Some(syu_task_model::GoalPlanConfidence::High),
+                    scope: Default::default(),
+                    steps: vec!["implement".to_string()],
+                },
+                test_plan: syu_task_model::GoalPlanTestPlan {
+                    selection_mode: syu_task_model::GoalPlanSelectionMode::Minimal,
+                    confidence: Some(syu_task_model::GoalPlanConfidence::High),
+                    required_tests: std::collections::BTreeMap::new(),
+                    suggested_tests: std::collections::BTreeMap::new(),
+                },
+                coverage: syu_task_model::GoalPlanCoverage {
+                    mode: syu_task_model::GoalPlanCoverageMode::ChangedLines,
+                    threshold: 0,
+                    include: Vec::new(),
+                    exclude: Vec::new(),
+                },
+                completion: Default::default(),
+                warnings: Vec::new(),
+            }),
+            ..ActiveGoalState::default()
+        });
+        state.goals.active.push(ActiveGoalState {
+            goal_id: "goal-2".to_string(),
+            goal_plan: None,
+            ..ActiveGoalState::default()
+        });
+        state.goals.selected_goal_id = Some("goal-2".to_string());
+
+        let availability =
+            action(WorkbenchActionId::GoalTestSelect).availability(&state.action_context());
+
+        assert!(!availability.available);
+        assert!(
+            availability
+                .missing_state
+                .contains(&WorkbenchStateRequirement::ActiveGoalPlan)
+        );
+    }
+
+    #[test]
+    fn history_response_is_recorded_once() {
+        let mut state = WorkbenchState::default();
+
+        state.apply_result(
+            WorkbenchActionId::HistoryShow,
+            &WorkbenchActionResult::HistoryResponse(HistoryResponse {
+                id: "goal-1".to_string(),
+                entity_kind: "goal",
+                title: "Goal".to_string(),
+                status: "active",
+                repository_root: "/repo".to_string(),
+                kind: "goal",
+                include_related: false,
+                scope: None,
+                path_filter: None,
+                tracked_paths: Vec::new(),
+                lifecycle_events: Vec::new(),
+                commits: Vec::new(),
+            }),
+        );
+
+        assert_eq!(state.evidence_timeline.entries.len(), 1);
+        assert_eq!(
+            state.evidence_timeline.entries[0].kind,
+            WorkbenchEvidenceKind::HistoryResponse
+        );
     }
 
     #[test]
