@@ -1,0 +1,87 @@
+---
+title: "Configuration / Workbench"
+description: "Generated reference for docs/syu/config/workbench.yaml"
+---
+
+> Generated from `docs/syu/config/workbench.yaml`.
+
+## Parsed content
+
+### Category
+
+- Configuration
+
+### Version
+
+- 1
+
+### Section
+
+- workbench
+
+### Precedence
+
+- **bind**:
+  - --bind
+  - workbench.bind
+  - localhost safety default
+- **port**:
+  - --port
+  - workbench.port
+  - 3000
+
+### Items
+
+- **key**: workbench.bind
+  - **type**: string
+  - **default**: 127.0.0.1
+  - **summary**: Sets the default bind address for the Workbench server.
+  - **description**:
+    - |
+      When present, `syu workbench` binds to this address unless `--bind` is
+      passed. Keep the default loopback value for local development so the
+      server does not become externally reachable by accident.
+- **key**: workbench.port
+  - **type**: number
+  - **default**: 3000
+  - **summary**: Sets the default TCP port for the Workbench server.
+  - **description**:
+    - |
+      When present, `syu workbench` listens on this port unless `--port` is
+      passed. Use one repository-native listener port so browser and desktop
+      clients can target the same typed API surface.
+
+## Source YAML
+
+```yaml
+# FEAT-WORKBENCH-SERVER-001
+category: Configuration
+version: 1
+section: workbench
+precedence:
+  bind:
+    - --bind
+    - workbench.bind
+    - localhost safety default
+  port:
+    - --port
+    - workbench.port
+    - 3000
+items:
+  - key: workbench.bind
+    type: string
+    default: 127.0.0.1
+    summary: Sets the default bind address for the Workbench server.
+    description: |
+      When present, `syu workbench` binds to this address unless `--bind` is
+      passed. Keep the default loopback value for local development so the
+      server does not become externally reachable by accident.
+  - key: workbench.port
+    type: number
+    default: 3000
+    summary: Sets the default TCP port for the Workbench server.
+    description: |
+      When present, `syu workbench` listens on this port unless `--port` is
+      passed. Use one repository-native listener port so browser and desktop
+      clients can target the same typed API surface.
+```
