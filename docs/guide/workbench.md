@@ -1,8 +1,9 @@
 # Workbench flow
 
 Use this guide when a request needs to become a goal-centered Workbench flow
-instead of just another CLI invocation. The Workbench is command-palette-first
-and should work the same way in browser and desktop contexts.
+instead of just another CLI invocation. Run `syu workbench` for the local
+Workbench server entrypoint; the Workbench is command-palette-first and should
+work the same way in browser and desktop contexts.
 
 The browser and desktop clients should share one Rust-native UI and server architecture so the same flow stays visible in both places.
 
