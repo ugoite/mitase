@@ -5,15 +5,24 @@ use crate::components::{
 use crate::design::classes;
 use crate::model::{WorkbenchUiState, WorkspacePulseSummary};
 use dioxus::prelude::*;
+use syu_workbench::WorkbenchActionId;
 
 #[component]
 pub fn AppShell(ui: WorkbenchUiState) -> Element {
+    let mut ui_state = use_signal(|| ui);
+    let ui = ui_state.read().clone();
     rsx! {
         div { class: classes::APP_SHELL,
             div { class: classes::PAGE_FRAME,
                 StatusBar { ui: ui.clone() }
                 if ui.command_palette_open {
-                    CommandPalette { ui: ui.clone() }
+                    CommandPalette {
+                        ui: ui.clone(),
+                        on_query_change: move |query: String| ui_state.write().set_query(query),
+                        on_select_action: move |action_id: WorkbenchActionId| {
+                            ui_state.write().select_action(action_id);
+                        },
+                    }
                 }
                 div { class: classes::MAIN_GRID,
                     GoalRail { ui: ui.clone() }
@@ -76,7 +85,11 @@ pub fn WorkspacePulse(summary: WorkspacePulseSummary) -> Element {
 }
 
 #[component]
-pub fn CommandPalette(ui: WorkbenchUiState) -> Element {
+pub fn CommandPalette(
+    ui: WorkbenchUiState,
+    on_query_change: EventHandler<String>,
+    on_select_action: EventHandler<WorkbenchActionId>,
+) -> Element {
     let entries = ui.visible_actions();
     rsx! {
         Panel { class: classes::PANEL_MUTED,
@@ -88,11 +101,23 @@ pub fn CommandPalette(ui: WorkbenchUiState) -> Element {
                 input {
                     class: "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none",
                     value: "{ui.command_query}",
-                    placeholder: "Filter actions"
+                    placeholder: "Filter actions",
+                    oninput: move |event| on_query_change.call(event.value())
                 }
                 div { class: "space-y-2",
                     for entry in entries.iter().cloned() {
-                        CommandItem { entry: entry, selected: false }
+                        CommandItem {
+                            entry: entry.clone(),
+                            selected: {
+                                let action_id = entry.action.id;
+                                ui.selected_action_id == Some(action_id)
+                            },
+                            onclick: {
+                                let on_select_action = on_select_action.clone();
+                                let action_id = entry.action.id;
+                                move |_| on_select_action.call(action_id)
+                            },
+                        }
                     }
                 }
                 if entries.is_empty() {
@@ -222,7 +247,7 @@ mod tests {
         ui.set_query("goal");
 
         let html = render_element(rsx! {
-            CommandPalette { ui: ui.clone() }
+            AppShell { ui }
         });
 
         assert!(html.contains("disabled: missing active_goal_plan"));

@@ -80,7 +80,11 @@ pub fn GoalCard(goal_id: String, title: String, selected: bool) -> Element {
 }
 
 #[component]
-pub fn CommandItem(entry: CommandPaletteEntry, selected: bool) -> Element {
+pub fn CommandItem(
+    entry: CommandPaletteEntry,
+    selected: bool,
+    onclick: EventHandler<MouseEvent>,
+) -> Element {
     let class = if selected {
         format!("{} {}", classes::COMMAND_ITEM, classes::COMMAND_ITEM_ACTIVE)
     } else {
@@ -94,6 +98,7 @@ pub fn CommandItem(entry: CommandPaletteEntry, selected: bool) -> Element {
     rsx! {
         button {
             class: "{class} {disabled_class}",
+            onclick: onclick,
             type: "button",
             disabled: !entry.availability.available,
             div { class: "flex flex-col gap-1 text-left",

@@ -77,6 +77,16 @@ impl WorkbenchUiState {
         self.command_query = query.into();
     }
 
+    pub fn select_action(
+        &mut self,
+        action_id: WorkbenchActionId,
+    ) -> Option<WorkbenchActionRunPreview> {
+        self.selected_action_id = Some(action_id);
+        let preview = self.action_preview(action_id);
+        self.preview = preview.clone();
+        preview
+    }
+
     pub fn visible_actions(&self) -> Vec<CommandPaletteEntry> {
         let query = self.command_query.trim().to_lowercase();
         self.payload
