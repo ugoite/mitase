@@ -589,8 +589,7 @@ impl WorkbenchState {
                     .get_or_insert_with(WorkspaceSnapshot::default)
                     .validation_summary = Some(format!("{} issues", report.issues.len()));
             }
-            WorkbenchActionResult::HistoryResponse(_) => {
-            }
+            WorkbenchActionResult::HistoryResponse(_) => {}
             WorkbenchActionResult::AssignmentState(assignment) => {
                 self.assignment = Some(assignment.clone());
             }
