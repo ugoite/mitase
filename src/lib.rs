@@ -72,6 +72,7 @@ pub(crate) mod test_support {
 
 enum Dispatch {
     Browse(cli::BrowseArgs),
+    Workbench(cli::WorkbenchArgs),
     List(cli::ListArgs),
     Show(cli::ShowArgs),
     Search(cli::SearchArgs),
@@ -95,6 +96,7 @@ enum Dispatch {
 fn dispatch(cli: cli::Cli, stdin_is_terminal: bool, stdout_is_terminal: bool) -> Dispatch {
     match cli.command {
         Some(cli::Commands::Browse(args)) => Dispatch::Browse(args),
+        Some(cli::Commands::Workbench(args)) => Dispatch::Workbench(args),
         Some(cli::Commands::List(args)) => Dispatch::List(args),
         Some(cli::Commands::Show(args)) => Dispatch::Show(args),
         Some(cli::Commands::Search(args)) => Dispatch::Search(args),
@@ -122,6 +124,7 @@ fn dispatch(cli: cli::Cli, stdin_is_terminal: bool, stdout_is_terminal: bool) ->
 fn run_dispatch(dispatch: Dispatch) -> Result<i32> {
     match dispatch {
         Dispatch::Browse(args) => command::browse::run_browse_command(&args),
+        Dispatch::Workbench(args) => command::workbench::run_workbench_command(&args),
         Dispatch::List(args) => command::list::run_list_command(&args),
         Dispatch::Show(args) => command::show::run_show_command(&args),
         Dispatch::Search(args) => command::search::run_search_command(&args),
