@@ -251,21 +251,7 @@ impl BranchScopeReport {
             affected_items,
             unowned_changes: trace_ownership.unowned_changes.clone(),
             ambiguous_ownership: trace_ownership.ambiguous_ownership.clone(),
-            out_of_scope_changes: if evidence.out_of_scope_changes.is_empty()
-                && !evidence.spec_files.is_empty()
-            {
-                evidence
-                    .spec_files
-                    .iter()
-                    .map(|file| OutOfScopeChange {
-                        file: file.clone(),
-                        allowed_ids: evidence.allowed_ids.clone(),
-                        reason: "changed spec file is outside the requested scope".to_string(),
-                    })
-                    .collect()
-            } else {
-                evidence.out_of_scope_changes.clone()
-            },
+            out_of_scope_changes: evidence.out_of_scope_changes.clone(),
         };
 
         let test_inventory = TestInventoryReport {
@@ -378,4 +364,50 @@ fn build_warnings(
         }
     }
     warnings
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        AffectedSpecItem, BranchScopeConfidence, BranchScopeEvidence, BranchScopeReport,
+        ChangedFileReport,
+    };
+    use crate::OwnershipStatus;
+
+    #[test]
+    fn spec_files_do_not_become_out_of_scope_without_explicit_violations() {
+        let report = BranchScopeReport::from_evidence(BranchScopeEvidence {
+            range: "HEAD~1..HEAD".to_string(),
+            changed_files: vec![ChangedFileReport {
+                file: "docs/syu/spec.md".to_string(),
+                symbols: Vec::new(),
+                owners: Vec::new(),
+                status: OwnershipStatus::Owned,
+                is_spec_file: true,
+            }],
+            trace_ownership: Vec::new(),
+            spec_items: vec![AffectedSpecItem {
+                kind: "spec".to_string(),
+                id: "spec-1".to_string(),
+                title: "Spec".to_string(),
+                document_path: Some("docs/syu/spec.md".to_string()),
+                direct: true,
+            }],
+            required_tests: Vec::new(),
+            linked_tests: Vec::new(),
+            include_patterns: Vec::new(),
+            exclude_patterns: Vec::new(),
+            allowed_ids: Vec::new(),
+            unowned_files: Vec::new(),
+            ambiguous_files: Vec::new(),
+            spec_files: vec!["docs/syu/spec.md".to_string()],
+            out_of_scope_changes: Vec::new(),
+            direct_items: Vec::new(),
+            related_items: Vec::new(),
+            has_planned_features: false,
+        });
+
+        assert_eq!(report.confidence, BranchScopeConfidence::Medium);
+        assert!(report.spec_impact.out_of_scope_changes.is_empty());
+    }
 }

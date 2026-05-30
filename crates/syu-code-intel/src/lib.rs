@@ -91,7 +91,7 @@ pub fn confidence_for_branch_scope(
     unowned_files: &[String],
     ambiguous_files: &[String],
     spec_files: &[String],
-    has_planned_features: bool,
+    _has_planned_features: bool,
 ) -> BranchScopeConfidence {
     if !unowned_files.is_empty() {
         return BranchScopeConfidence::Low;
@@ -104,8 +104,8 @@ pub fn confidence_for_branch_scope(
     {
         return BranchScopeConfidence::Medium;
     }
-    if !ambiguous_files.is_empty() && !has_planned_features {
-        return BranchScopeConfidence::Low;
+    if !ambiguous_files.is_empty() {
+        return BranchScopeConfidence::Medium;
     }
     BranchScopeConfidence::High
 }
@@ -128,7 +128,7 @@ pub fn flatten_symbols(file: &str, symbols: &[String]) -> Vec<ChangedSymbolRepor
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_git_range_changed_files;
+    use super::{BranchScopeConfidence, confidence_for_branch_scope, resolve_git_range_changed_files};
     use std::{fs, path::Path};
     use tempfile::tempdir;
 
@@ -186,5 +186,18 @@ mod tests {
                 Path::new("b.txt").to_path_buf()
             ]
         );
+    }
+
+    #[test]
+    fn ambiguous_ownership_caps_confidence_at_medium() {
+        let confidence = confidence_for_branch_scope(
+            &["src/lib.rs".to_string()],
+            &[],
+            &["src/lib.rs".to_string()],
+            &[],
+            true,
+        );
+
+        assert_eq!(confidence, BranchScopeConfidence::Medium);
     }
 }
