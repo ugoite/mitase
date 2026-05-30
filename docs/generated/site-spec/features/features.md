@@ -61,6 +61,8 @@ description: "Generated reference for docs/syu/features/features.yaml"
   - **file**: workbench/assignment.yaml
 - **kind**: workbench
   - **file**: workbench/desktop.yaml
+- **kind**: workbench
+  - **file**: workbench/server.yaml
 - **kind**: docs
   - **file**: documentation/docs.yaml
 - **kind**: skills
@@ -127,6 +129,8 @@ files:
     file: workbench/assignment.yaml
   - kind: workbench
     file: workbench/desktop.yaml
+  - kind: workbench
+    file: workbench/server.yaml
   - kind: docs
     file: documentation/docs.yaml
   - kind: skills

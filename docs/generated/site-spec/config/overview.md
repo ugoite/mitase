@@ -63,7 +63,7 @@ guidance:
 sections:
   - spec.yaml
   - validate.yaml
-- workbench.yaml
+  - workbench.yaml
   - report.yaml
   - runtimes.yaml
 items:

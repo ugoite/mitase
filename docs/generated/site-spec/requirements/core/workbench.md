@@ -142,6 +142,7 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
   - **linked_features**:
     - FEAT-WORKBENCH-SHELL-001
     - FEAT-WORKBENCH-007
+    - FEAT-WORKBENCH-SERVER-001
   - **tests**:
     - **markdown**:
       - **file**: docs/guide/workbench.md
@@ -164,6 +165,7 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
   - **linked_features**:
     - FEAT-WORKBENCH-SHELL-001
     - FEAT-WORKBENCH-007
+    - FEAT-WORKBENCH-SERVER-001
   - **tests**:
     - **markdown**:
       - **file**: docs/guide/workbench.md
@@ -297,6 +299,7 @@ requirements:
     linked_features:
       - FEAT-WORKBENCH-SHELL-001
       - FEAT-WORKBENCH-007
+      - FEAT-WORKBENCH-SERVER-001
     tests:
       markdown:
         - file: docs/guide/workbench.md
@@ -318,6 +321,7 @@ requirements:
     linked_features:
       - FEAT-WORKBENCH-SHELL-001
       - FEAT-WORKBENCH-007
+      - FEAT-WORKBENCH-SERVER-001
     tests:
       markdown:
         - file: docs/guide/workbench.md
