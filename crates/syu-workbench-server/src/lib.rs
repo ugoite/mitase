@@ -2,7 +2,9 @@ use anyhow::{Context, Result, bail};
 use axum::{
     Json, Router,
     extract::{Path, Query, State},
+    http::header,
     response::sse::{Event, KeepAlive, Sse},
+    response::{Html, IntoResponse, Response},
     routing::{get, post},
 };
 use futures_util::StreamExt;
@@ -811,6 +813,8 @@ impl WorkbenchServer {
 
     pub fn router(&self) -> Router {
         Router::new()
+            .route("/", get(workbench_index))
+            .route("/assets/tailwind.css", get(workbench_css))
             .route("/api/health", get(health))
             .route("/api/workspace/snapshot", get(workspace_snapshot))
             .route("/api/actions", get(list_actions))
@@ -909,6 +913,44 @@ impl WorkbenchServer {
         }
         Ok(watcher)
     }
+}
+
+async fn workbench_index(State(server): State<WorkbenchServer>) -> Html<String> {
+    let state = server.inner.state.read().await.clone();
+    let workspace = state
+        .workspace
+        .as_ref()
+        .map(|workspace| workspace.workspace_root.display().to_string())
+        .unwrap_or_else(|| "unloaded workspace".to_string());
+    Html(format!(
+        r#"<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Syu Workbench</title>
+  <link rel="stylesheet" href="/assets/tailwind.css">
+</head>
+<body>
+  <main class="min-h-screen bg-background text-foreground p-6">
+    <section class="mx-auto max-w-7xl">
+      <p class="text-sm uppercase tracking-wide text-evidence-pending">Syu Workbench</p>
+      <h1 class="mt-2 text-3xl font-semibold">Command Palette</h1>
+      <p class="mt-3 text-sm text-foreground/75">Workspace: {workspace}</p>
+      <p class="mt-6 text-sm text-foreground/70">Browser/server mode exposes the local Workbench API and shared Tailwind asset. Desktop mode loads the shared Dioxus Workbench UI crate around the same server.</p>
+    </section>
+  </main>
+</body>
+</html>"#
+    ))
+}
+
+async fn workbench_css() -> Response {
+    (
+        [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
+        include_str!("../../syu-app-ui/assets/tailwind.css"),
+    )
+        .into_response()
 }
 
 async fn health(State(server): State<WorkbenchServer>) -> Json<WorkbenchHealth> {
@@ -2080,6 +2122,54 @@ mod tests {
             .to_bytes();
         let json = serde_json::from_slice(&bytes).expect("json should parse");
         (status, json)
+    }
+
+    async fn text_response(router: Router, request: Request<Body>) -> (StatusCode, String) {
+        let response = router
+            .oneshot(request)
+            .await
+            .expect("request should succeed");
+        let status = response.status();
+        let bytes = BodyExt::collect(response.into_body())
+            .await
+            .expect("body should collect")
+            .to_bytes();
+        let text = String::from_utf8(bytes.to_vec()).expect("body should be utf8");
+        (status, text)
+    }
+
+    #[tokio::test]
+    async fn index_route_renders_workbench_browser_entrypoint_and_css_asset() {
+        let server = test_server();
+        let (status, html) = text_response(
+            server.router(),
+            Request::builder()
+                .uri("/")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert!(html.contains("Syu Workbench"));
+        assert!(html.contains("/assets/tailwind.css"));
+        assert!(html.contains("Command Palette"));
+    }
+
+    #[tokio::test]
+    async fn css_route_serves_the_shared_tailwind_asset() {
+        let server = test_server();
+        let (status, css) = text_response(
+            server.router(),
+            Request::builder()
+                .uri("/assets/tailwind.css")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert!(css.contains("--color-command-active"));
     }
 
     #[tokio::test]
