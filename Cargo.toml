@@ -4,11 +4,13 @@ members = [
     "crates/syu-actions",
     "crates/syu-code-intel",
     "crates/syu-app-ui",
+    "crates/syu-desktop",
     "crates/syu-domain",
     "crates/syu-workbench-server",
     "crates/syu-workbench",
     "crates/syu-task-model",
 ]
+resolver = "3"
 
 [package]
 name = "syu"

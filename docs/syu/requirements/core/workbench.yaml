@@ -173,7 +173,10 @@ requirements:
     description: |
       The Workbench MUST behave consistently in browser and desktop contexts.
       The same request, goal, assignment, and evidence flow SHOULD work in both
-      environments so users do not have to learn two separate products.
+      environments so users do not have to learn two separate products. Tauri
+      MUST remain a desktop shell around the shared Workbench server, typed
+      action registry, Dioxus UI crate, and Tailwind-generated CSS asset rather
+      than becoming a second Workbench implementation.
     priority: medium
     status: implemented
     linked_policies:
@@ -181,6 +184,7 @@ requirements:
     linked_features:
       - FEAT-WORKBENCH-SHELL-001
       - FEAT-WORKBENCH-007
+      - FEAT-WORKBENCH-TAURI-001
       - FEAT-WORKBENCH-SERVER-001
     tests:
       markdown:
@@ -188,6 +192,15 @@ requirements:
           symbols:
             - browser and desktop
             - same way
+      rust:
+        - file: crates/syu-desktop/src/lib.rs
+          symbols:
+            - desktop_bridge_uses_the_shared_action_registry
+            - desktop_shell_renders_the_shared_dioxus_workbench_ui
+        - file: crates/syu-workbench-server/src/lib.rs
+          symbols:
+            - index_route_renders_workbench_browser_entrypoint_and_css_asset
+            - css_route_serves_the_shared_tailwind_asset
   - id: REQ-WORKBENCH-007
     title: Rust-native UI and server architecture
     description: |
