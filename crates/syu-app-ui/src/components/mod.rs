@@ -8,11 +8,13 @@ pub use primitives::{
     ValidationEvidenceView,
 };
 pub use shell::{
-    AffectedSpecPanel, AppShell, BranchScopeLens, ChangedFilesPanel, CommandPalette, EvidencePanel,
-    EvidenceTimeline, GoalCanvas, GoalDependencyView, GoalPlanCanvas, GoalPlanExportPanel,
-    GoalRail, GoalScopePanel, GoalTestPlanPanel, GraphEdge, GraphNode, ImpactSummaryPanel,
+    AffectedSpecPanel, AgentRunPanel, AppShell, AssignGoalDialog, AssigneeSelector,
+    AssignmentConstraintPanel, AssignmentEvidencePanel, AssignmentPromptPreview, BranchScopeLens,
+    ChangedFilesPanel, CommandPalette, EvidencePanel, EvidenceTimeline, GoalCanvas,
+    GoalDependencyView, GoalPlanCanvas, GoalPlanExportPanel, GoalRail, GoalScopePanel,
+    GoalTestPlanPanel, GraphEdge, GraphNode, HumanAssignmentPanel, ImpactSummaryPanel,
     OutOfScopePanel, OwnershipBadge, OwnershipPanel, RequestClassificationPanel,
     RequestContextEditor, RequestIntakeCanvas, RequestScopePanel, ScaffoldPreviewPanel,
-    ScopeLegend, SpecImpactGraph, StatusBar, SuggestedGoalSplitPanel, TestRecommendationPanel,
-    WorkspacePulse,
+    ScopeGuardPreview, ScopeLegend, SpecImpactGraph, StatusBar, SuggestedGoalSplitPanel,
+    TestRecommendationPanel, WorkspacePulse,
 };
