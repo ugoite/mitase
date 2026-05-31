@@ -69,7 +69,7 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
     - FEAT-WORKBENCH-COMMAND-PALETTE-001
     - FEAT-WORKBENCH-DESIGN-TOKENS-001
     - FEAT-WORKBENCH-003
-    - FEAT-WORKBENCH-005
+    - FEAT-WORKBENCH-EVIDENCE-001
   - **tests**:
     - **markdown**:
       - **file**: docs/guide/workbench.md
@@ -84,6 +84,7 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
           - filters_actions_by_query
           - read_only_action_returns_placeholder_preview
           - registry_loaded_from_server_payload
+          - evidence_panel_renders_goal_scoped_timeline
 - **id**: REQ-WORKBENCH-003
   - **title**: Goal splitting for large change requests
   - **description**:
@@ -167,7 +168,7 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
   - **linked_policies**:
     - POL-005
   - **linked_features**:
-    - FEAT-WORKBENCH-005
+    - FEAT-WORKBENCH-EVIDENCE-001
     - FEAT-WORKBENCH-006
   - **tests**:
     - **markdown**:
@@ -278,7 +279,7 @@ requirements:
       - FEAT-WORKBENCH-COMMAND-PALETTE-001
       - FEAT-WORKBENCH-DESIGN-TOKENS-001
       - FEAT-WORKBENCH-003
-      - FEAT-WORKBENCH-005
+      - FEAT-WORKBENCH-EVIDENCE-001
     tests:
       markdown:
         - file: docs/guide/workbench.md
@@ -293,6 +294,7 @@ requirements:
             - filters_actions_by_query
             - read_only_action_returns_placeholder_preview
             - registry_loaded_from_server_payload
+            - evidence_panel_renders_goal_scoped_timeline
   - id: REQ-WORKBENCH-003
     title: Goal splitting for large change requests
     description: |
@@ -373,7 +375,7 @@ requirements:
     linked_policies:
       - POL-005
     linked_features:
-      - FEAT-WORKBENCH-005
+      - FEAT-WORKBENCH-EVIDENCE-001
       - FEAT-WORKBENCH-006
     tests:
       markdown:

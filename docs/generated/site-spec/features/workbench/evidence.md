@@ -17,9 +17,9 @@ description: "Generated reference for docs/syu/features/workbench/evidence.yaml"
 
 ### Features
 
-- **id**: FEAT-WORKBENCH-005
+- **id**: FEAT-WORKBENCH-EVIDENCE-001
   - **title**: Evidence trail in the Workbench
-  - **summary**: Keep evidence attached to the active request and goal so progress, handoffs, and completion checks stay proof-backed.
+  - **summary**: Keep evidence attached to the active request and goal so progress, handoffs, and completion checks stay proof-backed through a goal-scoped evidence timeline.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-WORKBENCH-002
@@ -39,9 +39,9 @@ category: Workbench
 version: 1
 
 features:
-  - id: FEAT-WORKBENCH-005
+  - id: FEAT-WORKBENCH-EVIDENCE-001
     title: Evidence trail in the Workbench
-    summary: Keep evidence attached to the active request and goal so progress, handoffs, and completion checks stay proof-backed.
+    summary: Keep evidence attached to the active request and goal so progress, handoffs, and completion checks stay proof-backed through a goal-scoped evidence timeline.
     status: implemented
     linked_requirements:
       - REQ-WORKBENCH-002
