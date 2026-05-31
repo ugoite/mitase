@@ -10,6 +10,7 @@ pub mod branch_scope;
 pub use branch_scope::{
     AffectedSpecItem, AmbiguousOwnership, BranchScopeConfidence, BranchScopeEvidence,
     BranchScopeReport, ChangedFileReport, ChangedSymbolReport, OutOfScopeChange, RepoRiskSummary,
+    SpecImpactGraphEdge, SpecImpactGraphNode, SpecImpactGraphReport, SpecImpactReport,
     SuggestedGoalSplit, TestInventoryReport, TraceOwnershipReport, UnownedChange,
 };
 

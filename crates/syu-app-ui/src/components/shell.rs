@@ -178,6 +178,8 @@ pub fn GoalCanvas(
                     ui: ui.clone(),
                     on_run_action: on_run_action,
                 }
+                BranchScopeLens { ui: ui.clone(), on_run_action: on_run_action }
+                SpecImpactGraph { ui: ui.clone() }
                 if let Some(preview) = ui.preview.clone().or_else(|| ui.selected_action_id.and_then(|id| ui.action_preview(id))) {
                     DetailDrawer {
                         title: preview.title.clone(),
@@ -192,6 +194,318 @@ pub fn GoalCanvas(
                     }
                 } else {
                     EmptyState { title: "No action selected".to_string(), body: "Open the palette to run a read-only action or inspect the next suggested step.".to_string() }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn BranchScopeLens(
+    ui: WorkbenchUiState,
+    on_run_action: Option<EventHandler<WorkbenchActionId>>,
+) -> Element {
+    let report = ui
+        .payload
+        .state
+        .branch_scope
+        .as_ref()
+        .and_then(|state| state.report.clone());
+    rsx! {
+        Panel { class: classes::PANEL_MUTED,
+            div { class: "flex flex-col gap-4 p-4",
+                div { class: classes::SECTION_HEADER,
+                    h2 { class: classes::SECTION_TITLE, "Branch Scope Lens" }
+                    ScopeChip { label: report.as_ref().map(|report| report.range.clone()).unwrap_or_else(|| "range pending".to_string()) }
+                }
+                div { class: "grid gap-2 md:grid-cols-5",
+                    FlowActionButton { label: "Load scope".to_string(), action_id: WorkbenchActionId::BranchScope, ui: ui.clone(), onclick: on_run_action }
+                    FlowActionButton { label: "Infer goal".to_string(), action_id: WorkbenchActionId::BranchInferGoal, ui: ui.clone(), onclick: on_run_action }
+                    FlowActionButton { label: "Spec impact".to_string(), action_id: WorkbenchActionId::SpecImpact, ui: ui.clone(), onclick: on_run_action }
+                    FlowActionButton { label: "Trace range".to_string(), action_id: WorkbenchActionId::TraceRange, ui: ui.clone(), onclick: on_run_action }
+                    FlowActionButton { label: "Relate range".to_string(), action_id: WorkbenchActionId::RelateRange, ui: ui.clone(), onclick: on_run_action }
+                }
+                if let Some(report) = report {
+                    ImpactSummaryPanel { report: report.clone() }
+                    div { class: "grid gap-3 xl:grid-cols-2",
+                        ChangedFilesPanel { report: report.clone() }
+                        OwnershipPanel { report: report.clone() }
+                        OutOfScopePanel { report: report.clone() }
+                        AffectedSpecPanel { report: report.clone() }
+                        SuggestedGoalSplitPanel { split: report.suggested_goal_split.clone() }
+                        TestRecommendationPanel { report: report.clone() }
+                    }
+                } else {
+                    EmptyState { title: "Branch scope pending".to_string(), body: "Load branch.scope to inspect changed files, owners, affected specs, test impact, and strict review status.".to_string() }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn SpecImpactGraph(ui: WorkbenchUiState) -> Element {
+    let report = ui
+        .payload
+        .state
+        .branch_scope
+        .as_ref()
+        .and_then(|state| state.report.clone());
+    rsx! {
+        Panel { class: classes::PANEL_MUTED,
+            div { class: "flex flex-col gap-4 p-4",
+                div { class: classes::SECTION_HEADER,
+                    h2 { class: classes::SECTION_TITLE, "Spec Impact Graph" }
+                    ScopeLegend {}
+                }
+                if let Some(report) = report {
+                    div { class: "grid gap-3 xl:grid-cols-[minmax(0,1fr)_16rem]",
+                        div { class: "min-h-72 rounded-xl border border-border bg-background p-3",
+                            svg { class: "h-72 w-full", view_box: "0 0 900 320", role: "img",
+                                for (index, edge) in report.spec_impact_graph.edges.iter().enumerate() {
+                                    GraphEdge { index, state: edge.state.clone(), label: format!("{} to {}", edge.from, edge.to) }
+                                }
+                                for (index, node) in report.spec_impact_graph.nodes.iter().enumerate() {
+                                    GraphNode {
+                                        index,
+                                        label: node.label.clone(),
+                                        kind: node.kind.clone(),
+                                        state: node.state.clone(),
+                                    }
+                                }
+                            }
+                        }
+                        div { class: "space-y-2",
+                            for node in &report.spec_impact_graph.nodes {
+                                article { class: "rounded-lg border border-border bg-panel p-2",
+                                    div { class: "flex flex-wrap items-center gap-2",
+                                        ScopeChip { label: node.kind.clone() }
+                                        ScopeChip { label: node.state.clone() }
+                                    }
+                                    p { class: "mt-2 text-sm font-medium", "{node.label}" }
+                                    p { class: "mt-1 text-xs text-foreground/60", "{node.id}" }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    EmptyState { title: "No impact graph".to_string(), body: "A Branch Scope report supplies typed nodes and edges for specs, code, and tests.".to_string() }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn GraphNode(index: usize, label: String, kind: String, state: String) -> Element {
+    let x = 95 + ((index % 4) as i32 * 210);
+    let y = 56 + ((index / 4) as i32 * 86);
+    let class = graph_state_class(&state);
+    let short = truncate_label(&label, 26);
+    rsx! {
+        g { tabindex: "0",
+            title { "{kind}: {label}" }
+            rect { x: "{x}", y: "{y}", width: "172", height: "44", rx: "7", class: "fill-panel stroke-current {class}" }
+            text { x: "{x + 12}", y: "{y + 19}", class: "fill-foreground text-[11px] font-semibold", "{short}" }
+            text { x: "{x + 12}", y: "{y + 34}", class: "fill-foreground/60 text-[9px] uppercase", "{kind} / {state}" }
+        }
+    }
+}
+
+#[component]
+pub fn GraphEdge(index: usize, state: String, label: String) -> Element {
+    let from_x = 266 + ((index % 4) as i32 * 210);
+    let from_y = 78 + ((index / 4) as i32 * 86);
+    let to_x = 305 + ((index % 4) as i32 * 210);
+    let to_y = if index % 3 == 2 { from_y + 86 } else { from_y };
+    let class = graph_state_class(&state);
+    rsx! {
+        g {
+            title { "{label}" }
+            line { x1: "{from_x}", y1: "{from_y}", x2: "{to_x}", y2: "{to_y}", class: "stroke-current {class}", stroke_width: "2" }
+            circle { cx: "{to_x}", cy: "{to_y}", r: "3", class: "fill-current {class}" }
+        }
+    }
+}
+
+#[component]
+pub fn ScopeLegend() -> Element {
+    rsx! {
+        div { class: "flex flex-wrap justify-end gap-2",
+            for label in ["spec-linked", "code-linked", "test-linked", "scope-in", "scope-out", "scope-ambiguous", "ownership-known", "ownership-missing", "ownership-ambiguous", "evidence-pass", "evidence-warn", "evidence-fail", "evidence-pending"] {
+                span { class: "inline-flex items-center gap-1 text-[10px] uppercase text-foreground/70",
+                    span { class: "h-2 w-2 rounded-full {graph_state_class(label)} bg-current" }
+                    span { "{label}" }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn ImpactSummaryPanel(report: syu_workbench::BranchScopeReport) -> Element {
+    let strict_status = if report.spec_impact.out_of_scope_changes.is_empty()
+        && report.trace_ownership.unowned_changes.is_empty()
+    {
+        "strict review: pass"
+    } else {
+        "strict review: warn"
+    };
+    rsx! {
+        div { class: "grid gap-3 md:grid-cols-4",
+            PulseMetric { label: "changed files".to_string(), value: report.changed_files.len().to_string() }
+            PulseMetric { label: "affected specs".to_string(), value: report.spec_impact.affected_items.len().to_string() }
+            PulseMetric { label: "tests".to_string(), value: report.test_inventory.total_tests.to_string() }
+            PulseMetric { label: "strict status".to_string(), value: strict_status.to_string() }
+        }
+    }
+}
+
+#[component]
+pub fn ChangedFilesPanel(report: syu_workbench::BranchScopeReport) -> Element {
+    rsx! {
+        Panel { class: classes::PANEL_MUTED,
+            div { class: "flex flex-col gap-2 p-3",
+                div { class: classes::SECTION_HEADER,
+                    h3 { class: "text-sm font-semibold", "Changed Files" }
+                    ScopeChip { label: format!("{} files", report.changed_files.len()) }
+                }
+                for file in &report.changed_files {
+                    article { class: classes::EVIDENCE_CARD,
+                        div { class: "flex flex-wrap items-center gap-2",
+                            OwnershipBadge { status: format!("{:?}", file.status) }
+                            ScopeChip { label: if file.is_spec_file { "spec-linked".to_string() } else { "code-linked".to_string() } }
+                        }
+                        p { class: "mt-2 text-sm font-medium", "{file.file}" }
+                        for symbol in &file.symbols {
+                            p { class: "text-xs text-foreground/65", "symbol: {symbol}" }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn OwnershipPanel(report: syu_workbench::BranchScopeReport) -> Element {
+    rsx! {
+        Panel { class: classes::PANEL_MUTED,
+            div { class: "flex flex-col gap-2 p-3",
+                div { class: classes::SECTION_HEADER,
+                    h3 { class: "text-sm font-semibold", "Ownership" }
+                    ScopeChip { label: format!("{} owned", report.trace_ownership.owned_files) }
+                }
+                for change in &report.trace_ownership.unowned_changes {
+                    p { class: "text-sm text-ownership-missing", "unowned: {change.file}" }
+                    p { class: "text-xs text-foreground/65", "{change.reason}" }
+                }
+                for change in &report.trace_ownership.ambiguous_ownership {
+                    p { class: "text-sm text-ownership-ambiguous", "ambiguous: {change.file}" }
+                }
+                if report.trace_ownership.unowned_changes.is_empty() && report.trace_ownership.ambiguous_ownership.is_empty() {
+                    p { class: "text-sm text-ownership-known", "ownership-known" }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn OwnershipBadge(status: String) -> Element {
+    let state = match status.as_str() {
+        "Owned" => "ownership-known",
+        "Partial" => "ownership-ambiguous",
+        _ => "ownership-missing",
+    };
+    rsx! {
+        span { class: "{classes::CHIP} {graph_state_class(state)}", "{state}" }
+    }
+}
+
+#[component]
+pub fn OutOfScopePanel(report: syu_workbench::BranchScopeReport) -> Element {
+    rsx! {
+        Panel { class: classes::PANEL_MUTED,
+            div { class: "flex flex-col gap-2 p-3",
+                div { class: classes::SECTION_HEADER,
+                    h3 { class: "text-sm font-semibold", "Out Of Scope" }
+                    ScopeChip { label: format!("{} files", report.spec_impact.out_of_scope_changes.len()) }
+                }
+                if report.spec_impact.out_of_scope_changes.is_empty() {
+                    p { class: "text-sm text-scope-in", "scope-in" }
+                } else {
+                    for change in &report.spec_impact.out_of_scope_changes {
+                        p { class: "text-sm text-scope-out", "{change.file}" }
+                        p { class: "text-xs text-foreground/65", "{change.reason}" }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn AffectedSpecPanel(report: syu_workbench::BranchScopeReport) -> Element {
+    rsx! {
+        Panel { class: classes::PANEL_MUTED,
+            div { class: "flex flex-col gap-2 p-3",
+                div { class: classes::SECTION_HEADER,
+                    h3 { class: "text-sm font-semibold", "Affected Specs" }
+                    ScopeChip { label: format!("{} linked", report.spec_impact.affected_items.len()) }
+                }
+                for item in &report.spec_impact.affected_items {
+                    article { class: classes::EVIDENCE_CARD,
+                        div { class: "flex flex-wrap items-center gap-2",
+                            ScopeChip { label: item.kind.clone() }
+                            ScopeChip { label: if item.direct { "spec-linked".to_string() } else { "scope-ambiguous".to_string() } }
+                        }
+                        p { class: "mt-2 text-sm font-medium", "{item.id}" }
+                        p { class: "text-xs text-foreground/65", "{item.title}" }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn SuggestedGoalSplitPanel(split: syu_workbench::SuggestedGoalSplit) -> Element {
+    rsx! {
+        Panel { class: classes::PANEL_MUTED,
+            div { class: "flex flex-col gap-2 p-3",
+                div { class: classes::SECTION_HEADER,
+                    h3 { class: "text-sm font-semibold", "Suggested Goal Split" }
+                    ScopeChip { label: format!("confidence: {}", split.confidence) }
+                }
+                for include in &split.include {
+                    p { class: "text-sm text-scope-in", "include: {include}" }
+                }
+                for exclude in &split.exclude {
+                    p { class: "text-sm text-scope-out", "exclude: {exclude}" }
+                }
+                for reason in &split.reasons {
+                    p { class: "text-xs text-evidence-warn", "{reason}" }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn TestRecommendationPanel(report: syu_workbench::BranchScopeReport) -> Element {
+    rsx! {
+        Panel { class: classes::PANEL_MUTED,
+            div { class: "flex flex-col gap-2 p-3",
+                div { class: classes::SECTION_HEADER,
+                    h3 { class: "text-sm font-semibold", "Test Impact" }
+                    ScopeChip { label: format!("{} tests", report.test_inventory.total_tests) }
+                }
+                for test in report.test_inventory.required_tests.iter().chain(report.test_inventory.linked_tests.iter()) {
+                    p { class: "text-sm text-test-linked", "{test}" }
+                }
+                if report.test_inventory.total_tests == 0 {
+                    p { class: "text-sm text-evidence-warn", "evidence-pending" }
                 }
             }
         }
@@ -653,6 +967,38 @@ fn include_pattern(include: &GoalPlanScopeInclude) -> String {
 fn goal_plan_yaml_preview(plan: &GoalPlanArtifact) -> String {
     serde_yaml::to_string(plan)
         .unwrap_or_else(|err| format!("# failed to render Goal Plan YAML: {err}"))
+}
+
+fn graph_state_class(state: &str) -> &'static str {
+    match state {
+        "spec-linked" => "text-spec-linked",
+        "code-linked" => "text-code-linked",
+        "test-linked" => "text-test-linked",
+        "scope-in" => "text-scope-in",
+        "scope-out" => "text-scope-out",
+        "scope-ambiguous" => "text-scope-ambiguous",
+        "ownership-known" => "text-ownership-known",
+        "ownership-missing" => "text-ownership-missing",
+        "ownership-ambiguous" => "text-ownership-ambiguous",
+        "evidence-pass" => "text-evidence-pass",
+        "evidence-warn" => "text-evidence-warn",
+        "evidence-fail" => "text-evidence-fail",
+        "evidence-pending" => "text-evidence-pending",
+        _ => "text-foreground/70",
+    }
+}
+
+fn truncate_label(label: &str, max_chars: usize) -> String {
+    if label.chars().count() <= max_chars {
+        return label.to_string();
+    }
+
+    let mut truncated = label
+        .chars()
+        .take(max_chars.saturating_sub(3))
+        .collect::<String>();
+    truncated.push_str("...");
+    truncated
 }
 
 #[cfg(test)]

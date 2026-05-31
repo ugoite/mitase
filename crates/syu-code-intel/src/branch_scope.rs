@@ -104,6 +104,29 @@ pub struct SpecImpactReport {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SpecImpactGraphNode {
+    pub id: String,
+    pub label: String,
+    pub kind: String,
+    pub state: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SpecImpactGraphEdge {
+    pub from: String,
+    pub to: String,
+    pub state: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SpecImpactGraphReport {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub nodes: Vec<SpecImpactGraphNode>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub edges: Vec<SpecImpactGraphEdge>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct TestInventoryReport {
     pub total_tests: usize,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -172,6 +195,7 @@ pub struct BranchScopeReport {
     pub changed_symbols: Vec<ChangedSymbolReport>,
     pub trace_ownership: TraceOwnershipReport,
     pub spec_impact: SpecImpactReport,
+    pub spec_impact_graph: SpecImpactGraphReport,
     pub test_inventory: TestInventoryReport,
     pub suggested_goal_split: SuggestedGoalSplit,
     pub repo_risk: RepoRiskSummary,
@@ -259,6 +283,8 @@ impl BranchScopeReport {
             required_tests: evidence.required_tests.clone(),
             linked_tests: evidence.linked_tests.clone(),
         };
+        let spec_impact_graph =
+            build_spec_impact_graph(&changed_files, &spec_impact, &test_inventory);
 
         let suggested_goal_split = SuggestedGoalSplit {
             confidence: confidence.label().to_string(),
@@ -285,12 +311,98 @@ impl BranchScopeReport {
             changed_symbols,
             trace_ownership,
             spec_impact,
+            spec_impact_graph,
             test_inventory,
             suggested_goal_split,
             repo_risk,
             warnings,
         }
     }
+}
+
+fn build_spec_impact_graph(
+    changed_files: &[ChangedFileReport],
+    spec_impact: &SpecImpactReport,
+    test_inventory: &TestInventoryReport,
+) -> SpecImpactGraphReport {
+    let mut nodes = Vec::new();
+    let mut edges = Vec::new();
+    let mut previous_spec_id: Option<String> = None;
+
+    for item in &spec_impact.affected_items {
+        let state = match item.kind.as_str() {
+            "philosophy" => "spec-linked",
+            "policy" => "spec-linked",
+            "requirement" => "scope-in",
+            "feature" => "scope-in",
+            _ => "spec-linked",
+        };
+        nodes.push(SpecImpactGraphNode {
+            id: item.id.clone(),
+            label: item.title.clone(),
+            kind: item.kind.clone(),
+            state: state.to_string(),
+        });
+        if let Some(previous) = &previous_spec_id {
+            edges.push(SpecImpactGraphEdge {
+                from: previous.clone(),
+                to: item.id.clone(),
+                state: "spec-linked".to_string(),
+            });
+        }
+        previous_spec_id = Some(item.id.clone());
+    }
+
+    for file in changed_files {
+        let state = match file.status {
+            OwnershipStatus::Owned => "ownership-known",
+            OwnershipStatus::Partial => "ownership-ambiguous",
+            OwnershipStatus::Unowned => "ownership-missing",
+        };
+        nodes.push(SpecImpactGraphNode {
+            id: file.file.clone(),
+            label: file.file.clone(),
+            kind: if file.symbols.is_empty() {
+                "file".to_string()
+            } else {
+                "file/symbol".to_string()
+            },
+            state: state.to_string(),
+        });
+        if let Some(owner) = file
+            .owners
+            .first()
+            .or_else(|| spec_impact.affected_items.first())
+        {
+            edges.push(SpecImpactGraphEdge {
+                from: owner.id.clone(),
+                to: file.file.clone(),
+                state: "code-linked".to_string(),
+            });
+        }
+    }
+
+    for test in test_inventory
+        .required_tests
+        .iter()
+        .chain(test_inventory.linked_tests.iter())
+    {
+        nodes.push(SpecImpactGraphNode {
+            id: test.clone(),
+            label: test.clone(),
+            kind: "test".to_string(),
+            state: "test-linked".to_string(),
+        });
+        if let Some(file) = changed_files.first() {
+            edges.push(SpecImpactGraphEdge {
+                from: file.file.clone(),
+                to: test.clone(),
+                state: "test-linked".to_string(),
+            });
+        }
+    }
+
+    SpecImpactGraphReport { nodes, edges }
 }
 
 fn build_split_reasons(
@@ -409,5 +521,70 @@ mod tests {
 
         assert_eq!(report.confidence, BranchScopeConfidence::Medium);
         assert!(report.spec_impact.out_of_scope_changes.is_empty());
+    }
+
+    #[test]
+    fn branch_scope_report_includes_typed_graph_nodes_and_edges() {
+        let report = BranchScopeReport::from_evidence(BranchScopeEvidence {
+            range: "main..HEAD".to_string(),
+            changed_files: vec![ChangedFileReport {
+                file: "src/workbench.rs".to_string(),
+                symbols: vec!["SpecImpactGraph".to_string()],
+                owners: vec![AffectedSpecItem {
+                    kind: "feature".to_string(),
+                    id: "FEAT-WORKBENCH-SPEC-GRAPH-001".to_string(),
+                    title: "Spec Impact Graph".to_string(),
+                    document_path: None,
+                    direct: true,
+                }],
+                status: OwnershipStatus::Owned,
+                is_spec_file: false,
+            }],
+            trace_ownership: Vec::new(),
+            spec_items: vec![
+                AffectedSpecItem {
+                    kind: "requirement".to_string(),
+                    id: "REQ-WORKBENCH-004".to_string(),
+                    title: "Spec impact and branch scope visualization".to_string(),
+                    document_path: None,
+                    direct: true,
+                },
+                AffectedSpecItem {
+                    kind: "feature".to_string(),
+                    id: "FEAT-WORKBENCH-SPEC-GRAPH-001".to_string(),
+                    title: "Spec Impact Graph".to_string(),
+                    document_path: None,
+                    direct: true,
+                },
+            ],
+            required_tests: vec!["tests/workbench_smoke.rs".to_string()],
+            linked_tests: Vec::new(),
+            include_patterns: vec!["crates/syu-app-ui/src/**".to_string()],
+            exclude_patterns: Vec::new(),
+            allowed_ids: Vec::new(),
+            unowned_files: Vec::new(),
+            ambiguous_files: Vec::new(),
+            spec_files: Vec::new(),
+            out_of_scope_changes: Vec::new(),
+            direct_items: Vec::new(),
+            related_items: Vec::new(),
+            has_planned_features: true,
+        });
+
+        assert!(report.spec_impact_graph.nodes.iter().any(|node| {
+            node.id == "FEAT-WORKBENCH-SPEC-GRAPH-001" && node.state == "scope-in"
+        }));
+        assert!(
+            report
+                .spec_impact_graph
+                .nodes
+                .iter()
+                .any(|node| { node.id == "src/workbench.rs" && node.state == "ownership-known" })
+        );
+        assert!(report.spec_impact_graph.edges.iter().any(|edge| {
+            edge.from == "REQ-WORKBENCH-004"
+                && edge.to == "FEAT-WORKBENCH-SPEC-GRAPH-001"
+                && edge.state == "spec-linked"
+        }));
     }
 }

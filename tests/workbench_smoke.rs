@@ -1,7 +1,8 @@
 use dioxus::prelude::*;
 use dioxus_ssr::render_element;
 use syu_app_ui::{
-    AppShell, EvidencePanel, GoalCanvas, GoalPlanExportPanel, WorkbenchUiState, build_demo_state,
+    AppShell, BranchScopeLens, EvidencePanel, GoalCanvas, GoalPlanExportPanel, SpecImpactGraph,
+    WorkbenchUiState, build_demo_state,
 };
 use syu_workbench::{
     WorkbenchActionId, WorkbenchActionRegistry, WorkbenchApiPayload, WorkbenchState,
@@ -156,4 +157,44 @@ fn goal_plan_export_panel_marks_yaml_as_temporary_artifact() {
     assert!(html.contains(".syu/workbench/goals/GOAL-WB-REQUEST-001.yaml"));
     assert!(html.contains("completion:"));
     assert!(html.contains("cargo test --test workbench_smoke"));
+}
+
+#[test]
+fn branch_scope_lens_renders_scope_ownership_and_tests() {
+    let ui = build_demo_state();
+
+    let html = render_element(rsx! {
+        BranchScopeLens {
+            ui,
+            on_run_action: None
+        }
+    });
+
+    assert!(html.contains("Branch Scope Lens"));
+    assert!(html.contains("origin/main...HEAD"));
+    assert!(html.contains("Changed Files"));
+    assert!(html.contains("ownership-known"));
+    assert!(html.contains("ownership-missing"));
+    assert!(html.contains("Out Of Scope"));
+    assert!(html.contains("Affected Specs"));
+    assert!(html.contains("FEAT-WORKBENCH-BRANCH-SCOPE-001"));
+    assert!(html.contains("Suggested Goal Split"));
+    assert!(html.contains("tests/workbench_smoke.rs"));
+}
+
+#[test]
+fn spec_impact_graph_renders_typed_nodes_edges_and_legend() {
+    let ui = build_demo_state();
+
+    let html = render_element(rsx! {
+        SpecImpactGraph { ui }
+    });
+
+    assert!(html.contains("Spec Impact Graph"));
+    assert!(html.contains("spec-linked"));
+    assert!(html.contains("code-linked"));
+    assert!(html.contains("test-linked"));
+    assert!(html.contains("scope-ambiguous"));
+    assert!(html.contains("FEAT-WORKBENCH-SPEC-GRAPH-001"));
+    assert!(html.contains("crates/syu-app-ui/src/components/shell.rs"));
 }

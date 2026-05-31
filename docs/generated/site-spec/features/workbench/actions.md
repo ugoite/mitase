@@ -78,6 +78,11 @@ description: "Generated reference for docs/syu/features/workbench/actions.yaml"
           - WorkbenchState
           - request.scope
           - goal.test_select
+          - branch.scope
+          - branch.infer_goal
+          - spec.impact
+          - trace.range
+          - relate.range
 
 ## Source YAML
 
@@ -147,4 +152,9 @@ features:
             - WorkbenchState
             - request.scope
             - goal.test_select
+            - branch.scope
+            - branch.infer_goal
+            - spec.impact
+            - trace.range
+            - relate.range
 ```
