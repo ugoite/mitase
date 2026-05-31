@@ -110,6 +110,27 @@ jobs:
             target/syu/goal.yaml
             target/syu/selected-tests.json
 
+  workbench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Rust for Workbench gates
+        uses: ./.github/actions/setup-rust
+
+      - name: Install scoped Tailwind CLI
+        shell: bash
+        run: |
+          npm install --prefix "$RUNNER_TEMP/tailwind" tailwindcss @tailwindcss/cli
+          ln -s "$RUNNER_TEMP/tailwind/node_modules" "$GITHUB_WORKSPACE/crates/syu-app-ui/node_modules"
+          echo "$RUNNER_TEMP/tailwind/node_modules/.bin" >>"$GITHUB_PATH"
+
+      - name: Expose Tailwind CLI to Workbench checks
+        run: echo "TAILWINDCSS_BIN=tailwindcss" >>"$GITHUB_ENV"
+
+      - name: Run Rust-native Workbench gates
+        run: scripts/ci/check-workbench.sh
+
   actionlint:
     runs-on: ubuntu-latest
     steps:
@@ -266,6 +287,7 @@ jobs:
       - quality-fast
       - quality-full
       - goal-tests
+      - workbench
       - actionlint
       - dependency-review
       - spec-linkage

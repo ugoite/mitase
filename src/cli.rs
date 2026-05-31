@@ -724,7 +724,7 @@ pub struct ReportArgs {
 const WORKBENCH_AFTER_HELP: &str = "\
 Examples:
   syu workbench .
-  syu app . --bind 127.0.0.1 --port 3000
+  syu workbench . --bind 127.0.0.1 --port 3000
   syu workbench . --bind 0.0.0.0 --allow-remote-bind
 
 Use `workbench.bind` and `workbench.port` from `syu.yaml` for the default

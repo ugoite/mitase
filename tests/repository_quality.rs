@@ -65,6 +65,9 @@ fn repository_declares_precommit_and_quality_gates() {
     let precommit = read_file(".pre-commit-config.yaml");
     let install_precommit = read_file("scripts/install-precommit.sh");
     let quality_script = read_file("scripts/ci/quality-gates.sh");
+    let workbench_script = read_file("scripts/ci/check-workbench.sh");
+    let workbench_smoke_script = read_file("scripts/ci/workbench-smoke.sh");
+    let ui_assets_script = read_file("scripts/ci/check-ui-assets.sh");
     let validate_changed_script = read_file("scripts/dev/validate-changed.sh");
     let branch_push_workflow = read_file(".github/workflows/branch-push.yml");
     let maintenance_workflow = read_file(".github/workflows/maintenance.yml");
@@ -91,6 +94,30 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(quality_script.contains("cargo test"));
     assert!(quality_script.contains("cargo run -- validate ."));
     assert!(quality_script.contains("check-generated-docs-freshness.sh"));
+    assert!(quality_script.contains("scripts/ci/check-ui-assets.sh"));
+    assert!(quality_script.contains("scripts/ci/workbench-smoke.sh"));
+    assert!(quality_script.contains("scripts/ci/check-workbench.sh"));
+    assert!(workbench_script.contains("FEAT-QUALITY-001"));
+    assert!(workbench_script.contains("cargo test -p syu-task-model"));
+    assert!(workbench_script.contains("cargo test -p syu-actions"));
+    assert!(workbench_script.contains("cargo test -p syu-code-intel"));
+    assert!(workbench_script.contains("cargo test -p syu-workbench"));
+    assert!(workbench_script.contains("cargo test -p syu-workbench-server"));
+    assert!(workbench_script.contains("cargo test -p syu-app-ui"));
+    assert!(
+        workbench_script.contains("cargo check -p syu-desktop --no-default-features --all-targets")
+    );
+    assert!(ci_workflow.contains("Install scoped Tailwind CLI"));
+    assert!(ci_workflow.contains("TAILWINDCSS_BIN=tailwindcss"));
+    assert!(workbench_script.contains("scripts/ci/check-ui-assets.sh"));
+    assert!(workbench_script.contains("scripts/ci/workbench-smoke.sh"));
+    assert!(workbench_smoke_script.contains("cargo test --test workbench_smoke"));
+    assert!(workbench_smoke_script.contains("cargo test -p syu-workbench-server workbench"));
+    assert!(ui_assets_script.contains("crates/syu-app-ui"));
+    assert!(ui_assets_script.contains("TAILWINDCSS_BIN"));
+    assert!(ui_assets_script.contains("@source \"./src/**/*.{rs,html,css}\""));
+    assert!(ui_assets_script.contains("--color-command-active"));
+    assert!(ui_assets_script.contains("unexpected frontend package or browser-app build config"));
     assert!(validate_changed_script.contains("cargo run -- validate ."));
     assert!(branch_push_workflow.contains("duplicate-check:"));
     assert!(branch_push_workflow.contains("has_open_pr"));
@@ -128,6 +155,7 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(ci_workflow.contains("quality-fast:"));
     assert!(ci_workflow.contains("quality-full:"));
     assert!(ci_workflow.contains("goal-tests:"));
+    assert!(ci_workflow.contains("workbench:"));
     assert!(ci_workflow.contains("actionlint:"));
     assert!(ci_workflow.contains("dependency-review:"));
     assert!(ci_workflow.contains("squash-history-spec-ids:"));
@@ -139,6 +167,7 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(ci_workflow.contains("scripts/ci/quality-gates.sh fast"));
     assert!(ci_workflow.contains("scripts/ci/quality-gates.sh full"));
     assert!(ci_workflow.contains("scripts/ci/run-goal-tests.sh"));
+    assert!(ci_workflow.contains("scripts/ci/check-workbench.sh"));
     assert!(ci_workflow.contains("Upload goal test artifacts"));
     assert!(ci_workflow.contains("shell: bash"));
     assert!(ci_workflow.contains("hooks=("));
@@ -150,6 +179,10 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(ci_workflow.contains("scripts/ci/check-pr-spec-links.sh"));
     assert!(ci_workflow.contains("scripts/ci/installer-smoke.sh"));
     assert!(ci_workflow.contains("scripts/ci/installed-binary-smoke.sh"));
+    assert!(!ci_workflow.contains("browser-app:"));
+    assert!(!ci_workflow.contains("playwright"));
+    assert!(!ci_workflow.contains("app-data.json"));
+    assert!(!ci_workflow.contains("app/package"));
 
     assert!(contributing.contains("weekly schedule"));
     assert!(contributing.contains("06:00 UTC"));
@@ -398,7 +431,13 @@ fn repository_declares_installer_contract() {
     assert!(installed_binary_smoke.contains("FEAT-QUALITY-001"));
     assert!(installed_binary_smoke.contains("cargo install --path"));
     assert!(installed_binary_smoke.contains("--locked"));
-    assert!(installed_binary_smoke.contains("browse \"$workspace\" --non-interactive"));
+    assert!(installed_binary_smoke.contains("workbench \"$workspace\""));
+    assert!(installed_binary_smoke.contains("/api/health"));
+    assert!(installed_binary_smoke.contains("/api/actions"));
+    assert!(installed_binary_smoke.contains("/api/workspace/snapshot"));
+    assert!(installed_binary_smoke.contains("/assets/tailwind.css"));
+    assert!(installed_binary_smoke.contains("request.scope"));
+    assert!(!installed_binary_smoke.contains("/api/app-data.json"));
     assert!(mock_registry.contains("FEAT-INSTALL-001"));
     assert!(mock_registry.contains("build_artifacts"));
 
