@@ -321,7 +321,7 @@ pub struct EvidenceRecord {
 
 pub type EvidenceEntry = EvidenceRecord;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct EvidenceTimelineFilter {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub goal_id: Option<String>,
@@ -903,7 +903,7 @@ impl Default for JobState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct EvidenceTimelineState {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub entries: Vec<EvidenceEntry>,
@@ -1700,6 +1700,32 @@ mod tests {
         assert_eq!(roundtrip.action_id, Some(WorkbenchActionId::GoalCheck));
         assert_eq!(roundtrip.status, EvidenceStatus::Warn);
         assert_eq!(roundtrip.attachments.len(), 1);
+    }
+
+    #[test]
+    fn evidence_timeline_serializes_for_export() {
+        let mut timeline = EvidenceTimelineState::default();
+        timeline.append(
+            EvidenceRecord::new(
+                WorkbenchEvidenceKind::TaskTestSelectionPlan,
+                EvidenceStatus::Pass,
+                "selected tests for goal",
+                Some(EvidenceSource::Action {
+                    action_id: Some(WorkbenchActionId::GoalTestSelect),
+                    action_label: Some("goal.test_select".to_string()),
+                }),
+            )
+            .with_goal_id(Some("goal-1".to_string()))
+            .with_action_id(WorkbenchActionId::GoalTestSelect),
+        );
+
+        let json = serde_json::to_string(&timeline).expect("evidence timeline should serialize");
+        let roundtrip: EvidenceTimelineState =
+            serde_json::from_str(&json).expect("evidence timeline should roundtrip");
+
+        assert_eq!(roundtrip.entries.len(), 1);
+        assert_eq!(roundtrip.entries[0].goal_id.as_deref(), Some("goal-1"));
+        assert_eq!(roundtrip.entries[0].status, EvidenceStatus::Pass);
     }
 
     #[test]

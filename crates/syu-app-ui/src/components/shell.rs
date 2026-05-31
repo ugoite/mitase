@@ -1014,17 +1014,7 @@ pub fn GoalPlanExportPanel(plan: GoalPlanArtifact) -> Element {
 
 #[component]
 pub fn EvidenceTimeline(entries: Vec<EvidenceRecord>, goal_id: Option<String>) -> Element {
-    let filtered_entries = goal_id
-        .as_ref()
-        .map(|goal_id| {
-            entries
-                .iter()
-                .filter(|entry| entry.goal_id.as_ref() == Some(goal_id))
-                .cloned()
-                .collect::<Vec<_>>()
-        })
-        .filter(|entries| !entries.is_empty())
-        .unwrap_or(entries);
+    let filtered_entries = scoped_evidence_entries(entries, goal_id.as_deref());
 
     rsx! {
         div { class: "space-y-3",
@@ -1068,7 +1058,10 @@ fn render_evidence_timeline_record(record: EvidenceRecord) -> Element {
 pub fn EvidencePanel(ui: WorkbenchUiState) -> Element {
     let active_goal = ui.payload.state.goals.active_goal().cloned();
     let goal_id = active_goal.as_ref().map(|goal| goal.goal_id.clone());
-    let latest = ui.payload.state.evidence_timeline.entries.last().cloned();
+    let latest = latest_scoped_evidence(
+        &ui.payload.state.evidence_timeline.entries,
+        goal_id.as_deref(),
+    );
     rsx! {
         Panel { class: classes::PANEL,
             div { class: classes::PANEL_INNER,
@@ -1091,6 +1084,33 @@ pub fn EvidencePanel(ui: WorkbenchUiState) -> Element {
                 }
             }
         }
+    }
+}
+
+fn scoped_evidence_entries(
+    entries: Vec<EvidenceRecord>,
+    goal_id: Option<&str>,
+) -> Vec<EvidenceRecord> {
+    match goal_id {
+        Some(goal_id) => entries
+            .into_iter()
+            .filter(|entry| entry.goal_id.as_deref() == Some(goal_id))
+            .collect(),
+        None => entries,
+    }
+}
+
+fn latest_scoped_evidence(
+    entries: &[EvidenceRecord],
+    goal_id: Option<&str>,
+) -> Option<EvidenceRecord> {
+    match goal_id {
+        Some(goal_id) => entries
+            .iter()
+            .rev()
+            .find(|entry| entry.goal_id.as_deref() == Some(goal_id))
+            .cloned(),
+        None => entries.last().cloned(),
     }
 }
 

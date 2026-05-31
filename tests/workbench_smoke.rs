@@ -79,6 +79,7 @@ fn evidence_panel_renders_goal_scoped_timeline() {
     assert!(html.contains("goal GOAL-WB-REQUEST-001"));
     assert!(html.contains("goal.test_select"));
     assert!(html.contains("goal.check"));
+    assert!(!html.contains("validation passed"));
 }
 
 #[test]

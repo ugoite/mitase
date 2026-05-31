@@ -252,7 +252,7 @@ impl Default for JobState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EvidenceEntry {
     pub kind: WorkbenchEvidenceKind,
     pub status: EvidenceStatus,
@@ -268,7 +268,7 @@ pub struct EvidenceEntry {
     pub attachments: Vec<EvidenceAttachment>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct EvidenceTimelineState {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub entries: Vec<EvidenceEntry>,
