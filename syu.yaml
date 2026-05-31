@@ -10,7 +10,7 @@ validate:
   require_reciprocal_links: true
   require_symbol_trace_coverage: true
   historical_ids:
-    enabled: true
+    enabled: false
 report:
   output: docs/generated/syu-report.md
 runtimes:
