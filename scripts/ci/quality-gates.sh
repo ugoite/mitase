@@ -14,14 +14,17 @@ run_quality_gates() {
   cargo clippy --all-targets --all-features -- -D warnings
   cargo run -- validate .
   bash scripts/ci/check-generated-docs-freshness.sh
+  bash scripts/ci/check-ui-assets.sh
 
   case "$mode" in
     fast)
       # Keep the fast lane short; the history-heavy log unit tests run in coverage.
       cargo test --lib --bins -- --skip command::log::tests::
+      bash scripts/ci/workbench-smoke.sh
       ;;
     full)
       cargo test
+      bash scripts/ci/check-workbench.sh
 
       mkdir -p target/quality
       cargo run -- report . --output target/quality/syu-report.md >/dev/null
