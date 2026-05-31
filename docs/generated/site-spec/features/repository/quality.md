@@ -19,7 +19,7 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
 
 - **id**: FEAT-QUALITY-001
   - **title**: Repository quality automation
-  - **summary**: Keep self-validation, dependency hygiene across Rust, GitHub Actions, the docs site, goal-selected PR tests, code scanning, and merge-queue-safe CI execution split into fast branch feedback, PR confidence, merge-queue enforcement, and maintenance checks.
+  - **summary**: Keep self-validation, Rust-native Workbench gates, constrained syu-app-ui Tailwind asset checks, dependency hygiene across Rust, GitHub Actions, the docs site, goal-selected PR tests, code scanning, and merge-queue-safe CI execution split into fast branch feedback, PR confidence, merge-queue enforcement, and maintenance checks.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-005
@@ -44,6 +44,23 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
       - **file**: scripts/ci/run-goal-tests.sh
         - **symbols**:
           - run_goal_tests
+      - **file**: scripts/ci/check-workbench.sh
+        - **symbols**:
+          - run_workbench_checks
+      - **file**: scripts/ci/workbench-smoke.sh
+        - **symbols**:
+          - run_workbench_smoke
+      - **file**: scripts/ci/check-ui-assets.sh
+        - **symbols**:
+          - check_ui_assets
+          - TAILWINDCSS_BIN
+          - crates/syu-app-ui
+      - **file**: scripts/ci/installed-binary-smoke.sh
+        - **symbols**:
+          - /api/health
+          - /api/actions
+          - /api/workspace/snapshot
+          - /assets/tailwind.css
       - **file**: scripts/ci/check-generated-docs-freshness.sh
         - **symbols**:
           - check_generated_docs_freshness
@@ -79,6 +96,7 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
           - quality-fast
           - quality-full
           - goal-tests
+          - workbench
           - actionlint
           - dependency-review
           - spec-linkage
@@ -96,6 +114,7 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
           - scripts/ci/quality-gates.sh fast
           - scripts/ci/quality-gates.sh full
           - scripts/ci/run-goal-tests.sh
+          - scripts/ci/check-workbench.sh
       - **file**: .github/workflows/branch-push.yml
         - **symbols**:
           - duplicate-check
@@ -151,7 +170,7 @@ version: 1
 features:
   - id: FEAT-QUALITY-001
     title: Repository quality automation
-    summary: Keep self-validation, dependency hygiene across Rust, GitHub Actions, the docs site, goal-selected PR tests, code scanning, and merge-queue-safe CI execution split into fast branch feedback, PR confidence, merge-queue enforcement, and maintenance checks.
+    summary: Keep self-validation, Rust-native Workbench gates, constrained syu-app-ui Tailwind asset checks, dependency hygiene across Rust, GitHub Actions, the docs site, goal-selected PR tests, code scanning, and merge-queue-safe CI execution split into fast branch feedback, PR confidence, merge-queue enforcement, and maintenance checks.
     status: implemented
     linked_requirements:
       - REQ-CORE-005
@@ -176,6 +195,23 @@ features:
         - file: scripts/ci/run-goal-tests.sh
           symbols:
             - run_goal_tests
+        - file: scripts/ci/check-workbench.sh
+          symbols:
+            - run_workbench_checks
+        - file: scripts/ci/workbench-smoke.sh
+          symbols:
+            - run_workbench_smoke
+        - file: scripts/ci/check-ui-assets.sh
+          symbols:
+            - check_ui_assets
+            - TAILWINDCSS_BIN
+            - crates/syu-app-ui
+        - file: scripts/ci/installed-binary-smoke.sh
+          symbols:
+            - /api/health
+            - /api/actions
+            - /api/workspace/snapshot
+            - /assets/tailwind.css
         - file: scripts/ci/check-generated-docs-freshness.sh
           symbols:
             - check_generated_docs_freshness
@@ -211,6 +247,7 @@ features:
             - quality-fast
             - quality-full
             - goal-tests
+            - workbench
             - actionlint
             - dependency-review
             - spec-linkage
@@ -228,6 +265,7 @@ features:
             - "scripts/ci/quality-gates.sh fast"
             - "scripts/ci/quality-gates.sh full"
             - "scripts/ci/run-goal-tests.sh"
+            - "scripts/ci/check-workbench.sh"
         - file: .github/workflows/branch-push.yml
           symbols:
             - duplicate-check

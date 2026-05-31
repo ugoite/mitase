@@ -110,6 +110,17 @@ jobs:
             target/syu/goal.yaml
             target/syu/selected-tests.json
 
+  workbench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Rust for Workbench gates
+        uses: ./.github/actions/setup-rust
+
+      - name: Run Rust-native Workbench gates
+        run: scripts/ci/check-workbench.sh
+
   actionlint:
     runs-on: ubuntu-latest
     steps:
@@ -266,6 +277,7 @@ jobs:
       - quality-fast
       - quality-full
       - goal-tests
+      - workbench
       - actionlint
       - dependency-review
       - spec-linkage

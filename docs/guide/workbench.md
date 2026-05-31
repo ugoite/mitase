@@ -7,6 +7,21 @@ work the same way in browser and desktop contexts.
 
 The browser and desktop clients should share one Rust-native UI and server architecture so the same flow stays visible in both places.
 
+## Workbench CI
+
+CI validates the Workbench as a Rust-native architecture. The Workbench gate
+runs focused package checks for the task model, actions, code intelligence,
+Workbench state, Workbench server, Dioxus UI crate, and the no-default-features
+desktop shell compile path. Full Tauri runtime checks remain local/platform
+checks when system UI libraries are not available in CI.
+
+Tailwind is constrained to `crates/syu-app-ui/`: `crates/syu-app-ui/tailwind.css`
+is the source, `crates/syu-app-ui/assets/tailwind.css` is the served asset, and
+CI must not add a Vite, React, TypeScript, Playwright, or old browser-app
+package setup for the Workbench. The installed-binary smoke starts `syu
+workbench`, checks `/api/health`, `/api/actions`, `/api/workspace/snapshot`, and
+verifies the shared CSS asset is loaded by the Workbench shell.
+
 The target product flow is:
 
 ```text
