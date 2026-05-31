@@ -21,3 +21,6 @@ syu-workbench-server = { path = "../syu-workbench-server" }
 tokio = { version = "1.52.3", features = ["net", "rt-multi-thread"] }
 tauri = { version = "2", optional = true }
 url = { version = "2.5.7", optional = true }
+
+[build-dependencies]
+tauri-build = "2"

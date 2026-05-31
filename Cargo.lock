@@ -4279,6 +4279,7 @@ dependencies = [
  "syu-workbench",
  "syu-workbench-server",
  "tauri",
+ "tauri-build",
  "tokio",
  "url",
 ]
