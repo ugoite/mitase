@@ -1,6 +1,8 @@
 use dioxus::prelude::*;
 use dioxus_ssr::render_element;
-use syu_app_ui::{AppShell, EvidencePanel, GoalCanvas, WorkbenchUiState, build_demo_state};
+use syu_app_ui::{
+    AppShell, EvidencePanel, GoalCanvas, GoalPlanExportPanel, WorkbenchUiState, build_demo_state,
+};
 use syu_workbench::{
     WorkbenchActionId, WorkbenchActionRegistry, WorkbenchApiPayload, WorkbenchState,
 };
@@ -36,7 +38,10 @@ fn goal_canvas_renders_a_read_only_action_preview_placeholder() {
     ui.run_read_only_action(WorkbenchActionId::HistoryShow);
 
     let html = render_element(rsx! {
-        GoalCanvas { ui }
+        GoalCanvas {
+            ui,
+            on_run_action: None
+        }
     });
 
     let pulse = html.find("Workbench Pulse").expect("pulse should render");
@@ -96,4 +101,59 @@ fn registry_loaded_from_server_payload() {
         payload.actions.len(),
         WorkbenchActionRegistry::standard().actions().len()
     );
+}
+
+#[test]
+fn request_intake_flow_renders_generated_goal_plan() {
+    let ui = build_demo_state();
+
+    let html = render_element(rsx! {
+        GoalCanvas {
+            ui,
+            on_run_action: None
+        }
+    });
+
+    assert!(html.contains("Request Intake"));
+    assert!(html.contains("Change request"));
+    assert!(html.contains("requirement_change"));
+    assert!(html.contains("Scaffold Preview"));
+    assert!(html.contains("Goal Plan"));
+    assert!(html.contains("GOAL-WB-REQUEST-001"));
+    assert!(html.contains("non-goal: Build a raw YAML editor"));
+    assert!(html.contains("include: crates/syu-app-ui/src/model.rs"));
+    assert!(html.contains("Export YAML"));
+    assert!(html.contains("syu.goal_plan"));
+}
+
+#[test]
+fn request_flow_actions_are_exposed_in_the_command_palette() {
+    let mut ui = build_demo_state();
+    ui.set_query("request.");
+
+    let html = render_element(rsx! {
+        AppShell { ui }
+    });
+
+    assert!(html.contains("request.classify"));
+    assert!(html.contains("request.scope"));
+    assert!(html.contains("request.scaffold"));
+    assert!(html.contains("request.plan"));
+}
+
+#[test]
+fn goal_plan_export_panel_marks_yaml_as_temporary_artifact() {
+    let ui = build_demo_state();
+    let plan = ui.payload.state.goals.active[0]
+        .goal_plan
+        .clone()
+        .expect("demo state includes a goal plan");
+
+    let html = render_element(rsx! {
+        GoalPlanExportPanel { plan }
+    });
+
+    assert!(html.contains(".syu/workbench/goals/GOAL-WB-REQUEST-001.yaml"));
+    assert!(html.contains("completion:"));
+    assert!(html.contains("cargo test --test workbench_smoke"));
 }
