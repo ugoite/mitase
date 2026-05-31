@@ -342,6 +342,7 @@ fn evidence_tone(kind: WorkbenchEvidenceKind) -> &'static str {
         WorkbenchEvidenceKind::GoalPlanCheckReport => "text-evidence-warn",
         WorkbenchEvidenceKind::HistoryResponse => "text-evidence-pending",
         WorkbenchEvidenceKind::AssignmentState => "text-goal",
+        WorkbenchEvidenceKind::AgentRun => "text-evidence-pending",
         WorkbenchEvidenceKind::JobState => "text-evidence-fail",
         _ => "text-foreground/70",
     }

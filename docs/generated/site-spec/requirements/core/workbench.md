@@ -159,17 +159,19 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
   - **title**: Human and AI assignment with explicit scope and evidence
   - **description**:
     - |
-      The Workbench MUST support assigning a scoped goal to a human or AI with
-      explicit scope, expected evidence, and a clear handoff boundary. The
-      assignment SHOULD be readable as a durable part of the goal rather than a
-      hidden runtime choice.
+      The Workbench MUST support assigning a scoped Goal Plan to a human or AI
+      command adapter with explicit include/exclude scope, non-goals, linked
+      spec context, required tests, completion commands, expected evidence, and
+      a clear handoff boundary. Automated assignment MUST be blocked when scope
+      is ambiguous or required constraints are missing, and dry-run output MUST
+      be captured as evidence.
   - **priority**: medium
   - **status**: implemented
   - **linked_policies**:
     - POL-005
   - **linked_features**:
     - FEAT-WORKBENCH-EVIDENCE-001
-    - FEAT-WORKBENCH-006
+    - FEAT-WORKBENCH-ASSIGNMENT-001
   - **tests**:
     - **markdown**:
       - **file**: docs/guide/workbench.md
@@ -177,6 +179,16 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
           - assignment
           - evidence
           - completion check
+    - **rust**:
+      - **file**: crates/syu-workbench/src/lib.rs
+        - **symbols**:
+          - assignment_blocker_logic_rejects_ambiguous_ai_scope
+          - dry_run_command_adapter_captures_stdout_stderr_and_evidence
+      - **file**: tests/workbench_smoke.rs
+        - **symbols**:
+          - assignment_preview_renders_blocked_state_with_scope_tokens
+          - assignment_actions_are_exposed_in_the_command_palette
+          - scope_guard_preview_renders_out_of_scope_changes
 - **id**: REQ-WORKBENCH-006
   - **title**: Shared browser and desktop Workbench behavior
   - **description**:
@@ -366,17 +378,19 @@ requirements:
   - id: REQ-WORKBENCH-005
     title: Human and AI assignment with explicit scope and evidence
     description: |
-      The Workbench MUST support assigning a scoped goal to a human or AI with
-      explicit scope, expected evidence, and a clear handoff boundary. The
-      assignment SHOULD be readable as a durable part of the goal rather than a
-      hidden runtime choice.
+      The Workbench MUST support assigning a scoped Goal Plan to a human or AI
+      command adapter with explicit include/exclude scope, non-goals, linked
+      spec context, required tests, completion commands, expected evidence, and
+      a clear handoff boundary. Automated assignment MUST be blocked when scope
+      is ambiguous or required constraints are missing, and dry-run output MUST
+      be captured as evidence.
     priority: medium
     status: implemented
     linked_policies:
       - POL-005
     linked_features:
       - FEAT-WORKBENCH-EVIDENCE-001
-      - FEAT-WORKBENCH-006
+      - FEAT-WORKBENCH-ASSIGNMENT-001
     tests:
       markdown:
         - file: docs/guide/workbench.md
@@ -384,6 +398,16 @@ requirements:
             - assignment
             - evidence
             - completion check
+      rust:
+        - file: crates/syu-workbench/src/lib.rs
+          symbols:
+            - assignment_blocker_logic_rejects_ambiguous_ai_scope
+            - dry_run_command_adapter_captures_stdout_stderr_and_evidence
+        - file: tests/workbench_smoke.rs
+          symbols:
+            - assignment_preview_renders_blocked_state_with_scope_tokens
+            - assignment_actions_are_exposed_in_the_command_palette
+            - scope_guard_preview_renders_out_of_scope_changes
   - id: REQ-WORKBENCH-006
     title: Shared browser and desktop Workbench behavior
     description: |

@@ -296,6 +296,17 @@ pub fn build_demo_state() -> WorkbenchUiState {
         ],
     };
     let goal_plan = demo_goal_plan();
+    let assignment = syu_workbench::Assignment::from_goal_plan(
+        &goal_plan,
+        syu_workbench::Assignee::local_command("local-coder", "Local command adapter"),
+        syu_workbench::AgentRunMode::DryRun,
+        vec![syu_workbench::AssignmentEvidenceRequirement {
+            id: "runner-output".to_string(),
+            description: "stdout/stderr and prompt context from the dry-run adapter".to_string(),
+            kind: WorkbenchEvidenceKind::AgentRun,
+            required: true,
+        }],
+    );
     let mut state = WorkbenchState {
         workspace: Some(syu_workbench::WorkspaceSnapshot {
             workspace_root: std::path::PathBuf::from("/workspace/syu"),
@@ -359,6 +370,7 @@ pub fn build_demo_state() -> WorkbenchUiState {
                 "FEAT-WORKBENCH-BRANCH-SCOPE-001".to_string(),
             ],
         }),
+        assignment: Some(assignment),
         ..WorkbenchState::default()
     };
     state.evidence_timeline.append(
