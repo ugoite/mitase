@@ -1,5 +1,9 @@
-use serde::Serialize;
-use std::{path::PathBuf, sync::OnceLock};
+use serde::{Deserialize, Serialize};
+use std::{
+    path::PathBuf,
+    sync::OnceLock,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 pub use syu_actions::{HistoryResponse, ValidationReport};
 pub use syu_code_intel::{
@@ -12,7 +16,7 @@ pub use syu_task_model::{
     RequestArtifactContext, ScaffoldPlan, ScopeOutcome, TaskTestSelectionPlan,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkbenchActionRisk {
     Low,
@@ -20,7 +24,7 @@ pub enum WorkbenchActionRisk {
     High,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkbenchActionMutability {
     ReadOnly,
@@ -43,7 +47,7 @@ impl WorkbenchActionMutability {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WorkbenchActionId {
     #[serde(rename = "request.new")]
     RequestNew,
@@ -102,7 +106,7 @@ impl WorkbenchActionId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkbenchActionFunction {
     ScaffoldRequest,
@@ -142,7 +146,7 @@ impl WorkbenchActionFunction {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkbenchActionOutputEvent {
     RequestCreated,
@@ -161,7 +165,7 @@ pub enum WorkbenchActionOutputEvent {
     AgentRunQueued,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkbenchEvidenceKind {
     RequestArtifact,
@@ -197,6 +201,429 @@ impl WorkbenchEvidenceKind {
             Self::JobState => "job_state",
         }
     }
+}
+
+pub type EvidenceKind = WorkbenchEvidenceKind;
+pub type EvidenceSummary = String;
+pub type EvidenceTimeline = EvidenceTimelineState;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EvidenceStatus {
+    Pending,
+    Pass,
+    Warn,
+    Fail,
+    Skipped,
+    Unknown,
+}
+
+impl EvidenceStatus {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Pass => "pass",
+            Self::Warn => "warn",
+            Self::Fail => "fail",
+            Self::Skipped => "skipped",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EvidenceSeverity {
+    Low,
+    Medium,
+    High,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EvidenceSubject {
+    Workspace,
+    Request,
+    Goal,
+    Branch,
+    SpecItem,
+    File,
+    Test,
+    Assignment,
+    AgentRun,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct EvidenceCommand {
+    pub command: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub args: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct EvidenceAttachment {
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EvidenceSource {
+    Action {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        action_id: Option<WorkbenchActionId>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        action_label: Option<String>,
+    },
+    Command {
+        command: String,
+    },
+    Manual {
+        actor: String,
+    },
+    System {
+        component: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EvidenceRecord {
+    pub kind: EvidenceKind,
+    pub status: EvidenceStatus,
+    pub summary: EvidenceSummary,
+    pub timestamp: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject: Option<EvidenceSubject>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub severity: Option<EvidenceSeverity>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<EvidenceSource>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action_id: Option<WorkbenchActionId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<EvidenceCommand>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<EvidenceAttachment>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub related_spec_id: Option<String>,
+}
+
+pub type EvidenceEntry = EvidenceRecord;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct EvidenceTimelineFilter {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<EvidenceKind>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<EvidenceStatus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_action_id: Option<WorkbenchActionId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub related_spec_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub since_timestamp: Option<u64>,
+}
+
+impl EvidenceRecord {
+    pub fn new(
+        kind: EvidenceKind,
+        status: EvidenceStatus,
+        summary: impl Into<String>,
+        source: Option<EvidenceSource>,
+    ) -> Self {
+        Self {
+            kind,
+            status,
+            summary: summary.into(),
+            timestamp: evidence_timestamp(),
+            goal_id: None,
+            subject: None,
+            severity: None,
+            source,
+            action_id: None,
+            command: None,
+            attachments: Vec::new(),
+            related_spec_id: None,
+        }
+    }
+
+    pub fn with_goal_id(mut self, goal_id: Option<String>) -> Self {
+        self.goal_id = goal_id;
+        self
+    }
+
+    pub fn with_subject(mut self, subject: EvidenceSubject) -> Self {
+        self.subject = Some(subject);
+        self
+    }
+
+    pub fn with_severity(mut self, severity: EvidenceSeverity) -> Self {
+        self.severity = Some(severity);
+        self
+    }
+
+    pub fn with_action_id(mut self, action_id: WorkbenchActionId) -> Self {
+        self.action_id = Some(action_id);
+        self
+    }
+
+    pub fn with_command(mut self, command: EvidenceCommand) -> Self {
+        self.command = Some(command);
+        self
+    }
+
+    pub fn with_related_spec_id(mut self, related_spec_id: Option<String>) -> Self {
+        self.related_spec_id = related_spec_id;
+        self
+    }
+
+    pub fn with_attachment(mut self, attachment: EvidenceAttachment) -> Self {
+        self.attachments.push(attachment);
+        self
+    }
+}
+
+impl EvidenceTimelineState {
+    pub fn append(&mut self, record: EvidenceRecord) {
+        self.entries.push(record);
+    }
+
+    pub fn append_action_result(
+        &mut self,
+        action_id: WorkbenchActionId,
+        goal_id: Option<String>,
+        result: &WorkbenchActionResult,
+    ) {
+        self.append(evidence_record_for_action(action_id, goal_id, result));
+    }
+}
+
+fn evidence_timestamp() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or_default()
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
+}
+
+fn truncated_json<T: Serialize>(value: &T) -> EvidenceAttachment {
+    let json = serde_json::to_string_pretty(value).unwrap_or_else(|_| "{}".to_string());
+    const MAX_ATTACHMENT_CHARS: usize = 4096;
+    let truncated = json.len() > MAX_ATTACHMENT_CHARS;
+    let content = if truncated {
+        Some(json.chars().take(MAX_ATTACHMENT_CHARS).collect())
+    } else {
+        Some(json)
+    };
+
+    EvidenceAttachment {
+        label: "result".to_string(),
+        mime_type: Some("application/json".to_string()),
+        summary: Some(if truncated {
+            "truncated JSON payload".to_string()
+        } else {
+            "JSON payload".to_string()
+        }),
+        content,
+        truncated,
+    }
+}
+
+fn evidence_record_for_action(
+    action_id: WorkbenchActionId,
+    goal_id: Option<String>,
+    result: &WorkbenchActionResult,
+) -> EvidenceRecord {
+    let kind = result.evidence_kind();
+    let (status, severity, subject, summary) = match result {
+        WorkbenchActionResult::RequestArtifact(_) => (
+            EvidenceStatus::Pass,
+            Some(EvidenceSeverity::Low),
+            Some(EvidenceSubject::Request),
+            "request artifact captured".to_string(),
+        ),
+        WorkbenchActionResult::ClassificationOutcome(outcome) => (
+            EvidenceStatus::Pass,
+            Some(EvidenceSeverity::Low),
+            Some(EvidenceSubject::Request),
+            format!("request classified as {}", outcome.classification.label()),
+        ),
+        WorkbenchActionResult::ScopeOutcome(outcome) => (
+            EvidenceStatus::Pass,
+            Some(EvidenceSeverity::Low),
+            Some(EvidenceSubject::Request),
+            format!(
+                "request scope identified {} requirements",
+                outcome.requirements.len()
+            ),
+        ),
+        WorkbenchActionResult::ScaffoldPlan(plan) => (
+            EvidenceStatus::Pass,
+            Some(EvidenceSeverity::Low),
+            Some(EvidenceSubject::Request),
+            format!("scaffold preview includes {} updates", plan.updates.len()),
+        ),
+        WorkbenchActionResult::GoalPlanArtifact(plan) => (
+            EvidenceStatus::Pass,
+            Some(EvidenceSeverity::Low),
+            Some(EvidenceSubject::Goal),
+            format!("goal plan generated for {}", plan.goal.id),
+        ),
+        WorkbenchActionResult::TaskTestSelectionPlan(plan) => (
+            if plan.commands.is_empty() {
+                EvidenceStatus::Pending
+            } else {
+                EvidenceStatus::Pass
+            },
+            Some(EvidenceSeverity::Low),
+            Some(EvidenceSubject::Goal),
+            format!(
+                "selected {} tests for {}",
+                plan.commands.len(),
+                plan.goal_id
+            ),
+        ),
+        WorkbenchActionResult::GoalPlanCheckReport(report) => (
+            if report.error_count() > 0 {
+                EvidenceStatus::Fail
+            } else if report.warning_count() > 0 {
+                EvidenceStatus::Warn
+            } else {
+                EvidenceStatus::Pass
+            },
+            Some(if report.error_count() > 0 {
+                EvidenceSeverity::High
+            } else if report.warning_count() > 0 {
+                EvidenceSeverity::Medium
+            } else {
+                EvidenceSeverity::Low
+            }),
+            Some(EvidenceSubject::Goal),
+            if report.passed() {
+                format!("goal check passed for {}", report.plan_path)
+            } else {
+                format!("goal check found {} issues", report.issues.len())
+            },
+        ),
+        WorkbenchActionResult::BranchScopeReport(report) => (
+            EvidenceStatus::Pass,
+            Some(EvidenceSeverity::Low),
+            Some(EvidenceSubject::Branch),
+            format!(
+                "branch scope summarized {} files",
+                report.changed_files.len()
+            ),
+        ),
+        WorkbenchActionResult::SpecImpactReport(report) => (
+            EvidenceStatus::Pass,
+            Some(EvidenceSeverity::Low),
+            Some(EvidenceSubject::SpecItem),
+            format!(
+                "spec impact mapped {} affected items",
+                report.affected_items.len()
+            ),
+        ),
+        WorkbenchActionResult::ValidationReport(report) => (
+            if report.is_success() {
+                EvidenceStatus::Pass
+            } else {
+                EvidenceStatus::Fail
+            },
+            Some(if report.is_success() {
+                if report.issues.is_empty() {
+                    EvidenceSeverity::Low
+                } else {
+                    EvidenceSeverity::Medium
+                }
+            } else {
+                EvidenceSeverity::High
+            }),
+            Some(EvidenceSubject::Workspace),
+            if report.is_success() {
+                "workspace validation passed".to_string()
+            } else {
+                format!("workspace validation found {} issues", report.issues.len())
+            },
+        ),
+        WorkbenchActionResult::HistoryResponse(history) => (
+            EvidenceStatus::Pass,
+            Some(EvidenceSeverity::Low),
+            Some(EvidenceSubject::Workspace),
+            format!("history loaded for {} {}", history.entity_kind, history.id),
+        ),
+        WorkbenchActionResult::AssignmentState(assignment) => (
+            EvidenceStatus::Pending,
+            Some(EvidenceSeverity::Low),
+            Some(EvidenceSubject::Assignment),
+            match &assignment.goal_id {
+                Some(goal_id) => format!("assignment created for {goal_id}"),
+                None => "assignment created".to_string(),
+            },
+        ),
+        WorkbenchActionResult::JobState(job) => (
+            match job.status {
+                JobStatus::Idle | JobStatus::Queued | JobStatus::Running => EvidenceStatus::Pending,
+                JobStatus::Completed => EvidenceStatus::Pass,
+                JobStatus::Failed => EvidenceStatus::Fail,
+            },
+            Some(EvidenceSeverity::Low),
+            Some(EvidenceSubject::AgentRun),
+            job.message
+                .clone()
+                .unwrap_or_else(|| format!("job {}", job.status.label())),
+        ),
+    };
+
+    let source = Some(EvidenceSource::Action {
+        action_id: Some(action_id),
+        action_label: Some(action_id.label().to_string()),
+    });
+    let command = match result {
+        WorkbenchActionResult::ValidationReport(_) => Some(EvidenceCommand {
+            command: "validation.run".to_string(),
+            args: Vec::new(),
+        }),
+        WorkbenchActionResult::GoalPlanCheckReport(_) => Some(EvidenceCommand {
+            command: "goal.check".to_string(),
+            args: Vec::new(),
+        }),
+        WorkbenchActionResult::TaskTestSelectionPlan(_) => Some(EvidenceCommand {
+            command: "goal.test_select".to_string(),
+            args: Vec::new(),
+        }),
+        _ => None,
+    };
+    let attachment = truncated_json(result);
+
+    EvidenceRecord::new(kind, status, summary, source)
+        .with_goal_id(goal_id)
+        .with_subject(subject.expect("subject is always set"))
+        .with_severity(severity.expect("severity is always set"))
+        .with_action_id(action_id)
+        .with_related_spec_id(None)
+        .with_attachment(attachment)
+        .with_command(command.unwrap_or(EvidenceCommand {
+            command: action_id.label().to_string(),
+            args: Vec::new(),
+        }))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -445,6 +872,18 @@ pub enum JobStatus {
     Failed,
 }
 
+impl JobStatus {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Idle => "idle",
+            Self::Queued => "queued",
+            Self::Running => "running",
+            Self::Completed => "completed",
+            Self::Failed => "failed",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct JobState {
     pub status: JobStatus,
@@ -464,15 +903,7 @@ impl Default for JobState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct EvidenceEntry {
-    pub kind: WorkbenchEvidenceKind,
-    pub summary: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub action_id: Option<WorkbenchActionId>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct EvidenceTimelineState {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub entries: Vec<EvidenceEntry>,
@@ -545,12 +976,21 @@ impl WorkbenchState {
     }
 
     pub fn apply_result(&mut self, action_id: WorkbenchActionId, result: &WorkbenchActionResult) {
-        let evidence_kind = result.evidence_kind();
-        self.evidence_timeline.entries.push(EvidenceEntry {
-            kind: evidence_kind,
-            summary: format!("{} produced {}", action_id.label(), evidence_kind.label()),
-            action_id: Some(action_id),
-        });
+        let active_goal_id = self.goals.active_goal().map(|goal| goal.goal_id.clone());
+        let evidence_goal_id = match result {
+            WorkbenchActionResult::GoalPlanArtifact(plan) => Some(plan.goal.id.clone()),
+            WorkbenchActionResult::TaskTestSelectionPlan(selection) => {
+                Some(selection.goal_id.clone())
+            }
+            WorkbenchActionResult::GoalPlanCheckReport(_) => active_goal_id.clone(),
+            WorkbenchActionResult::AssignmentState(assignment) => {
+                assignment.goal_id.clone().or(active_goal_id.clone())
+            }
+            WorkbenchActionResult::JobState(_) => active_goal_id.clone(),
+            _ => None,
+        };
+        self.evidence_timeline
+            .append_action_result(action_id, evidence_goal_id, result);
 
         match result {
             WorkbenchActionResult::RequestArtifact(artifact) => {
@@ -1222,6 +1662,101 @@ mod tests {
         assert_eq!(
             state.evidence_timeline.entries[0].kind,
             WorkbenchEvidenceKind::HistoryResponse
+        );
+    }
+
+    #[test]
+    fn evidence_record_serializes_with_goal_and_attachment() {
+        let record = EvidenceRecord::new(
+            WorkbenchEvidenceKind::GoalPlanCheckReport,
+            EvidenceStatus::Warn,
+            "goal check found issues",
+            Some(EvidenceSource::Action {
+                action_id: Some(WorkbenchActionId::GoalCheck),
+                action_label: Some("goal.check".to_string()),
+            }),
+        )
+        .with_goal_id(Some("goal-1".to_string()))
+        .with_action_id(WorkbenchActionId::GoalCheck)
+        .with_subject(EvidenceSubject::Goal)
+        .with_severity(EvidenceSeverity::Medium)
+        .with_command(EvidenceCommand {
+            command: "goal.check".to_string(),
+            args: Vec::new(),
+        })
+        .with_attachment(EvidenceAttachment {
+            label: "result".to_string(),
+            mime_type: Some("application/json".to_string()),
+            summary: Some("JSON payload".to_string()),
+            content: Some("{\"ok\":false}".to_string()),
+            truncated: false,
+        });
+
+        let json = serde_json::to_string(&record).expect("evidence record should serialize");
+        let roundtrip: EvidenceRecord =
+            serde_json::from_str(&json).expect("evidence record should roundtrip");
+
+        assert_eq!(roundtrip.goal_id.as_deref(), Some("goal-1"));
+        assert_eq!(roundtrip.action_id, Some(WorkbenchActionId::GoalCheck));
+        assert_eq!(roundtrip.status, EvidenceStatus::Warn);
+        assert_eq!(roundtrip.attachments.len(), 1);
+    }
+
+    #[test]
+    fn evidence_timeline_serializes_for_export() {
+        let mut timeline = EvidenceTimelineState::default();
+        timeline.append(
+            EvidenceRecord::new(
+                WorkbenchEvidenceKind::TaskTestSelectionPlan,
+                EvidenceStatus::Pass,
+                "selected tests for goal",
+                Some(EvidenceSource::Action {
+                    action_id: Some(WorkbenchActionId::GoalTestSelect),
+                    action_label: Some("goal.test_select".to_string()),
+                }),
+            )
+            .with_goal_id(Some("goal-1".to_string()))
+            .with_action_id(WorkbenchActionId::GoalTestSelect),
+        );
+
+        let json = serde_json::to_string(&timeline).expect("evidence timeline should serialize");
+        let roundtrip: EvidenceTimelineState =
+            serde_json::from_str(&json).expect("evidence timeline should roundtrip");
+
+        assert_eq!(roundtrip.entries.len(), 1);
+        assert_eq!(roundtrip.entries[0].goal_id.as_deref(), Some("goal-1"));
+        assert_eq!(roundtrip.entries[0].status, EvidenceStatus::Pass);
+    }
+
+    #[test]
+    fn goal_check_appends_goal_scoped_evidence() {
+        let mut state = WorkbenchState::default();
+        state.goals.active.push(ActiveGoalState {
+            goal_id: "goal-1".to_string(),
+            ..ActiveGoalState::default()
+        });
+
+        state.apply_result(
+            WorkbenchActionId::GoalCheck,
+            &WorkbenchActionResult::GoalPlanCheckReport(GoalPlanCheckReport {
+                plan_path: "plan.yaml".to_string(),
+                range: "HEAD~1..HEAD".to_string(),
+                changed_files: vec!["src/lib.rs".to_string()],
+                issues: Vec::new(),
+            }),
+        );
+
+        assert_eq!(state.evidence_timeline.entries.len(), 1);
+        let entry = &state.evidence_timeline.entries[0];
+        assert_eq!(entry.goal_id.as_deref(), Some("goal-1"));
+        assert_eq!(entry.status, EvidenceStatus::Pass);
+        assert_eq!(entry.action_id, Some(WorkbenchActionId::GoalCheck));
+        assert_eq!(
+            entry
+                .command
+                .as_ref()
+                .map(|command| command.command.as_str()),
+            Some("goal.check")
         );
     }
 

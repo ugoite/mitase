@@ -54,6 +54,11 @@ Goal Plan YAML exported from the Workbench must stay compatible with
 - Completion check: compare the result against the goal plan and required
   evidence before closing the loop.
 
+The Workbench evidence rail keeps a goal-scoped timeline of typed evidence
+records. Each record carries a status, source, timestamp, summary, and optional
+attachment so the panel can show validation, test selection, goal checks, and
+manual decisions without collapsing them into a single log blob.
+
 ## Spec Impact and Branch Scope
 
 Spec Impact Graph shows how philosophy, policy, requirement, feature, changed

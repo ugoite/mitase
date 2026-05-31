@@ -2,14 +2,17 @@ mod primitives;
 mod shell;
 
 pub use primitives::{
-    Button, CommandItem, DetailDrawer, EmptyState, EvidenceBadge, EvidenceLogRow, GoalCard,
-    IconButton, Panel, ScopeChip, StatusDot,
+    AgentEvidenceView, Button, CommandItem, CommandOutputView, DetailDrawer, EmptyState,
+    EvidenceBadge, EvidenceDetailDrawer, EvidenceLogRow, EvidenceRecordCard, GoalCard, IconButton,
+    ManualDecisionEvidenceView, Panel, ScopeChip, ScopeEvidenceView, StatusDot, TestEvidenceView,
+    ValidationEvidenceView,
 };
 pub use shell::{
     AffectedSpecPanel, AppShell, BranchScopeLens, ChangedFilesPanel, CommandPalette, EvidencePanel,
-    GoalCanvas, GoalDependencyView, GoalPlanCanvas, GoalPlanExportPanel, GoalRail, GoalScopePanel,
-    GoalTestPlanPanel, GraphEdge, GraphNode, ImpactSummaryPanel, OutOfScopePanel, OwnershipBadge,
-    OwnershipPanel, RequestClassificationPanel, RequestContextEditor, RequestIntakeCanvas,
-    RequestScopePanel, ScaffoldPreviewPanel, ScopeLegend, SpecImpactGraph, StatusBar,
-    SuggestedGoalSplitPanel, TestRecommendationPanel, WorkspacePulse,
+    EvidenceTimeline, GoalCanvas, GoalDependencyView, GoalPlanCanvas, GoalPlanExportPanel,
+    GoalRail, GoalScopePanel, GoalTestPlanPanel, GraphEdge, GraphNode, ImpactSummaryPanel,
+    OutOfScopePanel, OwnershipBadge, OwnershipPanel, RequestClassificationPanel,
+    RequestContextEditor, RequestIntakeCanvas, RequestScopePanel, ScaffoldPreviewPanel,
+    ScopeLegend, SpecImpactGraph, StatusBar, SuggestedGoalSplitPanel, TestRecommendationPanel,
+    WorkspacePulse,
 };

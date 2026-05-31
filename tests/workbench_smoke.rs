@@ -63,7 +63,23 @@ fn evidence_panel_renders_placeholder_when_empty() {
         EvidencePanel { ui }
     });
 
-    assert!(html.contains("Evidence placeholder"));
+    assert!(html.contains("Evidence timeline"));
+    assert!(html.contains("Append evidence by running goal checks"));
+}
+
+#[test]
+fn evidence_panel_renders_goal_scoped_timeline() {
+    let ui = build_demo_state();
+
+    let html = render_element(rsx! {
+        EvidencePanel { ui }
+    });
+
+    assert!(html.contains("Evidence Timeline"));
+    assert!(html.contains("goal GOAL-WB-REQUEST-001"));
+    assert!(html.contains("goal.test_select"));
+    assert!(html.contains("goal.check"));
+    assert!(!html.contains("validation passed"));
 }
 
 #[test]
