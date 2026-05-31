@@ -2306,6 +2306,8 @@ dependencies = [
  "dioxus",
  "dioxus-ssr",
  "manganis",
+ "serde_yaml",
+ "syu-task-model",
  "syu-workbench",
 ]
 
