@@ -10,9 +10,11 @@ use syu_task_model::{
 };
 use syu_workbench::{
     ActiveGoalState, ActiveRequestState, AffectedSpecItem, BranchScopeEvidence, BranchScopeReport,
-    ChangedFileReport, EvidenceEntry, GoalListState, OutOfScopeChange, OwnershipStatus,
-    WorkbenchAction, WorkbenchActionAvailability, WorkbenchActionId, WorkbenchActionMutability,
-    WorkbenchActionRegistry, WorkbenchApiPayload, WorkbenchEvidenceKind, WorkbenchState,
+    ChangedFileReport, EvidenceCommand, EvidenceEntry, EvidenceRecord, EvidenceSeverity,
+    EvidenceSource, EvidenceStatus, EvidenceSubject, GoalListState, OutOfScopeChange,
+    OwnershipStatus, WorkbenchAction, WorkbenchActionAvailability, WorkbenchActionId,
+    WorkbenchActionMutability, WorkbenchActionRegistry, WorkbenchApiPayload, WorkbenchEvidenceKind,
+    WorkbenchState,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -359,16 +361,79 @@ pub fn build_demo_state() -> WorkbenchUiState {
         }),
         ..WorkbenchState::default()
     };
-    state.evidence_timeline.entries.push(EvidenceEntry {
-        kind: WorkbenchEvidenceKind::ValidationReport,
-        summary: "validation passed".to_string(),
-        action_id: None,
-    });
-    state.evidence_timeline.entries.push(EvidenceEntry {
-        kind: WorkbenchEvidenceKind::BranchScopeReport,
-        summary: "branch.scope connected specs, code, tests, and ownership".to_string(),
-        action_id: Some(WorkbenchActionId::BranchScope),
-    });
+    state.evidence_timeline.append(
+        EvidenceRecord::new(
+            WorkbenchEvidenceKind::ValidationReport,
+            EvidenceStatus::Pass,
+            "validation passed",
+            Some(EvidenceSource::Command {
+                command: "syu validate".to_string(),
+            }),
+        )
+        .with_subject(EvidenceSubject::Workspace)
+        .with_severity(EvidenceSeverity::Low)
+        .with_command(EvidenceCommand {
+            command: "validation.run".to_string(),
+            args: Vec::new(),
+        }),
+    );
+    state.evidence_timeline.append(
+        EvidenceRecord::new(
+            WorkbenchEvidenceKind::BranchScopeReport,
+            EvidenceStatus::Pass,
+            "branch.scope connected specs, code, tests, and ownership",
+            Some(EvidenceSource::Action {
+                action_id: Some(WorkbenchActionId::BranchScope),
+                action_label: Some("branch.scope".to_string()),
+            }),
+        )
+        .with_action_id(WorkbenchActionId::BranchScope)
+        .with_subject(EvidenceSubject::Branch)
+        .with_severity(EvidenceSeverity::Low)
+        .with_command(EvidenceCommand {
+            command: "branch.scope".to_string(),
+            args: Vec::new(),
+        })
+        .with_goal_id(Some("GOAL-WB-REQUEST-001".to_string())),
+    );
+    state.evidence_timeline.append(
+        EvidenceRecord::new(
+            WorkbenchEvidenceKind::TaskTestSelectionPlan,
+            EvidenceStatus::Pass,
+            "test selection covers the active goal",
+            Some(EvidenceSource::Action {
+                action_id: Some(WorkbenchActionId::GoalTestSelect),
+                action_label: Some("goal.test_select".to_string()),
+            }),
+        )
+        .with_action_id(WorkbenchActionId::GoalTestSelect)
+        .with_goal_id(Some("GOAL-WB-REQUEST-001".to_string()))
+        .with_subject(EvidenceSubject::Goal)
+        .with_severity(EvidenceSeverity::Low)
+        .with_command(EvidenceCommand {
+            command: "goal.test_select".to_string(),
+            args: Vec::new(),
+        }),
+    );
+    state.evidence_timeline.append(
+        EvidenceRecord::new(
+            WorkbenchEvidenceKind::GoalPlanCheckReport,
+            EvidenceStatus::Pass,
+            "goal check passed for origin/main...HEAD",
+            Some(EvidenceSource::Action {
+                action_id: Some(WorkbenchActionId::GoalCheck),
+                action_label: Some("goal.check".to_string()),
+            }),
+        )
+        .with_action_id(WorkbenchActionId::GoalCheck)
+        .with_goal_id(Some("GOAL-WB-REQUEST-001".to_string()))
+        .with_subject(EvidenceSubject::Goal)
+        .with_severity(EvidenceSeverity::Low)
+        .with_command(EvidenceCommand {
+            command: "goal.check".to_string(),
+            args: Vec::new(),
+        }),
+    );
     let mut ui = WorkbenchUiState::from_state(state);
     ui.command_palette_open = true;
     ui.command_query = "goal".to_string();

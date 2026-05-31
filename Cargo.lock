@@ -2353,6 +2353,7 @@ name = "syu-workbench"
 version = "0.0.1-alpha.0"
 dependencies = [
  "serde",
+ "serde_json",
  "syu-actions",
  "syu-code-intel",
  "syu-task-model",
