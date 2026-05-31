@@ -5,11 +5,20 @@ use crate::components::{
 use crate::design::classes;
 use crate::model::{WorkbenchUiState, WorkspacePulseSummary};
 use dioxus::prelude::*;
+use std::collections::HashMap;
 use syu_task_model::{
     GoalPlanArtifact, GoalPlanConfidence, GoalPlanPersistentItem, GoalPlanScopeInclude,
     ScaffoldAction, ScaffoldUpdateKind,
 };
 use syu_workbench::WorkbenchActionId;
+
+const GRAPH_COLUMNS: usize = 4;
+const GRAPH_COLUMN_WIDTH: i32 = 210;
+const GRAPH_ROW_HEIGHT: i32 = 86;
+const GRAPH_NODE_X: i32 = 95;
+const GRAPH_NODE_Y: i32 = 56;
+const GRAPH_NODE_WIDTH: i32 = 172;
+const GRAPH_NODE_HEIGHT: i32 = 44;
 
 #[component]
 pub fn AppShell(ui: WorkbenchUiState) -> Element {
@@ -260,6 +269,19 @@ pub fn SpecImpactGraph(ui: WorkbenchUiState) -> Element {
         .and_then(|report| report.spec_impact_graph.nodes.first())
         .map(|node| node.id.clone())
         .unwrap_or_default();
+    let graph_layout = report.as_ref().map(|report| {
+        let node_positions = report
+            .spec_impact_graph
+            .nodes
+            .iter()
+            .enumerate()
+            .map(|(index, node)| (node.id.clone(), index))
+            .collect::<HashMap<_, _>>();
+        let svg_height = graph_view_height(report.spec_impact_graph.nodes.len());
+        let view_box = format!("0 0 900 {svg_height}");
+
+        (node_positions, svg_height, view_box)
+    });
     let mut selected_node_id = use_signal(|| initial_node);
     rsx! {
         Panel { class: classes::PANEL_MUTED,
@@ -268,12 +290,19 @@ pub fn SpecImpactGraph(ui: WorkbenchUiState) -> Element {
                     h2 { class: classes::SECTION_TITLE, "Spec Impact Graph" }
                     ScopeLegend {}
                 }
-                if let Some(report) = report {
+                if let (Some(report), Some((node_positions, svg_height, view_box))) = (report, graph_layout) {
                     div { class: "grid gap-3 xl:grid-cols-[minmax(0,1fr)_16rem]",
                         div { class: "min-h-72 rounded-xl border border-border bg-background p-3",
-                            svg { class: "h-72 w-full", view_box: "0 0 900 320", role: "img",
-                                for (index, edge) in report.spec_impact_graph.edges.iter().enumerate() {
-                                    GraphEdge { index, state: edge.state.clone(), label: format!("{} to {}", edge.from, edge.to) }
+                            svg { class: "w-full", height: "{svg_height}", view_box, role: "img",
+                                for edge in &report.spec_impact_graph.edges {
+                                    if let (Some(from_index), Some(to_index)) = (node_positions.get(&edge.from), node_positions.get(&edge.to)) {
+                                        GraphEdge {
+                                            from_index: *from_index,
+                                            to_index: *to_index,
+                                            state: edge.state.clone(),
+                                            label: format!("{} to {}", edge.from, edge.to),
+                                        }
+                                    }
                                 }
                                 for (index, node) in report.spec_impact_graph.nodes.iter().enumerate() {
                                     GraphNode {
@@ -328,8 +357,7 @@ pub fn GraphNode(
     selected: bool,
     onclick: EventHandler<MouseEvent>,
 ) -> Element {
-    let x = 95 + ((index % 4) as i32 * 210);
-    let y = 56 + ((index / 4) as i32 * 86);
+    let (x, y) = graph_node_origin(index);
     let class = graph_state_class(&state);
     let selected_class = if selected {
         "stroke-[3px]"
@@ -349,11 +377,9 @@ pub fn GraphNode(
 }
 
 #[component]
-pub fn GraphEdge(index: usize, state: String, label: String) -> Element {
-    let from_x = 266 + ((index % 4) as i32 * 210);
-    let from_y = 78 + ((index / 4) as i32 * 86);
-    let to_x = 305 + ((index % 4) as i32 * 210);
-    let to_y = if index % 3 == 2 { from_y + 86 } else { from_y };
+pub fn GraphEdge(from_index: usize, to_index: usize, state: String, label: String) -> Element {
+    let (from_x, from_y) = graph_edge_anchor(from_index, to_index);
+    let (to_x, to_y) = graph_edge_anchor(to_index, from_index);
     let class = graph_state_class(&state);
     rsx! {
         g {
@@ -362,6 +388,36 @@ pub fn GraphEdge(index: usize, state: String, label: String) -> Element {
             circle { cx: "{to_x}", cy: "{to_y}", r: "3", class: "fill-current {class}" }
         }
     }
+}
+
+fn graph_node_origin(index: usize) -> (i32, i32) {
+    (
+        GRAPH_NODE_X + ((index % GRAPH_COLUMNS) as i32 * GRAPH_COLUMN_WIDTH),
+        GRAPH_NODE_Y + ((index / GRAPH_COLUMNS) as i32 * GRAPH_ROW_HEIGHT),
+    )
+}
+
+fn graph_edge_anchor(index: usize, target_index: usize) -> (i32, i32) {
+    let (x, y) = graph_node_origin(index);
+    let column = index % GRAPH_COLUMNS;
+    let target_column = target_index % GRAPH_COLUMNS;
+    let row = index / GRAPH_COLUMNS;
+    let target_row = target_index / GRAPH_COLUMNS;
+
+    if target_row > row {
+        (x + (GRAPH_NODE_WIDTH / 2), y + GRAPH_NODE_HEIGHT)
+    } else if target_row < row {
+        (x + (GRAPH_NODE_WIDTH / 2), y)
+    } else if target_column >= column {
+        (x + GRAPH_NODE_WIDTH, y + (GRAPH_NODE_HEIGHT / 2))
+    } else {
+        (x, y + (GRAPH_NODE_HEIGHT / 2))
+    }
+}
+
+fn graph_view_height(node_count: usize) -> i32 {
+    let rows = node_count.max(1).div_ceil(GRAPH_COLUMNS);
+    320.max(70 + (rows as i32 * GRAPH_ROW_HEIGHT))
 }
 
 #[component]
