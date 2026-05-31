@@ -231,7 +231,10 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
       product can share one source of truth for request intake, goal tracking,
       evidence capture, and assignment state. The implementation SHOULD keep
       the UI and server layers close enough that browser and desktop clients
-      stay in sync.
+      stay in sync. CI MUST validate this architecture with Rust-native
+      Workbench model, action, server, UI, smoke, and installed-binary API
+      checks instead of old browser-app jobs. Tailwind CSS is allowed only as
+      a constrained stylesheet build layer for `crates/syu-app-ui/`.
   - **priority**: medium
   - **status**: implemented
   - **linked_policies**:
@@ -247,6 +250,18 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
           - Rust-native UI
           - server architecture
           - browser and desktop
+          - Workbench CI
+    - **shell**:
+      - **file**: scripts/ci/check-workbench.sh
+        - **symbols**:
+          - run_workbench_checks
+      - **file**: scripts/ci/check-ui-assets.sh
+        - **symbols**:
+          - check_ui_assets
+      - **file**: scripts/ci/installed-binary-smoke.sh
+        - **symbols**:
+          - /api/health
+          - /api/actions
 
 ## Source YAML
 
@@ -461,7 +476,10 @@ requirements:
       product can share one source of truth for request intake, goal tracking,
       evidence capture, and assignment state. The implementation SHOULD keep
       the UI and server layers close enough that browser and desktop clients
-      stay in sync.
+      stay in sync. CI MUST validate this architecture with Rust-native
+      Workbench model, action, server, UI, smoke, and installed-binary API
+      checks instead of old browser-app jobs. Tailwind CSS is allowed only as
+      a constrained stylesheet build layer for `crates/syu-app-ui/`.
     priority: medium
     status: implemented
     linked_policies:
@@ -477,4 +495,16 @@ requirements:
             - Rust-native UI
             - server architecture
             - browser and desktop
+            - Workbench CI
+      shell:
+        - file: scripts/ci/check-workbench.sh
+          symbols:
+            - run_workbench_checks
+        - file: scripts/ci/check-ui-assets.sh
+          symbols:
+            - check_ui_assets
+        - file: scripts/ci/installed-binary-smoke.sh
+          symbols:
+            - /api/health
+            - /api/actions
 ```
