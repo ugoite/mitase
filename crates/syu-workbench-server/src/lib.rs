@@ -16,7 +16,7 @@ use std::{
     net::{IpAddr, SocketAddr},
     path::{Component, Path as FsPath, PathBuf},
     sync::{Arc, OnceLock},
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use syu_code_intel::{
     BranchScopeEvidence, BranchScopeReport, ChangedFileReport, OwnershipStatus,
@@ -45,6 +45,48 @@ use tokio_stream::wrappers::BroadcastStream;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+pub enum EvidenceStatus {
+    Pending,
+    Pass,
+    Warn,
+    Fail,
+    Skipped,
+    Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EvidenceSource {
+    Action {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        action_id: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        action_label: Option<String>,
+    },
+    Command {
+        command: String,
+    },
+    System {
+        component: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct EvidenceAttachment {
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub truncated: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum WorkbenchEvidenceKind {
     RequestArtifact,
     ClassificationOutcome,
@@ -58,6 +100,10 @@ pub enum WorkbenchEvidenceKind {
     HistoryResponse,
     AssignmentState,
     JobState,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -209,15 +255,79 @@ impl Default for JobState {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct EvidenceEntry {
     pub kind: WorkbenchEvidenceKind,
+    pub status: EvidenceStatus,
     pub summary: String,
+    pub timestamp: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<EvidenceSource>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<EvidenceAttachment>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Default)]
 pub struct EvidenceTimelineState {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub entries: Vec<EvidenceEntry>,
+}
+
+impl EvidenceTimelineState {
+    fn append(&mut self, entry: EvidenceEntry) {
+        self.entries.push(entry);
+    }
+}
+
+fn evidence_timestamp() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or_default()
+}
+
+fn json_attachment<T: Serialize>(value: &T) -> EvidenceAttachment {
+    let json = serde_json::to_string_pretty(value).unwrap_or_else(|_| "{}".to_string());
+    const MAX_ATTACHMENT_CHARS: usize = 4096;
+    let truncated = json.len() > MAX_ATTACHMENT_CHARS;
+    let content = if truncated {
+        Some(json.chars().take(MAX_ATTACHMENT_CHARS).collect())
+    } else {
+        Some(json)
+    };
+    EvidenceAttachment {
+        label: "result".to_string(),
+        mime_type: Some("application/json".to_string()),
+        summary: Some(if truncated {
+            "truncated JSON payload".to_string()
+        } else {
+            "JSON payload".to_string()
+        }),
+        content,
+        truncated,
+    }
+}
+
+fn evidence_entry(
+    kind: WorkbenchEvidenceKind,
+    status: EvidenceStatus,
+    summary: impl Into<String>,
+    goal_id: Option<String>,
+    action_id: Option<String>,
+    source: Option<EvidenceSource>,
+    attachments: Vec<EvidenceAttachment>,
+) -> EvidenceEntry {
+    EvidenceEntry {
+        kind,
+        status,
+        summary: summary.into(),
+        timestamp: evidence_timestamp(),
+        goal_id,
+        action_id,
+        source,
+        attachments,
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Default)]
@@ -1004,6 +1114,22 @@ async fn goal_test_select(
         let mut state = server.inner.state.write().await;
         state.goals.active_goal_mut().goal_id = id.clone();
         state.goals.active_goal_mut().test_selection = Some(selection.clone());
+        state.evidence_timeline.append(evidence_entry(
+            WorkbenchEvidenceKind::TaskTestSelectionPlan,
+            EvidenceStatus::Pass,
+            format!(
+                "selected {} tests for {}",
+                selection.commands.len(),
+                selection.goal_id
+            ),
+            Some(id.clone()),
+            Some("goal.test_select".to_string()),
+            Some(EvidenceSource::Action {
+                action_id: Some("goal.test_select".to_string()),
+                action_label: Some("goal.test_select".to_string()),
+            }),
+            vec![json_attachment(&selection)],
+        ));
     }
     server
         .inner
@@ -1026,6 +1152,37 @@ async fn goal_check(
         let mut state = server.inner.state.write().await;
         state.goals.active_goal_mut().goal_id = id.clone();
         state.goals.active_goal_mut().check_report = Some(report.clone());
+        let status = if report
+            .issues
+            .iter()
+            .any(|issue| issue.severity == syu_domain::Severity::Error)
+        {
+            EvidenceStatus::Fail
+        } else if report
+            .issues
+            .iter()
+            .any(|issue| issue.severity == syu_domain::Severity::Warning)
+        {
+            EvidenceStatus::Warn
+        } else {
+            EvidenceStatus::Pass
+        };
+        state.evidence_timeline.append(evidence_entry(
+            WorkbenchEvidenceKind::GoalPlanCheckReport,
+            status,
+            if matches!(status, EvidenceStatus::Pass) {
+                format!("goal check passed for {}", report.plan_path)
+            } else {
+                format!("goal check found {} issues", report.issues.len())
+            },
+            Some(id.clone()),
+            Some("goal.check".to_string()),
+            Some(EvidenceSource::Action {
+                action_id: Some("goal.check".to_string()),
+                action_label: Some("goal.check".to_string()),
+            }),
+            vec![json_attachment(&report)],
+        ));
     }
     server
         .inner
@@ -1694,6 +1851,42 @@ async fn execute_action(
             let plan = serde_json::from_value::<GoalPlanArtifact>(body.clone())
                 .context("goal plan artifact required")?;
             let report = build_goal_check(server, &plan, "origin/main...HEAD").await;
+            {
+                let mut state = server.inner.state.write().await;
+                state.goals.active_goal_mut().goal_id = plan.goal.id.clone();
+                state.goals.active_goal_mut().check_report = Some(report.clone());
+                let status = if report
+                    .issues
+                    .iter()
+                    .any(|issue| issue.severity == syu_domain::Severity::Error)
+                {
+                    EvidenceStatus::Fail
+                } else if report
+                    .issues
+                    .iter()
+                    .any(|issue| issue.severity == syu_domain::Severity::Warning)
+                {
+                    EvidenceStatus::Warn
+                } else {
+                    EvidenceStatus::Pass
+                };
+                state.evidence_timeline.append(evidence_entry(
+                    WorkbenchEvidenceKind::GoalPlanCheckReport,
+                    status,
+                    if matches!(status, EvidenceStatus::Pass) {
+                        format!("goal check passed for {}", report.plan_path)
+                    } else {
+                        format!("goal check found {} issues", report.issues.len())
+                    },
+                    Some(plan.goal.id.clone()),
+                    Some(action_id.to_string()),
+                    Some(EvidenceSource::Action {
+                        action_id: Some(action_id.to_string()),
+                        action_label: Some(action_id.to_string()),
+                    }),
+                    vec![json_attachment(&report)],
+                ));
+            }
             ActionRunResponse {
                 action_id: action_id.to_string(),
                 event: WorkbenchEvent::GoalChecked {
@@ -1720,6 +1913,27 @@ async fn execute_action(
                 },
                 warnings: Vec::new(),
             };
+            {
+                let mut state = server.inner.state.write().await;
+                state.goals.active_goal_mut().goal_id = plan.goal.id.clone();
+                state.goals.active_goal_mut().test_selection = Some(selection.clone());
+                state.evidence_timeline.append(evidence_entry(
+                    WorkbenchEvidenceKind::TaskTestSelectionPlan,
+                    EvidenceStatus::Pass,
+                    format!(
+                        "selected {} tests for {}",
+                        selection.commands.len(),
+                        selection.goal_id
+                    ),
+                    Some(plan.goal.id.clone()),
+                    Some(action_id.to_string()),
+                    Some(EvidenceSource::Action {
+                        action_id: Some(action_id.to_string()),
+                        action_label: Some(action_id.to_string()),
+                    }),
+                    vec![json_attachment(&selection)],
+                ));
+            }
             ActionRunResponse {
                 action_id: action_id.to_string(),
                 event: WorkbenchEvent::GoalTestsSelected {
@@ -1796,8 +2010,28 @@ async fn execute_action(
         }
         "validation.run" => ActionRunResponse {
             action_id: action_id.to_string(),
-            event: WorkbenchEvent::ValidationUpdated {
-                summary: "validation snapshot refreshed".to_string(),
+            event: {
+                {
+                    let mut state = server.inner.state.write().await;
+                    state
+                        .workspace
+                        .get_or_insert_with(WorkspaceSnapshot::default)
+                        .validation_summary = Some("validation snapshot refreshed".to_string());
+                    state.evidence_timeline.append(evidence_entry(
+                        WorkbenchEvidenceKind::ValidationReport,
+                        EvidenceStatus::Pass,
+                        "validation snapshot refreshed",
+                        None,
+                        Some(action_id.to_string()),
+                        Some(EvidenceSource::Command {
+                            command: action_id.to_string(),
+                        }),
+                        vec![json_attachment(&serde_json::json!({"status": "ok"}))],
+                    ));
+                }
+                WorkbenchEvent::ValidationUpdated {
+                    summary: "validation snapshot refreshed".to_string(),
+                }
             },
             result: serde_json::json!({"status": "ok"}),
         },
@@ -2017,6 +2251,96 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         assert_eq!(json["range"], "HEAD...HEAD");
         assert_eq!(json["plan_path"], "request.yaml");
+
+        let snapshot = server.inner.state.read().await.clone();
+        assert_eq!(snapshot.evidence_timeline.entries.len(), 1);
+        assert_eq!(
+            snapshot.evidence_timeline.entries[0].kind,
+            WorkbenchEvidenceKind::GoalPlanCheckReport
+        );
+        assert_eq!(
+            snapshot.evidence_timeline.entries[0].goal_id.as_deref(),
+            Some("goal-1")
+        );
+        assert_eq!(
+            snapshot.evidence_timeline.entries[0].status,
+            EvidenceStatus::Pass
+        );
+    }
+
+    #[tokio::test]
+    async fn goal_test_select_endpoint_records_evidence() {
+        let server = test_server();
+        let plan = goal_plan_from_request(
+            &server,
+            &RequestPlanRequest {
+                request: RequestArtifact {
+                    version: 1,
+                    request: "Select tests for the goal".to_string(),
+                    context: Default::default(),
+                },
+                request_path: Some("request.yaml".to_string()),
+            },
+        )
+        .await;
+        let body = serde_json::to_string(&plan).expect("plan json");
+        let (status, json) = json_response(
+            server.router(),
+            Request::builder()
+                .method("POST")
+                .uri("/api/goals/goal-1/test-select")
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .expect("request"),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["goal_id"], "goal-1");
+
+        let snapshot = server.inner.state.read().await.clone();
+        assert_eq!(snapshot.evidence_timeline.entries.len(), 1);
+        assert_eq!(
+            snapshot.evidence_timeline.entries[0].kind,
+            WorkbenchEvidenceKind::TaskTestSelectionPlan
+        );
+        assert_eq!(
+            snapshot.evidence_timeline.entries[0].goal_id.as_deref(),
+            Some("goal-1")
+        );
+        assert_eq!(
+            snapshot.evidence_timeline.entries[0].status,
+            EvidenceStatus::Pass
+        );
+    }
+
+    #[tokio::test]
+    async fn validation_action_records_evidence() {
+        let server = test_server();
+        let (status, json) = json_response(
+            server.router(),
+            Request::builder()
+                .method("POST")
+                .uri("/api/actions/validation.run/run")
+                .header("content-type", "application/json")
+                .body(Body::from("{}"))
+                .expect("request"),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["result"]["status"], "ok");
+
+        let snapshot = server.inner.state.read().await.clone();
+        assert_eq!(snapshot.evidence_timeline.entries.len(), 1);
+        assert_eq!(
+            snapshot.evidence_timeline.entries[0].kind,
+            WorkbenchEvidenceKind::ValidationReport
+        );
+        assert_eq!(
+            snapshot.evidence_timeline.entries[0].status,
+            EvidenceStatus::Pass
+        );
     }
 
     #[tokio::test]

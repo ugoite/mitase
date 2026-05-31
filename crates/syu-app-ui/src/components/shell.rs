@@ -1,6 +1,7 @@
 use crate::components::{
-    Button, CommandItem, DetailDrawer, EmptyState, EvidenceBadge, EvidenceLogRow, GoalCard,
-    IconButton, Panel, ScopeChip, StatusDot,
+    AgentEvidenceView, Button, CommandItem, DetailDrawer, EmptyState, EvidenceBadge,
+    EvidenceDetailDrawer, EvidenceRecordCard, GoalCard, IconButton, ManualDecisionEvidenceView,
+    Panel, ScopeChip, ScopeEvidenceView, StatusDot, TestEvidenceView, ValidationEvidenceView,
 };
 use crate::design::classes;
 use crate::model::{WorkbenchUiState, WorkspacePulseSummary};
@@ -10,7 +11,7 @@ use syu_task_model::{
     GoalPlanArtifact, GoalPlanConfidence, GoalPlanPersistentItem, GoalPlanScopeInclude,
     ScaffoldAction, ScaffoldUpdateKind,
 };
-use syu_workbench::WorkbenchActionId;
+use syu_workbench::{EvidenceRecord, WorkbenchActionId};
 
 const GRAPH_COLUMNS: usize = 4;
 const GRAPH_COLUMN_WIDTH: i32 = 210;
@@ -1012,21 +1013,80 @@ pub fn GoalPlanExportPanel(plan: GoalPlanArtifact) -> Element {
 }
 
 #[component]
+pub fn EvidenceTimeline(entries: Vec<EvidenceRecord>, goal_id: Option<String>) -> Element {
+    let filtered_entries = goal_id
+        .as_ref()
+        .map(|goal_id| {
+            entries
+                .iter()
+                .filter(|entry| entry.goal_id.as_ref() == Some(goal_id))
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .filter(|entries| !entries.is_empty())
+        .unwrap_or(entries);
+
+    rsx! {
+        div { class: "space-y-3",
+            if filtered_entries.is_empty() {
+                EmptyState {
+                    title: "Evidence timeline".to_string(),
+                    body: "Append evidence by running goal checks, test selection, or validation.".to_string()
+                }
+            } else {
+                for record in filtered_entries {
+                    { render_evidence_timeline_record(record) }
+                }
+            }
+        }
+    }
+}
+
+fn render_evidence_timeline_record(record: EvidenceRecord) -> Element {
+    match record.kind {
+        syu_workbench::WorkbenchEvidenceKind::ValidationReport => {
+            rsx! { ValidationEvidenceView { record } }
+        }
+        syu_workbench::WorkbenchEvidenceKind::TaskTestSelectionPlan => {
+            rsx! { TestEvidenceView { record } }
+        }
+        syu_workbench::WorkbenchEvidenceKind::BranchScopeReport
+        | syu_workbench::WorkbenchEvidenceKind::SpecImpactReport => {
+            rsx! { ScopeEvidenceView { record } }
+        }
+        syu_workbench::WorkbenchEvidenceKind::JobState => {
+            rsx! { AgentEvidenceView { record } }
+        }
+        syu_workbench::WorkbenchEvidenceKind::AssignmentState => {
+            rsx! { ManualDecisionEvidenceView { record } }
+        }
+        _ => rsx! { EvidenceRecordCard { record } },
+    }
+}
+
+#[component]
 pub fn EvidencePanel(ui: WorkbenchUiState) -> Element {
+    let active_goal = ui.payload.state.goals.active_goal().cloned();
+    let goal_id = active_goal.as_ref().map(|goal| goal.goal_id.clone());
+    let latest = ui.payload.state.evidence_timeline.entries.last().cloned();
     rsx! {
         Panel { class: classes::PANEL,
             div { class: classes::PANEL_INNER,
                 div { class: classes::SECTION_HEADER,
-                    h2 { class: classes::SECTION_TITLE, "Evidence" }
-                    ScopeChip { label: format!("{} entries", ui.payload.state.evidence_timeline.entries.len()) }
+                    h2 { class: classes::SECTION_TITLE, "Evidence Timeline" }
+                    if let Some(goal) = &active_goal {
+                        ScopeChip { label: format!("goal {}", goal.goal_id) }
+                    } else {
+                        ScopeChip { label: "workspace".to_string() }
+                    }
+                }
+                if let Some(record) = latest {
+                    EvidenceDetailDrawer { record }
                 }
                 div { class: classes::SECTION_BODY,
-                    if ui.payload.state.evidence_timeline.entries.is_empty() {
-                        EmptyState { title: "Evidence placeholder".to_string(), body: "The first implementation keeps proof visible here.".to_string() }
-                    } else {
-                        for entry in &ui.payload.state.evidence_timeline.entries {
-                            EvidenceLogRow { entry: entry.clone() }
-                        }
+                    EvidenceTimeline {
+                        entries: ui.payload.state.evidence_timeline.entries.clone(),
+                        goal_id: goal_id.clone(),
                     }
                 }
             }
