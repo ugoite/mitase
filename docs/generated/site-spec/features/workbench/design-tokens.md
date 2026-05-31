@@ -36,8 +36,15 @@ description: "Generated reference for docs/syu/features/workbench/design-tokens.
           - COMMAND_ACTIVE
           - GOAL
           - GOAL_ACTIVE
+          - SPEC_LINKED
+          - CODE_LINKED
+          - TEST_LINKED
           - SCOPE_IN
           - SCOPE_OUT
+          - SCOPE_AMBIGUOUS
+          - OWNERSHIP_KNOWN
+          - OWNERSHIP_MISSING
+          - OWNERSHIP_AMBIGUOUS
           - EVIDENCE_PASS
           - EVIDENCE_WARN
           - EVIDENCE_FAIL
@@ -80,8 +87,15 @@ features:
             - COMMAND_ACTIVE
             - GOAL
             - GOAL_ACTIVE
+            - SPEC_LINKED
+            - CODE_LINKED
+            - TEST_LINKED
             - SCOPE_IN
             - SCOPE_OUT
+            - SCOPE_AMBIGUOUS
+            - OWNERSHIP_KNOWN
+            - OWNERSHIP_MISSING
+            - OWNERSHIP_AMBIGUOUS
             - EVIDENCE_PASS
             - EVIDENCE_WARN
             - EVIDENCE_FAIL
