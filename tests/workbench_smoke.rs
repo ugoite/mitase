@@ -179,6 +179,12 @@ fn branch_scope_lens_renders_scope_ownership_and_tests() {
     assert!(html.contains("Affected Specs"));
     assert!(html.contains("FEAT-WORKBENCH-BRANCH-SCOPE-001"));
     assert!(html.contains("Suggested Goal Split"));
+    assert!(html.contains("Goal Scope Comparison"));
+    assert!(html.contains("files included by Goal"));
+    assert!(html.contains("files excluded by Goal"));
+    assert!(html.contains("changed files not covered by Goal"));
+    assert!(html.contains("tests required by Goal"));
+    assert!(html.contains("tests detected from code ownership"));
     assert!(html.contains("tests/workbench_smoke.rs"));
 }
 
@@ -197,4 +203,6 @@ fn spec_impact_graph_renders_typed_nodes_edges_and_legend() {
     assert!(html.contains("scope-ambiguous"));
     assert!(html.contains("FEAT-WORKBENCH-SPEC-GRAPH-001"));
     assert!(html.contains("crates/syu-app-ui/src/components/shell.rs"));
+    assert!(html.contains("role=\"button\""));
+    assert!(html.contains("border-command-active"));
 }

@@ -57,6 +57,7 @@ features:
             - OutOfScopePanel
             - AffectedSpecPanel
             - SuggestedGoalSplitPanel
+            - GoalScopeComparisonPanel
             - ImpactSummaryPanel
             - OwnershipBadge
         - file: tests/workbench_smoke.rs

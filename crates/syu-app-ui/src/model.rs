@@ -529,6 +529,7 @@ fn demo_goal_plan() -> GoalPlanArtifact {
                 ],
                 exclude: vec![
                     "examples/browser-ui/**".to_string(),
+                    "examples/legacy-browser/**".to_string(),
                     "website/**".to_string(),
                     "React, TypeScript, Vite, and Playwright surfaces".to_string(),
                 ],

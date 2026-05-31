@@ -72,6 +72,7 @@ description: "Generated reference for docs/syu/features/workbench/branch-scope.y
           - OutOfScopePanel
           - AffectedSpecPanel
           - SuggestedGoalSplitPanel
+          - GoalScopeComparisonPanel
           - ImpactSummaryPanel
           - OwnershipBadge
       - **file**: tests/workbench_smoke.rs
@@ -159,6 +160,7 @@ features:
             - OutOfScopePanel
             - AffectedSpecPanel
             - SuggestedGoalSplitPanel
+            - GoalScopeComparisonPanel
             - ImpactSummaryPanel
             - OwnershipBadge
         - file: tests/workbench_smoke.rs

@@ -227,6 +227,10 @@ pub fn BranchScopeLens(
                 }
                 if let Some(report) = report {
                     ImpactSummaryPanel { report: report.clone() }
+                    GoalScopeComparisonPanel {
+                        report: report.clone(),
+                        plan: ui.payload.state.goals.active_goal().and_then(|goal| goal.goal_plan.clone()),
+                    }
                     div { class: "grid gap-3 xl:grid-cols-2",
                         ChangedFilesPanel { report: report.clone() }
                         OwnershipPanel { report: report.clone() }
@@ -251,6 +255,12 @@ pub fn SpecImpactGraph(ui: WorkbenchUiState) -> Element {
         .branch_scope
         .as_ref()
         .and_then(|state| state.report.clone());
+    let initial_node = report
+        .as_ref()
+        .and_then(|report| report.spec_impact_graph.nodes.first())
+        .map(|node| node.id.clone())
+        .unwrap_or_default();
+    let mut selected_node_id = use_signal(|| initial_node);
     rsx! {
         Panel { class: classes::PANEL_MUTED,
             div { class: "flex flex-col gap-4 p-4",
@@ -267,17 +277,29 @@ pub fn SpecImpactGraph(ui: WorkbenchUiState) -> Element {
                                 }
                                 for (index, node) in report.spec_impact_graph.nodes.iter().enumerate() {
                                     GraphNode {
+                                        id: node.id.clone(),
                                         index,
                                         label: node.label.clone(),
                                         kind: node.kind.clone(),
                                         state: node.state.clone(),
+                                        selected: selected_node_id.read().as_str() == node.id.as_str(),
+                                        onclick: {
+                                            let node_id = node.id.clone();
+                                            move |_| selected_node_id.set(node_id.clone())
+                                        },
                                     }
                                 }
                             }
                         }
                         div { class: "space-y-2",
                             for node in &report.spec_impact_graph.nodes {
-                                article { class: "rounded-lg border border-border bg-panel p-2",
+                                button {
+                                    class: if selected_node_id.read().as_str() == node.id.as_str() { "w-full rounded-lg border border-command-active bg-panel-muted p-2 text-left" } else { "w-full rounded-lg border border-border bg-panel p-2 text-left" },
+                                    type: "button",
+                                    onclick: {
+                                        let node_id = node.id.clone();
+                                        move |_| selected_node_id.set(node_id.clone())
+                                    },
                                     div { class: "flex flex-wrap items-center gap-2",
                                         ScopeChip { label: node.kind.clone() }
                                         ScopeChip { label: node.state.clone() }
@@ -297,15 +319,29 @@ pub fn SpecImpactGraph(ui: WorkbenchUiState) -> Element {
 }
 
 #[component]
-pub fn GraphNode(index: usize, label: String, kind: String, state: String) -> Element {
+pub fn GraphNode(
+    id: String,
+    index: usize,
+    label: String,
+    kind: String,
+    state: String,
+    selected: bool,
+    onclick: EventHandler<MouseEvent>,
+) -> Element {
     let x = 95 + ((index % 4) as i32 * 210);
     let y = 56 + ((index / 4) as i32 * 86);
     let class = graph_state_class(&state);
+    let selected_class = if selected {
+        "stroke-[3px]"
+    } else {
+        "stroke-[1.5px]"
+    };
     let short = truncate_label(&label, 26);
     rsx! {
-        g { tabindex: "0",
+        g { tabindex: "0", role: "button", onclick: move |event| onclick.call(event),
             title { "{kind}: {label}" }
-            rect { x: "{x}", y: "{y}", width: "172", height: "44", rx: "7", class: "fill-panel stroke-current {class}" }
+            desc { "{id}" }
+            rect { x: "{x}", y: "{y}", width: "172", height: "44", rx: "7", class: "fill-panel stroke-current {class} {selected_class}" }
             text { x: "{x + 12}", y: "{y + 19}", class: "fill-foreground text-[11px] font-semibold", "{short}" }
             text { x: "{x + 12}", y: "{y + 34}", class: "fill-foreground/60 text-[9px] uppercase", "{kind} / {state}" }
         }
@@ -336,6 +372,91 @@ pub fn ScopeLegend() -> Element {
                 span { class: "inline-flex items-center gap-1 text-[10px] uppercase text-foreground/70",
                     span { class: "h-2 w-2 rounded-full {graph_state_class(label)} bg-current" }
                     span { "{label}" }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn GoalScopeComparisonPanel(
+    report: syu_workbench::BranchScopeReport,
+    plan: Option<GoalPlanArtifact>,
+) -> Element {
+    let Some(plan) = plan else {
+        return rsx! {
+            EmptyState { title: "No Goal Plan comparison".to_string(), body: "Branch Scope Lens compares changed files against a selected Goal Plan when one is active.".to_string() }
+        };
+    };
+    let include_patterns = plan
+        .implementation_plan
+        .scope
+        .include
+        .iter()
+        .map(include_pattern)
+        .collect::<Vec<_>>();
+    let exclude_patterns = plan.implementation_plan.scope.exclude.clone();
+    let mut included = Vec::new();
+    let mut excluded = Vec::new();
+    let mut uncovered = Vec::new();
+
+    for file in &report.changed_files {
+        if exclude_patterns
+            .iter()
+            .any(|pattern| path_matches_goal_pattern(&file.file, pattern))
+        {
+            excluded.push(file.file.clone());
+        } else if include_patterns
+            .iter()
+            .any(|pattern| path_matches_goal_pattern(&file.file, pattern))
+        {
+            included.push(file.file.clone());
+        } else {
+            uncovered.push(file.file.clone());
+        }
+    }
+
+    rsx! {
+        Panel { class: classes::PANEL_MUTED,
+            div { class: "flex flex-col gap-3 p-3",
+                div { class: classes::SECTION_HEADER,
+                    h3 { class: "text-sm font-semibold", "Goal Scope Comparison" }
+                    ScopeChip { label: plan.goal.id.clone() }
+                }
+                div { class: "grid gap-3 md:grid-cols-3",
+                    GoalComparisonColumn { title: "files included by Goal".to_string(), tone: "scope-in".to_string(), files: included }
+                    GoalComparisonColumn { title: "files excluded by Goal".to_string(), tone: "scope-out".to_string(), files: excluded }
+                    GoalComparisonColumn { title: "changed files not covered by Goal".to_string(), tone: "scope-ambiguous".to_string(), files: uncovered }
+                }
+                div { class: "grid gap-3 md:grid-cols-2",
+                    div { class: classes::EVIDENCE_CARD,
+                        p { class: "text-xs uppercase tracking-[0.18em] text-foreground/60", "tests required by Goal" }
+                        for command in &plan.completion.must_pass {
+                            p { class: "mt-1 text-sm text-test-linked", "{command}" }
+                        }
+                    }
+                    div { class: classes::EVIDENCE_CARD,
+                        p { class: "text-xs uppercase tracking-[0.18em] text-foreground/60", "tests detected from code ownership" }
+                        for test in report.test_inventory.required_tests.iter().chain(report.test_inventory.linked_tests.iter()) {
+                            p { class: "mt-1 text-sm text-test-linked", "{test}" }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn GoalComparisonColumn(title: String, tone: String, files: Vec<String>) -> Element {
+    rsx! {
+        div { class: classes::EVIDENCE_CARD,
+            p { class: "text-xs uppercase tracking-[0.18em] text-foreground/60", "{title}" }
+            if files.is_empty() {
+                p { class: "mt-1 text-sm text-foreground/60", "none" }
+            } else {
+                for file in files {
+                    p { class: "mt-1 text-sm {graph_state_class(&tone)}", "{file}" }
                 }
             }
         }
@@ -447,6 +568,13 @@ pub fn OutOfScopePanel(report: syu_workbench::BranchScopeReport) -> Element {
 
 #[component]
 pub fn AffectedSpecPanel(report: syu_workbench::BranchScopeReport) -> Element {
+    let initial_spec = report
+        .spec_impact
+        .affected_items
+        .first()
+        .map(|item| item.id.clone())
+        .unwrap_or_default();
+    let mut selected_spec_id = use_signal(|| initial_spec);
     rsx! {
         Panel { class: classes::PANEL_MUTED,
             div { class: "flex flex-col gap-2 p-3",
@@ -455,7 +583,13 @@ pub fn AffectedSpecPanel(report: syu_workbench::BranchScopeReport) -> Element {
                     ScopeChip { label: format!("{} linked", report.spec_impact.affected_items.len()) }
                 }
                 for item in &report.spec_impact.affected_items {
-                    article { class: classes::EVIDENCE_CARD,
+                    button {
+                        class: if selected_spec_id.read().as_str() == item.id.as_str() { "w-full rounded-xl border border-command-active bg-panel p-3 text-left" } else { classes::EVIDENCE_CARD },
+                        type: "button",
+                        onclick: {
+                            let item_id = item.id.clone();
+                            move |_| selected_spec_id.set(item_id.clone())
+                        },
                         div { class: "flex flex-wrap items-center gap-2",
                             ScopeChip { label: item.kind.clone() }
                             ScopeChip { label: if item.direct { "spec-linked".to_string() } else { "scope-ambiguous".to_string() } }
@@ -962,6 +1096,26 @@ fn persistent_item_id(item: &GoalPlanPersistentItem) -> String {
 
 fn include_pattern(include: &GoalPlanScopeInclude) -> String {
     include.pattern().to_string()
+}
+
+fn path_matches_goal_pattern(path: &str, pattern: &str) -> bool {
+    if path == pattern {
+        return true;
+    }
+
+    if let Some(prefix) = pattern.strip_suffix("/**") {
+        return path.starts_with(prefix);
+    }
+
+    if let Some(prefix) = pattern.strip_suffix("/*") {
+        return path.starts_with(prefix);
+    }
+
+    if let Some((prefix, suffix)) = pattern.split_once('*') {
+        return path.starts_with(prefix) && path.ends_with(suffix);
+    }
+
+    false
 }
 
 fn goal_plan_yaml_preview(plan: &GoalPlanArtifact) -> String {
