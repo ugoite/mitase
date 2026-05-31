@@ -6,16 +6,77 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-pub use syu_actions::{HistoryResponse, ValidationReport};
 pub use syu_code_intel::{
     AffectedSpecItem, BranchScopeEvidence, BranchScopeReport, ChangedFileReport, OutOfScopeChange,
     OwnershipStatus, SpecImpactGraphEdge, SpecImpactGraphNode, SpecImpactGraphReport,
     SpecImpactReport, SuggestedGoalSplit,
 };
+pub use syu_domain::{Issue, Severity};
 pub use syu_task_model::{
     ClassificationOutcome, GoalPlanArtifact, GoalPlanCheckReport, RequestArtifact,
     RequestArtifactContext, ScaffoldPlan, ScopeOutcome, TaskTestSelectionPlan,
 };
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ValidationReport {
+    pub workspace_root: PathBuf,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub issues: Vec<Issue>,
+}
+
+impl ValidationReport {
+    pub fn is_success(&self) -> bool {
+        self.issues
+            .iter()
+            .all(|issue| issue.severity != Severity::Error)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HistoryResponse {
+    pub id: String,
+    pub entity_kind: &'static str,
+    pub title: String,
+    pub status: &'static str,
+    pub repository_root: String,
+    pub kind: &'static str,
+    pub include_related: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<HistoryScopeResponse>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path_filter: Option<String>,
+    pub tracked_paths: Vec<TrackedPath>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub lifecycle_events: Vec<HistoryLifecycleEvent>,
+    pub commits: Vec<MatchedCommit>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HistoryScopeResponse {
+    pub label: String,
+    pub revision_range: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct TrackedPath {
+    pub kind: &'static str,
+    pub path: String,
+    pub owner_kind: &'static str,
+    pub owner_id: String,
+    pub source: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HistoryLifecycleEvent {
+    pub kind: String,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct MatchedCommit {
+    pub hash: String,
+    pub summary: String,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

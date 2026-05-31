@@ -7,6 +7,8 @@ use axum::{
     response::{Html, IntoResponse, Response},
     routing::{get, post},
 };
+use dioxus::prelude::*;
+use dioxus_ssr::render_element;
 use futures_util::StreamExt;
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
@@ -20,6 +22,7 @@ use std::{
     sync::{Arc, OnceLock},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+use syu_app_ui::{AppShell, WorkbenchUiState};
 use syu_code_intel::{
     BranchScopeEvidence, BranchScopeReport, ChangedFileReport, OwnershipStatus,
     resolve_git_range_changed_files,
@@ -39,6 +42,7 @@ use syu_task_model::{
     ScaffoldUpdate, ScaffoldUpdateKind, ScopeFeatureCandidate, ScopeOutcome, ScopeSignals,
     SearchResult, TaskTestSelectionCommand, TaskTestSelectionEscalation, TaskTestSelectionPlan,
 };
+use syu_workbench as shared_workbench;
 use tokio::{
     sync::{RwLock, broadcast, mpsc},
     task,
@@ -917,40 +921,358 @@ impl WorkbenchServer {
 
 async fn workbench_index(State(server): State<WorkbenchServer>) -> Html<String> {
     let state = server.inner.state.read().await.clone();
-    let workspace = state
-        .workspace
-        .as_ref()
-        .map(|workspace| workspace.workspace_root.display().to_string())
-        .unwrap_or_else(|| "unloaded workspace".to_string());
-    Html(format!(
+    let ui = WorkbenchUiState::from_state(shared_workbench_state(state));
+    let shell = render_element(rsx! {
+        AppShell { ui }
+    });
+    Html(workbench_document(shell))
+}
+
+fn workbench_document(shell: String) -> String {
+    format!(
         r#"<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="referrer" content="same-origin">
   <title>Syu Workbench</title>
   <link rel="stylesheet" href="/assets/tailwind.css">
 </head>
-<body>
-  <main class="min-h-screen bg-background text-foreground p-6">
-    <section class="mx-auto max-w-7xl">
-      <p class="text-sm uppercase tracking-wide text-evidence-pending">Syu Workbench</p>
-      <h1 class="mt-2 text-3xl font-semibold">Command Palette</h1>
-      <p class="mt-3 text-sm text-foreground/75">Workspace: {workspace}</p>
-      <p class="mt-6 text-sm text-foreground/70">Browser/server mode exposes the local Workbench API and shared Tailwind asset. Desktop mode loads the shared Dioxus Workbench UI crate around the same server.</p>
-    </section>
-  </main>
+<body class="bg-background text-foreground">
+  <div id="syu-workbench-root" data-ui="dioxus-ssr">{shell}</div>
 </body>
 </html>"#
-    ))
+    )
 }
 
 async fn workbench_css() -> Response {
     (
-        [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
+        [
+            (header::CONTENT_TYPE, "text/css; charset=utf-8"),
+            (
+                header::CACHE_CONTROL,
+                "public, max-age=3600, stale-while-revalidate=86400",
+            ),
+        ],
         include_str!("../../syu-app-ui/assets/tailwind.css"),
     )
         .into_response()
+}
+
+fn shared_workbench_state(state: WorkbenchState) -> shared_workbench::WorkbenchState {
+    shared_workbench::WorkbenchState {
+        workspace: state.workspace.map(shared_workspace_snapshot),
+        request: state.request.map(shared_active_request_state),
+        goals: shared_goal_list_state(state.goals),
+        branch_scope: state.branch_scope.map(shared_branch_scope_state),
+        evidence_timeline: shared_evidence_timeline_state(state.evidence_timeline),
+        assignment: state.assignment.map(shared_assignment_state),
+        job: shared_job_state(state.job),
+        command_palette: shared_command_palette_state(state.command_palette),
+        confirmation: state.confirmation.map(shared_confirmation_metadata),
+    }
+}
+
+fn shared_workspace_snapshot(snapshot: WorkspaceSnapshot) -> shared_workbench::WorkspaceSnapshot {
+    shared_workbench::WorkspaceSnapshot {
+        workspace_root: snapshot.workspace_root,
+        spec_root: snapshot.spec_root,
+        branch: snapshot.branch,
+        validation_summary: snapshot.validation_summary,
+    }
+}
+
+fn shared_active_request_state(
+    request: ActiveRequestState,
+) -> shared_workbench::ActiveRequestState {
+    shared_workbench::ActiveRequestState {
+        request_path: request.request_path,
+        artifact: request.artifact,
+        classification: request.classification,
+        scope: request.scope,
+        scaffold: request.scaffold,
+    }
+}
+
+fn shared_active_goal_state(goal: ActiveGoalState) -> shared_workbench::ActiveGoalState {
+    shared_workbench::ActiveGoalState {
+        goal_id: goal.goal_id,
+        goal_plan: goal.goal_plan,
+        test_selection: goal.test_selection,
+        check_report: goal.check_report,
+    }
+}
+
+fn shared_goal_list_state(goals: GoalListState) -> shared_workbench::GoalListState {
+    shared_workbench::GoalListState {
+        active: goals
+            .active
+            .into_iter()
+            .map(shared_active_goal_state)
+            .collect(),
+        selected_goal_id: goals.selected_goal_id,
+    }
+}
+
+fn shared_branch_scope_state(report: BranchScopeReport) -> shared_workbench::BranchScopeState {
+    shared_workbench::BranchScopeState {
+        range: Some(report.range.clone()),
+        bounded_scope: Some(shared_workbench::BoundedScope {
+            range: Some(report.range.clone()),
+            allowed_ids: report
+                .spec_impact
+                .affected_items
+                .iter()
+                .map(|item| item.id.clone())
+                .collect(),
+            max_files: Some(report.changed_files.len()),
+        }),
+        allowed_ids: report
+            .spec_impact
+            .affected_items
+            .iter()
+            .map(|item| item.id.clone())
+            .collect(),
+        report: Some(report),
+    }
+}
+
+fn shared_evidence_timeline_state(
+    timeline: EvidenceTimelineState,
+) -> shared_workbench::EvidenceTimelineState {
+    shared_workbench::EvidenceTimelineState {
+        entries: timeline
+            .entries
+            .into_iter()
+            .map(shared_evidence_record)
+            .collect(),
+    }
+}
+
+fn shared_evidence_record(entry: EvidenceEntry) -> shared_workbench::EvidenceRecord {
+    shared_workbench::EvidenceRecord {
+        kind: shared_evidence_kind(entry.kind),
+        status: shared_evidence_status(entry.status),
+        summary: entry.summary,
+        timestamp: entry.timestamp,
+        goal_id: entry.goal_id,
+        subject: None,
+        severity: None,
+        source: entry.source.map(shared_evidence_source),
+        action_id: entry.action_id.and_then(shared_action_id),
+        command: None,
+        attachments: entry
+            .attachments
+            .into_iter()
+            .map(shared_evidence_attachment)
+            .collect(),
+        related_spec_id: None,
+    }
+}
+
+fn shared_evidence_source(source: EvidenceSource) -> shared_workbench::EvidenceSource {
+    match source {
+        EvidenceSource::Action {
+            action_id,
+            action_label,
+        } => shared_workbench::EvidenceSource::Action {
+            action_id: action_id.and_then(shared_action_id),
+            action_label,
+        },
+        EvidenceSource::Command { command } => {
+            shared_workbench::EvidenceSource::Command { command }
+        }
+        EvidenceSource::System { component } => {
+            shared_workbench::EvidenceSource::System { component }
+        }
+    }
+}
+
+fn shared_evidence_attachment(
+    attachment: EvidenceAttachment,
+) -> shared_workbench::EvidenceAttachment {
+    shared_workbench::EvidenceAttachment {
+        label: attachment.label,
+        mime_type: attachment.mime_type,
+        summary: attachment.summary,
+        content: attachment.content,
+        truncated: attachment.truncated,
+    }
+}
+
+fn shared_assignment_state(assignment: AssignmentState) -> shared_workbench::AssignmentState {
+    let include = assignment
+        .scope
+        .as_ref()
+        .map(|scope| scope.allowed_ids.clone())
+        .unwrap_or_default();
+    let required_tests = assignment
+        .scope
+        .as_ref()
+        .and_then(|scope| scope.range.clone())
+        .into_iter()
+        .collect();
+    shared_workbench::Assignment {
+        id: assignment
+            .goal_id
+            .as_ref()
+            .map(|goal_id| format!("assignment-{}", goal_id.to_lowercase()))
+            .unwrap_or_else(|| "assignment-1".to_string()),
+        goal_id: assignment.goal_id,
+        assignee: assignment.assignee.map(shared_assignee),
+        scope: shared_workbench::AssignmentScope {
+            include,
+            required_tests,
+            ..shared_workbench::AssignmentScope::default()
+        },
+        evidence_requirements: assignment
+            .expected_evidence
+            .iter()
+            .map(|kind| shared_workbench::AssignmentEvidenceRequirement {
+                id: shared_evidence_kind(kind.clone()).label().to_string(),
+                description: shared_evidence_kind(kind.clone()).label().replace('_', " "),
+                kind: shared_evidence_kind(kind.clone()),
+                required: true,
+            })
+            .collect(),
+        expected_evidence: assignment
+            .expected_evidence
+            .into_iter()
+            .map(shared_evidence_kind)
+            .collect(),
+        ..shared_workbench::Assignment::default()
+    }
+}
+
+fn shared_assignee(assignee: AssignmentAssignee) -> shared_workbench::Assignee {
+    match assignee {
+        AssignmentAssignee::Human { name } => shared_workbench::Assignee::human(name),
+        AssignmentAssignee::Ai { model } => {
+            shared_workbench::Assignee::local_command(model.clone(), model)
+        }
+    }
+}
+
+fn shared_job_state(job: JobState) -> shared_workbench::JobState {
+    shared_workbench::JobState {
+        status: match job.status {
+            JobStatus::Idle => shared_workbench::JobStatus::Idle,
+            JobStatus::Queued => shared_workbench::JobStatus::Queued,
+            JobStatus::Running => shared_workbench::JobStatus::Running,
+            JobStatus::Completed => shared_workbench::JobStatus::Completed,
+            JobStatus::Failed | JobStatus::Cancelled => shared_workbench::JobStatus::Failed,
+        },
+        action_id: job.action_id.and_then(shared_action_id),
+        message: job.message,
+    }
+}
+
+fn shared_command_palette_state(
+    palette: CommandPaletteState,
+) -> shared_workbench::CommandPaletteState {
+    shared_workbench::CommandPaletteState {
+        query: palette.query,
+        selected_action_id: palette.selected_action_id.and_then(shared_action_id),
+        visible_actions: palette
+            .visible_actions
+            .into_iter()
+            .filter_map(shared_action_id)
+            .collect(),
+    }
+}
+
+fn shared_confirmation_metadata(
+    confirmation: WorkbenchConfirmationMetadata,
+) -> shared_workbench::WorkbenchConfirmationMetadata {
+    shared_workbench::WorkbenchConfirmationMetadata {
+        confirmed_by: confirmation.confirmed_by,
+        rationale: confirmation.rationale,
+        scope_token: confirmation.scope_token,
+    }
+}
+
+fn shared_action_id(action_id: String) -> Option<shared_workbench::WorkbenchActionId> {
+    match action_id.as_str() {
+        "request.new" => Some(shared_workbench::WorkbenchActionId::RequestNew),
+        "request.classify" => Some(shared_workbench::WorkbenchActionId::RequestClassify),
+        "request.scope" => Some(shared_workbench::WorkbenchActionId::RequestScope),
+        "request.scaffold" => Some(shared_workbench::WorkbenchActionId::RequestScaffold),
+        "request.plan" => Some(shared_workbench::WorkbenchActionId::RequestPlan),
+        "goal.test_select" => Some(shared_workbench::WorkbenchActionId::GoalTestSelect),
+        "goal.check" => Some(shared_workbench::WorkbenchActionId::GoalCheck),
+        "branch.scope" => Some(shared_workbench::WorkbenchActionId::BranchScope),
+        "branch.infer_goal" => Some(shared_workbench::WorkbenchActionId::BranchInferGoal),
+        "spec.impact" => Some(shared_workbench::WorkbenchActionId::SpecImpact),
+        "trace.range" => Some(shared_workbench::WorkbenchActionId::TraceRange),
+        "relate.range" => Some(shared_workbench::WorkbenchActionId::RelateRange),
+        "validation.run" => Some(shared_workbench::WorkbenchActionId::ValidationRun),
+        "history.show" => Some(shared_workbench::WorkbenchActionId::HistoryShow),
+        "assignment.create" => Some(shared_workbench::WorkbenchActionId::AssignmentCreate),
+        "assignment.preview" => Some(shared_workbench::WorkbenchActionId::AssignmentPreview),
+        "assignment.run_dry" => Some(shared_workbench::WorkbenchActionId::AssignmentRunDry),
+        "assignment.run" => Some(shared_workbench::WorkbenchActionId::AssignmentRun),
+        "assignment.cancel" => Some(shared_workbench::WorkbenchActionId::AssignmentCancel),
+        "assignment.record_manual" => {
+            Some(shared_workbench::WorkbenchActionId::AssignmentRecordManual)
+        }
+        "assignment.collect_evidence" => {
+            Some(shared_workbench::WorkbenchActionId::AssignmentCollectEvidence)
+        }
+        "agent.run" => Some(shared_workbench::WorkbenchActionId::AgentRun),
+        _ => None,
+    }
+}
+
+fn shared_evidence_kind(kind: WorkbenchEvidenceKind) -> shared_workbench::WorkbenchEvidenceKind {
+    match kind {
+        WorkbenchEvidenceKind::RequestArtifact => {
+            shared_workbench::WorkbenchEvidenceKind::RequestArtifact
+        }
+        WorkbenchEvidenceKind::ClassificationOutcome => {
+            shared_workbench::WorkbenchEvidenceKind::ClassificationOutcome
+        }
+        WorkbenchEvidenceKind::ScopeOutcome => {
+            shared_workbench::WorkbenchEvidenceKind::ScopeOutcome
+        }
+        WorkbenchEvidenceKind::ScaffoldPlan => {
+            shared_workbench::WorkbenchEvidenceKind::ScaffoldPlan
+        }
+        WorkbenchEvidenceKind::GoalPlanArtifact => {
+            shared_workbench::WorkbenchEvidenceKind::GoalPlanArtifact
+        }
+        WorkbenchEvidenceKind::TaskTestSelectionPlan => {
+            shared_workbench::WorkbenchEvidenceKind::TaskTestSelectionPlan
+        }
+        WorkbenchEvidenceKind::GoalPlanCheckReport => {
+            shared_workbench::WorkbenchEvidenceKind::GoalPlanCheckReport
+        }
+        WorkbenchEvidenceKind::BranchScopeReport => {
+            shared_workbench::WorkbenchEvidenceKind::BranchScopeReport
+        }
+        WorkbenchEvidenceKind::ValidationReport => {
+            shared_workbench::WorkbenchEvidenceKind::ValidationReport
+        }
+        WorkbenchEvidenceKind::HistoryResponse => {
+            shared_workbench::WorkbenchEvidenceKind::HistoryResponse
+        }
+        WorkbenchEvidenceKind::AssignmentState => {
+            shared_workbench::WorkbenchEvidenceKind::AssignmentState
+        }
+        WorkbenchEvidenceKind::JobState => shared_workbench::WorkbenchEvidenceKind::JobState,
+    }
+}
+
+fn shared_evidence_status(status: EvidenceStatus) -> shared_workbench::EvidenceStatus {
+    match status {
+        EvidenceStatus::Pending => shared_workbench::EvidenceStatus::Pending,
+        EvidenceStatus::Pass => shared_workbench::EvidenceStatus::Pass,
+        EvidenceStatus::Warn => shared_workbench::EvidenceStatus::Warn,
+        EvidenceStatus::Fail => shared_workbench::EvidenceStatus::Fail,
+        EvidenceStatus::Skipped => shared_workbench::EvidenceStatus::Skipped,
+        EvidenceStatus::Unknown => shared_workbench::EvidenceStatus::Unknown,
+    }
 }
 
 async fn health(State(server): State<WorkbenchServer>) -> Json<WorkbenchHealth> {
@@ -2153,7 +2475,11 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         assert!(html.contains("Syu Workbench"));
         assert!(html.contains("/assets/tailwind.css"));
+        assert!(html.contains("syu-workbench-root"));
+        assert!(html.contains("Workbench Pulse"));
         assert!(html.contains("Command Palette"));
+        assert!(html.contains("request.classify"));
+        assert!(!html.contains("Browser/server mode exposes the local Workbench API"));
     }
 
     #[tokio::test]
@@ -2170,6 +2496,59 @@ mod tests {
 
         assert_eq!(status, StatusCode::OK);
         assert!(css.contains("--color-command-active"));
+    }
+
+    #[tokio::test]
+    async fn server_smoke_covers_root_css_health_and_actions() {
+        let server = test_server();
+        let router = server.router();
+
+        let (root_status, root_html) = text_response(
+            router.clone(),
+            Request::builder()
+                .uri("/")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+        let (css_status, css) = text_response(
+            router.clone(),
+            Request::builder()
+                .uri("/assets/tailwind.css")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+        let (health_status, health) = json_response(
+            router.clone(),
+            Request::builder()
+                .uri("/api/health")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+        let (actions_status, actions) = json_response(
+            router,
+            Request::builder()
+                .uri("/api/actions")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+
+        assert_eq!(root_status, StatusCode::OK);
+        assert!(root_html.contains("Command Palette"));
+        assert!(root_html.contains("request.classify"));
+        assert_eq!(css_status, StatusCode::OK);
+        assert!(css.contains("--color-background"));
+        assert_eq!(health_status, StatusCode::OK);
+        assert_eq!(health["ok"], true);
+        assert_eq!(actions_status, StatusCode::OK);
+        assert!(actions["actions"].as_array().is_some_and(|actions| {
+            actions
+                .iter()
+                .any(|action| action["id"] == "request.classify")
+        }));
     }
 
     #[tokio::test]

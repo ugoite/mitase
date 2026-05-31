@@ -24,7 +24,7 @@ features:
             - "*"
   - id: FEAT-WORKBENCH-007
     title: Shared browser and desktop Workbench
-    summary: Keep the browser and desktop Workbench aligned through a Rust-native UI and server architecture that share one request, goal, assignment, and evidence model.
+    summary: Serve the browser Workbench root and desktop shell from the same Rust-native Dioxus UI, Tailwind asset, typed action registry, and request, goal, assignment, and evidence model.
     status: implemented
     linked_requirements:
       - REQ-WORKBENCH-006
@@ -35,6 +35,7 @@ features:
           symbols:
             - workbench_index
             - workbench_css
+            - shared_workbench_state
       markdown:
         - file: docs/guide/workbench.md
           symbols:

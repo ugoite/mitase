@@ -173,10 +173,12 @@ requirements:
     description: |
       The Workbench MUST behave consistently in browser and desktop contexts.
       The same request, goal, assignment, and evidence flow SHOULD work in both
-      environments so users do not have to learn two separate products. Tauri
-      MUST remain a desktop shell around the shared Workbench server, typed
-      action registry, Dioxus UI crate, and Tailwind-generated CSS asset rather
-      than becoming a second Workbench implementation.
+      environments so users do not have to learn two separate products. The
+      browser root served by `syu workbench` MUST render the shared Dioxus
+      Workbench shell instead of an API placeholder page. Tauri MUST remain a
+      desktop shell around the shared Workbench server, typed action registry,
+      Dioxus UI crate, and Tailwind-generated CSS asset rather than becoming a
+      second Workbench implementation.
     priority: medium
     status: implemented
     linked_policies:
@@ -192,6 +194,7 @@ requirements:
           symbols:
             - browser and desktop
             - same way
+            - shared Dioxus Workbench UI
       rust:
         - file: crates/syu-desktop/src/lib.rs
           symbols:
@@ -201,6 +204,7 @@ requirements:
           symbols:
             - index_route_renders_workbench_browser_entrypoint_and_css_asset
             - css_route_serves_the_shared_tailwind_asset
+            - server_smoke_covers_root_css_health_and_actions
   - id: REQ-WORKBENCH-007
     title: Rust-native UI and server architecture
     description: |
@@ -210,8 +214,10 @@ requirements:
       the UI and server layers close enough that browser and desktop clients
       stay in sync. CI MUST validate this architecture with Rust-native
       Workbench model, action, server, UI, smoke, and installed-binary API
-      checks instead of old browser-app jobs. Tailwind CSS is allowed only as
-      a constrained stylesheet build layer for `crates/syu-app-ui/`.
+      checks instead of old browser-app jobs. The browser/server entrypoint
+      MUST server-render the shared UI crate with the shared CSS asset while
+      keeping localhost-first server security defaults. Tailwind CSS is allowed
+      only as a constrained stylesheet build layer for `crates/syu-app-ui/`.
     priority: medium
     status: implemented
     linked_policies:

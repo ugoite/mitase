@@ -9,14 +9,18 @@ license = "MIT"
 [dependencies]
 anyhow = "1.0.100"
 axum = "0.8.9"
+dioxus = { version = "0.7.9", features = ["asset", "html", "macro"] }
+dioxus-ssr = "0.7.9"
 futures-util = "0.3.31"
 notify = "8.2.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
+syu-app-ui = { path = "../syu-app-ui" }
 syu-code-intel = { path = "../syu-code-intel" }
 syu-core = { path = "../syu-core" }
 syu-domain = { path = "../syu-domain" }
 syu-task-model = { path = "../syu-task-model" }
+syu-workbench = { path = "../syu-workbench" }
 tokio = { version = "1.52.3", features = ["macros", "net", "rt-multi-thread", "sync"] }
 tokio-stream = { version = "0.1.17", features = ["sync"] }
 

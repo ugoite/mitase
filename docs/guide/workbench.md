@@ -2,10 +2,13 @@
 
 Use this guide when a request needs to become a goal-centered Workbench flow
 instead of just another CLI invocation. Run `syu workbench` for the local
-Workbench server entrypoint; the Workbench is command-palette-first and should
-work the same way in browser and desktop contexts.
+browser Workbench; its root page server-renders the shared Dioxus Workbench UI
+with the same Tailwind asset used by desktop. The first screen is
+command-palette-first, with the goal canvas and evidence rail already visible.
 
-The browser and desktop clients should share one Rust-native UI and server architecture so the same flow stays visible in both places.
+The browser and desktop clients work the same way through one Rust-native UI
+and server architecture so the same request, goal, assignment, and evidence
+flow stays visible in both places.
 
 ## Workbench CI
 
@@ -20,8 +23,9 @@ is the source, `crates/syu-app-ui/assets/tailwind.css` is the served asset, and
 CI uses the scoped Tailwind CLI to rebuild that asset and verify the build path.
 It must not add a Vite, React, TypeScript, Playwright, or old browser-app
 package setup for the Workbench. The installed-binary smoke starts `syu
-workbench`, checks `/api/health`, `/api/actions`, `/api/workspace/snapshot`, and
-verifies the shared CSS asset is loaded by the Workbench shell.
+workbench`, checks `/`, `/assets/tailwind.css`, `/api/health`, `/api/actions`,
+and `/api/workspace/snapshot`, and verifies the shared CSS asset is loaded by
+the Workbench shell.
 
 The target product flow is:
 
