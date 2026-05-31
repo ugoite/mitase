@@ -1842,7 +1842,7 @@ impl WorkbenchState {
                         AgentRunStatus::RunDry => JobStatus::Queued,
                         AgentRunStatus::RunActive => JobStatus::Running,
                     },
-                    action_id: Some(WorkbenchActionId::AssignmentRunDry),
+                    action_id: Some(action_id),
                     message: Some(format!("{} for {}", run.status.label(), run.assignment_id)),
                 };
             }
@@ -2656,6 +2656,38 @@ mod tests {
                 .map(|command| command.command.as_str()),
             Some("goal.check")
         );
+    }
+
+    #[test]
+    fn agent_runs_preserve_the_triggering_job_action_id() {
+        let mut state = WorkbenchState::default();
+        state.assignment = Some(Assignment {
+            id: "assignment-1".to_string(),
+            goal_id: Some("goal-1".to_string()),
+            ..Assignment::default()
+        });
+
+        state.apply_result(
+            WorkbenchActionId::AssignmentRun,
+            &WorkbenchActionResult::AgentRun(AgentRun {
+                id: "run-1".to_string(),
+                assignment_id: "assignment-1".to_string(),
+                profile_id: "profile-1".to_string(),
+                mode: AgentRunMode::Execute,
+                status: AgentRunStatus::RunDry,
+                scope_guard_before: ScopeGuardResult::valid(),
+                scope_guard_after: ScopeGuardResult::valid(),
+                output: AgentRunOutput {
+                    prompt: "prompt".to_string(),
+                    diff_summary: "diff".to_string(),
+                    ..AgentRunOutput::default()
+                },
+                evidence: Vec::new(),
+            }),
+        );
+
+        assert_eq!(state.job.action_id, Some(WorkbenchActionId::AssignmentRun));
+        assert_eq!(state.job.status, JobStatus::Queued);
     }
 
     #[test]

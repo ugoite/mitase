@@ -222,6 +222,9 @@ pub fn AssignGoalDialog(
     on_run_action: Option<EventHandler<WorkbenchActionId>>,
 ) -> Element {
     let assignment = ui.payload.state.assignment.clone();
+    let is_automated_assignee = assignment
+        .as_ref()
+        .is_some_and(assignment_has_automated_assignee);
     rsx! {
         Panel { class: classes::PANEL_MUTED,
             div { class: "space-y-4 p-4",
@@ -255,11 +258,13 @@ pub fn AssignGoalDialog(
                                 onclick: move |_| on_run_action.call(WorkbenchActionId::AssignmentPreview),
                                 "Preview"
                             }
-                            button {
-                                class: "rounded-full border border-command-active bg-command-active px-3 py-1.5 text-xs uppercase tracking-[0.16em] text-background",
-                                disabled: !assignment.is_runnable(),
-                                onclick: move |_| on_run_action.call(WorkbenchActionId::AssignmentRunDry),
-                                "Dry Run"
+                            if is_automated_assignee {
+                                button {
+                                    class: "rounded-full border border-command-active bg-command-active px-3 py-1.5 text-xs uppercase tracking-[0.16em] text-background",
+                                    disabled: !assignment.is_runnable(),
+                                    onclick: move |_| on_run_action.call(WorkbenchActionId::AssignmentRunDry),
+                                    "Dry Run"
+                                }
                             }
                         }
                     }
@@ -1559,12 +1564,22 @@ fn truncate_label(label: &str, max_chars: usize) -> String {
     truncated
 }
 
+fn assignment_has_automated_assignee(assignment: &Assignment) -> bool {
+    assignment
+        .assignee
+        .as_ref()
+        .is_some_and(|assignee| assignee.kind.is_automated())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::model::build_demo_state;
     use dioxus_ssr::render_element;
-    use syu_workbench::{WorkbenchActionId, WorkbenchState};
+    use syu_workbench::{
+        AgentRunMode, Assignee, Assignment, AssignmentScope, AssignmentStatus, ScopeGuardResult,
+        ScopeGuardStatus, WorkbenchActionId, WorkbenchState,
+    };
 
     #[test]
     fn app_shell_renders_workbench_pulse_before_the_side_panels() {
@@ -1589,6 +1604,29 @@ mod tests {
 
         assert!(html.contains("disabled: missing active_goal_plan"));
         assert!(html.contains("goal.check"));
+    }
+
+    #[test]
+    fn human_assignments_hide_the_dry_run_action() {
+        let human_assignment = Assignment {
+            assignee: Some(Assignee::human("Manual Reviewer")),
+            run_mode: AgentRunMode::Manual,
+            status: AssignmentStatus::AssignmentReady,
+            scope_guard: ScopeGuardResult {
+                status: ScopeGuardStatus::ScopeValid,
+                blockers: Vec::new(),
+                out_of_scope_files: Vec::new(),
+            },
+            scope: AssignmentScope::default(),
+            ..Assignment::default()
+        };
+        let automated_assignment = Assignment {
+            assignee: Some(Assignee::local_command("local-coder", "Local coder")),
+            ..human_assignment.clone()
+        };
+
+        assert!(!assignment_has_automated_assignee(&human_assignment));
+        assert!(assignment_has_automated_assignee(&automated_assignment));
     }
 
     #[test]
