@@ -2,7 +2,11 @@ use serde::Serialize;
 use std::{path::PathBuf, sync::OnceLock};
 
 pub use syu_actions::{HistoryResponse, ValidationReport};
-pub use syu_code_intel::{BranchScopeReport, OutOfScopeChange, SuggestedGoalSplit};
+pub use syu_code_intel::{
+    AffectedSpecItem, BranchScopeEvidence, BranchScopeReport, ChangedFileReport, OutOfScopeChange,
+    OwnershipStatus, SpecImpactGraphEdge, SpecImpactGraphNode, SpecImpactGraphReport,
+    SpecImpactReport, SuggestedGoalSplit,
+};
 pub use syu_task_model::{
     ClassificationOutcome, GoalPlanArtifact, GoalPlanCheckReport, RequestArtifact,
     RequestArtifactContext, ScaffoldPlan, ScopeOutcome, TaskTestSelectionPlan,
@@ -61,6 +65,10 @@ pub enum WorkbenchActionId {
     BranchInferGoal,
     #[serde(rename = "spec.impact")]
     SpecImpact,
+    #[serde(rename = "trace.range")]
+    TraceRange,
+    #[serde(rename = "relate.range")]
+    RelateRange,
     #[serde(rename = "validation.run")]
     ValidationRun,
     #[serde(rename = "history.show")]
@@ -84,6 +92,8 @@ impl WorkbenchActionId {
             Self::BranchScope => "branch.scope",
             Self::BranchInferGoal => "branch.infer_goal",
             Self::SpecImpact => "spec.impact",
+            Self::TraceRange => "trace.range",
+            Self::RelateRange => "relate.range",
             Self::ValidationRun => "validation.run",
             Self::HistoryShow => "history.show",
             Self::AssignmentCreate => "assignment.create",
@@ -102,6 +112,7 @@ pub enum WorkbenchActionFunction {
     SelectGoalTests,
     CheckGoalPlan,
     BranchScope,
+    TraceRange,
     InferGoalPlanFromDiff,
     RelateRange,
     ValidateWorkspace,
@@ -120,6 +131,7 @@ impl WorkbenchActionFunction {
             Self::SelectGoalTests => "select_goal_tests",
             Self::CheckGoalPlan => "check_goal_plan",
             Self::BranchScope => "branch.scope",
+            Self::TraceRange => "trace_range",
             Self::InferGoalPlanFromDiff => "infer_goal_plan_from_diff",
             Self::RelateRange => "relate_range",
             Self::ValidateWorkspace => "validate_workspace",
@@ -160,6 +172,7 @@ pub enum WorkbenchEvidenceKind {
     TaskTestSelectionPlan,
     GoalPlanCheckReport,
     BranchScopeReport,
+    SpecImpactReport,
     ValidationReport,
     HistoryResponse,
     AssignmentState,
@@ -177,6 +190,7 @@ impl WorkbenchEvidenceKind {
             Self::TaskTestSelectionPlan => "task_test_selection_plan",
             Self::GoalPlanCheckReport => "goal_plan_check_report",
             Self::BranchScopeReport => "branch_scope_report",
+            Self::SpecImpactReport => "spec_impact_report",
             Self::ValidationReport => "validation_report",
             Self::HistoryResponse => "history_response",
             Self::AssignmentState => "assignment_state",
@@ -276,6 +290,7 @@ pub enum WorkbenchActionResult {
     TaskTestSelectionPlan(TaskTestSelectionPlan),
     GoalPlanCheckReport(GoalPlanCheckReport),
     BranchScopeReport(BranchScopeReport),
+    SpecImpactReport(SpecImpactReport),
     ValidationReport(ValidationReport),
     HistoryResponse(HistoryResponse),
     AssignmentState(AssignmentState),
@@ -293,6 +308,7 @@ impl WorkbenchActionResult {
             Self::TaskTestSelectionPlan(_) => WorkbenchEvidenceKind::TaskTestSelectionPlan,
             Self::GoalPlanCheckReport(_) => WorkbenchEvidenceKind::GoalPlanCheckReport,
             Self::BranchScopeReport(_) => WorkbenchEvidenceKind::BranchScopeReport,
+            Self::SpecImpactReport(_) => WorkbenchEvidenceKind::SpecImpactReport,
             Self::ValidationReport(_) => WorkbenchEvidenceKind::ValidationReport,
             Self::HistoryResponse(_) => WorkbenchEvidenceKind::HistoryResponse,
             Self::AssignmentState(_) => WorkbenchEvidenceKind::AssignmentState,
@@ -584,6 +600,7 @@ impl WorkbenchState {
                     allowed_ids,
                 });
             }
+            WorkbenchActionResult::SpecImpactReport(_) => {}
             WorkbenchActionResult::ValidationReport(report) => {
                 self.workspace
                     .get_or_insert_with(WorkspaceSnapshot::default)
@@ -921,7 +938,35 @@ fn build_registry() -> Vec<WorkbenchAction> {
             risk: WorkbenchActionRisk::Low,
             function: WorkbenchActionFunction::RelateRange,
             output_event: WorkbenchActionOutputEvent::SpecImpactAssessed,
+            evidence_kind: WorkbenchEvidenceKind::SpecImpactReport,
+            ai_eligible: false,
+        },
+        WorkbenchAction {
+            id: WorkbenchActionId::TraceRange,
+            title: "Trace range".to_string(),
+            description: "Trace changed files and symbols for the selected branch range."
+                .to_string(),
+            required_state: vec![WorkbenchStateRequirement::WorkspaceLoaded],
+            input_schema: WorkbenchActionInputSchema::BranchScope,
+            mutability: WorkbenchActionMutability::ReadOnly,
+            risk: WorkbenchActionRisk::Low,
+            function: WorkbenchActionFunction::TraceRange,
+            output_event: WorkbenchActionOutputEvent::BranchScoped,
             evidence_kind: WorkbenchEvidenceKind::BranchScopeReport,
+            ai_eligible: false,
+        },
+        WorkbenchAction {
+            id: WorkbenchActionId::RelateRange,
+            title: "Relate range".to_string(),
+            description: "Relate the selected branch range to affected specs and tests."
+                .to_string(),
+            required_state: vec![WorkbenchStateRequirement::BranchScopeLoaded],
+            input_schema: WorkbenchActionInputSchema::BranchScope,
+            mutability: WorkbenchActionMutability::ReadOnly,
+            risk: WorkbenchActionRisk::Low,
+            function: WorkbenchActionFunction::RelateRange,
+            output_event: WorkbenchActionOutputEvent::SpecImpactAssessed,
+            evidence_kind: WorkbenchEvidenceKind::SpecImpactReport,
             ai_eligible: false,
         },
         WorkbenchAction {

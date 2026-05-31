@@ -9,8 +9,9 @@ use syu_task_model::{
     TaskTestSelectionCommand, TaskTestSelectionEscalation, TaskTestSelectionPlan,
 };
 use syu_workbench::{
-    ActiveGoalState, ActiveRequestState, EvidenceEntry, GoalListState, WorkbenchAction,
-    WorkbenchActionAvailability, WorkbenchActionId, WorkbenchActionMutability,
+    ActiveGoalState, ActiveRequestState, AffectedSpecItem, BranchScopeEvidence, BranchScopeReport,
+    ChangedFileReport, EvidenceEntry, GoalListState, OutOfScopeChange, OwnershipStatus,
+    WorkbenchAction, WorkbenchActionAvailability, WorkbenchActionId, WorkbenchActionMutability,
     WorkbenchActionRegistry, WorkbenchApiPayload, WorkbenchEvidenceKind, WorkbenchState,
 };
 
@@ -338,6 +339,24 @@ pub fn build_demo_state() -> WorkbenchUiState {
             rationale: Some("demo fixture for request-to-goals flow".to_string()),
             scope_token: Some("request-739".to_string()),
         }),
+        branch_scope: Some(syu_workbench::BranchScopeState {
+            range: Some("origin/main...HEAD".to_string()),
+            report: Some(demo_branch_scope_report()),
+            bounded_scope: Some(syu_workbench::BoundedScope {
+                range: Some("origin/main...HEAD".to_string()),
+                allowed_ids: vec![
+                    "REQ-WORKBENCH-004".to_string(),
+                    "FEAT-WORKBENCH-SPEC-GRAPH-001".to_string(),
+                    "FEAT-WORKBENCH-BRANCH-SCOPE-001".to_string(),
+                ],
+                max_files: Some(3),
+            }),
+            allowed_ids: vec![
+                "REQ-WORKBENCH-004".to_string(),
+                "FEAT-WORKBENCH-SPEC-GRAPH-001".to_string(),
+                "FEAT-WORKBENCH-BRANCH-SCOPE-001".to_string(),
+            ],
+        }),
         ..WorkbenchState::default()
     };
     state.evidence_timeline.entries.push(EvidenceEntry {
@@ -345,10 +364,91 @@ pub fn build_demo_state() -> WorkbenchUiState {
         summary: "validation passed".to_string(),
         action_id: None,
     });
+    state.evidence_timeline.entries.push(EvidenceEntry {
+        kind: WorkbenchEvidenceKind::BranchScopeReport,
+        summary: "branch.scope connected specs, code, tests, and ownership".to_string(),
+        action_id: Some(WorkbenchActionId::BranchScope),
+    });
     let mut ui = WorkbenchUiState::from_state(state);
     ui.command_palette_open = true;
     ui.command_query = "goal".to_string();
     ui
+}
+
+fn demo_branch_scope_report() -> BranchScopeReport {
+    let requirement = AffectedSpecItem {
+        kind: "requirement".to_string(),
+        id: "REQ-WORKBENCH-004".to_string(),
+        title: "Spec impact and branch scope visualization".to_string(),
+        document_path: Some("docs/syu/requirements/core/workbench.yaml".to_string()),
+        direct: true,
+    };
+    let spec_graph = AffectedSpecItem {
+        kind: "feature".to_string(),
+        id: "FEAT-WORKBENCH-SPEC-GRAPH-001".to_string(),
+        title: "Spec Impact Graph".to_string(),
+        document_path: Some("docs/syu/features/workbench/branch-scope.yaml".to_string()),
+        direct: true,
+    };
+    let branch_lens = AffectedSpecItem {
+        kind: "feature".to_string(),
+        id: "FEAT-WORKBENCH-BRANCH-SCOPE-001".to_string(),
+        title: "Branch Scope Lens".to_string(),
+        document_path: Some("docs/syu/features/workbench/branch-scope.yaml".to_string()),
+        direct: true,
+    };
+
+    BranchScopeReport::from_evidence(BranchScopeEvidence {
+        range: "origin/main...HEAD".to_string(),
+        changed_files: vec![
+            ChangedFileReport {
+                file: "crates/syu-app-ui/src/components/shell.rs".to_string(),
+                symbols: vec!["SpecImpactGraph".to_string(), "BranchScopeLens".to_string()],
+                owners: vec![spec_graph.clone(), branch_lens.clone()],
+                status: OwnershipStatus::Owned,
+                is_spec_file: false,
+            },
+            ChangedFileReport {
+                file: "crates/syu-app-ui/src/design/tokens.rs".to_string(),
+                symbols: vec!["SCOPE_AMBIGUOUS".to_string()],
+                owners: vec![spec_graph.clone()],
+                status: OwnershipStatus::Partial,
+                is_spec_file: false,
+            },
+            ChangedFileReport {
+                file: "examples/legacy-browser/index.ts".to_string(),
+                symbols: Vec::new(),
+                owners: Vec::new(),
+                status: OwnershipStatus::Unowned,
+                is_spec_file: false,
+            },
+        ],
+        trace_ownership: Vec::new(),
+        spec_items: vec![requirement, spec_graph, branch_lens],
+        required_tests: vec!["tests/workbench_smoke.rs".to_string()],
+        linked_tests: vec!["cargo test -p syu-code-intel branch_scope".to_string()],
+        include_patterns: vec![
+            "crates/syu-app-ui/src/**".to_string(),
+            "crates/syu-code-intel/src/branch_scope.rs".to_string(),
+        ],
+        exclude_patterns: vec!["examples/legacy-browser/**".to_string()],
+        allowed_ids: vec![
+            "REQ-WORKBENCH-004".to_string(),
+            "FEAT-WORKBENCH-SPEC-GRAPH-001".to_string(),
+            "FEAT-WORKBENCH-BRANCH-SCOPE-001".to_string(),
+        ],
+        unowned_files: vec!["examples/legacy-browser/index.ts".to_string()],
+        ambiguous_files: vec!["crates/syu-app-ui/src/design/tokens.rs".to_string()],
+        spec_files: Vec::new(),
+        out_of_scope_changes: vec![OutOfScopeChange {
+            file: "examples/legacy-browser/index.ts".to_string(),
+            allowed_ids: vec!["FEAT-WORKBENCH-BRANCH-SCOPE-001".to_string()],
+            reason: "legacy browser surface is excluded by the Goal Plan".to_string(),
+        }],
+        direct_items: Vec::new(),
+        related_items: Vec::new(),
+        has_planned_features: true,
+    })
 }
 
 fn demo_request_artifact() -> RequestArtifact {
@@ -429,6 +529,7 @@ fn demo_goal_plan() -> GoalPlanArtifact {
                 ],
                 exclude: vec![
                     "examples/browser-ui/**".to_string(),
+                    "examples/legacy-browser/**".to_string(),
                     "website/**".to_string(),
                     "React, TypeScript, Vite, and Playwright surfaces".to_string(),
                 ],
