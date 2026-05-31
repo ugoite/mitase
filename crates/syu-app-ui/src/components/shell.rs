@@ -651,41 +651,8 @@ fn include_pattern(include: &GoalPlanScopeInclude) -> String {
 }
 
 fn goal_plan_yaml_preview(plan: &GoalPlanArtifact) -> String {
-    let include = plan
-        .implementation_plan
-        .scope
-        .include
-        .iter()
-        .map(|entry| format!("      - {}", include_pattern(entry)))
-        .collect::<Vec<_>>()
-        .join("\n");
-    let exclude = plan
-        .implementation_plan
-        .scope
-        .exclude
-        .iter()
-        .map(|entry| format!("      - {entry}"))
-        .collect::<Vec<_>>()
-        .join("\n");
-    let commands = plan
-        .completion
-        .must_pass
-        .iter()
-        .map(|entry| format!("    - {entry}"))
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    format!(
-        "version: {}\nkind: {}\ngoal:\n  id: {}\n  title: {}\n  statement: {}\nimplementation_plan:\n  scope:\n    include:\n{}\n    exclude:\n{}\ncompletion:\n  must_pass:\n{}\n",
-        plan.version,
-        plan.kind,
-        plan.goal.id,
-        plan.goal.title,
-        plan.goal.statement,
-        include,
-        exclude,
-        commands
-    )
+    serde_yaml::to_string(plan)
+        .unwrap_or_else(|err| format!("# failed to render Goal Plan YAML: {err}"))
 }
 
 #[cfg(test)]
@@ -740,6 +707,26 @@ mod tests {
         assert!(pulse < preview);
         assert!(html.contains("Read-only action placeholder"));
         assert!(html.contains("Evidence placeholder"));
+    }
+
+    #[test]
+    fn goal_plan_yaml_preview_roundtrips_through_the_task_model_schema() {
+        let ui = build_demo_state();
+        let plan = ui
+            .payload
+            .state
+            .goals
+            .active_goal()
+            .and_then(|goal| goal.goal_plan.as_ref())
+            .expect("demo state should include an active goal plan");
+
+        let yaml = goal_plan_yaml_preview(plan);
+        let parsed: GoalPlanArtifact =
+            serde_yaml::from_str(&yaml).expect("preview should deserialize as a GoalPlanArtifact");
+
+        assert_eq!(&parsed, plan);
+        assert!(yaml.contains("test_plan:"));
+        assert!(yaml.contains("coverage:"));
     }
 
     #[test]
