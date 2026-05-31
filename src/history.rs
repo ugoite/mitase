@@ -3,8 +3,9 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
+    io::Write,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
 };
 
 use anyhow::{Context, Result, bail};
@@ -73,6 +74,37 @@ struct CommitSnapshot {
     occurrences_by_value: BTreeMap<String, HistoricalIdOccurrence>,
 }
 
+type GitObjectId = String;
+type BlobCacheKey = (SectionKind, GitObjectId);
+
+#[cfg(test)]
+thread_local! {
+    static PARSED_HISTORICAL_BLOB_COUNT: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct GitTreeBlobEntry {
+    path: PathBuf,
+    blob_id: GitObjectId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum GitPathChange {
+    Upsert { path: PathBuf, blob_id: GitObjectId },
+    Delete { path: PathBuf },
+}
+
+#[derive(Debug, Clone)]
+struct HistoricalPathState {
+    section: SectionKind,
+    blob_id: GitObjectId,
+}
+
+#[derive(Debug, Default, Clone)]
+struct ParsedHistoricalBlob {
+    ids_by_value: BTreeSet<String>,
+}
+
 pub(crate) fn build_historical_id_index(
     workspace_root: &Path,
     config: &SyuConfig,
@@ -108,37 +140,63 @@ pub(crate) fn build_historical_id_index(
 
     let mut previous_commit_ids = BTreeSet::new();
     let mut latest_occurrences = BTreeMap::new();
-    let commits = if let Some(start_ref) = index.start_ref.clone() {
-        let mut commits = Vec::new();
-        let snapshot = record_commit_snapshot(
-            &repository_root,
-            &spec_root_relative,
-            &start_ref,
-            &mut index,
-        )?;
-        update_historical_reuse_index(
-            &mut index,
-            &mut previous_commit_ids,
-            &mut latest_occurrences,
-            snapshot,
-        );
-        let commit_range = format!("{start_ref}..HEAD");
-        let later_commits = git_rev_list(&repository_root, &commit_range)?;
-        commits.extend(later_commits);
-        commits
+
+    let (initial_commit, commits) = if let Some(start_ref) = index.start_ref.clone() {
+        (start_ref, Vec::new())
     } else {
-        git_rev_list(&repository_root, "HEAD")?
+        let mut commits = git_rev_list(&repository_root, "HEAD")?;
+        let Some(initial_commit) = commits.first().cloned() else {
+            index.available = true;
+            return Ok(index);
+        };
+        commits.remove(0);
+        (initial_commit, commits)
     };
 
+    let mut path_index =
+        build_historical_path_index(&repository_root, &initial_commit, &spec_root_relative)?;
+    let mut blob_cache = BTreeMap::new();
+    ensure_blobs_parsed(&repository_root, &path_index, &mut blob_cache)?;
+    let snapshot =
+        snapshot_from_cached_paths(&initial_commit, &path_index, &blob_cache, &mut index);
+    update_historical_reuse_index(
+        &mut index,
+        &mut previous_commit_ids,
+        &mut latest_occurrences,
+        snapshot,
+    );
+
+    let mut previous_processed_commit = initial_commit;
+    let commits = if let Some(start_ref) = index.start_ref.clone() {
+        let commit_range = format!("{start_ref}..HEAD");
+        git_rev_list(&repository_root, &commit_range)?
+    } else {
+        commits
+    };
     for commit in commits {
-        let snapshot =
-            record_commit_snapshot(&repository_root, &spec_root_relative, &commit, &mut index)?;
+        match git_diff_tree_blob_changes(
+            &repository_root,
+            &previous_processed_commit,
+            &commit,
+            &spec_root_relative,
+        ) {
+            Ok(changes) => {
+                apply_historical_path_changes(&mut path_index, changes, &spec_root_relative)
+            }
+            Err(_) => {
+                path_index =
+                    build_historical_path_index(&repository_root, &commit, &spec_root_relative)?;
+            }
+        }
+        ensure_blobs_parsed(&repository_root, &path_index, &mut blob_cache)?;
+        let snapshot = snapshot_from_cached_paths(&commit, &path_index, &blob_cache, &mut index);
         update_historical_reuse_index(
             &mut index,
             &mut previous_commit_ids,
             &mut latest_occurrences,
             snapshot,
         );
+        previous_processed_commit = commit;
     }
 
     index.available = true;
@@ -234,114 +292,159 @@ fn git_rev_list(repository_root: &Path, rev_range: &str) -> Result<Vec<String>> 
         .collect())
 }
 
+#[cfg(test)]
 fn record_commit_snapshot(
     repository_root: &Path,
     spec_root_relative: &Path,
     commit: &str,
     index: &mut HistoricalIdIndex,
 ) -> Result<CommitSnapshot> {
-    let files = git_tree_files(repository_root, commit, spec_root_relative)?;
-    let mut snapshot = CommitSnapshot::default();
-    for file in files {
-        record_snapshot_file(
-            repository_root,
-            spec_root_relative,
-            commit,
-            &file,
-            index,
-            &mut snapshot,
-        )?;
-    }
-
-    Ok(snapshot)
+    let path_index = build_historical_path_index(repository_root, commit, spec_root_relative)?;
+    let mut blob_cache = BTreeMap::new();
+    ensure_blobs_parsed(repository_root, &path_index, &mut blob_cache)?;
+    Ok(snapshot_from_cached_paths(
+        commit,
+        &path_index,
+        &blob_cache,
+        index,
+    ))
 }
 
-fn record_snapshot_file(
+fn build_historical_path_index(
     repository_root: &Path,
-    spec_root_relative: &Path,
     commit: &str,
-    file: &str,
-    index: &mut HistoricalIdIndex,
-    snapshot: &mut CommitSnapshot,
+    spec_root_relative: &Path,
+) -> Result<BTreeMap<PathBuf, HistoricalPathState>> {
+    let mut path_index = BTreeMap::new();
+    for entry in git_tree_blob_entries(repository_root, commit, spec_root_relative)? {
+        let Some(section) = historical_section_for_path(&entry.path, spec_root_relative) else {
+            continue;
+        };
+        path_index.insert(
+            entry.path,
+            HistoricalPathState {
+                section,
+                blob_id: entry.blob_id,
+            },
+        );
+    }
+    Ok(path_index)
+}
+
+fn apply_historical_path_changes(
+    path_index: &mut BTreeMap<PathBuf, HistoricalPathState>,
+    changes: Vec<GitPathChange>,
+    spec_root_relative: &Path,
+) {
+    for change in changes {
+        match change {
+            GitPathChange::Upsert { path, blob_id } => {
+                let Some(section) = historical_section_for_path(&path, spec_root_relative) else {
+                    path_index.remove(&path);
+                    continue;
+                };
+                path_index.insert(path, HistoricalPathState { section, blob_id });
+            }
+            GitPathChange::Delete { path } => {
+                path_index.remove(&path);
+            }
+        }
+    }
+}
+
+fn ensure_blobs_parsed(
+    repository_root: &Path,
+    path_index: &BTreeMap<PathBuf, HistoricalPathState>,
+    blob_cache: &mut BTreeMap<BlobCacheKey, ParsedHistoricalBlob>,
 ) -> Result<()> {
-    if !is_yaml_file(file) {
-        return Ok(());
+    let missing_keys = path_index
+        .values()
+        .map(|state| (state.section, state.blob_id.clone()))
+        .filter(|key| !blob_cache.contains_key(key))
+        .collect::<BTreeSet<_>>();
+    let blobs = git_cat_file_batch(
+        repository_root,
+        missing_keys.iter().map(|(_, blob_id)| blob_id.clone()),
+    )?;
+    for (section, blob_id) in missing_keys {
+        let Some(raw) = blobs.get(&blob_id) else {
+            continue;
+        };
+        let parsed = parse_historical_blob_raw(section, raw, &blob_id)?;
+        blob_cache.insert((section, blob_id), parsed);
     }
-
-    if is_under_section(file, spec_root_relative, "philosophy") {
-        parse_blob::<PhilosophyDocument>(repository_root, commit, file)?
-            .into_iter()
-            .for_each(|document| {
-                for item in document.philosophies {
-                    record_id(
-                        index,
-                        snapshot,
-                        SectionKind::Philosophy,
-                        Path::new(file),
-                        commit,
-                        item.id,
-                    );
-                }
-            });
-        return Ok(());
-    }
-
-    if is_under_section(file, spec_root_relative, "policies") {
-        parse_blob::<PolicyDocument>(repository_root, commit, file)?
-            .into_iter()
-            .for_each(|document| {
-                for item in document.policies {
-                    record_id(
-                        index,
-                        snapshot,
-                        SectionKind::Policies,
-                        Path::new(file),
-                        commit,
-                        item.id,
-                    );
-                }
-            });
-        return Ok(());
-    }
-
-    if is_under_section(file, spec_root_relative, "requirements") {
-        parse_blob::<RequirementDocument>(repository_root, commit, file)?
-            .into_iter()
-            .for_each(|document| {
-                for item in document.requirements {
-                    record_id(
-                        index,
-                        snapshot,
-                        SectionKind::Requirements,
-                        Path::new(file),
-                        commit,
-                        item.id,
-                    );
-                }
-            });
-        return Ok(());
-    }
-
-    if is_under_section(file, spec_root_relative, "features") && !file.ends_with("features.yaml") {
-        parse_feature_blob(repository_root, commit, file)?
-            .into_iter()
-            .for_each(|document| {
-                for item in document.features {
-                    record_id(
-                        index,
-                        snapshot,
-                        SectionKind::Features,
-                        Path::new(file),
-                        commit,
-                        item.id,
-                    );
-                }
-            });
-    }
-
     Ok(())
 }
 
+fn snapshot_from_cached_paths(
+    commit: &str,
+    path_index: &BTreeMap<PathBuf, HistoricalPathState>,
+    blob_cache: &BTreeMap<BlobCacheKey, ParsedHistoricalBlob>,
+    index: &mut HistoricalIdIndex,
+) -> CommitSnapshot {
+    let mut snapshot = CommitSnapshot::default();
+    for (path, state) in path_index {
+        let Some(parsed) = blob_cache.get(&(state.section, state.blob_id.clone())) else {
+            continue;
+        };
+        for id in &parsed.ids_by_value {
+            record_id(
+                index,
+                &mut snapshot,
+                state.section,
+                path,
+                commit,
+                id.clone(),
+            );
+        }
+    }
+    snapshot
+}
+
+fn parse_historical_blob_raw(
+    section: SectionKind,
+    raw: &str,
+    object_id: &str,
+) -> Result<ParsedHistoricalBlob> {
+    #[cfg(test)]
+    PARSED_HISTORICAL_BLOB_COUNT.with(|count| count.set(count.get() + 1));
+
+    let mut parsed = ParsedHistoricalBlob::default();
+    match section {
+        SectionKind::Philosophy => {
+            let document: PhilosophyDocument = serde_yaml::from_str(raw)
+                .with_context(|| format!("failed to parse historical blob object `{object_id}`"))?;
+            parsed
+                .ids_by_value
+                .extend(document.philosophies.into_iter().map(|item| item.id));
+        }
+        SectionKind::Policies => {
+            let document: PolicyDocument = serde_yaml::from_str(raw)
+                .with_context(|| format!("failed to parse historical blob object `{object_id}`"))?;
+            parsed
+                .ids_by_value
+                .extend(document.policies.into_iter().map(|item| item.id));
+        }
+        SectionKind::Requirements => {
+            let document: RequirementDocument = serde_yaml::from_str(raw)
+                .with_context(|| format!("failed to parse historical blob object `{object_id}`"))?;
+            parsed
+                .ids_by_value
+                .extend(document.requirements.into_iter().map(|item| item.id));
+        }
+        SectionKind::Features => {
+            let Some(document) = parse_feature_blob_raw(raw, object_id)? else {
+                return Ok(parsed);
+            };
+            parsed
+                .ids_by_value
+                .extend(document.features.into_iter().map(|item| item.id));
+        }
+    }
+    Ok(parsed)
+}
+
+#[cfg(test)]
 fn parse_feature_blob(
     repository_root: &Path,
     commit: &str,
@@ -350,7 +453,11 @@ fn parse_feature_blob(
     let Some(raw) = git_blob(repository_root, commit, path)? else {
         return Ok(None);
     };
-    let value: serde_yaml::Value = match serde_yaml::from_str(&raw) {
+    parse_feature_blob_raw(&raw, &format!("{commit}:{path}"))
+}
+
+fn parse_feature_blob_raw(raw: &str, source: &str) -> Result<Option<FeatureDocument>> {
+    let value: serde_yaml::Value = match serde_yaml::from_str(raw) {
         Ok(value) => value,
         Err(_) => return Ok(None),
     };
@@ -360,11 +467,12 @@ fn parse_feature_blob(
     if !mapping.contains_key(serde_yaml::Value::String("features".to_string())) {
         return Ok(None);
     }
-    Ok(Some(serde_yaml::from_str(&raw).with_context(|| {
-        format!("failed to parse feature document `{path}` at `{commit}`")
+    Ok(Some(serde_yaml::from_str(raw).with_context(|| {
+        format!("failed to parse feature document `{source}`")
     })?))
 }
 
+#[cfg(test)]
 fn parse_blob<T>(repository_root: &Path, commit: &str, path: &str) -> Result<Option<T>>
 where
     T: for<'de> serde::Deserialize<'de>,
@@ -377,6 +485,7 @@ where
     })?))
 }
 
+#[cfg(test)]
 fn git_blob(repository_root: &Path, commit: &str, path: &str) -> Result<Option<String>> {
     let spec = format!("{commit}:{path}");
     let output = git_command(repository_root)
@@ -406,19 +515,34 @@ fn git_blob(repository_root: &Path, commit: &str, path: &str) -> Result<Option<S
     ))
 }
 
+#[cfg(test)]
 fn git_blob_missing(stderr: &str, commit: &str, path: &str) -> bool {
     stderr.contains(&format!("path '{path}' does not exist in '{commit}'"))
 }
 
+#[cfg(test)]
 fn git_tree_files(
     repository_root: &Path,
     commit: &str,
     spec_root_relative: &Path,
 ) -> Result<Vec<String>> {
+    Ok(
+        git_tree_blob_entries(repository_root, commit, spec_root_relative)?
+            .into_iter()
+            .map(|entry| path_to_git_string(&entry.path))
+            .collect(),
+    )
+}
+
+fn git_tree_blob_entries(
+    repository_root: &Path,
+    commit: &str,
+    spec_root_relative: &Path,
+) -> Result<Vec<GitTreeBlobEntry>> {
     let output = git_command(repository_root)
         .arg("ls-tree")
         .arg("-r")
-        .arg("--name-only")
+        .arg("-z")
         .arg(commit)
         .arg("--")
         .args(spec_root_arg(spec_root_relative))
@@ -437,14 +561,231 @@ fn git_tree_files(
         );
     }
 
-    let stdout =
-        String::from_utf8(output.stdout).context("git ls-tree output should be valid UTF-8")?;
-    Ok(stdout
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-        .map(str::to_string)
-        .collect())
+    parse_git_tree_blob_entries(output.stdout)
+}
+
+fn parse_git_tree_blob_entries(stdout: Vec<u8>) -> Result<Vec<GitTreeBlobEntry>> {
+    let mut entries = Vec::new();
+    for record in stdout
+        .split(|byte| *byte == 0)
+        .filter(|record| !record.is_empty())
+    {
+        let record = std::str::from_utf8(record).context("git ls-tree output should be UTF-8")?;
+        let Some((metadata, path)) = record.split_once('\t') else {
+            bail!("failed to parse git ls-tree record `{record}`");
+        };
+        let mut fields = metadata.split_whitespace();
+        let _mode = fields.next();
+        let object_type = fields.next();
+        let object_id = fields.next();
+        if object_type != Some("blob") {
+            continue;
+        }
+        let Some(object_id) = object_id else {
+            bail!("failed to parse object id from git ls-tree record `{record}`");
+        };
+        entries.push(GitTreeBlobEntry {
+            path: PathBuf::from(path),
+            blob_id: object_id.to_string(),
+        });
+    }
+    Ok(entries)
+}
+
+fn git_diff_tree_blob_changes(
+    repository_root: &Path,
+    previous_commit: &str,
+    commit: &str,
+    spec_root_relative: &Path,
+) -> Result<Vec<GitPathChange>> {
+    let output = git_command(repository_root)
+        .arg("diff-tree")
+        .arg("--raw")
+        .arg("-z")
+        .arg("--no-abbrev")
+        .arg("-M")
+        .arg("-r")
+        .arg(previous_commit)
+        .arg(commit)
+        .arg("--")
+        .args(spec_root_arg(spec_root_relative))
+        .output()
+        .with_context(|| {
+            format!(
+                "failed to run `git diff-tree {previous_commit} {commit}` in `{}`",
+                repository_root.display()
+            )
+        })?;
+    if !output.status.success() {
+        bail!(
+            "failed to enumerate historical changes for `{previous_commit}..{commit}` in `{}`: {}",
+            repository_root.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+
+    parse_git_diff_tree_blob_changes(output.stdout)
+}
+
+fn parse_git_diff_tree_blob_changes(stdout: Vec<u8>) -> Result<Vec<GitPathChange>> {
+    let mut changes = Vec::new();
+    let records = stdout
+        .split(|byte| *byte == 0)
+        .filter(|record| !record.is_empty())
+        .collect::<Vec<_>>();
+    let mut index = 0;
+    while index < records.len() {
+        let metadata =
+            std::str::from_utf8(records[index]).context("git diff-tree output should be UTF-8")?;
+        index += 1;
+        let fields = metadata.split_whitespace().collect::<Vec<_>>();
+        if fields.len() < 5 {
+            bail!("failed to parse git diff-tree record `{metadata}`");
+        }
+        let new_oid = fields[3].to_string();
+        let status = fields[4];
+        let status_kind = status
+            .chars()
+            .next()
+            .context("git diff-tree status should not be empty")?;
+        let path_count = if matches!(status_kind, 'R' | 'C') {
+            2
+        } else {
+            1
+        };
+        if index + path_count > records.len() {
+            bail!("git diff-tree record `{metadata}` is missing path data");
+        }
+        let old_path = path_from_git_record(records[index])?;
+        index += 1;
+        let new_path = if path_count == 2 {
+            let path = path_from_git_record(records[index])?;
+            index += 1;
+            Some(path)
+        } else {
+            None
+        };
+
+        match status_kind {
+            'A' | 'M' | 'T' => changes.push(GitPathChange::Upsert {
+                path: old_path,
+                blob_id: new_oid,
+            }),
+            'D' => changes.push(GitPathChange::Delete { path: old_path }),
+            'R' => {
+                changes.push(GitPathChange::Delete { path: old_path });
+                let Some(path) = new_path else {
+                    bail!("rename record `{metadata}` is missing new path");
+                };
+                changes.push(GitPathChange::Upsert {
+                    path,
+                    blob_id: new_oid,
+                });
+            }
+            'C' => {
+                let Some(path) = new_path else {
+                    bail!("copy record `{metadata}` is missing new path");
+                };
+                changes.push(GitPathChange::Upsert {
+                    path,
+                    blob_id: new_oid,
+                });
+            }
+            _ => bail!("unsupported git diff-tree status `{status}`"),
+        }
+    }
+    Ok(changes)
+}
+
+fn path_from_git_record(record: &[u8]) -> Result<PathBuf> {
+    Ok(PathBuf::from(
+        std::str::from_utf8(record).context("git path output should be UTF-8")?,
+    ))
+}
+
+fn git_cat_file_batch(
+    repository_root: &Path,
+    object_ids: impl IntoIterator<Item = String>,
+) -> Result<BTreeMap<String, String>> {
+    let object_ids = object_ids.into_iter().collect::<BTreeSet<_>>();
+    if object_ids.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+
+    let mut child = git_command(repository_root)
+        .arg("cat-file")
+        .arg("--batch")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| {
+            format!(
+                "failed to run `git cat-file --batch` in `{}`",
+                repository_root.display()
+            )
+        })?;
+    {
+        let stdin = child
+            .stdin
+            .as_mut()
+            .context("git cat-file stdin should be available")?;
+        for object_id in &object_ids {
+            writeln!(stdin, "{object_id}").context("failed to write object id to git cat-file")?;
+        }
+    }
+    let output = child
+        .wait_with_output()
+        .context("failed to read git cat-file output")?;
+    if !output.status.success() {
+        bail!(
+            "failed to read historical blobs in `{}`: {}",
+            repository_root.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+
+    parse_git_cat_file_batch(output.stdout)
+}
+
+fn parse_git_cat_file_batch(stdout: Vec<u8>) -> Result<BTreeMap<String, String>> {
+    let mut blobs = BTreeMap::new();
+    let mut offset = 0;
+    while offset < stdout.len() {
+        let Some(relative_header_end) = stdout[offset..].iter().position(|byte| *byte == b'\n')
+        else {
+            bail!("git cat-file output ended before a blob header");
+        };
+        let header_end = offset + relative_header_end;
+        let header = std::str::from_utf8(&stdout[offset..header_end])
+            .context("git cat-file header should be UTF-8")?;
+        offset = header_end + 1;
+
+        let fields = header.split_whitespace().collect::<Vec<_>>();
+        if fields.len() != 3 {
+            bail!("failed to parse git cat-file header `{header}`");
+        }
+        let object_id = fields[0].to_string();
+        let object_type = fields[1];
+        let size = fields[2]
+            .parse::<usize>()
+            .with_context(|| format!("failed to parse git cat-file size from `{header}`"))?;
+        if object_type != "blob" {
+            bail!("expected Git blob `{object_id}`, found `{object_type}`");
+        }
+        let content_end = offset + size;
+        if content_end > stdout.len() {
+            bail!("git cat-file blob `{object_id}` ended before {size} bytes");
+        }
+        let content = String::from_utf8(stdout[offset..content_end].to_vec())
+            .with_context(|| format!("git blob `{object_id}` should be valid UTF-8"))?;
+        blobs.insert(object_id, content);
+        offset = content_end;
+        if offset < stdout.len() && stdout[offset] == b'\n' {
+            offset += 1;
+        }
+    }
+    Ok(blobs)
 }
 
 fn spec_root_arg(spec_root_relative: &Path) -> Vec<&Path> {
@@ -459,17 +800,29 @@ fn is_yaml_file(path: &str) -> bool {
     path.ends_with(".yaml") || path.ends_with(".yml")
 }
 
-fn is_under_section(path: &str, spec_root_relative: &Path, section: &str) -> bool {
-    let prefix = if spec_root_relative.as_os_str().is_empty() {
-        section.to_string()
+fn historical_section_for_path(path: &Path, spec_root_relative: &Path) -> Option<SectionKind> {
+    let relative = if spec_root_relative.as_os_str().is_empty() {
+        path
     } else {
-        format!(
-            "{}/{}",
-            spec_root_relative.to_string_lossy().replace('\\', "/"),
-            section
-        )
+        path.strip_prefix(spec_root_relative).ok()?
     };
-    path == prefix || path.starts_with(&format!("{prefix}/"))
+    let relative = path_to_git_string(relative);
+    if !is_yaml_file(&relative) {
+        return None;
+    }
+
+    let (section, rest) = relative.split_once('/')?;
+    match section {
+        "philosophy" => Some(SectionKind::Philosophy),
+        "policies" => Some(SectionKind::Policies),
+        "requirements" => Some(SectionKind::Requirements),
+        "features" if rest != "features.yaml" => Some(SectionKind::Features),
+        _ => None,
+    }
+}
+
+fn path_to_git_string(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
 }
 
 fn record_id(
@@ -975,6 +1328,94 @@ mod tests {
                 .contains("git rev-parse returned an empty repository root"),
             "unexpected error: {error}"
         );
+    }
+
+    #[test]
+    fn build_historical_id_index_parses_unchanged_blobs_once() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = tempdir.path();
+        init_git_repository(workspace);
+
+        fs::create_dir_all(workspace.join("requirements/core")).expect("requirements dir");
+        fs::write(
+            workspace.join("requirements/core/unchanged.yaml"),
+            "category: Core History\nprefix: REQ-HIST\nrequirements:\n  - id: REQ-HIST-CACHE-001\n    title: Unchanged blobs should be cached.\n    description: Historical indexing should not parse unchanged blobs repeatedly.\n    priority: medium\n    status: implemented\n    linked_policies: []\n    linked_features: []\n    tests: {}\n",
+        )
+        .expect("requirement file");
+        git(workspace, &["add", "."]);
+        git_commit(workspace, "docs: add cached historical requirement");
+
+        for index in 0..20 {
+            fs::write(workspace.join(format!("note-{index}.txt")), "unrelated\n")
+                .expect("note file");
+            git(workspace, &["add", "."]);
+            git_commit(workspace, "chore: change unrelated file");
+        }
+
+        let config = SyuConfig {
+            spec: crate::config::SpecConfig {
+                root: PathBuf::from("."),
+            },
+            ..SyuConfig::default()
+        };
+        PARSED_HISTORICAL_BLOB_COUNT.with(|count| count.set(0));
+
+        let index = build_historical_id_index(workspace, &config).expect("index should build");
+
+        assert!(index.contains("REQ-HIST-CACHE-001"));
+        PARSED_HISTORICAL_BLOB_COUNT.with(|count| assert_eq!(count.get(), 1));
+    }
+
+    #[test]
+    fn build_historical_id_index_tracks_renamed_paths_without_reparsing_same_blob() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = tempdir.path();
+        init_git_repository(workspace);
+
+        fs::create_dir_all(workspace.join("requirements/core")).expect("requirements dir");
+        fs::write(
+            workspace.join("requirements/core/original name.yaml"),
+            "category: Core History\nprefix: REQ-HIST\nrequirements:\n  - id: REQ-HIST-RENAME-001\n    title: Renamed blobs should keep history.\n    description: Historical indexing should follow raw rename records.\n    priority: medium\n    status: implemented\n    linked_policies: []\n    linked_features: []\n    tests: {}\n",
+        )
+        .expect("requirement file");
+        git(workspace, &["add", "."]);
+        git_commit(workspace, "docs: add renamed historical requirement");
+
+        git(
+            workspace,
+            &[
+                "mv",
+                "requirements/core/original name.yaml",
+                "requirements/core/café requirement.yaml",
+            ],
+        );
+        git_commit(workspace, "docs: rename historical requirement");
+        let rename_commit = git_stdout(workspace, &["rev-parse", "HEAD"]);
+
+        fs::remove_file(workspace.join("requirements/core/café requirement.yaml"))
+            .expect("remove renamed requirement");
+        git(workspace, &["add", "-A"]);
+        git_commit(workspace, "docs: delete renamed historical requirement");
+
+        let config = SyuConfig {
+            spec: crate::config::SpecConfig {
+                root: PathBuf::from("."),
+            },
+            ..SyuConfig::default()
+        };
+        PARSED_HISTORICAL_BLOB_COUNT.with(|count| count.set(0));
+
+        let index = build_historical_id_index(workspace, &config).expect("index should build");
+
+        let deleted = index
+            .deleted_entry("REQ-HIST-RENAME-001")
+            .expect("renamed historical id should be recorded as deleted");
+        assert_eq!(
+            deleted.path,
+            PathBuf::from("requirements/core/café requirement.yaml")
+        );
+        assert_eq!(deleted.commit, rename_commit);
+        PARSED_HISTORICAL_BLOB_COUNT.with(|count| assert_eq!(count.get(), 1));
     }
 
     #[test]
