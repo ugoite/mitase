@@ -190,9 +190,7 @@ fn format_timestamp_ms(timestamp_ms: u64) -> String {
     let minute = (seconds_of_day % (SECONDS_PER_MINUTE * MINUTES_PER_HOUR)) / SECONDS_PER_MINUTE;
     let second = seconds_of_day % SECONDS_PER_MINUTE;
 
-    format!(
-        "{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02} UTC"
-    )
+    format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02} UTC")
 }
 
 fn civil_from_days(days: i64) -> (i64, i64, i64) {
