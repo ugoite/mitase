@@ -8,8 +8,15 @@
   --color-command-active: oklch(0.36 0.06 167);
   --color-goal: oklch(0.76 0.16 146);
   --color-goal-active: oklch(0.86 0.13 146);
+  --color-spec-linked: oklch(0.8 0.09 265);
+  --color-code-linked: oklch(0.78 0.11 200);
+  --color-test-linked: oklch(0.82 0.1 145);
   --color-scope-in: oklch(0.79 0.1 230);
   --color-scope-out: oklch(0.74 0.14 28);
+  --color-scope-ambiguous: oklch(0.84 0.14 90);
+  --color-ownership-known: oklch(0.78 0.12 150);
+  --color-ownership-missing: oklch(0.73 0.17 27);
+  --color-ownership-ambiguous: oklch(0.83 0.12 82);
   --color-evidence-pass: oklch(0.79 0.13 146);
   --color-evidence-warn: oklch(0.84 0.14 90);
   --color-evidence-fail: oklch(0.73 0.17 27);

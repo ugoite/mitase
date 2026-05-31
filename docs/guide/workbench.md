@@ -54,6 +54,21 @@ Goal Plan YAML exported from the Workbench must stay compatible with
 - Completion check: compare the result against the goal plan and required
   evidence before closing the loop.
 
+## Spec Impact and Branch Scope
+
+Spec Impact Graph shows how philosophy, policy, requirement, feature, changed
+file or symbol, and test nodes connect. Branch Scope Lens shows the selected
+Git range, changed files, traced owners, unowned files, ambiguous ownership,
+out-of-scope files, affected spec IDs, suggested goal split, test
+recommendations, and strict review status.
+
+The action surface for this view is `branch.scope`, `branch.infer_goal`,
+`spec.impact`, `trace.range`, and `relate.range`. Graph nodes, edges, badges,
+and evidence states must use Workbench token names such as `spec-linked`,
+`code-linked`, `test-linked`, `scope-in`, `scope-out`, `scope-ambiguous`,
+`ownership-known`, `ownership-missing`, `ownership-ambiguous`,
+`evidence-pass`, `evidence-warn`, `evidence-fail`, and `evidence-pending`.
+
 ## Command palette registry
 
 The Workbench UI should render actions from a registry instead of hardcoding
