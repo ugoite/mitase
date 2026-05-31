@@ -118,6 +118,16 @@ jobs:
       - name: Set up Rust for Workbench gates
         uses: ./.github/actions/setup-rust
 
+      - name: Install scoped Tailwind CLI
+        shell: bash
+        run: |
+          npm install --prefix "$RUNNER_TEMP/tailwind" tailwindcss @tailwindcss/cli
+          ln -s "$RUNNER_TEMP/tailwind/node_modules" "$GITHUB_WORKSPACE/crates/syu-app-ui/node_modules"
+          echo "$RUNNER_TEMP/tailwind/node_modules/.bin" >>"$GITHUB_PATH"
+
+      - name: Expose Tailwind CLI to Workbench checks
+        run: echo "TAILWINDCSS_BIN=tailwindcss" >>"$GITHUB_ENV"
+
       - name: Run Rust-native Workbench gates
         run: scripts/ci/check-workbench.sh
 

@@ -19,7 +19,7 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
 
 - **id**: FEAT-QUALITY-001
   - **title**: Repository quality automation
-  - **summary**: Keep self-validation, Rust-native Workbench gates, constrained syu-app-ui Tailwind asset checks, dependency hygiene across Rust, GitHub Actions, the docs site, goal-selected PR tests, code scanning, and merge-queue-safe CI execution split into fast branch feedback, PR confidence, merge-queue enforcement, and maintenance checks.
+  - **summary**: Keep self-validation, Rust-native Workbench gates, constrained syu-app-ui Tailwind asset checks with a scoped CLI build, dependency hygiene across Rust, GitHub Actions, the docs site, goal-selected PR tests, code scanning, and merge-queue-safe CI execution split into fast branch feedback, PR confidence, merge-queue enforcement, and maintenance checks.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-005
@@ -115,6 +115,8 @@ description: "Generated reference for docs/syu/features/repository/quality.yaml"
           - scripts/ci/quality-gates.sh full
           - scripts/ci/run-goal-tests.sh
           - scripts/ci/check-workbench.sh
+          - Install scoped Tailwind CLI
+          - TAILWINDCSS_BIN=tailwindcss
       - **file**: .github/workflows/branch-push.yml
         - **symbols**:
           - duplicate-check
@@ -170,7 +172,7 @@ version: 1
 features:
   - id: FEAT-QUALITY-001
     title: Repository quality automation
-    summary: Keep self-validation, Rust-native Workbench gates, constrained syu-app-ui Tailwind asset checks, dependency hygiene across Rust, GitHub Actions, the docs site, goal-selected PR tests, code scanning, and merge-queue-safe CI execution split into fast branch feedback, PR confidence, merge-queue enforcement, and maintenance checks.
+    summary: Keep self-validation, Rust-native Workbench gates, constrained syu-app-ui Tailwind asset checks with a scoped CLI build, dependency hygiene across Rust, GitHub Actions, the docs site, goal-selected PR tests, code scanning, and merge-queue-safe CI execution split into fast branch feedback, PR confidence, merge-queue enforcement, and maintenance checks.
     status: implemented
     linked_requirements:
       - REQ-CORE-005
@@ -266,6 +268,8 @@ features:
             - "scripts/ci/quality-gates.sh full"
             - "scripts/ci/run-goal-tests.sh"
             - "scripts/ci/check-workbench.sh"
+            - Install scoped Tailwind CLI
+            - TAILWINDCSS_BIN=tailwindcss
         - file: .github/workflows/branch-push.yml
           symbols:
             - duplicate-check

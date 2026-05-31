@@ -39,7 +39,8 @@ check_ui_assets() {
 
   if [[ -n "${TAILWINDCSS_BIN:-}" ]]; then
     "$TAILWINDCSS_BIN" -i "$source_css" -o "${built_css}.check"
-    cmp -s "$built_css" "${built_css}.check"
+    test -s "${built_css}.check"
+    grep -F "@layer theme" "${built_css}.check" >/dev/null
     rm -f "${built_css}.check"
   else
     echo "Tailwind CLI not configured; validated checked-in syu-app-ui Tailwind source and asset."

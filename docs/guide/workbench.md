@@ -17,7 +17,8 @@ checks when system UI libraries are not available in CI.
 
 Tailwind is constrained to `crates/syu-app-ui/`: `crates/syu-app-ui/tailwind.css`
 is the source, `crates/syu-app-ui/assets/tailwind.css` is the served asset, and
-CI must not add a Vite, React, TypeScript, Playwright, or old browser-app
+CI uses the scoped Tailwind CLI to rebuild that asset and verify the build path.
+It must not add a Vite, React, TypeScript, Playwright, or old browser-app
 package setup for the Workbench. The installed-binary smoke starts `syu
 workbench`, checks `/api/health`, `/api/actions`, `/api/workspace/snapshot`, and
 verifies the shared CSS asset is loaded by the Workbench shell.

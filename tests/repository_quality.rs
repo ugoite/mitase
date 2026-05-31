@@ -107,6 +107,8 @@ fn repository_declares_precommit_and_quality_gates() {
     assert!(
         workbench_script.contains("cargo check -p syu-desktop --no-default-features --all-targets")
     );
+    assert!(ci_workflow.contains("Install scoped Tailwind CLI"));
+    assert!(ci_workflow.contains("TAILWINDCSS_BIN=tailwindcss"));
     assert!(workbench_script.contains("scripts/ci/check-ui-assets.sh"));
     assert!(workbench_script.contains("scripts/ci/workbench-smoke.sh"));
     assert!(workbench_smoke_script.contains("cargo test --test workbench_smoke"));
