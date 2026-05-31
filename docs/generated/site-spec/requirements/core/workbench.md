@@ -91,20 +91,34 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
       The Workbench MUST help break large requests into smaller scoped goals
       before execution starts. It SHOULD preserve the parent request, keep the
       split goals reviewable, and let each goal carry its own temporary Goal
-      Plan so delivery stays bounded.
+      Plan so delivery stays bounded. Request Intake MUST distinguish temporary
+      Workbench planning artifacts under `.syu/workbench/` from persistent spec
+      items, and exported Goal Plan YAML MUST remain compatible with
+      `syu task check` while preserving non-goals, scope, tests, completion
+      commands, and required evidence.
   - **priority**: medium
   - **status**: implemented
   - **linked_policies**:
     - POL-005
   - **linked_features**:
     - FEAT-WORKBENCH-003
+    - FEAT-WORKBENCH-REQUEST-INTAKE-001
+    - FEAT-WORKBENCH-GOAL-SPLITTER-001
   - **tests**:
     - **markdown**:
       - **file**: docs/guide/workbench.md
         - **symbols**:
+          - Request Intake
+          - Goal Splitter
           - scaffold preview
           - Goal Plan
           - assignment
+    - **rust**:
+      - **file**: tests/workbench_smoke.rs
+        - **symbols**:
+          - request_intake_flow_renders_generated_goal_plan
+          - request_flow_actions_are_exposed_in_the_command_palette
+          - goal_plan_export_panel_marks_yaml_as_temporary_artifact
 - **id**: REQ-WORKBENCH-004
   - **title**: Spec impact and branch scope visualization
   - **description**:
@@ -271,20 +285,34 @@ requirements:
       The Workbench MUST help break large requests into smaller scoped goals
       before execution starts. It SHOULD preserve the parent request, keep the
       split goals reviewable, and let each goal carry its own temporary Goal
-      Plan so delivery stays bounded.
+      Plan so delivery stays bounded. Request Intake MUST distinguish temporary
+      Workbench planning artifacts under `.syu/workbench/` from persistent spec
+      items, and exported Goal Plan YAML MUST remain compatible with
+      `syu task check` while preserving non-goals, scope, tests, completion
+      commands, and required evidence.
     priority: medium
     status: implemented
     linked_policies:
       - POL-005
     linked_features:
       - FEAT-WORKBENCH-003
+      - FEAT-WORKBENCH-REQUEST-INTAKE-001
+      - FEAT-WORKBENCH-GOAL-SPLITTER-001
     tests:
       markdown:
         - file: docs/guide/workbench.md
           symbols:
+            - Request Intake
+            - Goal Splitter
             - scaffold preview
             - Goal Plan
             - assignment
+      rust:
+        - file: tests/workbench_smoke.rs
+          symbols:
+            - request_intake_flow_renders_generated_goal_plan
+            - request_flow_actions_are_exposed_in_the_command_palette
+            - goal_plan_export_panel_marks_yaml_as_temporary_artifact
   - id: REQ-WORKBENCH-004
     title: Spec impact and branch scope visualization
     description: |
