@@ -126,13 +126,19 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
       The Workbench MUST show which specifications, files, and branch scope are
       likely to change before the user commits to implementation. It SHOULD
       make the impact of a request visible early enough that the user can
-      refine scope before work starts.
+      refine scope before work starts. Scope status MUST distinguish in-scope,
+      out-of-scope, ambiguous, owned, unowned, and ownership-ambiguous states,
+      and visual graph state MUST use named Workbench tokens rather than
+      arbitrary styling. Spec impact and branch scope reports SHOULD stay
+      compatible with future evidence timeline records.
   - **priority**: medium
   - **status**: implemented
   - **linked_policies**:
     - POL-005
   - **linked_features**:
     - FEAT-WORKBENCH-004
+    - FEAT-WORKBENCH-SPEC-GRAPH-001
+    - FEAT-WORKBENCH-BRANCH-SCOPE-001
   - **tests**:
     - **markdown**:
       - **file**: docs/guide/workbench.md
@@ -140,6 +146,14 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
           - scope
           - branch scope
           - scaffold preview
+    - **rust**:
+      - **file**: crates/syu-code-intel/src/branch_scope.rs
+        - **symbols**:
+          - branch_scope_report_includes_typed_graph_nodes_and_edges
+      - **file**: tests/workbench_smoke.rs
+        - **symbols**:
+          - branch_scope_lens_renders_scope_ownership_and_tests
+          - spec_impact_graph_renders_typed_nodes_edges_and_legend
 - **id**: REQ-WORKBENCH-005
   - **title**: Human and AI assignment with explicit scope and evidence
   - **description**:
@@ -319,13 +333,19 @@ requirements:
       The Workbench MUST show which specifications, files, and branch scope are
       likely to change before the user commits to implementation. It SHOULD
       make the impact of a request visible early enough that the user can
-      refine scope before work starts.
+      refine scope before work starts. Scope status MUST distinguish in-scope,
+      out-of-scope, ambiguous, owned, unowned, and ownership-ambiguous states,
+      and visual graph state MUST use named Workbench tokens rather than
+      arbitrary styling. Spec impact and branch scope reports SHOULD stay
+      compatible with future evidence timeline records.
     priority: medium
     status: implemented
     linked_policies:
       - POL-005
     linked_features:
       - FEAT-WORKBENCH-004
+      - FEAT-WORKBENCH-SPEC-GRAPH-001
+      - FEAT-WORKBENCH-BRANCH-SCOPE-001
     tests:
       markdown:
         - file: docs/guide/workbench.md
@@ -333,6 +353,14 @@ requirements:
             - scope
             - branch scope
             - scaffold preview
+      rust:
+        - file: crates/syu-code-intel/src/branch_scope.rs
+          symbols:
+            - branch_scope_report_includes_typed_graph_nodes_and_edges
+        - file: tests/workbench_smoke.rs
+          symbols:
+            - branch_scope_lens_renders_scope_ownership_and_tests
+            - spec_impact_graph_renders_typed_nodes_edges_and_legend
   - id: REQ-WORKBENCH-005
     title: Human and AI assignment with explicit scope and evidence
     description: |
