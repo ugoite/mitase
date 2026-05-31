@@ -20,7 +20,10 @@ use crate::{
         path_matches_ignored_generated_directory, validate_symbol_trace_coverage,
     },
     history::{HistoricalIdIndex, build_historical_id_index},
-    inspect::{apply_symbol_doc_fix, inspect_symbol, supports_rich_inspection},
+    inspect::{
+        SymbolInspection, apply_symbol_doc_fix, inspect_file_symbols, inspect_symbol,
+        supports_rich_inspection,
+    },
     language::adapter_for_language,
     model::{
         CheckResult, DefinitionCounts, Feature, FeatureDocument, FeatureRegistryDocument,
@@ -68,6 +71,45 @@ struct ValidationResources<'a> {
 struct RequirementValidationIndex<'a> {
     policies_by_id: &'a HashMap<&'a str, &'a Policy>,
     features_by_id: &'a HashMap<&'a str, &'a Feature>,
+}
+
+#[derive(Debug, Default)]
+struct TraceValidationCache {
+    file_contents: HashMap<PathBuf, Result<String, String>>,
+    rich_inspections:
+        HashMap<(String, PathBuf), Result<Option<HashMap<String, SymbolInspection>>, String>>,
+}
+
+impl TraceValidationCache {
+    fn read_file(&mut self, path: &Path) -> Result<&str, String> {
+        let entry = self
+            .file_contents
+            .entry(path.to_path_buf())
+            .or_insert_with(|| fs::read_to_string(path).map_err(|error| error.to_string()));
+        entry.as_deref().map_err(String::clone)
+    }
+
+    fn inspect_symbol(
+        &mut self,
+        language: &str,
+        config: &SyuConfig,
+        path: &Path,
+        contents: &str,
+        symbol: &str,
+    ) -> Result<Option<SymbolInspection>, String> {
+        let key = (language.to_string(), path.to_path_buf());
+        let entry = self.rich_inspections.entry(key).or_insert_with(|| {
+            inspect_file_symbols(language, config, path, contents)
+                .map_err(|error| error.to_string())
+        });
+
+        match entry {
+            Ok(Some(symbols)) => Ok(symbols.get(symbol).cloned()),
+            Ok(None) => inspect_symbol(language, config, path, contents, symbol)
+                .map_err(|error| error.to_string()),
+            Err(error) => Err(error.clone()),
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -647,6 +689,7 @@ fn collect_check_result_from_workspace_with_mode(
         policies_by_id: &policies_by_id,
         features_by_id: &features_by_id,
     };
+    let mut trace_cache = TraceValidationCache::default();
 
     for philosophy in &workspace.philosophies {
         validate_philosophy(philosophy, &policies_by_id, &workspace.config, &mut issues);
@@ -663,22 +706,24 @@ fn collect_check_result_from_workspace_with_mode(
     }
 
     for requirement in &workspace.requirements {
-        validate_requirement(
+        validate_requirement_with_cache(
             requirement,
             requirement_validation_index,
             validation_resources,
             &mut issues,
             &mut trace_summary.requirement_traces,
+            &mut trace_cache,
         );
     }
 
     for feature in &workspace.features {
-        validate_feature(
+        validate_feature_with_cache(
             feature,
             &requirements_by_id,
             validation_resources,
             &mut issues,
             &mut trace_summary.feature_traces,
+            &mut trace_cache,
         );
     }
 
@@ -2892,12 +2937,32 @@ fn validate_policy(
     }
 }
 
+#[cfg(test)]
 fn validate_requirement(
     requirement: &Requirement,
     index: RequirementValidationIndex<'_>,
     resources: ValidationResources<'_>,
     issues: &mut Vec<Issue>,
     trace_count: &mut TraceCount,
+) {
+    let mut trace_cache = TraceValidationCache::default();
+    validate_requirement_with_cache(
+        requirement,
+        index,
+        resources,
+        issues,
+        trace_count,
+        &mut trace_cache,
+    );
+}
+
+fn validate_requirement_with_cache(
+    requirement: &Requirement,
+    index: RequirementValidationIndex<'_>,
+    resources: ValidationResources<'_>,
+    issues: &mut Vec<Issue>,
+    trace_count: &mut TraceCount,
+    trace_cache: &mut TraceValidationCache,
 ) {
     validate_non_empty_field("requirement", "id", &requirement.id, issues);
     validate_non_empty_field("requirement", "title", &requirement.title, issues);
@@ -3068,16 +3133,37 @@ fn validate_requirement(
             &requirement.tests,
             issues,
             trace_count,
+            trace_cache,
         );
     }
 }
 
+#[cfg(test)]
 fn validate_feature(
     feature: &Feature,
     requirements_by_id: &HashMap<&str, &Requirement>,
     resources: ValidationResources<'_>,
     issues: &mut Vec<Issue>,
     trace_count: &mut TraceCount,
+) {
+    let mut trace_cache = TraceValidationCache::default();
+    validate_feature_with_cache(
+        feature,
+        requirements_by_id,
+        resources,
+        issues,
+        trace_count,
+        &mut trace_cache,
+    );
+}
+
+fn validate_feature_with_cache(
+    feature: &Feature,
+    requirements_by_id: &HashMap<&str, &Requirement>,
+    resources: ValidationResources<'_>,
+    issues: &mut Vec<Issue>,
+    trace_count: &mut TraceCount,
+    trace_cache: &mut TraceValidationCache,
 ) {
     validate_non_empty_field("feature", "id", &feature.id, issues);
     validate_non_empty_field("feature", "title", &feature.title, issues);
@@ -3183,6 +3269,7 @@ fn validate_feature(
             &feature.implementations,
             issues,
             trace_count,
+            trace_cache,
         );
     }
 }
@@ -3194,6 +3281,7 @@ fn validate_trace_map(
     references_by_language: &BTreeMap<String, Vec<TraceReference>>,
     issues: &mut Vec<Issue>,
     trace_count: &mut TraceCount,
+    trace_cache: &mut TraceValidationCache,
 ) {
     let subject = format!("{} {}", target.role.subject_kind(), target.owner_id);
     for (language, references) in references_by_language {
@@ -3273,7 +3361,7 @@ fn validate_trace_map(
     for (language, references) in references_by_language {
         for reference in references {
             trace_count.declared += 1;
-            if verify_trace_reference(
+            if verify_trace_reference_with_cache(
                 root,
                 config,
                 target.owner_id,
@@ -3281,6 +3369,7 @@ fn validate_trace_map(
                 language,
                 reference,
                 issues,
+                trace_cache,
             ) {
                 trace_count.validated += 1;
             }
@@ -3353,6 +3442,7 @@ fn report_orphaned_definition(
     ));
 }
 
+#[cfg(test)]
 fn verify_trace_reference(
     root: &Path,
     config: &SyuConfig,
@@ -3361,6 +3451,29 @@ fn verify_trace_reference(
     language: &str,
     reference: &TraceReference,
     issues: &mut Vec<Issue>,
+) -> bool {
+    let mut trace_cache = TraceValidationCache::default();
+    verify_trace_reference_with_cache(
+        root,
+        config,
+        owner_id,
+        role,
+        language,
+        reference,
+        issues,
+        &mut trace_cache,
+    )
+}
+
+fn verify_trace_reference_with_cache(
+    root: &Path,
+    config: &SyuConfig,
+    owner_id: &str,
+    role: TraceRole,
+    language: &str,
+    reference: &TraceReference,
+    issues: &mut Vec<Issue>,
+    trace_cache: &mut TraceValidationCache,
 ) -> bool {
     let subject = format!("{} {}", role.subject_kind(), owner_id);
     let is_openapi = language == "openapi";
@@ -3470,7 +3583,7 @@ fn verify_trace_reference(
         }
     }
 
-    let contents = match fs::read_to_string(&path) {
+    let contents = match trace_cache.read_file(&path) {
         Ok(contents) => contents,
         Err(error) => {
             issues.push(Issue::error(
@@ -3491,6 +3604,7 @@ fn verify_trace_reference(
         }
     };
 
+    let contents = contents.to_string();
     let ignored_paths = normalized_symbol_trace_coverage_ignored_paths(config);
     if !path_matches_ignored_generated_directory(display_path, &ignored_paths) {
         match evaluate_trace_ownership(root, config, owner_id, &path, reference, &contents) {
@@ -3636,7 +3750,7 @@ fn verify_trace_reference(
         }
 
         let inspection = if supports_rich_inspection(language) {
-            match inspect_symbol(language, config, &path, &contents, symbol) {
+            match trace_cache.inspect_symbol(language, config, &path, &contents, symbol) {
                 Ok(result) => result,
                 Err(error) => {
                     issues.push(Issue::error(

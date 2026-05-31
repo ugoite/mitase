@@ -4,7 +4,11 @@
 use anyhow::{Context, Result, bail};
 use regex::Regex;
 use serde::Deserialize;
-use std::{collections::BTreeSet, path::Path, process::Command};
+use std::{
+    collections::{BTreeSet, HashMap},
+    path::Path,
+    process::Command,
+};
 use syn::{Attribute, ImplItem, Item};
 use tree_sitter::Parser;
 
@@ -196,6 +200,38 @@ pub fn inspect_symbol(
                 start_marker: "/**",
             },
         )),
+        _ => Ok(None),
+    }
+}
+
+pub fn inspect_file_symbols(
+    language: &str,
+    config: &SyuConfig,
+    path: &Path,
+    contents: &str,
+) -> Result<Option<HashMap<String, SymbolInspection>>> {
+    match adapter_for_language(language).map(LanguageAdapter::canonical_name) {
+        Some("rust") => Ok(Some(inspect_rust_file(contents))),
+        Some("python") => {
+            let mut symbols = HashMap::new();
+            for item in inspect_python_file(config, path)? {
+                symbols.entry(item.name).or_insert(SymbolInspection {
+                    docs: item.docs,
+                    line: item.line,
+                });
+            }
+            Ok(Some(symbols))
+        }
+        Some("typescript") => {
+            let mut symbols = HashMap::new();
+            for item in inspect_typescript_file(path, contents)? {
+                symbols.entry(item.name).or_insert(SymbolInspection {
+                    docs: item.docs,
+                    line: item.line,
+                });
+            }
+            Ok(Some(symbols))
+        }
         _ => Ok(None),
     }
 }
@@ -526,13 +562,25 @@ fn render_new_doc_block(indent: &str, missing: &[String], style: DocCommentStyle
 }
 
 fn inspect_rust_symbol(contents: &str, symbol: &str) -> Option<String> {
-    let file = syn::parse_file(contents).ok()?;
+    inspect_rust_file(contents)
+        .remove(symbol)
+        .map(|inspection| inspection.docs)
+}
+
+fn inspect_rust_file(contents: &str) -> HashMap<String, SymbolInspection> {
+    let Ok(file) = syn::parse_file(contents) else {
+        return HashMap::new();
+    };
     let mut symbols = Vec::new();
     collect_rust_items(&file.items, &mut symbols);
-    symbols
-        .into_iter()
-        .find(|(name, _)| name == symbol)
-        .map(|(_, docs)| docs)
+    let mut inspections = HashMap::new();
+    for (name, docs) in symbols {
+        let line = find_rust_declaration_line(contents, &name).unwrap_or(1);
+        inspections
+            .entry(name)
+            .or_insert(SymbolInspection { docs, line });
+    }
+    inspections
 }
 
 fn collect_rust_items(items: &[Item], symbols: &mut Vec<(String, String)>) {
