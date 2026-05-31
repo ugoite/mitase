@@ -160,6 +160,7 @@ fn evidence_tone(kind: WorkbenchEvidenceKind) -> &'static str {
     match kind {
         WorkbenchEvidenceKind::ValidationReport => "text-evidence-pass",
         WorkbenchEvidenceKind::BranchScopeReport => "text-scope-in",
+        WorkbenchEvidenceKind::SpecImpactReport => "text-spec-linked",
         WorkbenchEvidenceKind::GoalPlanCheckReport => "text-evidence-warn",
         WorkbenchEvidenceKind::HistoryResponse => "text-evidence-pending",
         WorkbenchEvidenceKind::AssignmentState => "text-goal",
