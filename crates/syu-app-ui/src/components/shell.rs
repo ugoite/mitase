@@ -303,7 +303,19 @@ pub fn ScopeGuardPreview(result: ScopeGuardResult) -> Element {
             div { class: "mt-2 flex flex-wrap gap-2",
                 ScopeChip { label: "scope-in".to_string() }
                 ScopeChip { label: "scope-out".to_string() }
+                ScopeChip { label: "out-of-scope changes".to_string() }
                 ScopeChip { label: result.status.label().to_string() }
+            }
+            if !result.out_of_scope_files.is_empty() {
+                div { class: "mt-3 space-y-2 rounded-lg border border-evidence-fail/40 bg-evidence-fail/10 p-3",
+                    div { class: "flex items-center gap-2",
+                        StatusDot { tone_class: "bg-evidence-fail", label: "scope-invalid".to_string() }
+                        p { class: "text-sm font-medium text-foreground/80", "Out-of-scope changes" }
+                    }
+                    for file in result.out_of_scope_files {
+                        p { class: "text-sm text-foreground/75", "{file}" }
+                    }
+                }
             }
             if !result.blockers.is_empty() {
                 div { class: "mt-3 space-y-2 rounded-lg border border-evidence-fail/40 bg-evidence-fail/10 p-3",

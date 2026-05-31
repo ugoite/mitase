@@ -44,6 +44,7 @@ description: "Generated reference for docs/syu/features/workbench/assignment.yam
         - **symbols**:
           - assignment_preview_renders_blocked_state_with_scope_tokens
           - assignment_actions_are_exposed_in_the_command_palette
+          - scope_guard_preview_renders_out_of_scope_changes
     - **markdown**:
       - **file**: docs/guide/workbench.md
         - **symbols**:
@@ -85,6 +86,7 @@ features:
           symbols:
             - assignment_preview_renders_blocked_state_with_scope_tokens
             - assignment_actions_are_exposed_in_the_command_palette
+            - scope_guard_preview_renders_out_of_scope_changes
       markdown:
         - file: docs/guide/workbench.md
           symbols:

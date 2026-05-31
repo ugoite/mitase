@@ -188,6 +188,7 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
         - **symbols**:
           - assignment_preview_renders_blocked_state_with_scope_tokens
           - assignment_actions_are_exposed_in_the_command_palette
+          - scope_guard_preview_renders_out_of_scope_changes
 - **id**: REQ-WORKBENCH-006
   - **title**: Shared browser and desktop Workbench behavior
   - **description**:
@@ -406,6 +407,7 @@ requirements:
           symbols:
             - assignment_preview_renders_blocked_state_with_scope_tokens
             - assignment_actions_are_exposed_in_the_command_palette
+            - scope_guard_preview_renders_out_of_scope_changes
   - id: REQ-WORKBENCH-006
     title: Shared browser and desktop Workbench behavior
     description: |

@@ -5,7 +5,8 @@ use syu_app_ui::{
     SpecImpactGraph, WorkbenchUiState, build_demo_state,
 };
 use syu_workbench::{
-    WorkbenchActionId, WorkbenchActionRegistry, WorkbenchApiPayload, WorkbenchState,
+    AssignmentBlocker, ScopeGuardResult, ScopeGuardStatus, WorkbenchActionId,
+    WorkbenchActionRegistry, WorkbenchApiPayload, WorkbenchState,
 };
 
 #[test]
@@ -197,6 +198,27 @@ fn assignment_actions_are_exposed_in_the_command_palette() {
     assert!(html.contains("assignment.run"));
     assert!(html.contains("assignment.record_manual"));
     assert!(html.contains("assignment.collect_evidence"));
+}
+
+#[test]
+fn scope_guard_preview_renders_out_of_scope_changes() {
+    let result = ScopeGuardResult {
+        status: ScopeGuardStatus::ScopeInvalid,
+        blockers: vec![AssignmentBlocker::new(
+            "out_of_scope_diff",
+            "runner produced changes outside allowed files",
+        )],
+        out_of_scope_files: vec!["examples/legacy-browser/index.ts".to_string()],
+    };
+
+    let html = render_element(rsx! {
+        syu_app_ui::ScopeGuardPreview { result }
+    });
+
+    assert!(html.contains("out-of-scope changes"));
+    assert!(html.contains("Out-of-scope changes"));
+    assert!(html.contains("examples/legacy-browser/index.ts"));
+    assert!(html.contains("scope-invalid"));
 }
 
 #[test]
