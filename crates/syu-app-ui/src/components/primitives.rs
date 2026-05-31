@@ -74,7 +74,7 @@ pub fn CommandOutputView(
     attachment: Option<EvidenceAttachment>,
 ) -> Element {
     rsx! {
-        section { class: "rounded-xl border border-border bg-background/40 p-3",
+        section { class: "mt-3 rounded-lg bg-background/30 p-3",
             div { class: "flex items-center justify-between gap-3",
                 p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "{title}" }
                 if let Some(command) = &command {
@@ -136,6 +136,7 @@ pub fn EvidenceRecordCard(record: EvidenceRecord) -> Element {
     let tone_class = evidence_status_tone(record.status);
     let source_label = record_source_label(&record);
     let attachment = record.attachments.first().cloned();
+    let timestamp_label = format_timestamp_ms(record.timestamp);
     rsx! {
         article { class: classes::EVIDENCE_CARD,
             div { class: "flex items-start justify-between gap-3",
@@ -152,7 +153,7 @@ pub fn EvidenceRecordCard(record: EvidenceRecord) -> Element {
                         p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "{source_label}" }
                     }
                 }
-                p { class: "shrink-0 text-xs text-foreground/45", "{record.timestamp}" }
+                p { class: "shrink-0 text-xs text-foreground/45", "{timestamp_label}" }
             }
             if let Some(command) = &record.command {
                 CommandOutputView {
@@ -171,6 +172,41 @@ pub fn EvidenceRecordCard(record: EvidenceRecord) -> Element {
             }
         }
     }
+}
+
+fn format_timestamp_ms(timestamp_ms: u64) -> String {
+    const MILLIS_PER_SECOND: i64 = 1_000;
+    const SECONDS_PER_MINUTE: i64 = 60;
+    const MINUTES_PER_HOUR: i64 = 60;
+    const HOURS_PER_DAY: i64 = 24;
+    const SECONDS_PER_DAY: i64 = SECONDS_PER_MINUTE * MINUTES_PER_HOUR * HOURS_PER_DAY;
+
+    let total_seconds = (timestamp_ms / MILLIS_PER_SECOND as u64) as i64;
+    let seconds_of_day = total_seconds.rem_euclid(SECONDS_PER_DAY);
+    let days = total_seconds.div_euclid(SECONDS_PER_DAY);
+
+    let (year, month, day) = civil_from_days(days);
+    let hour = seconds_of_day / (SECONDS_PER_MINUTE * MINUTES_PER_HOUR);
+    let minute = (seconds_of_day % (SECONDS_PER_MINUTE * MINUTES_PER_HOUR)) / SECONDS_PER_MINUTE;
+    let second = seconds_of_day % SECONDS_PER_MINUTE;
+
+    format!(
+        "{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02} UTC"
+    )
+}
+
+fn civil_from_days(days: i64) -> (i64, i64, i64) {
+    let days = days + 719_468;
+    let era = if days >= 0 { days } else { days - 146_096 } / 146_097;
+    let doe = days - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let mut year = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = mp + if mp < 10 { 3 } else { -9 };
+    year += if month <= 2 { 1 } else { 0 };
+    (year, month, day)
 }
 
 #[component]
