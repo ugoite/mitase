@@ -76,9 +76,11 @@ struct RequirementValidationIndex<'a> {
 #[derive(Debug, Default)]
 struct TraceValidationCache {
     file_contents: HashMap<PathBuf, Result<String, String>>,
-    rich_inspections:
-        HashMap<(String, PathBuf), Result<Option<HashMap<String, SymbolInspection>>, String>>,
+    rich_inspections: HashMap<TraceInspectionCacheKey, TraceInspectionCacheEntry>,
 }
+
+type TraceInspectionCacheKey = (String, PathBuf);
+type TraceInspectionCacheEntry = Result<Option<HashMap<String, SymbolInspection>>, String>;
 
 impl TraceValidationCache {
     fn read_file(&mut self, path: &Path) -> Result<&str, String> {
@@ -3364,8 +3366,7 @@ fn validate_trace_map(
             if verify_trace_reference_with_cache(
                 root,
                 config,
-                target.owner_id,
-                target.role,
+                target,
                 language,
                 reference,
                 issues,
@@ -3456,8 +3457,11 @@ fn verify_trace_reference(
     verify_trace_reference_with_cache(
         root,
         config,
-        owner_id,
-        role,
+        TraceValidationTarget {
+            owner_id,
+            role,
+            status: None,
+        },
         language,
         reference,
         issues,
@@ -3468,13 +3472,14 @@ fn verify_trace_reference(
 fn verify_trace_reference_with_cache(
     root: &Path,
     config: &SyuConfig,
-    owner_id: &str,
-    role: TraceRole,
+    target: TraceValidationTarget<'_>,
     language: &str,
     reference: &TraceReference,
     issues: &mut Vec<Issue>,
     trace_cache: &mut TraceValidationCache,
 ) -> bool {
+    let owner_id = target.owner_id;
+    let role = target.role;
     let subject = format!("{} {}", role.subject_kind(), owner_id);
     let is_openapi = language == "openapi";
     let adapter = if is_openapi {
