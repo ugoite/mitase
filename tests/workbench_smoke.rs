@@ -1,8 +1,8 @@
 use dioxus::prelude::*;
 use dioxus_ssr::render_element;
 use syu_app_ui::{
-    AppShell, BranchScopeLens, EvidencePanel, GoalCanvas, GoalPlanExportPanel, SpecImpactGraph,
-    WorkbenchUiState, build_demo_state,
+    AppShell, AssignGoalDialog, BranchScopeLens, EvidencePanel, GoalCanvas, GoalPlanExportPanel,
+    SpecImpactGraph, WorkbenchUiState, build_demo_state,
 };
 use syu_workbench::{
     WorkbenchActionId, WorkbenchActionRegistry, WorkbenchApiPayload, WorkbenchState,
@@ -156,6 +156,47 @@ fn request_flow_actions_are_exposed_in_the_command_palette() {
     assert!(html.contains("request.scope"));
     assert!(html.contains("request.scaffold"));
     assert!(html.contains("request.plan"));
+}
+
+#[test]
+fn assignment_preview_renders_blocked_state_with_scope_tokens() {
+    let ui = build_demo_state();
+
+    let html = render_element(rsx! {
+        AssignGoalDialog {
+            ui,
+            on_run_action: None
+        }
+    });
+
+    assert!(html.contains("Scoped Assignment"));
+    assert!(html.contains("Assignment Prompt Preview"));
+    assert!(html.contains("assignment-blocked"));
+    assert!(html.contains("scope-invalid"));
+    assert!(html.contains("scope-in"));
+    assert!(html.contains("scope-out"));
+    assert!(html.contains("evidence-required"));
+    assert!(
+        html.contains("AI assignment must list completion commands")
+            || html.contains("required_tests_missing")
+    );
+}
+
+#[test]
+fn assignment_actions_are_exposed_in_the_command_palette() {
+    let mut ui = build_demo_state();
+    ui.set_query("assignment.");
+
+    let html = render_element(rsx! {
+        AppShell { ui }
+    });
+
+    assert!(html.contains("assignment.create"));
+    assert!(html.contains("assignment.preview"));
+    assert!(html.contains("assignment.run_dry"));
+    assert!(html.contains("assignment.run"));
+    assert!(html.contains("assignment.record_manual"));
+    assert!(html.contains("assignment.collect_evidence"));
 }
 
 #[test]

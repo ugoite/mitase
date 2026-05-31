@@ -1,7 +1,8 @@
 use crate::components::{
-    AgentEvidenceView, Button, CommandItem, DetailDrawer, EmptyState, EvidenceBadge,
-    EvidenceDetailDrawer, EvidenceRecordCard, GoalCard, IconButton, ManualDecisionEvidenceView,
-    Panel, ScopeChip, ScopeEvidenceView, StatusDot, TestEvidenceView, ValidationEvidenceView,
+    AgentEvidenceView, Button, CommandItem, CommandOutputView, DetailDrawer, EmptyState,
+    EvidenceBadge, EvidenceDetailDrawer, EvidenceRecordCard, GoalCard, IconButton,
+    ManualDecisionEvidenceView, Panel, ScopeChip, ScopeEvidenceView, StatusDot, TestEvidenceView,
+    ValidationEvidenceView,
 };
 use crate::design::classes;
 use crate::model::{WorkbenchUiState, WorkspacePulseSummary};
@@ -10,6 +11,10 @@ use std::collections::HashMap;
 use syu_task_model::{
     GoalPlanArtifact, GoalPlanConfidence, GoalPlanPersistentItem, GoalPlanScopeInclude,
     ScaffoldAction, ScaffoldUpdateKind,
+};
+use syu_workbench::{
+    AgentRun, Assignee, AssigneeKind, Assignment, AssignmentStatus, ScopeGuardResult,
+    ScopeGuardStatus,
 };
 use syu_workbench::{EvidenceRecord, WorkbenchActionId};
 
@@ -189,6 +194,7 @@ pub fn GoalCanvas(
                     on_run_action: on_run_action,
                 }
                 BranchScopeLens { ui: ui.clone(), on_run_action: on_run_action }
+                AssignGoalDialog { ui: ui.clone(), on_run_action: on_run_action }
                 SpecImpactGraph { ui: ui.clone() }
                 if let Some(preview) = ui.preview.clone().or_else(|| ui.selected_action_id.and_then(|id| ui.action_preview(id))) {
                     DetailDrawer {
@@ -204,6 +210,223 @@ pub fn GoalCanvas(
                     }
                 } else {
                     EmptyState { title: "No action selected".to_string(), body: "Open the palette to run a read-only action or inspect the next suggested step.".to_string() }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn AssignGoalDialog(
+    ui: WorkbenchUiState,
+    on_run_action: Option<EventHandler<WorkbenchActionId>>,
+) -> Element {
+    let assignment = ui.payload.state.assignment.clone();
+    rsx! {
+        Panel { class: classes::PANEL_MUTED,
+            div { class: "space-y-4 p-4",
+                div { class: classes::SECTION_HEADER,
+                    h2 { class: classes::SECTION_TITLE, "Scoped Assignment" }
+                    if let Some(assignment) = &assignment {
+                        StatusDot {
+                            tone_class: assignment_status_tone(assignment.status),
+                            label: assignment.status.label().to_string(),
+                        }
+                    } else {
+                        ScopeChip { label: "assignment-blocked".to_string() }
+                    }
+                }
+                if let Some(assignment) = assignment {
+                    AssigneeSelector { assignee: assignment.assignee.clone() }
+                    ScopeGuardPreview { result: assignment.scope_guard.clone() }
+                    AssignmentConstraintPanel { assignment: assignment.clone() }
+                    AssignmentPromptPreview { assignment: assignment.clone() }
+                    if let Some(run) = assignment.latest_run.clone() {
+                        AgentRunPanel { run }
+                    } else if matches!(assignment.assignee.as_ref().map(|assignee| assignee.kind), Some(AssigneeKind::Human)) {
+                        HumanAssignmentPanel { assignment: assignment.clone() }
+                    }
+                    AssignmentEvidencePanel { assignment: assignment.clone() }
+                    if let Some(on_run_action) = on_run_action {
+                        div { class: "flex flex-wrap gap-2",
+                            button {
+                                class: "rounded-full border border-border bg-panel-muted px-3 py-1.5 text-xs uppercase tracking-[0.16em] text-foreground/70",
+                                disabled: !assignment.is_runnable(),
+                                onclick: move |_| on_run_action.call(WorkbenchActionId::AssignmentPreview),
+                                "Preview"
+                            }
+                            button {
+                                class: "rounded-full border border-command-active bg-command-active px-3 py-1.5 text-xs uppercase tracking-[0.16em] text-background",
+                                disabled: !assignment.is_runnable(),
+                                onclick: move |_| on_run_action.call(WorkbenchActionId::AssignmentRunDry),
+                                "Dry Run"
+                            }
+                        }
+                    }
+                } else {
+                    EmptyState {
+                        title: "No assignment loaded".to_string(),
+                        body: "Create assignment keeps Goal scope, non-goals, tests, completion commands, and required evidence together.".to_string()
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn AssigneeSelector(assignee: Option<Assignee>) -> Element {
+    rsx! {
+        section { class: "rounded-xl border border-border bg-background/30 p-3",
+            p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "Assignee Selector" }
+            if let Some(assignee) = assignee {
+                div { class: "mt-2 flex flex-wrap items-center gap-2",
+                    ScopeChip { label: assignee.kind.label().to_string() }
+                    ScopeChip { label: assignee.id.clone() }
+                    p { class: "text-sm font-medium", "{assignee.display_name}" }
+                }
+            } else {
+                p { class: "mt-2 text-sm text-evidence-warn", "assignment-blocked: assignee missing" }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn ScopeGuardPreview(result: ScopeGuardResult) -> Element {
+    rsx! {
+        section { class: "rounded-xl border border-border bg-background/30 p-3",
+            div { class: "flex flex-wrap items-center gap-2",
+                p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "Scope Guard Preview" }
+                StatusDot { tone_class: scope_guard_tone(result.status), label: result.status.label().to_string() }
+            }
+            div { class: "mt-2 flex flex-wrap gap-2",
+                ScopeChip { label: "scope-in".to_string() }
+                ScopeChip { label: "scope-out".to_string() }
+                ScopeChip { label: result.status.label().to_string() }
+            }
+            if !result.blockers.is_empty() {
+                div { class: "mt-3 space-y-2 rounded-lg border border-evidence-fail/40 bg-evidence-fail/10 p-3",
+                    for blocker in result.blockers {
+                        div { class: "flex items-center gap-2",
+                            StatusDot { tone_class: "bg-evidence-fail", label: "assignment-blocked".to_string() }
+                            p { class: "text-sm text-foreground/80", "{blocker.code}: {blocker.message}" }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn AssignmentConstraintPanel(assignment: Assignment) -> Element {
+    rsx! {
+        section { class: "grid gap-3 md:grid-cols-2",
+            ConstraintList { title: "Allowed files".to_string(), token: "scope-in".to_string(), values: assignment.scope.include.clone() }
+            ConstraintList { title: "Forbidden files".to_string(), token: "scope-out".to_string(), values: assignment.scope.exclude.clone() }
+            ConstraintList { title: "Non-goals".to_string(), token: "assignment-ready".to_string(), values: assignment.scope.non_goals.clone() }
+            ConstraintList { title: "Required tests".to_string(), token: "evidence-required".to_string(), values: assignment.scope.required_tests.clone() }
+            ConstraintList { title: "Completion commands".to_string(), token: "run-dry".to_string(), values: assignment.scope.completion_commands.clone() }
+            ConstraintList { title: "Linked spec context".to_string(), token: "spec-linked".to_string(), values: assignment.scope.linked_spec_context.clone() }
+        }
+    }
+}
+
+#[component]
+fn ConstraintList(title: String, token: String, values: Vec<String>) -> Element {
+    rsx! {
+        div { class: "rounded-xl border border-border bg-background/30 p-3",
+            div { class: "flex items-center justify-between gap-2",
+                p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "{title}" }
+                ScopeChip { label: token }
+            }
+            if values.is_empty() {
+                p { class: "mt-2 text-sm text-evidence-warn", "evidence-missing" }
+            } else {
+                ul { class: "mt-2 space-y-1",
+                    for value in values {
+                        li { class: "text-sm text-foreground/75", "{value}" }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn AssignmentPromptPreview(assignment: Assignment) -> Element {
+    rsx! {
+        section { class: "rounded-xl border border-border bg-background/30 p-3",
+            div { class: "flex flex-wrap items-center gap-2",
+                p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "Assignment Prompt Preview" }
+                ScopeChip { label: assignment.run_mode.label().to_string() }
+            }
+            pre { class: "mt-2 max-h-56 overflow-auto rounded-lg border border-border bg-panel-muted p-3 text-xs text-foreground/70",
+                "{assignment.prompt_preview}"
+            }
+        }
+    }
+}
+
+#[component]
+pub fn AgentRunPanel(run: AgentRun) -> Element {
+    rsx! {
+        section { class: "rounded-xl border border-border bg-background/30 p-3",
+            div { class: "flex flex-wrap items-center gap-2",
+                p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "Agent Run Panel" }
+                StatusDot { tone_class: agent_run_tone(run.status), label: run.status.label().to_string() }
+                ScopeChip { label: run.output.diff_summary.clone() }
+            }
+            CommandOutputView {
+                title: "Runner output".to_string(),
+                summary: run.status.label().to_string(),
+                command: Some(syu_workbench::EvidenceCommand {
+                    command: run.profile_id.clone(),
+                    args: vec![run.mode.label().to_string()],
+                }),
+                attachment: Some(syu_workbench::EvidenceAttachment {
+                    label: "stdout-stderr".to_string(),
+                    mime_type: Some("text/plain".to_string()),
+                    summary: Some("stdout/stderr".to_string()),
+                    content: Some(format!("stdout:\n{}\nstderr:\n{}", run.output.stdout, run.output.stderr)),
+                    truncated: false,
+                }),
+            }
+        }
+    }
+}
+
+#[component]
+pub fn HumanAssignmentPanel(assignment: Assignment) -> Element {
+    rsx! {
+        section { class: "rounded-xl border border-border bg-background/30 p-3",
+            div { class: "flex flex-wrap items-center gap-2",
+                p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "Human Assignment Panel" }
+                ScopeChip { label: "manual".to_string() }
+                ScopeChip { label: assignment.status.label().to_string() }
+            }
+            p { class: "mt-2 text-sm text-foreground/75", "Human assignment uses the same scoped handoff without command execution." }
+        }
+    }
+}
+
+#[component]
+pub fn AssignmentEvidencePanel(assignment: Assignment) -> Element {
+    rsx! {
+        section { class: "rounded-xl border border-border bg-background/30 p-3",
+            div { class: "flex flex-wrap items-center gap-2",
+                p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "Assignment Evidence Panel" }
+                EvidenceBadge { kind: syu_workbench::WorkbenchEvidenceKind::AssignmentState }
+            }
+            if assignment.evidence_requirements.is_empty() {
+                p { class: "mt-2 text-sm text-evidence-warn", "evidence-missing" }
+            } else {
+                div { class: "mt-2 flex flex-wrap gap-2",
+                    for requirement in assignment.evidence_requirements {
+                        ScopeChip { label: if requirement.required { "evidence-required".to_string() } else { "evidence-optional".to_string() } }
+                        p { class: "text-sm text-foreground/75", "{requirement.description}" }
+                    }
                 }
             }
         }
@@ -1044,7 +1267,8 @@ fn render_evidence_timeline_record(record: EvidenceRecord) -> Element {
         | syu_workbench::WorkbenchEvidenceKind::SpecImpactReport => {
             rsx! { ScopeEvidenceView { record } }
         }
-        syu_workbench::WorkbenchEvidenceKind::JobState => {
+        syu_workbench::WorkbenchEvidenceKind::AgentRun
+        | syu_workbench::WorkbenchEvidenceKind::JobState => {
             rsx! { AgentEvidenceView { record } }
         }
         syu_workbench::WorkbenchEvidenceKind::AssignmentState => {
@@ -1278,6 +1502,38 @@ fn graph_state_class(state: &str) -> &'static str {
     }
 }
 
+fn assignment_status_tone(status: AssignmentStatus) -> &'static str {
+    match status {
+        AssignmentStatus::AssignmentReady
+        | AssignmentStatus::AssignmentComplete
+        | AssignmentStatus::AssignmentDryRun => "bg-evidence-pass",
+        AssignmentStatus::AssignmentActive => "bg-evidence-pending",
+        AssignmentStatus::AssignmentBlocked | AssignmentStatus::AssignmentFailed => {
+            "bg-evidence-fail"
+        }
+    }
+}
+
+fn scope_guard_tone(status: ScopeGuardStatus) -> &'static str {
+    match status {
+        ScopeGuardStatus::ScopeValid => "bg-evidence-pass",
+        ScopeGuardStatus::ScopeAmbiguous => "bg-scope-ambiguous",
+        ScopeGuardStatus::ScopeInvalid => "bg-evidence-fail",
+    }
+}
+
+fn agent_run_tone(status: syu_workbench::AgentRunStatus) -> &'static str {
+    match status {
+        syu_workbench::AgentRunStatus::RunComplete => "bg-evidence-pass",
+        syu_workbench::AgentRunStatus::RunDry | syu_workbench::AgentRunStatus::RunActive => {
+            "bg-evidence-pending"
+        }
+        syu_workbench::AgentRunStatus::RunFailed | syu_workbench::AgentRunStatus::Blocked => {
+            "bg-evidence-fail"
+        }
+    }
+}
+
 fn truncate_label(label: &str, max_chars: usize) -> String {
     if label.chars().count() <= max_chars {
         return label.to_string();
@@ -1373,6 +1629,6 @@ mod tests {
             EvidencePanel { ui }
         });
 
-        assert!(html.contains("Evidence placeholder"));
+        assert!(html.contains("Append evidence by running goal checks"));
     }
 }

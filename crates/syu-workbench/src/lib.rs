@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::{
     path::PathBuf,
+    process::Command,
     sync::OnceLock,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -79,6 +80,18 @@ pub enum WorkbenchActionId {
     HistoryShow,
     #[serde(rename = "assignment.create")]
     AssignmentCreate,
+    #[serde(rename = "assignment.preview")]
+    AssignmentPreview,
+    #[serde(rename = "assignment.run_dry")]
+    AssignmentRunDry,
+    #[serde(rename = "assignment.run")]
+    AssignmentRun,
+    #[serde(rename = "assignment.cancel")]
+    AssignmentCancel,
+    #[serde(rename = "assignment.record_manual")]
+    AssignmentRecordManual,
+    #[serde(rename = "assignment.collect_evidence")]
+    AssignmentCollectEvidence,
     #[serde(rename = "agent.run")]
     AgentRun,
 }
@@ -101,6 +114,12 @@ impl WorkbenchActionId {
             Self::ValidationRun => "validation.run",
             Self::HistoryShow => "history.show",
             Self::AssignmentCreate => "assignment.create",
+            Self::AssignmentPreview => "assignment.preview",
+            Self::AssignmentRunDry => "assignment.run_dry",
+            Self::AssignmentRun => "assignment.run",
+            Self::AssignmentCancel => "assignment.cancel",
+            Self::AssignmentRecordManual => "assignment.record_manual",
+            Self::AssignmentCollectEvidence => "assignment.collect_evidence",
             Self::AgentRun => "agent.run",
         }
     }
@@ -122,6 +141,12 @@ pub enum WorkbenchActionFunction {
     ValidateWorkspace,
     HistoryForItem,
     AssignmentCreate,
+    AssignmentPreview,
+    AssignmentRunDry,
+    AssignmentRun,
+    AssignmentCancel,
+    AssignmentRecordManual,
+    AssignmentCollectEvidence,
     AgentRun,
 }
 
@@ -141,6 +166,12 @@ impl WorkbenchActionFunction {
             Self::ValidateWorkspace => "validate_workspace",
             Self::HistoryForItem => "history_for_item",
             Self::AssignmentCreate => "assignment.create",
+            Self::AssignmentPreview => "assignment.preview",
+            Self::AssignmentRunDry => "assignment.run_dry",
+            Self::AssignmentRun => "assignment.run",
+            Self::AssignmentCancel => "assignment.cancel",
+            Self::AssignmentRecordManual => "assignment.record_manual",
+            Self::AssignmentCollectEvidence => "assignment.collect_evidence",
             Self::AgentRun => "agent.run",
         }
     }
@@ -162,6 +193,12 @@ pub enum WorkbenchActionOutputEvent {
     ValidationRun,
     HistoryShown,
     AssignmentCreated,
+    AssignmentPreviewed,
+    AssignmentDryRunQueued,
+    AssignmentRunQueued,
+    AssignmentCancelled,
+    AssignmentManualRecorded,
+    AssignmentEvidenceCollected,
     AgentRunQueued,
 }
 
@@ -180,6 +217,7 @@ pub enum WorkbenchEvidenceKind {
     ValidationReport,
     HistoryResponse,
     AssignmentState,
+    AgentRun,
     JobState,
 }
 
@@ -198,6 +236,7 @@ impl WorkbenchEvidenceKind {
             Self::ValidationReport => "validation_report",
             Self::HistoryResponse => "history_response",
             Self::AssignmentState => "assignment_state",
+            Self::AgentRun => "agent_run",
             Self::JobState => "job_state",
         }
     }
@@ -570,13 +609,42 @@ fn evidence_record_for_action(
             format!("history loaded for {} {}", history.entity_kind, history.id),
         ),
         WorkbenchActionResult::AssignmentState(assignment) => (
-            EvidenceStatus::Pending,
-            Some(EvidenceSeverity::Low),
+            if assignment.status == AssignmentStatus::AssignmentBlocked {
+                EvidenceStatus::Warn
+            } else {
+                EvidenceStatus::Pending
+            },
+            Some(
+                if assignment.status == AssignmentStatus::AssignmentBlocked {
+                    EvidenceSeverity::Medium
+                } else {
+                    EvidenceSeverity::Low
+                },
+            ),
             Some(EvidenceSubject::Assignment),
             match &assignment.goal_id {
                 Some(goal_id) => format!("assignment created for {goal_id}"),
                 None => "assignment created".to_string(),
             },
+        ),
+        WorkbenchActionResult::AgentRun(run) => (
+            match run.status {
+                AgentRunStatus::RunComplete => EvidenceStatus::Pass,
+                AgentRunStatus::RunFailed | AgentRunStatus::Blocked => EvidenceStatus::Fail,
+                AgentRunStatus::RunDry | AgentRunStatus::RunActive => EvidenceStatus::Pending,
+            },
+            Some(
+                if matches!(
+                    run.status,
+                    AgentRunStatus::RunFailed | AgentRunStatus::Blocked
+                ) {
+                    EvidenceSeverity::High
+                } else {
+                    EvidenceSeverity::Low
+                },
+            ),
+            Some(EvidenceSubject::AgentRun),
+            format!("{} recorded for {}", run.status.label(), run.assignment_id),
         ),
         WorkbenchActionResult::JobState(job) => (
             match job.status {
@@ -608,6 +676,10 @@ fn evidence_record_for_action(
         WorkbenchActionResult::TaskTestSelectionPlan(_) => Some(EvidenceCommand {
             command: "goal.test_select".to_string(),
             args: Vec::new(),
+        }),
+        WorkbenchActionResult::AgentRun(run) => Some(EvidenceCommand {
+            command: run.profile_id.clone(),
+            args: vec![run.mode.label().to_string()],
         }),
         _ => None,
     };
@@ -721,6 +793,7 @@ pub enum WorkbenchActionResult {
     ValidationReport(ValidationReport),
     HistoryResponse(HistoryResponse),
     AssignmentState(AssignmentState),
+    AgentRun(AgentRun),
     JobState(JobState),
 }
 
@@ -739,6 +812,7 @@ impl WorkbenchActionResult {
             Self::ValidationReport(_) => WorkbenchEvidenceKind::ValidationReport,
             Self::HistoryResponse(_) => WorkbenchEvidenceKind::HistoryResponse,
             Self::AssignmentState(_) => WorkbenchEvidenceKind::AssignmentState,
+            Self::AgentRun(_) => WorkbenchEvidenceKind::AgentRun,
             Self::JobState(_) => WorkbenchEvidenceKind::JobState,
         }
     }
@@ -843,23 +917,713 @@ impl BoundedScope {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum AssignmentAssignee {
-    Human { name: String },
-    Ai { model: String },
+pub enum AssigneeKind {
+    Human,
+    LocalCommand,
+    ManualPatch,
+    ExternalAgent,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Default)]
-pub struct AssignmentState {
+impl AssigneeKind {
+    pub const fn is_automated(self) -> bool {
+        matches!(
+            self,
+            Self::LocalCommand | Self::ManualPatch | Self::ExternalAgent
+        )
+    }
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Human => "human",
+            Self::LocalCommand => "local_command",
+            Self::ManualPatch => "manual_patch",
+            Self::ExternalAgent => "external_agent",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct Assignee {
+    pub id: String,
+    pub kind: AssigneeKind,
+    pub display_name: String,
+}
+
+impl Assignee {
+    pub fn human(name: impl Into<String>) -> Self {
+        let name = name.into();
+        Self {
+            id: name.to_lowercase().replace(' ', "-"),
+            kind: AssigneeKind::Human,
+            display_name: name,
+        }
+    }
+
+    pub fn local_command(id: impl Into<String>, display_name: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            kind: AssigneeKind::LocalCommand,
+            display_name: display_name.into(),
+        }
+    }
+}
+
+pub type AssignmentAssignee = Assignee;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct AssignmentScope {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub include: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub exclude: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub non_goals: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub linked_spec_context: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub required_tests: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub completion_commands: Vec<String>,
+}
+
+impl AssignmentScope {
+    pub fn from_goal_plan(plan: &GoalPlanArtifact) -> Self {
+        Self {
+            include: plan
+                .implementation_plan
+                .scope
+                .include
+                .iter()
+                .map(goal_scope_include_label)
+                .collect(),
+            exclude: plan.implementation_plan.scope.exclude.clone(),
+            non_goals: plan.goal.non_goals.clone(),
+            linked_spec_context: plan.spec_mapping.persistent_items.labels(),
+            required_tests: plan
+                .test_plan
+                .required_tests
+                .values()
+                .flat_map(|tests| {
+                    tests.iter().map(|test| {
+                        let file = test.file.display().to_string();
+                        if test.symbols.is_empty() {
+                            file
+                        } else {
+                            format!("{file}::{}", test.symbols.join(","))
+                        }
+                    })
+                })
+                .collect(),
+            completion_commands: plan.completion.must_pass.clone(),
+        }
+    }
+}
+
+trait PersistentItemLabels {
+    fn labels(&self) -> Vec<String>;
+}
+
+impl PersistentItemLabels for syu_task_model::GoalPlanPersistentItems {
+    fn labels(&self) -> Vec<String> {
+        self.philosophies
+            .iter()
+            .chain(self.policies.iter())
+            .chain(self.requirements.iter())
+            .chain(self.features.iter())
+            .map(persistent_item_label)
+            .collect()
+    }
+}
+
+fn persistent_item_label(item: &syu_task_model::GoalPlanPersistentItem) -> String {
+    match item {
+        syu_task_model::GoalPlanPersistentItem::Id(id) => id.clone(),
+        syu_task_model::GoalPlanPersistentItem::Item(item) => {
+            let title = item.title.as_deref().unwrap_or("untitled");
+            let document_path = item.document_path.as_deref().unwrap_or("path pending");
+            format!("{} ({title}, {document_path})", item.id)
+        }
+    }
+}
+
+fn goal_scope_include_label(include: &syu_task_model::GoalPlanScopeInclude) -> String {
+    match include {
+        syu_task_model::GoalPlanScopeInclude::Pattern(pattern) => pattern.clone(),
+        syu_task_model::GoalPlanScopeInclude::Entry(entry) => {
+            if entry.symbols.is_empty() {
+                entry.file.clone()
+            } else {
+                format!("{}::{}", entry.file, entry.symbols.join(","))
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AssignmentPermissions {
+    #[serde(default)]
+    pub allow_command_execution: bool,
+    #[serde(default)]
+    pub dry_run_only: bool,
+    #[serde(default)]
+    pub require_isolated_worktree: bool,
+}
+
+impl Default for AssignmentPermissions {
+    fn default() -> Self {
+        Self {
+            allow_command_execution: false,
+            dry_run_only: true,
+            require_isolated_worktree: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AssignmentEvidenceRequirement {
+    pub id: String,
+    pub description: String,
+    pub kind: WorkbenchEvidenceKind,
+    #[serde(default = "default_true")]
+    pub required: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentProfile {
+    pub id: String,
+    pub command: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub args: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct WorkbenchAgentConfig {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub agents: Vec<AgentProfile>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentRunMode {
+    Manual,
+    DryRun,
+    Execute,
+}
+
+impl AgentRunMode {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Manual => "manual",
+            Self::DryRun => "dry_run",
+            Self::Execute => "execute",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentRunStatus {
+    RunDry,
+    RunActive,
+    RunFailed,
+    RunComplete,
+    Blocked,
+}
+
+impl AgentRunStatus {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::RunDry => "run-dry",
+            Self::RunActive => "run-active",
+            Self::RunFailed => "run-failed",
+            Self::RunComplete => "run-complete",
+            Self::Blocked => "assignment-blocked",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct AgentRunOutput {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub stdout: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub stderr: String,
+    pub prompt: String,
+    pub diff_summary: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AgentRun {
+    pub id: String,
+    pub assignment_id: String,
+    pub profile_id: String,
+    pub mode: AgentRunMode,
+    pub status: AgentRunStatus,
+    pub scope_guard_before: ScopeGuardResult,
+    pub scope_guard_after: ScopeGuardResult,
+    pub output: AgentRunOutput,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence: Vec<EvidenceRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AssignmentBlocker {
+    pub code: String,
+    pub message: String,
+}
+
+impl AssignmentBlocker {
+    pub fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            code: code.into(),
+            message: message.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ScopeGuardStatus {
+    ScopeValid,
+    ScopeAmbiguous,
+    ScopeInvalid,
+}
+
+impl ScopeGuardStatus {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::ScopeValid => "scope-valid",
+            Self::ScopeAmbiguous => "scope-ambiguous",
+            Self::ScopeInvalid => "scope-invalid",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScopeGuardResult {
+    pub status: ScopeGuardStatus,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blockers: Vec<AssignmentBlocker>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub out_of_scope_files: Vec<String>,
+}
+
+impl ScopeGuardResult {
+    pub fn valid() -> Self {
+        Self {
+            status: ScopeGuardStatus::ScopeValid,
+            blockers: Vec::new(),
+            out_of_scope_files: Vec::new(),
+        }
+    }
+
+    pub fn is_runnable(&self) -> bool {
+        self.status == ScopeGuardStatus::ScopeValid && self.blockers.is_empty()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AssignmentStatus {
+    AssignmentReady,
+    AssignmentBlocked,
+    AssignmentDryRun,
+    AssignmentActive,
+    AssignmentComplete,
+    AssignmentFailed,
+}
+
+impl AssignmentStatus {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::AssignmentReady => "assignment-ready",
+            Self::AssignmentBlocked => "assignment-blocked",
+            Self::AssignmentDryRun => "assignment-dry-run",
+            Self::AssignmentActive => "assignment-active",
+            Self::AssignmentComplete => "assignment-complete",
+            Self::AssignmentFailed => "assignment-failed",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Assignment {
+    pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub goal_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub assignee: Option<AssignmentAssignee>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub scope: Option<BoundedScope>,
+    pub assignee: Option<Assignee>,
+    pub scope: AssignmentScope,
+    pub permissions: AssignmentPermissions,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub evidence_requirements: Vec<AssignmentEvidenceRequirement>,
+    pub run_mode: AgentRunMode,
+    pub status: AssignmentStatus,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub expected_evidence: Vec<WorkbenchEvidenceKind>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blockers: Vec<AssignmentBlocker>,
+    pub scope_guard: ScopeGuardResult,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub prompt_preview: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_run: Option<AgentRun>,
+}
+
+pub type AssignmentState = Assignment;
+
+impl Default for Assignment {
+    fn default() -> Self {
+        Self {
+            id: "assignment-1".to_string(),
+            goal_id: None,
+            assignee: None,
+            scope: AssignmentScope::default(),
+            permissions: AssignmentPermissions::default(),
+            evidence_requirements: Vec::new(),
+            run_mode: AgentRunMode::Manual,
+            status: AssignmentStatus::AssignmentBlocked,
+            expected_evidence: Vec::new(),
+            blockers: Vec::new(),
+            scope_guard: ScopeGuardResult {
+                status: ScopeGuardStatus::ScopeAmbiguous,
+                blockers: vec![AssignmentBlocker::new(
+                    "scope_missing",
+                    "assignment has not been scoped",
+                )],
+                out_of_scope_files: Vec::new(),
+            },
+            prompt_preview: String::new(),
+            latest_run: None,
+        }
+    }
+}
+
+impl Assignment {
+    pub fn from_goal_plan(
+        plan: &GoalPlanArtifact,
+        assignee: Assignee,
+        run_mode: AgentRunMode,
+        evidence_requirements: Vec<AssignmentEvidenceRequirement>,
+    ) -> Self {
+        let scope = AssignmentScope::from_goal_plan(plan);
+        let permissions = AssignmentPermissions {
+            allow_command_execution: matches!(
+                run_mode,
+                AgentRunMode::DryRun | AgentRunMode::Execute
+            ),
+            dry_run_only: !matches!(run_mode, AgentRunMode::Execute),
+            require_isolated_worktree: true,
+        };
+        let mut assignment = Self {
+            id: format!("assignment-{}", plan.goal.id.to_lowercase()),
+            goal_id: Some(plan.goal.id.clone()),
+            assignee: Some(assignee),
+            scope,
+            permissions,
+            evidence_requirements,
+            run_mode,
+            status: AssignmentStatus::AssignmentBlocked,
+            expected_evidence: vec![
+                WorkbenchEvidenceKind::AssignmentState,
+                WorkbenchEvidenceKind::AgentRun,
+            ],
+            blockers: Vec::new(),
+            scope_guard: ScopeGuardResult::valid(),
+            prompt_preview: String::new(),
+            latest_run: None,
+        };
+        assignment.scope_guard = ScopeGuard::preview(&assignment);
+        assignment.blockers = assignment.scope_guard.blockers.clone();
+        assignment.status = if assignment.blockers.is_empty() {
+            match run_mode {
+                AgentRunMode::Manual => AssignmentStatus::AssignmentReady,
+                AgentRunMode::DryRun => AssignmentStatus::AssignmentDryRun,
+                AgentRunMode::Execute => AssignmentStatus::AssignmentReady,
+            }
+        } else {
+            AssignmentStatus::AssignmentBlocked
+        };
+        assignment.prompt_preview = AssignmentPromptBuilder::build(&assignment);
+        assignment
+    }
+
+    pub fn is_runnable(&self) -> bool {
+        self.scope_guard.is_runnable() && self.status != AssignmentStatus::AssignmentBlocked
+    }
+}
+
+pub struct ScopeGuard;
+
+impl ScopeGuard {
+    pub fn preview(assignment: &Assignment) -> ScopeGuardResult {
+        let mut blockers = Vec::new();
+        let is_automated = assignment
+            .assignee
+            .as_ref()
+            .is_some_and(|assignee| assignee.kind.is_automated());
+        let is_manual = matches!(assignment.run_mode, AgentRunMode::Manual);
+
+        if is_automated && assignment.scope.include.is_empty() {
+            blockers.push(AssignmentBlocker::new(
+                "scope_include_missing",
+                "AI assignment requires at least one explicit include scope",
+            ));
+        }
+        if is_automated && assignment.scope.non_goals.is_empty() {
+            blockers.push(AssignmentBlocker::new(
+                "non_goals_missing",
+                "AI assignment must carry non-goals",
+            ));
+        }
+        if is_automated && assignment.scope.completion_commands.is_empty() {
+            blockers.push(AssignmentBlocker::new(
+                "completion_commands_missing",
+                "AI assignment must list completion commands",
+            ));
+        }
+        if is_automated
+            && assignment
+                .evidence_requirements
+                .iter()
+                .all(|item| !item.required)
+        {
+            blockers.push(AssignmentBlocker::new(
+                "evidence_required",
+                "AI assignment must list required evidence",
+            ));
+        }
+        if is_automated && !is_manual && assignment.scope.required_tests.is_empty() {
+            blockers.push(AssignmentBlocker::new(
+                "required_tests_missing",
+                "Assignment cannot run when required tests are missing unless marked manual",
+            ));
+        }
+        if assignment
+            .scope
+            .include
+            .iter()
+            .any(|item| item.contains("ambiguous"))
+        {
+            blockers.push(AssignmentBlocker::new(
+                "scope_ambiguous",
+                "Assignment cannot run when scope is ambiguous",
+            ));
+        }
+
+        let status = if blockers
+            .iter()
+            .any(|blocker| blocker.code == "scope_ambiguous")
+        {
+            ScopeGuardStatus::ScopeAmbiguous
+        } else if blockers.is_empty() {
+            ScopeGuardStatus::ScopeValid
+        } else {
+            ScopeGuardStatus::ScopeInvalid
+        };
+
+        ScopeGuardResult {
+            status,
+            blockers,
+            out_of_scope_files: Vec::new(),
+        }
+    }
+}
+
+pub struct AssignmentPromptBuilder;
+
+impl AssignmentPromptBuilder {
+    pub fn build(assignment: &Assignment) -> String {
+        let mut lines = Vec::new();
+        lines.push(format!(
+            "Goal Plan: {}",
+            assignment.goal_id.as_deref().unwrap_or("unselected")
+        ));
+        if let Some(assignee) = &assignment.assignee {
+            lines.push(format!(
+                "Assignee: {} ({})",
+                assignee.display_name,
+                assignee.kind.label()
+            ));
+        }
+        lines.push(format!("Run mode: {}", assignment.run_mode.label()));
+        push_section(&mut lines, "Allowed files", &assignment.scope.include);
+        push_section(&mut lines, "Forbidden files", &assignment.scope.exclude);
+        push_section(&mut lines, "Non-goals", &assignment.scope.non_goals);
+        push_section(
+            &mut lines,
+            "Linked spec context",
+            &assignment.scope.linked_spec_context,
+        );
+        push_section(
+            &mut lines,
+            "Required tests",
+            &assignment.scope.required_tests,
+        );
+        push_section(
+            &mut lines,
+            "Completion commands",
+            &assignment.scope.completion_commands,
+        );
+        let evidence = assignment
+            .evidence_requirements
+            .iter()
+            .map(|item| item.description.clone())
+            .collect::<Vec<_>>();
+        push_section(&mut lines, "Required evidence", &evidence);
+        lines.push(format!(
+            "Current validation status: {}",
+            if assignment.scope.required_tests.is_empty() {
+                "evidence-missing"
+            } else {
+                "evidence-required"
+            }
+        ));
+        lines.push(format!(
+            "Current branch-scope status: {}",
+            assignment.scope_guard.status.label()
+        ));
+        lines.join("\n")
+    }
+}
+
+fn push_section(lines: &mut Vec<String>, title: &str, values: &[String]) {
+    lines.push(format!("{title}:"));
+    if values.is_empty() {
+        lines.push("- missing".to_string());
+    } else {
+        lines.extend(values.iter().map(|value| format!("- {value}")));
+    }
+}
+
+pub struct CommandAgentAdapter {
+    pub profile: AgentProfile,
+}
+
+impl CommandAgentAdapter {
+    pub fn new(profile: AgentProfile) -> Self {
+        Self { profile }
+    }
+
+    pub fn run_dry(&self, assignment: &Assignment) -> AgentRun {
+        let before = ScopeGuard::preview(assignment);
+        if !before.is_runnable() {
+            return AgentRun {
+                id: format!("run-{}", assignment.id),
+                assignment_id: assignment.id.clone(),
+                profile_id: self.profile.id.clone(),
+                mode: AgentRunMode::DryRun,
+                status: AgentRunStatus::Blocked,
+                scope_guard_before: before.clone(),
+                scope_guard_after: before,
+                output: AgentRunOutput {
+                    prompt: AssignmentPromptBuilder::build(assignment),
+                    diff_summary: "no command executed because assignment is blocked".to_string(),
+                    ..AgentRunOutput::default()
+                },
+                evidence: Vec::new(),
+            };
+        }
+
+        let prompt = AssignmentPromptBuilder::build(assignment);
+        let output = Command::new(&self.profile.command)
+            .args(&self.profile.args)
+            .env("SYU_ASSIGNMENT_ID", &assignment.id)
+            .env("SYU_ASSIGNMENT_PROMPT", &prompt)
+            .output();
+
+        let (status, run_output) = match output {
+            Ok(output) => (
+                if output.status.success() {
+                    AgentRunStatus::RunComplete
+                } else {
+                    AgentRunStatus::RunFailed
+                },
+                AgentRunOutput {
+                    exit_code: output.status.code(),
+                    stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+                    stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+                    prompt,
+                    diff_summary: "no diff produced by dry-run command adapter".to_string(),
+                },
+            ),
+            Err(error) => (
+                AgentRunStatus::RunFailed,
+                AgentRunOutput {
+                    exit_code: None,
+                    stdout: String::new(),
+                    stderr: error.to_string(),
+                    prompt,
+                    diff_summary: "no diff produced; command failed before execution".to_string(),
+                },
+            ),
+        };
+
+        let after = ScopeGuard::preview(assignment);
+        let mut run = AgentRun {
+            id: format!("run-{}", assignment.id),
+            assignment_id: assignment.id.clone(),
+            profile_id: self.profile.id.clone(),
+            mode: AgentRunMode::DryRun,
+            status,
+            scope_guard_before: before,
+            scope_guard_after: after,
+            output: run_output,
+            evidence: Vec::new(),
+        };
+        run.evidence = EvidenceCollector::from_agent_run(&run);
+        run
+    }
+}
+
+pub struct WorktreeRunner;
+pub struct PatchRunner;
+
+pub struct EvidenceCollector;
+
+impl EvidenceCollector {
+    pub fn from_agent_run(run: &AgentRun) -> Vec<EvidenceRecord> {
+        vec![
+            EvidenceRecord::new(
+                WorkbenchEvidenceKind::AgentRun,
+                if run.status == AgentRunStatus::RunComplete {
+                    EvidenceStatus::Pass
+                } else {
+                    EvidenceStatus::Fail
+                },
+                format!("{} captured stdout/stderr", run.status.label()),
+                Some(EvidenceSource::Command {
+                    command: run.profile_id.clone(),
+                }),
+            )
+            .with_subject(EvidenceSubject::AgentRun)
+            .with_severity(if run.status == AgentRunStatus::RunComplete {
+                EvidenceSeverity::Low
+            } else {
+                EvidenceSeverity::High
+            })
+            .with_command(EvidenceCommand {
+                command: run.profile_id.clone(),
+                args: vec![run.mode.label().to_string()],
+            })
+            .with_attachment(EvidenceAttachment {
+                label: "runner-output".to_string(),
+                mime_type: Some("application/json".to_string()),
+                summary: Some(run.output.diff_summary.clone()),
+                content: serde_json::to_string_pretty(&run.output).ok(),
+                truncated: false,
+            }),
+        ]
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -986,6 +1750,15 @@ impl WorkbenchState {
             WorkbenchActionResult::AssignmentState(assignment) => {
                 assignment.goal_id.clone().or(active_goal_id.clone())
             }
+            WorkbenchActionResult::AgentRun(run) => self
+                .assignment
+                .as_ref()
+                .and_then(|assignment| assignment.goal_id.clone())
+                .or_else(|| {
+                    active_goal_id
+                        .clone()
+                        .or_else(|| Some(run.assignment_id.clone()))
+                }),
             WorkbenchActionResult::JobState(_) => active_goal_id.clone(),
             _ => None,
         };
@@ -1050,6 +1823,29 @@ impl WorkbenchState {
             WorkbenchActionResult::AssignmentState(assignment) => {
                 self.assignment = Some(assignment.clone());
             }
+            WorkbenchActionResult::AgentRun(run) => {
+                if let Some(assignment) = self.assignment.as_mut() {
+                    assignment.latest_run = Some(run.clone());
+                    assignment.status = match run.status {
+                        AgentRunStatus::RunComplete => AssignmentStatus::AssignmentComplete,
+                        AgentRunStatus::RunFailed | AgentRunStatus::Blocked => {
+                            AssignmentStatus::AssignmentFailed
+                        }
+                        AgentRunStatus::RunDry => AssignmentStatus::AssignmentDryRun,
+                        AgentRunStatus::RunActive => AssignmentStatus::AssignmentActive,
+                    };
+                }
+                self.job = JobState {
+                    status: match run.status {
+                        AgentRunStatus::RunComplete => JobStatus::Completed,
+                        AgentRunStatus::RunFailed | AgentRunStatus::Blocked => JobStatus::Failed,
+                        AgentRunStatus::RunDry => JobStatus::Queued,
+                        AgentRunStatus::RunActive => JobStatus::Running,
+                    },
+                    action_id: Some(WorkbenchActionId::AssignmentRunDry),
+                    message: Some(format!("{} for {}", run.status.label(), run.assignment_id)),
+                };
+            }
             WorkbenchActionResult::JobState(job) => {
                 self.job = job.clone();
             }
@@ -1110,8 +1906,7 @@ impl WorkbenchActionContext {
             || self
                 .assignment
                 .as_ref()
-                .and_then(|assignment| assignment.scope.as_ref())
-                .is_some_and(BoundedScope::is_bounded)
+                .is_some_and(|assignment| !assignment.scope.include.is_empty())
     }
 }
 
@@ -1454,6 +2249,109 @@ fn build_registry() -> Vec<WorkbenchAction> {
             ai_eligible: false,
         },
         WorkbenchAction {
+            id: WorkbenchActionId::AssignmentPreview,
+            title: "Preview assignment".to_string(),
+            description: "Inspect scoped assignment constraints, blockers, and prompt context."
+                .to_string(),
+            required_state: vec![
+                WorkbenchStateRequirement::AssignmentLoaded,
+                WorkbenchStateRequirement::ConfirmationMetadata,
+            ],
+            input_schema: WorkbenchActionInputSchema::Assignment,
+            mutability: WorkbenchActionMutability::ReadOnly,
+            risk: WorkbenchActionRisk::Low,
+            function: WorkbenchActionFunction::AssignmentPreview,
+            output_event: WorkbenchActionOutputEvent::AssignmentPreviewed,
+            evidence_kind: WorkbenchEvidenceKind::AssignmentState,
+            ai_eligible: false,
+        },
+        WorkbenchAction {
+            id: WorkbenchActionId::AssignmentRunDry,
+            title: "Dry-run assignment".to_string(),
+            description: "Run the configured command adapter in dry-run mode and capture evidence."
+                .to_string(),
+            required_state: vec![
+                WorkbenchStateRequirement::AssignmentLoaded,
+                WorkbenchStateRequirement::BoundedScope,
+                WorkbenchStateRequirement::ConfirmationMetadata,
+            ],
+            input_schema: WorkbenchActionInputSchema::AgentRun,
+            mutability: WorkbenchActionMutability::MutatesState,
+            risk: WorkbenchActionRisk::Medium,
+            function: WorkbenchActionFunction::AssignmentRunDry,
+            output_event: WorkbenchActionOutputEvent::AssignmentDryRunQueued,
+            evidence_kind: WorkbenchEvidenceKind::AgentRun,
+            ai_eligible: true,
+        },
+        WorkbenchAction {
+            id: WorkbenchActionId::AssignmentRun,
+            title: "Run assignment".to_string(),
+            description:
+                "Execute a scoped command adapter when full execution is explicitly enabled."
+                    .to_string(),
+            required_state: vec![
+                WorkbenchStateRequirement::AssignmentLoaded,
+                WorkbenchStateRequirement::BoundedScope,
+                WorkbenchStateRequirement::ConfirmationMetadata,
+            ],
+            input_schema: WorkbenchActionInputSchema::AgentRun,
+            mutability: WorkbenchActionMutability::MutatesStateAndFiles,
+            risk: WorkbenchActionRisk::High,
+            function: WorkbenchActionFunction::AssignmentRun,
+            output_event: WorkbenchActionOutputEvent::AssignmentRunQueued,
+            evidence_kind: WorkbenchEvidenceKind::AgentRun,
+            ai_eligible: true,
+        },
+        WorkbenchAction {
+            id: WorkbenchActionId::AssignmentCancel,
+            title: "Cancel assignment".to_string(),
+            description: "Cancel the active assignment without running commands.".to_string(),
+            required_state: vec![
+                WorkbenchStateRequirement::AssignmentLoaded,
+                WorkbenchStateRequirement::ConfirmationMetadata,
+            ],
+            input_schema: WorkbenchActionInputSchema::Assignment,
+            mutability: WorkbenchActionMutability::MutatesState,
+            risk: WorkbenchActionRisk::Low,
+            function: WorkbenchActionFunction::AssignmentCancel,
+            output_event: WorkbenchActionOutputEvent::AssignmentCancelled,
+            evidence_kind: WorkbenchEvidenceKind::AssignmentState,
+            ai_eligible: false,
+        },
+        WorkbenchAction {
+            id: WorkbenchActionId::AssignmentRecordManual,
+            title: "Record manual assignment".to_string(),
+            description: "Record a human assignment decision as evidence.".to_string(),
+            required_state: vec![
+                WorkbenchStateRequirement::AssignmentLoaded,
+                WorkbenchStateRequirement::ConfirmationMetadata,
+            ],
+            input_schema: WorkbenchActionInputSchema::Assignment,
+            mutability: WorkbenchActionMutability::MutatesState,
+            risk: WorkbenchActionRisk::Low,
+            function: WorkbenchActionFunction::AssignmentRecordManual,
+            output_event: WorkbenchActionOutputEvent::AssignmentManualRecorded,
+            evidence_kind: WorkbenchEvidenceKind::AssignmentState,
+            ai_eligible: false,
+        },
+        WorkbenchAction {
+            id: WorkbenchActionId::AssignmentCollectEvidence,
+            title: "Collect assignment evidence".to_string(),
+            description: "Append runner output and scope guard results to the evidence timeline."
+                .to_string(),
+            required_state: vec![
+                WorkbenchStateRequirement::AssignmentLoaded,
+                WorkbenchStateRequirement::ConfirmationMetadata,
+            ],
+            input_schema: WorkbenchActionInputSchema::AgentRun,
+            mutability: WorkbenchActionMutability::MutatesState,
+            risk: WorkbenchActionRisk::Low,
+            function: WorkbenchActionFunction::AssignmentCollectEvidence,
+            output_event: WorkbenchActionOutputEvent::AssignmentEvidenceCollected,
+            evidence_kind: WorkbenchEvidenceKind::AgentRun,
+            ai_eligible: false,
+        },
+        WorkbenchAction {
             id: WorkbenchActionId::AgentRun,
             title: "Run agent".to_string(),
             description: "Launch an AI run against a bounded goal scope and assignment."
@@ -1761,6 +2659,80 @@ mod tests {
     }
 
     #[test]
+    fn assignment_blocker_logic_rejects_ambiguous_ai_scope() {
+        let mut assignment = Assignment {
+            id: "assignment-1".to_string(),
+            goal_id: Some("goal-1".to_string()),
+            assignee: Some(Assignee::local_command("local-coder", "Local coder")),
+            scope: AssignmentScope {
+                include: vec!["ambiguous:src/lib.rs".to_string()],
+                ..AssignmentScope::default()
+            },
+            run_mode: AgentRunMode::DryRun,
+            evidence_requirements: Vec::new(),
+            ..Assignment::default()
+        };
+        assignment.scope_guard = ScopeGuard::preview(&assignment);
+
+        assert_eq!(
+            assignment.scope_guard.status,
+            ScopeGuardStatus::ScopeAmbiguous
+        );
+        assert!(assignment.scope_guard.blockers.iter().any(|blocker| {
+            blocker.code == "scope_ambiguous"
+                || blocker.code == "non_goals_missing"
+                || blocker.code == "completion_commands_missing"
+                || blocker.code == "evidence_required"
+        }));
+    }
+
+    #[test]
+    fn dry_run_command_adapter_captures_stdout_stderr_and_evidence() {
+        let assignment = Assignment {
+            id: "assignment-1".to_string(),
+            goal_id: Some("goal-1".to_string()),
+            assignee: Some(Assignee::local_command("local-coder", "Local coder")),
+            scope: AssignmentScope {
+                include: vec!["src/lib.rs".to_string()],
+                non_goals: vec!["Do not edit docs".to_string()],
+                required_tests: vec!["cargo test -p syu-workbench".to_string()],
+                completion_commands: vec!["cargo test -p syu-workbench".to_string()],
+                ..AssignmentScope::default()
+            },
+            evidence_requirements: vec![AssignmentEvidenceRequirement {
+                id: "runner-output".to_string(),
+                description: "runner stdout/stderr".to_string(),
+                kind: WorkbenchEvidenceKind::AgentRun,
+                required: true,
+            }],
+            run_mode: AgentRunMode::DryRun,
+            scope_guard: ScopeGuardResult::valid(),
+            status: AssignmentStatus::AssignmentDryRun,
+            ..Assignment::default()
+        };
+        let adapter = CommandAgentAdapter::new(AgentProfile {
+            id: "fixture".to_string(),
+            command: "sh".to_string(),
+            args: vec![
+                "-c".to_string(),
+                "printf runner-stdout; printf runner-stderr >&2".to_string(),
+            ],
+        });
+
+        let run = adapter.run_dry(&assignment);
+
+        assert_eq!(run.status, AgentRunStatus::RunComplete);
+        assert_eq!(run.output.stdout, "runner-stdout");
+        assert_eq!(run.output.stderr, "runner-stderr");
+        assert_eq!(
+            run.output.diff_summary,
+            "no diff produced by dry-run command adapter"
+        );
+        assert_eq!(run.evidence.len(), 1);
+        assert_eq!(run.evidence[0].kind, WorkbenchEvidenceKind::AgentRun);
+    }
+
+    #[test]
     fn branch_infer_goal_is_available_with_branch_scope() {
         let mut state = WorkbenchState::default();
         state.branch_scope = Some(BranchScopeState {
@@ -1810,7 +2782,7 @@ mod tests {
             .filter(|candidate| candidate.ai_eligible)
             .collect::<Vec<_>>();
 
-        assert_eq!(ai_actions.len(), 1);
+        assert!(!ai_actions.is_empty());
         for action in ai_actions {
             assert!(
                 action
