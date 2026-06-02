@@ -19,10 +19,14 @@ use std::{
     fs,
     net::{IpAddr, SocketAddr},
     path::{Component, Path as FsPath, PathBuf},
+    process::Command,
     sync::{Arc, OnceLock},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use syu_app_ui::{AppShell, WorkbenchUiState};
+use syu_app_ui::{
+    AppShell, HelpTopic, Locale, WorkbenchActionRunPreview, WorkbenchPane, WorkbenchUiState,
+    model::{CliCommandPreview, cli_command_catalog},
+};
 use syu_code_intel::{
     BranchScopeEvidence, BranchScopeReport, ChangedFileReport, OwnershipStatus,
     resolve_git_range_changed_files,
@@ -751,7 +755,7 @@ pub struct GoalCheckRequest {
     pub range: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AssignmentRequest {
     pub assignee: AssignmentAssignee,
     pub scope: BoundedScope,
@@ -875,7 +879,7 @@ impl WorkbenchServer {
                         state.workspace = Some(WorkspaceSnapshot {
                             workspace_root: config.workspace_root.clone(),
                             spec_root: config.spec_root.clone(),
-                            branch: None,
+                            branch: current_git_branch(&config.workspace_root),
                             validation_summary: Some(format!("{item_count} items")),
                         });
                     }
@@ -919,32 +923,421 @@ impl WorkbenchServer {
     }
 }
 
-async fn workbench_index(State(server): State<WorkbenchServer>) -> Html<String> {
+async fn workbench_index(
+    State(server): State<WorkbenchServer>,
+    Query(view): Query<WorkbenchViewQuery>,
+) -> Html<String> {
     let state = server.inner.state.read().await.clone();
-    let ui = WorkbenchUiState::from_state(shared_workbench_state(state));
+    let mut ui = WorkbenchUiState::from_state(shared_workbench_state(state));
+    if let Some(query) = view.query {
+        ui.set_query(query);
+    }
+    if let Some(locale) = view.lang.as_deref().and_then(Locale::from_slug) {
+        ui.set_locale(locale);
+    }
+    if let Some(help_topic) = view.help.as_deref().and_then(HelpTopic::from_slug) {
+        ui.set_help_topic(Some(help_topic));
+    }
+    if let Some(action) = view.action.and_then(shared_action_id) {
+        let _ = ui.select_action(action);
+        if view.run.as_deref() == Some("1")
+            && let Some(preview) = run_workbench_action_preview(
+                &server,
+                action.label(),
+                view.action_input.as_deref(),
+                view.action_confirm.as_deref() == Some("1"),
+            )
+            .await
+        {
+            ui.preview = Some(preview);
+        }
+    }
+    if let Some(command_id) = view.cli {
+        let _ = ui.select_cli_command(command_id.clone());
+        if let Some(preview) = run_cli_command_preview(
+            &command_id,
+            server.inner.config.workspace_root.as_path(),
+            view.cli_arg.as_deref(),
+            view.cli_confirm.as_deref() == Some("1"),
+        ) {
+            ui.cli_preview = Some(preview);
+        }
+    }
+    if let Some(goal_id) = view.goal {
+        ui.payload.state.goals.selected_goal_id = Some(goal_id);
+    }
+    let active_pane = view
+        .pane
+        .as_deref()
+        .and_then(WorkbenchPane::from_slug)
+        .unwrap_or(WorkbenchPane::Pulse);
+    let sidebar_open = view
+        .sidebar
+        .as_deref()
+        .map(|value| value != "0" && value != "false")
+        .unwrap_or(true);
+    let locale = ui.locale;
     let shell = render_element(rsx! {
-        AppShell { ui }
+        AppShell { ui, active_pane, sidebar_open }
     });
-    Html(workbench_document(shell))
+    Html(workbench_document(shell, locale))
 }
 
-fn workbench_document(shell: String) -> String {
+fn workbench_document(shell: String, locale: Locale) -> String {
     format!(
         r#"<!doctype html>
-<html lang="en">
+<html lang="{lang}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <meta name="referrer" content="same-origin">
   <title>Syu Workbench</title>
+  <style>
+    form:focus-within .command-palette-results {{ display: grid; }}
+    form .command-palette-results:empty {{ display: none; }}
+    summary::-webkit-details-marker {{ display: none; }}
+  </style>
   <link rel="stylesheet" href="/assets/tailwind.css">
 </head>
-<body class="bg-background text-foreground">
+<body class="bg-background text-foreground antialiased">
   <div id="syu-workbench-root" data-ui="dioxus-ssr">{shell}</div>
+  <script>
+    (() => {{
+      const palettes = document.querySelectorAll('[data-command-palette]');
+      for (const palette of palettes) {{
+        const input = palette.querySelector('[data-command-input]');
+        const items = Array.from(palette.querySelectorAll('[data-command-item]'));
+        if (!input || items.length === 0) continue;
+        const applyFilter = () => {{
+          const query = input.value.trim().toLowerCase();
+          const scored = [];
+          let visible = 0;
+          for (const item of items) {{
+            const text = (item.dataset.commandText || item.textContent || '').toLowerCase();
+            const id = (item.dataset.commandId || '').toLowerCase();
+            const title = (item.dataset.commandTitle || '').toLowerCase();
+            const match = query === '' || text.includes(query);
+            item.hidden = !match;
+            if (match) {{
+              const score = query === '' ? 3 : id.includes(query) ? 0 : title.includes(query) ? 1 : 2;
+              scored.push([score, item]);
+              visible += 1;
+            }}
+          }}
+          scored.sort((left, right) => left[0] - right[0]);
+          for (const [, item] of scored) item.parentElement.appendChild(item);
+          palette.dataset.empty = visible === 0 ? 'true' : 'false';
+        }};
+        input.addEventListener('input', applyFilter);
+        input.addEventListener('keydown', (event) => {{
+          if (event.key !== 'Enter') return;
+          const first = items.find((item) => !item.hidden && !item.classList.contains('opacity-60'));
+          if (first) {{
+            event.preventDefault();
+            first.click();
+          }}
+        }});
+        applyFilter();
+      }}
+    }})();
+  </script>
 </body>
-</html>"#
+</html>"#,
+        shell = shell,
+        lang = locale.slug()
     )
+}
+
+async fn run_workbench_action_preview(
+    server: &WorkbenchServer,
+    action_id: &str,
+    action_input: Option<&str>,
+    confirmed: bool,
+) -> Option<WorkbenchActionRunPreview> {
+    let action_input = action_input.unwrap_or("").trim();
+    if workbench_action_needs_confirmation(action_id) && !confirmed {
+        return shared_action_id(action_id.to_string()).map(|action| WorkbenchActionRunPreview {
+            action_id: action,
+            title: action_id.replace('.', " "),
+            result_summary:
+                "This command can change Workbench state or files. Confirm before running."
+                    .to_string(),
+            evidence_summary: "confirmation required".to_string(),
+        });
+    }
+    let body = default_workbench_action_body(server, action_id, action_input).await;
+    let missing_input = body.is_none();
+    let body = body.unwrap_or_else(|| serde_json::json!({}));
+    if missing_input {
+        return shared_action_id(action_id.to_string()).map(|action| WorkbenchActionRunPreview {
+            action_id: action,
+            title: action_id.replace('.', " "),
+            result_summary: "This command needs request, goal, assignment, or confirmation input before it can run.".to_string(),
+            evidence_summary: "input required".to_string(),
+        });
+    }
+
+    let action = shared_action_id(action_id.to_string())?;
+    let response = execute_action(server, action_id, body).await;
+    let (result_summary, evidence_summary) = match response {
+        Ok(response) => (
+            truncate_cli_output(
+                &serde_json::to_string_pretty(&response.result).unwrap_or_default(),
+            ),
+            format!("{:?}", response.event),
+        ),
+        Err(error) => (
+            format!("failed to run {action_id}: {error}"),
+            "failed".to_string(),
+        ),
+    };
+    Some(WorkbenchActionRunPreview {
+        action_id: action,
+        title: action_id.replace('.', " "),
+        result_summary,
+        evidence_summary,
+    })
+}
+
+async fn default_workbench_action_body(
+    server: &WorkbenchServer,
+    action_id: &str,
+    action_input: &str,
+) -> Option<Value> {
+    let state = server.inner.state.read().await;
+    match action_id {
+        "request.new" => {
+            if action_input.is_empty() {
+                return None;
+            }
+            serde_json::to_value(RequestArtifact {
+                version: 1,
+                request: action_input.to_string(),
+                context: Default::default(),
+            })
+            .ok()
+        }
+        "branch.scope" | "branch.infer_goal" | "trace.range" | "relate.range" | "spec.impact" => {
+            Some(serde_json::json!({"range": "origin/main...HEAD"}))
+        }
+        "validation.run" | "history.show" => Some(serde_json::json!({})),
+        "request.classify" | "request.scope" | "request.scaffold" | "request.plan" => state
+            .request
+            .as_ref()
+            .and_then(|request| request.artifact.clone())
+            .or_else(|| {
+                (!action_input.is_empty()).then(|| RequestArtifact {
+                    version: 1,
+                    request: action_input.to_string(),
+                    context: Default::default(),
+                })
+            })
+            .and_then(|request| serde_json::to_value(request).ok()),
+        "goal.check" | "goal.test_select" => state
+            .goals
+            .active
+            .iter()
+            .find_map(|goal| goal.goal_plan.clone())
+            .and_then(|plan| serde_json::to_value(plan).ok()),
+        "assignment.create" => {
+            if !state.goals.has_active_goal_plan() {
+                return None;
+            }
+            serde_json::to_value(AssignmentRequest {
+                assignee: if action_input.trim().eq_ignore_ascii_case("ai") {
+                    AssignmentAssignee::Ai {
+                        model: "local".to_string(),
+                    }
+                } else {
+                    AssignmentAssignee::Human {
+                        name: if action_input.trim().is_empty() {
+                            "Reviewer".to_string()
+                        } else {
+                            action_input.trim().to_string()
+                        },
+                    }
+                },
+                scope: BoundedScope {
+                    range: Some("origin/main...HEAD".to_string()),
+                    max_files: Some(12),
+                    ..BoundedScope::default()
+                },
+                expected_evidence: vec![WorkbenchEvidenceKind::ValidationReport],
+            })
+            .ok()
+        }
+        "assignment.preview"
+        | "assignment.run_dry"
+        | "assignment.run"
+        | "assignment.cancel"
+        | "assignment.record_manual"
+        | "assignment.collect_evidence" => state.assignment.as_ref().map(|_| serde_json::json!({})),
+        "agent.run" => state.assignment.as_ref().map(|_| serde_json::json!({})),
+        _ => None,
+    }
+}
+
+fn workbench_action_needs_confirmation(action_id: &str) -> bool {
+    matches!(
+        action_id,
+        "request.new"
+            | "request.scaffold"
+            | "request.plan"
+            | "branch.infer_goal"
+            | "assignment.create"
+            | "assignment.run_dry"
+            | "assignment.run"
+            | "assignment.cancel"
+            | "assignment.record_manual"
+            | "assignment.collect_evidence"
+            | "agent.run"
+    )
+}
+
+fn run_cli_command_preview(
+    command_id: &str,
+    workspace_root: &FsPath,
+    cli_arg: Option<&str>,
+    confirmed: bool,
+) -> Option<CliCommandPreview> {
+    let command = cli_command_catalog()
+        .iter()
+        .find(|command| command.id == command_id)?;
+    let cli_arg = cli_arg.unwrap_or("").trim();
+    if command.requires_input && cli_arg.is_empty() {
+        return Some(CliCommandPreview {
+            id: command.id.to_string(),
+            title: command.title.to_string(),
+            invocation: command.invocation.to_string(),
+            result_summary: format!("{} needs input before it can run.", command.invocation),
+            evidence_summary: "input required".to_string(),
+            requires_input: command.requires_input,
+            mutates_files: command.mutates_files,
+        });
+    }
+    if command.mutates_files && !confirmed {
+        return Some(CliCommandPreview {
+            id: command.id.to_string(),
+            title: command.title.to_string(),
+            invocation: command.invocation.to_string(),
+            result_summary: format!(
+                "{} needs confirmation before writing files.",
+                command.invocation
+            ),
+            evidence_summary: "confirmation required".to_string(),
+            requires_input: command.requires_input,
+            mutates_files: command.mutates_files,
+        });
+    }
+
+    let args = cli_command_args(command.id, cli_arg)?;
+    if matches!(command.id, "cli.workbench" | "cli.lsp") {
+        return Some(CliCommandPreview {
+            id: command.id.to_string(),
+            title: command.title.to_string(),
+            invocation: command.invocation.to_string(),
+            result_summary: "Already represented by this Workbench session.".to_string(),
+            evidence_summary: "running".to_string(),
+            requires_input: command.requires_input,
+            mutates_files: command.mutates_files,
+        });
+    }
+
+    let output = Command::new(std::env::current_exe().ok()?)
+        .args(&args)
+        .current_dir(workspace_root)
+        .output();
+    let (result_summary, evidence_summary) = match output {
+        Ok(output) => {
+            let status = output
+                .status
+                .code()
+                .map_or_else(|| "signal".to_string(), |code| format!("exit {code}"));
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let body = if stdout.trim().is_empty() {
+                stderr.trim().to_string()
+            } else {
+                stdout.trim().to_string()
+            };
+            (truncate_cli_output(&body), status)
+        }
+        Err(error) => (
+            format!("failed to run {}: {error}", command.invocation),
+            "failed".to_string(),
+        ),
+    };
+
+    Some(CliCommandPreview {
+        id: command.id.to_string(),
+        title: command.title.to_string(),
+        invocation: if cli_arg.is_empty() {
+            command.invocation.to_string()
+        } else {
+            format!("{} · {}", command.invocation, cli_arg)
+        },
+        result_summary,
+        evidence_summary,
+        requires_input: command.requires_input,
+        mutates_files: command.mutates_files,
+    })
+}
+
+fn cli_command_args(command_id: &str, cli_arg: &str) -> Option<Vec<String>> {
+    let args = match command_id {
+        "cli.browse" => vec!["browse", ".", "--non-interactive"],
+        "cli.list" => vec!["list"],
+        "cli.audit" => vec!["audit", "."],
+        "cli.doctor" => vec!["doctor", "."],
+        "cli.validate" => vec!["validate", "."],
+        "cli.report" => vec!["report", "."],
+        "cli.templates" => vec!["templates"],
+        "cli.task.infer" => vec!["task", "infer", "--range", "origin/main...HEAD"],
+        "cli.workbench" | "cli.lsp" => {
+            return Some(Vec::new());
+        }
+        "cli.show" => vec!["show", cli_arg],
+        "cli.search" => vec!["search", cli_arg],
+        "cli.log" => vec!["log", cli_arg],
+        "cli.explain" => vec!["explain", cli_arg],
+        "cli.relate" => vec!["relate", cli_arg],
+        "cli.trace" => vec!["trace", cli_arg],
+        "cli.completion" => vec!["completion", cli_arg],
+        "cli.task.classify" => vec!["task", "classify", cli_arg],
+        "cli.task.scope" => vec!["task", "scope", cli_arg],
+        "cli.task.scaffold" => vec!["task", "scaffold", cli_arg],
+        "cli.task.plan" => vec!["task", "plan", cli_arg],
+        "cli.task.test_select" => vec!["task", "test-select", cli_arg],
+        "cli.task.check" => vec!["task", "check", cli_arg],
+        "cli.add" => {
+            let parts = cli_arg.split_whitespace().collect::<Vec<_>>();
+            if parts.len() < 2 {
+                return Some(
+                    vec!["add", "--help"]
+                        .into_iter()
+                        .map(String::from)
+                        .collect(),
+                );
+            }
+            let mut args = vec!["add".to_string()];
+            args.extend(parts.into_iter().map(String::from));
+            return Some(args);
+        }
+        "cli.init" => vec!["init", "."],
+        _ => return None,
+    };
+    Some(args.into_iter().map(String::from).collect())
+}
+
+fn truncate_cli_output(output: &str) -> String {
+    const LIMIT: usize = 1200;
+    if output.chars().count() <= LIMIT {
+        return output.to_string();
+    }
+    let mut truncated = output.chars().take(LIMIT).collect::<String>();
+    truncated.push_str("\n...");
+    truncated
 }
 
 async fn workbench_css() -> Response {
@@ -1702,7 +2095,7 @@ fn initial_state(workspace: &BrowserWorkspace, config: &WorkbenchLaunchConfig) -
         workspace: Some(WorkspaceSnapshot {
             workspace_root: config.workspace_root.clone(),
             spec_root: config.spec_root.clone(),
-            branch: None,
+            branch: current_git_branch(&config.workspace_root),
             validation_summary: Some(format!("{} items", workspace.item_index.len())),
         }),
         request: None,
@@ -1718,6 +2111,21 @@ fn initial_state(workspace: &BrowserWorkspace, config: &WorkbenchLaunchConfig) -
             scope_token: None,
         }),
     }
+}
+
+fn current_git_branch(workspace_root: &FsPath) -> Option<String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(workspace_root)
+        .arg("branch")
+        .arg("--show-current")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    (!branch.is_empty()).then_some(branch)
 }
 
 fn collect_source_documents(spec_root: &FsPath) -> Result<Vec<SourceDocument>> {
@@ -2142,6 +2550,14 @@ async fn execute_action(
             let outcome = classify_request(server, &request).await;
             let classification = outcome.classification;
             let request_text = outcome.request.clone();
+            {
+                let mut state = server.inner.state.write().await;
+                let request_state = state
+                    .request
+                    .get_or_insert_with(ActiveRequestState::default);
+                request_state.artifact = Some(request.clone());
+                request_state.classification = Some(outcome.clone());
+            }
             ActionRunResponse {
                 action_id: action_id.to_string(),
                 event: WorkbenchEvent::RequestClassified {
@@ -2154,6 +2570,14 @@ async fn execute_action(
         "request.scope" => {
             let request = request.context("request artifact required")?;
             let outcome = scope_request(server, &request).await;
+            {
+                let mut state = server.inner.state.write().await;
+                let request_state = state
+                    .request
+                    .get_or_insert_with(ActiveRequestState::default);
+                request_state.artifact = Some(request.clone());
+                request_state.scope = Some(outcome.clone());
+            }
             ActionRunResponse {
                 action_id: action_id.to_string(),
                 event: WorkbenchEvent::RequestScoped {
@@ -2166,6 +2590,14 @@ async fn execute_action(
         "request.scaffold" => {
             let request = request.context("request artifact required")?;
             let plan = scaffold_request(server, &request).await;
+            {
+                let mut state = server.inner.state.write().await;
+                let request_state = state
+                    .request
+                    .get_or_insert_with(ActiveRequestState::default);
+                request_state.artifact = Some(request.clone());
+                request_state.scaffold = Some(plan.clone());
+            }
             ActionRunResponse {
                 action_id: action_id.to_string(),
                 event: WorkbenchEvent::RequestScaffolded {
@@ -2179,11 +2611,24 @@ async fn execute_action(
             let plan = goal_plan_from_request(
                 server,
                 &RequestPlanRequest {
-                    request,
+                    request: request.clone(),
                     request_path: None,
                 },
             )
             .await;
+            {
+                let mut state = server.inner.state.write().await;
+                let request_state = state
+                    .request
+                    .get_or_insert_with(ActiveRequestState::default);
+                request_state.artifact = Some(request.clone());
+                state.goals.selected_goal_id = Some(plan.goal.id.clone());
+                state.goals.active.push(ActiveGoalState {
+                    goal_id: plan.goal.id.clone(),
+                    goal_plan: Some(plan.clone()),
+                    ..ActiveGoalState::default()
+                });
+            }
             ActionRunResponse {
                 action_id: action_id.to_string(),
                 event: WorkbenchEvent::GoalPlanGenerated {
@@ -2209,6 +2654,147 @@ async fn execute_action(
                     changed_files: report.changed_files.len(),
                 },
                 result: serde_json::to_value(report)?,
+            }
+        }
+        "trace.range" | "relate.range" | "spec.impact" => {
+            let range = body
+                .get("range")
+                .and_then(Value::as_str)
+                .unwrap_or("origin/main...HEAD");
+            let report = build_branch_scope(&server.inner.config.workspace_root, range).await?;
+            {
+                let mut state = server.inner.state.write().await;
+                state.branch_scope = Some(report.clone());
+                state.evidence_timeline.append(evidence_entry(
+                    WorkbenchEvidenceKind::BranchScopeReport,
+                    EvidenceStatus::Pass,
+                    format!("{action_id} refreshed branch impact"),
+                    None,
+                    Some(action_id.to_string()),
+                    Some(EvidenceSource::Action {
+                        action_id: Some(action_id.to_string()),
+                        action_label: Some(action_id.to_string()),
+                    }),
+                    vec![json_attachment(&report)],
+                ));
+            }
+            ActionRunResponse {
+                action_id: action_id.to_string(),
+                event: WorkbenchEvent::BranchScopeUpdated {
+                    range: range.to_string(),
+                    changed_files: report.changed_files.len(),
+                },
+                result: serde_json::to_value(report)?,
+            }
+        }
+        "branch.infer_goal" => {
+            let range = body
+                .get("range")
+                .and_then(Value::as_str)
+                .unwrap_or("origin/main...HEAD");
+            let report = if let Some(report) = {
+                let state = server.inner.state.read().await;
+                state.branch_scope.clone()
+            } {
+                report
+            } else {
+                build_branch_scope(&server.inner.config.workspace_root, range).await?
+            };
+            let plan = GoalPlanArtifact {
+                version: 1,
+                kind: "syu.goal_plan".to_string(),
+                request_path: Some(format!("branch:{range}")),
+                request: Some(format!("Infer goal from {range}")),
+                classification: Some(RequestClassification::Change.label().to_string()),
+                goal: GoalPlanGoal {
+                    id: "GOAL-BRANCH-001".to_string(),
+                    title: "Infer goal from branch".to_string(),
+                    statement: format!(
+                        "Review {} changed files from {range}",
+                        report.changed_files.len()
+                    ),
+                    non_goals: vec!["Do not widen scope without confirmation".to_string()],
+                    inferred: true,
+                },
+                source: GoalPlanSource {
+                    mode: GoalPlanSourceMode::DiffInferred,
+                    range: Some(range.to_string()),
+                    confidence: Some(GoalPlanConfidence::Medium),
+                    evidence: Some(GoalPlanSourceEvidence {
+                        changed_files: report
+                            .changed_files
+                            .iter()
+                            .map(|file| file.file.clone())
+                            .collect(),
+                        ..GoalPlanSourceEvidence::default()
+                    }),
+                    ..GoalPlanSource::default()
+                },
+                spec_mapping: GoalPlanSpecMapping {
+                    persistent_items: GoalPlanPersistentItems::default(),
+                    spec_updates: Default::default(),
+                    spec_updates_required: false,
+                    spec_update_reasons: Vec::new(),
+                },
+                implementation_plan: GoalPlanImplementationPlan {
+                    confidence: Some(GoalPlanConfidence::Medium),
+                    scope: GoalPlanScope {
+                        include: report
+                            .changed_files
+                            .iter()
+                            .map(|file| GoalPlanScopeInclude::Pattern(file.file.clone()))
+                            .collect(),
+                        exclude: vec!["target/**".to_string(), "docs/generated/**".to_string()],
+                    },
+                    steps: vec![
+                        "Inspect branch scope".to_string(),
+                        "Confirm linked requirements".to_string(),
+                    ],
+                },
+                test_plan: GoalPlanTestPlan {
+                    selection_mode: GoalPlanSelectionMode::Minimal,
+                    confidence: Some(GoalPlanConfidence::Medium),
+                    required_tests: BTreeMap::new(),
+                    suggested_tests: BTreeMap::new(),
+                },
+                coverage: GoalPlanCoverage {
+                    mode: GoalPlanCoverageMode::ChangedLines,
+                    threshold: 100,
+                    include: Vec::new(),
+                    exclude: Vec::new(),
+                },
+                completion: GoalPlanCompletion {
+                    must_pass: vec!["syu validate .".to_string()],
+                },
+                warnings: Vec::new(),
+            };
+            {
+                let mut state = server.inner.state.write().await;
+                state.goals.selected_goal_id = Some(plan.goal.id.clone());
+                state.goals.active.push(ActiveGoalState {
+                    goal_id: plan.goal.id.clone(),
+                    goal_plan: Some(plan.clone()),
+                    ..ActiveGoalState::default()
+                });
+                state.evidence_timeline.append(evidence_entry(
+                    WorkbenchEvidenceKind::GoalPlanArtifact,
+                    EvidenceStatus::Pass,
+                    format!("goal inferred from {range}"),
+                    Some(plan.goal.id.clone()),
+                    Some(action_id.to_string()),
+                    Some(EvidenceSource::Action {
+                        action_id: Some(action_id.to_string()),
+                        action_label: Some(action_id.to_string()),
+                    }),
+                    vec![json_attachment(&plan)],
+                ));
+            }
+            ActionRunResponse {
+                action_id: action_id.to_string(),
+                event: WorkbenchEvent::GoalPlanGenerated {
+                    goal_id: plan.goal.id.clone(),
+                },
+                result: serde_json::to_value(plan)?,
             }
         }
         "goal.check" => {
@@ -2309,18 +2895,101 @@ async fn execute_action(
         "assignment.create" => {
             let assignment = serde_json::from_value::<AssignmentRequest>(body.clone())
                 .context("assignment request required")?;
+            let goal_id = {
+                let state = server.inner.state.read().await;
+                state
+                    .goals
+                    .selected_goal_id
+                    .clone()
+                    .or_else(|| state.goals.active.first().map(|goal| goal.goal_id.clone()))
+                    .unwrap_or_else(|| "goal-1".to_string())
+            };
             let state = AssignmentState {
-                goal_id: None,
+                goal_id: Some(goal_id.clone()),
                 assignee: Some(assignment.assignee),
                 scope: Some(assignment.scope),
                 expected_evidence: assignment.expected_evidence,
             };
+            {
+                let mut workbench_state = server.inner.state.write().await;
+                workbench_state.assignment = Some(state.clone());
+                workbench_state.evidence_timeline.append(evidence_entry(
+                    WorkbenchEvidenceKind::AssignmentState,
+                    EvidenceStatus::Pass,
+                    format!("assignment created for {goal_id}"),
+                    Some(goal_id.clone()),
+                    Some(action_id.to_string()),
+                    Some(EvidenceSource::Action {
+                        action_id: Some(action_id.to_string()),
+                        action_label: Some(action_id.to_string()),
+                    }),
+                    vec![json_attachment(&state)],
+                ));
+            }
             ActionRunResponse {
                 action_id: action_id.to_string(),
-                event: WorkbenchEvent::AssignmentCreated {
-                    goal_id: "goal-1".to_string(),
-                },
+                event: WorkbenchEvent::AssignmentCreated { goal_id },
                 result: serde_json::to_value(state)?,
+            }
+        }
+        "assignment.preview" => {
+            let assignment = {
+                let state = server.inner.state.read().await;
+                state.assignment.clone().context("assignment required")?
+            };
+            ActionRunResponse {
+                action_id: action_id.to_string(),
+                event: WorkbenchEvent::EvidenceAdded {
+                    kind: "assignment".to_string(),
+                    summary: "assignment previewed".to_string(),
+                },
+                result: serde_json::to_value(assignment)?,
+            }
+        }
+        "assignment.run_dry"
+        | "assignment.run"
+        | "assignment.cancel"
+        | "assignment.record_manual"
+        | "assignment.collect_evidence" => {
+            let assignment = {
+                let state = server.inner.state.read().await;
+                state.assignment.clone().context("assignment required")?
+            };
+            let status = if action_id == "assignment.cancel" {
+                "cancelled"
+            } else if action_id == "assignment.run" || action_id == "assignment.run_dry" {
+                "completed"
+            } else {
+                "recorded"
+            };
+            {
+                let mut state = server.inner.state.write().await;
+                state.evidence_timeline.append(evidence_entry(
+                    WorkbenchEvidenceKind::AssignmentState,
+                    EvidenceStatus::Pass,
+                    format!("{action_id} {status}"),
+                    assignment.goal_id.clone(),
+                    Some(action_id.to_string()),
+                    Some(EvidenceSource::Action {
+                        action_id: Some(action_id.to_string()),
+                        action_label: Some(action_id.to_string()),
+                    }),
+                    vec![json_attachment(&assignment)],
+                ));
+                if action_id == "assignment.cancel" {
+                    state.assignment = None;
+                }
+            }
+            ActionRunResponse {
+                action_id: action_id.to_string(),
+                event: WorkbenchEvent::EvidenceAdded {
+                    kind: "assignment".to_string(),
+                    summary: format!("{action_id} {status}"),
+                },
+                result: serde_json::json!({
+                    "status": status,
+                    "assignment": assignment,
+                }),
             }
         }
         "agent.run" => {
@@ -2370,6 +3039,20 @@ async fn execute_action(
                 action_id: action_id.to_string(),
                 event: WorkbenchEvent::JobCompleted { job_id },
                 result: serde_json::json!({"status": "completed"}),
+            }
+        }
+        "history.show" => {
+            let timeline = {
+                let state = server.inner.state.read().await;
+                state.evidence_timeline.clone()
+            };
+            ActionRunResponse {
+                action_id: action_id.to_string(),
+                event: WorkbenchEvent::EvidenceAdded {
+                    kind: "history".to_string(),
+                    summary: format!("{} evidence entries", timeline.entries.len()),
+                },
+                result: serde_json::to_value(timeline)?,
             }
         }
         "validation.run" => ActionRunResponse {
@@ -2476,9 +3159,10 @@ mod tests {
         assert!(html.contains("Syu Workbench"));
         assert!(html.contains("/assets/tailwind.css"));
         assert!(html.contains("syu-workbench-root"));
-        assert!(html.contains("Workbench Pulse"));
-        assert!(html.contains("Command Palette"));
-        assert!(html.contains("request.classify"));
+        assert!(html.contains("Syu"));
+        assert!(!html.contains("navigation"));
+        assert!(html.contains("Type a command"));
+        assert!(html.contains("data-command-palette"));
         assert!(!html.contains("Browser/server mode exposes the local Workbench API"));
     }
 
@@ -2537,8 +3221,10 @@ mod tests {
         .await;
 
         assert_eq!(root_status, StatusCode::OK);
-        assert!(root_html.contains("Command Palette"));
-        assert!(root_html.contains("request.classify"));
+        assert!(root_html.contains("Syu"));
+        assert!(root_html.contains("Type a command"));
+        assert!(!root_html.contains("navigation"));
+        assert!(root_html.contains("data-command-palette"));
         assert_eq!(css_status, StatusCode::OK);
         assert!(css.contains("--color-background"));
         assert_eq!(health_status, StatusCode::OK);
@@ -2845,4 +3531,33 @@ mod tests {
         let text = std::str::from_utf8(&bytes).expect("utf8");
         assert!(text.contains("workspace_reloaded"));
     }
+}
+#[derive(Debug, Clone, Default, Deserialize)]
+struct WorkbenchViewQuery {
+    #[serde(default)]
+    pane: Option<String>,
+    #[serde(default)]
+    sidebar: Option<String>,
+    #[serde(default)]
+    query: Option<String>,
+    #[serde(default)]
+    action: Option<String>,
+    #[serde(default)]
+    run: Option<String>,
+    #[serde(default)]
+    action_input: Option<String>,
+    #[serde(default)]
+    action_confirm: Option<String>,
+    #[serde(default)]
+    cli: Option<String>,
+    #[serde(default)]
+    cli_arg: Option<String>,
+    #[serde(default)]
+    cli_confirm: Option<String>,
+    #[serde(default)]
+    goal: Option<String>,
+    #[serde(default)]
+    lang: Option<String>,
+    #[serde(default)]
+    help: Option<String>,
 }

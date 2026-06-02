@@ -7,6 +7,7 @@ pub use primitives::{
     ManualDecisionEvidenceView, Panel, ScopeChip, ScopeEvidenceView, StatusDot, TestEvidenceView,
     ValidationEvidenceView,
 };
+pub use shell::WorkbenchPane;
 pub use shell::{
     AffectedSpecPanel, AgentRunPanel, AppShell, AssignGoalDialog, AssigneeSelector,
     AssignmentConstraintPanel, AssignmentEvidencePanel, AssignmentPromptPreview, BranchScopeLens,

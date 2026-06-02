@@ -1,3 +1,4 @@
+use crate::i18n::{HelpTopic, Locale, UiCopy, copy};
 use std::collections::BTreeMap;
 use syu_task_model::{
     GoalPlanArtifact, GoalPlanCompletion, GoalPlanConfidence, GoalPlanCoverage,
@@ -33,6 +34,27 @@ pub struct WorkbenchActionRunPreview {
     pub evidence_summary: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CliCommandEntry {
+    pub id: &'static str,
+    pub title: &'static str,
+    pub description: &'static str,
+    pub invocation: &'static str,
+    pub requires_input: bool,
+    pub mutates_files: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CliCommandPreview {
+    pub id: String,
+    pub title: String,
+    pub invocation: String,
+    pub result_summary: String,
+    pub evidence_summary: String,
+    pub requires_input: bool,
+    pub mutates_files: bool,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct WorkspacePulseSummary {
     pub workspace: String,
@@ -49,7 +71,11 @@ pub struct WorkbenchUiState {
     pub command_palette_open: bool,
     pub command_query: String,
     pub selected_action_id: Option<WorkbenchActionId>,
+    pub selected_cli_command_id: Option<String>,
     pub preview: Option<WorkbenchActionRunPreview>,
+    pub cli_preview: Option<CliCommandPreview>,
+    pub locale: Locale,
+    pub help_topic: Option<HelpTopic>,
 }
 
 impl WorkbenchUiState {
@@ -59,7 +85,11 @@ impl WorkbenchUiState {
             command_palette_open: true,
             command_query: String::new(),
             selected_action_id: None,
+            selected_cli_command_id: None,
             preview: None,
+            cli_preview: None,
+            locale: Locale::En,
+            help_topic: None,
         }
     }
 
@@ -74,7 +104,11 @@ impl WorkbenchUiState {
             command_palette_open: true,
             command_query: String::new(),
             selected_action_id: None,
+            selected_cli_command_id: None,
             preview: None,
+            cli_preview: None,
+            locale: Locale::En,
+            help_topic: None,
         }
     }
 
@@ -90,19 +124,47 @@ impl WorkbenchUiState {
         self.command_query = query.into();
     }
 
+    pub fn set_locale(&mut self, locale: Locale) {
+        self.locale = locale;
+    }
+
+    pub fn set_help_topic(&mut self, help_topic: Option<HelpTopic>) {
+        self.help_topic = help_topic;
+    }
+
+    pub fn copy(&self) -> &'static dyn UiCopy {
+        copy(self.locale)
+    }
+
     pub fn select_action(
         &mut self,
         action_id: WorkbenchActionId,
     ) -> Option<WorkbenchActionRunPreview> {
         self.selected_action_id = Some(action_id);
+        self.selected_cli_command_id = None;
+        self.cli_preview = None;
         let preview = self.action_preview(action_id);
         self.preview = preview.clone();
         preview
     }
 
+    pub fn select_cli_command(
+        &mut self,
+        command_id: impl Into<String>,
+    ) -> Option<CliCommandPreview> {
+        let command_id = command_id.into();
+        self.selected_action_id = None;
+        self.preview = None;
+        self.selected_cli_command_id = Some(command_id.clone());
+        let preview = self.cli_command_preview(&command_id);
+        self.cli_preview = preview.clone();
+        preview
+    }
+
     pub fn visible_actions(&self) -> Vec<CommandPaletteEntry> {
         let query = self.command_query.trim().to_lowercase();
-        self.payload
+        let mut actions = self
+            .payload
             .actions
             .iter()
             .cloned()
@@ -123,7 +185,84 @@ impl WorkbenchUiState {
                     matched_query,
                 })
             })
-            .collect()
+            .collect::<Vec<_>>();
+        actions.sort_by_key(|entry| {
+            (
+                !entry.availability.available,
+                !entry.action.id.label().contains(query.as_str()),
+                entry.action.title.clone(),
+            )
+        });
+        actions
+    }
+
+    pub fn suggested_actions(&self, limit: usize) -> Vec<CommandPaletteEntry> {
+        let query = self.command_query.trim().to_lowercase();
+        let mut actions = self.visible_actions();
+        if query.is_empty() {
+            actions
+                .sort_by_key(|entry| (!entry.availability.available, entry.action.title.clone()));
+        }
+        actions.into_iter().take(limit).collect()
+    }
+
+    pub fn visible_cli_commands(&self) -> Vec<CliCommandEntry> {
+        let query = self.command_query.trim().to_lowercase();
+        let mut commands = cli_command_catalog()
+            .iter()
+            .copied()
+            .filter(|command| {
+                let haystack = format!(
+                    "{} {} {} {}",
+                    command.id, command.title, command.description, command.invocation
+                )
+                .to_lowercase();
+                query.is_empty() || haystack.contains(&query)
+            })
+            .collect::<Vec<_>>();
+        commands.sort_by_key(|command| {
+            (
+                command.mutates_files,
+                !command.id.contains(query.as_str()),
+                command.title,
+            )
+        });
+        commands
+    }
+
+    pub fn cli_command_preview(&self, command_id: &str) -> Option<CliCommandPreview> {
+        let command = cli_command_catalog()
+            .iter()
+            .find(|command| command.id == command_id)?;
+        let result_summary = if command.requires_input {
+            format!(
+                "{} needs a selector or file before it can run.",
+                command.invocation
+            )
+        } else if command.mutates_files {
+            format!(
+                "{} is available from the palette with confirmation.",
+                command.invocation
+            )
+        } else {
+            format!("{} is ready for this workspace.", command.invocation)
+        };
+        let evidence_summary = if command.mutates_files {
+            "writes files".to_string()
+        } else if command.requires_input {
+            "input required".to_string()
+        } else {
+            "read-only".to_string()
+        };
+        Some(CliCommandPreview {
+            id: command.id.to_string(),
+            title: command.title.to_string(),
+            invocation: command.invocation.to_string(),
+            result_summary,
+            evidence_summary,
+            requires_input: command.requires_input,
+            mutates_files: command.mutates_files,
+        })
     }
 
     pub fn action_preview(
@@ -142,12 +281,8 @@ impl WorkbenchUiState {
         Some(WorkbenchActionRunPreview {
             action_id,
             title: action.title.clone(),
-            result_summary: format!("Read-only action placeholder for {}", action.title),
-            evidence_summary: format!(
-                "Evidence placeholder for {} ({})",
-                action.title,
-                action.evidence_kind.label()
-            ),
+            result_summary: format!("Preview opened for {}", action.title),
+            evidence_summary: "Ready to review".to_string(),
         })
     }
 
@@ -157,6 +292,8 @@ impl WorkbenchUiState {
     ) -> Option<WorkbenchActionRunPreview> {
         let preview = self.action_preview(action_id)?;
         self.selected_action_id = Some(action_id);
+        self.selected_cli_command_id = None;
+        self.cli_preview = None;
         self.preview = Some(preview.clone());
         Some(preview)
     }
@@ -214,13 +351,13 @@ impl WorkbenchUiState {
             .entries
             .last()
             .map(evidence_summary)
-            .unwrap_or_else(|| "evidence placeholder".to_string());
+            .unwrap_or_else(|| "no evidence yet".to_string());
         let next_action = self
             .visible_actions()
             .into_iter()
             .find(|entry| entry.availability.available)
             .map(|entry| entry.action.title)
-            .unwrap_or_else(|| "no suggested action".to_string());
+            .unwrap_or_else(|| "nothing to open".to_string());
 
         WorkspacePulseSummary {
             workspace,
@@ -231,6 +368,211 @@ impl WorkbenchUiState {
             next_action,
         }
     }
+}
+
+pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
+    &[
+        CliCommandEntry {
+            id: "cli.browse",
+            title: "Browse spec",
+            description: "Explore the spec tree.",
+            invocation: "syu browse . --non-interactive",
+            requires_input: false,
+            mutates_files: false,
+        },
+        CliCommandEntry {
+            id: "cli.workbench",
+            title: "Open workbench",
+            description: "Run the browser or desktop Workbench.",
+            invocation: "syu workbench .",
+            requires_input: false,
+            mutates_files: false,
+        },
+        CliCommandEntry {
+            id: "cli.list",
+            title: "List spec items",
+            description: "List philosophies, policies, requirements, or features.",
+            invocation: "syu list",
+            requires_input: false,
+            mutates_files: false,
+        },
+        CliCommandEntry {
+            id: "cli.show",
+            title: "Show item",
+            description: "Show one spec item by ID.",
+            invocation: "syu show <id>",
+            requires_input: true,
+            mutates_files: false,
+        },
+        CliCommandEntry {
+            id: "cli.search",
+            title: "Search spec",
+            description: "Search spec items by text or ID.",
+            invocation: "syu search <query>",
+            requires_input: true,
+            mutates_files: false,
+        },
+        CliCommandEntry {
+            id: "cli.audit",
+            title: "Audit spec",
+            description: "Audit the layered spec for overlap and tension.",
+            invocation: "syu audit .",
+            requires_input: false,
+            mutates_files: false,
+        },
+        CliCommandEntry {
+            id: "cli.log",
+            title: "Show history",
+            description: "Show git history for a traced requirement or feature.",
+            invocation: "syu log <id>",
+            requires_input: true,
+            mutates_files: false,
+        },
+        CliCommandEntry {
+            id: "cli.explain",
+            title: "Explain selector",
+            description: "Explain how an ID, file, or symbol fits the spec chain.",
+            invocation: "syu explain <selector>",
+            requires_input: true,
+            mutates_files: false,
+        },
+        CliCommandEntry {
+            id: "cli.relate",
+            title: "Relate selector",
+            description: "Inspect the connected graph around an ID, path, symbol, or range.",
+            invocation: "syu relate <selector>",
+            requires_input: true,
+            mutates_files: false,
+        },
+        CliCommandEntry {
+            id: "cli.trace",
+            title: "Trace file or range",
+            description: "Resolve linked specs from a traced file, symbol, or git range.",
+            invocation: "syu trace <file>",
+            requires_input: true,
+            mutates_files: false,
+        },
+        CliCommandEntry {
+            id: "cli.doctor",
+            title: "Run doctor",
+            description: "Inspect contributor-tooling readiness.",
+            invocation: "syu doctor .",
+            requires_input: false,
+            mutates_files: false,
+        },
+        CliCommandEntry {
+            id: "cli.validate",
+            title: "Validate workspace",
+            description: "Validate layered graph, traces, and optional fixes.",
+            invocation: "syu validate .",
+            requires_input: false,
+            mutates_files: false,
+        },
+        CliCommandEntry {
+            id: "cli.report",
+            title: "Render report",
+            description: "Render a Markdown validation report.",
+            invocation: "syu report .",
+            requires_input: false,
+            mutates_files: true,
+        },
+        CliCommandEntry {
+            id: "cli.init",
+            title: "Initialize workspace",
+            description: "Scaffold a version-matched syu workspace.",
+            invocation: "syu init .",
+            requires_input: false,
+            mutates_files: true,
+        },
+        CliCommandEntry {
+            id: "cli.templates",
+            title: "List templates",
+            description: "List starter templates and examples.",
+            invocation: "syu templates",
+            requires_input: false,
+            mutates_files: false,
+        },
+        CliCommandEntry {
+            id: "cli.completion",
+            title: "Generate completion",
+            description: "Generate shell completion scripts.",
+            invocation: "syu completion <shell>",
+            requires_input: true,
+            mutates_files: false,
+        },
+        CliCommandEntry {
+            id: "cli.task.classify",
+            title: "Classify request",
+            description: "Classify a request artifact.",
+            invocation: "syu task classify <request.yaml>",
+            requires_input: true,
+            mutates_files: false,
+        },
+        CliCommandEntry {
+            id: "cli.task.scope",
+            title: "Scope request",
+            description: "Map a request artifact onto the spec graph.",
+            invocation: "syu task scope <request.yaml>",
+            requires_input: true,
+            mutates_files: false,
+        },
+        CliCommandEntry {
+            id: "cli.task.scaffold",
+            title: "Scaffold request",
+            description: "Preview spec and file updates from a request.",
+            invocation: "syu task scaffold <request.yaml>",
+            requires_input: true,
+            mutates_files: false,
+        },
+        CliCommandEntry {
+            id: "cli.task.plan",
+            title: "Plan request",
+            description: "Generate a temporary Goal Plan.",
+            invocation: "syu task plan <request.yaml>",
+            requires_input: true,
+            mutates_files: false,
+        },
+        CliCommandEntry {
+            id: "cli.task.test_select",
+            title: "Select task tests",
+            description: "Select tests from a Goal Plan.",
+            invocation: "syu task test-select <goal-plan.yaml>",
+            requires_input: true,
+            mutates_files: false,
+        },
+        CliCommandEntry {
+            id: "cli.task.infer",
+            title: "Infer task goal",
+            description: "Infer a provisional Goal Plan from a git diff.",
+            invocation: "syu task infer --range origin/main...HEAD",
+            requires_input: false,
+            mutates_files: false,
+        },
+        CliCommandEntry {
+            id: "cli.task.check",
+            title: "Check task goal",
+            description: "Validate a Goal Plan against a git range.",
+            invocation: "syu task check <goal-plan.yaml>",
+            requires_input: true,
+            mutates_files: false,
+        },
+        CliCommandEntry {
+            id: "cli.add",
+            title: "Add spec stub",
+            description: "Scaffold a philosophy, policy, requirement, or feature stub.",
+            invocation: "syu add <kind> <id>",
+            requires_input: true,
+            mutates_files: true,
+        },
+        CliCommandEntry {
+            id: "cli.lsp",
+            title: "Start LSP",
+            description: "Start the editor integration language server.",
+            invocation: "syu lsp",
+            requires_input: false,
+            mutates_files: false,
+        },
+    ]
 }
 
 pub fn build_demo_state() -> WorkbenchUiState {
@@ -687,8 +1029,8 @@ mod tests {
 
         let preview = ui.action_preview(WorkbenchActionId::HistoryShow).unwrap();
 
-        assert!(preview.result_summary.contains("placeholder"));
-        assert!(preview.evidence_summary.contains("Evidence placeholder"));
+        assert!(preview.result_summary.contains("Preview opened"));
+        assert_eq!(preview.evidence_summary, "Ready to review");
     }
 
     #[test]
@@ -699,5 +1041,31 @@ mod tests {
             payload.actions.len(),
             WorkbenchActionRegistry::standard().actions().len()
         );
+    }
+
+    #[test]
+    fn cli_catalog_exposes_top_level_and_task_commands() {
+        let ids = cli_command_catalog()
+            .iter()
+            .map(|command| command.id)
+            .collect::<Vec<_>>();
+
+        assert_eq!(ids.len(), 25);
+        assert!(ids.contains(&"cli.validate"));
+        assert!(ids.contains(&"cli.task.check"));
+        assert!(ids.contains(&"cli.add"));
+    }
+
+    #[test]
+    fn filters_cli_commands_by_query_and_previews_invocation() {
+        let mut ui = WorkbenchUiState::from_state(WorkbenchState::default());
+        ui.set_query("validate");
+
+        let visible = ui.visible_cli_commands();
+        let preview = ui.cli_command_preview("cli.validate").unwrap();
+
+        assert!(visible.iter().any(|command| command.id == "cli.validate"));
+        assert!(preview.invocation.contains("syu validate ."));
+        assert_eq!(preview.evidence_summary, "read-only");
     }
 }

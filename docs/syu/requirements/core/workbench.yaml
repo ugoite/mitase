@@ -28,7 +28,7 @@ requirements:
       rust:
         - file: tests/workbench_smoke.rs
           symbols:
-            - app_shell_renders_workbench_pulse_before_the_side_panels
+            - app_shell_renders_command_palette_first_shell
             - command_palette_renders_disabled_reason_for_unavailable_actions
             - goal_canvas_renders_a_read_only_action_preview_placeholder
             - evidence_panel_renders_placeholder_when_empty
@@ -67,6 +67,10 @@ requirements:
             - read_only_action_returns_placeholder_preview
             - registry_loaded_from_server_payload
             - evidence_panel_renders_goal_scoped_timeline
+        - file: crates/syu-app-ui/src/model.rs
+          symbols:
+            - cli_catalog_exposes_top_level_and_task_commands
+            - filters_cli_commands_by_query_and_previews_invocation
   - id: REQ-WORKBENCH-003
     title: Goal splitting for large change requests
     description: |

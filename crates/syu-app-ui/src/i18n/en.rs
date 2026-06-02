@@ -1,0 +1,151 @@
+use super::{HelpTopic, Locale, UiCopy};
+use crate::WorkbenchPane;
+
+pub struct English;
+
+pub static EN: English = English;
+
+impl UiCopy for English {
+    fn app_title(&self) -> &'static str {
+        "Syu Workbench"
+    }
+
+    fn app_tagline(&self) -> &'static str {
+        "command-palette-first workspace"
+    }
+
+    fn workspace_label(&self) -> &'static str {
+        "workspace"
+    }
+
+    fn branch_label(&self) -> &'static str {
+        "branch"
+    }
+
+    fn health_label(&self) -> &'static str {
+        "health"
+    }
+
+    fn actions_label(&self) -> &'static str {
+        "suggestions"
+    }
+
+    fn palette_placeholder(&self) -> &'static str {
+        "Type a command"
+    }
+
+    fn palette_hint(&self) -> &'static str {
+        "Results appear as you type"
+    }
+
+    fn palette_hint_active(&self) -> &'static str {
+        "Press Enter to run"
+    }
+
+    fn sidebar_title(&self) -> &'static str {
+        "navigation"
+    }
+
+    fn sidebar_toggle_open(&self) -> &'static str {
+        "show sidebar"
+    }
+
+    fn sidebar_toggle_close(&self) -> &'static str {
+        "hide sidebar"
+    }
+
+    fn help_label(&self) -> &'static str {
+        "help"
+    }
+
+    fn close_label(&self) -> &'static str {
+        "close"
+    }
+
+    fn language_label(&self) -> &'static str {
+        "language"
+    }
+
+    fn language_name(&self, locale: Locale) -> &'static str {
+        match locale {
+            Locale::En => "EN",
+            Locale::Ja => "日本語",
+        }
+    }
+
+    fn pane_title(&self, pane: WorkbenchPane) -> &'static str {
+        match pane {
+            WorkbenchPane::Pulse => "Workspace pulse",
+            WorkbenchPane::Commands => "Command palette",
+            WorkbenchPane::Goals => "Goal plan",
+            WorkbenchPane::Request => "Request intake",
+            WorkbenchPane::Branch => "Branch",
+            WorkbenchPane::Assignment => "Assignment",
+            WorkbenchPane::Graph => "Spec graph",
+            WorkbenchPane::Evidence => "Evidence",
+        }
+    }
+
+    fn pane_summary(&self, pane: WorkbenchPane) -> &'static str {
+        match pane {
+            WorkbenchPane::Pulse => "workspace, branch, and one action to open in one snapshot",
+            WorkbenchPane::Commands => "the top box that launches actions",
+            WorkbenchPane::Goals => "the current goal and the plan behind it",
+            WorkbenchPane::Request => "the request you are classifying",
+            WorkbenchPane::Branch => "what changed in this branch",
+            WorkbenchPane::Assignment => "who owns the handoff",
+            WorkbenchPane::Graph => "how specs, code, and tests connect",
+            WorkbenchPane::Evidence => "what happened most recently",
+        }
+    }
+
+    fn help_title(&self, topic: HelpTopic) -> &'static str {
+        match topic {
+            HelpTopic::Palette => "Command palette",
+            HelpTopic::Sidebar => "Sidebar navigation",
+            HelpTopic::Pulse => "Workspace pulse",
+            HelpTopic::Goals => "Goal plan",
+            HelpTopic::Request => "Request intake",
+            HelpTopic::Branch => "Branch",
+            HelpTopic::Assignment => "Assignment",
+            HelpTopic::Graph => "Spec graph",
+            HelpTopic::Evidence => "Evidence",
+        }
+    }
+
+    fn help_body(&self, topic: HelpTopic) -> &'static str {
+        match topic {
+            HelpTopic::Palette => "Focus the top box, type a few letters, then choose a result.",
+            HelpTopic::Sidebar => "Use the left sidebar to switch views and collapse the menu.",
+            HelpTopic::Pulse => "Shows the workspace, branch, and one action to open together.",
+            HelpTopic::Goals => "Shows the current goal and the plan behind it.",
+            HelpTopic::Request => {
+                "Shows the request text, its classification, and the scope it opens."
+            }
+            HelpTopic::Branch => "Shows the branch range, changed files, and impact.",
+            HelpTopic::Assignment => "Shows who owns the handoff and how it runs.",
+            HelpTopic::Graph => "Shows how specs, files, and tests connect.",
+            HelpTopic::Evidence => "Shows the newest events and outputs first.",
+        }
+    }
+
+    fn command_surface_title(&self) -> &'static str {
+        "Command palette"
+    }
+
+    fn command_surface_body(&self) -> &'static str {
+        "Focus the top box, type to filter, and pick a result."
+    }
+
+    fn command_surface_chip_one(&self) -> &'static str {
+        "focus"
+    }
+
+    fn command_surface_chip_two(&self) -> &'static str {
+        "filter"
+    }
+
+    fn command_surface_chip_three(&self) -> &'static str {
+        "run"
+    }
+}

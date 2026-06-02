@@ -2,10 +2,12 @@
 
 pub mod components;
 pub mod design;
+pub mod i18n;
 pub mod model;
 
 use dioxus::prelude::{Asset, asset};
 
+pub use components::WorkbenchPane;
 pub use components::{
     AffectedSpecPanel, AgentEvidenceView, AgentRunPanel, AppShell, AssignGoalDialog,
     AssigneeSelector, AssignmentConstraintPanel, AssignmentEvidencePanel, AssignmentPromptPreview,
@@ -19,6 +21,7 @@ pub use components::{
     SuggestedGoalSplitPanel, TestEvidenceView, TestRecommendationPanel, ValidationEvidenceView,
     WorkspacePulse,
 };
+pub use i18n::{HelpTopic, Locale};
 pub use model::{
     CommandPaletteEntry, WorkbenchActionRunPreview, WorkbenchUiState, build_demo_state,
 };

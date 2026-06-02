@@ -1,11 +1,11 @@
 use crate::components::{
-    AgentEvidenceView, Button, CommandItem, CommandOutputView, DetailDrawer, EmptyState,
-    EvidenceBadge, EvidenceDetailDrawer, EvidenceRecordCard, GoalCard, IconButton,
-    ManualDecisionEvidenceView, Panel, ScopeChip, ScopeEvidenceView, StatusDot, TestEvidenceView,
-    ValidationEvidenceView,
+    AgentEvidenceView, CommandItem, CommandOutputView, DetailDrawer, EmptyState, EvidenceBadge,
+    EvidenceDetailDrawer, EvidenceRecordCard, GoalCard, ManualDecisionEvidenceView, Panel,
+    ScopeChip, ScopeEvidenceView, StatusDot, TestEvidenceView, ValidationEvidenceView,
 };
 use crate::design::classes;
-use crate::model::{WorkbenchUiState, WorkspacePulseSummary};
+use crate::i18n::{HelpTopic, Locale};
+use crate::model::{CliCommandEntry, CliCommandPreview, WorkbenchUiState, WorkspacePulseSummary};
 use dioxus::prelude::*;
 use std::collections::HashMap;
 use syu_task_model::{
@@ -13,10 +13,9 @@ use syu_task_model::{
     ScaffoldAction, ScaffoldUpdateKind,
 };
 use syu_workbench::{
-    AgentRun, Assignee, AssigneeKind, Assignment, AssignmentStatus, ScopeGuardResult,
-    ScopeGuardStatus,
+    AgentRun, Assignee, AssigneeKind, Assignment, AssignmentStatus, EvidenceRecord, EvidenceSource,
+    OwnershipStatus, ScopeGuardResult, ScopeGuardStatus, WorkbenchAction, WorkbenchActionId,
 };
-use syu_workbench::{EvidenceRecord, WorkbenchActionId};
 
 const GRAPH_COLUMNS: usize = 4;
 const GRAPH_COLUMN_WIDTH: i32 = 210;
@@ -26,32 +25,96 @@ const GRAPH_NODE_Y: i32 = 56;
 const GRAPH_NODE_WIDTH: i32 = 172;
 const GRAPH_NODE_HEIGHT: i32 = 44;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkbenchPane {
+    Pulse,
+    Commands,
+    Goals,
+    Request,
+    Branch,
+    Assignment,
+    Graph,
+    Evidence,
+}
+
+#[allow(dead_code)]
+impl WorkbenchPane {
+    const ALL: [WorkbenchPane; 7] = [
+        Self::Pulse,
+        Self::Goals,
+        Self::Request,
+        Self::Branch,
+        Self::Assignment,
+        Self::Graph,
+        Self::Evidence,
+    ];
+
+    pub fn slug(self) -> &'static str {
+        match self {
+            Self::Pulse => "pulse",
+            Self::Commands => "commands",
+            Self::Goals => "goals",
+            Self::Request => "request",
+            Self::Branch => "branch",
+            Self::Assignment => "assignment",
+            Self::Graph => "graph",
+            Self::Evidence => "evidence",
+        }
+    }
+
+    pub fn from_slug(value: &str) -> Option<Self> {
+        match value {
+            "pulse" => Some(Self::Pulse),
+            "commands" | "palette" => Some(Self::Commands),
+            "goals" => Some(Self::Goals),
+            "request" => Some(Self::Request),
+            "branch" => Some(Self::Branch),
+            "assignment" => Some(Self::Assignment),
+            "graph" => Some(Self::Graph),
+            "evidence" => Some(Self::Evidence),
+            _ => None,
+        }
+    }
+
+    fn icon(self) -> &'static str {
+        match self {
+            Self::Pulse => "◌",
+            Self::Commands => "⌘",
+            Self::Goals => "◎",
+            Self::Request => "↻",
+            Self::Branch => "↗",
+            Self::Assignment => "✦",
+            Self::Graph => "◈",
+            Self::Evidence => "⟡",
+        }
+    }
+}
+
 #[component]
-pub fn AppShell(ui: WorkbenchUiState) -> Element {
-    let mut ui_state = use_signal(|| ui);
-    let ui = ui_state.read().clone();
+pub fn AppShell(ui: WorkbenchUiState, active_pane: WorkbenchPane, sidebar_open: bool) -> Element {
+    let _ = sidebar_open;
     rsx! {
         div { class: classes::APP_SHELL,
-            div { class: classes::PAGE_FRAME,
-                StatusBar { ui: ui.clone() }
-                if ui.command_palette_open {
-                    CommandPalette {
+        div { class: classes::PAGE_FRAME,
+                StatusBar {
+                    ui: ui.clone(),
+                    active_pane: active_pane,
+                    sidebar_open: false,
+                    palette: rsx! { CommandPalette { ui: ui.clone(), active_pane: active_pane } },
+                }
+                if let Some(help_topic) = ui.help_topic {
+                    HelpPanel {
                         ui: ui.clone(),
-                        on_query_change: move |query: String| ui_state.write().set_query(query),
-                        on_select_action: move |action_id: WorkbenchActionId| {
-                            ui_state.write().select_action(action_id);
-                        },
+                        active_pane: active_pane,
+                        sidebar_open: false,
+                        help_topic: help_topic,
                     }
                 }
                 div { class: classes::MAIN_GRID,
-                    GoalRail { ui: ui.clone() }
-                    GoalCanvas {
+                    WorkbenchStage {
                         ui: ui.clone(),
-                        on_run_action: move |action_id: WorkbenchActionId| {
-                            ui_state.write().select_action(action_id);
-                        },
+                        active_pane: active_pane,
                     }
-                    EvidencePanel { ui: ui.clone() }
                 }
             }
         }
@@ -59,21 +122,498 @@ pub fn AppShell(ui: WorkbenchUiState) -> Element {
 }
 
 #[component]
-pub fn StatusBar(ui: WorkbenchUiState) -> Element {
+pub fn StatusBar(
+    ui: WorkbenchUiState,
+    active_pane: WorkbenchPane,
+    sidebar_open: bool,
+    palette: Element,
+) -> Element {
+    let _ = sidebar_open;
     let summary = ui.pulse_summary();
+    let copy = ui.copy();
     rsx! {
-        header { class: classes::CHROME_BAR,
-            div { class: "flex items-center gap-3",
-                Button { label: "Cmd+K".to_string(), active: ui.command_palette_open, disabled: false }
-                div { class: classes::CHROME_META,
-                    ScopeChip { label: summary.workspace.clone() }
-                    ScopeChip { label: summary.branch.clone() }
-                    ScopeChip { label: summary.health.clone() }
+        header { class: "border-b border-border bg-panel",
+            nav { class: "mx-auto flex max-w-7xl items-center justify-between gap-4 py-3", "aria-label": "Global",
+                div { class: "flex lg:flex-1",
+                    a { class: "-m-1.5 p-1.5 text-base font-semibold text-foreground", href: view_href(&ui, WorkbenchPane::Pulse, false, ui.locale, None),
+                        span { class: "sr-only", "{copy.app_title()}" }
+                        "Syu"
+                    }
+                }
+                div { class: "hidden min-w-0 flex-1 lg:block", {palette.clone()} }
+                div { class: "flex flex-1 justify-end",
+                    details { class: "relative",
+                        summary { class: "flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-full border border-border bg-background text-sm text-foreground/70 hover:bg-panel-muted", title: copy.language_label(),
+                            "⚙"
+                        }
+                        div { class: "absolute right-0 z-30 mt-2 w-80 rounded-lg border border-border bg-panel p-3 shadow-lg",
+                            div { class: "space-y-3",
+                                LabeledSelect { label: copy.language_label().to_string(), value: copy.language_name(ui.locale).to_string() }
+                                LabeledSelect { label: copy.workspace_label().to_string(), value: summary.workspace.clone() }
+                                LabeledSelect { label: copy.branch_label().to_string(), value: summary.branch.clone() }
+                                LabeledSelect { label: copy.health_label().to_string(), value: summary.health.clone() }
+                                div { class: "grid grid-cols-2 gap-2",
+                                    a { class: "rounded-lg border border-border bg-background px-3 py-2 text-center text-xs font-medium text-foreground/75 hover:bg-panel-muted", href: view_href(&ui, active_pane, false, Locale::En, ui.help_topic), "EN" }
+                                    a { class: "rounded-lg border border-border bg-background px-3 py-2 text-center text-xs font-medium text-foreground/75 hover:bg-panel-muted", href: view_href(&ui, active_pane, false, Locale::Ja, ui.help_topic), "日本語" }
+                                }
+                            }
+                        }
+                    }
                 }
             }
-            div { class: "flex items-center gap-2",
-                IconButton { label: "Workspace".to_string(), icon: "⌁".to_string() }
-                StatusDot { tone_class: "bg-evidence-pass", label: format!("{} actions", summary.available_actions) }
+            div { class: "pb-4 lg:hidden", {palette} }
+            div { class: "sr-only",
+                ScopeChip { label: format!("{} {}", summary.available_actions, copy.actions_label()) }
+            }
+        }
+    }
+}
+
+#[component]
+fn LabeledSelect(label: String, value: String) -> Element {
+    rsx! {
+        label { class: "grid gap-1 text-xs text-foreground/55",
+            span { class: "uppercase", "{label}" }
+            select { class: "w-full truncate rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none", disabled: true,
+                option { selected: true, "{value}" }
+            }
+        }
+    }
+}
+
+#[component]
+fn HelpLink(
+    ui: WorkbenchUiState,
+    active_pane: WorkbenchPane,
+    sidebar_open: bool,
+    topic: HelpTopic,
+) -> Element {
+    let copy = ui.copy();
+    rsx! {
+        a {
+            class: "inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-panel-muted text-xs text-foreground/70 hover:bg-background",
+            href: view_href(&ui, active_pane, sidebar_open, ui.locale, Some(topic)),
+            title: copy.help_label(),
+            "?"
+        }
+    }
+}
+
+#[component]
+fn HelpPanel(
+    ui: WorkbenchUiState,
+    active_pane: WorkbenchPane,
+    sidebar_open: bool,
+    help_topic: HelpTopic,
+) -> Element {
+    let copy = ui.copy();
+    rsx! {
+        section { class: "rounded-2xl border border-border bg-panel p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]",
+            div { class: "flex items-start justify-between gap-3",
+                div { class: "space-y-1",
+                    p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{copy.help_label()}" }
+                    h3 { class: "text-sm font-semibold text-foreground", "{copy.help_title(help_topic)}" }
+                }
+                a {
+                    class: "inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-panel-muted text-foreground/60 hover:bg-background",
+                    href: view_href(&ui, active_pane, sidebar_open, ui.locale, None),
+                    title: copy.close_label(),
+                    "×"
+                }
+            }
+            p { class: "mt-3 text-sm text-foreground/75", "{copy.help_body(help_topic)}" }
+        }
+    }
+}
+
+fn pane_help_topic(pane: WorkbenchPane) -> HelpTopic {
+    match pane {
+        WorkbenchPane::Pulse => HelpTopic::Pulse,
+        WorkbenchPane::Commands => HelpTopic::Palette,
+        WorkbenchPane::Goals => HelpTopic::Goals,
+        WorkbenchPane::Request => HelpTopic::Request,
+        WorkbenchPane::Branch => HelpTopic::Branch,
+        WorkbenchPane::Assignment => HelpTopic::Assignment,
+        WorkbenchPane::Graph => HelpTopic::Graph,
+        WorkbenchPane::Evidence => HelpTopic::Evidence,
+    }
+}
+
+fn view_href(
+    ui: &WorkbenchUiState,
+    pane: WorkbenchPane,
+    sidebar_open: bool,
+    locale: Locale,
+    help_topic: Option<HelpTopic>,
+) -> String {
+    let mut params = vec![
+        format!("pane={}", pane.slug()),
+        format!("sidebar={}", if sidebar_open { "1" } else { "0" }),
+        format!("lang={}", locale.slug()),
+    ];
+    if !ui.command_query.trim().is_empty() {
+        params.push(format!("query={}", urlencoding::encode(&ui.command_query)));
+    }
+    if let Some(action_id) = ui.selected_action_id {
+        params.push(format!("action={}", action_id.label()));
+    }
+    if let Some(command_id) = ui.selected_cli_command_id.as_ref() {
+        params.push(format!("cli={}", urlencoding::encode(command_id)));
+    }
+    if let Some(goal_id) = ui.payload.state.goals.selected_goal_id.as_ref() {
+        params.push(format!("goal={}", urlencoding::encode(goal_id)));
+    }
+    if let Some(help_topic) = help_topic.or(ui.help_topic) {
+        params.push(format!("help={}", help_topic.slug()));
+    }
+    format!("?{}", params.join("&"))
+}
+
+#[component]
+pub fn WorkbenchSidebar(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Element {
+    let copy = ui.copy();
+    rsx! {
+        aside { class: "w-full shrink-0 lg:w-72",
+            nav { class: "rounded-2xl border border-border bg-panel p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_18px_36px_rgba(15,23,42,0.06)]",
+                div { class: "flex items-center justify-between gap-3 px-1 pb-3",
+                    p { class: "text-xs font-medium uppercase tracking-[0.24em] text-foreground/50", "{copy.sidebar_title()}" }
+                    div { class: "flex items-center gap-2",
+                        HelpLink { ui: ui.clone(), active_pane: active_pane, sidebar_open: true, topic: HelpTopic::Sidebar }
+                        a {
+                            class: "inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-panel-muted text-foreground/60 hover:bg-background",
+                            href: view_href(&ui, active_pane, true, ui.locale, ui.help_topic),
+                            title: copy.sidebar_toggle_close(),
+                            "◱"
+                        }
+                    }
+                }
+                ul { class: "space-y-1",
+                    for pane in WorkbenchPane::ALL {
+                        li {
+                            SidebarPaneButton {
+                                ui: ui.clone(),
+                                pane,
+                                active: pane == active_pane,
+                                collapsed: false,
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn WorkbenchSidebarRail(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Element {
+    let copy = ui.copy();
+    rsx! {
+        aside { class: "w-full shrink-0 lg:w-16",
+            nav { class: "rounded-2xl border border-border bg-panel p-2 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_18px_36px_rgba(15,23,42,0.06)]",
+                a {
+                    class: "mb-2 inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-panel-muted text-foreground/60 hover:bg-background",
+                    href: view_href(&ui, active_pane, false, ui.locale, ui.help_topic),
+                    title: copy.sidebar_toggle_open(),
+                    "☰"
+                }
+                ul { class: "space-y-1",
+                    for pane in WorkbenchPane::ALL {
+                        li {
+                            SidebarPaneButton {
+                                ui: ui.clone(),
+                                pane,
+                                active: pane == active_pane,
+                                collapsed: true,
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn SidebarPaneButton(
+    ui: WorkbenchUiState,
+    pane: WorkbenchPane,
+    active: bool,
+    collapsed: bool,
+) -> Element {
+    let copy = ui.copy();
+    let base = if active {
+        "group flex w-full items-start gap-3 rounded-2xl border border-border bg-foreground/5 px-3 py-3 text-left text-foreground shadow-[0_0_0_1px_rgba(15,23,42,0.02)]"
+    } else {
+        "group flex w-full items-start gap-3 rounded-2xl border border-transparent bg-panel-muted px-3 py-3 text-left text-foreground/72 hover:border-border hover:bg-background"
+    };
+    rsx! {
+        a {
+            class: base,
+            href: view_href(&ui, pane, !collapsed, ui.locale, ui.help_topic),
+            title: copy.pane_summary(pane),
+            span { class: "grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-background text-xs text-foreground/75 transition group-hover:bg-panel",
+                "{pane.icon()}"
+            }
+            if !collapsed {
+                span { class: "flex min-w-0 flex-1 flex-col",
+                    span { class: "text-sm font-medium text-foreground", "{copy.pane_title(pane)}" }
+                    span { class: "text-[10px] leading-4 tracking-[0.18em] text-foreground/45", "{copy.pane_summary(pane)}" }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn WorkbenchStage(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Element {
+    let detail = selected_pane_detail(ui.clone(), active_pane);
+    let action_preview = ui
+        .preview
+        .clone()
+        .or_else(|| ui.selected_action_id.and_then(|id| ui.action_preview(id)));
+    let cli_preview = ui.cli_preview.clone().or_else(|| {
+        ui.selected_cli_command_id
+            .as_deref()
+            .and_then(|id| ui.cli_command_preview(id))
+    });
+    let selected_action = ui.selected_action().cloned();
+    rsx! {
+        main { class: "min-w-0 flex-1",
+            section { class: "rounded-lg border border-border bg-panel p-4 shadow-sm",
+                div { class: "mb-4 flex items-center justify-between gap-3",
+                    div { class: "min-w-0",
+                        p { class: "text-xs uppercase text-foreground/45", "result" }
+                        h1 { class: "truncate text-lg font-semibold text-foreground", "{cli_preview.as_ref().map(|command| command.title.as_str()).or_else(|| selected_action.as_ref().map(|action| action.title.as_str())).unwrap_or(ui.copy().pane_title(active_pane))}" }
+                    }
+                    a {
+                        class: "inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background text-xs text-foreground/70 hover:bg-panel-muted",
+                        href: view_href(&ui, active_pane, false, ui.locale, Some(pane_help_topic(active_pane))),
+                        title: ui.copy().help_label(),
+                        "?"
+                    }
+                }
+                {detail}
+                if let Some(preview) = cli_preview {
+                    div { class: "mt-4",
+                        CliCommandResult { preview }
+                    }
+                } else if let Some(preview) = action_preview {
+                    div { class: "mt-4",
+                        DetailDrawer {
+                            title: preview.title.clone(),
+                            body: preview.result_summary.clone(),
+                            evidence: preview.evidence_summary.clone(),
+                        }
+                    }
+                } else if let Some(action) = selected_action {
+                    div { class: "mt-4",
+                        WorkbenchActionResult { action }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn WorkbenchActionResult(action: WorkbenchAction) -> Element {
+    let needs_input = workbench_action_needs_text_input(action.id.label());
+    let needs_confirmation = action.mutability.requires_confirmation();
+    rsx! {
+        section { class: classes::DRAWER,
+            div { class: "flex items-center justify-between gap-3",
+                h3 { class: "text-sm font-semibold", "{action.title}" }
+                ScopeChip { label: if needs_confirmation { "confirm".to_string() } else { "ready".to_string() } }
+            }
+            p { class: "mt-2 text-sm text-foreground/75", "{action.description}" }
+            form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/", method: "get",
+                input { type: "hidden", name: "pane", value: "commands" }
+                input { type: "hidden", name: "sidebar", value: "0" }
+                input { type: "hidden", name: "action", value: "{action.id.label()}" }
+                input { type: "hidden", name: "run", value: "1" }
+                if needs_input {
+                    input {
+                        class: "min-w-0 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-foreground/20",
+                        name: "action_input",
+                        placeholder: "request",
+                        autocomplete: "off",
+                    }
+                } else {
+                    input { type: "hidden", name: "action_input", value: "" }
+                }
+                if needs_confirmation {
+                    label { class: "inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground/70",
+                        input { type: "checkbox", name: "action_confirm", value: "1" }
+                        span { "confirm" }
+                    }
+                }
+                button {
+                    class: "rounded-lg border border-border bg-foreground px-3 py-2 text-sm font-medium text-background hover:bg-foreground/90",
+                    type: "submit",
+                    "Run"
+                }
+            }
+        }
+    }
+}
+
+fn workbench_action_needs_text_input(action_id: &str) -> bool {
+    matches!(
+        action_id,
+        "request.new"
+            | "request.classify"
+            | "request.scope"
+            | "request.scaffold"
+            | "request.plan"
+            | "assignment.create"
+    )
+}
+
+#[component]
+fn CliCommandResult(preview: CliCommandPreview) -> Element {
+    let default_cli_arg = cli_input_placeholder(&preview.id);
+
+    rsx! {
+        section { class: classes::DRAWER,
+            div { class: "flex items-center justify-between gap-3",
+                h3 { class: "text-sm font-semibold", "{preview.title}" }
+                ScopeChip { label: "result".to_string() }
+            }
+            p { class: "mt-2 whitespace-pre-wrap text-sm text-foreground/75", "{preview.result_summary}" }
+            p { class: "mt-2 text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{preview.invocation} · {preview.evidence_summary}" }
+            if preview.requires_input || preview.mutates_files {
+                form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/", method: "get",
+                    input { type: "hidden", name: "pane", value: "commands" }
+                    input { type: "hidden", name: "sidebar", value: "0" }
+                    input { type: "hidden", name: "cli", value: "{preview.id}" }
+                    if preview.requires_input {
+                        input {
+                            class: "min-w-0 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-foreground/20",
+                            name: "cli_arg",
+                            placeholder: "{default_cli_arg}",
+                            value: "{default_cli_arg}",
+                            autocomplete: "off",
+                        }
+                    } else {
+                        input { type: "hidden", name: "cli_arg", value: "" }
+                    }
+                    if preview.mutates_files {
+                        label { class: "inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground/70",
+                            input { type: "checkbox", name: "cli_confirm", value: "1" }
+                            span { "confirm" }
+                        }
+                    }
+                    button {
+                        class: "rounded-lg border border-border bg-foreground px-3 py-2 text-sm font-medium text-background hover:bg-foreground/90",
+                        type: "submit",
+                        "Run"
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn cli_input_placeholder(command_id: &str) -> &'static str {
+    match command_id {
+        "cli.show" | "cli.log" => "REQ-WORKBENCH-001",
+        "cli.search" => "workbench",
+        "cli.explain" | "cli.relate" => "REQ-WORKBENCH-001",
+        "cli.trace" => "src/main.rs",
+        "cli.completion" => "zsh",
+        "cli.add" => "requirement REQ-NEW-001",
+        "cli.task.classify" | "cli.task.scope" | "cli.task.scaffold" | "cli.task.plan" => {
+            "request.yaml"
+        }
+        "cli.task.test_select" | "cli.task.check" => ".syu/workbench/goals/goal.yaml",
+        _ => "value",
+    }
+}
+
+fn selected_pane_detail(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Element {
+    match active_pane {
+        WorkbenchPane::Pulse => rsx! { WorkbenchPulse { summary: ui.pulse_summary() } },
+        WorkbenchPane::Commands => rsx! { CommandSurfaceOverview { ui } },
+        WorkbenchPane::Goals => rsx! { GoalsOverview { ui } },
+        WorkbenchPane::Request => rsx! { RequestOverview { ui } },
+        WorkbenchPane::Branch => rsx! { BranchOverview { ui } },
+        WorkbenchPane::Assignment => rsx! { AssignmentOverview { ui } },
+        WorkbenchPane::Graph => rsx! { GraphOverview { ui } },
+        WorkbenchPane::Evidence => rsx! { EvidenceOverview { ui } },
+    }
+}
+
+#[component]
+pub fn WorkbenchPulse(summary: WorkspacePulseSummary) -> Element {
+    rsx! {
+        div { class: "space-y-4",
+            div { class: "grid gap-3 md:grid-cols-3",
+                div { class: "space-y-1",
+                    p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "workspace" }
+                    select {
+                        class: "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none",
+                        disabled: true,
+                        option { selected: true, "{summary.workspace}" }
+                    }
+                }
+                div { class: "space-y-1",
+                    p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "branch" }
+                    select {
+                        class: "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none",
+                        disabled: true,
+                        option { selected: true, "{summary.branch}" }
+                    }
+                }
+                div { class: "space-y-1",
+                    p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "health" }
+                    select {
+                        class: "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none",
+                        disabled: true,
+                        option { selected: true, "{summary.health}" }
+                    }
+                }
+            }
+            div { class: "grid gap-3 xl:grid-cols-3",
+                a {
+                    class: "rounded-2xl border border-border bg-background p-4 text-left hover:bg-panel",
+                    href: "?pane=commands&sidebar=1&help=palette",
+                    div { class: "flex items-center gap-3",
+                        span { class: "grid h-10 w-10 place-items-center rounded-full border border-border bg-panel-muted text-xs", "⌘" }
+                        div { class: "min-w-0",
+                            p { class: "text-sm font-medium text-foreground", "Type a command" }
+                            p { class: "text-xs uppercase tracking-[0.18em] text-foreground/45", "open palette" }
+                        }
+                    }
+                }
+                a {
+                    class: "rounded-2xl border border-border bg-background p-4 text-left hover:bg-panel",
+                    href: "?pane=pulse&sidebar=1&action=branch.scope",
+                    div { class: "flex items-center gap-3",
+                        span { class: "grid h-10 w-10 place-items-center rounded-full border border-border bg-panel-muted text-xs", "↻" }
+                        div { class: "min-w-0",
+                            p { class: "text-sm font-medium text-foreground", "Load branch scope" }
+                            p { class: "text-xs uppercase tracking-[0.18em] text-foreground/45", "see changes" }
+                        }
+                    }
+                }
+                a {
+                    class: "rounded-2xl border border-border bg-background p-4 text-left hover:bg-panel",
+                    href: "?pane=pulse&sidebar=1&action=request.new",
+                    div { class: "flex items-center gap-3",
+                        span { class: "grid h-10 w-10 place-items-center rounded-full border border-border bg-panel-muted text-xs", "◌" }
+                        div { class: "min-w-0",
+                            p { class: "text-sm font-medium text-foreground", "Start a request" }
+                            p { class: "text-xs uppercase tracking-[0.18em] text-foreground/45", "intake first" }
+                        }
+                    }
+                }
+            }
+            div { class: "grid gap-3 md:grid-cols-3",
+                div { class: "space-y-1",
+                    PulseMetric { label: "ready".to_string(), value: summary.available_actions.to_string() }
+                }
+                PulseMetric { label: "latest".to_string(), value: summary.recent_evidence.clone() }
+                PulseMetric { label: "open".to_string(), value: summary.next_action.clone() }
             }
         }
     }
@@ -81,27 +621,213 @@ pub fn StatusBar(ui: WorkbenchUiState) -> Element {
 
 #[component]
 pub fn WorkspacePulse(summary: WorkspacePulseSummary) -> Element {
+    rsx! { WorkbenchPulse { summary } }
+}
+
+#[component]
+fn CommandSurfaceOverview(ui: WorkbenchUiState) -> Element {
+    let copy = ui.copy();
     rsx! {
-        Panel { class: classes::PANEL_MUTED,
-            div { class: "flex flex-col gap-3 p-4",
-                div { class: classes::SECTION_HEADER,
-                    h2 { class: classes::SECTION_TITLE, "Workbench Pulse" }
-                    ScopeChip { label: summary.health.clone() }
+        div { class: "space-y-3",
+            div { class: "rounded-2xl border border-border bg-background p-4",
+                div { class: "flex flex-wrap items-center gap-2",
+                    ScopeChip { label: copy.command_surface_title().to_string() }
+                    ScopeChip { label: copy.command_surface_chip_one().to_string() }
+                    ScopeChip { label: copy.command_surface_chip_two().to_string() }
+                    ScopeChip { label: copy.command_surface_chip_three().to_string() }
                 }
-                div { class: "grid gap-3 md:grid-cols-2",
-                    div { class: "space-y-1",
-                        p { class: "text-xs uppercase tracking-[0.18em] text-foreground/60", "workspace" }
-                        p { class: "text-sm", "{summary.workspace}" }
+                p { class: "mt-3 text-sm text-foreground/75", "{copy.command_surface_body()}" }
+            }
+            div { class: "grid gap-3 md:grid-cols-3",
+                MiniSelect { label: "focus".to_string(), value: copy.palette_hint().to_string() }
+                MiniSelect { label: "open".to_string(), value: copy.palette_hint_active().to_string() }
+                MiniSelect { label: "help".to_string(), value: copy.help_title(HelpTopic::Palette).to_string() }
+            }
+        }
+    }
+}
+
+#[component]
+fn GoalsOverview(ui: WorkbenchUiState) -> Element {
+    let goals = &ui.payload.state.goals.active;
+    let selected_goal_id = ui.payload.state.goals.selected_goal_id.as_ref();
+    let selected_goal = selected_goal_id
+        .and_then(|goal_id| goals.iter().find(|goal| &goal.goal_id == goal_id))
+        .or_else(|| goals.first());
+    let goal_plan = selected_goal.and_then(|goal| goal.goal_plan.as_ref());
+    let goal_title = goal_plan
+        .map(|plan| plan.goal.title.clone())
+        .unwrap_or_else(|| "Untitled goal".to_string());
+    let goal_statement = goal_plan
+        .map(|plan| plan.goal.statement.clone())
+        .unwrap_or_else(|| "pending".to_string());
+    let goal_origin = goal_plan
+        .map(|plan| {
+            if plan.goal.inferred {
+                "inferred"
+            } else {
+                "explicit"
+            }
+            .to_string()
+        })
+        .unwrap_or_else(|| "pending".to_string());
+    let step_count = goal_plan
+        .map(|plan| plan.implementation_plan.steps.len())
+        .unwrap_or(0);
+    let required_test_count = goal_plan
+        .map(|plan| plan.test_plan.required_tests.len())
+        .unwrap_or(0);
+    let non_goal_count = goal_plan.map(|plan| plan.goal.non_goals.len()).unwrap_or(0);
+    let goal_id = selected_goal
+        .map(|goal| goal.goal_id.clone())
+        .unwrap_or_default();
+    let goal_plan_state = if goal_plan.is_some() {
+        "plan ready"
+    } else {
+        "plan pending"
+    };
+    let goal_plan_tone = if goal_plan.is_some() {
+        "bg-evidence-pass"
+    } else {
+        "bg-evidence-pending"
+    };
+    if selected_goal.is_some() {
+        rsx! {
+            div { class: "space-y-3",
+                div { class: "rounded-2xl border border-border bg-panel p-4 shadow-sm",
+                    div { class: "flex flex-wrap items-start justify-between gap-3",
+                        div { class: "space-y-1",
+                            p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "goal" }
+                            h3 { class: "text-base font-semibold text-foreground", "{goal_title}" }
+                            p { class: "text-sm text-foreground/65", "{goal_id}" }
+                        }
+                        div { class: "flex items-center gap-2",
+                            StatusDot { tone_class: goal_plan_tone, label: goal_plan_state.to_string() }
+                            HelpLink { ui: ui.clone(), active_pane: WorkbenchPane::Goals, sidebar_open: true, topic: HelpTopic::Goals }
+                        }
                     }
-                    div { class: "space-y-1",
-                        p { class: "text-xs uppercase tracking-[0.18em] text-foreground/60", "branch" }
-                        p { class: "text-sm", "{summary.branch}" }
+                    div { class: "mt-4 grid gap-3 lg:grid-cols-[1.2fr_0.8fr]",
+                        div { class: "rounded-2xl border border-border bg-background p-4",
+                            div { class: "flex items-center justify-between gap-3",
+                                p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "statement" }
+                                ScopeChip { label: "goal path".to_string() }
+                            }
+                            p { class: "mt-3 text-base leading-7 text-foreground", "{goal_statement}" }
+                            div { class: "mt-4 grid gap-3 sm:grid-cols-3",
+                                div { class: "rounded-xl border border-border bg-panel-muted p-3",
+                                    p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "plan steps" }
+                                    p { class: "mt-1 text-2xl font-semibold text-foreground", "{step_count}" }
+                                }
+                                div { class: "rounded-xl border border-border bg-panel-muted p-3",
+                                    p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "tests" }
+                                    p { class: "mt-1 text-2xl font-semibold text-foreground", "{required_test_count}" }
+                                }
+                                div { class: "rounded-xl border border-border bg-panel-muted p-3",
+                                    p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "non-goals" }
+                                    p { class: "mt-1 text-2xl font-semibold text-foreground", "{non_goal_count}" }
+                                }
+                            }
+                        }
+                        div { class: "space-y-3",
+                            div { class: "rounded-2xl border border-border bg-background p-3",
+                                p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "origin" }
+                                div { class: "mt-2 flex flex-wrap gap-2",
+                                    ScopeChip { label: goal_origin }
+                                    ScopeChip { label: if goal_plan.is_some() { "plan ready".to_string() } else { "plan pending".to_string() } }
+                                }
+                            }
+                            div { class: "rounded-2xl border border-border bg-background p-3",
+                                p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "title" }
+                                select {
+                                    class: "mt-2 w-full rounded-xl border border-border bg-panel-muted px-3 py-2 text-sm outline-none",
+                                    disabled: true,
+                                    option { selected: true, "{goal_title}" }
+                                }
+                            }
+                            div { class: "rounded-2xl border border-border bg-background p-3",
+                                p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "tests" }
+                                select {
+                                    class: "mt-2 w-full rounded-xl border border-border bg-panel-muted px-3 py-2 text-sm outline-none",
+                                    disabled: true,
+                                    option { selected: true, "{required_test_count} required" }
+                                }
+                            }
+                        }
+                    }
+                    div { class: "mt-4 grid gap-3 lg:grid-cols-3",
+                        div { class: "rounded-xl border border-border bg-background p-3",
+                            p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "plan" }
+                            div { class: "mt-2 h-2 rounded-full bg-panel-muted" }
+                            div { class: "mt-3 h-2 w-4/5 rounded-full bg-panel-muted" }
+                            div { class: "mt-3 h-2 w-2/3 rounded-full bg-panel-muted" }
+                        }
+                        div { class: "rounded-xl border border-border bg-background p-3",
+                            p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "tests" }
+                            div { class: "mt-2 h-2 rounded-full bg-panel-muted" }
+                            div { class: "mt-3 h-2 w-3/4 rounded-full bg-panel-muted" }
+                            div { class: "mt-3 h-2 w-1/2 rounded-full bg-panel-muted" }
+                        }
+                        div { class: "rounded-xl border border-border bg-background p-3",
+                            p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "limits" }
+                            div { class: "mt-2 h-2 rounded-full bg-panel-muted" }
+                            div { class: "mt-3 h-2 w-5/6 rounded-full bg-panel-muted" }
+                            div { class: "mt-3 h-2 w-1/2 rounded-full bg-panel-muted" }
+                        }
                     }
                 }
-                div { class: "grid gap-3 md:grid-cols-3",
-                    PulseMetric { label: "available actions".to_string(), value: summary.available_actions.to_string() }
-                    PulseMetric { label: "recent evidence".to_string(), value: summary.recent_evidence.clone() }
-                    PulseMetric { label: "next suggested".to_string(), value: summary.next_action.clone() }
+            }
+        }
+    } else {
+        rsx! {
+            div { class: "space-y-3",
+                div { class: "rounded-2xl border border-border bg-panel p-4 shadow-sm",
+                    div { class: "flex items-start justify-between gap-3",
+                        div { class: "space-y-2",
+                            p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "No goal yet" }
+                            p { class: "text-sm text-foreground/65", "A goal card appears here once planning starts." }
+                        }
+                        HelpLink { ui: ui.clone(), active_pane: WorkbenchPane::Goals, sidebar_open: true, topic: HelpTopic::Goals }
+                    }
+                    div { class: "mt-4 grid gap-3 lg:grid-cols-[1.2fr_0.8fr]",
+                        div { class: "rounded-2xl border border-dashed border-border bg-background p-4",
+                            div { class: "flex items-center justify-between gap-3",
+                                p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "statement" }
+                                div { class: "h-6 w-20 rounded-full bg-panel-muted" }
+                            }
+                            div { class: "mt-3 h-24 rounded-xl bg-panel-muted" }
+                        }
+                        div { class: "space-y-3",
+                            div { class: "rounded-xl border border-border bg-background p-3",
+                                p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "origin" }
+                                div { class: "mt-2 h-10 rounded-lg bg-panel-muted" }
+                            }
+                            div { class: "rounded-xl border border-border bg-background p-3",
+                                p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "title" }
+                                div { class: "mt-2 h-10 rounded-lg bg-panel-muted" }
+                            }
+                            div { class: "rounded-xl border border-border bg-background p-3",
+                                p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "tests" }
+                                div { class: "mt-2 h-10 rounded-lg bg-panel-muted" }
+                            }
+                        }
+                    }
+                    div { class: "mt-4 grid gap-3 lg:grid-cols-3",
+                        div { class: "rounded-xl border border-dashed border-border bg-background p-3",
+                            p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "plan" }
+                            div { class: "mt-2 h-2 rounded-full bg-panel-muted" }
+                            div { class: "mt-3 h-2 w-4/5 rounded-full bg-panel-muted" }
+                        }
+                        div { class: "rounded-xl border border-dashed border-border bg-background p-3",
+                            p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "tests" }
+                            div { class: "mt-2 h-2 rounded-full bg-panel-muted" }
+                            div { class: "mt-3 h-2 w-3/4 rounded-full bg-panel-muted" }
+                        }
+                        div { class: "rounded-xl border border-dashed border-border bg-background p-3",
+                            p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "limits" }
+                            div { class: "mt-2 h-2 rounded-full bg-panel-muted" }
+                            div { class: "mt-3 h-2 w-2/3 rounded-full bg-panel-muted" }
+                        }
+                    }
                 }
             }
         }
@@ -109,40 +835,625 @@ pub fn WorkspacePulse(summary: WorkspacePulseSummary) -> Element {
 }
 
 #[component]
-pub fn CommandPalette(
-    ui: WorkbenchUiState,
-    on_query_change: EventHandler<String>,
-    on_select_action: EventHandler<WorkbenchActionId>,
-) -> Element {
-    let entries = ui.visible_actions();
-    rsx! {
-        Panel { class: classes::PANEL_MUTED,
-            div { class: "flex flex-col gap-3 p-4",
-                div { class: classes::SECTION_HEADER,
-                    h2 { class: classes::SECTION_TITLE, "Command Palette" }
-                    ScopeChip { label: if ui.command_palette_open { "open".to_string() } else { "closed".to_string() } }
-                }
-                input {
-                    class: "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none",
-                    value: "{ui.command_query}",
-                    placeholder: "Filter actions",
-                    oninput: move |event| on_query_change.call(event.value())
-                }
-                div { class: "space-y-2",
-                    for entry in entries.iter().cloned() {
-                        CommandItem {
-                            entry: entry.clone(),
-                            selected: {
-                                let action_id = entry.action.id;
-                                ui.selected_action_id == Some(action_id)
-                            },
-                            onclick: move |_| on_select_action.call(entry.action.id),
+fn RequestOverview(ui: WorkbenchUiState) -> Element {
+    let request = ui.payload.state.request.clone();
+    if let Some(request) = request {
+        let request_text = request
+            .artifact
+            .as_ref()
+            .map(|artifact| artifact.request.clone())
+            .unwrap_or_else(|| "request".to_string());
+        let classification = request
+            .classification
+            .as_ref()
+            .map(|classification| classification.classification.label().to_string())
+            .unwrap_or_else(|| "pending".to_string());
+        let scope_notes = request
+            .scope
+            .as_ref()
+            .map(|scope| scope.notes.clone())
+            .unwrap_or_default();
+        let scope_requirements = request
+            .scope
+            .as_ref()
+            .map(|scope| scope.requirements.len())
+            .unwrap_or(0);
+        let scope_features = request
+            .scope
+            .as_ref()
+            .map(|scope| scope.features.len())
+            .unwrap_or(0);
+        let scope_policies = request
+            .scope
+            .as_ref()
+            .map(|scope| scope.policies.len())
+            .unwrap_or(0);
+        let scope_philosophies = request
+            .scope
+            .as_ref()
+            .map(|scope| scope.philosophies.len())
+            .unwrap_or(0);
+        let scope_ready = request.scope.is_some();
+        let scope_note_text = scope_notes
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "Classify the request to open the scope view.".to_string());
+        let scope_status_label = if scope_ready { "ready" } else { "no scope yet" };
+        let request_tone = if request.classification.is_some() {
+            "bg-evidence-pass"
+        } else {
+            "bg-evidence-pending"
+        };
+        let request_artifact_text = request
+            .artifact
+            .as_ref()
+            .map(|artifact| artifact.request.clone())
+            .unwrap_or_else(|| "none".to_string());
+        rsx! {
+            div { class: "space-y-3",
+                div { class: "rounded-2xl border border-border bg-panel p-4 shadow-sm",
+                    div { class: "flex flex-wrap items-start justify-between gap-3",
+                        div { class: "space-y-1",
+                            p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "request" }
+                            h3 { class: "text-base font-semibold text-foreground", "{request_text}" }
+                        }
+                        div { class: "flex items-center gap-2",
+                            StatusDot { tone_class: request_tone, label: classification.clone() }
+                            HelpLink { ui: ui.clone(), active_pane: WorkbenchPane::Request, sidebar_open: true, topic: HelpTopic::Request }
+                        }
+                    }
+                    div { class: "mt-4 grid gap-3 lg:grid-cols-[0.9fr_1.1fr]",
+                        div { class: "space-y-3",
+                            div { class: "rounded-2xl border border-border bg-background p-4",
+                                p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "inbox" }
+                                select {
+                                    class: "mt-2 w-full rounded-xl border border-border bg-panel-muted px-3 py-2 text-sm outline-none",
+                                    disabled: true,
+                                    option { selected: true, "{request_artifact_text}" }
+                                }
+                            }
+                            div { class: "rounded-2xl border border-border bg-background p-4",
+                                p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "classifier" }
+                                select {
+                                    class: "mt-2 w-full rounded-xl border border-border bg-panel-muted px-3 py-2 text-sm outline-none",
+                                    disabled: true,
+                                    option { selected: true, "{classification}" }
+                                }
+                            }
+                        }
+                        div { class: "rounded-2xl border border-border bg-background p-4",
+                            div { class: "flex items-center justify-between gap-3",
+                                p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "scope" }
+                                ScopeChip { label: scope_status_label.to_string() }
+                            }
+                            p { class: "mt-3 text-sm text-foreground/75", "{scope_note_text}" }
+                            div { class: "mt-4 grid gap-3 md:grid-cols-2",
+                                MiniSelect { label: "requirements".to_string(), value: scope_requirements.to_string() }
+                                MiniSelect { label: "features".to_string(), value: scope_features.to_string() }
+                                MiniSelect { label: "policies".to_string(), value: scope_policies.to_string() }
+                                MiniSelect { label: "philosophies".to_string(), value: scope_philosophies.to_string() }
+                            }
                         }
                     }
                 }
-                if entries.is_empty() {
-                    EmptyState { title: "No matching actions".to_string(), body: "Try a different command palette filter.".to_string() }
+            }
+        }
+    } else {
+        rsx! {
+            div { class: "space-y-3",
+                div { class: "rounded-2xl border border-border bg-panel p-4 shadow-sm",
+                    div { class: "flex items-start justify-between gap-3",
+                        div { class: "space-y-2",
+                            p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "No request yet" }
+                            p { class: "text-sm text-foreground/65", "A request card appears here after intake." }
+                        }
+                        HelpLink { ui: ui.clone(), active_pane: WorkbenchPane::Request, sidebar_open: true, topic: HelpTopic::Request }
+                    }
+                    div { class: "mt-4 grid gap-3 lg:grid-cols-[0.9fr_1.1fr]",
+                        div { class: "space-y-3",
+                            div { class: "rounded-2xl border border-dashed border-border bg-background p-4",
+                                p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "inbox" }
+                                div { class: "mt-3 h-10 rounded-xl bg-panel-muted" }
+                            }
+                            div { class: "rounded-2xl border border-dashed border-border bg-background p-4",
+                                p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "classifier" }
+                                div { class: "mt-3 h-10 rounded-xl bg-panel-muted" }
+                            }
+                        }
+                        div { class: "rounded-2xl border border-dashed border-border bg-background p-4",
+                            div { class: "flex items-center justify-between gap-3",
+                                p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "scope" }
+                                div { class: "h-6 w-16 rounded-full bg-panel-muted" }
+                            }
+                            div { class: "mt-3 h-24 rounded-xl bg-panel-muted" }
+                        }
+                    }
+                    div { class: "mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4",
+                        for label in ["requirements", "features", "policies", "philosophies"] {
+                            div { class: "rounded-xl border border-dashed border-border bg-background p-3",
+                                p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "{label}" }
+                                div { class: "mt-2 h-8 rounded-lg bg-panel-muted" }
+                            }
+                        }
+                    }
                 }
+            }
+        }
+    }
+}
+
+#[component]
+fn BranchOverview(ui: WorkbenchUiState) -> Element {
+    let report = ui
+        .payload
+        .state
+        .branch_scope
+        .as_ref()
+        .and_then(|state| state.report.as_ref());
+    if let Some(report) = report {
+        let ownership_status_label = |status: OwnershipStatus| match status {
+            OwnershipStatus::Owned => "owned",
+            OwnershipStatus::Partial => "partial",
+            OwnershipStatus::Unowned => "unowned",
+        };
+        rsx! {
+            div { class: "space-y-3",
+                div { class: "rounded-2xl border border-border bg-panel p-4 shadow-sm",
+                    div { class: "flex flex-wrap items-start justify-between gap-3",
+                        div { class: "space-y-1",
+                            p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "branch" }
+                            h3 { class: "text-base font-semibold text-foreground", "{report.range.clone()}" }
+                        }
+                        div { class: "flex items-center gap-2",
+                            StatusDot { tone_class: "bg-evidence-pass", label: report.confidence.label().to_string() }
+                            HelpLink { ui: ui.clone(), active_pane: WorkbenchPane::Branch, sidebar_open: true, topic: HelpTopic::Branch }
+                        }
+                    }
+                    div { class: "mt-4 grid gap-3 lg:grid-cols-[1.1fr_0.9fr]",
+                        div { class: "rounded-2xl border border-border bg-background p-3",
+                            p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "changed files" }
+                            div { class: "mt-3 space-y-2",
+                                for file in report.changed_files.iter().take(5) {
+                                    button {
+                                        class: "w-full rounded-xl border border-border bg-panel px-3 py-3 text-left hover:bg-background",
+                                        type: "button",
+                                        div { class: "flex items-center justify-between gap-3",
+                                            p { class: "text-sm font-medium text-foreground", "{file.file}" }
+                                            ScopeChip { label: ownership_status_label(file.status).to_string() }
+                                        }
+                                        div { class: "mt-2 flex flex-wrap gap-2",
+                                            ScopeChip { label: if file.is_spec_file { "spec".to_string() } else { "code".to_string() } }
+                                            ScopeChip { label: format!("{} symbols", file.symbols.len()) }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        div { class: "grid gap-3 sm:grid-cols-3 lg:grid-cols-1",
+                            MiniSelect { label: "files".to_string(), value: report.changed_files.len().to_string() }
+                            MiniSelect { label: "specs".to_string(), value: report.spec_impact.affected_items.len().to_string() }
+                            MiniSelect { label: "risk".to_string(), value: report.repo_risk.level.clone() }
+                        }
+                    }
+                    div { class: "mt-4 rounded-2xl border border-border bg-background p-3",
+                        SpecImpactGraph { ui: ui.clone() }
+                    }
+                }
+            }
+        }
+    } else {
+        rsx! {
+            div { class: "space-y-3",
+                EmptyState { title: "No branch scope".to_string(), body: "Load scope to see the diff and affected surface.".to_string() }
+            }
+        }
+    }
+}
+
+#[component]
+fn AssignmentOverview(ui: WorkbenchUiState) -> Element {
+    let assignment = ui.payload.state.assignment.clone();
+    if let Some(assignment) = assignment {
+        rsx! {
+            div { class: "space-y-3",
+                div { class: "rounded-2xl border border-border bg-panel p-4 shadow-sm",
+                    div { class: "flex flex-wrap items-start justify-between gap-3",
+                        div { class: "space-y-1",
+                            p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "assignment" }
+                            h3 { class: "text-base font-semibold text-foreground", "{assignment.assignee.as_ref().map(|assignee| assignee.display_name.clone()).unwrap_or_else(|| \"unassigned\".to_string())}" }
+                        }
+                        div { class: "flex items-center gap-2",
+                            StatusDot {
+                                tone_class: assignment_status_tone(assignment.status),
+                                label: assignment.status.label().to_string(),
+                            }
+                            HelpLink { ui: ui.clone(), active_pane: WorkbenchPane::Assignment, sidebar_open: true, topic: HelpTopic::Assignment }
+                        }
+                    }
+                    div { class: "mt-4 grid gap-3 lg:grid-cols-[0.9fr_1.1fr]",
+                        div { class: "space-y-3",
+                            AssigneeSelector { assignee: assignment.assignee.clone() }
+                            div { class: "rounded-xl border border-border bg-background/30 p-3",
+                                p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "run mode" }
+                                MiniSelect { label: "mode".to_string(), value: assignment.run_mode.label().to_string() }
+                                MiniSelect { label: "evidence".to_string(), value: if assignment.evidence_requirements.is_empty() { "none".to_string() } else { format!("{} items", assignment.evidence_requirements.len()) } }
+                            }
+                        }
+                        ScopeGuardPreview { result: assignment.scope_guard.clone() }
+                    }
+                    div { class: "mt-4 grid gap-3 lg:grid-cols-2",
+                        AssignmentPromptPreview { assignment: assignment.clone() }
+                        AssignmentEvidencePanel { assignment: assignment.clone() }
+                    }
+                    div { class: "mt-4",
+                        AssignmentConstraintPanel { assignment: assignment.clone() }
+                    }
+                }
+            }
+        }
+    } else {
+        rsx! {
+            div { class: "space-y-3",
+                div { class: "rounded-2xl border border-border bg-panel p-4 shadow-sm",
+                    div { class: "flex items-start justify-between gap-3",
+                        div { class: "space-y-2",
+                            p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "No assignment yet" }
+                            p { class: "text-sm text-foreground/65", "A handoff appears here once a goal is scoped." }
+                        }
+                        ScopeChip { label: "handoff".to_string() }
+                    }
+                    div { class: "mt-4 grid gap-3 lg:grid-cols-[0.9fr_1.1fr]",
+                        div { class: "space-y-3",
+                            div { class: "rounded-xl border border-dashed border-border bg-background p-3",
+                                p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "assignee" }
+                                div { class: "mt-2 h-12 rounded-lg bg-panel-muted" }
+                            }
+                            div { class: "rounded-xl border border-dashed border-border bg-background p-3",
+                                p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "run mode" }
+                                div { class: "mt-2 h-12 rounded-lg bg-panel-muted" }
+                            }
+                        }
+                        div { class: "rounded-2xl border border-dashed border-border bg-background p-4",
+                            p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "scope guard" }
+                            div { class: "mt-3 h-28 rounded-xl bg-panel-muted" }
+                        }
+                    }
+                    div { class: "mt-4 grid gap-3 lg:grid-cols-2",
+                        div { class: "rounded-2xl border border-dashed border-border bg-background p-4",
+                            p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "prompt" }
+                            div { class: "mt-3 h-24 rounded-xl bg-panel-muted" }
+                        }
+                        div { class: "rounded-2xl border border-dashed border-border bg-background p-4",
+                            p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "evidence" }
+                            div { class: "mt-3 h-24 rounded-xl bg-panel-muted" }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn GraphOverview(ui: WorkbenchUiState) -> Element {
+    let report = ui
+        .payload
+        .state
+        .branch_scope
+        .as_ref()
+        .and_then(|state| state.report.as_ref());
+    let ready = report.is_some();
+    let graph_status_label = if ready { "ready" } else { "waiting" };
+    let graph_tone = if ready {
+        "bg-evidence-pass"
+    } else {
+        "bg-evidence-pending"
+    };
+    let node_count = report
+        .map(|report| report.spec_impact_graph.nodes.len())
+        .unwrap_or(0);
+    let edge_count = report
+        .map(|report| report.spec_impact_graph.edges.len())
+        .unwrap_or(0);
+    if ready {
+        rsx! {
+            div { class: "space-y-3",
+                div { class: "rounded-2xl border border-border bg-panel p-4 shadow-sm",
+                    div { class: "flex flex-wrap items-start justify-between gap-3",
+                        div { class: "space-y-1",
+                            p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "spec map" }
+                            h3 { class: "text-base font-semibold text-foreground", "Spec graph" }
+                        }
+                        div { class: "flex items-center gap-2",
+                            StatusDot { tone_class: graph_tone, label: graph_status_label.to_string() }
+                            HelpLink { ui: ui.clone(), active_pane: WorkbenchPane::Graph, sidebar_open: true, topic: HelpTopic::Graph }
+                        }
+                    }
+                    div { class: "mt-4 grid gap-3 md:grid-cols-3",
+                        MiniSelect { label: "nodes".to_string(), value: node_count.to_string() }
+                        MiniSelect { label: "edges".to_string(), value: edge_count.to_string() }
+                        MiniSelect { label: "view".to_string(), value: "interactive map".to_string() }
+                    }
+                    div { class: "mt-4 rounded-2xl border border-border bg-background p-3",
+                        SpecImpactGraph { ui: ui.clone() }
+                    }
+                }
+            }
+        }
+    } else {
+        rsx! {
+            div { class: "space-y-3",
+                div { class: "rounded-2xl border border-border bg-panel p-4 shadow-sm",
+                    div { class: "flex flex-wrap items-start justify-between gap-3",
+                        div { class: "space-y-1",
+                            p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "spec map" }
+                            h3 { class: "text-base font-semibold text-foreground", "Spec graph" }
+                        }
+                        div { class: "flex items-center gap-2",
+                            StatusDot { tone_class: graph_tone, label: graph_status_label.to_string() }
+                            HelpLink { ui: ui.clone(), active_pane: WorkbenchPane::Graph, sidebar_open: true, topic: HelpTopic::Graph }
+                        }
+                    }
+                    div { class: "mt-4 grid gap-3 md:grid-cols-3",
+                        MiniSelect { label: "nodes".to_string(), value: "0".to_string() }
+                        MiniSelect { label: "edges".to_string(), value: "0".to_string() }
+                        MiniSelect { label: "view".to_string(), value: "interactive map".to_string() }
+                    }
+                    div { class: "mt-4 rounded-lg border border-dashed border-border bg-background p-4",
+                        div { class: "grid gap-3 md:grid-cols-[minmax(0,1fr)_14rem]",
+                            EmptyState {
+                                title: "Branch scope not loaded".to_string(),
+                                body: "Use the command palette to load the workspace graph.".to_string(),
+                            }
+                            a {
+                                class: "flex items-center justify-center rounded-lg border border-border bg-panel px-3 py-2 text-sm font-medium text-foreground/80 hover:bg-panel-muted",
+                                href: "?pane=commands&sidebar=0&query=branch%20scope&action=branch.scope",
+                                "Load branch scope"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn EvidenceOverview(ui: WorkbenchUiState) -> Element {
+    let records = ui
+        .payload
+        .state
+        .evidence_timeline
+        .entries
+        .iter()
+        .rev()
+        .take(3)
+        .cloned()
+        .collect::<Vec<_>>();
+    let latest_record = records.first().cloned();
+    if let Some(record) = latest_record {
+        let record_status = record.status.label().to_string();
+        let record_source = evidence_source_label(&record);
+        let record_time = format_timestamp_ms(record.timestamp);
+        let record_command = record.command.clone();
+        let record_attachment = record.attachments.first().cloned();
+        rsx! {
+            div { class: "space-y-3",
+                div { class: "rounded-2xl border border-border bg-panel p-4 shadow-sm",
+                    div { class: "flex flex-wrap items-start justify-between gap-3",
+                        div { class: "space-y-1",
+                            p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "activity" }
+                            h3 { class: "text-base font-semibold text-foreground", "{record.summary}" }
+                        }
+                        div { class: "flex items-center gap-2",
+                            EvidenceBadge { kind: record.kind }
+                            HelpLink { ui: ui.clone(), active_pane: WorkbenchPane::Evidence, sidebar_open: true, topic: HelpTopic::Evidence }
+                        }
+                    }
+                    div { class: "mt-4 grid gap-3 md:grid-cols-3",
+                        MiniSelect { label: "status".to_string(), value: record_status }
+                        MiniSelect { label: "source".to_string(), value: record_source }
+                        MiniSelect { label: "time".to_string(), value: record_time }
+                    }
+                    if record_command.is_some() {
+                        CommandOutputView {
+                            title: "linked command".to_string(),
+                            summary: record.summary.clone(),
+                            command: record_command,
+                            attachment: record_attachment,
+                        }
+                    }
+                }
+                if !records.is_empty() {
+                    div { class: "space-y-2",
+                        for record in records.into_iter().skip(1) {
+                            EvidenceRecordCard { record }
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        rsx! {
+            div { class: "space-y-3",
+                div { class: "rounded-2xl border border-border bg-panel p-4 shadow-sm",
+                    div { class: "flex flex-wrap items-start justify-between gap-3",
+                        div { class: "space-y-1",
+                            p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "activity" }
+                            h3 { class: "text-base font-semibold text-foreground", "Evidence" }
+                        }
+                        div { class: "flex items-center gap-2",
+                            EvidenceBadge { kind: syu_workbench::WorkbenchEvidenceKind::AssignmentState }
+                            HelpLink { ui: ui.clone(), active_pane: WorkbenchPane::Evidence, sidebar_open: true, topic: HelpTopic::Evidence }
+                        }
+                    }
+                    div { class: "mt-4 space-y-3",
+                        div { class: "rounded-2xl border border-dashed border-border bg-background p-4",
+                            div { class: "flex items-center justify-between gap-3",
+                                div { class: "h-2 w-28 rounded-full bg-panel-muted" }
+                                div { class: "h-2 w-16 rounded-full bg-panel-muted" }
+                            }
+                            div { class: "mt-4 space-y-3",
+                                div { class: "h-11 rounded-xl bg-panel-muted" }
+                                div { class: "h-11 rounded-xl bg-panel-muted" }
+                            }
+                        }
+                        div { class: "grid gap-3 md:grid-cols-3",
+                            div { class: "rounded-2xl border border-dashed border-border bg-background p-3",
+                                p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "status" }
+                                div { class: "mt-2 h-10 rounded-lg bg-panel-muted" }
+                            }
+                            div { class: "rounded-2xl border border-dashed border-border bg-background p-3",
+                                p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "source" }
+                                div { class: "mt-2 h-10 rounded-lg bg-panel-muted" }
+                            }
+                            div { class: "rounded-2xl border border-dashed border-border bg-background p-3",
+                                p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "time" }
+                                div { class: "mt-2 h-10 rounded-lg bg-panel-muted" }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn evidence_source_label(record: &EvidenceRecord) -> String {
+    match record.source.as_ref() {
+        Some(EvidenceSource::Action {
+            action_label,
+            action_id,
+        }) => action_label
+            .clone()
+            .or_else(|| action_id.as_ref().map(|id| id.label().to_string()))
+            .unwrap_or_else(|| "action".to_string()),
+        Some(EvidenceSource::Command { command }) => command.clone(),
+        Some(EvidenceSource::Manual { actor }) => actor.clone(),
+        Some(EvidenceSource::System { component }) => component.clone(),
+        None => "system".to_string(),
+    }
+}
+
+fn format_timestamp_ms(timestamp_ms: u64) -> String {
+    const MILLIS_PER_SECOND: i64 = 1_000;
+    const SECONDS_PER_MINUTE: i64 = 60;
+    const MINUTES_PER_HOUR: i64 = 60;
+    const HOURS_PER_DAY: i64 = 24;
+    const SECONDS_PER_DAY: i64 = SECONDS_PER_MINUTE * MINUTES_PER_HOUR * HOURS_PER_DAY;
+
+    let total_seconds = (timestamp_ms / MILLIS_PER_SECOND as u64) as i64;
+    let seconds_of_day = total_seconds.rem_euclid(SECONDS_PER_DAY);
+    let days = total_seconds.div_euclid(SECONDS_PER_DAY);
+
+    let (year, month, day) = civil_from_days(days);
+    let hour = seconds_of_day / (SECONDS_PER_MINUTE * MINUTES_PER_HOUR);
+    let minute = (seconds_of_day % (SECONDS_PER_MINUTE * MINUTES_PER_HOUR)) / SECONDS_PER_MINUTE;
+    let second = seconds_of_day % SECONDS_PER_MINUTE;
+
+    format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02} UTC")
+}
+
+fn civil_from_days(days: i64) -> (i64, i64, i64) {
+    let days = days + 719_468;
+    let era = if days >= 0 { days } else { days - 146_096 } / 146_097;
+    let doe = days - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let mut year = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = doy - (153 * mp + 2) / 5 + 1;
+    let month = mp + if mp < 10 { 3 } else { -9 };
+    year += if month <= 2 { 1 } else { 0 };
+    (year, month, day)
+}
+
+#[component]
+fn MetricTile(label: String, value: String) -> Element {
+    rsx! {
+        div { class: "rounded-xl border border-border bg-background p-3",
+            p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{label}" }
+            p { class: "mt-1 text-sm font-medium text-foreground", "{value}" }
+        }
+    }
+}
+
+#[component]
+fn MiniSelect(label: String, value: String) -> Element {
+    rsx! {
+        div { class: "space-y-1",
+            p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{label}" }
+            select { class: "w-full rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none", disabled: true, option { selected: true, "{value}" } }
+        }
+    }
+}
+
+#[component]
+pub fn CommandPalette(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Element {
+    let entries = ui.visible_actions();
+    let cli_entries = ui.visible_cli_commands();
+    let has_entries = !entries.is_empty() || !cli_entries.is_empty();
+    let copy = ui.copy();
+    rsx! {
+        form { class: "group relative", action: "/", method: "get", "data-command-palette": "true",
+            input { type: "hidden", name: "pane", value: active_pane.slug() }
+            input { type: "hidden", name: "sidebar", value: "0" }
+            div { class: "flex items-center gap-2",
+                div { class: "relative min-w-0 flex-1",
+                    span { class: "pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-foreground/50", "⌘" }
+                    input {
+                        class: "w-full rounded-lg border border-border bg-background py-2.5 pl-10 pr-12 text-sm shadow-sm outline-none transition focus:border-foreground/20 focus:shadow-[0_0_0_4px_rgba(15,23,42,0.04)]",
+                        value: "{ui.command_query}",
+                        name: "query",
+                        placeholder: copy.palette_placeholder(),
+                        autocomplete: "off",
+                        spellcheck: "false",
+                        "data-command-input": "true",
+                    }
+                }
+            }
+            div { class: "command-palette-results absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 hidden max-h-[26rem] grid-cols-1 gap-1 overflow-auto rounded-lg border border-border bg-panel p-1.5 shadow-lg", "data-command-results": "true",
+                for entry in entries {
+                    CommandItem { entry: entry, selected: false }
+                }
+                for entry in cli_entries {
+                    CliCommandItem { entry }
+                }
+                if !has_entries {
+                    EmptyState { title: "No matches".to_string(), body: copy.palette_hint().to_string() }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn CliCommandItem(entry: CliCommandEntry) -> Element {
+    let state = if entry.mutates_files {
+        "confirm"
+    } else if entry.requires_input {
+        "input"
+    } else {
+        "ready"
+    };
+    rsx! {
+        a {
+            class: classes::COMMAND_ITEM,
+            href: format!("?pane=commands&sidebar=0&cli={}", entry.id),
+            title: "{entry.description}",
+            "data-command-item": "true",
+            "data-command-text": format!("{} {} {} {}", entry.id, entry.title, entry.description, entry.invocation),
+            "data-command-id": entry.id,
+            "data-command-title": entry.title,
+            div { class: "flex items-start gap-3 text-left",
+                span { class: "grid h-8 w-8 shrink-0 place-items-center rounded-full border border-border bg-panel-muted text-xs text-foreground/70", "›" }
+                div { class: "flex min-w-0 flex-col gap-1",
+                    span { class: "text-sm font-medium text-foreground", "{entry.title}" }
+                    span { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{entry.id}" }
+                }
+            }
+            div { class: "flex flex-col items-end gap-1 text-xs uppercase tracking-[0.18em]",
+                span { class: "normal-case tracking-normal text-foreground/50", "{state}" }
             }
         }
     }
@@ -154,12 +1465,12 @@ pub fn GoalRail(ui: WorkbenchUiState) -> Element {
         Panel { class: classes::PANEL,
             div { class: classes::PANEL_INNER,
                 div { class: classes::SECTION_HEADER,
-                    h2 { class: classes::SECTION_TITLE, "Goal Rail" }
-                    ScopeChip { label: format!("{} goals", ui.payload.state.goals.active.len()) }
+                    h2 { class: classes::SECTION_TITLE, "Goals" }
+                    ScopeChip { label: format!("{}", ui.payload.state.goals.active.len()) }
                 }
                 div { class: classes::SECTION_BODY,
                     if ui.payload.state.goals.active.is_empty() {
-                        EmptyState { title: "No active goals".to_string(), body: "The Workbench will anchor the first goal here.".to_string() }
+                        EmptyState { title: "None".to_string(), body: "The first goal appears here." }
                     } else {
                         for goal in &ui.payload.state.goals.active {
                             GoalCard {
@@ -209,7 +1520,7 @@ pub fn GoalCanvas(
                         evidence: format!("ready for {}", action.evidence_kind.label()),
                     }
                 } else {
-                    EmptyState { title: "No action selected".to_string(), body: "Open the palette to run a read-only action or inspect the next suggested step.".to_string() }
+                    EmptyState { title: "No preview selected".to_string(), body: "Open the palette to inspect a command or preview the result.".to_string() }
                 }
             }
         }
@@ -581,7 +1892,17 @@ pub fn SpecImpactGraph(ui: WorkbenchUiState) -> Element {
                         }
                     }
                 } else {
-                    EmptyState { title: "No impact graph".to_string(), body: "A Branch Scope report supplies typed nodes and edges for specs, code, and tests.".to_string() }
+                    div { class: "grid gap-3 md:grid-cols-[minmax(0,1fr)_14rem]",
+                        EmptyState {
+                            title: "Branch scope not loaded".to_string(),
+                            body: "Open Load branch scope from the command palette to build this graph.".to_string(),
+                        }
+                        a {
+                            class: "flex items-center justify-center rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground/80 hover:bg-panel-muted",
+                            href: "?pane=commands&sidebar=0&query=branch%20scope&action=branch.scope",
+                            "Load branch scope"
+                        }
+                    }
                 }
             }
         }
@@ -789,14 +2110,19 @@ pub fn ChangedFilesPanel(report: syu_workbench::BranchScopeReport) -> Element {
                     ScopeChip { label: format!("{} files", report.changed_files.len()) }
                 }
                 for file in &report.changed_files {
-                    article { class: classes::EVIDENCE_CARD,
-                        div { class: "flex flex-wrap items-center gap-2",
-                            OwnershipBadge { status: format!("{:?}", file.status) }
-                            ScopeChip { label: if file.is_spec_file { "spec-linked".to_string() } else { "code-linked".to_string() } }
+                    details { class: classes::EVIDENCE_CARD,
+                        summary { class: "list-none cursor-pointer rounded-xl outline-none",
+                            div { class: "flex flex-wrap items-center gap-2",
+                                OwnershipBadge { status: format!("{:?}", file.status) }
+                                ScopeChip { label: if file.is_spec_file { "spec-linked".to_string() } else { "code-linked".to_string() } }
+                                ScopeChip { label: format!("{} symbols", file.symbols.len()) }
+                            }
+                            p { class: "mt-2 text-sm font-medium", "{file.file}" }
                         }
-                        p { class: "mt-2 text-sm font-medium", "{file.file}" }
-                        for symbol in &file.symbols {
-                            p { class: "text-xs text-foreground/65", "symbol: {symbol}" }
+                        div { class: "mt-3 space-y-2",
+                            for symbol in &file.symbols {
+                                p { class: "text-xs text-foreground/65", "symbol: {symbol}" }
+                            }
                         }
                     }
                 }
@@ -814,15 +2140,24 @@ pub fn OwnershipPanel(report: syu_workbench::BranchScopeReport) -> Element {
                     h3 { class: "text-sm font-semibold", "Ownership" }
                     ScopeChip { label: format!("{} owned", report.trace_ownership.owned_files) }
                 }
-                for change in &report.trace_ownership.unowned_changes {
-                    p { class: "text-sm text-ownership-missing", "unowned: {change.file}" }
-                    p { class: "text-xs text-foreground/65", "{change.reason}" }
-                }
-                for change in &report.trace_ownership.ambiguous_ownership {
-                    p { class: "text-sm text-ownership-ambiguous", "ambiguous: {change.file}" }
-                }
                 if report.trace_ownership.unowned_changes.is_empty() && report.trace_ownership.ambiguous_ownership.is_empty() {
                     p { class: "text-sm text-ownership-known", "ownership-known" }
+                } else {
+                    for change in &report.trace_ownership.unowned_changes {
+                        details { class: "rounded-xl border border-evidence-fail/40 bg-background/30 p-3",
+                            summary { class: "list-none cursor-pointer rounded-lg outline-none",
+                                p { class: "text-sm text-ownership-missing", "unowned: {change.file}" }
+                            }
+                            p { class: "mt-2 text-xs text-foreground/65", "{change.reason}" }
+                        }
+                    }
+                    for change in &report.trace_ownership.ambiguous_ownership {
+                        details { class: "rounded-xl border border-evidence-warn/40 bg-background/30 p-3",
+                            summary { class: "list-none cursor-pointer rounded-lg outline-none",
+                                p { class: "text-sm text-ownership-ambiguous", "ambiguous: {change.file}" }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -854,8 +2189,12 @@ pub fn OutOfScopePanel(report: syu_workbench::BranchScopeReport) -> Element {
                     p { class: "text-sm text-scope-in", "scope-in" }
                 } else {
                     for change in &report.spec_impact.out_of_scope_changes {
-                        p { class: "text-sm text-scope-out", "{change.file}" }
-                        p { class: "text-xs text-foreground/65", "{change.reason}" }
+                        details { class: "rounded-xl border border-evidence-fail/40 bg-background/30 p-3",
+                            summary { class: "list-none cursor-pointer rounded-lg outline-none",
+                                p { class: "text-sm text-scope-out", "{change.file}" }
+                            }
+                            p { class: "mt-2 text-xs text-foreground/65", "{change.reason}" }
+                        }
                     }
                 }
             }
@@ -909,14 +2248,21 @@ pub fn SuggestedGoalSplitPanel(split: syu_workbench::SuggestedGoalSplit) -> Elem
                     h3 { class: "text-sm font-semibold", "Suggested Goal Split" }
                     ScopeChip { label: format!("confidence: {}", split.confidence) }
                 }
-                for include in &split.include {
-                    p { class: "text-sm text-scope-in", "include: {include}" }
-                }
-                for exclude in &split.exclude {
-                    p { class: "text-sm text-scope-out", "exclude: {exclude}" }
-                }
-                for reason in &split.reasons {
-                    p { class: "text-xs text-evidence-warn", "{reason}" }
+                details { class: "rounded-xl border border-border bg-background/30 p-3",
+                    summary { class: "list-none cursor-pointer rounded-lg outline-none",
+                        p { class: "text-sm font-medium text-foreground", "split preview" }
+                    }
+                    div { class: "mt-3 space-y-2",
+                        for include in &split.include {
+                            p { class: "text-sm text-scope-in", "include: {include}" }
+                        }
+                        for exclude in &split.exclude {
+                            p { class: "text-sm text-scope-out", "exclude: {exclude}" }
+                        }
+                        for reason in &split.reasons {
+                            p { class: "text-xs text-evidence-warn", "{reason}" }
+                        }
+                    }
                 }
             }
         }
@@ -932,11 +2278,18 @@ pub fn TestRecommendationPanel(report: syu_workbench::BranchScopeReport) -> Elem
                     h3 { class: "text-sm font-semibold", "Test Impact" }
                     ScopeChip { label: format!("{} tests", report.test_inventory.total_tests) }
                 }
-                for test in report.test_inventory.required_tests.iter().chain(report.test_inventory.linked_tests.iter()) {
-                    p { class: "text-sm text-test-linked", "{test}" }
-                }
-                if report.test_inventory.total_tests == 0 {
-                    p { class: "text-sm text-evidence-warn", "evidence-pending" }
+                details { class: "rounded-xl border border-border bg-background/30 p-3",
+                    summary { class: "list-none cursor-pointer rounded-lg outline-none",
+                        p { class: "text-sm font-medium text-foreground", "test list" }
+                    }
+                    div { class: "mt-3 space-y-1",
+                        for test in report.test_inventory.required_tests.iter().chain(report.test_inventory.linked_tests.iter()) {
+                            p { class: "text-sm text-test-linked", "{test}" }
+                        }
+                        if report.test_inventory.total_tests == 0 {
+                            p { class: "text-sm text-evidence-warn", "evidence-pending" }
+                        }
+                    }
                 }
             }
         }
@@ -1390,16 +2743,12 @@ fn FlowActionButton(
     } else {
         "rounded-xl border border-border bg-panel-muted px-3 py-2 text-sm font-medium text-foreground/55"
     };
+    let _ = onclick;
     rsx! {
-        button {
+        a {
             class: class,
-            disabled: !available,
-            onclick: move |_| {
-                if let Some(handler) = onclick {
-                    handler.call(action_id);
-                }
-            },
-            type: "button",
+            href: format!("?pane=commands&sidebar=1&action={}", action_id.label()),
+            aria_disabled: if available { "false" } else { "true" },
             span { "{label}" }
             span { class: "ml-2 text-xs opacity-75", "{action_id.label()}" }
         }
@@ -1582,15 +2931,16 @@ mod tests {
     };
 
     #[test]
-    fn app_shell_renders_workbench_pulse_before_the_side_panels() {
+    fn app_shell_renders_command_palette_first_shell() {
         let html = render_element(rsx! {
-            AppShell { ui: build_demo_state() }
+            AppShell { ui: build_demo_state(), active_pane: WorkbenchPane::Commands, sidebar_open: true }
         });
 
-        assert!(html.contains("Workbench Pulse"));
-        assert!(html.contains("Goal Rail"));
-        assert!(html.contains("Evidence"));
-        assert!(html.contains("Command Palette"));
+        assert!(html.contains("Syu"));
+        assert!(html.contains("Type a command"));
+        assert!(html.contains("Command palette"));
+        assert!(html.contains("data-command-palette"));
+        assert!(!html.contains("navigation"));
     }
 
     #[test]
@@ -1599,10 +2949,9 @@ mod tests {
         ui.set_query("goal");
 
         let html = render_element(rsx! {
-            AppShell { ui }
+            AppShell { ui, active_pane: WorkbenchPane::Commands, sidebar_open: true }
         });
 
-        assert!(html.contains("disabled: missing active_goal_plan"));
         assert!(html.contains("goal.check"));
     }
 
@@ -1641,14 +2990,14 @@ mod tests {
             }
         });
 
-        let pulse = html.find("Workbench Pulse").expect("pulse should render");
+        let pulse = html.find("workspace").expect("workspace should render");
         let preview = html
-            .find("Read-only action placeholder")
+            .find("Preview opened for")
             .expect("preview should render");
 
         assert!(pulse < preview);
-        assert!(html.contains("Read-only action placeholder"));
-        assert!(html.contains("Evidence placeholder"));
+        assert!(html.contains("Preview opened for"));
+        assert!(html.contains("Ready to review"));
     }
 
     #[test]

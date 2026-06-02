@@ -14,7 +14,7 @@
 
 ## Traceability
 
-- Requirement-to-test traceability: 180/180
+- Requirement-to-test traceability: 181/181
 - Feature-to-implementation traceability: 208/208
 
 ## Issues

@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 use dioxus_ssr::render_element;
 use syu_app_ui::{
     AppShell, AssignGoalDialog, BranchScopeLens, EvidencePanel, GoalCanvas, GoalPlanExportPanel,
-    SpecImpactGraph, WorkbenchUiState, build_demo_state,
+    SpecImpactGraph, WorkbenchPane, WorkbenchUiState, build_demo_state,
 };
 use syu_workbench::{
     AssignmentBlocker, ScopeGuardResult, ScopeGuardStatus, WorkbenchActionId,
@@ -10,15 +10,15 @@ use syu_workbench::{
 };
 
 #[test]
-fn app_shell_renders_workbench_pulse_before_the_side_panels() {
+fn app_shell_renders_command_palette_first_shell() {
     let html = render_element(rsx! {
-        AppShell { ui: build_demo_state() }
+        AppShell { ui: build_demo_state(), active_pane: WorkbenchPane::Pulse, sidebar_open: false }
     });
 
-    assert!(html.contains("Workbench Pulse"));
-    assert!(html.contains("Goal Rail"));
-    assert!(html.contains("Evidence"));
-    assert!(html.contains("Command Palette"));
+    assert!(html.contains("Syu"));
+    assert!(html.contains("data-command-palette"));
+    assert!(html.contains("Type a command"));
+    assert!(!html.contains("navigation"));
 }
 
 #[test]
@@ -27,7 +27,7 @@ fn command_palette_renders_disabled_reason_for_unavailable_actions() {
     ui.set_query("goal");
 
     let html = render_element(rsx! {
-        AppShell { ui }
+        AppShell { ui, active_pane: WorkbenchPane::Commands, sidebar_open: false }
     });
 
     assert!(html.contains("disabled: missing active_goal_plan"));
@@ -46,14 +46,14 @@ fn goal_canvas_renders_a_read_only_action_preview_placeholder() {
         }
     });
 
-    let pulse = html.find("Workbench Pulse").expect("pulse should render");
+    let pulse = html.find("workspace").expect("pulse should render");
     let preview = html
-        .find("Read-only action placeholder")
+        .find("Preview opened for Show history")
         .expect("preview should render");
 
     assert!(pulse < preview);
-    assert!(html.contains("Read-only action placeholder"));
-    assert!(html.contains("Evidence placeholder"));
+    assert!(html.contains("Preview opened for Show history"));
+    assert!(html.contains("Ready to review"));
 }
 
 #[test]
@@ -106,8 +106,12 @@ fn read_only_action_returns_placeholder_preview() {
 
     let preview = ui.action_preview(WorkbenchActionId::HistoryShow).unwrap();
 
-    assert!(preview.result_summary.contains("placeholder"));
-    assert!(preview.evidence_summary.contains("Evidence placeholder"));
+    assert!(
+        preview
+            .result_summary
+            .contains("Preview opened for Show history")
+    );
+    assert!(preview.evidence_summary.contains("Ready to review"));
 }
 
 #[test]
@@ -150,7 +154,7 @@ fn request_flow_actions_are_exposed_in_the_command_palette() {
     ui.set_query("request.");
 
     let html = render_element(rsx! {
-        AppShell { ui }
+        AppShell { ui, active_pane: WorkbenchPane::Commands, sidebar_open: false }
     });
 
     assert!(html.contains("request.classify"));
@@ -189,7 +193,7 @@ fn assignment_actions_are_exposed_in_the_command_palette() {
     ui.set_query("assignment.");
 
     let html = render_element(rsx! {
-        AppShell { ui }
+        AppShell { ui, active_pane: WorkbenchPane::Commands, sidebar_open: false }
     });
 
     assert!(html.contains("assignment.create"));

@@ -16,7 +16,7 @@ check_ui_assets() {
 
   grep -F '@import "tailwindcss";' "$source_css" >/dev/null
   grep -F '@source "./src/**/*.{rs,html,css}";' "$source_css" >/dev/null
-  grep -F "@theme" "$built_css" >/dev/null
+  grep -F "@layer theme" "$built_css" >/dev/null
   grep -F -- "--color-command-active" "$built_css" >/dev/null
   grep -F -- "--color-evidence-pending" "$built_css" >/dev/null
 

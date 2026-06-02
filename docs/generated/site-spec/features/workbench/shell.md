@@ -44,7 +44,7 @@ description: "Generated reference for docs/syu/features/workbench/shell.yaml"
           - StatusBar
       - **file**: tests/workbench_smoke.rs
         - **symbols**:
-          - app_shell_renders_workbench_pulse_before_the_side_panels
+          - app_shell_renders_command_palette_first_shell
           - command_palette_renders_disabled_reason_for_unavailable_actions
           - goal_canvas_renders_a_read_only_action_preview_placeholder
           - evidence_panel_renders_placeholder_when_empty
@@ -90,7 +90,7 @@ features:
             - StatusBar
         - file: tests/workbench_smoke.rs
           symbols:
-            - app_shell_renders_workbench_pulse_before_the_side_panels
+            - app_shell_renders_command_palette_first_shell
             - command_palette_renders_disabled_reason_for_unavailable_actions
             - goal_canvas_renders_a_read_only_action_preview_placeholder
             - evidence_panel_renders_placeholder_when_empty

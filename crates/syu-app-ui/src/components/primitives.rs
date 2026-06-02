@@ -8,16 +8,16 @@ use syu_workbench::{
 #[component]
 pub fn Panel(class: &'static str, children: Element) -> Element {
     rsx! {
-        div { class: "{classes::PANEL} {class}", {children} }
+        div { class: "{class}", {children} }
     }
 }
 
 #[component]
 pub fn Button(label: String, active: bool, disabled: bool) -> Element {
     let class = if active {
-        "rounded-full border border-command-active bg-command-active px-3 py-1.5 text-sm font-medium text-background"
+        "inline-flex items-center gap-2 rounded-full border border-command-active bg-command-active px-3 py-1.5 text-xs font-medium uppercase tracking-[0.18em] text-background"
     } else {
-        "rounded-full border border-border bg-panel-muted px-3 py-1.5 text-sm font-medium text-foreground hover:bg-panel"
+        "inline-flex items-center gap-2 rounded-full border border-border bg-panel-muted px-3 py-1.5 text-xs font-medium uppercase tracking-[0.18em] text-foreground/80 hover:bg-panel"
     };
     rsx! {
         button {
@@ -33,10 +33,11 @@ pub fn Button(label: String, active: bool, disabled: bool) -> Element {
 pub fn IconButton(label: String, icon: String) -> Element {
     rsx! {
         button {
-            class: "inline-flex items-center gap-2 rounded-full border border-border bg-panel-muted px-3 py-1.5 text-sm hover:bg-panel",
+            class: "inline-flex items-center gap-2 rounded-full border border-border bg-panel-muted px-3 py-1.5 text-xs font-medium uppercase tracking-[0.18em] text-foreground/80 hover:bg-panel",
             type: "button",
-            span { class: "text-foreground/60", "{icon}" }
-            span { "{label}" }
+            title: "{label}",
+            span { class: "grid h-5 w-5 place-items-center rounded-full border border-border/70 text-foreground/60", "{icon}" }
+            span { class: "sr-only", "{label}" }
         }
     }
 }
@@ -44,7 +45,7 @@ pub fn IconButton(label: String, icon: String) -> Element {
 #[component]
 pub fn StatusDot(tone_class: &'static str, label: String) -> Element {
     rsx! {
-        span { class: "inline-flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-foreground/70",
+        span { class: "inline-flex items-center gap-2 text-[10px] uppercase tracking-[0.22em] text-foreground/65",
             span { class: "{classes::STATUS_DOT} {tone_class}" }
             span { "{label}" }
         }
@@ -74,9 +75,9 @@ pub fn CommandOutputView(
     attachment: Option<EvidenceAttachment>,
 ) -> Element {
     rsx! {
-        section { class: "mt-3 rounded-lg bg-background/30 p-3",
+        section { class: "mt-3 rounded-xl border border-border/70 bg-background/30 p-3",
             div { class: "flex items-center justify-between gap-3",
-                p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "{title}" }
+                p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{title}" }
                 if let Some(command) = &command {
                     ScopeChip { label: command.command.clone() }
                 }
@@ -84,12 +85,12 @@ pub fn CommandOutputView(
             p { class: "mt-2 text-sm text-foreground/75", "{summary}" }
             if let Some(command) = &command {
                 if !command.args.is_empty() {
-                    p { class: "mt-2 text-xs text-foreground/55", "{command.args.join(\" \")}" }
+                    p { class: "mt-2 text-xs text-foreground/50", "{command.args.join(\" \")}" }
                 }
             }
             if let Some(attachment) = attachment {
                 if let Some(summary) = attachment.summary {
-                    p { class: "mt-2 text-xs uppercase tracking-[0.18em] text-foreground/55", "{summary}" }
+                    p { class: "mt-2 text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{summary}" }
                 }
                 if let Some(content) = attachment.content {
                     pre { class: "mt-2 max-h-40 overflow-auto rounded-lg border border-border bg-panel-muted p-2 text-xs text-foreground/70",
@@ -112,7 +113,7 @@ pub fn EvidenceDetailDrawer(record: EvidenceRecord) -> Element {
                 h3 { class: "text-sm font-semibold", "{record.summary}" }
                 EvidenceBadge { kind: record.kind }
             }
-            p { class: "mt-2 text-xs uppercase tracking-[0.18em] text-foreground/60", "{record.status.label()}" }
+            p { class: "mt-2 text-[10px] uppercase tracking-[0.24em] text-foreground/55", "{record.status.label()}" }
             if let Some(goal_id) = &record.goal_id {
                 p { class: "mt-2 text-sm text-foreground/80", "Goal: {goal_id}" }
             }
@@ -138,36 +139,40 @@ pub fn EvidenceRecordCard(record: EvidenceRecord) -> Element {
     let attachment = record.attachments.first().cloned();
     let timestamp_label = format_timestamp_ms(record.timestamp);
     rsx! {
-        article { class: classes::EVIDENCE_CARD,
-            div { class: "flex items-start justify-between gap-3",
-                div { class: "min-w-0 space-y-2",
-                    div { class: "flex flex-wrap items-center gap-2",
-                        StatusDot { tone_class: tone_class, label: record.status.label().to_string() }
-                        EvidenceBadge { kind: record.kind }
-                        if let Some(goal_id) = &record.goal_id {
-                            ScopeChip { label: goal_id.clone() }
+        details { class: classes::EVIDENCE_CARD,
+            summary { class: "list-none cursor-pointer rounded-xl outline-none",
+                div { class: "flex items-start justify-between gap-3",
+                    div { class: "min-w-0 space-y-2",
+                        div { class: "flex flex-wrap items-center gap-2",
+                            StatusDot { tone_class: tone_class, label: record.status.label().to_string() }
+                            EvidenceBadge { kind: record.kind }
+                            if let Some(goal_id) = &record.goal_id {
+                                ScopeChip { label: goal_id.clone() }
+                            }
+                        }
+                        p { class: "text-sm font-medium text-foreground", "{record.summary}" }
+                        if let Some(source_label) = source_label {
+                            p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{source_label}" }
                         }
                     }
-                    p { class: "text-sm font-medium text-foreground", "{record.summary}" }
-                    if let Some(source_label) = source_label {
-                        p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "{source_label}" }
-                    }
+                    p { class: "shrink-0 text-xs text-foreground/45", "{timestamp_label}" }
                 }
-                p { class: "shrink-0 text-xs text-foreground/45", "{timestamp_label}" }
             }
-            if let Some(command) = &record.command {
-                CommandOutputView {
-                    title: "Command output".to_string(),
-                    summary: record.summary.clone(),
-                    command: Some(command.clone()),
-                    attachment: attachment.clone(),
-                }
-            } else if let Some(attachment) = attachment {
-                CommandOutputView {
-                    title: "Evidence attachment".to_string(),
-                    summary: record.summary.clone(),
-                    command: None,
-                    attachment: Some(attachment),
+            div { class: "mt-3 space-y-3",
+                if let Some(command) = &record.command {
+                    CommandOutputView {
+                        title: "Command output".to_string(),
+                        summary: record.summary.clone(),
+                        command: Some(command.clone()),
+                        attachment: attachment.clone(),
+                    }
+                } else if let Some(attachment) = attachment {
+                    CommandOutputView {
+                        title: "Evidence attachment".to_string(),
+                        summary: record.summary.clone(),
+                        command: None,
+                        attachment: Some(attachment),
+                    }
                 }
             }
         }
@@ -245,24 +250,23 @@ pub fn ManualDecisionEvidenceView(record: EvidenceRecord) -> Element {
 #[component]
 pub fn GoalCard(goal_id: String, title: String, selected: bool) -> Element {
     let class = if selected {
-        "rounded-xl border border-goal-active bg-panel-muted p-3"
+        "rounded-xl border border-goal-active/80 bg-panel/80 p-3 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]"
     } else {
         "rounded-xl border border-border bg-panel-muted p-3"
     };
     rsx! {
-        article { class: class,
-            p { class: "text-xs uppercase tracking-[0.18em] text-foreground/60", "{goal_id}" }
-            p { class: "mt-1 text-sm font-medium", "{title}" }
+        a {
+            class: class,
+            href: format!("?pane=goals&sidebar=1&goal={goal_id}"),
+            aria_current: if selected { "page" } else { "false" },
+            p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/55", "{goal_id}" }
+            p { class: "mt-1 text-sm font-medium text-foreground/90", "{title}" }
         }
     }
 }
 
 #[component]
-pub fn CommandItem(
-    entry: CommandPaletteEntry,
-    selected: bool,
-    onclick: EventHandler<MouseEvent>,
-) -> Element {
+pub fn CommandItem(entry: CommandPaletteEntry, selected: bool) -> Element {
     let class = if selected {
         format!("{} {}", classes::COMMAND_ITEM, classes::COMMAND_ITEM_ACTIVE)
     } else {
@@ -273,22 +277,38 @@ pub fn CommandItem(
     } else {
         classes::COMMAND_ITEM_DISABLED
     };
+    let href = if entry.availability.available && !entry.action.mutability.requires_confirmation() {
+        format!(
+            "?pane=commands&sidebar=0&action={}&run=1",
+            entry.action.id.label()
+        )
+    } else {
+        format!(
+            "?pane=commands&sidebar=0&action={}",
+            entry.action.id.label()
+        )
+    };
     rsx! {
-        button {
+        a {
             class: "{class} {disabled_class}",
-            onclick: onclick,
-            type: "button",
-            disabled: !entry.availability.available,
-            div { class: "flex flex-col gap-1 text-left",
-                span { class: "text-sm font-medium", "{entry.action.title}" }
-                span { class: "text-xs text-foreground/65", "{entry.action.description}" }
+            href,
+            title: "{entry.action.description}",
+            "data-command-item": "true",
+            "data-command-text": format!("{} {} {}", entry.action.id.label(), entry.action.title, entry.action.description),
+            "data-command-id": entry.action.id.label(),
+            "data-command-title": entry.action.title.clone(),
+            div { class: "flex items-start gap-3 text-left",
+                span { class: "grid h-8 w-8 shrink-0 place-items-center rounded-full border border-border bg-panel-muted text-xs text-foreground/70", "{action_icon(entry.action.id)}" }
+                div { class: "flex min-w-0 flex-col gap-1",
+                    span { class: "text-sm font-medium text-foreground", "{entry.action.title}" }
+                    span { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{entry.action.id.label()}" }
+                }
             }
             div { class: "flex flex-col items-end gap-1 text-xs uppercase tracking-[0.18em]",
-                span { "{entry.action.id.label()}" }
                 if let Some(reason) = &entry.disabled_reason {
-                    span { class: "normal-case tracking-normal text-evidence-warn", "{reason}" }
+                    span { class: "max-w-[11rem] text-right normal-case tracking-normal text-foreground/50", "{reason}" }
                 } else {
-                    span { class: "normal-case tracking-normal text-evidence-pass", "ready" }
+                    span { class: "normal-case tracking-normal text-foreground/50", "ready" }
                 }
             }
         }
@@ -299,8 +319,8 @@ pub fn CommandItem(
 pub fn EmptyState(title: String, body: String) -> Element {
     rsx! {
         div { class: classes::EMPTY_STATE,
-            p { class: "text-sm font-semibold", "{title}" }
-            p { class: "mt-1 text-sm", "{body}" }
+            p { class: "text-sm font-semibold text-foreground/90", "{title}" }
+            p { class: "mt-1 text-sm text-foreground/65", "{body}" }
         }
     }
 }
@@ -311,10 +331,10 @@ pub fn DetailDrawer(title: String, body: String, evidence: String) -> Element {
         section { class: classes::DRAWER,
             div { class: "flex items-center justify-between gap-3",
                 h3 { class: "text-sm font-semibold", "{title}" }
-                EvidenceBadge { kind: WorkbenchEvidenceKind::HistoryResponse }
+                ScopeChip { label: "result".to_string() }
             }
-            p { class: "mt-2 text-sm text-foreground/80", "{body}" }
-            p { class: "mt-2 text-xs uppercase tracking-[0.18em] text-evidence-pending", "{evidence}" }
+            p { class: "mt-2 text-sm text-foreground/75", "{body}" }
+            p { class: "mt-2 text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{evidence}" }
         }
     }
 }
@@ -374,5 +394,32 @@ fn record_source_label(record: &EvidenceRecord) -> Option<String> {
             Some(format!("source: {component}"))
         }
         None => None,
+    }
+}
+
+pub(crate) fn action_icon(action_id: syu_workbench::WorkbenchActionId) -> &'static str {
+    match action_id {
+        syu_workbench::WorkbenchActionId::RequestNew => "＋",
+        syu_workbench::WorkbenchActionId::RequestClassify => "◌",
+        syu_workbench::WorkbenchActionId::RequestScope => "⌁",
+        syu_workbench::WorkbenchActionId::RequestScaffold => "▣",
+        syu_workbench::WorkbenchActionId::RequestPlan => "▤",
+        syu_workbench::WorkbenchActionId::GoalTestSelect => "✓",
+        syu_workbench::WorkbenchActionId::GoalCheck => "◎",
+        syu_workbench::WorkbenchActionId::BranchScope => "↻",
+        syu_workbench::WorkbenchActionId::BranchInferGoal => "↗",
+        syu_workbench::WorkbenchActionId::SpecImpact => "◈",
+        syu_workbench::WorkbenchActionId::TraceRange => "⋯",
+        syu_workbench::WorkbenchActionId::RelateRange => "⊕",
+        syu_workbench::WorkbenchActionId::ValidationRun => "⟐",
+        syu_workbench::WorkbenchActionId::HistoryShow => "⌂",
+        syu_workbench::WorkbenchActionId::AssignmentCreate => "✦",
+        syu_workbench::WorkbenchActionId::AssignmentPreview => "◫",
+        syu_workbench::WorkbenchActionId::AssignmentRunDry => "↯",
+        syu_workbench::WorkbenchActionId::AssignmentRun => "▶",
+        syu_workbench::WorkbenchActionId::AssignmentCancel => "✕",
+        syu_workbench::WorkbenchActionId::AssignmentRecordManual => "✎",
+        syu_workbench::WorkbenchActionId::AssignmentCollectEvidence => "⟡",
+        syu_workbench::WorkbenchActionId::AgentRun => "⌘",
     }
 }
