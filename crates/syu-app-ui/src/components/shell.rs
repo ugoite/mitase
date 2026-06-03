@@ -395,7 +395,7 @@ pub fn WorkbenchStage(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
                 {detail}
                 if let Some(preview) = cli_preview {
                     div { class: "mt-4",
-                        CliCommandResult { preview }
+                        CliCommandResult { preview, locale: ui.locale }
                     }
                 } else if let Some(preview) = action_preview {
                     div { class: "mt-4",
@@ -407,7 +407,7 @@ pub fn WorkbenchStage(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
                     }
                 } else if let Some(action) = selected_action {
                     div { class: "mt-4",
-                        WorkbenchActionResult { action }
+                        WorkbenchActionResult { action, locale: ui.locale }
                     }
                 }
             }
@@ -416,7 +416,7 @@ pub fn WorkbenchStage(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
 }
 
 #[component]
-fn WorkbenchActionResult(action: WorkbenchAction) -> Element {
+fn WorkbenchActionResult(action: WorkbenchAction, locale: Locale) -> Element {
     let needs_input = workbench_action_needs_text_input(action.id.label());
     let needs_confirmation = action.mutability.requires_confirmation();
     rsx! {
@@ -429,6 +429,7 @@ fn WorkbenchActionResult(action: WorkbenchAction) -> Element {
             form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/", method: "get",
                 input { type: "hidden", name: "pane", value: "commands" }
                 input { type: "hidden", name: "sidebar", value: "0" }
+                input { type: "hidden", name: "lang", value: "{locale.slug()}" }
                 input { type: "hidden", name: "action", value: "{action.id.label()}" }
                 input { type: "hidden", name: "run", value: "1" }
                 if needs_input {
@@ -470,7 +471,7 @@ fn workbench_action_needs_text_input(action_id: &str) -> bool {
 }
 
 #[component]
-fn CliCommandResult(preview: CliCommandPreview) -> Element {
+fn CliCommandResult(preview: CliCommandPreview, locale: Locale) -> Element {
     let default_cli_arg = cli_input_placeholder(&preview.id);
 
     rsx! {
@@ -485,6 +486,7 @@ fn CliCommandResult(preview: CliCommandPreview) -> Element {
                 form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/", method: "get",
                     input { type: "hidden", name: "pane", value: "commands" }
                     input { type: "hidden", name: "sidebar", value: "0" }
+                    input { type: "hidden", name: "lang", value: "{locale.slug()}" }
                     input { type: "hidden", name: "cli", value: "{preview.id}" }
                     if preview.requires_input {
                         input {
@@ -1398,6 +1400,7 @@ pub fn CommandPalette(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
         form { class: "group relative", action: "/", method: "get", "data-command-palette": "true",
             input { type: "hidden", name: "pane", value: active_pane.slug() }
             input { type: "hidden", name: "sidebar", value: "0" }
+            input { type: "hidden", name: "lang", value: "{ui.locale.slug()}" }
             div { class: "flex items-center gap-2",
                 div { class: "relative min-w-0 flex-1",
                     span { class: "pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-foreground/50", "⌘" }
@@ -1414,10 +1417,10 @@ pub fn CommandPalette(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
             }
             div { class: "command-palette-results absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 hidden max-h-[26rem] grid-cols-1 gap-1 overflow-auto rounded-lg border border-border bg-panel p-1.5 shadow-lg", "data-command-results": "true",
                 for entry in entries {
-                    CommandItem { entry: entry, selected: false }
+                    CommandItem { entry: entry, selected: false, locale: ui.locale }
                 }
                 for entry in cli_entries {
-                    CliCommandItem { entry }
+                    CliCommandItem { entry, locale: ui.locale }
                 }
                 if !has_entries {
                     EmptyState { title: "No matches".to_string(), body: copy.palette_hint().to_string() }
@@ -1428,7 +1431,7 @@ pub fn CommandPalette(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
 }
 
 #[component]
-fn CliCommandItem(entry: CliCommandEntry) -> Element {
+fn CliCommandItem(entry: CliCommandEntry, locale: Locale) -> Element {
     let state = if entry.mutates_files {
         "confirm"
     } else if entry.requires_input {
@@ -1439,7 +1442,7 @@ fn CliCommandItem(entry: CliCommandEntry) -> Element {
     rsx! {
         a {
             class: classes::COMMAND_ITEM,
-            href: format!("?pane=commands&sidebar=0&cli={}", entry.id),
+            href: format!("?pane=commands&sidebar=0&lang={}&cli={}", locale.slug(), entry.id),
             title: "{entry.description}",
             "data-command-item": "true",
             "data-command-text": format!("{} {} {} {}", entry.id, entry.title, entry.description, entry.invocation),
@@ -2953,6 +2956,37 @@ mod tests {
         });
 
         assert!(html.contains("goal.check"));
+    }
+
+    #[test]
+    fn command_palette_preserves_selected_locale_across_search_links_and_run_forms() {
+        let mut ui = build_demo_state();
+        ui.set_locale(Locale::Ja);
+        ui.set_query("validate");
+
+        let html = render_element(rsx! {
+            AppShell { ui, active_pane: WorkbenchPane::Commands, sidebar_open: false }
+        });
+
+        assert!(html.contains("name=\"lang\" value=\"ja\""));
+        assert!(
+            html.contains("href=\"?pane=commands&#38;sidebar=0&#38;lang=ja&#38;cli=cli.validate\"")
+        );
+        assert!(html.contains("data-command-id=\"cli.validate\""));
+    }
+
+    #[test]
+    fn runnable_cli_forms_preserve_selected_locale() {
+        let mut ui = build_demo_state();
+        ui.set_locale(Locale::Ja);
+        ui.select_cli_command("cli.task.check");
+
+        let html = render_element(rsx! {
+            AppShell { ui, active_pane: WorkbenchPane::Commands, sidebar_open: false }
+        });
+
+        assert!(html.contains("name=\"lang\" value=\"ja\""));
+        assert!(html.contains("name=\"cli\" value=\"cli.task.check\""));
     }
 
     #[test]

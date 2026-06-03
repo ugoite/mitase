@@ -1,4 +1,5 @@
 use crate::design::classes;
+use crate::i18n::Locale;
 use crate::model::CommandPaletteEntry;
 use dioxus::prelude::*;
 use syu_workbench::{
@@ -266,7 +267,7 @@ pub fn GoalCard(goal_id: String, title: String, selected: bool) -> Element {
 }
 
 #[component]
-pub fn CommandItem(entry: CommandPaletteEntry, selected: bool) -> Element {
+pub fn CommandItem(entry: CommandPaletteEntry, selected: bool, locale: Locale) -> Element {
     let class = if selected {
         format!("{} {}", classes::COMMAND_ITEM, classes::COMMAND_ITEM_ACTIVE)
     } else {
@@ -279,12 +280,14 @@ pub fn CommandItem(entry: CommandPaletteEntry, selected: bool) -> Element {
     };
     let href = if entry.availability.available && !entry.action.mutability.requires_confirmation() {
         format!(
-            "?pane=commands&sidebar=0&action={}&run=1",
+            "?pane=commands&sidebar=0&lang={}&action={}&run=1",
+            locale.slug(),
             entry.action.id.label()
         )
     } else {
         format!(
-            "?pane=commands&sidebar=0&action={}",
+            "?pane=commands&sidebar=0&lang={}&action={}",
+            locale.slug(),
             entry.action.id.label()
         )
     };

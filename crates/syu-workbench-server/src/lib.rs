@@ -3421,6 +3421,39 @@ mod tests {
         );
     }
 
+    #[test]
+    fn every_palette_cli_command_has_a_preview_and_argument_path() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+
+        for command in cli_command_catalog() {
+            let cli_arg = match command.id {
+                "cli.show" | "cli.log" => "REQ-WORKBENCH-001",
+                "cli.search" => "workbench",
+                "cli.explain" | "cli.relate" => "docs/syu/requirements.md",
+                "cli.trace" => "crates/syu-workbench-server/src/lib.rs",
+                "cli.completion" => "zsh",
+                "cli.task.classify" | "cli.task.scope" | "cli.task.scaffold" | "cli.task.plan" => {
+                    "target/syu/workbench/request.yaml"
+                }
+                "cli.task.test_select" | "cli.task.check" => "target/syu/workbench/goal.yaml",
+                "cli.add" => "requirement REQ-WORKBENCH-PLAYWRIGHT-001",
+                _ => "",
+            };
+
+            let resolved_arg = cli_default_arg(command.id, cli_arg);
+            assert!(
+                cli_command_args(command.id, resolved_arg).is_some(),
+                "{} should resolve to CLI arguments",
+                command.id
+            );
+
+            let preview = run_cli_command_preview(command.id, tempdir.path(), Some(cli_arg), false)
+                .unwrap_or_else(|| panic!("{} should produce a preview", command.id));
+            assert_eq!(preview.id, command.id);
+            assert!(!preview.result_summary.trim().is_empty());
+        }
+    }
+
     #[tokio::test]
     async fn health_endpoint_reports_server_details() {
         let server = test_server();
