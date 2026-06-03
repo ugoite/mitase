@@ -479,8 +479,8 @@ fn CliCommandResult(preview: CliCommandPreview) -> Element {
                 h3 { class: "text-sm font-semibold", "{preview.title}" }
                 ScopeChip { label: "result".to_string() }
             }
-            p { class: "mt-2 whitespace-pre-wrap text-sm text-foreground/75", "{preview.result_summary}" }
-            p { class: "mt-2 text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{preview.invocation} · {preview.evidence_summary}" }
+            p { class: "mt-2 whitespace-pre-wrap break-all text-sm text-foreground/75", "{preview.result_summary}" }
+            p { class: "mt-2 break-all text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{preview.invocation} · {preview.evidence_summary}" }
             if preview.requires_input || preview.mutates_files {
                 form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/", method: "get",
                     input { type: "hidden", name: "pane", value: "commands" }
@@ -523,9 +523,9 @@ fn cli_input_placeholder(command_id: &str) -> &'static str {
         "cli.completion" => "zsh",
         "cli.add" => "requirement REQ-NEW-001",
         "cli.task.classify" | "cli.task.scope" | "cli.task.scaffold" | "cli.task.plan" => {
-            "request.yaml"
+            "target/syu/workbench/request.yaml"
         }
-        "cli.task.test_select" | "cli.task.check" => ".syu/workbench/goals/goal.yaml",
+        "cli.task.test_select" | "cli.task.check" => "target/syu/workbench/goal.yaml",
         _ => "value",
     }
 }

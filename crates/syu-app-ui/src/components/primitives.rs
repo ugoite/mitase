@@ -82,10 +82,10 @@ pub fn CommandOutputView(
                     ScopeChip { label: command.command.clone() }
                 }
             }
-            p { class: "mt-2 text-sm text-foreground/75", "{summary}" }
+            p { class: "mt-2 break-all text-sm text-foreground/75", "{summary}" }
             if let Some(command) = &command {
                 if !command.args.is_empty() {
-                    p { class: "mt-2 text-xs text-foreground/50", "{command.args.join(\" \")}" }
+                    p { class: "mt-2 break-all text-xs text-foreground/50", "{command.args.join(\" \")}" }
                 }
             }
             if let Some(attachment) = attachment {
@@ -333,8 +333,8 @@ pub fn DetailDrawer(title: String, body: String, evidence: String) -> Element {
                 h3 { class: "text-sm font-semibold", "{title}" }
                 ScopeChip { label: "result".to_string() }
             }
-            p { class: "mt-2 text-sm text-foreground/75", "{body}" }
-            p { class: "mt-2 text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{evidence}" }
+            p { class: "mt-2 break-all text-sm text-foreground/75", "{body}" }
+            p { class: "mt-2 break-all text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{evidence}" }
         }
     }
 }

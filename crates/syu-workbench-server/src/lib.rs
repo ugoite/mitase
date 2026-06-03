@@ -42,9 +42,10 @@ use syu_task_model::{
     GoalPlanImplementationPlan, GoalPlanPersistentItem, GoalPlanPersistentItemDetails,
     GoalPlanPersistentItems, GoalPlanScope, GoalPlanScopeInclude, GoalPlanSelectionMode,
     GoalPlanSource, GoalPlanSourceEvidence, GoalPlanSourceMode, GoalPlanSpecMapping,
-    GoalPlanTestPlan, RequestArtifact, RequestClassification, ScaffoldAction, ScaffoldPlan,
-    ScaffoldUpdate, ScaffoldUpdateKind, ScopeFeatureCandidate, ScopeOutcome, ScopeSignals,
-    SearchResult, TaskTestSelectionCommand, TaskTestSelectionEscalation, TaskTestSelectionPlan,
+    GoalPlanTestPlan, RequestArtifact, RequestArtifactContext, RequestClassification,
+    ScaffoldAction, ScaffoldPlan, ScaffoldUpdate, ScaffoldUpdateKind, ScopeFeatureCandidate,
+    ScopeOutcome, ScopeSignals, SearchResult, TaskTestSelectionCommand,
+    TaskTestSelectionEscalation, TaskTestSelectionPlan,
 };
 use syu_workbench as shared_workbench;
 use tokio::{
@@ -998,7 +999,7 @@ fn workbench_document(shell: String, locale: Locale) -> String {
     form .command-palette-results:empty {{ display: none; }}
     summary::-webkit-details-marker {{ display: none; }}
   </style>
-  <link rel="stylesheet" href="/assets/tailwind.css">
+  <link rel="stylesheet" href="/assets/tailwind.css?v=workbench-palette-commands">
 </head>
 <body class="bg-background text-foreground antialiased">
   <div id="syu-workbench-root" data-ui="dioxus-ssr">{shell}</div>
@@ -1231,6 +1232,18 @@ fn run_cli_command_preview(
         });
     }
 
+    let cli_arg = cli_default_arg(command.id, cli_arg);
+    if let Err(error) = ensure_cli_task_fixture(command.id, workspace_root, cli_arg) {
+        return Some(CliCommandPreview {
+            id: command.id.to_string(),
+            title: command.title.to_string(),
+            invocation: command.invocation.to_string(),
+            result_summary: format!("failed to prepare command input: {error}"),
+            evidence_summary: "failed".to_string(),
+            requires_input: command.requires_input,
+            mutates_files: command.mutates_files,
+        });
+    }
     let args = cli_command_args(command.id, cli_arg)?;
     if matches!(command.id, "cli.workbench" | "cli.lsp") {
         return Some(CliCommandPreview {
@@ -1309,7 +1322,7 @@ fn cli_command_args(command_id: &str, cli_arg: &str) -> Option<Vec<String>> {
         "cli.task.scaffold" => vec!["task", "scaffold", cli_arg],
         "cli.task.plan" => vec!["task", "plan", cli_arg],
         "cli.task.test_select" => vec!["task", "test-select", cli_arg],
-        "cli.task.check" => vec!["task", "check", cli_arg],
+        "cli.task.check" => vec!["task", "check", cli_arg, "--range", "origin/main...HEAD"],
         "cli.add" => {
             let parts = cli_arg.split_whitespace().collect::<Vec<_>>();
             if parts.len() < 2 {
@@ -1330,6 +1343,135 @@ fn cli_command_args(command_id: &str, cli_arg: &str) -> Option<Vec<String>> {
     Some(args.into_iter().map(String::from).collect())
 }
 
+fn cli_default_arg<'a>(command_id: &str, cli_arg: &'a str) -> &'a str {
+    if !cli_arg.is_empty() {
+        return cli_arg;
+    }
+    match command_id {
+        "cli.task.classify" | "cli.task.scope" | "cli.task.scaffold" | "cli.task.plan" => {
+            "target/syu/workbench/request.yaml"
+        }
+        "cli.task.test_select" | "cli.task.check" => "target/syu/workbench/goal.yaml",
+        _ => cli_arg,
+    }
+}
+
+fn ensure_cli_task_fixture(command_id: &str, workspace_root: &FsPath, cli_arg: &str) -> Result<()> {
+    match command_id {
+        "cli.task.classify" | "cli.task.scope" | "cli.task.scaffold" | "cli.task.plan" => {
+            ensure_request_fixture(workspace_root, cli_arg)
+        }
+        "cli.task.test_select" | "cli.task.check" => ensure_goal_fixture(workspace_root, cli_arg),
+        _ => Ok(()),
+    }
+}
+
+fn ensure_request_fixture(workspace_root: &FsPath, relative_path: &str) -> Result<()> {
+    let path = workspace_root.join(relative_path);
+    if path.exists() {
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create `{}`", parent.display()))?;
+    }
+    let artifact = RequestArtifact {
+        version: 1,
+        request: "Make Syu Workbench command palette commands usable for beginners.".to_string(),
+        context: RequestArtifactContext {
+            affected_area: Some("Workbench browser UI and command palette".to_string()),
+            repository_constraints: vec![
+                "Keep behavior Rust/Dioxus-native.".to_string(),
+                "Use current Syu repository specs as the source of truth.".to_string(),
+            ],
+            linked_ids: vec!["REQ-WORKBENCH-001".to_string()],
+        },
+    };
+    let yaml = serde_yaml::to_string(&artifact).context("failed to encode request fixture")?;
+    fs::write(&path, yaml).with_context(|| format!("failed to write `{}`", path.display()))
+}
+
+fn ensure_goal_fixture(workspace_root: &FsPath, relative_path: &str) -> Result<()> {
+    let path = workspace_root.join(relative_path);
+    if path.exists() {
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create `{}`", parent.display()))?;
+    }
+    let plan = GoalPlanArtifact {
+        version: 1,
+        kind: "syu.goal_plan".to_string(),
+        request_path: Some("target/syu/workbench/request.yaml".to_string()),
+        request: Some("Make Syu Workbench command palette commands usable for beginners.".to_string()),
+        classification: Some(RequestClassification::Change.label().to_string()),
+        source: GoalPlanSource {
+            mode: GoalPlanSourceMode::RequestDriven,
+            request_artifact: Some("target/syu/workbench/request.yaml".to_string()),
+            classification: Some(RequestClassification::Change.label().to_string()),
+            confidence: Some(GoalPlanConfidence::Medium),
+            evidence: Some(GoalPlanSourceEvidence {
+                traced_requirements: vec!["REQ-WORKBENCH-001".to_string()],
+                traced_features: vec!["FEAT-WORKBENCH-SHELL-001".to_string()],
+                ..GoalPlanSourceEvidence::default()
+            }),
+            ..GoalPlanSource::default()
+        },
+        goal: GoalPlanGoal {
+            id: "GOAL-WORKBENCH-PALETTE-001".to_string(),
+            title: "Make command palette commands usable".to_string(),
+            statement: "Every Workbench palette command can be opened, understood, and executed with safe defaults.".to_string(),
+            non_goals: vec!["Do not reintroduce a separate browser frontend.".to_string()],
+            inferred: false,
+        },
+        spec_mapping: GoalPlanSpecMapping {
+            persistent_items: GoalPlanPersistentItems {
+                requirements: vec![GoalPlanPersistentItem::Id(
+                    "REQ-WORKBENCH-001".to_string(),
+                )],
+                features: vec![GoalPlanPersistentItem::Id(
+                    "FEAT-WORKBENCH-SHELL-001".to_string(),
+                )],
+                ..GoalPlanPersistentItems::default()
+            },
+            spec_updates: Default::default(),
+            spec_updates_required: false,
+            spec_update_reasons: Vec::new(),
+        },
+        implementation_plan: GoalPlanImplementationPlan {
+            confidence: Some(GoalPlanConfidence::Medium),
+            scope: GoalPlanScope {
+                include: vec![GoalPlanScopeInclude::Pattern("**".to_string())],
+                exclude: vec!["target/**".to_string()],
+            },
+            steps: vec![
+                "Audit command palette commands".to_string(),
+                "Fix commands that cannot run from defaults".to_string(),
+                "Verify desktop and mobile rendering".to_string(),
+            ],
+        },
+        test_plan: GoalPlanTestPlan {
+            selection_mode: GoalPlanSelectionMode::Minimal,
+            confidence: Some(GoalPlanConfidence::Medium),
+            required_tests: BTreeMap::new(),
+            suggested_tests: BTreeMap::new(),
+        },
+        coverage: GoalPlanCoverage {
+            mode: GoalPlanCoverageMode::ChangedLines,
+            threshold: 100,
+            include: Vec::new(),
+            exclude: vec!["target/**".to_string()],
+        },
+        completion: GoalPlanCompletion {
+            must_pass: vec!["target/debug/syu validate .".to_string()],
+        },
+        warnings: Vec::new(),
+    };
+    let yaml = serde_yaml::to_string(&plan).context("failed to encode goal fixture")?;
+    fs::write(&path, yaml).with_context(|| format!("failed to write `{}`", path.display()))
+}
+
 fn truncate_cli_output(output: &str) -> String {
     const LIMIT: usize = 1200;
     if output.chars().count() <= LIMIT {
@@ -1344,10 +1486,7 @@ async fn workbench_css() -> Response {
     (
         [
             (header::CONTENT_TYPE, "text/css; charset=utf-8"),
-            (
-                header::CACHE_CONTROL,
-                "public, max-age=3600, stale-while-revalidate=86400",
-            ),
+            (header::CACHE_CONTROL, "no-cache"),
         ],
         include_str!("../../syu-app-ui/assets/tailwind.css"),
     )
@@ -3235,6 +3374,51 @@ mod tests {
                 .iter()
                 .any(|action| action["id"] == "request.classify")
         }));
+    }
+
+    #[test]
+    fn cli_task_defaults_prepare_readable_fixtures() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let workspace_root = tempdir.path();
+
+        ensure_cli_task_fixture(
+            "cli.task.classify",
+            workspace_root,
+            "target/syu/workbench/request.yaml",
+        )
+        .expect("request fixture");
+        ensure_cli_task_fixture(
+            "cli.task.check",
+            workspace_root,
+            "target/syu/workbench/goal.yaml",
+        )
+        .expect("goal fixture");
+
+        let request_path = workspace_root.join("target/syu/workbench/request.yaml");
+        let goal_path = workspace_root.join("target/syu/workbench/goal.yaml");
+        let request = fs::read_to_string(request_path).expect("request fixture should be readable");
+        let goal = fs::read_to_string(goal_path).expect("goal fixture should be readable");
+
+        assert!(request.contains("REQ-WORKBENCH-001"));
+        assert!(goal.contains("GOAL-WORKBENCH-PALETTE-001"));
+        assert!(goal.contains("**"));
+    }
+
+    #[test]
+    fn cli_task_check_preview_passes_required_range_argument() {
+        let args = cli_command_args("cli.task.check", "target/syu/workbench/goal.yaml")
+            .expect("task check args");
+
+        assert_eq!(
+            args,
+            vec![
+                "task".to_string(),
+                "check".to_string(),
+                "target/syu/workbench/goal.yaml".to_string(),
+                "--range".to_string(),
+                "origin/main...HEAD".to_string(),
+            ]
+        );
     }
 
     #[tokio::test]
