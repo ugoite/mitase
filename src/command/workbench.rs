@@ -16,6 +16,7 @@ pub fn run_workbench_command(args: &WorkbenchArgs) -> Result<i32> {
         bind,
         port,
         allow_remote_bind: args.allow_remote_bind,
+        show_log: args.show_log,
     })?;
 
     let runtime = tokio::runtime::Builder::new_multi_thread()

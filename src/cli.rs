@@ -748,6 +748,10 @@ pub struct WorkbenchArgs {
     #[arg(help = "Allow binding outside localhost and 127.0.0.1")]
     #[arg(long, action = ArgAction::SetTrue)]
     pub allow_remote_bind: bool,
+
+    #[arg(help = "Show command stdout/stderr in Workbench result views")]
+    #[arg(long, action = ArgAction::SetTrue)]
+    pub show_log: bool,
 }
 
 #[derive(Debug, Clone, Args)]

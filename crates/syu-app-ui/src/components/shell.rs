@@ -5,7 +5,10 @@ use crate::components::{
 };
 use crate::design::classes;
 use crate::i18n::{HelpTopic, Locale};
-use crate::model::{CliCommandEntry, CliCommandPreview, WorkbenchUiState, WorkspacePulseSummary};
+use crate::model::{
+    CliCommandEntry, CliCommandPreview, SpecBrowserItem, SpecBrowserModel, WorkbenchUiState,
+    WorkspacePulseSummary,
+};
 use dioxus::prelude::*;
 use std::collections::HashMap;
 use syu_task_model::{
@@ -148,13 +151,15 @@ pub fn StatusBar(
                         }
                         div { class: "absolute right-0 z-30 mt-2 w-80 rounded-lg border border-border bg-panel p-3 shadow-lg",
                             div { class: "space-y-3",
-                                LabeledSelect { label: copy.language_label().to_string(), value: copy.language_name(ui.locale).to_string() }
-                                LabeledSelect { label: copy.workspace_label().to_string(), value: summary.workspace.clone() }
-                                LabeledSelect { label: copy.branch_label().to_string(), value: summary.branch.clone() }
-                                LabeledSelect { label: copy.health_label().to_string(), value: summary.health.clone() }
-                                div { class: "grid grid-cols-2 gap-2",
-                                    a { class: "rounded-lg border border-border bg-background px-3 py-2 text-center text-xs font-medium text-foreground/75 hover:bg-panel-muted", href: view_href(&ui, active_pane, false, Locale::En, ui.help_topic), "EN" }
-                                    a { class: "rounded-lg border border-border bg-background px-3 py-2 text-center text-xs font-medium text-foreground/75 hover:bg-panel-muted", href: view_href(&ui, active_pane, false, Locale::Ja, ui.help_topic), "日本語" }
+                                div { class: "grid grid-cols-2 gap-2", "aria-label": copy.language_label(),
+                                    a { class: language_button_class(ui.locale == Locale::En), href: view_href(&ui, active_pane, false, Locale::En, ui.help_topic), "EN" }
+                                    a { class: language_button_class(ui.locale == Locale::Ja), href: view_href(&ui, active_pane, false, Locale::Ja, ui.help_topic), "日本語" }
+                                }
+                                SettingsRow { label: copy.workspace_label().to_string(), value: summary.workspace.clone() }
+                                SettingsRow { label: copy.branch_label().to_string(), value: summary.branch.clone() }
+                                SettingsRow { label: copy.health_label().to_string(), value: summary.health.clone() }
+                                div { class: "text-[10px] uppercase tracking-[0.18em] text-foreground/45",
+                                    "{copy.language_label()}: {copy.language_name(ui.locale)}"
                                 }
                             }
                         }
@@ -170,14 +175,20 @@ pub fn StatusBar(
 }
 
 #[component]
-fn LabeledSelect(label: String, value: String) -> Element {
+fn SettingsRow(label: String, value: String) -> Element {
     rsx! {
-        label { class: "grid gap-1 text-xs text-foreground/55",
-            span { class: "uppercase", "{label}" }
-            select { class: "w-full truncate rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none", disabled: true,
-                option { selected: true, "{value}" }
-            }
+        div { class: "grid gap-1 text-xs text-foreground/55",
+            span { class: "uppercase tracking-[0.18em]", "{label}" }
+            p { class: "truncate rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground", "{value}" }
         }
+    }
+}
+
+fn language_button_class(active: bool) -> &'static str {
+    if active {
+        "rounded-lg border border-foreground bg-foreground px-3 py-2 text-center text-xs font-medium text-background"
+    } else {
+        "rounded-lg border border-border bg-background px-3 py-2 text-center text-xs font-medium text-foreground/75 hover:bg-panel-muted"
     }
 }
 
@@ -395,7 +406,14 @@ pub fn WorkbenchStage(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
                 {detail}
                 if let Some(preview) = cli_preview {
                     div { class: "mt-4",
-                        CliCommandResult { preview, locale: ui.locale }
+                        CliCommandResult { preview: preview.clone(), locale: ui.locale }
+                    }
+                    if cli_command_opens_spec_browser(&preview.id) {
+                        if let Some(browser) = ui.spec_browser.clone() {
+                            div { class: "mt-4",
+                                SpecInfoBrowser { browser, query: ui.command_query.clone() }
+                            }
+                        }
                     }
                 } else if let Some(preview) = action_preview {
                     div { class: "mt-4",
@@ -473,42 +491,239 @@ fn workbench_action_needs_text_input(action_id: &str) -> bool {
 #[component]
 fn CliCommandResult(preview: CliCommandPreview, locale: Locale) -> Element {
     let default_cli_arg = cli_input_placeholder(&preview.id);
+    let needs_confirmation = preview.mutates_files;
 
     rsx! {
         section { class: classes::DRAWER,
             div { class: "flex items-center justify-between gap-3",
-                h3 { class: "text-sm font-semibold", "{preview.title}" }
-                ScopeChip { label: "result".to_string() }
+                p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "command" }
+                ScopeChip { label: if needs_confirmation { "confirm".to_string() } else if preview.requires_input { "input".to_string() } else { "ready".to_string() } }
             }
-            p { class: "mt-2 whitespace-pre-wrap break-all text-sm text-foreground/75", "{preview.result_summary}" }
-            p { class: "mt-2 break-all text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{preview.invocation} · {preview.evidence_summary}" }
-            if preview.requires_input || preview.mutates_files {
-                form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/", method: "get",
-                    input { type: "hidden", name: "pane", value: "commands" }
-                    input { type: "hidden", name: "sidebar", value: "0" }
-                    input { type: "hidden", name: "lang", value: "{locale.slug()}" }
-                    input { type: "hidden", name: "cli", value: "{preview.id}" }
-                    if preview.requires_input {
-                        input {
-                            class: "min-w-0 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-foreground/20",
-                            name: "cli_arg",
-                            placeholder: "{default_cli_arg}",
-                            value: "{default_cli_arg}",
-                            autocomplete: "off",
+            p { class: "mt-2 text-sm text-foreground/75", "{preview.result_summary}" }
+            div { class: "mt-3 rounded-lg border border-border bg-background p-3",
+                p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "execution" }
+                p { class: "mt-1 break-all text-sm font-medium text-foreground", "{preview.invocation}" }
+                p { class: "mt-1 text-xs text-foreground/55", "{preview.evidence_summary}" }
+            }
+            form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/", method: "get",
+                input { type: "hidden", name: "pane", value: "commands" }
+                input { type: "hidden", name: "sidebar", value: "0" }
+                input { type: "hidden", name: "lang", value: "{locale.slug()}" }
+                input { type: "hidden", name: "cli", value: "{preview.id}" }
+                input { type: "hidden", name: "run", value: "1" }
+                if preview.requires_input {
+                    input {
+                        class: "min-w-0 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-foreground/20",
+                        name: "cli_arg",
+                        placeholder: "{default_cli_arg}",
+                        value: "{default_cli_arg}",
+                        autocomplete: "off",
+                    }
+                } else {
+                    input { type: "hidden", name: "cli_arg", value: "" }
+                }
+                if preview.mutates_files {
+                    label { class: "inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground/70",
+                        input { type: "checkbox", name: "cli_confirm", value: "1" }
+                        span { "confirm" }
+                    }
+                }
+                button {
+                    class: "rounded-lg border border-border bg-foreground px-3 py-2 text-sm font-medium text-background hover:bg-foreground/90",
+                    type: "submit",
+                    "Run"
+                }
+            }
+        }
+    }
+}
+
+fn cli_command_opens_spec_browser(command_id: &str) -> bool {
+    crate::model::cli_command_catalog()
+        .iter()
+        .any(|command| command.id == command_id && command.opens_spec_browser)
+}
+
+#[component]
+fn SpecInfoBrowser(browser: SpecBrowserModel, query: String) -> Element {
+    let selected = selected_spec_item(&browser, &query);
+    rsx! {
+        section { class: "rounded-lg border border-border bg-panel p-4 shadow-sm",
+            div { class: "mb-3 grid gap-3 lg:grid-cols-[16rem_minmax(0,1fr)]",
+                div { class: "lg:col-span-2",
+                    p { class: "mb-1 text-[10px] uppercase tracking-[0.24em] text-foreground/45", "Search specs" }
+                    input {
+                        class: "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-foreground/20",
+                        name: "query",
+                        value: "{query}",
+                        placeholder: "Search specs",
+                        readonly: true,
+                    }
+                }
+                div { class: "rounded-lg border border-border bg-background p-2",
+                    p { class: "px-2 pb-2 text-[10px] uppercase tracking-[0.24em] text-foreground/45", "Spec tree" }
+                    nav { class: "max-h-[30rem] overflow-auto", "aria-label": "Spec tree",
+                        for section in &browser.sections {
+                            div { class: "mb-3 last:mb-0",
+                                p { class: "px-2 pb-1 text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{section.label}" }
+                                for document in &section.documents {
+                                    details { class: "group", open: true,
+                                        summary { class: "cursor-pointer list-none rounded-md px-2 py-1 text-xs font-medium text-foreground/65 hover:bg-panel-muted",
+                                            "{document.title}"
+                                        }
+                                        div { class: "ml-3 border-l border-border pl-2",
+                                            for item in &document.items {
+                                                a {
+                                                    class: spec_tree_item_class(selected.as_ref().map(|selected| selected.id.as_str()) == Some(item.id.as_str())),
+                                                    href: "#",
+                                                    title: "{item.title}",
+                                                    "data-spec-tree-item": "true",
+                                                    "data-spec-text": format!("{} {} {}", item.id, item.title, item.description.clone().unwrap_or_default()),
+                                                    span { class: "truncate text-xs font-medium", "{item.id}" }
+                                                    span { class: "truncate text-[11px] text-foreground/55", "{item.title}" }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
+                    }
+                }
+                div { class: "min-w-0",
+                    if let Some(item) = selected {
+                        SpecModelCard { item }
                     } else {
-                        input { type: "hidden", name: "cli_arg", value: "" }
+                        EmptyState { title: "No spec item".to_string(), body: "The workspace spec tree is empty or still loading." }
                     }
-                    if preview.mutates_files {
-                        label { class: "inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground/70",
-                            input { type: "checkbox", name: "cli_confirm", value: "1" }
-                            span { "confirm" }
+                }
+            }
+        }
+    }
+}
+
+fn spec_tree_item_class(active: bool) -> &'static str {
+    if active {
+        "grid gap-0.5 rounded-md border border-foreground bg-foreground px-2 py-2 text-background"
+    } else {
+        "grid gap-0.5 rounded-md border border-transparent px-2 py-2 text-foreground hover:border-border hover:bg-panel-muted"
+    }
+}
+
+fn selected_spec_item(browser: &SpecBrowserModel, query: &str) -> Option<SpecBrowserItem> {
+    let needle = query.trim().to_lowercase();
+    browser
+        .sections
+        .iter()
+        .flat_map(|section| section.documents.iter())
+        .flat_map(|document| document.items.iter())
+        .find(|item| {
+            browser.selected_item_id.as_deref() == Some(item.id.as_str())
+                || (!needle.is_empty()
+                    && format!(
+                        "{} {} {}",
+                        item.id,
+                        item.title,
+                        item.description.clone().unwrap_or_default()
+                    )
+                    .to_lowercase()
+                    .contains(&needle))
+        })
+        .cloned()
+        .or_else(|| {
+            browser
+                .sections
+                .iter()
+                .flat_map(|section| section.documents.iter())
+                .flat_map(|document| document.items.iter())
+                .next()
+                .cloned()
+        })
+}
+
+#[component]
+fn SpecModelCard(item: SpecBrowserItem) -> Element {
+    rsx! {
+        article { class: "rounded-lg border border-border bg-background p-4",
+            div { class: "flex flex-wrap items-start justify-between gap-3",
+                div { class: "min-w-0",
+                    p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{item.kind}" }
+                    h3 { class: "mt-1 text-base font-semibold text-foreground", "{item.title}" }
+                    p { class: "mt-1 break-all text-xs font-medium text-foreground/55", "{item.id}" }
+                }
+                if let Some(status) = item.status.clone() {
+                    ScopeChip { label: status }
+                }
+            }
+            if let Some(summary) = item.summary.clone().or(item.description.clone()) {
+                p { class: "mt-4 text-sm leading-6 text-foreground/75", "{summary}" }
+            }
+            div { class: "mt-4 grid gap-3 md:grid-cols-2",
+                if let Some(priority) = item.priority.clone() {
+                    MetricTile { label: "priority".to_string(), value: priority }
+                }
+                if let Some(status) = item.status.clone() {
+                    MetricTile { label: "status".to_string(), value: status }
+                }
+            }
+            if let Some(principle) = item.product_design_principle.clone() {
+                ModelCardSection { title: "Product principle".to_string(), body: principle }
+            }
+            if let Some(guideline) = item.coding_guideline.clone() {
+                ModelCardSection { title: "Coding guideline".to_string(), body: guideline }
+            }
+            LinkList { label: "philosophies".to_string(), values: item.linked_philosophies.clone() }
+            LinkList { label: "policies".to_string(), values: item.linked_policies.clone() }
+            LinkList { label: "requirements".to_string(), values: item.linked_requirements.clone() }
+            LinkList { label: "features".to_string(), values: item.linked_features.clone() }
+            TraceGroups { label: "tests".to_string(), groups: item.tests.clone() }
+            TraceGroups { label: "implementations".to_string(), groups: item.implementations.clone() }
+        }
+    }
+}
+
+#[component]
+fn ModelCardSection(title: String, body: String) -> Element {
+    rsx! {
+        section { class: "mt-4 rounded-lg border border-border bg-panel p-3",
+            p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{title}" }
+            p { class: "mt-1 text-sm leading-6 text-foreground/75", "{body}" }
+        }
+    }
+}
+
+#[component]
+fn LinkList(label: String, values: Vec<String>) -> Element {
+    if values.is_empty() {
+        return rsx! {};
+    }
+    rsx! {
+        div { class: "mt-4",
+            p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{label}" }
+            div { class: "mt-2 flex flex-wrap gap-2",
+                for value in values {
+                    span { class: "rounded-md border border-border bg-panel px-2 py-1 text-xs font-medium text-foreground/70", "{value}" }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn TraceGroups(label: String, groups: Vec<crate::model::SpecBrowserTraceGroup>) -> Element {
+    if groups.is_empty() {
+        return rsx! {};
+    }
+    rsx! {
+        div { class: "mt-4",
+            p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{label}" }
+            div { class: "mt-2 grid gap-2",
+                for group in groups {
+                    div { class: "rounded-lg border border-border bg-panel p-3",
+                        p { class: "text-xs font-medium uppercase tracking-[0.18em] text-foreground/55", "{group.language}" }
+                        for reference in group.references {
+                            p { class: "mt-1 break-all text-xs text-foreground/70", "{reference.file}" }
                         }
-                    }
-                    button {
-                        class: "rounded-lg border border-border bg-foreground px-3 py-2 text-sm font-medium text-background hover:bg-foreground/90",
-                        type: "submit",
-                        "Run"
                     }
                 }
             }
@@ -1439,10 +1654,15 @@ fn CliCommandItem(entry: CliCommandEntry, locale: Locale) -> Element {
     } else {
         "ready"
     };
+    let href = format!(
+        "?pane=commands&sidebar=0&lang={}&cli={}",
+        locale.slug(),
+        entry.id
+    );
     rsx! {
         a {
             class: classes::COMMAND_ITEM,
-            href: format!("?pane=commands&sidebar=0&lang={}&cli={}", locale.slug(), entry.id),
+            href,
             title: "{entry.description}",
             "data-command-item": "true",
             "data-command-text": format!("{} {} {} {}", entry.id, entry.title, entry.description, entry.invocation),
@@ -2987,6 +3207,21 @@ mod tests {
 
         assert!(html.contains("name=\"lang\" value=\"ja\""));
         assert!(html.contains("name=\"cli\" value=\"cli.task.check\""));
+    }
+
+    #[test]
+    fn cli_result_uses_explicit_run_form_without_log_shortcut() {
+        let mut ui = build_demo_state();
+        ui.set_locale(Locale::Ja);
+        ui.select_cli_command("cli.validate");
+
+        let html = render_element(rsx! {
+            AppShell { ui, active_pane: WorkbenchPane::Commands, sidebar_open: false }
+        });
+
+        assert!(!html.contains("Show log"));
+        assert!(html.contains("name=\"run\" value=\"1\""));
+        assert!(html.contains("name=\"cli\" value=\"cli.validate\""));
     }
 
     #[test]

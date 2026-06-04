@@ -39,7 +39,7 @@ impl UiCopy for Japanese {
     }
 
     fn palette_hint_active(&self) -> &'static str {
-        "Enter で実行"
+        "選択して確認"
     }
 
     fn sidebar_title(&self) -> &'static str {

@@ -107,6 +107,7 @@ pub fn run_with_config(config: DesktopLaunchConfig) -> Result<()> {
         bind: config.bind.clone(),
         port: config.port,
         allow_remote_bind: false,
+        show_log: false,
     };
     let url = config.local_url();
 

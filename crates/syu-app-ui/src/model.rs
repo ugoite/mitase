@@ -42,6 +42,7 @@ pub struct CliCommandEntry {
     pub invocation: &'static str,
     pub requires_input: bool,
     pub mutates_files: bool,
+    pub opens_spec_browser: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -53,6 +54,60 @@ pub struct CliCommandPreview {
     pub evidence_summary: String,
     pub requires_input: bool,
     pub mutates_files: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpecBrowserModel {
+    pub sections: Vec<SpecBrowserSection>,
+    pub selected_item_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpecBrowserSection {
+    pub label: String,
+    pub documents: Vec<SpecBrowserDocument>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpecBrowserDocument {
+    pub path: String,
+    pub title: String,
+    pub folder_segments: Vec<String>,
+    pub items: Vec<SpecBrowserItem>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpecBrowserItem {
+    pub kind: String,
+    pub id: String,
+    pub title: String,
+    pub summary: Option<String>,
+    pub description: Option<String>,
+    pub product_design_principle: Option<String>,
+    pub coding_guideline: Option<String>,
+    pub priority: Option<String>,
+    pub status: Option<String>,
+    pub linked_philosophies: Vec<String>,
+    pub linked_policies: Vec<String>,
+    pub linked_requirements: Vec<String>,
+    pub linked_features: Vec<String>,
+    pub tests: Vec<SpecBrowserTraceGroup>,
+    pub implementations: Vec<SpecBrowserTraceGroup>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpecBrowserTraceGroup {
+    pub language: String,
+    pub references: Vec<SpecBrowserTraceReference>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpecBrowserTraceReference {
+    pub file: String,
+    pub symbols: Vec<String>,
+    pub doc_contains: Vec<String>,
+    pub method: Option<String>,
+    pub path: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -74,6 +129,7 @@ pub struct WorkbenchUiState {
     pub selected_cli_command_id: Option<String>,
     pub preview: Option<WorkbenchActionRunPreview>,
     pub cli_preview: Option<CliCommandPreview>,
+    pub spec_browser: Option<SpecBrowserModel>,
     pub locale: Locale,
     pub help_topic: Option<HelpTopic>,
 }
@@ -88,6 +144,7 @@ impl WorkbenchUiState {
             selected_cli_command_id: None,
             preview: None,
             cli_preview: None,
+            spec_browser: None,
             locale: Locale::En,
             help_topic: None,
         }
@@ -107,6 +164,7 @@ impl WorkbenchUiState {
             selected_cli_command_id: None,
             preview: None,
             cli_preview: None,
+            spec_browser: None,
             locale: Locale::En,
             help_topic: None,
         }
@@ -236,16 +294,19 @@ impl WorkbenchUiState {
             .find(|command| command.id == command_id)?;
         let result_summary = if command.requires_input {
             format!(
-                "{} needs a selector or file before it can run.",
+                "Provide input for {} before running it.",
                 command.invocation
             )
         } else if command.mutates_files {
             format!(
-                "{} is available from the palette with confirmation.",
+                "{} requires confirmation before it writes files.",
                 command.invocation
             )
+        } else if command.opens_spec_browser {
+            "Browse the structured spec information below, or run the command for terminal output."
+                .to_string()
         } else {
-            format!("{} is ready for this workspace.", command.invocation)
+            format!("{} is ready to run.", command.invocation)
         };
         let evidence_summary = if command.mutates_files {
             "writes files".to_string()
@@ -379,14 +440,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu browse . --non-interactive",
             requires_input: false,
             mutates_files: false,
-        },
-        CliCommandEntry {
-            id: "cli.workbench",
-            title: "Open workbench",
-            description: "Run the browser or desktop Workbench.",
-            invocation: "syu workbench .",
-            requires_input: false,
-            mutates_files: false,
+            opens_spec_browser: true,
         },
         CliCommandEntry {
             id: "cli.list",
@@ -395,6 +449,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu list",
             requires_input: false,
             mutates_files: false,
+            opens_spec_browser: true,
         },
         CliCommandEntry {
             id: "cli.show",
@@ -403,6 +458,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu show <id>",
             requires_input: true,
             mutates_files: false,
+            opens_spec_browser: true,
         },
         CliCommandEntry {
             id: "cli.search",
@@ -411,6 +467,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu search <query>",
             requires_input: true,
             mutates_files: false,
+            opens_spec_browser: true,
         },
         CliCommandEntry {
             id: "cli.audit",
@@ -419,6 +476,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu audit .",
             requires_input: false,
             mutates_files: false,
+            opens_spec_browser: false,
         },
         CliCommandEntry {
             id: "cli.log",
@@ -427,6 +485,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu log <id>",
             requires_input: true,
             mutates_files: false,
+            opens_spec_browser: false,
         },
         CliCommandEntry {
             id: "cli.explain",
@@ -435,6 +494,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu explain <selector>",
             requires_input: true,
             mutates_files: false,
+            opens_spec_browser: true,
         },
         CliCommandEntry {
             id: "cli.relate",
@@ -443,6 +503,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu relate <selector>",
             requires_input: true,
             mutates_files: false,
+            opens_spec_browser: true,
         },
         CliCommandEntry {
             id: "cli.trace",
@@ -451,6 +512,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu trace <file>",
             requires_input: true,
             mutates_files: false,
+            opens_spec_browser: false,
         },
         CliCommandEntry {
             id: "cli.doctor",
@@ -459,6 +521,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu doctor .",
             requires_input: false,
             mutates_files: false,
+            opens_spec_browser: false,
         },
         CliCommandEntry {
             id: "cli.validate",
@@ -467,6 +530,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu validate .",
             requires_input: false,
             mutates_files: false,
+            opens_spec_browser: false,
         },
         CliCommandEntry {
             id: "cli.report",
@@ -475,6 +539,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu report .",
             requires_input: false,
             mutates_files: true,
+            opens_spec_browser: false,
         },
         CliCommandEntry {
             id: "cli.init",
@@ -483,6 +548,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu init .",
             requires_input: false,
             mutates_files: true,
+            opens_spec_browser: false,
         },
         CliCommandEntry {
             id: "cli.templates",
@@ -491,6 +557,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu templates",
             requires_input: false,
             mutates_files: false,
+            opens_spec_browser: false,
         },
         CliCommandEntry {
             id: "cli.completion",
@@ -499,6 +566,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu completion <shell>",
             requires_input: true,
             mutates_files: false,
+            opens_spec_browser: false,
         },
         CliCommandEntry {
             id: "cli.task.classify",
@@ -507,6 +575,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu task classify <request.yaml>",
             requires_input: true,
             mutates_files: false,
+            opens_spec_browser: false,
         },
         CliCommandEntry {
             id: "cli.task.scope",
@@ -515,6 +584,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu task scope <request.yaml>",
             requires_input: true,
             mutates_files: false,
+            opens_spec_browser: true,
         },
         CliCommandEntry {
             id: "cli.task.scaffold",
@@ -523,6 +593,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu task scaffold <request.yaml>",
             requires_input: true,
             mutates_files: false,
+            opens_spec_browser: false,
         },
         CliCommandEntry {
             id: "cli.task.plan",
@@ -531,6 +602,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu task plan <request.yaml>",
             requires_input: true,
             mutates_files: false,
+            opens_spec_browser: false,
         },
         CliCommandEntry {
             id: "cli.task.test_select",
@@ -539,6 +611,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu task test-select <goal-plan.yaml>",
             requires_input: true,
             mutates_files: false,
+            opens_spec_browser: false,
         },
         CliCommandEntry {
             id: "cli.task.infer",
@@ -547,6 +620,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu task infer --range origin/main...HEAD",
             requires_input: false,
             mutates_files: false,
+            opens_spec_browser: false,
         },
         CliCommandEntry {
             id: "cli.task.check",
@@ -555,6 +629,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu task check <goal-plan.yaml>",
             requires_input: true,
             mutates_files: false,
+            opens_spec_browser: false,
         },
         CliCommandEntry {
             id: "cli.add",
@@ -563,6 +638,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu add <kind> <id>",
             requires_input: true,
             mutates_files: true,
+            opens_spec_browser: false,
         },
         CliCommandEntry {
             id: "cli.lsp",
@@ -571,6 +647,7 @@ pub fn cli_command_catalog() -> &'static [CliCommandEntry] {
             invocation: "syu lsp",
             requires_input: false,
             mutates_files: false,
+            opens_spec_browser: false,
         },
     ]
 }
@@ -1050,10 +1127,16 @@ mod tests {
             .map(|command| command.id)
             .collect::<Vec<_>>();
 
-        assert_eq!(ids.len(), 25);
+        assert_eq!(ids.len(), 24);
+        assert!(!ids.contains(&"cli.workbench"));
         assert!(ids.contains(&"cli.validate"));
         assert!(ids.contains(&"cli.task.check"));
         assert!(ids.contains(&"cli.add"));
+        assert!(
+            cli_command_catalog()
+                .iter()
+                .any(|command| command.id == "cli.list" && command.opens_spec_browser)
+        );
     }
 
     #[test]

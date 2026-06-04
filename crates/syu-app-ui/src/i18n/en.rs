@@ -39,7 +39,7 @@ impl UiCopy for English {
     }
 
     fn palette_hint_active(&self) -> &'static str {
-        "Press Enter to run"
+        "Select to review"
     }
 
     fn sidebar_title(&self) -> &'static str {

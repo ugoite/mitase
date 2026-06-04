@@ -25,7 +25,10 @@ use std::{
 };
 use syu_app_ui::{
     AppShell, HelpTopic, Locale, WorkbenchActionRunPreview, WorkbenchPane, WorkbenchUiState,
-    model::{CliCommandPreview, cli_command_catalog},
+    model::{
+        CliCommandPreview, SpecBrowserDocument, SpecBrowserItem, SpecBrowserModel,
+        SpecBrowserSection, SpecBrowserTraceGroup, SpecBrowserTraceReference, cli_command_catalog,
+    },
 };
 use syu_code_intel::{
     BranchScopeEvidence, BranchScopeReport, ChangedFileReport, OwnershipStatus,
@@ -658,6 +661,7 @@ pub struct WorkbenchLaunchConfig {
     pub bind: String,
     pub port: u16,
     pub allow_remote_bind: bool,
+    pub show_log: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -853,6 +857,13 @@ impl WorkbenchServer {
         let listener = tokio::net::TcpListener::bind(addr)
             .await
             .with_context(|| format!("failed to bind workbench server at `{addr}`"))?;
+        let local_addr = listener
+            .local_addr()
+            .context("failed to read workbench listener address")?;
+        println!("Syu Workbench listening at http://{local_addr}");
+        if self.inner.config.show_log {
+            println!("Workbench command logs are visible in result views.");
+        }
         let watcher = self.spawn_watcher()?;
         let _keep_watcher_alive = watcher;
         axum::serve(listener, self.router())
@@ -930,6 +941,12 @@ async fn workbench_index(
 ) -> Html<String> {
     let state = server.inner.state.read().await.clone();
     let mut ui = WorkbenchUiState::from_state(shared_workbench_state(state));
+    let browser_workspace = server.inner.browser_workspace.read().await;
+    ui.spec_browser = Some(shared_spec_browser_model(
+        &browser_workspace,
+        view.spec_item.as_deref(),
+    ));
+    drop(browser_workspace);
     if let Some(query) = view.query {
         ui.set_query(query);
     }
@@ -955,12 +972,15 @@ async fn workbench_index(
     }
     if let Some(command_id) = view.cli {
         let _ = ui.select_cli_command(command_id.clone());
-        if let Some(preview) = run_cli_command_preview(
-            &command_id,
-            server.inner.config.workspace_root.as_path(),
-            view.cli_arg.as_deref(),
-            view.cli_confirm.as_deref() == Some("1"),
-        ) {
+        if view.run.as_deref() == Some("1")
+            && let Some(preview) = run_cli_command_preview(
+                &command_id,
+                server.inner.config.workspace_root.as_path(),
+                view.cli_arg.as_deref(),
+                view.cli_confirm.as_deref() == Some("1"),
+                server.inner.config.show_log || view.show_log.as_deref() == Some("1"),
+            )
+        {
             ui.cli_preview = Some(preview);
         }
     }
@@ -1031,14 +1051,6 @@ fn workbench_document(shell: String, locale: Locale) -> String {
           palette.dataset.empty = visible === 0 ? 'true' : 'false';
         }};
         input.addEventListener('input', applyFilter);
-        input.addEventListener('keydown', (event) => {{
-          if (event.key !== 'Enter') return;
-          const first = items.find((item) => !item.hidden && !item.classList.contains('opacity-60'));
-          if (first) {{
-            event.preventDefault();
-            first.click();
-          }}
-        }});
         applyFilter();
       }}
     }})();
@@ -1201,6 +1213,7 @@ fn run_cli_command_preview(
     workspace_root: &FsPath,
     cli_arg: Option<&str>,
     confirmed: bool,
+    show_log: bool,
 ) -> Option<CliCommandPreview> {
     let command = cli_command_catalog()
         .iter()
@@ -1274,7 +1287,17 @@ fn run_cli_command_preview(
             } else {
                 stdout.trim().to_string()
             };
-            (truncate_cli_output(&body), status)
+            let result_summary = if show_log {
+                format!(
+                    "{}\n\nstdout:\n{}\n\nstderr:\n{}",
+                    truncate_cli_output(&body),
+                    stdout.trim(),
+                    stderr.trim()
+                )
+            } else {
+                truncate_cli_output(&body)
+            };
+            (result_summary, status)
         }
         Err(error) => (
             format!("failed to run {}: {error}", command.invocation),
@@ -1480,6 +1503,93 @@ fn truncate_cli_output(output: &str) -> String {
     let mut truncated = output.chars().take(LIMIT).collect::<String>();
     truncated.push_str("\n...");
     truncated
+}
+
+fn shared_spec_browser_model(
+    workspace: &BrowserWorkspace,
+    selected_item_id: Option<&str>,
+) -> SpecBrowserModel {
+    let selected_item_id = selected_item_id
+        .map(str::to_string)
+        .or_else(|| workspace.item_index.keys().next().cloned());
+    SpecBrowserModel {
+        sections: workspace
+            .sections
+            .iter()
+            .map(|section| SpecBrowserSection {
+                label: section.label.clone(),
+                documents: section
+                    .documents
+                    .iter()
+                    .map(|document| SpecBrowserDocument {
+                        path: document.path.clone(),
+                        title: document.title.clone(),
+                        folder_segments: document.folder_segments.clone(),
+                        items: document
+                            .items
+                            .iter()
+                            .map(shared_spec_browser_item)
+                            .collect(),
+                    })
+                    .collect(),
+            })
+            .collect(),
+        selected_item_id,
+    }
+}
+
+fn shared_spec_browser_item(item: &BrowserItem) -> SpecBrowserItem {
+    SpecBrowserItem {
+        kind: item.kind.label().to_string(),
+        id: item.id.clone(),
+        title: item.title.clone(),
+        summary: item.summary.clone(),
+        description: item.description.clone(),
+        product_design_principle: item.product_design_principle.clone(),
+        coding_guideline: item.coding_guideline.clone(),
+        priority: item.priority.clone(),
+        status: item.status.clone(),
+        linked_philosophies: item.linked_philosophies.clone(),
+        linked_policies: item.linked_policies.clone(),
+        linked_requirements: item.linked_requirements.clone(),
+        linked_features: item.linked_features.clone(),
+        tests: item
+            .tests
+            .iter()
+            .map(|group| SpecBrowserTraceGroup {
+                language: group.language.clone(),
+                references: group
+                    .references
+                    .iter()
+                    .map(|reference| SpecBrowserTraceReference {
+                        file: reference.file.clone(),
+                        symbols: reference.symbols.clone(),
+                        doc_contains: reference.doc_contains.clone(),
+                        method: reference.method.clone(),
+                        path: reference.path.clone(),
+                    })
+                    .collect(),
+            })
+            .collect(),
+        implementations: item
+            .implementations
+            .iter()
+            .map(|group| SpecBrowserTraceGroup {
+                language: group.language.clone(),
+                references: group
+                    .references
+                    .iter()
+                    .map(|reference| SpecBrowserTraceReference {
+                        file: reference.file.clone(),
+                        symbols: reference.symbols.clone(),
+                        doc_contains: reference.doc_contains.clone(),
+                        method: reference.method.clone(),
+                        path: reference.path.clone(),
+                    })
+                    .collect(),
+            })
+            .collect(),
+    }
 }
 
 async fn workbench_css() -> Response {
@@ -3250,6 +3360,7 @@ mod tests {
             bind: "127.0.0.1".to_string(),
             port: 3000,
             allow_remote_bind: false,
+            show_log: false,
         })
         .expect("server should initialize")
     }
@@ -3303,6 +3414,26 @@ mod tests {
         assert!(html.contains("Type a command"));
         assert!(html.contains("data-command-palette"));
         assert!(!html.contains("Browser/server mode exposes the local Workbench API"));
+    }
+
+    #[tokio::test]
+    async fn cli_information_command_renders_spec_browser_without_running_cli() {
+        let server = test_server();
+        let (status, html) = text_response(
+            server.router(),
+            Request::builder()
+                .uri("/?pane=commands&cli=cli.list&query=requirements")
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert!(html.contains("Spec tree"));
+        assert!(html.contains("Search specs"));
+        assert!(html.contains("name=\"run\" value=\"1\""));
+        assert!(!html.contains("stdout:"));
+        assert!(!html.contains("stderr:"));
     }
 
     #[tokio::test]
@@ -3447,11 +3578,22 @@ mod tests {
                 command.id
             );
 
-            let preview = run_cli_command_preview(command.id, tempdir.path(), Some(cli_arg), false)
-                .unwrap_or_else(|| panic!("{} should produce a preview", command.id));
+            let preview =
+                run_cli_command_preview(command.id, tempdir.path(), Some(cli_arg), false, false)
+                    .unwrap_or_else(|| panic!("{} should produce a preview", command.id));
             assert_eq!(preview.id, command.id);
             assert!(!preview.result_summary.trim().is_empty());
         }
+    }
+
+    #[test]
+    fn cli_preview_can_include_stdout_and_stderr_log_sections() {
+        let tempdir = tempfile::tempdir().expect("tempdir");
+        let preview = run_cli_command_preview("cli.templates", tempdir.path(), None, false, true)
+            .expect("templates preview");
+
+        assert!(preview.result_summary.contains("stdout:"));
+        assert!(preview.result_summary.contains("stderr:"));
     }
 
     #[tokio::test]
@@ -3771,6 +3913,10 @@ struct WorkbenchViewQuery {
     cli_arg: Option<String>,
     #[serde(default)]
     cli_confirm: Option<String>,
+    #[serde(default)]
+    show_log: Option<String>,
+    #[serde(default)]
+    spec_item: Option<String>,
     #[serde(default)]
     goal: Option<String>,
     #[serde(default)]
