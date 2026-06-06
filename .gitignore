@@ -11,3 +11,5 @@ website/node_modules
 editors/vscode/node_modules
 editors/vscode/.vscode-test
 __pycache__/
+.apt/
+.tmp/
