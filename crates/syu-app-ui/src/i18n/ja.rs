@@ -38,10 +38,6 @@ impl UiCopy for Japanese {
         "入力すると候補が出ます"
     }
 
-    fn palette_hint_active(&self) -> &'static str {
-        "選択して確認"
-    }
-
     fn sidebar_title(&self) -> &'static str {
         "ナビゲーション"
     }
@@ -127,23 +123,7 @@ impl UiCopy for Japanese {
         }
     }
 
-    fn command_surface_title(&self) -> &'static str {
-        "コマンドパレット"
-    }
-
     fn command_surface_body(&self) -> &'static str {
         "上部の入力欄にフォーカスすると候補が出ます。候補を選んで進めます。"
-    }
-
-    fn command_surface_chip_one(&self) -> &'static str {
-        "フォーカス"
-    }
-
-    fn command_surface_chip_two(&self) -> &'static str {
-        "絞り込み"
-    }
-
-    fn command_surface_chip_three(&self) -> &'static str {
-        "実行"
     }
 }

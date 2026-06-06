@@ -46,10 +46,12 @@ description: "Generated reference for docs/syu/features/workbench/desktop.yaml"
     - REQ-WORKBENCH-007
   - **implementations**:
     - **rust**:
-      - **file**: crates/syu-workbench-server/src/lib.rs
+      - **file**: crates/syu-workbench-server/src/browser.rs
         - **symbols**:
           - workbench_index
           - workbench_css
+      - **file**: crates/syu-workbench-server/src/adapters.rs
+        - **symbols**:
           - shared_workbench_state
     - **markdown**:
       - **file**: docs/guide/workbench.md
@@ -94,10 +96,12 @@ features:
       - REQ-WORKBENCH-007
     implementations:
       rust:
-        - file: crates/syu-workbench-server/src/lib.rs
+        - file: crates/syu-workbench-server/src/browser.rs
           symbols:
             - workbench_index
             - workbench_css
+        - file: crates/syu-workbench-server/src/adapters.rs
+          symbols:
             - shared_workbench_state
       markdown:
         - file: docs/guide/workbench.md

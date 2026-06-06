@@ -39,14 +39,14 @@ description: "Generated reference for docs/syu/features/workbench/goal-splitter.
     - REQ-WORKBENCH-003
   - **implementations**:
     - **rust**:
-      - **file**: crates/syu-app-ui/src/components/shell.rs
+      - **file**: crates/syu-app-ui/src/components/shell/request.rs
         - **symbols**:
           - RequestIntakeCanvas
           - RequestContextEditor
           - RequestClassificationPanel
           - RequestScopePanel
           - ScaffoldPreviewPanel
-      - **file**: crates/syu-app-ui/src/model.rs
+      - **file**: crates/syu-app-ui/src/model/demo.rs
         - **symbols**:
           - build_demo_state
       - **file**: tests/workbench_smoke.rs
@@ -67,7 +67,7 @@ description: "Generated reference for docs/syu/features/workbench/goal-splitter.
     - REQ-WORKBENCH-003
   - **implementations**:
     - **rust**:
-      - **file**: crates/syu-app-ui/src/components/shell.rs
+      - **file**: crates/syu-app-ui/src/components/shell/request.rs
         - **symbols**:
           - GoalPlanCanvas
           - GoalDependencyView
@@ -114,14 +114,14 @@ features:
       - REQ-WORKBENCH-003
     implementations:
       rust:
-        - file: crates/syu-app-ui/src/components/shell.rs
+        - file: crates/syu-app-ui/src/components/shell/request.rs
           symbols:
             - RequestIntakeCanvas
             - RequestContextEditor
             - RequestClassificationPanel
             - RequestScopePanel
             - ScaffoldPreviewPanel
-        - file: crates/syu-app-ui/src/model.rs
+        - file: crates/syu-app-ui/src/model/demo.rs
           symbols:
             - build_demo_state
         - file: tests/workbench_smoke.rs
@@ -142,7 +142,7 @@ features:
       - REQ-WORKBENCH-003
     implementations:
       rust:
-        - file: crates/syu-app-ui/src/components/shell.rs
+        - file: crates/syu-app-ui/src/components/shell/request.rs
           symbols:
             - GoalPlanCanvas
             - GoalDependencyView

@@ -40,9 +40,11 @@ description: "Generated reference for docs/syu/features/workbench/actions.yaml"
         - **symbols**:
           - WorkbenchUiState
           - CommandPaletteEntry
-      - **file**: crates/syu-app-ui/src/components/shell.rs
+      - **file**: crates/syu-app-ui/src/components/shell/command_palette.rs
         - **symbols**:
           - CommandPalette
+      - **file**: crates/syu-app-ui/src/components/shell/goals.rs
+        - **symbols**:
           - GoalCanvas
       - **file**: tests/workbench_smoke.rs
         - **symbols**:
@@ -114,9 +116,11 @@ features:
           symbols:
             - WorkbenchUiState
             - CommandPaletteEntry
-        - file: crates/syu-app-ui/src/components/shell.rs
+        - file: crates/syu-app-ui/src/components/shell/command_palette.rs
           symbols:
             - CommandPalette
+        - file: crates/syu-app-ui/src/components/shell/goals.rs
+          symbols:
             - GoalCanvas
         - file: tests/workbench_smoke.rs
           symbols:

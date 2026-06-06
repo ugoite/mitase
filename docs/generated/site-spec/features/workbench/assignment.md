@@ -31,7 +31,7 @@ description: "Generated reference for docs/syu/features/workbench/assignment.yam
           - ScopeGuard
           - CommandAgentAdapter
           - EvidenceCollector
-      - **file**: crates/syu-app-ui/src/components/shell.rs
+      - **file**: crates/syu-app-ui/src/components/shell/assignment.rs
         - **symbols**:
           - AssignGoalDialog
           - ScopeGuardPreview
@@ -73,7 +73,7 @@ features:
             - ScopeGuard
             - CommandAgentAdapter
             - EvidenceCollector
-        - file: crates/syu-app-ui/src/components/shell.rs
+        - file: crates/syu-app-ui/src/components/shell/assignment.rs
           symbols:
             - AssignGoalDialog
             - ScopeGuardPreview

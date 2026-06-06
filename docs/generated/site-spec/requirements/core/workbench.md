@@ -85,7 +85,7 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
           - read_only_action_returns_placeholder_preview
           - registry_loaded_from_server_payload
           - evidence_panel_renders_goal_scoped_timeline
-      - **file**: crates/syu-app-ui/src/model.rs
+      - **file**: crates/syu-app-ui/src/model/tests.rs
         - **symbols**:
           - cli_catalog_exposes_top_level_and_task_commands
           - filters_cli_commands_by_query_and_previews_invocation
@@ -226,7 +226,7 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
         - **symbols**:
           - desktop_bridge_uses_the_shared_action_registry
           - desktop_shell_renders_the_shared_dioxus_workbench_ui
-      - **file**: crates/syu-workbench-server/src/lib.rs
+      - **file**: crates/syu-workbench-server/src/tests.rs
         - **symbols**:
           - index_route_renders_workbench_browser_entrypoint_and_css_asset
           - css_route_serves_the_shared_tailwind_asset
@@ -345,7 +345,7 @@ requirements:
             - read_only_action_returns_placeholder_preview
             - registry_loaded_from_server_payload
             - evidence_panel_renders_goal_scoped_timeline
-        - file: crates/syu-app-ui/src/model.rs
+        - file: crates/syu-app-ui/src/model/tests.rs
           symbols:
             - cli_catalog_exposes_top_level_and_task_commands
             - filters_cli_commands_by_query_and_previews_invocation
@@ -482,7 +482,7 @@ requirements:
           symbols:
             - desktop_bridge_uses_the_shared_action_registry
             - desktop_shell_renders_the_shared_dioxus_workbench_ui
-        - file: crates/syu-workbench-server/src/lib.rs
+        - file: crates/syu-workbench-server/src/tests.rs
           symbols:
             - index_route_renders_workbench_browser_entrypoint_and_css_asset
             - css_route_serves_the_shared_tailwind_asset

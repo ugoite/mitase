@@ -38,10 +38,6 @@ impl UiCopy for English {
         "Results appear as you type"
     }
 
-    fn palette_hint_active(&self) -> &'static str {
-        "Select to review"
-    }
-
     fn sidebar_title(&self) -> &'static str {
         "navigation"
     }
@@ -129,23 +125,7 @@ impl UiCopy for English {
         }
     }
 
-    fn command_surface_title(&self) -> &'static str {
-        "Command palette"
-    }
-
     fn command_surface_body(&self) -> &'static str {
         "Focus the top box, type to filter, and pick a result."
-    }
-
-    fn command_surface_chip_one(&self) -> &'static str {
-        "focus"
-    }
-
-    fn command_surface_chip_two(&self) -> &'static str {
-        "filter"
-    }
-
-    fn command_surface_chip_three(&self) -> &'static str {
-        "run"
     }
 }

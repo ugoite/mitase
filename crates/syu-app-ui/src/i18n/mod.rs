@@ -79,7 +79,6 @@ pub trait UiCopy: Sync {
     fn actions_label(&self) -> &'static str;
     fn palette_placeholder(&self) -> &'static str;
     fn palette_hint(&self) -> &'static str;
-    fn palette_hint_active(&self) -> &'static str;
     fn sidebar_title(&self) -> &'static str;
     fn sidebar_toggle_open(&self) -> &'static str;
     fn sidebar_toggle_close(&self) -> &'static str;
@@ -91,11 +90,7 @@ pub trait UiCopy: Sync {
     fn pane_summary(&self, pane: WorkbenchPane) -> &'static str;
     fn help_title(&self, topic: HelpTopic) -> &'static str;
     fn help_body(&self, topic: HelpTopic) -> &'static str;
-    fn command_surface_title(&self) -> &'static str;
     fn command_surface_body(&self) -> &'static str;
-    fn command_surface_chip_one(&self) -> &'static str;
-    fn command_surface_chip_two(&self) -> &'static str;
-    fn command_surface_chip_three(&self) -> &'static str;
 }
 
 pub fn copy(locale: Locale) -> &'static dyn UiCopy {

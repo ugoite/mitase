@@ -16,7 +16,7 @@ features:
             - SpecImpactGraphNode
             - SpecImpactGraphEdge
             - BranchScopeReport
-        - file: crates/syu-app-ui/src/components/shell.rs
+        - file: crates/syu-app-ui/src/components/shell/branch_scope.rs
           symbols:
             - SpecImpactGraph
             - GraphNode
@@ -49,7 +49,7 @@ features:
             - WorkbenchActionId
             - WorkbenchEvidenceKind
             - BranchScopeState
-        - file: crates/syu-app-ui/src/components/shell.rs
+        - file: crates/syu-app-ui/src/components/shell/branch_scope.rs
           symbols:
             - BranchScopeLens
             - ChangedFilesPanel

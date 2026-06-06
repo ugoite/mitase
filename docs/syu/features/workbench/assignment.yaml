@@ -16,7 +16,7 @@ features:
             - ScopeGuard
             - CommandAgentAdapter
             - EvidenceCollector
-        - file: crates/syu-app-ui/src/components/shell.rs
+        - file: crates/syu-app-ui/src/components/shell/assignment.rs
           symbols:
             - AssignGoalDialog
             - ScopeGuardPreview

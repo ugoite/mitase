@@ -31,7 +31,7 @@ description: "Generated reference for docs/syu/features/workbench/branch-scope.y
           - SpecImpactGraphNode
           - SpecImpactGraphEdge
           - BranchScopeReport
-      - **file**: crates/syu-app-ui/src/components/shell.rs
+      - **file**: crates/syu-app-ui/src/components/shell/branch_scope.rs
         - **symbols**:
           - SpecImpactGraph
           - GraphNode
@@ -64,7 +64,7 @@ description: "Generated reference for docs/syu/features/workbench/branch-scope.y
           - WorkbenchActionId
           - WorkbenchEvidenceKind
           - BranchScopeState
-      - **file**: crates/syu-app-ui/src/components/shell.rs
+      - **file**: crates/syu-app-ui/src/components/shell/branch_scope.rs
         - **symbols**:
           - BranchScopeLens
           - ChangedFilesPanel
@@ -119,7 +119,7 @@ features:
             - SpecImpactGraphNode
             - SpecImpactGraphEdge
             - BranchScopeReport
-        - file: crates/syu-app-ui/src/components/shell.rs
+        - file: crates/syu-app-ui/src/components/shell/branch_scope.rs
           symbols:
             - SpecImpactGraph
             - GraphNode
@@ -152,7 +152,7 @@ features:
             - WorkbenchActionId
             - WorkbenchEvidenceKind
             - BranchScopeState
-        - file: crates/syu-app-ui/src/components/shell.rs
+        - file: crates/syu-app-ui/src/components/shell/branch_scope.rs
           symbols:
             - BranchScopeLens
             - ChangedFilesPanel

@@ -1,0 +1,69 @@
+use super::*;
+
+#[component]
+pub fn GoalRail(ui: WorkbenchUiState) -> Element {
+    rsx! {
+        Panel { class: classes::PANEL,
+            div { class: classes::PANEL_INNER,
+                div { class: classes::SECTION_HEADER,
+                    h2 { class: classes::SECTION_TITLE, "Goals" }
+                    ScopeChip { label: format!("{}", ui.payload.state.goals.active.len()) }
+                }
+                div { class: classes::SECTION_BODY,
+                    if ui.payload.state.goals.active.is_empty() {
+                        EmptyState { title: "None".to_string(), body: "The first goal appears here." }
+                    } else {
+                        for goal in &ui.payload.state.goals.active {
+                            GoalCard {
+                                goal_id: goal.goal_id.clone(),
+                                title: goal_title(goal),
+                                selected: ui.payload.state.goals.selected_goal_id.as_ref() == Some(&goal.goal_id),
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+pub fn GoalCanvas(
+    ui: WorkbenchUiState,
+    on_run_action: Option<EventHandler<WorkbenchActionId>>,
+) -> Element {
+    let summary = ui.pulse_summary();
+    rsx! {
+        Panel { class: classes::PANEL,
+            div { class: classes::PANEL_INNER,
+                WorkspacePulse { summary: summary.clone() }
+                RequestIntakeCanvas {
+                    ui: ui.clone(),
+                    on_run_action: on_run_action,
+                }
+                GoalPlanCanvas {
+                    ui: ui.clone(),
+                    on_run_action: on_run_action,
+                }
+                BranchScopeLens { ui: ui.clone(), on_run_action: on_run_action }
+                AssignGoalDialog { ui: ui.clone(), on_run_action: on_run_action }
+                SpecImpactGraph { ui: ui.clone() }
+                if let Some(preview) = ui.preview.clone().or_else(|| ui.selected_action_id.and_then(|id| ui.action_preview(id))) {
+                    DetailDrawer {
+                        title: preview.title.clone(),
+                        body: preview.result_summary.clone(),
+                        evidence: preview.evidence_summary.clone(),
+                    }
+                } else if let Some(action) = ui.selected_action() {
+                    DetailDrawer {
+                        title: action.title.clone(),
+                        body: action.description.clone(),
+                        evidence: format!("ready for {}", action.evidence_kind.label()),
+                    }
+                } else {
+                    EmptyState { title: "No preview selected".to_string(), body: "Open the palette to inspect a command or preview the result.".to_string() }
+                }
+            }
+        }
+    }
+}
