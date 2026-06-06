@@ -56,6 +56,7 @@ fn command_palette_preserves_selected_locale_across_search_links_and_run_forms()
 fn runnable_cli_forms_preserve_selected_locale() {
     let mut ui = build_demo_state();
     ui.set_locale(Locale::Ja);
+    ui.set_query("goal");
     ui.select_cli_command("cli.task.check");
 
     let html = render_element(rsx! {
@@ -63,6 +64,7 @@ fn runnable_cli_forms_preserve_selected_locale() {
     });
 
     assert!(html.contains("name=\"lang\" value=\"ja\""));
+    assert!(html.contains("name=\"query\" value=\"goal\""));
     assert!(html.contains("name=\"cli\" value=\"cli.task.check\""));
 }
 
@@ -79,6 +81,115 @@ fn cli_result_uses_explicit_run_form_without_log_shortcut() {
     assert!(!html.contains("Show log"));
     assert!(html.contains("name=\"run\" value=\"1\""));
     assert!(html.contains("name=\"cli\" value=\"cli.validate\""));
+}
+
+#[test]
+fn command_palette_renders_category_filters_and_badges() {
+    let html = render_element(rsx! {
+        AppShell { ui: build_demo_state(), active_pane: WorkbenchPane::Commands, sidebar_open: false }
+    });
+
+    assert!(html.contains("aria-label=\"Command categories\""));
+    assert!(html.contains("data-command-category=\"check\""));
+    assert!(html.contains(">Check</a>"));
+}
+
+#[test]
+fn check_result_renders_summary_list_and_detail_layout() {
+    let mut ui = build_demo_state();
+    ui.select_cli_command("cli.validate");
+
+    let html = render_element(rsx! {
+        AppShell { ui, active_pane: WorkbenchPane::Commands, sidebar_open: false }
+    });
+
+    assert!(html.contains("data-result-kind=\"CheckDetail\""));
+    assert!(html.contains("data-check-summary=\"true\""));
+    assert!(html.contains("aria-label=\"Result items\""));
+    assert!(html.contains("aria-current=\"page\""));
+    assert!(html.contains("data-result-detail=\"pending\""));
+    assert!(html.contains("style=\"max-height: 36rem\""));
+    assert!(!html.contains("Focus the top box, type to filter, and pick a result."));
+}
+
+#[test]
+fn change_result_is_rendered_below_its_execution_form() {
+    let mut ui = build_demo_state();
+    ui.select_cli_command("cli.init");
+
+    let html = render_element(rsx! {
+        AppShell { ui, active_pane: WorkbenchPane::Commands, sidebar_open: false }
+    });
+
+    let run_form = html.find("name=\"run\" value=\"1\"").expect("run form");
+    let result = html
+        .find("data-result-kind=\"ChangeDetail\"")
+        .expect("typed result");
+    assert!(run_form < result);
+}
+
+#[test]
+fn every_result_category_has_a_distinct_summary_surface() {
+    let cases = [
+        ("cli.log", "browse", "data-browse-context"),
+        ("cli.validate", "check", "data-check-summary"),
+        ("cli.task.plan", "plan", "data-plan-summary"),
+        ("cli.init", "change", "data-change-summary"),
+        ("cli.lsp", "operate", "data-operation-summary"),
+        ("cli.report", "generate", "data-generated-summary"),
+    ];
+
+    for (command_id, category, summary_marker) in cases {
+        let mut ui = build_demo_state();
+        ui.select_cli_command(command_id);
+        let html = render_element(rsx! {
+            AppShell { ui, active_pane: WorkbenchPane::Commands, sidebar_open: false }
+        });
+
+        assert!(html.contains(&format!("data-category-layout=\"{category}\"")));
+        assert!(html.contains(summary_marker));
+    }
+}
+
+#[test]
+fn spec_browse_commands_render_search_list_and_detail_without_run_form() {
+    let mut ui = build_demo_state();
+    ui.set_query("REQ-WORKBENCH");
+    ui.select_cli_command("cli.list");
+    ui.spec_browser = Some(SpecBrowserModel {
+        sections: Vec::new(),
+        selected_item_id: None,
+    });
+
+    let html = render_element(rsx! {
+        AppShell { ui, active_pane: WorkbenchPane::Commands, sidebar_open: false }
+    });
+
+    assert!(html.contains("data-category-layout=\"browse\""));
+    assert!(html.contains("Search specs"));
+    assert!(html.contains("aria-label=\"Spec tree\""));
+    assert!(html.contains("style=\"max-height: 30rem\""));
+    assert!(html.contains("data-spec-search=\"true\""));
+    assert!(html.contains("data-spec-detail=\"true\""));
+    assert!(!html.contains("name=\"run\" value=\"1\""));
+}
+
+#[test]
+fn plan_commands_do_not_append_the_browse_surface() {
+    let mut ui = build_demo_state();
+    ui.select_cli_command("cli.task.scope");
+    ui.spec_browser = Some(SpecBrowserModel {
+        sections: Vec::new(),
+        selected_item_id: None,
+    });
+
+    let html = render_element(rsx! {
+        AppShell { ui, active_pane: WorkbenchPane::Commands, sidebar_open: false }
+    });
+
+    assert!(html.contains("data-category-layout=\"plan\""));
+    assert!(!html.contains("Search specs"));
+    assert!(!html.contains("aria-label=\"Spec tree\""));
 }
 
 #[test]

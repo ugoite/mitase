@@ -69,3 +69,39 @@ fn filters_cli_commands_by_query_and_previews_invocation() {
     assert!(preview.invocation.contains("syu validate ."));
     assert_eq!(preview.evidence_summary, "read-only");
 }
+
+#[test]
+fn every_command_has_a_category_effect_and_typed_result_kind() {
+    for command in cli_command_catalog() {
+        assert_eq!(
+            command.result_kind(),
+            category_result_kind(command.category())
+        );
+        assert!(!command.effect().label().is_empty());
+    }
+
+    for action in WorkbenchActionRegistry::standard().actions() {
+        assert_eq!(
+            workbench_action_result_kind(action.id),
+            category_result_kind(workbench_action_category(action.id))
+        );
+        assert!(!workbench_action_effect(action).label().is_empty());
+    }
+}
+
+#[test]
+fn category_filter_applies_to_actions_and_cli_commands() {
+    let mut ui = build_demo_state();
+    ui.set_command_category(Some(CommandCategory::Check));
+
+    assert!(
+        ui.visible_cli_commands()
+            .iter()
+            .all(|command| command.category() == CommandCategory::Check)
+    );
+    assert!(
+        ui.visible_actions()
+            .iter()
+            .all(|entry| { workbench_action_category(entry.action.id) == CommandCategory::Check })
+    );
+}

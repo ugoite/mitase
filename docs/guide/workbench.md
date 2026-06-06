@@ -127,6 +127,20 @@ The registry should make these availability rules explicit:
 - mutating actions require confirmation metadata;
 - AI-eligible actions require a bounded scope.
 
+Palette commands are also classified by intent so the selected command opens
+in a predictable result surface:
+
+- **Browse** commands show search or context above a result list and detail;
+- **Check** commands show the overall pass, warn, or fail result above a check
+  list and selected detail;
+- **Plan** commands show their input and generated proposals;
+- **Change** commands keep input and confirmation above the execution result;
+- **Operate** commands show runtime state, controls, and events;
+- **Generate** commands show generation options and the resulting artifact.
+
+Every action and CLI command must produce a typed result for one of these
+surfaces. Raw command output is retained only as optional diagnostics.
+
 ## Why it exists
 
 The Workbench keeps large changes reviewable by making the request, goal,

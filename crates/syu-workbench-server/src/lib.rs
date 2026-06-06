@@ -26,8 +26,10 @@ use std::{
 use syu_app_ui::{
     AppShell, HelpTopic, Locale, WorkbenchActionRunPreview, WorkbenchPane, WorkbenchUiState,
     model::{
-        CliCommandPreview, SpecBrowserDocument, SpecBrowserItem, SpecBrowserModel,
-        SpecBrowserSection, SpecBrowserTraceGroup, SpecBrowserTraceReference, cli_command_catalog,
+        CliCommandPreview, CommandCategory, CommandEffect, CommandResultItem, CommandResultStatus,
+        SpecBrowserDocument, SpecBrowserItem, SpecBrowserModel, SpecBrowserSection,
+        SpecBrowserTraceGroup, SpecBrowserTraceReference, TypedCommandResult, category_result_kind,
+        cli_command_catalog, workbench_action_category,
     },
 };
 use syu_code_intel::{
@@ -954,6 +956,8 @@ struct WorkbenchViewQuery {
     sidebar: Option<String>,
     #[serde(default)]
     query: Option<String>,
+    #[serde(default)]
+    category: Option<String>,
     #[serde(default)]
     action: Option<String>,
     #[serde(default)]

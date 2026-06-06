@@ -24,6 +24,123 @@ mod demo;
 pub use commands::cli_command_catalog;
 pub use demo::build_demo_state;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommandCategory {
+    Browse,
+    Check,
+    Plan,
+    Change,
+    Operate,
+    Generate,
+}
+
+impl CommandCategory {
+    pub const ALL: [Self; 6] = [
+        Self::Browse,
+        Self::Check,
+        Self::Plan,
+        Self::Change,
+        Self::Operate,
+        Self::Generate,
+    ];
+
+    pub const fn slug(self) -> &'static str {
+        match self {
+            Self::Browse => "browse",
+            Self::Check => "check",
+            Self::Plan => "plan",
+            Self::Change => "change",
+            Self::Operate => "operate",
+            Self::Generate => "generate",
+        }
+    }
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Browse => "Browse",
+            Self::Check => "Check",
+            Self::Plan => "Plan",
+            Self::Change => "Change",
+            Self::Operate => "Operate",
+            Self::Generate => "Generate",
+        }
+    }
+
+    pub fn from_slug(value: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|category| category.slug() == value)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommandEffect {
+    ReadOnly,
+    MutatesState,
+    MutatesFiles,
+    RuntimeProcess,
+}
+
+impl CommandEffect {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::ReadOnly => "read only",
+            Self::MutatesState => "changes state",
+            Self::MutatesFiles => "changes files",
+            Self::RuntimeProcess => "runtime process",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommandResultKind {
+    ListDetail,
+    CheckDetail,
+    PlanDetail,
+    ChangeDetail,
+    OperationDetail,
+    GeneratedArtifact,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommandResultStatus {
+    Ready,
+    Pass,
+    Warn,
+    Fail,
+    Pending,
+}
+
+impl CommandResultStatus {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::Pass => "pass",
+            Self::Warn => "warn",
+            Self::Fail => "fail",
+            Self::Pending => "pending",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandResultItem {
+    pub id: String,
+    pub title: String,
+    pub summary: String,
+    pub detail: String,
+    pub status: CommandResultStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TypedCommandResult {
+    pub kind: CommandResultKind,
+    pub status: CommandResultStatus,
+    pub summary: String,
+    pub items: Vec<CommandResultItem>,
+    pub diagnostics: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct CommandPaletteEntry {
     pub action: WorkbenchAction,
@@ -38,6 +155,9 @@ pub struct WorkbenchActionRunPreview {
     pub title: String,
     pub result_summary: String,
     pub evidence_summary: String,
+    pub category: CommandCategory,
+    pub effect: CommandEffect,
+    pub result: TypedCommandResult,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,6 +171,40 @@ pub struct CliCommandEntry {
     pub opens_spec_browser: bool,
 }
 
+impl CliCommandEntry {
+    pub fn category(self) -> CommandCategory {
+        match self.id {
+            "cli.audit" | "cli.doctor" | "cli.validate" | "cli.task.check" => {
+                CommandCategory::Check
+            }
+            "cli.task.classify"
+            | "cli.task.scope"
+            | "cli.task.scaffold"
+            | "cli.task.plan"
+            | "cli.task.test_select"
+            | "cli.task.infer" => CommandCategory::Plan,
+            "cli.init" | "cli.add" => CommandCategory::Change,
+            "cli.lsp" => CommandCategory::Operate,
+            "cli.report" | "cli.completion" => CommandCategory::Generate,
+            _ => CommandCategory::Browse,
+        }
+    }
+
+    pub fn effect(self) -> CommandEffect {
+        if self.id == "cli.lsp" {
+            CommandEffect::RuntimeProcess
+        } else if self.mutates_files {
+            CommandEffect::MutatesFiles
+        } else {
+            CommandEffect::ReadOnly
+        }
+    }
+
+    pub fn result_kind(self) -> CommandResultKind {
+        category_result_kind(self.category())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct CliCommandPreview {
     pub id: String,
@@ -60,6 +214,9 @@ pub struct CliCommandPreview {
     pub evidence_summary: String,
     pub requires_input: bool,
     pub mutates_files: bool,
+    pub category: CommandCategory,
+    pub effect: CommandEffect,
+    pub result: TypedCommandResult,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -131,6 +288,7 @@ pub struct WorkbenchUiState {
     pub payload: WorkbenchApiPayload,
     pub command_palette_open: bool,
     pub command_query: String,
+    pub command_category: Option<CommandCategory>,
     pub selected_action_id: Option<WorkbenchActionId>,
     pub selected_cli_command_id: Option<String>,
     pub preview: Option<WorkbenchActionRunPreview>,
@@ -146,6 +304,7 @@ impl WorkbenchUiState {
             payload: WorkbenchApiPayload::new(state),
             command_palette_open: true,
             command_query: String::new(),
+            command_category: None,
             selected_action_id: None,
             selected_cli_command_id: None,
             preview: None,
@@ -166,6 +325,7 @@ impl WorkbenchUiState {
             },
             command_palette_open: true,
             command_query: String::new(),
+            command_category: None,
             selected_action_id: None,
             selected_cli_command_id: None,
             preview: None,
@@ -186,6 +346,10 @@ impl WorkbenchUiState {
 
     pub fn set_query(&mut self, query: impl Into<String>) {
         self.command_query = query.into();
+    }
+
+    pub fn set_command_category(&mut self, category: Option<CommandCategory>) {
+        self.command_category = category;
     }
 
     pub fn set_locale(&mut self, locale: Locale) {
@@ -249,6 +413,10 @@ impl WorkbenchUiState {
                     matched_query,
                 })
             })
+            .filter(|entry| {
+                self.command_category
+                    .is_none_or(|category| workbench_action_category(entry.action.id) == category)
+            })
             .collect::<Vec<_>>();
         actions.sort_by_key(|entry| {
             (
@@ -283,6 +451,10 @@ impl WorkbenchUiState {
                 .to_lowercase();
                 query.is_empty() || haystack.contains(&query)
             })
+            .filter(|command| {
+                self.command_category
+                    .is_none_or(|category| command.category() == category)
+            })
             .collect::<Vec<_>>();
         commands.sort_by_key(|command| {
             (
@@ -299,10 +471,7 @@ impl WorkbenchUiState {
             .iter()
             .find(|command| command.id == command_id)?;
         let result_summary = if command.requires_input {
-            format!(
-                "Provide input for {} before running it.",
-                command.invocation
-            )
+            format!("Review the input for {}, then run it.", command.invocation)
         } else if command.mutates_files {
             format!(
                 "{} requires confirmation before it writes files.",
@@ -317,7 +486,7 @@ impl WorkbenchUiState {
         let evidence_summary = if command.mutates_files {
             "writes files".to_string()
         } else if command.requires_input {
-            "input required".to_string()
+            "input ready".to_string()
         } else {
             "read-only".to_string()
         };
@@ -325,10 +494,17 @@ impl WorkbenchUiState {
             id: command.id.to_string(),
             title: command.title.to_string(),
             invocation: command.invocation.to_string(),
-            result_summary,
-            evidence_summary,
+            result_summary: result_summary.clone(),
+            evidence_summary: evidence_summary.clone(),
             requires_input: command.requires_input,
             mutates_files: command.mutates_files,
+            category: command.category(),
+            effect: command.effect(),
+            result: pending_typed_result(
+                command.result_kind(),
+                result_summary,
+                evidence_summary.clone(),
+            ),
         })
     }
 
@@ -350,6 +526,13 @@ impl WorkbenchUiState {
             title: action.title.clone(),
             result_summary: format!("Preview opened for {}", action.title),
             evidence_summary: "Ready to review".to_string(),
+            category: workbench_action_category(action_id),
+            effect: workbench_action_effect(action),
+            result: pending_typed_result(
+                workbench_action_result_kind(action_id),
+                format!("Preview opened for {}", action.title),
+                "Ready to review".to_string(),
+            ),
         })
     }
 
@@ -452,6 +635,71 @@ fn availability_reason(availability: &WorkbenchActionAvailability) -> String {
 
 fn evidence_summary(entry: &EvidenceEntry) -> String {
     format!("{}: {}", entry.kind.label(), entry.summary)
+}
+
+pub fn category_result_kind(category: CommandCategory) -> CommandResultKind {
+    match category {
+        CommandCategory::Browse => CommandResultKind::ListDetail,
+        CommandCategory::Check => CommandResultKind::CheckDetail,
+        CommandCategory::Plan => CommandResultKind::PlanDetail,
+        CommandCategory::Change => CommandResultKind::ChangeDetail,
+        CommandCategory::Operate => CommandResultKind::OperationDetail,
+        CommandCategory::Generate => CommandResultKind::GeneratedArtifact,
+    }
+}
+
+pub fn pending_typed_result(
+    kind: CommandResultKind,
+    summary: String,
+    detail: String,
+) -> TypedCommandResult {
+    TypedCommandResult {
+        kind,
+        status: CommandResultStatus::Pending,
+        summary: summary.clone(),
+        items: vec![CommandResultItem {
+            id: "pending".to_string(),
+            title: "Not run yet".to_string(),
+            summary,
+            detail,
+            status: CommandResultStatus::Pending,
+        }],
+        diagnostics: None,
+    }
+}
+
+pub fn workbench_action_category(action_id: WorkbenchActionId) -> CommandCategory {
+    match action_id {
+        WorkbenchActionId::GoalCheck | WorkbenchActionId::ValidationRun => CommandCategory::Check,
+        WorkbenchActionId::RequestClassify
+        | WorkbenchActionId::RequestScope
+        | WorkbenchActionId::RequestScaffold
+        | WorkbenchActionId::RequestPlan
+        | WorkbenchActionId::GoalTestSelect
+        | WorkbenchActionId::BranchInferGoal => CommandCategory::Plan,
+        WorkbenchActionId::RequestNew
+        | WorkbenchActionId::AssignmentCreate
+        | WorkbenchActionId::AssignmentRecordManual => CommandCategory::Change,
+        WorkbenchActionId::AssignmentRunDry
+        | WorkbenchActionId::AssignmentRun
+        | WorkbenchActionId::AssignmentCancel
+        | WorkbenchActionId::AssignmentCollectEvidence
+        | WorkbenchActionId::AgentRun => CommandCategory::Operate,
+        _ => CommandCategory::Browse,
+    }
+}
+
+pub fn workbench_action_effect(action: &WorkbenchAction) -> CommandEffect {
+    match action.mutability {
+        WorkbenchActionMutability::ReadOnly => CommandEffect::ReadOnly,
+        WorkbenchActionMutability::MutatesState => CommandEffect::MutatesState,
+        WorkbenchActionMutability::MutatesFiles
+        | WorkbenchActionMutability::MutatesStateAndFiles => CommandEffect::MutatesFiles,
+    }
+}
+
+pub fn workbench_action_result_kind(action_id: WorkbenchActionId) -> CommandResultKind {
+    category_result_kind(workbench_action_category(action_id))
 }
 
 #[cfg(test)]

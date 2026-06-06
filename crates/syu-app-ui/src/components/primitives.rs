@@ -267,7 +267,12 @@ pub fn GoalCard(goal_id: String, title: String, selected: bool) -> Element {
 }
 
 #[component]
-pub fn CommandItem(entry: CommandPaletteEntry, selected: bool, locale: Locale) -> Element {
+pub fn CommandItem(
+    entry: CommandPaletteEntry,
+    selected: bool,
+    locale: Locale,
+    category: Option<crate::model::CommandCategory>,
+) -> Element {
     let class = if selected {
         format!("{} {}", classes::COMMAND_ITEM, classes::COMMAND_ITEM_ACTIVE)
     } else {
@@ -278,19 +283,24 @@ pub fn CommandItem(entry: CommandPaletteEntry, selected: bool, locale: Locale) -
     } else {
         classes::COMMAND_ITEM_DISABLED
     };
+    let category_param =
+        category.map_or_else(String::new, |value| format!("&category={}", value.slug()));
     let href = if entry.availability.available && !entry.action.mutability.requires_confirmation() {
         format!(
-            "?pane=commands&sidebar=0&lang={}&action={}&run=1",
+            "?pane=commands&sidebar=0&lang={}&action={}&run=1{}",
             locale.slug(),
-            entry.action.id.label()
+            entry.action.id.label(),
+            category_param,
         )
     } else {
         format!(
-            "?pane=commands&sidebar=0&lang={}&action={}",
+            "?pane=commands&sidebar=0&lang={}&action={}{}",
             locale.slug(),
-            entry.action.id.label()
+            entry.action.id.label(),
+            category_param,
         )
     };
+    let action_category = crate::model::workbench_action_category(entry.action.id);
     rsx! {
         a {
             class: "{class} {disabled_class}",
@@ -300,6 +310,7 @@ pub fn CommandItem(entry: CommandPaletteEntry, selected: bool, locale: Locale) -
             "data-command-text": format!("{} {} {}", entry.action.id.label(), entry.action.title, entry.action.description),
             "data-command-id": entry.action.id.label(),
             "data-command-title": entry.action.title.clone(),
+            "data-command-category": action_category.slug(),
             div { class: "flex items-start gap-3 text-left",
                 span { class: "grid h-8 w-8 shrink-0 place-items-center rounded-full border border-border bg-panel-muted text-xs text-foreground/70", "{action_icon(entry.action.id)}" }
                 div { class: "flex min-w-0 flex-col gap-1",
@@ -308,6 +319,7 @@ pub fn CommandItem(entry: CommandPaletteEntry, selected: bool, locale: Locale) -
                 }
             }
             div { class: "flex flex-col items-end gap-1 text-xs uppercase tracking-[0.18em]",
+                span { class: "rounded-full border border-border bg-background px-2 py-0.5 text-[9px] tracking-[0.16em] text-foreground/60", "{action_category.label()}" }
                 if let Some(reason) = &entry.disabled_reason {
                     span { class: "max-w-[11rem] text-right normal-case tracking-normal text-foreground/50", "{reason}" }
                 } else {

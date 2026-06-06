@@ -19,7 +19,7 @@ description: "Generated reference for docs/syu/features/workbench/actions.yaml"
 
 - **id**: FEAT-WORKBENCH-COMMAND-PALETTE-001
   - **title**: Workbench command palette registry
-  - **summary**: Keep request, goal, evidence, and assignment actions explicit so users can see which artifact is being created, updated, or handed off, and drive them from a typed registry instead of hardcoded UI flow.
+  - **summary**: Keep request, goal, evidence, and assignment actions explicit, classify palette commands by user intent, and render every execution through a typed category result instead of a generic command-output string.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-WORKBENCH-002
@@ -40,6 +40,8 @@ description: "Generated reference for docs/syu/features/workbench/actions.yaml"
         - **symbols**:
           - WorkbenchUiState
           - CommandPaletteEntry
+          - CommandCategory
+          - TypedCommandResult
       - **file**: crates/syu-app-ui/src/components/shell/command_palette.rs
         - **symbols**:
           - CommandPalette
@@ -95,7 +97,7 @@ version: 1
 features:
   - id: FEAT-WORKBENCH-COMMAND-PALETTE-001
     title: Workbench command palette registry
-    summary: Keep request, goal, evidence, and assignment actions explicit so users can see which artifact is being created, updated, or handed off, and drive them from a typed registry instead of hardcoded UI flow.
+    summary: Keep request, goal, evidence, and assignment actions explicit, classify palette commands by user intent, and render every execution through a typed category result instead of a generic command-output string.
     status: implemented
     linked_requirements:
       - REQ-WORKBENCH-002
@@ -116,6 +118,8 @@ features:
           symbols:
             - WorkbenchUiState
             - CommandPaletteEntry
+            - CommandCategory
+            - TypedCommandResult
         - file: crates/syu-app-ui/src/components/shell/command_palette.rs
           symbols:
             - CommandPalette

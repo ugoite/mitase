@@ -89,9 +89,75 @@ async fn cli_information_command_renders_spec_browser_without_running_cli() {
     assert_eq!(status, StatusCode::OK);
     assert!(html.contains("Spec tree"));
     assert!(html.contains("Search specs"));
-    assert!(html.contains("name=\"run\" value=\"1\""));
+    assert!(html.contains("data-category-layout=\"browse\""));
+    assert!(html.contains("spec_item="));
+    assert!(!html.contains("name=\"run\" value=\"1\""));
     assert!(!html.contains("stdout:"));
     assert!(!html.contains("stderr:"));
+}
+
+#[tokio::test]
+async fn category_filter_and_typed_check_result_render_from_browser_route() {
+    let server = test_server();
+    let router = server.router();
+    let (_, filtered_html) = text_response(
+        router.clone(),
+        Request::builder()
+            .uri("/?pane=commands&category=check")
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+
+    assert!(filtered_html.contains("data-command-id=\"cli.validate\""));
+    assert!(!filtered_html.contains("data-command-id=\"cli.init\""));
+
+    let (_, result_html) = text_response(
+        router,
+        Request::builder()
+            .uri("/?pane=commands&category=check&cli=cli.validate&run=1")
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+
+    assert!(result_html.contains("data-result-kind=\"CheckDetail\""));
+    assert!(result_html.contains("data-check-summary=\"true\""));
+}
+
+#[test]
+fn structured_results_use_short_category_summaries_instead_of_json_headings() {
+    let result = typed_result_from_json(
+        CommandCategory::Check,
+        r#"{"issues":[{"severity":"error","message":"broken link"}]}"#.to_string(),
+        CommandResultStatus::Fail,
+        serde_json::json!({
+            "issues": [{"severity": "error", "message": "broken link"}]
+        }),
+    );
+
+    assert_eq!(result.summary, "1 checks · fail");
+    assert_eq!(result.items[0].title, "broken link");
+    assert!(!result.summary.contains('{'));
+}
+
+#[test]
+fn structured_object_results_split_into_readable_field_items() {
+    let result = typed_result_from_json(
+        CommandCategory::Check,
+        String::new(),
+        CommandResultStatus::Pass,
+        serde_json::json!({
+            "workspace_root": "/workspace",
+            "definition_counts": {"requirements": 4},
+            "issues": []
+        }),
+    );
+
+    assert_eq!(result.summary, "2 checks · pass");
+    assert_eq!(result.items[0].title, "Definition counts");
+    assert_eq!(result.items[1].title, "Workspace root");
+    assert!(result.items.iter().all(|item| item.detail.len() < 80));
 }
 
 #[tokio::test]
@@ -213,8 +279,16 @@ async fn every_palette_action_can_be_selected_and_submitted_from_browser_route()
         assert!(
             run_html.contains(&action_id.replace('.', " "))
                 || run_html.contains("failed to run")
-                || run_html.contains("input required"),
+                || run_html.contains("input required")
+                || run_html.contains("data-result-kind="),
             "{action_id} should render a submission result"
+        );
+        assert!(
+            run_html.contains(&format!(
+                "data-category-layout=\"{}\"",
+                syu_app_ui::model::workbench_action_category(action.id).slug()
+            )),
+            "{action_id} should render its category-specific result layout"
         );
     }
 }
@@ -271,8 +345,19 @@ async fn every_palette_cli_command_can_be_selected_and_submitted_from_browser_ro
         assert!(
             run_html.contains(command.invocation)
                 || run_html.contains("needs input before it can run")
-                || run_html.contains("needs confirmation before writing files"),
+                || run_html.contains("needs confirmation before writing files")
+                || (command.category() == CommandCategory::Browse
+                    && command.opens_spec_browser
+                    && run_html.contains("data-category-layout=\"browse\"")),
             "{} should render a submission result",
+            command.id
+        );
+        assert!(
+            run_html.contains(&format!(
+                "data-category-layout=\"{}\"",
+                command.category().slug()
+            )),
+            "{} should render its category-specific result layout",
             command.id
         );
     }
@@ -319,6 +404,8 @@ fn cli_task_check_preview_passes_required_range_argument() {
             "target/syu/workbench/goal.yaml".to_string(),
             "--range".to_string(),
             "origin/main...HEAD".to_string(),
+            "--format".to_string(),
+            "json".to_string(),
         ]
     );
 }

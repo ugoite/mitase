@@ -15,6 +15,11 @@ pub(super) async fn workbench_index(
     if let Some(query) = view.query {
         ui.set_query(query);
     }
+    ui.set_command_category(
+        view.category
+            .as_deref()
+            .and_then(CommandCategory::from_slug),
+    );
     if let Some(locale) = view.lang.as_deref().and_then(Locale::from_slug) {
         ui.set_locale(locale);
     }
@@ -82,6 +87,20 @@ pub(super) fn workbench_document(shell: String, locale: Locale) -> String {
   <style>
     form:focus-within .command-palette-results {{ display: grid; }}
     form .command-palette-results:empty {{ display: none; }}
+    [data-result-item][aria-current="page"] {{
+      border-color: var(--color-foreground);
+      background: var(--color-foreground);
+      color: var(--color-background);
+    }}
+    @media (min-width: 64rem) {{
+      [data-result-grid] [data-result-detail-panel],
+      [data-spec-browser-grid] [data-spec-detail] {{
+        grid-column: span 2 / span 2;
+      }}
+      [data-spec-browser-grid] [data-spec-search] {{
+        grid-column: 1 / -1;
+      }}
+    }}
     summary::-webkit-details-marker {{ display: none; }}
   </style>
   <link rel="stylesheet" href="/assets/tailwind.css?v=workbench-palette-commands">
@@ -118,6 +137,20 @@ pub(super) fn workbench_document(shell: String, locale: Locale) -> String {
         input.addEventListener('input', applyFilter);
         applyFilter();
       }}
+      for (const item of document.querySelectorAll('[data-result-item]')) {{
+        item.addEventListener('click', (event) => {{
+          event.preventDefault();
+          const id = item.dataset.resultItem;
+          const surface = item.closest('[data-result-kind]');
+          if (!surface || !id) return;
+          for (const detail of surface.querySelectorAll('[data-result-detail]')) {{
+            detail.hidden = detail.dataset.resultDetail !== id;
+          }}
+          for (const candidate of surface.querySelectorAll('[data-result-item]')) {{
+            candidate.setAttribute('aria-current', candidate === item ? 'page' : 'false');
+          }}
+        }});
+      }}
     }})();
   </script>
 </body>
@@ -135,47 +168,62 @@ pub(super) async fn run_workbench_action_preview(
 ) -> Option<WorkbenchActionRunPreview> {
     let action_input = action_input.unwrap_or("").trim();
     if workbench_action_needs_confirmation(action_id) && !confirmed {
-        return shared_action_id(action_id.to_string()).map(|action| WorkbenchActionRunPreview {
-            action_id: action,
-            title: action_id.replace('.', " "),
-            result_summary:
-                "This command can change Workbench state or files. Confirm before running."
-                    .to_string(),
-            evidence_summary: "confirmation required".to_string(),
+        return shared_action_id(action_id.to_string()).map(|action| {
+            typed_action_preview(
+                action,
+                action_id,
+                "This command can change Workbench state or files. Confirm before running.",
+                "confirmation required",
+                CommandResultStatus::Pending,
+                None,
+            )
         });
     }
     let body = default_workbench_action_body(server, action_id, action_input).await;
     let missing_input = body.is_none();
     let body = body.unwrap_or_else(|| serde_json::json!({}));
     if missing_input {
-        return shared_action_id(action_id.to_string()).map(|action| WorkbenchActionRunPreview {
-            action_id: action,
-            title: action_id.replace('.', " "),
-            result_summary: "This command needs request, goal, assignment, or confirmation input before it can run.".to_string(),
-            evidence_summary: "input required".to_string(),
+        return shared_action_id(action_id.to_string()).map(|action| {
+            typed_action_preview(
+                action,
+                action_id,
+                "This command needs request, goal, assignment, or confirmation input before it can run.",
+                "input required",
+                CommandResultStatus::Pending,
+                None,
+            )
         });
     }
 
     let action = shared_action_id(action_id.to_string())?;
     let response = execute_action(server, action_id, body).await;
-    let (result_summary, evidence_summary) = match response {
-        Ok(response) => (
-            truncate_cli_output(
+    let (result_summary, evidence_summary, status, structured) = match response {
+        Ok(response) => {
+            let result_summary = truncate_cli_output(
                 &serde_json::to_string_pretty(&response.result).unwrap_or_default(),
-            ),
-            format!("{:?}", response.event),
-        ),
+            );
+            (
+                result_summary,
+                format!("{:?}", response.event),
+                CommandResultStatus::Pass,
+                Some(response.result),
+            )
+        }
         Err(error) => (
             format!("failed to run {action_id}: {error}"),
             "failed".to_string(),
+            CommandResultStatus::Fail,
+            None,
         ),
     };
-    Some(WorkbenchActionRunPreview {
-        action_id: action,
-        title: action_id.replace('.', " "),
-        result_summary,
-        evidence_summary,
-    })
+    Some(typed_action_preview(
+        action,
+        action_id,
+        &result_summary,
+        &evidence_summary,
+        status,
+        structured,
+    ))
 }
 
 pub(super) async fn default_workbench_action_body(
@@ -285,61 +333,61 @@ pub(super) fn run_cli_command_preview(
         .find(|command| command.id == command_id)?;
     let cli_arg = cli_arg.unwrap_or("").trim();
     if command.requires_input && cli_arg.is_empty() {
-        return Some(CliCommandPreview {
-            id: command.id.to_string(),
-            title: command.title.to_string(),
-            invocation: command.invocation.to_string(),
-            result_summary: format!("{} needs input before it can run.", command.invocation),
-            evidence_summary: "input required".to_string(),
-            requires_input: command.requires_input,
-            mutates_files: command.mutates_files,
-        });
+        return Some(typed_cli_preview(
+            *command,
+            command.invocation.to_string(),
+            format!("{} needs input before it can run.", command.invocation),
+            "input required".to_string(),
+            CommandResultStatus::Pending,
+            None,
+            None,
+        ));
     }
     if command.mutates_files && !confirmed {
-        return Some(CliCommandPreview {
-            id: command.id.to_string(),
-            title: command.title.to_string(),
-            invocation: command.invocation.to_string(),
-            result_summary: format!(
+        return Some(typed_cli_preview(
+            *command,
+            command.invocation.to_string(),
+            format!(
                 "{} needs confirmation before writing files.",
                 command.invocation
             ),
-            evidence_summary: "confirmation required".to_string(),
-            requires_input: command.requires_input,
-            mutates_files: command.mutates_files,
-        });
+            "confirmation required".to_string(),
+            CommandResultStatus::Pending,
+            None,
+            None,
+        ));
     }
 
     let cli_arg = cli_default_arg(command.id, cli_arg);
     if let Err(error) = ensure_cli_task_fixture(command.id, workspace_root, cli_arg) {
-        return Some(CliCommandPreview {
-            id: command.id.to_string(),
-            title: command.title.to_string(),
-            invocation: command.invocation.to_string(),
-            result_summary: format!("failed to prepare command input: {error}"),
-            evidence_summary: "failed".to_string(),
-            requires_input: command.requires_input,
-            mutates_files: command.mutates_files,
-        });
+        return Some(typed_cli_preview(
+            *command,
+            command.invocation.to_string(),
+            format!("failed to prepare command input: {error}"),
+            "failed".to_string(),
+            CommandResultStatus::Fail,
+            None,
+            None,
+        ));
     }
     let args = cli_command_args(command.id, cli_arg)?;
     if matches!(command.id, "cli.workbench" | "cli.lsp") {
-        return Some(CliCommandPreview {
-            id: command.id.to_string(),
-            title: command.title.to_string(),
-            invocation: command.invocation.to_string(),
-            result_summary: "Already represented by this Workbench session.".to_string(),
-            evidence_summary: "running".to_string(),
-            requires_input: command.requires_input,
-            mutates_files: command.mutates_files,
-        });
+        return Some(typed_cli_preview(
+            *command,
+            command.invocation.to_string(),
+            "Already represented by this Workbench session.".to_string(),
+            "running".to_string(),
+            CommandResultStatus::Ready,
+            None,
+            None,
+        ));
     }
 
     let output = Command::new(std::env::current_exe().ok()?)
         .args(&args)
         .current_dir(workspace_root)
         .output();
-    let (result_summary, evidence_summary) = match output {
+    let (result_summary, evidence_summary, status, diagnostics, structured) = match output {
         Ok(output) => {
             let status = output
                 .status
@@ -362,27 +410,298 @@ pub(super) fn run_cli_command_preview(
             } else {
                 truncate_cli_output(&body)
             };
-            (result_summary, status)
+            let typed_status = if output.status.success() {
+                CommandResultStatus::Pass
+            } else {
+                CommandResultStatus::Fail
+            };
+            (
+                result_summary,
+                status,
+                typed_status,
+                Some(format!(
+                    "stdout:\n{}\n\nstderr:\n{}",
+                    stdout.trim(),
+                    stderr.trim()
+                )),
+                serde_json::from_str::<Value>(&body).ok(),
+            )
         }
         Err(error) => (
             format!("failed to run {}: {error}", command.invocation),
             "failed".to_string(),
+            CommandResultStatus::Fail,
+            None,
+            None,
         ),
     };
 
-    Some(CliCommandPreview {
-        id: command.id.to_string(),
-        title: command.title.to_string(),
-        invocation: if cli_arg.is_empty() {
+    Some(typed_cli_preview(
+        *command,
+        if cli_arg.is_empty() {
             command.invocation.to_string()
         } else {
             format!("{} · {}", command.invocation, cli_arg)
         },
         result_summary,
         evidence_summary,
+        status,
+        diagnostics,
+        structured,
+    ))
+}
+
+fn typed_cli_preview(
+    command: syu_app_ui::model::CliCommandEntry,
+    invocation: String,
+    summary: String,
+    detail: String,
+    status: CommandResultStatus,
+    diagnostics: Option<String>,
+    structured: Option<Value>,
+) -> CliCommandPreview {
+    let result = structured.map_or_else(
+        || {
+            typed_result(
+                command.category(),
+                command.id,
+                command.title,
+                summary.clone(),
+                detail.clone(),
+                status,
+                diagnostics,
+            )
+        },
+        |value| typed_result_from_json(command.category(), summary.clone(), status, value),
+    );
+    CliCommandPreview {
+        id: command.id.to_string(),
+        title: command.title.to_string(),
+        invocation,
+        result_summary: summary,
+        evidence_summary: detail,
         requires_input: command.requires_input,
         mutates_files: command.mutates_files,
-    })
+        category: command.category(),
+        effect: command.effect(),
+        result,
+    }
+}
+
+fn typed_action_preview(
+    action_id: shared_workbench::WorkbenchActionId,
+    action_label: &str,
+    summary: &str,
+    detail: &str,
+    status: CommandResultStatus,
+    structured: Option<Value>,
+) -> WorkbenchActionRunPreview {
+    let category = workbench_action_category(action_id);
+    let effect = shared_workbench::WorkbenchActionRegistry::standard()
+        .action(action_id)
+        .map(syu_app_ui::model::workbench_action_effect)
+        .unwrap_or(CommandEffect::ReadOnly);
+    WorkbenchActionRunPreview {
+        action_id,
+        title: action_label.replace('.', " "),
+        result_summary: summary.to_string(),
+        evidence_summary: detail.to_string(),
+        category,
+        effect,
+        result: structured.map_or_else(
+            || {
+                typed_result(
+                    category,
+                    action_label,
+                    &action_label.replace('.', " "),
+                    summary.to_string(),
+                    detail.to_string(),
+                    status,
+                    None,
+                )
+            },
+            |value| typed_result_from_json(category, summary.to_string(), status, value),
+        ),
+    }
+}
+
+fn typed_result(
+    category: CommandCategory,
+    id: &str,
+    title: &str,
+    summary: String,
+    detail: String,
+    status: CommandResultStatus,
+    diagnostics: Option<String>,
+) -> TypedCommandResult {
+    TypedCommandResult {
+        kind: category_result_kind(category),
+        status,
+        summary: summary.clone(),
+        items: vec![CommandResultItem {
+            id: id.to_string(),
+            title: title.to_string(),
+            summary,
+            detail,
+            status,
+        }],
+        diagnostics,
+    }
+}
+
+pub(super) fn typed_result_from_json(
+    category: CommandCategory,
+    _summary: String,
+    status: CommandResultStatus,
+    value: Value,
+) -> TypedCommandResult {
+    let values = structured_result_values(value);
+    let items = values
+        .into_iter()
+        .enumerate()
+        .map(|(index, (field_name, value))| {
+            let id = json_string(&value, &["id", "rule", "kind", "name"])
+                .or(field_name.clone())
+                .unwrap_or_else(|| format!("result-{}", index + 1));
+            let title = json_string(&value, &["title", "summary", "message", "kind"])
+                .or_else(|| field_name.as_deref().map(humanize_json_key))
+                .unwrap_or_else(|| default_result_item_title(category, index));
+            let item_status = json_status(&value).unwrap_or(status);
+            CommandResultItem {
+                id,
+                title,
+                summary: json_string(&value, &["summary", "message", "description"])
+                    .unwrap_or_else(|| summarize_json_value(&value)),
+                detail: serde_json::to_string_pretty(&value).unwrap_or_default(),
+                status: item_status,
+            }
+        })
+        .collect::<Vec<_>>();
+    let aggregate_status = if items
+        .iter()
+        .any(|item| item.status == CommandResultStatus::Fail)
+    {
+        CommandResultStatus::Fail
+    } else if items
+        .iter()
+        .any(|item| item.status == CommandResultStatus::Warn)
+    {
+        CommandResultStatus::Warn
+    } else {
+        status
+    };
+    TypedCommandResult {
+        kind: category_result_kind(category),
+        status: aggregate_status,
+        summary: typed_result_summary(category, items.len(), aggregate_status),
+        items,
+        diagnostics: None,
+    }
+}
+
+fn structured_result_values(value: Value) -> Vec<(Option<String>, Value)> {
+    if let Some(items) = preferred_result_array(&value).filter(|items| !items.is_empty()) {
+        return items.iter().cloned().map(|item| (None, item)).collect();
+    }
+    if let Value::Object(object) = value {
+        return object
+            .into_iter()
+            .filter(|(_, value)| !matches!(value, Value::Array(items) if items.is_empty()))
+            .map(|(key, value)| (Some(key), value))
+            .collect();
+    }
+    vec![(None, value)]
+}
+
+fn summarize_json_value(value: &Value) -> String {
+    match value {
+        Value::Null => "No value".to_string(),
+        Value::Bool(value) => value.to_string(),
+        Value::Number(value) => value.to_string(),
+        Value::String(value) => value.clone(),
+        Value::Array(items) => format!("{} items", items.len()),
+        Value::Object(fields) => format!("{} fields", fields.len()),
+    }
+}
+
+fn humanize_json_key(key: &str) -> String {
+    let mut words = key.split('_').filter(|word| !word.is_empty());
+    let first = words.next().unwrap_or(key);
+    let mut title = first.to_string();
+    if let Some(initial) = title.get_mut(0..1) {
+        initial.make_ascii_uppercase();
+    }
+    for word in words {
+        title.push(' ');
+        title.push_str(word);
+    }
+    title
+}
+
+fn typed_result_summary(
+    category: CommandCategory,
+    item_count: usize,
+    status: CommandResultStatus,
+) -> String {
+    let noun = match category {
+        CommandCategory::Browse => "items",
+        CommandCategory::Check => "checks",
+        CommandCategory::Plan => "proposals",
+        CommandCategory::Change => "changes",
+        CommandCategory::Operate => "events",
+        CommandCategory::Generate => "artifacts",
+    };
+    format!("{item_count} {noun} · {}", status.label())
+}
+
+fn default_result_item_title(category: CommandCategory, index: usize) -> String {
+    let noun = match category {
+        CommandCategory::Browse => "Item",
+        CommandCategory::Check => "Check",
+        CommandCategory::Plan => "Proposal",
+        CommandCategory::Change => "Change",
+        CommandCategory::Operate => "Event",
+        CommandCategory::Generate => "Artifact",
+    };
+    format!("{noun} {}", index + 1)
+}
+
+fn preferred_result_array(value: &Value) -> Option<&[Value]> {
+    if let Some(items) = value.as_array() {
+        return Some(items);
+    }
+    let object = value.as_object()?;
+    [
+        "issues",
+        "findings",
+        "checks",
+        "items",
+        "results",
+        "matches",
+        "templates",
+        "updates",
+        "commands",
+    ]
+    .into_iter()
+    .find_map(|key| object.get(key).and_then(Value::as_array))
+    .map(Vec::as_slice)
+}
+
+fn json_string(value: &Value, keys: &[&str]) -> Option<String> {
+    let object = value.as_object()?;
+    keys.iter()
+        .find_map(|key| object.get(*key).and_then(Value::as_str).map(str::to_string))
+}
+
+fn json_status(value: &Value) -> Option<CommandResultStatus> {
+    let status = json_string(value, &["status", "severity", "level"])?;
+    match status.to_lowercase().as_str() {
+        "pass" | "passed" | "success" | "ok" | "info" => Some(CommandResultStatus::Pass),
+        "warn" | "warning" => Some(CommandResultStatus::Warn),
+        "fail" | "failed" | "error" => Some(CommandResultStatus::Fail),
+        "pending" | "unknown" => Some(CommandResultStatus::Pending),
+        _ => None,
+    }
 }
 
 pub(super) fn cli_command_args(command_id: &str, cli_arg: &str) -> Option<Vec<String>> {
@@ -428,7 +747,37 @@ pub(super) fn cli_command_args(command_id: &str, cli_arg: &str) -> Option<Vec<St
         "cli.init" => vec!["init", "."],
         _ => return None,
     };
-    Some(args.into_iter().map(String::from).collect())
+    let mut args = args.into_iter().map(String::from).collect::<Vec<_>>();
+    if cli_command_supports_json(command_id) {
+        args.extend(["--format".to_string(), "json".to_string()]);
+    }
+    Some(args)
+}
+
+fn cli_command_supports_json(command_id: &str) -> bool {
+    matches!(
+        command_id,
+        "cli.browse"
+            | "cli.list"
+            | "cli.show"
+            | "cli.search"
+            | "cli.audit"
+            | "cli.log"
+            | "cli.explain"
+            | "cli.relate"
+            | "cli.trace"
+            | "cli.doctor"
+            | "cli.validate"
+            | "cli.init"
+            | "cli.templates"
+            | "cli.task.classify"
+            | "cli.task.scope"
+            | "cli.task.scaffold"
+            | "cli.task.plan"
+            | "cli.task.test_select"
+            | "cli.task.infer"
+            | "cli.task.check"
+    )
 }
 
 pub(super) fn cli_default_arg<'a>(command_id: &str, cli_arg: &'a str) -> &'a str {

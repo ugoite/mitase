@@ -6,8 +6,9 @@ use crate::components::{
 use crate::design::classes;
 use crate::i18n::{HelpTopic, Locale};
 use crate::model::{
-    CliCommandEntry, CliCommandPreview, SpecBrowserItem, SpecBrowserModel, WorkbenchUiState,
-    WorkspacePulseSummary,
+    CliCommandEntry, CliCommandPreview, CommandCategory, CommandResultItem, CommandResultStatus,
+    SpecBrowserItem, SpecBrowserModel, TypedCommandResult, WorkbenchUiState, WorkspacePulseSummary,
+    workbench_action_category,
 };
 use dioxus::prelude::*;
 use std::collections::HashMap;
@@ -280,6 +281,9 @@ fn view_href(
     if !ui.command_query.trim().is_empty() {
         params.push(format!("query={}", urlencoding::encode(&ui.command_query)));
     }
+    if let Some(category) = ui.command_category {
+        params.push(format!("category={}", category.slug()));
+    }
     if let Some(action_id) = ui.selected_action_id {
         params.push(format!("action={}", action_id.label()));
     }
@@ -400,6 +404,8 @@ pub fn WorkbenchStage(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
             .and_then(|id| ui.cli_command_preview(id))
     });
     let selected_action = ui.selected_action().cloned();
+    let show_pane_detail = active_pane != WorkbenchPane::Commands
+        || (ui.selected_cli_command_id.is_none() && ui.selected_action_id.is_none());
     rsx! {
         main { class: "min-w-0 flex-1",
             section { class: "rounded-lg border border-border bg-panel p-4 shadow-sm",
@@ -415,29 +421,36 @@ pub fn WorkbenchStage(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
                         "?"
                     }
                 }
-                {detail}
+                if show_pane_detail {
+                    {detail}
+                }
                 if let Some(preview) = cli_preview {
                     div { class: "mt-4",
-                        CliCommandResult { preview: preview.clone(), locale: ui.locale }
-                    }
-                    if cli_command_opens_spec_browser(&preview.id) {
-                        if let Some(browser) = ui.spec_browser.clone() {
-                            div { class: "mt-4",
-                                SpecInfoBrowser { browser, query: ui.command_query.clone() }
+                        if preview.category == CommandCategory::Browse && cli_command_opens_spec_browser(&preview.id) {
+                            if let Some(browser) = ui.spec_browser.clone() {
+                                SpecInfoBrowser {
+                                    browser,
+                                    query: ui.command_query.clone(),
+                                    locale: ui.locale,
+                                    command_id: preview.id.clone(),
+                                    category: ui.command_category,
+                                }
                             }
+                        } else {
+                            CliCommandResult { preview: preview.clone(), locale: ui.locale, query: ui.command_query.clone() }
                         }
                     }
                 } else if let Some(preview) = action_preview {
                     div { class: "mt-4",
-                        DetailDrawer {
-                            title: preview.title.clone(),
-                            body: preview.result_summary.clone(),
-                            evidence: preview.evidence_summary.clone(),
+                        if let Some(action) = selected_action {
+                            WorkbenchActionResult { action, locale: ui.locale, result: Some(preview.result.clone()), category: ui.command_category, query: ui.command_query.clone() }
+                        } else {
+                            TypedResultView { result: preview.result.clone(), category: preview.category }
                         }
                     }
                 } else if let Some(action) = selected_action {
                     div { class: "mt-4",
-                        WorkbenchActionResult { action, locale: ui.locale }
+                        WorkbenchActionResult { action, locale: ui.locale, result: None, category: ui.command_category, query: ui.command_query.clone() }
                     }
                 }
             }
@@ -446,14 +459,26 @@ pub fn WorkbenchStage(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
 }
 
 #[component]
-fn WorkbenchActionResult(action: WorkbenchAction, locale: Locale) -> Element {
+fn WorkbenchActionResult(
+    action: WorkbenchAction,
+    locale: Locale,
+    result: Option<TypedCommandResult>,
+    category: Option<CommandCategory>,
+    query: String,
+) -> Element {
     let needs_input = workbench_action_needs_text_input(action.id.label());
     let needs_confirmation = action.mutability.requires_confirmation();
+    let action_category = workbench_action_category(action.id);
+    let category_param = category.map_or_else(String::new, |value| value.slug().to_string());
     rsx! {
-        section { class: classes::DRAWER,
+        section { class: "space-y-4",
+          div { class: classes::DRAWER,
             div { class: "flex items-center justify-between gap-3",
                 h3 { class: "text-sm font-semibold", "{action.title}" }
-                ScopeChip { label: if needs_confirmation { "confirm".to_string() } else { "ready".to_string() } }
+                div { class: "flex gap-2",
+                    ScopeChip { label: action_category.label().to_string() }
+                    ScopeChip { label: if needs_confirmation { "confirm".to_string() } else { "ready".to_string() } }
+                }
             }
             p { class: "mt-2 text-sm text-foreground/75", "{action.description}" }
             form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/", method: "get",
@@ -462,6 +487,8 @@ fn WorkbenchActionResult(action: WorkbenchAction, locale: Locale) -> Element {
                 input { type: "hidden", name: "lang", value: "{locale.slug()}" }
                 input { type: "hidden", name: "action", value: "{action.id.label()}" }
                 input { type: "hidden", name: "run", value: "1" }
+                input { type: "hidden", name: "category", value: "{category_param}" }
+                input { type: "hidden", name: "query", value: "{query}" }
                 if needs_input {
                     input {
                         class: "min-w-0 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-foreground/20",
@@ -484,6 +511,10 @@ fn WorkbenchActionResult(action: WorkbenchAction, locale: Locale) -> Element {
                     "Run"
                 }
             }
+          }
+          if let Some(result) = result {
+              TypedResultView { result, category: action_category }
+          }
         }
     }
 }
@@ -501,21 +532,24 @@ fn workbench_action_needs_text_input(action_id: &str) -> bool {
 }
 
 #[component]
-fn CliCommandResult(preview: CliCommandPreview, locale: Locale) -> Element {
+fn CliCommandResult(preview: CliCommandPreview, locale: Locale, query: String) -> Element {
     let default_cli_arg = cli_input_placeholder(&preview.id);
     let needs_confirmation = preview.mutates_files;
 
     rsx! {
-        section { class: classes::DRAWER,
+        section { class: "space-y-4",
+          div { class: classes::DRAWER,
             div { class: "flex items-center justify-between gap-3",
                 p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "command" }
-                ScopeChip { label: if needs_confirmation { "confirm".to_string() } else if preview.requires_input { "input".to_string() } else { "ready".to_string() } }
+                div { class: "flex gap-2",
+                    ScopeChip { label: preview.category.label().to_string() }
+                    ScopeChip { label: preview.effect.label().to_string() }
+                    ScopeChip { label: if needs_confirmation { "confirm".to_string() } else if preview.requires_input { "input".to_string() } else { "ready".to_string() } }
+                }
             }
-            p { class: "mt-2 text-sm text-foreground/75", "{preview.result_summary}" }
             div { class: "mt-3 rounded-lg border border-border bg-background p-3",
                 p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "execution" }
                 p { class: "mt-1 break-all text-sm font-medium text-foreground", "{preview.invocation}" }
-                p { class: "mt-1 text-xs text-foreground/55", "{preview.evidence_summary}" }
             }
             form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/", method: "get",
                 input { type: "hidden", name: "pane", value: "commands" }
@@ -523,6 +557,8 @@ fn CliCommandResult(preview: CliCommandPreview, locale: Locale) -> Element {
                 input { type: "hidden", name: "lang", value: "{locale.slug()}" }
                 input { type: "hidden", name: "cli", value: "{preview.id}" }
                 input { type: "hidden", name: "run", value: "1" }
+                input { type: "hidden", name: "category", value: "{preview.category.slug()}" }
+                input { type: "hidden", name: "query", value: "{query}" }
                 if preview.requires_input {
                     input {
                         class: "min-w-0 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-foreground/20",
@@ -546,6 +582,168 @@ fn CliCommandResult(preview: CliCommandPreview, locale: Locale) -> Element {
                     "Run"
                 }
             }
+          }
+          TypedResultView { result: preview.result.clone(), category: preview.category }
+        }
+    }
+}
+
+#[component]
+fn TypedResultView(result: TypedCommandResult, category: CommandCategory) -> Element {
+    let pass_count = result
+        .items
+        .iter()
+        .filter(|item| item.status == CommandResultStatus::Pass)
+        .count();
+    let warn_count = result
+        .items
+        .iter()
+        .filter(|item| item.status == CommandResultStatus::Warn)
+        .count();
+    let fail_count = result
+        .items
+        .iter()
+        .filter(|item| item.status == CommandResultStatus::Fail)
+        .count();
+    rsx! {
+        section {
+            class: "rounded-lg border border-border bg-panel p-4 shadow-sm",
+            "data-result-kind": format!("{:?}", result.kind),
+            "data-category-layout": category.slug(),
+            div { class: "mb-4 flex flex-wrap items-start justify-between gap-3",
+                div { class: "min-w-0",
+                    p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{category.label()} result" }
+                    h3 { class: "mt-1 text-base font-semibold text-foreground", "{result.summary}" }
+                }
+                ScopeChip { label: result.status.label().to_string() }
+            }
+            ResultCategorySummary {
+                category,
+                result: result.clone(),
+                pass_count,
+                warn_count,
+                fail_count,
+            }
+            div { class: "grid gap-3 lg:grid-cols-3", "data-result-grid": "true",
+                nav {
+                    class: "overflow-auto rounded-lg border border-border bg-background p-2",
+                    style: "max-height: 30rem",
+                    "aria-label": "Result items",
+                    p { class: "px-2 pb-2 text-[10px] uppercase tracking-[0.2em] text-foreground/45", "{result_list_label(category)}" }
+                    for (index, item) in result.items.iter().enumerate() {
+                        ResultListItem { item: item.clone(), selected: index == 0 }
+                    }
+                }
+                div {
+                    class: "min-w-0 overflow-auto rounded-lg border border-border bg-background p-4",
+                    style: "max-height: 36rem",
+                    "data-result-detail-panel": "true",
+                    if result.items.is_empty() {
+                        EmptyState { title: "No result items".to_string(), body: result.summary.clone() }
+                    } else {
+                        for (index, item) in result.items.iter().enumerate() {
+                            article {
+                                "data-result-detail": item.id.clone(),
+                                hidden: index != 0,
+                                div { class: "flex items-start justify-between gap-3",
+                                    div {
+                                        p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{item.id}" }
+                                        h4 { class: "mt-1 text-sm font-semibold text-foreground", "{item.title}" }
+                                    }
+                                    ScopeChip { label: item.status.label().to_string() }
+                                }
+                                p { class: "mt-3 text-sm text-foreground/70", "{item.summary}" }
+                                pre { class: "mt-3 whitespace-pre-wrap break-words rounded-lg border border-border bg-panel-muted p-3 text-xs text-foreground/70", "{item.detail}" }
+                            }
+                        }
+                    }
+                    if let Some(diagnostics) = result.diagnostics {
+                        details { class: "mt-4",
+                            summary { class: "cursor-pointer text-xs font-medium text-foreground/60", "Diagnostics" }
+                            pre { class: "mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-panel-muted p-3 text-xs text-foreground/65", "{diagnostics}" }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn ResultCategorySummary(
+    category: CommandCategory,
+    result: TypedCommandResult,
+    pass_count: usize,
+    warn_count: usize,
+    fail_count: usize,
+) -> Element {
+    match category {
+        CommandCategory::Browse => rsx! {
+            div { class: "mb-4 rounded-lg border border-border bg-background p-3", "data-browse-context": "true",
+                p { class: "mb-1 text-[10px] uppercase tracking-[0.2em] text-foreground/45", "Search and context" }
+                input {
+                    class: "w-full rounded-lg border border-border bg-panel-muted px-3 py-2 text-sm text-foreground/70",
+                    value: "{result.summary}",
+                    readonly: true,
+                    aria_label: "Browse result context",
+                }
+            }
+        },
+        CommandCategory::Check => rsx! {
+            div { class: "mb-4 grid gap-2 sm:grid-cols-3", "data-check-summary": "true",
+                MetricTile { label: "pass".to_string(), value: pass_count.to_string() }
+                MetricTile { label: "warn".to_string(), value: warn_count.to_string() }
+                MetricTile { label: "fail".to_string(), value: fail_count.to_string() }
+            }
+        },
+        CommandCategory::Plan => rsx! {
+            div { class: "mb-4 grid gap-2 sm:grid-cols-2", "data-plan-summary": "true",
+                MetricTile { label: "proposal status".to_string(), value: result.status.label().to_string() }
+                MetricTile { label: "generated proposals".to_string(), value: result.items.len().to_string() }
+            }
+        },
+        CommandCategory::Change => rsx! {
+            div { class: "mb-4 rounded-lg border border-border bg-background p-3", "data-change-summary": "true",
+                p { class: "text-[10px] uppercase tracking-[0.2em] text-foreground/45", "Execution result" }
+                p { class: "mt-1 text-sm text-foreground/70", "Review the applied workspace or Workbench state changes below." }
+            }
+        },
+        CommandCategory::Operate => rsx! {
+            div { class: "mb-4 grid gap-2 sm:grid-cols-2", "data-operation-summary": "true",
+                MetricTile { label: "runtime status".to_string(), value: result.status.label().to_string() }
+                MetricTile { label: "events".to_string(), value: result.items.len().to_string() }
+            }
+        },
+        CommandCategory::Generate => rsx! {
+            div { class: "mb-4 grid gap-2 sm:grid-cols-2", "data-generated-summary": "true",
+                MetricTile { label: "artifact status".to_string(), value: result.status.label().to_string() }
+                MetricTile { label: "generated artifacts".to_string(), value: result.items.len().to_string() }
+            }
+        },
+    }
+}
+
+fn result_list_label(category: CommandCategory) -> &'static str {
+    match category {
+        CommandCategory::Browse => "Items",
+        CommandCategory::Check => "Checks",
+        CommandCategory::Plan => "Proposals",
+        CommandCategory::Change => "Changes",
+        CommandCategory::Operate => "Events",
+        CommandCategory::Generate => "Artifacts",
+    }
+}
+
+#[component]
+fn ResultListItem(item: CommandResultItem, selected: bool) -> Element {
+    rsx! {
+        a {
+            class: "mb-1 grid gap-1 rounded-md border border-transparent px-3 py-2 text-foreground hover:border-border hover:bg-panel-muted",
+            href: "#",
+            aria_current: if selected { "page" } else { "false" },
+            "data-result-item": item.id.clone(),
+            span { class: "text-xs font-medium", "{item.title}" }
+            span { class: "text-[10px] uppercase tracking-[0.16em] opacity-65", "{item.status.label()}" }
         }
     }
 }
@@ -557,24 +755,46 @@ fn cli_command_opens_spec_browser(command_id: &str) -> bool {
 }
 
 #[component]
-fn SpecInfoBrowser(browser: SpecBrowserModel, query: String) -> Element {
+fn SpecInfoBrowser(
+    browser: SpecBrowserModel,
+    query: String,
+    locale: Locale,
+    command_id: String,
+    category: Option<CommandCategory>,
+) -> Element {
     let selected = selected_spec_item(&browser, &query);
+    let category_value = category.map_or("browse", CommandCategory::slug);
     rsx! {
-        section { class: "rounded-lg border border-border bg-panel p-4 shadow-sm",
-            div { class: "mb-3 grid gap-3 lg:grid-cols-[16rem_minmax(0,1fr)]",
-                div { class: "lg:col-span-2",
+        section { class: "rounded-lg border border-border bg-panel p-4 shadow-sm", "data-category-layout": "browse",
+            div { class: "mb-3 grid gap-3 lg:grid-cols-3", "data-spec-browser-grid": "true",
+                form {
+                    class: "flex items-end gap-2",
+                    "data-spec-search": "true",
+                    action: "/",
+                    method: "get",
+                    input { type: "hidden", name: "pane", value: "commands" }
+                    input { type: "hidden", name: "sidebar", value: "0" }
+                    input { type: "hidden", name: "lang", value: "{locale.slug()}" }
+                    input { type: "hidden", name: "cli", value: "{command_id}" }
+                    input { type: "hidden", name: "category", value: "{category_value}" }
+                    div { class: "min-w-0 flex-1",
                     p { class: "mb-1 text-[10px] uppercase tracking-[0.24em] text-foreground/45", "Search specs" }
                     input {
                         class: "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-foreground/20",
                         name: "query",
                         value: "{query}",
                         placeholder: "Search specs",
-                        readonly: true,
+                    }
+                    }
+                    button {
+                        class: "rounded-lg border border-border bg-foreground px-3 py-2 text-sm font-medium text-background hover:bg-foreground/90",
+                        type: "submit",
+                        "Search"
                     }
                 }
                 div { class: "rounded-lg border border-border bg-background p-2",
                     p { class: "px-2 pb-2 text-[10px] uppercase tracking-[0.24em] text-foreground/45", "Spec tree" }
-                    nav { class: "max-h-[30rem] overflow-auto", "aria-label": "Spec tree",
+                    nav { class: "overflow-auto", style: "max-height: 30rem", "aria-label": "Spec tree",
                         for section in &browser.sections {
                             div { class: "mb-3 last:mb-0",
                                 p { class: "px-2 pb-1 text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{section.label}" }
@@ -587,7 +807,7 @@ fn SpecInfoBrowser(browser: SpecBrowserModel, query: String) -> Element {
                                             for item in &document.items {
                                                 a {
                                                     class: spec_tree_item_class(selected.as_ref().map(|selected| selected.id.as_str()) == Some(item.id.as_str())),
-                                                    href: "#",
+                                                    href: spec_item_href(&command_id, locale, category_value, &query, &item.id),
                                                     title: "{item.title}",
                                                     "data-spec-tree-item": "true",
                                                     "data-spec-text": format!("{} {} {}", item.id, item.title, item.description.clone().unwrap_or_default()),
@@ -602,7 +822,7 @@ fn SpecInfoBrowser(browser: SpecBrowserModel, query: String) -> Element {
                         }
                     }
                 }
-                div { class: "min-w-0",
+                div { class: "min-w-0", "data-spec-detail": "true",
                     if let Some(item) = selected {
                         SpecModelCard { item }
                     } else {
@@ -612,6 +832,23 @@ fn SpecInfoBrowser(browser: SpecBrowserModel, query: String) -> Element {
             }
         }
     }
+}
+
+fn spec_item_href(
+    command_id: &str,
+    locale: Locale,
+    category: &str,
+    query: &str,
+    item_id: &str,
+) -> String {
+    format!(
+        "?pane=commands&sidebar=0&lang={}&cli={}&category={}&query={}&spec_item={}",
+        locale.slug(),
+        urlencoding::encode(command_id),
+        urlencoding::encode(category),
+        urlencoding::encode(query),
+        urlencoding::encode(item_id),
+    )
 }
 
 fn spec_tree_item_class(active: bool) -> &'static str {
