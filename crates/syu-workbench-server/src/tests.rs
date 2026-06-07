@@ -498,8 +498,8 @@ fn cli_task_check_preview_passes_required_range_argument() {
     );
 }
 
-#[test]
-fn every_palette_cli_command_has_a_preview_and_argument_path() {
+#[tokio::test]
+async fn every_palette_cli_command_has_a_preview_and_argument_path() {
     let tempdir = tempfile::tempdir().expect("tempdir");
 
     for command in cli_command_catalog() {
@@ -526,20 +526,32 @@ fn every_palette_cli_command_has_a_preview_and_argument_path() {
 
         let preview =
             run_cli_command_preview(command.id, tempdir.path(), Some(cli_arg), false, false)
+                .await
                 .unwrap_or_else(|| panic!("{} should produce a preview", command.id));
         assert_eq!(preview.id, command.id);
         assert!(!preview.result_summary.trim().is_empty());
     }
 }
 
-#[test]
-fn cli_preview_can_include_stdout_and_stderr_log_sections() {
+#[tokio::test]
+async fn cli_preview_can_include_stdout_and_stderr_log_sections() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let preview = run_cli_command_preview("cli.templates", tempdir.path(), None, false, true)
+        .await
         .expect("templates preview");
 
     assert!(preview.result_summary.contains("stdout:"));
     assert!(preview.result_summary.contains("stderr:"));
+}
+
+#[tokio::test]
+async fn cli_preview_hides_diagnostics_without_show_log() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let preview = run_cli_command_preview("cli.templates", tempdir.path(), None, false, false)
+        .await
+        .expect("templates preview");
+
+    assert!(preview.result.diagnostics.is_none());
 }
 
 #[tokio::test]

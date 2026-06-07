@@ -91,6 +91,7 @@ async fn render_workbench(
                 view.cli_confirm.as_deref() == Some("1"),
                 server.inner.config.show_log || view.show_log.as_deref() == Some("1"),
             )
+            .await
         {
             ui.cli_preview = Some(preview);
         }
@@ -385,7 +386,7 @@ pub(super) fn workbench_action_needs_confirmation(action_id: &str) -> bool {
     )
 }
 
-pub(super) fn run_cli_command_preview(
+pub(super) async fn run_cli_command_preview(
     command_id: &str,
     workspace_root: &FsPath,
     cli_arg: Option<&str>,
@@ -447,10 +448,16 @@ pub(super) fn run_cli_command_preview(
         ));
     }
 
-    let output = Command::new(std::env::current_exe().ok()?)
-        .args(&args)
-        .current_dir(workspace_root)
-        .output();
+    let executable = std::env::current_exe().ok()?;
+    let workspace_root = workspace_root.to_path_buf();
+    let output = task::spawn_blocking(move || {
+        Command::new(executable)
+            .args(&args)
+            .current_dir(workspace_root)
+            .output()
+    })
+    .await
+    .ok()?;
     let (result_summary, evidence_summary, status, diagnostics, structured) = match output {
         Ok(output) => {
             let status = output
@@ -483,11 +490,8 @@ pub(super) fn run_cli_command_preview(
                 result_summary,
                 status,
                 typed_status,
-                Some(format!(
-                    "stdout:\n{}\n\nstderr:\n{}",
-                    stdout.trim(),
-                    stderr.trim()
-                )),
+                show_log
+                    .then(|| format!("stdout:\n{}\n\nstderr:\n{}", stdout.trim(), stderr.trim())),
                 serde_json::from_str::<Value>(&body).ok(),
             )
         }
