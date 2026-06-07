@@ -135,11 +135,28 @@ async fn category_filter_and_typed_check_result_render_from_browser_route() {
     assert!(filtered_html.contains("data-command-id=\"cli.validate\""));
     assert!(!filtered_html.contains("data-command-id=\"cli.init\""));
 
-    let (_, result_html) = text_response(
+    let (_, get_html) = text_response(
         router,
         Request::builder()
             .uri("/?pane=commands&category=check&cli=cli.validate&run=1")
             .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+
+    assert!(get_html.contains("syu validate ."));
+
+    let (_, result_html) = text_response(
+        server.router(),
+        Request::builder()
+            .method("POST")
+            .uri("/run")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .header("host", "localhost:3000")
+            .header("origin", "http://localhost:3000")
+            .body(Body::from(
+                "pane=commands&category=check&cli=cli.validate&run=1",
+            ))
             .expect("request"),
     )
     .await;
@@ -289,15 +306,19 @@ async fn every_palette_action_can_be_selected_and_submitted_from_browser_route()
         );
 
         let (run_status, run_html) = text_response(
-                router.clone(),
-                Request::builder()
-                    .uri(format!(
-                        "/?pane=commands&action={action_id}&run=1&action_input=Workbench&action_confirm=1"
-                    ))
-                    .body(Body::empty())
-                    .expect("request"),
-            )
-            .await;
+            router.clone(),
+            Request::builder()
+                .method("POST")
+                .uri("/run")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .header("host", "localhost:3000")
+                .header("origin", "http://localhost:3000")
+                .body(Body::from(format!(
+                    "pane=commands&action={action_id}&run=1&action_input=Workbench&action_confirm=1"
+                )))
+                .expect("request"),
+        )
+        .await;
         assert_eq!(run_status, StatusCode::OK, "{action_id} should submit");
         assert!(
             run_html.contains(&action_id.replace('.', " "))
@@ -359,8 +380,15 @@ async fn every_palette_cli_command_can_be_selected_and_submitted_from_browser_ro
         let (run_status, run_html) = text_response(
             router.clone(),
             Request::builder()
-                .uri(format!("/?pane=commands&cli={}&run=1", command.id))
-                .body(Body::empty())
+                .method("POST")
+                .uri("/run")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .header("host", "localhost:3000")
+                .header("origin", "http://localhost:3000")
+                .body(Body::from(format!(
+                    "pane=commands&cli={}&run=1",
+                    command.id
+                )))
                 .expect("request"),
         )
         .await;
@@ -412,6 +440,43 @@ fn cli_task_defaults_prepare_readable_fixtures() {
     assert!(request.contains("REQ-WORKBENCH-001"));
     assert!(goal.contains("GOAL-WORKBENCH-PALETTE-001"));
     assert!(goal.contains("**"));
+}
+
+#[test]
+fn cli_task_fixtures_reject_paths_outside_workbench_target() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+
+    for path in [
+        "../request.yaml",
+        "target/syu/other/request.yaml",
+        "/tmp/request.yaml",
+    ] {
+        assert!(
+            ensure_cli_task_fixture("cli.task.classify", tempdir.path(), path).is_err(),
+            "{path} should be rejected"
+        );
+    }
+}
+
+#[tokio::test]
+async fn command_run_rejects_cross_origin_posts() {
+    let server = test_server();
+    let response = server
+        .router()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/run")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .header("host", "localhost:3000")
+                .header("origin", "https://attacker.example")
+                .body(Body::from("cli=cli.validate&run=1"))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
 #[test]

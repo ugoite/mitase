@@ -1,8 +1,8 @@
 use anyhow::{Context, Result, bail};
 use axum::{
     Json, Router,
-    extract::{Path, Query, State},
-    http::header,
+    extract::{Form, Path, Query, State},
+    http::{HeaderMap, StatusCode, header},
     response::sse::{Event, KeepAlive, Sse},
     response::{Html, IntoResponse, Response},
     routing::{get, post},
@@ -840,6 +840,7 @@ impl WorkbenchServer {
     pub fn router(&self) -> Router {
         Router::new()
             .route("/", get(workbench_index))
+            .route("/run", post(workbench_run))
             .route("/assets/tailwind.css", get(workbench_css))
             .route("/api/health", get(health))
             .route("/api/workspace/snapshot", get(workspace_snapshot))

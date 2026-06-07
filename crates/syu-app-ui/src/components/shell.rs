@@ -489,7 +489,7 @@ fn WorkbenchActionResult(
                 }
             }
             p { class: "mt-2 text-sm text-foreground/75", "{action.description}" }
-            form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/", method: "get", "data-command-run-form": "true",
+            form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/run", method: "post", "data-command-run-form": "true",
                 input { type: "hidden", name: "pane", value: "commands" }
                 input { type: "hidden", name: "sidebar", value: "0" }
                 input { type: "hidden", name: "lang", value: "{locale.slug()}" }
@@ -563,7 +563,7 @@ fn CliCommandResult(preview: CliCommandPreview, locale: Locale, query: String) -
                 p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "execution" }
                 p { class: "mt-1 break-all text-sm font-medium text-foreground", "{preview.invocation}" }
             }
-            form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/", method: "get", "data-command-run-form": "true",
+            form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/run", method: "post", "data-command-run-form": "true",
                 input { type: "hidden", name: "pane", value: "commands" }
                 input { type: "hidden", name: "sidebar", value: "0" }
                 input { type: "hidden", name: "lang", value: "{locale.slug()}" }

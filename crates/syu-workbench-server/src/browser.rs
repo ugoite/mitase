@@ -4,6 +4,42 @@ pub(super) async fn workbench_index(
     State(server): State<WorkbenchServer>,
     Query(view): Query<WorkbenchViewQuery>,
 ) -> Html<String> {
+    render_workbench(server, view, false).await
+}
+
+pub(super) async fn workbench_run(
+    State(server): State<WorkbenchServer>,
+    headers: HeaderMap,
+    Form(view): Form<WorkbenchViewQuery>,
+) -> Result<Html<String>, StatusCode> {
+    validate_same_origin(&headers)?;
+    Ok(render_workbench(server, view, true).await)
+}
+
+fn validate_same_origin(headers: &HeaderMap) -> Result<(), StatusCode> {
+    let host = headers
+        .get(header::HOST)
+        .and_then(|value| value.to_str().ok())
+        .ok_or(StatusCode::FORBIDDEN)?;
+    let origin = headers
+        .get(header::ORIGIN)
+        .and_then(|value| value.to_str().ok())
+        .ok_or(StatusCode::FORBIDDEN)?;
+    let origin_host = origin
+        .strip_prefix("http://")
+        .or_else(|| origin.strip_prefix("https://"))
+        .ok_or(StatusCode::FORBIDDEN)?;
+    if origin_host != host {
+        return Err(StatusCode::FORBIDDEN);
+    }
+    Ok(())
+}
+
+async fn render_workbench(
+    server: WorkbenchServer,
+    view: WorkbenchViewQuery,
+    allow_run: bool,
+) -> Html<String> {
     let state = server.inner.state.read().await.clone();
     let mut ui = WorkbenchUiState::from_state(shared_workbench_state(state));
     let browser_workspace = server.inner.browser_workspace.read().await;
@@ -31,7 +67,8 @@ pub(super) async fn workbench_index(
     }
     if let Some(action) = view.action.and_then(shared_action_id) {
         let _ = ui.select_action(action);
-        if view.run.as_deref() == Some("1")
+        if allow_run
+            && view.run.as_deref() == Some("1")
             && let Some(preview) = run_workbench_action_preview(
                 &server,
                 action.label(),
@@ -45,7 +82,8 @@ pub(super) async fn workbench_index(
     }
     if let Some(command_id) = view.cli {
         let _ = ui.select_cli_command(command_id.clone());
-        if view.run.as_deref() == Some("1")
+        if allow_run
+            && view.run.as_deref() == Some("1")
             && let Some(preview) = run_cli_command_preview(
                 &command_id,
                 server.inner.config.workspace_root.as_path(),
@@ -834,7 +872,7 @@ pub(super) fn ensure_cli_task_fixture(
 }
 
 pub(super) fn ensure_request_fixture(workspace_root: &FsPath, relative_path: &str) -> Result<()> {
-    let path = workspace_root.join(relative_path);
+    let path = safe_fixture_path(workspace_root, relative_path)?;
     if path.exists() {
         return Ok(());
     }
@@ -859,7 +897,7 @@ pub(super) fn ensure_request_fixture(workspace_root: &FsPath, relative_path: &st
 }
 
 pub(super) fn ensure_goal_fixture(workspace_root: &FsPath, relative_path: &str) -> Result<()> {
-    let path = workspace_root.join(relative_path);
+    let path = safe_fixture_path(workspace_root, relative_path)?;
     if path.exists() {
         return Ok(());
     }
@@ -937,6 +975,22 @@ pub(super) fn ensure_goal_fixture(workspace_root: &FsPath, relative_path: &str) 
     };
     let yaml = serde_yaml::to_string(&plan).context("failed to encode goal fixture")?;
     fs::write(&path, yaml).with_context(|| format!("failed to write `{}`", path.display()))
+}
+
+fn safe_fixture_path(workspace_root: &FsPath, relative_path: &str) -> Result<PathBuf> {
+    let relative = FsPath::new(relative_path);
+    if relative.is_absolute()
+        || relative
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        bail!("fixture path must be a normalized relative path");
+    }
+    let fixture_root = FsPath::new("target/syu/workbench");
+    if !relative.starts_with(fixture_root) {
+        bail!("fixture path must stay under `{}`", fixture_root.display());
+    }
+    Ok(workspace_root.join(relative))
 }
 
 pub(super) fn truncate_cli_output(output: &str) -> String {
