@@ -63,6 +63,9 @@ pub(super) fn current_git_branch(workspace_root: &FsPath) -> Option<String> {
 }
 
 pub(super) fn collect_source_documents(spec_root: &FsPath) -> Result<Vec<SourceDocument>> {
+    if !spec_root.exists() {
+        return Ok(Vec::new());
+    }
     let mut documents = Vec::new();
     collect_yaml_documents(spec_root, spec_root, &mut documents)?;
     Ok(documents)

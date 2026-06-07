@@ -2,15 +2,20 @@ category: Core Workbench
 prefix: REQ-WORKBENCH
 requirements:
   - id: REQ-WORKBENCH-001
-    title: Command-palette-first Workbench
+    title: Role-oriented, command-palette-first Workbench
     description: |
-      The Workbench MUST open around a command palette instead of a fixed tab
-      strip. Users SHOULD be able to launch request, goal, scope, assignment,
-      and evidence actions from the same keyboard-first surface, and the UI
-      SHOULD keep the active goal centered in view while rendering actions from
-      the registry rather than hardcoded buttons. The first Workbench shell
-      SHOULD be visually intentional from the start, using centralized design
-      tokens and reusable classes rather than throwaway handwritten CSS.
+      The Workbench MUST keep the command palette as its keyboard-first action
+      surface while exposing only four persistent role menus: Items, Work,
+      Scope, and Diagnostics. A selected palette command MUST open in its
+      appropriate role instead of leaving the user in a generic command result.
+      Items MUST provide a collapsible spec tree, linked-item navigation,
+      source-preserving item editing with mandatory diff review, reciprocal
+      adjacent-layer link updates, and workspace initialization when specs do
+      not exist. Diagnostics MUST expose distinct workspace checks and refresh
+      all available checks together. Work and Scope MAY expose focused
+      subviews without adding more persistent roles. The shared header MUST
+      remain visible above these roles, and the shell SHOULD use centralized
+      design tokens and reusable classes.
     priority: medium
     status: implemented
     linked_policies:
@@ -24,6 +29,7 @@ requirements:
           symbols:
             - command-palette-first
             - command palette registry
+            - Role-oriented navigation
             - WorkbenchActionRegistry
       rust:
         - file: tests/workbench_smoke.rs
@@ -32,6 +38,15 @@ requirements:
             - command_palette_renders_disabled_reason_for_unavailable_actions
             - goal_canvas_renders_a_read_only_action_preview_placeholder
             - evidence_panel_renders_placeholder_when_empty
+        - file: crates/syu-workbench-server/src/tests.rs
+          symbols:
+            - role_menu_routes_commands_to_items_and_diagnostics
+            - item_edit_previews_and_applies_reciprocal_links_together
+            - diagnostics_refresh_all_runs_unique_tools_and_skips_missing_goal
+            - items_surface_opens_before_workspace_initialization
+        - file: src/command/workbench.rs
+          symbols:
+            - uninitialized_directory_resolves_to_a_workbench_launch
   - id: REQ-WORKBENCH-002
     title: Request, Goal, Evidence, and Assignment model
     description: |

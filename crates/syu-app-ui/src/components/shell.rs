@@ -46,6 +46,8 @@ const GRAPH_NODE_HEIGHT: i32 = 44;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkbenchPane {
+    Items,
+    Diagnostics,
     Pulse,
     Commands,
     Goals,
@@ -58,18 +60,12 @@ pub enum WorkbenchPane {
 
 #[allow(dead_code)]
 impl WorkbenchPane {
-    const ALL: [WorkbenchPane; 7] = [
-        Self::Pulse,
-        Self::Goals,
-        Self::Request,
-        Self::Branch,
-        Self::Assignment,
-        Self::Graph,
-        Self::Evidence,
-    ];
+    const ALL: [WorkbenchPane; 4] = [Self::Items, Self::Pulse, Self::Branch, Self::Diagnostics];
 
     pub fn slug(self) -> &'static str {
         match self {
+            Self::Items => "items",
+            Self::Diagnostics => "diagnostics",
             Self::Pulse => "pulse",
             Self::Commands => "commands",
             Self::Goals => "goals",
@@ -83,20 +79,24 @@ impl WorkbenchPane {
 
     pub fn from_slug(value: &str) -> Option<Self> {
         match value {
-            "pulse" => Some(Self::Pulse),
-            "commands" | "palette" => Some(Self::Commands),
+            "items" => Some(Self::Items),
+            "diagnostics" => Some(Self::Diagnostics),
+            "pulse" | "work" => Some(Self::Pulse),
             "goals" => Some(Self::Goals),
             "request" => Some(Self::Request),
-            "branch" => Some(Self::Branch),
             "assignment" => Some(Self::Assignment),
-            "graph" => Some(Self::Graph),
             "evidence" => Some(Self::Evidence),
+            "branch" | "scope" => Some(Self::Branch),
+            "graph" => Some(Self::Graph),
+            "commands" | "palette" => Some(Self::Pulse),
             _ => None,
         }
     }
 
     fn icon(self) -> &'static str {
         match self {
+            Self::Items => "▤",
+            Self::Diagnostics => "✓",
             Self::Pulse => "◌",
             Self::Commands => "⌘",
             Self::Goals => "◎",
@@ -105,6 +105,40 @@ impl WorkbenchPane {
             Self::Assignment => "✦",
             Self::Graph => "◈",
             Self::Evidence => "⟡",
+        }
+    }
+
+    pub fn for_cli(command_id: &str) -> Self {
+        match command_id {
+            "cli.browse" | "cli.list" | "cli.show" | "cli.search" | "cli.explain"
+            | "cli.relate" | "cli.log" | "cli.add" | "cli.init" | "cli.templates" => Self::Items,
+            "cli.audit" | "cli.doctor" | "cli.validate" | "cli.report" | "cli.task.check" => {
+                Self::Diagnostics
+            }
+            "cli.trace" | "cli.task.scope" | "cli.task.infer" => Self::Branch,
+            _ => Self::Pulse,
+        }
+    }
+
+    pub fn for_action(action_id: WorkbenchActionId) -> Self {
+        match action_id {
+            WorkbenchActionId::ValidationRun | WorkbenchActionId::GoalCheck => Self::Diagnostics,
+            WorkbenchActionId::BranchScope
+            | WorkbenchActionId::SpecImpact
+            | WorkbenchActionId::TraceRange
+            | WorkbenchActionId::RelateRange => Self::Branch,
+            WorkbenchActionId::HistoryShow => Self::Items,
+            _ => Self::Pulse,
+        }
+    }
+
+    fn role(self) -> Self {
+        match self {
+            Self::Goals | Self::Request | Self::Assignment | Self::Evidence | Self::Commands => {
+                Self::Pulse
+            }
+            Self::Graph => Self::Branch,
+            pane => pane,
         }
     }
 }
@@ -129,10 +163,17 @@ pub fn AppShell(ui: WorkbenchUiState, active_pane: WorkbenchPane, sidebar_open: 
                         help_topic: help_topic,
                     }
                 }
-                div { class: classes::MAIN_GRID,
-                    WorkbenchStage {
-                        ui: ui.clone(),
-                        active_pane: active_pane,
+                div { class: "workbench-layout",
+                    if sidebar_open {
+                        WorkbenchSidebar { ui: ui.clone(), active_pane }
+                    } else {
+                        WorkbenchSidebarRail { ui: ui.clone(), active_pane }
+                    }
+                    div { class: classes::MAIN_GRID,
+                        WorkbenchStage {
+                            ui: ui.clone(),
+                            active_pane: active_pane,
+                        }
                     }
                 }
             }
@@ -151,7 +192,7 @@ pub fn StatusBar(
     let summary = ui.pulse_summary();
     let copy = ui.copy();
     rsx! {
-        header { class: "border-b border-border bg-panel",
+        header { class: "z-40 border-b border-border bg-panel/95", style: "position: sticky; top: 0",
             nav { class: "mx-auto flex max-w-7xl items-center justify-between gap-4 py-3", "aria-label": "Global",
                 div { class: "flex lg:flex-1",
                     a { class: "-m-1.5 p-1.5 text-base font-semibold text-foreground", href: view_href(&ui, WorkbenchPane::Pulse, false, ui.locale, None),
@@ -255,6 +296,8 @@ fn HelpPanel(
 
 fn pane_help_topic(pane: WorkbenchPane) -> HelpTopic {
     match pane {
+        WorkbenchPane::Items => HelpTopic::Items,
+        WorkbenchPane::Diagnostics => HelpTopic::Diagnostics,
         WorkbenchPane::Pulse => HelpTopic::Pulse,
         WorkbenchPane::Commands => HelpTopic::Palette,
         WorkbenchPane::Goals => HelpTopic::Goals,
@@ -329,7 +372,7 @@ pub fn WorkbenchSidebar(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Ele
                             SidebarPaneButton {
                                 ui: ui.clone(),
                                 pane,
-                                active: pane == active_pane,
+                                active: pane == active_pane.role(),
                                 collapsed: false,
                             }
                         }
@@ -358,7 +401,7 @@ pub fn WorkbenchSidebarRail(ui: WorkbenchUiState, active_pane: WorkbenchPane) ->
                             SidebarPaneButton {
                                 ui: ui.clone(),
                                 pane,
-                                active: pane == active_pane,
+                                active: pane == active_pane.role(),
                                 collapsed: true,
                             }
                         }
@@ -410,11 +453,11 @@ pub fn WorkbenchStage(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
             .and_then(|id| ui.cli_command_preview(id))
     });
     let selected_action = ui.selected_action().cloned();
-    let show_pane_detail = active_pane != WorkbenchPane::Commands
-        || (ui.selected_cli_command_id.is_none() && ui.selected_action_id.is_none());
+    let item_edit_preview = ui.item_edit_preview.clone();
+    let show_pane_detail = ui.selected_cli_command_id.is_none() && ui.selected_action_id.is_none();
     rsx! {
         main { class: "min-w-0 flex-1",
-            section { class: "rounded-lg border border-border bg-panel p-4 shadow-sm",
+            section { class: "min-w-0 rounded-lg border border-border bg-panel p-4 shadow-sm",
                 div { class: "mb-4 flex items-center justify-between gap-3",
                     div { class: "min-w-0",
                         p { class: "text-xs uppercase text-foreground/45", "result" }
@@ -427,8 +470,12 @@ pub fn WorkbenchStage(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
                         "?"
                     }
                 }
+                RoleSubviewNav { ui: ui.clone(), active_pane }
                 if show_pane_detail {
                     {detail}
+                }
+                if let Some(preview) = item_edit_preview {
+                    ItemEditPreviewPanel { preview }
                 }
                 if let Some(preview) = cli_preview {
                     div { class: "mt-4",
@@ -466,6 +513,63 @@ pub fn WorkbenchStage(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
 }
 
 #[component]
+fn ItemEditPreviewPanel(preview: crate::model::ItemEditPreview) -> Element {
+    rsx! {
+        section { class: "mt-4 rounded-lg border border-border bg-background p-4", "data-item-edit-preview": "true",
+            div { class: "flex flex-wrap items-start justify-between gap-3",
+                div {
+                    p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "Item change" }
+                    h3 { class: "mt-1 text-sm font-semibold", "{preview.item_id}" }
+                    p { class: "mt-1 text-sm text-foreground/65", "{preview.message}" }
+                }
+                ScopeChip { label: if preview.applied { "applied".to_string() } else { "preview".to_string() } }
+            }
+            pre { class: "mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-panel-muted p-3 text-xs text-foreground/70", "{preview.diff}" }
+            if !preview.applied && !preview.apply_payload.is_empty() {
+                form { class: "mt-3", action: "/run", method: "post",
+                    input { type: "hidden", name: "pane", value: "items" }
+                    input { type: "hidden", name: "sidebar", value: "1" }
+                    input { type: "hidden", name: "item_edit", value: "{preview.item_id}" }
+                    input { type: "hidden", name: "item_edit_apply", value: "1" }
+                    input { type: "hidden", name: "item_edit_payload", value: "{preview.apply_payload}" }
+                    button { class: "rounded-lg border border-border bg-foreground px-3 py-2 text-sm font-medium text-background", type: "submit", "Apply reviewed change" }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn RoleSubviewNav(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Element {
+    let panes: &[WorkbenchPane] = match active_pane.role() {
+        WorkbenchPane::Pulse => &[
+            WorkbenchPane::Pulse,
+            WorkbenchPane::Request,
+            WorkbenchPane::Goals,
+            WorkbenchPane::Assignment,
+            WorkbenchPane::Evidence,
+        ],
+        WorkbenchPane::Branch => &[WorkbenchPane::Branch, WorkbenchPane::Graph],
+        _ => &[],
+    };
+    if panes.is_empty() {
+        return rsx! {};
+    }
+    rsx! {
+        nav { class: "mb-4 flex w-full min-w-0 max-w-full flex-nowrap gap-2 border-b border-border pb-3", style: "max-width: 100%; overflow-x: auto", "aria-label": "Role views", "data-role-subviews": "true",
+            for pane in panes {
+                a {
+                    class: if *pane == active_pane { "whitespace-nowrap rounded-lg border border-foreground bg-foreground px-3 py-2 text-xs font-medium text-background" } else { "whitespace-nowrap rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground/70 hover:bg-panel-muted" },
+                    href: view_href(&ui, *pane, true, ui.locale, None),
+                    aria_current: if *pane == active_pane { "page" } else { "false" },
+                    "{ui.copy().pane_title(*pane)}"
+                }
+            }
+        }
+    }
+}
+
+#[component]
 fn WorkbenchActionResult(
     action: WorkbenchAction,
     locale: Locale,
@@ -490,8 +594,8 @@ fn WorkbenchActionResult(
             }
             p { class: "mt-2 text-sm text-foreground/75", "{action.description}" }
             form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/run", method: "post", "data-command-run-form": "true",
-                input { type: "hidden", name: "pane", value: "commands" }
-                input { type: "hidden", name: "sidebar", value: "0" }
+                input { type: "hidden", name: "pane", value: "{WorkbenchPane::for_action(action.id).slug()}" }
+                input { type: "hidden", name: "sidebar", value: "1" }
                 input { type: "hidden", name: "lang", value: "{locale.slug()}" }
                 input { type: "hidden", name: "action", value: "{action.id.label()}" }
                 input { type: "hidden", name: "run", value: "1" }
@@ -564,8 +668,8 @@ fn CliCommandResult(preview: CliCommandPreview, locale: Locale, query: String) -
                 p { class: "mt-1 break-all text-sm font-medium text-foreground", "{preview.invocation}" }
             }
             form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/run", method: "post", "data-command-run-form": "true",
-                input { type: "hidden", name: "pane", value: "commands" }
-                input { type: "hidden", name: "sidebar", value: "0" }
+                input { type: "hidden", name: "pane", value: "{WorkbenchPane::for_cli(&preview.id).slug()}" }
+                input { type: "hidden", name: "sidebar", value: "1" }
                 input { type: "hidden", name: "lang", value: "{locale.slug()}" }
                 input { type: "hidden", name: "cli", value: "{preview.id}" }
                 input { type: "hidden", name: "run", value: "1" }
@@ -783,13 +887,23 @@ fn SpecInfoBrowser(
     let category_value = category.map_or("browse", CommandCategory::slug);
     rsx! {
         section { class: "rounded-lg border border-border bg-panel p-4 shadow-sm", "data-category-layout": "browse",
+            div { class: "mb-4 flex flex-wrap items-center justify-between gap-2", "data-items-toolbar": "true",
+                div {
+                    p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "Persistent specification" }
+                    p { class: "text-sm text-foreground/65", "Browse the layered files, follow linked items, or create a new specification item." }
+                }
+                div { class: "flex flex-wrap gap-2",
+                    a { class: "rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-panel-muted", href: "?pane=items&sidebar=1&cli=cli.add", "New item" }
+                    a { class: "rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-panel-muted", href: "?pane=items&sidebar=1&cli=cli.init", "Initialize workspace" }
+                }
+            }
             div { class: "mb-3 grid gap-3 lg:grid-cols-3", "data-spec-browser-grid": "true",
                 form {
                     class: "flex items-end gap-2",
                     "data-spec-search": "true",
                     action: "/",
                     method: "get",
-                    input { type: "hidden", name: "pane", value: "commands" }
+                    input { type: "hidden", name: "pane", value: "items" }
                     input { type: "hidden", name: "sidebar", value: "0" }
                     input { type: "hidden", name: "lang", value: "{locale.slug()}" }
                     input { type: "hidden", name: "cli", value: "{command_id}" }
@@ -817,23 +931,14 @@ fn SpecInfoBrowser(
                             div { class: "mb-3 last:mb-0",
                                 p { class: "px-2 pb-1 text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{section.label}" }
                                 for document in &section.documents {
-                                    details { class: "group", open: true,
-                                        summary { class: "cursor-pointer list-none rounded-md px-2 py-1 text-xs font-medium text-foreground/65 hover:bg-panel-muted",
-                                            "{document.title}"
-                                        }
-                                        div { class: "ml-3 border-l border-border pl-2",
-                                            for item in &document.items {
-                                                a {
-                                                    class: spec_tree_item_class(selected.as_ref().map(|selected| selected.id.as_str()) == Some(item.id.as_str())),
-                                                    href: spec_item_href(&command_id, locale, category_value, &command_query, &spec_query, &item.id),
-                                                    title: "{item.title}",
-                                                    "data-spec-tree-item": "true",
-                                                    "data-spec-text": format!("{} {} {}", item.id, item.title, item.description.clone().unwrap_or_default()),
-                                                    span { class: "truncate text-xs font-medium", "{item.id}" }
-                                                    span { class: "truncate text-[11px] text-foreground/55", "{item.title}" }
-                                                }
-                                            }
-                                        }
+                                    SpecDocumentTree {
+                                        document: document.clone(),
+                                        selected_id: selected.as_ref().map(|selected| selected.id.clone()),
+                                        command_id: command_id.clone(),
+                                        locale,
+                                        category: category_value.to_string(),
+                                        command_query: command_query.clone(),
+                                        spec_query: spec_query.clone(),
                                     }
                                 }
                             }
@@ -854,6 +959,50 @@ fn SpecInfoBrowser(
     }
 }
 
+#[component]
+fn SpecDocumentTree(
+    document: SpecBrowserDocument,
+    selected_id: Option<String>,
+    command_id: String,
+    locale: Locale,
+    category: String,
+    command_query: String,
+    spec_query: String,
+) -> Element {
+    let content = rsx! {
+        details { class: "group", open: true, "data-spec-document": "true",
+            summary { class: "cursor-pointer list-none rounded-md px-2 py-1 text-xs font-medium text-foreground/65 hover:bg-panel-muted",
+                "{document.title}"
+            }
+            div { class: "ml-3 border-l border-border pl-2",
+                for item in &document.items {
+                    a {
+                        class: spec_tree_item_class(selected_id.as_deref() == Some(item.id.as_str())),
+                        href: spec_item_href(&command_id, locale, &category, &command_query, &spec_query, &item.id),
+                        title: "{item.title}",
+                        "data-spec-tree-item": "true",
+                        "data-spec-text": format!("{} {} {}", item.id, item.title, item.description.clone().unwrap_or_default()),
+                        span { class: "truncate text-xs font-medium", "{item.id}" }
+                        span { class: "truncate text-[11px] text-foreground/55", "{item.title}" }
+                    }
+                }
+            }
+        }
+    };
+    if document.folder_segments.is_empty() {
+        content
+    } else {
+        rsx! {
+            details { class: "group", open: true, "data-spec-folder": "true",
+                summary { class: "cursor-pointer list-none rounded-md px-2 py-1 text-[10px] font-medium text-foreground/50 hover:bg-panel-muted",
+                    "▾ {document.folder_segments.join(\" / \")}"
+                }
+                div { class: "ml-3 border-l border-border pl-2", {content} }
+            }
+        }
+    }
+}
+
 fn spec_item_href(
     command_id: &str,
     locale: Locale,
@@ -863,7 +1012,7 @@ fn spec_item_href(
     item_id: &str,
 ) -> String {
     format!(
-        "?pane=commands&sidebar=0&lang={}&cli={}&category={}&query={}&spec_query={}&spec_item={}",
+        "?pane=items&sidebar=1&lang={}&cli={}&category={}&query={}&spec_query={}&spec_item={}",
         locale.slug(),
         urlencoding::encode(command_id),
         urlencoding::encode(category),
@@ -990,7 +1139,136 @@ fn SpecModelCard(item: SpecBrowserItem) -> Element {
             LinkList { label: "features".to_string(), values: item.linked_features.clone() }
             TraceGroups { label: "tests".to_string(), groups: item.tests.clone() }
             TraceGroups { label: "implementations".to_string(), groups: item.implementations.clone() }
+            details { class: "mt-4 rounded-lg border border-border bg-panel p-3", "data-item-editor": "true",
+                summary { class: "cursor-pointer text-sm font-semibold", "Edit item" }
+                form { class: "mt-3 grid gap-3", action: "/run", method: "post",
+                    input { type: "hidden", name: "pane", value: "items" }
+                    input { type: "hidden", name: "sidebar", value: "1" }
+                    input { type: "hidden", name: "item_edit", value: "{item.id}" }
+                    label { class: "grid gap-1 text-xs text-foreground/60",
+                        "Title"
+                        input { class: "rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground", value: "{item.title}", name: "title" }
+                    }
+                    label { class: "grid gap-1 text-xs text-foreground/60",
+                        "Summary"
+                        textarea { class: "min-h-20 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground", name: "summary", "{item.summary.clone().unwrap_or_default()}" }
+                    }
+                    label { class: "grid gap-1 text-xs text-foreground/60",
+                        "Description"
+                        textarea { class: "min-h-28 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground", name: "description", "{item.description.clone().unwrap_or_default()}" }
+                    }
+                    label { class: "grid gap-1 text-xs text-foreground/60",
+                        "Product design principle"
+                        textarea { class: "min-h-28 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground", name: "product_design_principle", "{item.product_design_principle.clone().unwrap_or_default()}" }
+                    }
+                    label { class: "grid gap-1 text-xs text-foreground/60",
+                        "Coding guideline"
+                        textarea { class: "min-h-28 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground", name: "coding_guideline", "{item.coding_guideline.clone().unwrap_or_default()}" }
+                    }
+                    div { class: "grid gap-3 sm:grid-cols-2",
+                        label { class: "grid gap-1 text-xs text-foreground/60",
+                            "Priority"
+                            input { class: "rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground", value: "{item.priority.clone().unwrap_or_default()}", name: "priority" }
+                        }
+                        label { class: "grid gap-1 text-xs text-foreground/60",
+                            "Status"
+                            input { class: "rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground", value: "{item.status.clone().unwrap_or_default()}", name: "status" }
+                        }
+                    }
+                    label { class: "grid gap-1 text-xs text-foreground/60",
+                        "Linked philosophies"
+                        input { class: "rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground", value: "{item.linked_philosophies.join(\", \")}", name: "linked_philosophies" }
+                    }
+                    label { class: "grid gap-1 text-xs text-foreground/60",
+                        "Linked policies"
+                        input { class: "rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground", value: "{item.linked_policies.join(\", \")}", name: "linked_policies" }
+                    }
+                    label { class: "grid gap-1 text-xs text-foreground/60",
+                        "Linked requirements"
+                        input { class: "rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground", value: "{item.linked_requirements.join(\", \")}", name: "linked_requirements" }
+                    }
+                    label { class: "grid gap-1 text-xs text-foreground/60",
+                        "Linked features"
+                        input { class: "rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground", value: "{item.linked_features.join(\", \")}", name: "linked_features" }
+                    }
+                    label { class: "grid gap-1 text-xs text-foreground/60",
+                        "Tests YAML"
+                        textarea { class: "min-h-36 rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-foreground", name: "tests_yaml", "{trace_groups_yaml(&item.tests)}" }
+                    }
+                    label { class: "grid gap-1 text-xs text-foreground/60",
+                        "Implementations YAML"
+                        textarea { class: "min-h-36 rounded-lg border border-border bg-background px-3 py-2 font-mono text-xs text-foreground", name: "implementations_yaml", "{trace_groups_yaml(&item.implementations)}" }
+                    }
+                    p { class: "text-xs text-foreground/50", "A source-preserving diff is shown before files are changed. ID and document location stay fixed." }
+                    button { class: "w-fit rounded-lg border border-border bg-foreground px-3 py-2 text-sm font-medium text-background", type: "submit", "Preview changes" }
+                }
+            }
         }
+    }
+}
+
+fn trace_groups_yaml(groups: &[crate::model::SpecBrowserTraceGroup]) -> String {
+    let mut languages = serde_yaml::Mapping::new();
+    for group in groups {
+        let references = group
+            .references
+            .iter()
+            .map(|reference| {
+                let mut mapping = serde_yaml::Mapping::new();
+                mapping.insert(
+                    serde_yaml::Value::String("file".to_string()),
+                    serde_yaml::Value::String(reference.file.clone()),
+                );
+                if !reference.symbols.is_empty() {
+                    mapping.insert(
+                        serde_yaml::Value::String("symbols".to_string()),
+                        serde_yaml::Value::Sequence(
+                            reference
+                                .symbols
+                                .iter()
+                                .cloned()
+                                .map(serde_yaml::Value::String)
+                                .collect(),
+                        ),
+                    );
+                }
+                if !reference.doc_contains.is_empty() {
+                    mapping.insert(
+                        serde_yaml::Value::String("doc_contains".to_string()),
+                        serde_yaml::Value::Sequence(
+                            reference
+                                .doc_contains
+                                .iter()
+                                .cloned()
+                                .map(serde_yaml::Value::String)
+                                .collect(),
+                        ),
+                    );
+                }
+                if let Some(method) = &reference.method {
+                    mapping.insert(
+                        serde_yaml::Value::String("method".to_string()),
+                        serde_yaml::Value::String(method.clone()),
+                    );
+                }
+                if let Some(path) = &reference.path {
+                    mapping.insert(
+                        serde_yaml::Value::String("path".to_string()),
+                        serde_yaml::Value::String(path.clone()),
+                    );
+                }
+                serde_yaml::Value::Mapping(mapping)
+            })
+            .collect();
+        languages.insert(
+            serde_yaml::Value::String(group.language.clone()),
+            serde_yaml::Value::Sequence(references),
+        );
+    }
+    if languages.is_empty() {
+        String::new()
+    } else {
+        serde_yaml::to_string(&serde_yaml::Value::Mapping(languages)).unwrap_or_default()
     }
 }
 
@@ -1014,7 +1292,11 @@ fn LinkList(label: String, values: Vec<String>) -> Element {
             p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{label}" }
             div { class: "mt-2 flex flex-wrap gap-2",
                 for value in values {
-                    span { class: "rounded-md border border-border bg-panel px-2 py-1 text-xs font-medium text-foreground/70", "{value}" }
+                    a {
+                        class: "rounded-md border border-border bg-panel px-2 py-1 text-xs font-medium text-foreground/70 hover:bg-panel-muted",
+                        href: format!("?pane=items&sidebar=1&cli=cli.show&spec_item={}", urlencoding::encode(&value)),
+                        "{value}"
+                    }
                 }
             }
         }
@@ -1059,8 +1341,93 @@ fn cli_input_placeholder(command_id: &str) -> &'static str {
     }
 }
 
+#[component]
+fn DiagnosticsOverview(ui: WorkbenchUiState) -> Element {
+    let tools = [
+        (
+            "Workspace validation",
+            "Validate the layered graph, traces, and document consistency.",
+            "cli.validate",
+            "validate",
+        ),
+        (
+            "Contributor doctor",
+            "Check the local tools and contributor surfaces used by this workspace.",
+            "cli.doctor",
+            "doctor",
+        ),
+        (
+            "Specification audit",
+            "Review overlap, tension, and orphaned-policy candidates.",
+            "cli.audit",
+            "audit",
+        ),
+        (
+            "Goal check",
+            "Compare the active Goal Plan with the current branch range.",
+            "cli.task.check",
+            "goal",
+        ),
+    ];
+    rsx! {
+        section { class: "space-y-4", "data-diagnostics-overview": "true",
+            div { class: "flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border bg-background p-4",
+                div {
+                    p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "All checks" }
+                    h3 { class: "mt-1 text-base font-semibold", "Workspace diagnostics" }
+                    p { class: "mt-1 text-sm text-foreground/65", "Refresh every available check, then open a finding to inspect its context." }
+                }
+                form { action: "/run", method: "post", "data-diagnostics-refresh-all": "true",
+                    input { type: "hidden", name: "pane", value: "diagnostics" }
+                    input { type: "hidden", name: "sidebar", value: "1" }
+                    input { type: "hidden", name: "lang", value: "{ui.locale.slug()}" }
+                    input { type: "hidden", name: "diagnostics_all", value: "1" }
+                    button {
+                        class: "rounded-lg border border-border bg-foreground px-3 py-2 text-sm font-medium text-background hover:bg-foreground/90",
+                        type: "submit",
+                        "Refresh all"
+                    }
+                }
+            }
+            div { class: "grid gap-3 md:grid-cols-2",
+                for (title, description, command_id, tool_id) in tools {
+                    a {
+                        class: "rounded-lg border border-border bg-background p-4 hover:bg-panel-muted",
+                        href: format!("?pane=diagnostics&sidebar=1&cli={command_id}"),
+                        "data-diagnostic-tool": tool_id,
+                        div { class: "flex items-start justify-between gap-3",
+                            div {
+                                h3 { class: "text-sm font-semibold", "{title}" }
+                                p { class: "mt-2 text-sm text-foreground/65", "{description}" }
+                            }
+                            ScopeChip { label: if command_id == "cli.task.check" && ui.payload.state.goals.active.is_empty() { "skipped".to_string() } else { "ready".to_string() } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 fn selected_pane_detail(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Element {
     match active_pane {
+        WorkbenchPane::Items => {
+            if let Some(browser) = ui.spec_browser.clone() {
+                rsx! {
+                    SpecInfoBrowser {
+                        browser,
+                        command_query: ui.command_query.clone(),
+                        spec_query: ui.spec_query.clone(),
+                        locale: ui.locale,
+                        command_id: "cli.show".to_string(),
+                        category: Some(CommandCategory::Browse),
+                    }
+                }
+            } else {
+                rsx! { EmptyState { title: "No syu workspace".to_string(), body: "Initialize this workspace to create and browse its specification tree.".to_string() } }
+            }
+        }
+        WorkbenchPane::Diagnostics => rsx! { DiagnosticsOverview { ui } },
         WorkbenchPane::Pulse => rsx! { WorkbenchPulse { summary: ui.pulse_summary() } },
         WorkbenchPane::Commands => rsx! { CommandSurfaceOverview { ui } },
         WorkbenchPane::Goals => rsx! { GoalsOverview { ui } },

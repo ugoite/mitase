@@ -30,6 +30,8 @@ impl Locale {
 pub enum HelpTopic {
     Palette,
     Sidebar,
+    Items,
+    Diagnostics,
     Pulse,
     Goals,
     Request,
@@ -44,6 +46,8 @@ impl HelpTopic {
         match self {
             Self::Palette => "palette",
             Self::Sidebar => "sidebar",
+            Self::Items => "items",
+            Self::Diagnostics => "diagnostics",
             Self::Pulse => "pulse",
             Self::Goals => "goals",
             Self::Request => "request",
@@ -58,6 +62,8 @@ impl HelpTopic {
         match value {
             "palette" => Some(Self::Palette),
             "sidebar" => Some(Self::Sidebar),
+            "items" => Some(Self::Items),
+            "diagnostics" => Some(Self::Diagnostics),
             "pulse" => Some(Self::Pulse),
             "goals" => Some(Self::Goals),
             "request" => Some(Self::Request),

@@ -4,7 +4,7 @@ version: 1
 features:
   - id: FEAT-WORKBENCH-SHELL-001
     title: Command-palette Workbench shell
-    summary: Open the Workbench around a command palette and goal-centered surface that launches request, goal, scope, assignment, and evidence actions without a fixed tab strip, using the typed Workbench state machine, action registry, and Dioxus shell components as the source of truth.
+    summary: Keep the command palette as the keyboard-first action surface inside a shared shell with four persistent roles (Items, Work, Scope, and Diagnostics), focused Work and Scope subviews, command-to-role routing, a collapsible and editable spec tree, and distinct refreshable diagnostics.
     status: implemented
     linked_requirements:
       - REQ-WORKBENCH-001
@@ -22,17 +22,27 @@ features:
           symbols:
             - AppShell
             - CommandPalette
+            - WorkbenchPane
             - WorkspacePulse
             - GoalRail
             - GoalCanvas
             - EvidencePanel
             - StatusBar
+        - file: crates/syu-app-ui/src/components/shell.rs
+          symbols:
+            - SpecInfoBrowser
         - file: tests/workbench_smoke.rs
           symbols:
             - app_shell_renders_command_palette_first_shell
             - command_palette_renders_disabled_reason_for_unavailable_actions
             - goal_canvas_renders_a_read_only_action_preview_placeholder
             - evidence_panel_renders_placeholder_when_empty
+        - file: crates/syu-workbench-server/src/tests.rs
+          symbols:
+            - role_menu_routes_commands_to_items_and_diagnostics
+            - item_edit_previews_and_applies_reciprocal_links_together
+            - diagnostics_refresh_all_runs_unique_tools_and_skips_missing_goal
+            - items_surface_opens_before_workspace_initialization
       markdown:
         - file: docs/guide/workbench.md
           symbols:

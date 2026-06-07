@@ -5,7 +5,7 @@ pub const CHROME_BAR: &str = "flex items-center justify-between gap-4 rounded-2x
 pub const CHROME_META: &str =
     "flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.22em] text-foreground/60";
 pub const CHROME_BADGE: &str = "rounded-full border border-border bg-panel-muted px-3 py-1";
-pub const MAIN_GRID: &str = "flex flex-1 flex-col gap-6";
+pub const MAIN_GRID: &str = "flex min-w-0 flex-1 flex-col gap-6";
 pub const PANEL: &str = "rounded-2xl border border-border bg-panel shadow-[0_2px_4px_rgba(15,23,42,0.04),0_20px_48px_rgba(15,23,42,0.07)]";
 pub const PANEL_INNER: &str = "flex h-full flex-col gap-3 p-4";
 pub const PANEL_MUTED: &str = "rounded-2xl border border-border bg-panel-muted shadow-[0_1px_2px_rgba(15,23,42,0.03),0_10px_24px_rgba(15,23,42,0.03)]";

@@ -443,7 +443,7 @@ pub(super) fn BranchOverview(ui: WorkbenchUiState) -> Element {
             OwnershipStatus::Unowned => "unowned",
         };
         rsx! {
-            div { class: "space-y-3",
+            div { class: "space-y-3", "data-scope-overview": "true",
                 div { class: "rounded-2xl border border-border bg-panel p-4 shadow-sm",
                     div { class: "flex flex-wrap items-start justify-between gap-3",
                         div { class: "space-y-1",
@@ -489,7 +489,7 @@ pub(super) fn BranchOverview(ui: WorkbenchUiState) -> Element {
         }
     } else {
         rsx! {
-            div { class: "space-y-3",
+            div { class: "space-y-3", "data-scope-overview": "true",
                 EmptyState { title: "No branch scope".to_string(), body: "Load scope to see the diff and affected surface.".to_string() }
             }
         }

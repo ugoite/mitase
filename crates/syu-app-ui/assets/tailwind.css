@@ -1165,6 +1165,19 @@ body {
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
   background-color: var(--color-background);
 }
+.workbench-layout {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  gap: 1rem;
+}
+@media (min-width: 64rem) {
+  .workbench-layout {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+}
 @property --tw-translate-x {
   syntax: "*";
   inherits: false;

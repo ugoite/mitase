@@ -273,6 +273,15 @@ pub struct SpecBrowserTraceReference {
     pub path: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ItemEditPreview {
+    pub item_id: String,
+    pub diff: String,
+    pub apply_payload: String,
+    pub applied: bool,
+    pub message: String,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct WorkspacePulseSummary {
     pub workspace: String,
@@ -295,6 +304,7 @@ pub struct WorkbenchUiState {
     pub preview: Option<WorkbenchActionRunPreview>,
     pub cli_preview: Option<CliCommandPreview>,
     pub spec_browser: Option<SpecBrowserModel>,
+    pub item_edit_preview: Option<ItemEditPreview>,
     pub locale: Locale,
     pub help_topic: Option<HelpTopic>,
 }
@@ -312,6 +322,7 @@ impl WorkbenchUiState {
             preview: None,
             cli_preview: None,
             spec_browser: None,
+            item_edit_preview: None,
             locale: Locale::En,
             help_topic: None,
         }
@@ -334,6 +345,7 @@ impl WorkbenchUiState {
             preview: None,
             cli_preview: None,
             spec_browser: None,
+            item_edit_preview: None,
             locale: Locale::En,
             help_topic: None,
         }

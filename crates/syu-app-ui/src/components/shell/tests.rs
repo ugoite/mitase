@@ -16,7 +16,9 @@ fn app_shell_renders_command_palette_first_shell() {
     assert!(html.contains("Type a command"));
     assert!(html.contains("Command palette"));
     assert!(html.contains("data-command-palette"));
-    assert!(!html.contains("navigation"));
+    assert!(html.contains("navigation"));
+    assert!(html.contains(">Items</span>"));
+    assert!(html.contains(">Diagnostics</span>"));
     assert!(!html.contains("<select"));
     assert!(!html.contains(">focus</span>"));
     assert!(!html.contains(">filter</span>"));
@@ -47,7 +49,7 @@ fn command_palette_preserves_selected_locale_across_search_links_and_run_forms()
 
     assert!(html.contains("name=\"lang\" value=\"ja\""));
     assert!(
-        html.contains("href=\"?pane=commands&#38;sidebar=0&#38;lang=ja&#38;cli=cli.validate\"")
+        html.contains("href=\"?pane=diagnostics&#38;sidebar=1&#38;lang=ja&#38;cli=cli.validate\"")
     );
     assert!(html.contains("data-command-id=\"cli.validate\""));
 }

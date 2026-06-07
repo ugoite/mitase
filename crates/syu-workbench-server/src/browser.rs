@@ -1,4 +1,5 @@
 use super::*;
+use std::collections::BTreeSet;
 
 pub(super) async fn workbench_index(
     State(server): State<WorkbenchServer>,
@@ -96,14 +97,76 @@ async fn render_workbench(
             ui.cli_preview = Some(preview);
         }
     }
+    if allow_run && view.diagnostics_all.as_deref() == Some("1") {
+        ui.selected_cli_command_id = Some("diagnostics.all".to_string());
+        ui.cli_preview = Some(
+            run_all_diagnostics(
+                server.inner.config.workspace_root.as_path(),
+                !ui.payload.state.goals.active.is_empty(),
+                server.inner.config.show_log || view.show_log.as_deref() == Some("1"),
+            )
+            .await,
+        );
+    }
+    if allow_run && let Some(item_id) = view.item_edit.as_deref() {
+        let values = if let Some(payload) = view.item_edit_payload.as_deref() {
+            serde_json::from_str(payload).ok()
+        } else {
+            Some(ItemEditValues {
+                title: view.title.unwrap_or_default(),
+                summary: view.summary.unwrap_or_default(),
+                description: view.description.unwrap_or_default(),
+                product_design_principle: view.product_design_principle.unwrap_or_default(),
+                coding_guideline: view.coding_guideline.unwrap_or_default(),
+                priority: view.priority.unwrap_or_default(),
+                status: view.status.unwrap_or_default(),
+                linked_philosophies: split_item_links(view.linked_philosophies.as_deref()),
+                linked_policies: split_item_links(view.linked_policies.as_deref()),
+                linked_requirements: split_item_links(view.linked_requirements.as_deref()),
+                linked_features: split_item_links(view.linked_features.as_deref()),
+                tests_yaml: view.tests_yaml.unwrap_or_default(),
+                implementations_yaml: view.implementations_yaml.unwrap_or_default(),
+                source_hashes: BTreeMap::new(),
+            })
+        };
+        ui.item_edit_preview = match values {
+            Some(values) => Some(
+                match preview_or_apply_item_edit(
+                    &server,
+                    item_id,
+                    values,
+                    view.item_edit_apply.as_deref() == Some("1"),
+                )
+                .await
+                {
+                    Ok(preview) => preview,
+                    Err(error) => ItemEditPreview {
+                        item_id: item_id.to_string(),
+                        diff: error.to_string(),
+                        apply_payload: String::new(),
+                        applied: false,
+                        message: "The item change could not be prepared or applied.".to_string(),
+                    },
+                },
+            ),
+            None => None,
+        };
+    }
     if let Some(goal_id) = view.goal {
         ui.payload.state.goals.selected_goal_id = Some(goal_id);
     }
-    let active_pane = view
-        .pane
-        .as_deref()
-        .and_then(WorkbenchPane::from_slug)
-        .unwrap_or(WorkbenchPane::Pulse);
+    let requested_pane = view.pane.as_deref();
+    let active_pane = if matches!(requested_pane, Some("commands" | "palette")) {
+        ui.selected_cli_command_id
+            .as_deref()
+            .map(WorkbenchPane::for_cli)
+            .or_else(|| ui.selected_action_id.map(WorkbenchPane::for_action))
+            .unwrap_or(WorkbenchPane::Pulse)
+    } else {
+        requested_pane
+            .and_then(WorkbenchPane::from_slug)
+            .unwrap_or(WorkbenchPane::Pulse)
+    };
     let sidebar_open = view
         .sidebar
         .as_deref()
@@ -116,12 +179,559 @@ async fn render_workbench(
     Html(workbench_document(shell, locale))
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(super) struct ItemEditValues {
+    title: String,
+    summary: String,
+    description: String,
+    product_design_principle: String,
+    coding_guideline: String,
+    priority: String,
+    status: String,
+    linked_philosophies: Vec<String>,
+    linked_policies: Vec<String>,
+    linked_requirements: Vec<String>,
+    linked_features: Vec<String>,
+    tests_yaml: String,
+    implementations_yaml: String,
+    source_hashes: BTreeMap<String, u64>,
+}
+
+fn split_item_links(value: Option<&str>) -> Vec<String> {
+    value
+        .unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+pub(super) async fn preview_or_apply_item_edit(
+    server: &WorkbenchServer,
+    item_id: &str,
+    mut values: ItemEditValues,
+    apply: bool,
+) -> Result<ItemEditPreview> {
+    let (document_path, kind, item_index) = {
+        let workspace = server.inner.browser_workspace.read().await;
+        let selected = workspace
+            .sections
+            .iter()
+            .flat_map(|section| section.documents.iter())
+            .find_map(|document| {
+                document
+                    .items
+                    .iter()
+                    .find(|item| item.id == item_id)
+                    .map(|item| (document.path.clone(), item.kind))
+            })
+            .with_context(|| format!("unknown item `{item_id}`"))?;
+        let item_index = workspace
+            .item_index
+            .iter()
+            .map(|(id, entry)| (id.clone(), (entry.document_path.clone(), entry.kind)))
+            .collect::<BTreeMap<_, _>>();
+        (selected.0, selected.1, item_index)
+    };
+    let path = server.inner.config.spec_root.join(&document_path);
+    let raw = fs::read_to_string(&path)
+        .with_context(|| format!("failed to read `{}`", path.display()))?;
+    let mut document: serde_yaml::Value = serde_yaml::from_str(&raw)
+        .with_context(|| format!("failed to parse `{}`", path.display()))?;
+    let item = yaml_item_mut(&mut document, kind, item_id)?;
+    let mapping = item
+        .as_mapping_mut()
+        .context("spec item must be a mapping")?;
+    let old_links = reciprocal_links(kind)
+        .iter()
+        .map(|relation| {
+            (
+                relation.source_field,
+                yaml_string_list(mapping, relation.source_field),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    set_yaml_string(mapping, "title", values.title.clone());
+    set_optional_yaml_string(mapping, "summary", values.summary.clone());
+    set_optional_yaml_string(mapping, "description", values.description.clone());
+    set_optional_yaml_string(
+        mapping,
+        "product_design_principle",
+        values.product_design_principle.clone(),
+    );
+    set_optional_yaml_string(mapping, "coding_guideline", values.coding_guideline.clone());
+    set_optional_yaml_string(mapping, "priority", values.priority.clone());
+    set_optional_yaml_string(mapping, "status", values.status.clone());
+    set_yaml_list(mapping, "linked_philosophies", &values.linked_philosophies);
+    set_yaml_list(mapping, "linked_policies", &values.linked_policies);
+    set_yaml_list(mapping, "linked_requirements", &values.linked_requirements);
+    set_yaml_list(mapping, "linked_features", &values.linked_features);
+    set_yaml_mapping_text(mapping, "tests", &values.tests_yaml)?;
+    set_yaml_mapping_text(mapping, "implementations", &values.implementations_yaml)?;
+    let updated_item = item.clone();
+    let updated = replace_yaml_item_block(&raw, item_id, &updated_item)?;
+    let mut changes = BTreeMap::from([(document_path.clone(), (raw, updated))]);
+    for relation in reciprocal_links(kind) {
+        let old = old_links
+            .get(relation.source_field)
+            .cloned()
+            .unwrap_or_default();
+        let new = values.link_values(relation.source_field);
+        for target_id in old
+            .iter()
+            .chain(new.iter())
+            .cloned()
+            .collect::<BTreeSet<_>>()
+        {
+            let (target_path, target_kind) = item_index
+                .get(&target_id)
+                .with_context(|| format!("unknown linked item `{target_id}`"))?;
+            if *target_kind != relation.target_kind {
+                bail!(
+                    "`{target_id}` is not a {} item",
+                    relation.target_kind.label()
+                );
+            }
+            let should_link = new.contains(&target_id);
+            if !changes.contains_key(target_path) {
+                let target = server.inner.config.spec_root.join(target_path);
+                let target_raw = fs::read_to_string(&target)
+                    .with_context(|| format!("failed to read `{}`", target.display()))?;
+                changes.insert(target_path.clone(), (target_raw.clone(), target_raw));
+            }
+            let entry = changes
+                .get_mut(target_path)
+                .context("linked item source was not loaded")?;
+            entry.1 = update_reciprocal_link(
+                &entry.1,
+                *target_kind,
+                &target_id,
+                relation.target_field,
+                item_id,
+                should_link,
+            )?;
+        }
+    }
+    changes.retain(|_, (before, after)| before != after);
+    if apply {
+        verify_source_hashes(
+            &server.inner.config.spec_root,
+            &changes,
+            &values.source_hashes,
+        )?;
+        write_item_changes(&server.inner.config.spec_root, &changes)?;
+    } else {
+        values.source_hashes = changes
+            .iter()
+            .map(|(path, (before, _))| (path.clone(), text_hash(before)))
+            .collect();
+    }
+    let diff = changes
+        .iter()
+        .map(|(relative, (before, after))| {
+            let path = server.inner.config.spec_root.join(relative);
+            format!(
+                "--- {}\n+++ {}\n\n{}",
+                path.display(),
+                path.display(),
+                line_diff(before, after)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    Ok(ItemEditPreview {
+        item_id: item_id.to_string(),
+        diff,
+        apply_payload: serde_json::to_string(&values)?,
+        applied: apply,
+        message: if apply {
+            "The reviewed item change was applied.".to_string()
+        } else {
+            "Review this source-preserving item diff before applying it.".to_string()
+        },
+    })
+}
+
+#[derive(Clone, Copy)]
+struct ReciprocalLink {
+    source_field: &'static str,
+    target_kind: SectionKind,
+    target_field: &'static str,
+}
+
+fn reciprocal_links(kind: SectionKind) -> &'static [ReciprocalLink] {
+    match kind {
+        SectionKind::Philosophy => &[ReciprocalLink {
+            source_field: "linked_policies",
+            target_kind: SectionKind::Policies,
+            target_field: "linked_philosophies",
+        }],
+        SectionKind::Policies => &[
+            ReciprocalLink {
+                source_field: "linked_philosophies",
+                target_kind: SectionKind::Philosophy,
+                target_field: "linked_policies",
+            },
+            ReciprocalLink {
+                source_field: "linked_requirements",
+                target_kind: SectionKind::Requirements,
+                target_field: "linked_policies",
+            },
+        ],
+        SectionKind::Requirements => &[
+            ReciprocalLink {
+                source_field: "linked_policies",
+                target_kind: SectionKind::Policies,
+                target_field: "linked_requirements",
+            },
+            ReciprocalLink {
+                source_field: "linked_features",
+                target_kind: SectionKind::Features,
+                target_field: "linked_requirements",
+            },
+        ],
+        SectionKind::Features => &[ReciprocalLink {
+            source_field: "linked_requirements",
+            target_kind: SectionKind::Requirements,
+            target_field: "linked_features",
+        }],
+    }
+}
+
+impl ItemEditValues {
+    fn link_values(&self, field: &str) -> Vec<String> {
+        match field {
+            "linked_philosophies" => self.linked_philosophies.clone(),
+            "linked_policies" => self.linked_policies.clone(),
+            "linked_requirements" => self.linked_requirements.clone(),
+            "linked_features" => self.linked_features.clone(),
+            _ => Vec::new(),
+        }
+    }
+}
+
+fn yaml_item_mut<'a>(
+    document: &'a mut serde_yaml::Value,
+    kind: SectionKind,
+    item_id: &str,
+) -> Result<&'a mut serde_yaml::Value> {
+    let list_key = match kind {
+        SectionKind::Philosophy => "philosophies",
+        SectionKind::Policies => "policies",
+        SectionKind::Requirements => "requirements",
+        SectionKind::Features => "features",
+    };
+    document
+        .as_mapping_mut()
+        .and_then(|mapping| mapping.get_mut(serde_yaml::Value::String(list_key.to_string())))
+        .and_then(serde_yaml::Value::as_sequence_mut)
+        .context("spec document does not contain its item list")?
+        .iter_mut()
+        .find(|item| {
+            item.as_mapping()
+                .and_then(|mapping| mapping.get(serde_yaml::Value::String("id".to_string())))
+                .and_then(serde_yaml::Value::as_str)
+                == Some(item_id)
+        })
+        .with_context(|| format!("item `{item_id}` is missing from its document"))
+}
+
+fn yaml_string_list(mapping: &serde_yaml::Mapping, key: &str) -> Vec<String> {
+    mapping
+        .get(serde_yaml::Value::String(key.to_string()))
+        .and_then(serde_yaml::Value::as_sequence)
+        .into_iter()
+        .flatten()
+        .filter_map(serde_yaml::Value::as_str)
+        .map(str::to_string)
+        .collect()
+}
+
+fn update_reciprocal_link(
+    raw: &str,
+    kind: SectionKind,
+    item_id: &str,
+    field: &str,
+    linked_id: &str,
+    should_link: bool,
+) -> Result<String> {
+    let mut document: serde_yaml::Value = serde_yaml::from_str(raw)?;
+    let item = yaml_item_mut(&mut document, kind, item_id)?;
+    let mapping = item
+        .as_mapping_mut()
+        .context("spec item must be a mapping")?;
+    let mut links = yaml_string_list(mapping, field);
+    if should_link {
+        if !links.iter().any(|value| value == linked_id) {
+            links.push(linked_id.to_string());
+        }
+    } else {
+        links.retain(|value| value != linked_id);
+    }
+    set_yaml_list(mapping, field, &links);
+    replace_yaml_item_block(raw, item_id, &item.clone())
+}
+
+fn verify_source_hashes(
+    spec_root: &FsPath,
+    changes: &BTreeMap<String, (String, String)>,
+    expected: &BTreeMap<String, u64>,
+) -> Result<()> {
+    for (relative, (before, _)) in changes {
+        let current = fs::read_to_string(spec_root.join(relative))?;
+        if expected.get(relative) != Some(&text_hash(&current)) || current != *before {
+            bail!(
+                "source document `{relative}` changed after preview; reload the item and review a new diff"
+            );
+        }
+    }
+    Ok(())
+}
+
+fn write_item_changes(
+    spec_root: &FsPath,
+    changes: &BTreeMap<String, (String, String)>,
+) -> Result<()> {
+    let mut staged = Vec::new();
+    for (relative, (_, after)) in changes {
+        let path = spec_root.join(relative);
+        let file_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .context("item source path must have a UTF-8 file name")?;
+        let temp = path.with_file_name(format!(".{file_name}.syu-workbench-{}", text_hash(after)));
+        if let Err(error) = fs::write(&temp, after) {
+            for (_, staged_temp) in &staged {
+                let _ = fs::remove_file(staged_temp);
+            }
+            return Err(error).with_context(|| format!("failed to stage `{}`", path.display()));
+        }
+        staged.push((path, temp));
+    }
+    let mut applied = Vec::new();
+    for (path, temp) in &staged {
+        if let Err(error) = fs::rename(temp, path) {
+            for (applied_path, before) in applied.iter().rev() {
+                let _ = fs::write(applied_path, before);
+            }
+            for (_, remaining) in &staged {
+                let _ = fs::remove_file(remaining);
+            }
+            return Err(error).with_context(|| format!("failed to apply `{}`", path.display()));
+        }
+        let before = changes
+            .iter()
+            .find_map(|(relative, (before, _))| {
+                (spec_root.join(relative) == *path).then_some(before.clone())
+            })
+            .context("applied item edit is missing its rollback source")?;
+        applied.push((path.clone(), before));
+    }
+    Ok(())
+}
+
+fn text_hash(value: &str) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn set_yaml_string(mapping: &mut serde_yaml::Mapping, key: &str, value: String) {
+    mapping.insert(
+        serde_yaml::Value::String(key.to_string()),
+        serde_yaml::Value::String(value),
+    );
+}
+
+fn set_optional_yaml_string(mapping: &mut serde_yaml::Mapping, key: &str, value: String) {
+    let yaml_key = serde_yaml::Value::String(key.to_string());
+    if value.is_empty() && !mapping.contains_key(&yaml_key) {
+        return;
+    }
+    mapping.insert(yaml_key, serde_yaml::Value::String(value));
+}
+
+fn set_yaml_list(mapping: &mut serde_yaml::Mapping, key: &str, values: &[String]) {
+    let yaml_key = serde_yaml::Value::String(key.to_string());
+    if values.is_empty() && !mapping.contains_key(&yaml_key) {
+        return;
+    }
+    mapping.insert(
+        yaml_key,
+        serde_yaml::Value::Sequence(
+            values
+                .iter()
+                .cloned()
+                .map(serde_yaml::Value::String)
+                .collect(),
+        ),
+    );
+}
+
+fn set_yaml_mapping_text(mapping: &mut serde_yaml::Mapping, key: &str, value: &str) -> Result<()> {
+    let yaml_key = serde_yaml::Value::String(key.to_string());
+    if value.trim().is_empty() && !mapping.contains_key(&yaml_key) {
+        return Ok(());
+    }
+    let parsed = if value.trim().is_empty() {
+        serde_yaml::Value::Mapping(serde_yaml::Mapping::new())
+    } else {
+        serde_yaml::from_str(value)
+            .with_context(|| format!("`{key}` must be valid YAML mapping content"))?
+    };
+    if !parsed.is_mapping() {
+        bail!("`{key}` must be a YAML mapping grouped by language");
+    }
+    mapping.insert(yaml_key, parsed);
+    Ok(())
+}
+
+pub(super) fn replace_yaml_item_block(
+    raw: &str,
+    item_id: &str,
+    item: &serde_yaml::Value,
+) -> Result<String> {
+    let lines = raw.split_inclusive('\n').collect::<Vec<_>>();
+    let marker = format!("- id: {item_id}");
+    let start = lines
+        .iter()
+        .position(|line| line.trim_end().trim_start() == marker)
+        .with_context(|| format!("could not locate source block for `{item_id}`"))?;
+    let indent = lines[start].len() - lines[start].trim_start().len();
+    let end = lines
+        .iter()
+        .enumerate()
+        .skip(start + 1)
+        .find(|(_, line)| {
+            line.len() - line.trim_start().len() == indent && line.trim_start().starts_with("- id:")
+        })
+        .map_or(lines.len(), |(index, _)| index);
+    let yaml = serde_yaml::to_string(item)?;
+    let mut rendered = String::new();
+    for (index, line) in yaml.lines().enumerate() {
+        if index == 0 {
+            rendered.push_str(&" ".repeat(indent));
+            rendered.push_str("- ");
+            rendered.push_str(line);
+        } else {
+            rendered.push_str(&" ".repeat(indent + 2));
+            rendered.push_str(line);
+        }
+        rendered.push('\n');
+    }
+    let mut updated = String::new();
+    updated.push_str(&lines[..start].concat());
+    updated.push_str(&rendered);
+    updated.push_str(&lines[end..].concat());
+    Ok(updated)
+}
+
+fn line_diff(before: &str, after: &str) -> String {
+    let before_lines = before.lines().collect::<Vec<_>>();
+    let after_lines = after.lines().collect::<Vec<_>>();
+    let mut result = String::new();
+    for line in before_lines
+        .iter()
+        .filter(|line| !after_lines.contains(line))
+    {
+        result.push_str("- ");
+        result.push_str(line);
+        result.push('\n');
+    }
+    for line in after_lines
+        .iter()
+        .filter(|line| !before_lines.contains(line))
+    {
+        result.push_str("+ ");
+        result.push_str(line);
+        result.push('\n');
+    }
+    if result.is_empty() {
+        result.push_str("No changes.");
+    }
+    result
+}
+
+async fn run_all_diagnostics(
+    workspace_root: &FsPath,
+    goal_available: bool,
+    show_log: bool,
+) -> CliCommandPreview {
+    let mut items = Vec::new();
+    let mut overall = CommandResultStatus::Pass;
+    for (id, title) in [
+        ("cli.validate", "Workspace validation"),
+        ("cli.doctor", "Contributor doctor"),
+        ("cli.audit", "Specification audit"),
+    ] {
+        if let Some(preview) =
+            run_cli_command_preview(id, workspace_root, None, false, show_log).await
+        {
+            if preview.result.status == CommandResultStatus::Fail {
+                overall = CommandResultStatus::Fail;
+            } else if preview.result.status == CommandResultStatus::Warn
+                && overall != CommandResultStatus::Fail
+            {
+                overall = CommandResultStatus::Warn;
+            }
+            items.push(CommandResultItem {
+                id: id.to_string(),
+                title: title.to_string(),
+                summary: preview.result.summary.clone(),
+                detail: preview.result.summary,
+                status: preview.result.status,
+            });
+        }
+    }
+    if goal_available {
+        if let Some(preview) =
+            run_cli_command_preview("cli.task.check", workspace_root, None, false, show_log).await
+        {
+            items.push(CommandResultItem {
+                id: "cli.task.check".to_string(),
+                title: "Goal check".to_string(),
+                summary: preview.result.summary.clone(),
+                detail: preview.result.summary,
+                status: preview.result.status,
+            });
+        }
+    } else {
+        items.push(CommandResultItem {
+            id: "cli.task.check".to_string(),
+            title: "Goal check".to_string(),
+            summary: "Skipped because no active Goal Plan is available.".to_string(),
+            detail: "Create or select a Goal Plan, then refresh diagnostics again.".to_string(),
+            status: CommandResultStatus::Pending,
+        });
+    }
+    CliCommandPreview {
+        id: "diagnostics.all".to_string(),
+        title: "Refresh all diagnostics".to_string(),
+        invocation: "Workbench diagnostics refresh".to_string(),
+        result_summary: "Refreshed all available diagnostics.".to_string(),
+        evidence_summary: format!("{} tools", items.len()),
+        requires_input: false,
+        mutates_files: false,
+        category: CommandCategory::Check,
+        effect: syu_app_ui::model::CommandEffect::ReadOnly,
+        result: TypedCommandResult {
+            kind: syu_app_ui::model::CommandResultKind::CheckDetail,
+            status: overall,
+            summary: "All diagnostics refreshed".to_string(),
+            items,
+            diagnostics: None,
+        },
+    }
+}
+
 pub(super) fn workbench_document(shell: String, locale: Locale) -> String {
     format!(
         r#"<!doctype html>
 <html lang="{lang}">
 <head>
   <meta charset="utf-8">
+  <base href="/">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
   <meta name="referrer" content="same-origin">

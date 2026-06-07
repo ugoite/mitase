@@ -1,3 +1,4 @@
+use crate::WorkbenchPane;
 use crate::design::classes;
 use crate::i18n::Locale;
 use crate::model::CommandPaletteEntry;
@@ -287,14 +288,16 @@ pub fn CommandItem(
         category.map_or_else(String::new, |value| format!("&category={}", value.slug()));
     let href = if entry.availability.available && !entry.action.mutability.requires_confirmation() {
         format!(
-            "?pane=commands&sidebar=0&lang={}&action={}&run=1{}",
+            "?pane={}&sidebar=1&lang={}&action={}&run=1{}",
+            WorkbenchPane::for_action(entry.action.id).slug(),
             locale.slug(),
             entry.action.id.label(),
             category_param,
         )
     } else {
         format!(
-            "?pane=commands&sidebar=0&lang={}&action={}{}",
+            "?pane={}&sidebar=1&lang={}&action={}{}",
+            WorkbenchPane::for_action(entry.action.id).slug(),
             locale.slug(),
             entry.action.id.label(),
             category_param,

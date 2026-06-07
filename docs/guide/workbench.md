@@ -10,6 +10,27 @@ The browser and desktop clients work the same way through one Rust-native UI
 and server architecture so the same request, goal, assignment, and evidence
 flow stays visible in both places.
 
+## Role-oriented navigation
+
+The fixed header keeps Syu, the command palette, and settings available while
+the left menu separates the Workbench into four persistent roles:
+
+- **Items** shows philosophy, policy, requirement, and feature documents as a
+  collapsible file tree. Linked items open in the same role. Item fields,
+  links, tests, and implementations can be edited without renaming or moving
+  IDs or files; every edit requires a source-preserving diff preview, and
+  adjacent-layer reciprocal links are reviewed and applied together. When
+  `docs/syu` does not exist yet, workspace initialization starts here.
+- **Work** contains the pulse, request, goals, assignment, and evidence
+  subviews for the goal-centered delivery flow.
+- **Scope** contains branch scope and the spec impact graph.
+- **Diagnostics** keeps validation, contributor doctor, specification audit,
+  and Goal Plan check results distinct, and can refresh all available checks.
+
+The command palette remains the primary action launcher. Selecting or running a
+command routes to its owning role, so browse and add commands open Items,
+scope and graph commands open Scope, and checks open Diagnostics.
+
 ## Workbench CI
 
 CI validates the Workbench as a Rust-native architecture. The Workbench gate

@@ -15,8 +15,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
     collections::BTreeMap,
+    collections::hash_map::DefaultHasher,
     convert::Infallible,
     fs,
+    hash::{Hash, Hasher},
     net::{IpAddr, SocketAddr},
     path::{Component, Path as FsPath, PathBuf},
     process::Command,
@@ -27,9 +29,9 @@ use syu_app_ui::{
     AppShell, HelpTopic, Locale, WorkbenchActionRunPreview, WorkbenchPane, WorkbenchUiState,
     model::{
         CliCommandPreview, CommandCategory, CommandEffect, CommandResultItem, CommandResultStatus,
-        SpecBrowserDocument, SpecBrowserItem, SpecBrowserModel, SpecBrowserSection,
-        SpecBrowserTraceGroup, SpecBrowserTraceReference, TypedCommandResult, category_result_kind,
-        cli_command_catalog, workbench_action_category,
+        ItemEditPreview, SpecBrowserDocument, SpecBrowserItem, SpecBrowserModel,
+        SpecBrowserSection, SpecBrowserTraceGroup, SpecBrowserTraceReference, TypedCommandResult,
+        category_result_kind, cli_command_catalog, workbench_action_category,
     },
 };
 use syu_code_intel::{
@@ -940,7 +942,7 @@ impl WorkbenchServer {
                     workspace_root.display()
                 )
             })?;
-        if spec_root != workspace_root {
+        if spec_root != workspace_root && spec_root.exists() {
             watcher
                 .watch(&spec_root, RecursiveMode::Recursive)
                 .with_context(|| format!("failed to watch spec root `{}`", spec_root.display()))?;
@@ -977,6 +979,40 @@ struct WorkbenchViewQuery {
     cli_confirm: Option<String>,
     #[serde(default)]
     show_log: Option<String>,
+    #[serde(default)]
+    diagnostics_all: Option<String>,
+    #[serde(default)]
+    item_edit: Option<String>,
+    #[serde(default)]
+    item_edit_apply: Option<String>,
+    #[serde(default)]
+    item_edit_payload: Option<String>,
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(default)]
+    summary: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    product_design_principle: Option<String>,
+    #[serde(default)]
+    coding_guideline: Option<String>,
+    #[serde(default)]
+    priority: Option<String>,
+    #[serde(default)]
+    status: Option<String>,
+    #[serde(default)]
+    linked_philosophies: Option<String>,
+    #[serde(default)]
+    linked_policies: Option<String>,
+    #[serde(default)]
+    linked_requirements: Option<String>,
+    #[serde(default)]
+    linked_features: Option<String>,
+    #[serde(default)]
+    tests_yaml: Option<String>,
+    #[serde(default)]
+    implementations_yaml: Option<String>,
     #[serde(default)]
     spec_item: Option<String>,
     #[serde(default)]

@@ -71,11 +71,13 @@ impl UiCopy for English {
 
     fn pane_title(&self, pane: WorkbenchPane) -> &'static str {
         match pane {
-            WorkbenchPane::Pulse => "Workspace pulse",
+            WorkbenchPane::Items => "Items",
+            WorkbenchPane::Diagnostics => "Diagnostics",
+            WorkbenchPane::Pulse => "Work",
             WorkbenchPane::Commands => "Command palette",
             WorkbenchPane::Goals => "Goal plan",
             WorkbenchPane::Request => "Request intake",
-            WorkbenchPane::Branch => "Branch",
+            WorkbenchPane::Branch => "Scope",
             WorkbenchPane::Assignment => "Assignment",
             WorkbenchPane::Graph => "Spec graph",
             WorkbenchPane::Evidence => "Evidence",
@@ -84,11 +86,13 @@ impl UiCopy for English {
 
     fn pane_summary(&self, pane: WorkbenchPane) -> &'static str {
         match pane {
-            WorkbenchPane::Pulse => "workspace, branch, and one action to open in one snapshot",
+            WorkbenchPane::Items => "browse and edit the persistent specification",
+            WorkbenchPane::Diagnostics => "refresh workspace and goal checks",
+            WorkbenchPane::Pulse => "requests, goals, assignment, and evidence",
             WorkbenchPane::Commands => "the top box that launches actions",
             WorkbenchPane::Goals => "the current goal and the plan behind it",
             WorkbenchPane::Request => "the request you are classifying",
-            WorkbenchPane::Branch => "what changed in this branch",
+            WorkbenchPane::Branch => "branch scope and specification impact",
             WorkbenchPane::Assignment => "who owns the handoff",
             WorkbenchPane::Graph => "how specs, code, and tests connect",
             WorkbenchPane::Evidence => "what happened most recently",
@@ -97,6 +101,8 @@ impl UiCopy for English {
 
     fn help_title(&self, topic: HelpTopic) -> &'static str {
         match topic {
+            HelpTopic::Items => "Items",
+            HelpTopic::Diagnostics => "Diagnostics",
             HelpTopic::Palette => "Command palette",
             HelpTopic::Sidebar => "Sidebar navigation",
             HelpTopic::Pulse => "Workspace pulse",
@@ -111,6 +117,12 @@ impl UiCopy for English {
 
     fn help_body(&self, topic: HelpTopic) -> &'static str {
         match topic {
+            HelpTopic::Items => {
+                "Browse the layered file tree, follow links, and manage specification items."
+            }
+            HelpTopic::Diagnostics => {
+                "Run workspace and goal checks, then jump from findings to affected items."
+            }
             HelpTopic::Palette => "Focus the top box, type a few letters, then choose a result.",
             HelpTopic::Sidebar => "Use the left sidebar to switch views and collapse the menu.",
             HelpTopic::Pulse => "Shows the workspace, branch, and one action to open together.",

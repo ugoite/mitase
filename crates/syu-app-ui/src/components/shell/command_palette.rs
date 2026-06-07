@@ -71,7 +71,8 @@ pub(super) fn CliCommandItem(
     let category_param =
         category.map_or_else(String::new, |value| format!("&category={}", value.slug()));
     let href = format!(
-        "?pane=commands&sidebar=0&lang={}&cli={}{}",
+        "?pane={}&sidebar=1&lang={}&cli={}{}",
+        WorkbenchPane::for_cli(entry.id).slug(),
         locale.slug(),
         entry.id,
         category_param,

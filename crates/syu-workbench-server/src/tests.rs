@@ -66,9 +66,12 @@ async fn index_route_renders_workbench_browser_entrypoint_and_css_asset() {
     assert_eq!(status, StatusCode::OK);
     assert!(html.contains("Syu Workbench"));
     assert!(html.contains("/assets/tailwind.css"));
+    assert!(html.contains("<base href=\"/\">"));
     assert!(html.contains("syu-workbench-root"));
     assert!(html.contains("Syu"));
-    assert!(!html.contains("navigation"));
+    assert!(html.contains("navigation"));
+    assert!(html.contains(">Items</span>"));
+    assert!(html.contains(">Diagnostics</span>"));
     assert!(html.contains("Type a command"));
     assert!(html.contains("data-command-palette"));
     assert!(html.contains("document.querySelectorAll('[data-command-run-form]')"));
@@ -77,6 +80,36 @@ async fn index_route_renders_workbench_browser_entrypoint_and_css_asset() {
     assert!(html.contains("button.disabled = true"));
     assert!(html.contains("animate-spin"));
     assert!(!html.contains("Browser/server mode exposes the local Workbench API"));
+}
+
+#[tokio::test]
+async fn items_surface_opens_before_workspace_initialization() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let server = WorkbenchServer::new(WorkbenchLaunchConfig {
+        workspace_root: tempdir.path().to_path_buf(),
+        spec_root: tempdir.path().join("docs/syu"),
+        bind: "127.0.0.1".to_string(),
+        port: 3000,
+        allow_remote_bind: false,
+        show_log: false,
+    })
+    .expect("uninitialized workspace should open");
+    let (status, html) = text_response(
+        server.router(),
+        Request::builder()
+            .uri("/?pane=items")
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(html.contains("data-items-toolbar=\"true\""));
+    assert!(html.contains("Initialize workspace"));
+    assert!(html.contains("cli.init"));
+    server
+        .spawn_watcher()
+        .expect("uninitialized workspace should be watchable");
 }
 
 #[tokio::test]
@@ -99,6 +132,193 @@ async fn cli_information_command_renders_spec_browser_without_running_cli() {
     assert!(!html.contains("name=\"run\" value=\"1\""));
     assert!(!html.contains("stdout:"));
     assert!(!html.contains("stderr:"));
+}
+
+#[tokio::test]
+async fn role_menu_routes_commands_to_items_and_diagnostics() {
+    let server = test_server();
+    let (_, items_html) = text_response(
+        server.router(),
+        Request::builder()
+            .uri("/?pane=commands&cli=cli.show&spec_item=REQ-WORKBENCH-001")
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    assert!(items_html.contains("aria-current=\"page\""));
+    assert!(items_html.contains("data-items-toolbar=\"true\""));
+    assert!(items_html.contains("data-item-editor=\"true\""));
+
+    let (_, diagnostics_html) = text_response(
+        server.router(),
+        Request::builder()
+            .uri("/?pane=diagnostics")
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    assert!(diagnostics_html.contains("data-diagnostics-overview=\"true\""));
+    assert!(diagnostics_html.contains("data-diagnostic-tool=\"validate\""));
+    assert!(diagnostics_html.contains("data-diagnostic-tool=\"doctor\""));
+    assert!(diagnostics_html.contains("data-diagnostic-tool=\"audit\""));
+    assert!(diagnostics_html.contains("data-diagnostic-tool=\"goal\""));
+}
+
+#[tokio::test]
+async fn diagnostics_refresh_all_runs_unique_tools_and_skips_missing_goal() {
+    let server = test_server();
+    let (status, html) = text_response(
+        server.router(),
+        Request::builder()
+            .method("POST")
+            .uri("/run")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .header("host", "localhost:3000")
+            .header("origin", "http://localhost:3000")
+            .body(Body::from("pane=diagnostics&sidebar=1&diagnostics_all=1"))
+            .expect("request"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(html.contains("All diagnostics refreshed"));
+    assert!(html.contains("Workspace validation"));
+    assert!(html.contains("Contributor doctor"));
+    assert!(html.contains("Specification audit"));
+    assert!(html.contains("Goal check"));
+    assert!(html.contains("Skipped because no active Goal Plan is available."));
+}
+
+#[tokio::test]
+async fn item_edit_requires_review_before_writing_source() {
+    let server = test_server();
+    let source = server
+        .inner
+        .config
+        .spec_root
+        .join("requirements/core/workbench.yaml");
+    let before = fs::read_to_string(&source).expect("source");
+    let (status, html) = text_response(
+        server.router(),
+        Request::builder()
+            .method("POST")
+            .uri("/run")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .header("host", "localhost:3000")
+            .header("origin", "http://localhost:3000")
+            .body(Body::from(
+                "pane=items&sidebar=1&item_edit=REQ-WORKBENCH-001&title=Preview+title&description=Preview+body&priority=medium&status=implemented&linked_policies=POL-005",
+            ))
+            .expect("request"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(html.contains("data-item-edit-preview=\"true\""));
+    assert!(html.contains("Review this source-preserving item diff before applying it."));
+    assert!(html.contains("Apply reviewed change"));
+    assert_eq!(
+        fs::read_to_string(source).expect("source after preview"),
+        before
+    );
+}
+
+#[tokio::test]
+async fn item_edit_previews_and_applies_reciprocal_links_together() {
+    let tempdir = tempfile::tempdir().expect("tempdir");
+    let spec_root = tempdir.path().join("docs/syu");
+    let requirements = spec_root.join("requirements/core");
+    let features = spec_root.join("features/core");
+    fs::create_dir_all(&requirements).expect("requirements dir");
+    fs::create_dir_all(&features).expect("features dir");
+    let requirement_path = requirements.join("requirements.yaml");
+    let feature_path = features.join("core.yaml");
+    let requirement_before = "category: Core\nprefix: REQ\nrequirements:\n  - id: REQ-1\n    title: Requirement\n    description: Keep links reciprocal.\n    priority: medium\n    status: planned\n    linked_features:\n      - FEAT-1\n    tests: {}\n";
+    let feature_before = "category: Core\nversion: 1\nfeatures:\n  - id: FEAT-1\n    title: First\n    summary: First feature.\n    status: planned\n    linked_requirements:\n      - REQ-1\n    implementations: {}\n  - id: FEAT-2\n    title: Second\n    summary: Second feature.\n    status: planned\n    linked_requirements: []\n    implementations: {}\n";
+    fs::write(&requirement_path, requirement_before).expect("requirement");
+    fs::write(&feature_path, feature_before).expect("features");
+    let server = WorkbenchServer::new(WorkbenchLaunchConfig {
+        workspace_root: tempdir.path().to_path_buf(),
+        spec_root: spec_root.clone(),
+        bind: "127.0.0.1".to_string(),
+        port: 3000,
+        allow_remote_bind: false,
+        show_log: false,
+    })
+    .expect("server");
+    let values: ItemEditValues = serde_json::from_value(serde_json::json!({
+        "title": "Requirement",
+        "summary": "",
+        "description": "Keep links reciprocal.",
+        "product_design_principle": "",
+        "coding_guideline": "",
+        "priority": "medium",
+        "status": "planned",
+        "linked_philosophies": [],
+        "linked_policies": [],
+        "linked_requirements": [],
+        "linked_features": ["FEAT-2"],
+        "tests_yaml": "",
+        "implementations_yaml": "",
+        "source_hashes": {}
+    }))
+    .expect("edit values");
+
+    let preview = preview_or_apply_item_edit(&server, "REQ-1", values, false)
+        .await
+        .expect("preview");
+    assert!(!preview.applied);
+    assert!(preview.diff.contains("FEAT-1"));
+    assert!(preview.diff.contains("FEAT-2"));
+    assert_eq!(
+        fs::read_to_string(&requirement_path).expect("requirement after preview"),
+        requirement_before
+    );
+    assert_eq!(
+        fs::read_to_string(&feature_path).expect("features after preview"),
+        feature_before
+    );
+
+    let reviewed: ItemEditValues =
+        serde_json::from_str(&preview.apply_payload).expect("review payload");
+    fs::write(&feature_path, format!("{feature_before}\n")).expect("external feature edit");
+    let stale_error = preview_or_apply_item_edit(&server, "REQ-1", reviewed.clone(), true)
+        .await
+        .expect_err("stale reciprocal source should be rejected");
+    assert!(stale_error.to_string().contains("changed after preview"));
+    assert_eq!(
+        fs::read_to_string(&requirement_path).expect("requirement after rejected apply"),
+        requirement_before
+    );
+    fs::write(&feature_path, feature_before).expect("restore features");
+
+    let applied = preview_or_apply_item_edit(&server, "REQ-1", reviewed, true)
+        .await
+        .expect("apply");
+    assert!(applied.applied);
+    let requirement_after = fs::read_to_string(requirement_path).expect("requirement after apply");
+    let feature_after = fs::read_to_string(feature_path).expect("features after apply");
+    assert!(requirement_after.contains("FEAT-2"));
+    assert!(!requirement_after.contains("FEAT-1"));
+    let first = feature_after
+        .split("- id: FEAT-2")
+        .next()
+        .expect("first feature block");
+    let second = feature_after
+        .split("- id: FEAT-2")
+        .nth(1)
+        .expect("second feature block");
+    assert!(!first.contains("REQ-1"));
+    assert!(second.contains("REQ-1"));
+}
+
+#[test]
+fn item_block_replacement_preserves_other_items_and_unknown_fields() {
+    let raw = "category: Core\nrequirements:\n  - id: REQ-1\n    title: Before\n    unknown: keep\n  - id: REQ-2\n    title: Other\n";
+    let item: serde_yaml::Value =
+        serde_yaml::from_str("id: REQ-1\ntitle: After\nunknown: keep\n").expect("item");
+    let updated = replace_yaml_item_block(raw, "REQ-1", &item).expect("replace");
+    assert!(updated.contains("title: After"));
+    assert!(updated.contains("unknown: keep"));
+    assert!(updated.contains("- id: REQ-2\n    title: Other"));
 }
 
 #[tokio::test]
@@ -257,7 +477,9 @@ async fn server_smoke_covers_root_css_health_and_actions() {
     assert_eq!(root_status, StatusCode::OK);
     assert!(root_html.contains("Syu"));
     assert!(root_html.contains("Type a command"));
-    assert!(!root_html.contains("navigation"));
+    assert!(root_html.contains("navigation"));
+    assert!(root_html.contains(">Items</span>"));
+    assert!(root_html.contains(">Diagnostics</span>"));
     assert!(root_html.contains("data-command-palette"));
     assert_eq!(css_status, StatusCode::OK);
     assert!(css.contains("--color-background"));
