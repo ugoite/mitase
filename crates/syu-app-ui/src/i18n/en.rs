@@ -128,4 +128,12 @@ impl UiCopy for English {
     fn command_surface_body(&self) -> &'static str {
         "Focus the top box, type to filter, and pick a result."
     }
+
+    fn run_label(&self) -> &'static str {
+        "Run"
+    }
+
+    fn running_label(&self) -> &'static str {
+        "Running..."
+    }
 }

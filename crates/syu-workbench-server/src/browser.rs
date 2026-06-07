@@ -154,6 +154,29 @@ pub(super) fn workbench_document(shell: String, locale: Locale) -> String {
           }}
         }});
       }}
+      for (const form of document.querySelectorAll('[data-command-run-form]')) {{
+        form.addEventListener('submit', (event) => {{
+          if (!form.checkValidity()) return;
+          if (form.dataset.running === 'true') {{
+            event.preventDefault();
+            return;
+          }}
+          form.dataset.running = 'true';
+          const button = form.querySelector('[data-command-run-button]');
+          const status = form.querySelector('[data-command-run-status]');
+          const runningLabel = button?.dataset.runningLabel || 'Running...';
+          if (button) {{
+            button.disabled = true;
+            button.setAttribute('aria-disabled', 'true');
+            button.innerHTML = `<span class="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" aria-hidden="true"></span><span>${{runningLabel}}</span>`;
+            button.classList.add('inline-flex', 'items-center', 'justify-center', 'gap-2', 'opacity-80');
+          }}
+          if (status) {{
+            status.textContent = runningLabel;
+            status.classList.remove('hidden');
+          }}
+        }});
+      }}
     }})();
   </script>
 </body>

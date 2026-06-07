@@ -71,6 +71,11 @@ async fn index_route_renders_workbench_browser_entrypoint_and_css_asset() {
     assert!(!html.contains("navigation"));
     assert!(html.contains("Type a command"));
     assert!(html.contains("data-command-palette"));
+    assert!(html.contains("document.querySelectorAll('[data-command-run-form]')"));
+    assert!(html.contains("if (!form.checkValidity()) return"));
+    assert!(html.contains("form.dataset.running === 'true'"));
+    assert!(html.contains("button.disabled = true"));
+    assert!(html.contains("animate-spin"));
     assert!(!html.contains("Browser/server mode exposes the local Workbench API"));
 }
 

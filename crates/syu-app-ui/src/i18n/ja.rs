@@ -126,4 +126,12 @@ impl UiCopy for Japanese {
     fn command_surface_body(&self) -> &'static str {
         "上部の入力欄にフォーカスすると候補が出ます。候補を選んで進めます。"
     }
+
+    fn run_label(&self) -> &'static str {
+        "実行"
+    }
+
+    fn running_label(&self) -> &'static str {
+        "実行中..."
+    }
 }

@@ -91,6 +91,8 @@ pub trait UiCopy: Sync {
     fn help_title(&self, topic: HelpTopic) -> &'static str;
     fn help_body(&self, topic: HelpTopic) -> &'static str;
     fn command_surface_body(&self) -> &'static str;
+    fn run_label(&self) -> &'static str;
+    fn running_label(&self) -> &'static str;
 }
 
 pub fn copy(locale: Locale) -> &'static dyn UiCopy {

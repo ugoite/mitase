@@ -81,6 +81,28 @@ fn cli_result_uses_explicit_run_form_without_log_shortcut() {
     assert!(!html.contains("Show log"));
     assert!(html.contains("name=\"run\" value=\"1\""));
     assert!(html.contains("name=\"cli\" value=\"cli.validate\""));
+    assert!(html.contains("data-command-run-form=\"true\""));
+    assert!(html.contains("data-command-run-button=\"true\""));
+    assert!(html.contains("data-command-run-status=\"true\""));
+    assert!(html.contains("aria-live=\"polite\""));
+    assert!(html.contains("data-running-label=\"実行中...\""));
+}
+
+#[test]
+fn workbench_action_run_form_exposes_shared_running_ui() {
+    let mut ui = build_demo_state();
+    ui.select_action(WorkbenchActionId::ValidationRun);
+
+    let html = render_element(rsx! {
+        AppShell { ui, active_pane: WorkbenchPane::Commands, sidebar_open: false }
+    });
+
+    assert!(html.contains("name=\"action\" value=\"validation.run\""));
+    assert!(html.contains("data-command-run-form=\"true\""));
+    assert!(html.contains("data-command-run-button=\"true\""));
+    assert!(html.contains("data-command-run-status=\"true\""));
+    assert!(html.contains("aria-live=\"polite\""));
+    assert!(html.contains("data-running-label=\"Running...\""));
 }
 
 #[test]

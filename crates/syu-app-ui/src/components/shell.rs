@@ -473,6 +473,7 @@ fn WorkbenchActionResult(
     category: Option<CommandCategory>,
     query: String,
 ) -> Element {
+    let copy = crate::i18n::copy(locale);
     let needs_input = workbench_action_needs_text_input(action.id.label());
     let needs_confirmation = action.mutability.requires_confirmation();
     let action_category = workbench_action_category(action.id);
@@ -488,7 +489,7 @@ fn WorkbenchActionResult(
                 }
             }
             p { class: "mt-2 text-sm text-foreground/75", "{action.description}" }
-            form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/", method: "get",
+            form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/", method: "get", "data-command-run-form": "true",
                 input { type: "hidden", name: "pane", value: "commands" }
                 input { type: "hidden", name: "sidebar", value: "0" }
                 input { type: "hidden", name: "lang", value: "{locale.slug()}" }
@@ -515,8 +516,11 @@ fn WorkbenchActionResult(
                 button {
                     class: "rounded-lg border border-border bg-foreground px-3 py-2 text-sm font-medium text-background hover:bg-foreground/90",
                     type: "submit",
-                    "Run"
+                    "data-command-run-button": "true",
+                    "data-running-label": copy.running_label(),
+                    "{copy.run_label()}"
                 }
+                p { class: "hidden text-xs text-foreground/60 sm:col-span-2", "aria-live": "polite", "data-command-run-status": "true" }
             }
           }
           if let Some(result) = result {
@@ -540,6 +544,7 @@ fn workbench_action_needs_text_input(action_id: &str) -> bool {
 
 #[component]
 fn CliCommandResult(preview: CliCommandPreview, locale: Locale, query: String) -> Element {
+    let copy = crate::i18n::copy(locale);
     let default_cli_arg = cli_input_placeholder(&preview.id);
     let needs_confirmation = preview.mutates_files;
 
@@ -558,7 +563,7 @@ fn CliCommandResult(preview: CliCommandPreview, locale: Locale, query: String) -
                 p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "execution" }
                 p { class: "mt-1 break-all text-sm font-medium text-foreground", "{preview.invocation}" }
             }
-            form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/", method: "get",
+            form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/", method: "get", "data-command-run-form": "true",
                 input { type: "hidden", name: "pane", value: "commands" }
                 input { type: "hidden", name: "sidebar", value: "0" }
                 input { type: "hidden", name: "lang", value: "{locale.slug()}" }
@@ -586,8 +591,11 @@ fn CliCommandResult(preview: CliCommandPreview, locale: Locale, query: String) -
                 button {
                     class: "rounded-lg border border-border bg-foreground px-3 py-2 text-sm font-medium text-background hover:bg-foreground/90",
                     type: "submit",
-                    "Run"
+                    "data-command-run-button": "true",
+                    "data-running-label": copy.running_label(),
+                    "{copy.run_label()}"
                 }
+                p { class: "hidden text-xs text-foreground/60 sm:col-span-2", "aria-live": "polite", "data-command-run-status": "true" }
             }
           }
           TypedResultView { result: preview.result.clone(), category: preview.category }
