@@ -97,6 +97,24 @@ async fn cli_information_command_renders_spec_browser_without_running_cli() {
 }
 
 #[tokio::test]
+async fn command_palette_and_spec_search_queries_are_independent() {
+    let server = test_server();
+    let (status, html) = text_response(
+        server.router(),
+        Request::builder()
+            .uri("/?pane=commands&cli=cli.show&query=show&spec_query=repository")
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(html.contains("name=\"query\" value=\"show\""));
+    assert!(html.contains("name=\"spec_query\" value=\"repository\""));
+    assert!(html.contains("spec_query=repository"));
+}
+
+#[tokio::test]
 async fn category_filter_and_typed_check_result_render_from_browser_route() {
     let server = test_server();
     let router = server.router();

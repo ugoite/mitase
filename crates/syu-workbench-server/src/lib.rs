@@ -957,6 +957,8 @@ struct WorkbenchViewQuery {
     #[serde(default)]
     query: Option<String>,
     #[serde(default)]
+    spec_query: Option<String>,
+    #[serde(default)]
     category: Option<String>,
     #[serde(default)]
     action: Option<String>,

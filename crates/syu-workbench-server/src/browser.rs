@@ -15,6 +15,9 @@ pub(super) async fn workbench_index(
     if let Some(query) = view.query {
         ui.set_query(query);
     }
+    if let Some(query) = view.spec_query {
+        ui.set_spec_query(query);
+    }
     ui.set_command_category(
         view.category
             .as_deref()

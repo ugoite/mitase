@@ -7,8 +7,8 @@ use crate::design::classes;
 use crate::i18n::{HelpTopic, Locale};
 use crate::model::{
     CliCommandEntry, CliCommandPreview, CommandCategory, CommandResultItem, CommandResultStatus,
-    SpecBrowserItem, SpecBrowserModel, TypedCommandResult, WorkbenchUiState, WorkspacePulseSummary,
-    workbench_action_category,
+    SpecBrowserDocument, SpecBrowserItem, SpecBrowserModel, SpecBrowserSection, TypedCommandResult,
+    WorkbenchUiState, WorkspacePulseSummary, workbench_action_category,
 };
 use dioxus::prelude::*;
 use std::collections::HashMap;
@@ -281,6 +281,12 @@ fn view_href(
     if !ui.command_query.trim().is_empty() {
         params.push(format!("query={}", urlencoding::encode(&ui.command_query)));
     }
+    if !ui.spec_query.trim().is_empty() {
+        params.push(format!(
+            "spec_query={}",
+            urlencoding::encode(&ui.spec_query)
+        ));
+    }
     if let Some(category) = ui.command_category {
         params.push(format!("category={}", category.slug()));
     }
@@ -430,7 +436,8 @@ pub fn WorkbenchStage(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
                             if let Some(browser) = ui.spec_browser.clone() {
                                 SpecInfoBrowser {
                                     browser,
-                                    query: ui.command_query.clone(),
+                                    command_query: ui.command_query.clone(),
+                                    spec_query: ui.spec_query.clone(),
                                     locale: ui.locale,
                                     command_id: preview.id.clone(),
                                     category: ui.command_category,
@@ -757,12 +764,14 @@ fn cli_command_opens_spec_browser(command_id: &str) -> bool {
 #[component]
 fn SpecInfoBrowser(
     browser: SpecBrowserModel,
-    query: String,
+    command_query: String,
+    spec_query: String,
     locale: Locale,
     command_id: String,
     category: Option<CommandCategory>,
 ) -> Element {
-    let selected = selected_spec_item(&browser, &query);
+    let browser = filtered_spec_browser(&browser, &spec_query);
+    let selected = selected_spec_item(&browser);
     let category_value = category.map_or("browse", CommandCategory::slug);
     rsx! {
         section { class: "rounded-lg border border-border bg-panel p-4 shadow-sm", "data-category-layout": "browse",
@@ -777,12 +786,13 @@ fn SpecInfoBrowser(
                     input { type: "hidden", name: "lang", value: "{locale.slug()}" }
                     input { type: "hidden", name: "cli", value: "{command_id}" }
                     input { type: "hidden", name: "category", value: "{category_value}" }
+                    input { type: "hidden", name: "query", value: "{command_query}" }
                     div { class: "min-w-0 flex-1",
                     p { class: "mb-1 text-[10px] uppercase tracking-[0.24em] text-foreground/45", "Search specs" }
                     input {
                         class: "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-foreground/20",
-                        name: "query",
-                        value: "{query}",
+                        name: "spec_query",
+                        value: "{spec_query}",
                         placeholder: "Search specs",
                     }
                     }
@@ -807,7 +817,7 @@ fn SpecInfoBrowser(
                                             for item in &document.items {
                                                 a {
                                                     class: spec_tree_item_class(selected.as_ref().map(|selected| selected.id.as_str()) == Some(item.id.as_str())),
-                                                    href: spec_item_href(&command_id, locale, category_value, &query, &item.id),
+                                                    href: spec_item_href(&command_id, locale, category_value, &command_query, &spec_query, &item.id),
                                                     title: "{item.title}",
                                                     "data-spec-tree-item": "true",
                                                     "data-spec-text": format!("{} {} {}", item.id, item.title, item.description.clone().unwrap_or_default()),
@@ -825,6 +835,8 @@ fn SpecInfoBrowser(
                 div { class: "min-w-0", "data-spec-detail": "true",
                     if let Some(item) = selected {
                         SpecModelCard { item }
+                    } else if !spec_query.trim().is_empty() {
+                        EmptyState { title: "No matching spec items".to_string(), body: "Try another ID, title, summary, or description.".to_string() }
                     } else {
                         EmptyState { title: "No spec item".to_string(), body: "The workspace spec tree is empty or still loading." }
                     }
@@ -838,15 +850,17 @@ fn spec_item_href(
     command_id: &str,
     locale: Locale,
     category: &str,
-    query: &str,
+    command_query: &str,
+    spec_query: &str,
     item_id: &str,
 ) -> String {
     format!(
-        "?pane=commands&sidebar=0&lang={}&cli={}&category={}&query={}&spec_item={}",
+        "?pane=commands&sidebar=0&lang={}&cli={}&category={}&query={}&spec_query={}&spec_item={}",
         locale.slug(),
         urlencoding::encode(command_id),
         urlencoding::encode(category),
-        urlencoding::encode(query),
+        urlencoding::encode(command_query),
+        urlencoding::encode(spec_query),
         urlencoding::encode(item_id),
     )
 }
@@ -859,25 +873,13 @@ fn spec_tree_item_class(active: bool) -> &'static str {
     }
 }
 
-fn selected_spec_item(browser: &SpecBrowserModel, query: &str) -> Option<SpecBrowserItem> {
-    let needle = query.trim().to_lowercase();
+fn selected_spec_item(browser: &SpecBrowserModel) -> Option<SpecBrowserItem> {
     browser
         .sections
         .iter()
         .flat_map(|section| section.documents.iter())
         .flat_map(|document| document.items.iter())
-        .find(|item| {
-            browser.selected_item_id.as_deref() == Some(item.id.as_str())
-                || (!needle.is_empty()
-                    && format!(
-                        "{} {} {}",
-                        item.id,
-                        item.title,
-                        item.description.clone().unwrap_or_default()
-                    )
-                    .to_lowercase()
-                    .contains(&needle))
-        })
+        .find(|item| browser.selected_item_id.as_deref() == Some(item.id.as_str()))
         .cloned()
         .or_else(|| {
             browser
@@ -888,6 +890,59 @@ fn selected_spec_item(browser: &SpecBrowserModel, query: &str) -> Option<SpecBro
                 .next()
                 .cloned()
         })
+}
+
+fn filtered_spec_browser(browser: &SpecBrowserModel, query: &str) -> SpecBrowserModel {
+    let needle = query.trim().to_lowercase();
+    if needle.is_empty() {
+        return browser.clone();
+    }
+
+    let sections = browser
+        .sections
+        .iter()
+        .filter_map(|section| {
+            let documents = section
+                .documents
+                .iter()
+                .filter_map(|document| {
+                    let items = document
+                        .items
+                        .iter()
+                        .filter(|item| spec_item_matches(item, &needle))
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    (!items.is_empty()).then(|| SpecBrowserDocument {
+                        path: document.path.clone(),
+                        title: document.title.clone(),
+                        folder_segments: document.folder_segments.clone(),
+                        items,
+                    })
+                })
+                .collect::<Vec<_>>();
+            (!documents.is_empty()).then(|| SpecBrowserSection {
+                label: section.label.clone(),
+                documents,
+            })
+        })
+        .collect();
+
+    SpecBrowserModel {
+        sections,
+        selected_item_id: browser.selected_item_id.clone(),
+    }
+}
+
+fn spec_item_matches(item: &SpecBrowserItem, needle: &str) -> bool {
+    format!(
+        "{} {} {} {}",
+        item.id,
+        item.title,
+        item.summary.clone().unwrap_or_default(),
+        item.description.clone().unwrap_or_default()
+    )
+    .to_lowercase()
+    .contains(needle)
 }
 
 #[component]

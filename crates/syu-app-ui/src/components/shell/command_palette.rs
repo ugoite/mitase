@@ -122,6 +122,12 @@ fn category_href(
     if !ui.command_query.trim().is_empty() {
         params.push(format!("query={}", urlencoding::encode(&ui.command_query)));
     }
+    if !ui.spec_query.trim().is_empty() {
+        params.push(format!(
+            "spec_query={}",
+            urlencoding::encode(&ui.spec_query)
+        ));
+    }
     if let Some(category) = category {
         params.push(format!("category={}", category.slug()));
     }

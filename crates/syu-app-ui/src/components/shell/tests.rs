@@ -155,6 +155,7 @@ fn every_result_category_has_a_distinct_summary_surface() {
 fn spec_browse_commands_render_search_list_and_detail_without_run_form() {
     let mut ui = build_demo_state();
     ui.set_query("REQ-WORKBENCH");
+    ui.set_spec_query("browser");
     ui.select_cli_command("cli.list");
     ui.spec_browser = Some(SpecBrowserModel {
         sections: Vec::new(),
@@ -171,7 +172,87 @@ fn spec_browse_commands_render_search_list_and_detail_without_run_form() {
     assert!(html.contains("style=\"max-height: 30rem\""));
     assert!(html.contains("data-spec-search=\"true\""));
     assert!(html.contains("data-spec-detail=\"true\""));
+    assert!(html.contains("name=\"query\" value=\"REQ-WORKBENCH\""));
+    assert!(html.contains("name=\"spec_query\" value=\"browser\""));
     assert!(!html.contains("name=\"run\" value=\"1\""));
+}
+
+#[test]
+fn spec_browser_filters_tree_without_changing_palette_query() {
+    let mut ui = build_demo_state();
+    ui.set_query("show");
+    ui.set_spec_query("matching summary");
+    ui.select_cli_command("cli.show");
+    ui.spec_browser = Some(SpecBrowserModel {
+        sections: vec![SpecBrowserSection {
+            label: "Requirements".to_string(),
+            documents: vec![SpecBrowserDocument {
+                path: "requirements.yaml".to_string(),
+                title: "Requirements".to_string(),
+                folder_segments: Vec::new(),
+                items: vec![
+                    test_spec_item("REQ-MATCH", "Matching item", Some("matching summary")),
+                    test_spec_item("REQ-HIDDEN", "Hidden item", Some("unrelated")),
+                ],
+            }],
+        }],
+        selected_item_id: Some("REQ-HIDDEN".to_string()),
+    });
+
+    let html = render_element(rsx! {
+        AppShell { ui, active_pane: WorkbenchPane::Commands, sidebar_open: false }
+    });
+
+    assert!(html.contains("name=\"query\" value=\"show\""));
+    assert!(html.contains("name=\"spec_query\" value=\"matching summary\""));
+    assert!(html.contains("REQ-MATCH"));
+    assert!(!html.contains("REQ-HIDDEN"));
+}
+
+#[test]
+fn spec_browser_renders_empty_state_for_no_matches() {
+    let mut ui = build_demo_state();
+    ui.set_spec_query("missing");
+    ui.select_cli_command("cli.search");
+    ui.spec_browser = Some(SpecBrowserModel {
+        sections: vec![SpecBrowserSection {
+            label: "Requirements".to_string(),
+            documents: vec![SpecBrowserDocument {
+                path: "requirements.yaml".to_string(),
+                title: "Requirements".to_string(),
+                folder_segments: Vec::new(),
+                items: vec![test_spec_item("REQ-ONLY", "Only item", None)],
+            }],
+        }],
+        selected_item_id: Some("REQ-ONLY".to_string()),
+    });
+
+    let html = render_element(rsx! {
+        AppShell { ui, active_pane: WorkbenchPane::Commands, sidebar_open: false }
+    });
+
+    assert!(html.contains("No matching spec items"));
+    assert!(!html.contains("REQ-ONLY"));
+}
+
+fn test_spec_item(id: &str, title: &str, summary: Option<&str>) -> SpecBrowserItem {
+    SpecBrowserItem {
+        kind: "requirement".to_string(),
+        id: id.to_string(),
+        title: title.to_string(),
+        summary: summary.map(str::to_string),
+        description: None,
+        product_design_principle: None,
+        coding_guideline: None,
+        priority: None,
+        status: None,
+        linked_philosophies: Vec::new(),
+        linked_policies: Vec::new(),
+        linked_requirements: Vec::new(),
+        linked_features: Vec::new(),
+        tests: Vec::new(),
+        implementations: Vec::new(),
+    }
 }
 
 #[test]
