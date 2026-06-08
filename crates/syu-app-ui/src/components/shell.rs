@@ -329,6 +329,9 @@ fn view_href(
             urlencoding::encode(&ui.spec_query)
         ));
     }
+    if !ui.spec_kind.trim().is_empty() {
+        params.push(format!("spec_kind={}", urlencoding::encode(&ui.spec_kind)));
+    }
     if let Some(category) = ui.command_category {
         params.push(format!("category={}", category.slug()));
     }
@@ -510,6 +513,7 @@ pub fn WorkbenchStage(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
                                     browser,
                                     command_query: ui.command_query.clone(),
                                     spec_query: ui.spec_query.clone(),
+                                    spec_kind: ui.spec_kind.clone(),
                                     locale: ui.locale,
                                     command_id: preview.id.clone(),
                                     category: ui.command_category,
@@ -911,17 +915,141 @@ fn cli_command_opens_spec_browser(command_id: &str) -> bool {
         .any(|command| command.id == command_id && command.opens_spec_browser)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SpecKindTab {
+    Philosophy,
+    Policy,
+    Requirement,
+    Feature,
+}
+
+impl SpecKindTab {
+    const ALL: [Self; 4] = [
+        Self::Philosophy,
+        Self::Policy,
+        Self::Requirement,
+        Self::Feature,
+    ];
+
+    const fn slug(self) -> &'static str {
+        match self {
+            Self::Philosophy => "philosophy",
+            Self::Policy => "policy",
+            Self::Requirement => "requirement",
+            Self::Feature => "feature",
+        }
+    }
+
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Philosophy => "Philosophy",
+            Self::Policy => "Policy",
+            Self::Requirement => "Requirement",
+            Self::Feature => "Feature",
+        }
+    }
+
+    fn from_slug(value: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|kind| kind.slug() == value)
+    }
+
+    fn matches_section(self, label: &str) -> bool {
+        matches!(
+            (self, label.to_ascii_lowercase().as_str()),
+            (Self::Philosophy, "philosophy")
+                | (Self::Policy, "policies")
+                | (Self::Requirement, "requirements")
+                | (Self::Feature, "features")
+        )
+    }
+}
+
+fn active_spec_kind(browser: &SpecBrowserModel, spec_kind: &str) -> SpecKindTab {
+    SpecKindTab::from_slug(spec_kind.trim())
+        .filter(|kind| {
+            browser
+                .sections
+                .iter()
+                .any(|section| kind.matches_section(&section.label))
+        })
+        .unwrap_or_else(|| {
+            SpecKindTab::ALL
+                .into_iter()
+                .find(|kind| {
+                    browser
+                        .sections
+                        .iter()
+                        .any(|section| kind.matches_section(&section.label))
+                })
+                .unwrap_or(SpecKindTab::Requirement)
+        })
+}
+
+fn filter_spec_browser_by_kind(browser: &SpecBrowserModel, kind: SpecKindTab) -> SpecBrowserModel {
+    SpecBrowserModel {
+        sections: browser
+            .sections
+            .iter()
+            .filter(|section| kind.matches_section(&section.label))
+            .cloned()
+            .collect(),
+        selected_item_id: browser.selected_item_id.clone(),
+    }
+}
+
+fn spec_browser_items(browser: &SpecBrowserModel) -> Vec<SpecBrowserItem> {
+    browser
+        .sections
+        .iter()
+        .flat_map(|section| section.documents.iter())
+        .flat_map(|document| document.items.iter())
+        .cloned()
+        .collect()
+}
+
+fn spec_kind_tab_class(active: bool) -> &'static str {
+    if active {
+        "whitespace-nowrap rounded-lg border border-foreground bg-foreground px-3 py-2 text-xs font-medium text-background"
+    } else {
+        "whitespace-nowrap rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground/70 hover:bg-panel-muted"
+    }
+}
+
+fn spec_kind_href(
+    command_id: &str,
+    locale: Locale,
+    category: &str,
+    command_query: &str,
+    spec_query: &str,
+    kind: SpecKindTab,
+) -> String {
+    format!(
+        "?pane=items&sidebar=1&lang={}&cli={}&category={}&query={}&spec_query={}&spec_kind={}",
+        locale.slug(),
+        urlencoding::encode(command_id),
+        urlencoding::encode(category),
+        urlencoding::encode(command_query),
+        urlencoding::encode(spec_query),
+        kind.slug(),
+    )
+}
+
 #[component]
 fn SpecInfoBrowser(
     browser: SpecBrowserModel,
     command_query: String,
     spec_query: String,
+    spec_kind: String,
     locale: Locale,
     command_id: String,
     category: Option<CommandCategory>,
 ) -> Element {
     let browser = filtered_spec_browser(&browser, &spec_query);
+    let active_kind = active_spec_kind(&browser, &spec_kind);
+    let browser = filter_spec_browser_by_kind(&browser, active_kind);
     let selected = selected_spec_item(&browser);
+    let selected_id = selected.as_ref().map(|item| item.id.clone());
+    let detail_items = spec_browser_items(&browser);
     let category_value = category.map_or("browse", CommandCategory::slug);
     rsx! {
         section { class: "rounded-lg border border-border bg-panel p-4 shadow-sm", "data-category-layout": "browse",
@@ -935,19 +1063,19 @@ fn SpecInfoBrowser(
                     a { class: "rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-panel-muted", href: "?pane=items&sidebar=1&cli=cli.init", "Initialize workspace" }
                 }
             }
-            div { class: "mb-3 grid gap-3 lg:grid-cols-3", "data-spec-browser-grid": "true",
-                form {
-                    class: "flex items-end gap-2",
-                    "data-spec-search": "true",
-                    action: "/",
-                    method: "get",
-                    input { type: "hidden", name: "pane", value: "items" }
-                    input { type: "hidden", name: "sidebar", value: "0" }
-                    input { type: "hidden", name: "lang", value: "{locale.slug()}" }
-                    input { type: "hidden", name: "cli", value: "{command_id}" }
-                    input { type: "hidden", name: "category", value: "{category_value}" }
-                    input { type: "hidden", name: "query", value: "{command_query}" }
-                    div { class: "min-w-0 flex-1",
+            form {
+                class: "mb-3 flex items-end gap-2",
+                "data-spec-search": "true",
+                action: "/",
+                method: "get",
+                input { type: "hidden", name: "pane", value: "items" }
+                input { type: "hidden", name: "sidebar", value: "0" }
+                input { type: "hidden", name: "lang", value: "{locale.slug()}" }
+                input { type: "hidden", name: "cli", value: "{command_id}" }
+                input { type: "hidden", name: "category", value: "{category_value}" }
+                input { type: "hidden", name: "query", value: "{command_query}" }
+                input { type: "hidden", name: "spec_kind", value: "{active_kind.slug()}" }
+                div { class: "min-w-0 flex-1",
                     p { class: "mb-1 text-[10px] uppercase tracking-[0.24em] text-foreground/45", "Search specs" }
                     input {
                         class: "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-foreground/20",
@@ -955,13 +1083,25 @@ fn SpecInfoBrowser(
                         value: "{spec_query}",
                         placeholder: "Search specs",
                     }
-                    }
-                    button {
-                        class: "rounded-lg border border-border bg-foreground px-3 py-2 text-sm font-medium text-background hover:bg-foreground/90",
-                        type: "submit",
-                        "Search"
+                }
+                button {
+                    class: "rounded-lg border border-border bg-foreground px-3 py-2 text-sm font-medium text-background hover:bg-foreground/90",
+                    type: "submit",
+                    "Search"
+                }
+            }
+            nav { class: "mb-3 flex w-full min-w-0 flex-nowrap gap-2 overflow-x-auto border-b border-border pb-3", "aria-label": "Spec kind tabs",
+                for kind in SpecKindTab::ALL {
+                    a {
+                        class: spec_kind_tab_class(kind == active_kind),
+                        href: spec_kind_href(&command_id, locale, &category_value, &command_query, &spec_query, kind),
+                        aria_current: if kind == active_kind { "page" } else { "false" },
+                        "data-spec-kind-tab": kind.slug(),
+                        "{kind.label()}"
                     }
                 }
+            }
+            div { class: "mb-3 grid gap-3 lg:grid-cols-3", "data-spec-browser-grid": "true", "data-spec-kind-panel": active_kind.slug(),
                 div { class: "rounded-lg border border-border bg-background p-2",
                     p { class: "px-2 pb-2 text-[10px] uppercase tracking-[0.24em] text-foreground/45", "Spec tree" }
                     nav { class: "overflow-auto", style: "max-height: 30rem", "aria-label": "Spec tree",
@@ -976,14 +1116,21 @@ fn SpecInfoBrowser(
                                     category: category_value.to_string(),
                                     command_query: command_query.clone(),
                                     spec_query: spec_query.clone(),
+                                    spec_kind: active_kind.slug().to_string(),
                                 }
                             }
                         }
                     }
                 }
                 div { class: "min-w-0", "data-spec-detail": "true",
-                    if let Some(item) = selected {
-                        SpecModelCard { item }
+                    if !detail_items.is_empty() {
+                        for item in detail_items {
+                            div {
+                                hidden: selected_id.as_deref() != Some(item.id.as_str()),
+                                "data-spec-detail-card": item.id.clone(),
+                                SpecModelCard { item: item.clone() }
+                            }
+                        }
                     } else if !spec_query.trim().is_empty() {
                         EmptyState { title: "No matching spec items".to_string(), body: "Try another ID, title, summary, or description.".to_string() }
                     } else {
@@ -1004,6 +1151,7 @@ fn SpecSectionTree(
     category: String,
     command_query: String,
     spec_query: String,
+    spec_kind: String,
 ) -> Element {
     let tree = SpecFolderNode::from_section(&section);
     rsx! {
@@ -1017,6 +1165,7 @@ fn SpecSectionTree(
                     category: category.clone(),
                     command_query: command_query.clone(),
                     spec_query: spec_query.clone(),
+                    spec_kind: spec_kind.clone(),
                 }
             }
             for folder in &tree.folders {
@@ -1028,6 +1177,7 @@ fn SpecSectionTree(
                     category: category.clone(),
                     command_query: command_query.clone(),
                     spec_query: spec_query.clone(),
+                    spec_kind: spec_kind.clone(),
                 }
             }
         }
@@ -1115,6 +1265,7 @@ fn SpecFolderTree(
     category: String,
     command_query: String,
     spec_query: String,
+    spec_kind: String,
 ) -> Element {
     rsx! {
         details {
@@ -1123,8 +1274,8 @@ fn SpecFolderTree(
             "data-spec-folder": "true",
             "data-spec-folder-path": folder.path.clone(),
             summary { class: "flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-foreground/65 hover:bg-panel-muted",
-                span { class: "w-3 text-[10px] text-foreground/40 group-open:rotate-90", ">" }
-                span { class: "text-[10px] uppercase tracking-[0.12em] text-foreground/40", "dir" }
+                span { class: "w-3 text-[10px] text-foreground/40 group-open:rotate-90", "data-spec-folder-toggle": "true", ">" }
+                span { class: "text-[10px] uppercase tracking-[0.12em] text-foreground/40", "data-spec-folder-icon": "true", "folder" }
                 span { class: "truncate", "{folder.name}" }
             }
             div { class: "ml-3 grid gap-0.5 border-l border-border pl-2",
@@ -1137,6 +1288,7 @@ fn SpecFolderTree(
                         category: category.clone(),
                         command_query: command_query.clone(),
                         spec_query: spec_query.clone(),
+                        spec_kind: spec_kind.clone(),
                     }
                 }
                 for child in &folder.folders {
@@ -1148,6 +1300,7 @@ fn SpecFolderTree(
                         category: category.clone(),
                         command_query: command_query.clone(),
                         spec_query: spec_query.clone(),
+                        spec_kind: spec_kind.clone(),
                     }
                 }
             }
@@ -1164,6 +1317,7 @@ fn SpecDocumentTree(
     category: String,
     command_query: String,
     spec_query: String,
+    spec_kind: String,
 ) -> Element {
     rsx! {
         details {
@@ -1172,7 +1326,7 @@ fn SpecDocumentTree(
             "data-spec-document": "true",
             "data-spec-document-path": document.path.clone(),
             summary { class: "flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-foreground/65 hover:bg-panel-muted",
-                span { class: "w-3 text-[10px] text-foreground/40 group-open:rotate-90", ">" }
+                span { class: "w-3 text-[10px] text-foreground/40 group-open:rotate-90", "data-spec-document-toggle": "true", ">" }
                 span { class: "text-[10px] uppercase tracking-[0.12em] text-foreground/40", "doc" }
                 span { class: "truncate", "{document.title}" }
             }
@@ -1180,9 +1334,10 @@ fn SpecDocumentTree(
                 for item in &document.items {
                     a {
                         class: spec_tree_item_class(selected_id.as_deref() == Some(item.id.as_str())),
-                        href: spec_item_href(&command_id, locale, &category, &command_query, &spec_query, &item.id),
+                        href: spec_item_href(&command_id, locale, &category, &command_query, &spec_query, &spec_kind, &item.id),
                         title: "{item.title}",
                         "data-spec-tree-item": "true",
+                        "data-spec-item-target": item.id.clone(),
                         "data-spec-text": format!("{} {} {}", item.id, item.title, item.description.clone().unwrap_or_default()),
                         span { class: "truncate text-xs font-medium", "{item.id}" }
                         span { class: "truncate text-[11px] text-foreground/55", "{item.title}" }
@@ -1199,15 +1354,17 @@ fn spec_item_href(
     category: &str,
     command_query: &str,
     spec_query: &str,
+    spec_kind: &str,
     item_id: &str,
 ) -> String {
     format!(
-        "?pane=items&sidebar=1&lang={}&cli={}&category={}&query={}&spec_query={}&spec_item={}",
+        "?pane=items&sidebar=1&lang={}&cli={}&category={}&query={}&spec_query={}&spec_kind={}&spec_item={}",
         locale.slug(),
         urlencoding::encode(command_id),
         urlencoding::encode(category),
         urlencoding::encode(command_query),
         urlencoding::encode(spec_query),
+        urlencoding::encode(spec_kind),
         urlencoding::encode(item_id),
     )
 }
@@ -1608,6 +1765,7 @@ fn selected_pane_detail(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Ele
                         browser,
                         command_query: ui.command_query.clone(),
                         spec_query: ui.spec_query.clone(),
+                        spec_kind: ui.spec_kind.clone(),
                         locale: ui.locale,
                         command_id: "cli.show".to_string(),
                         category: Some(CommandCategory::Browse),

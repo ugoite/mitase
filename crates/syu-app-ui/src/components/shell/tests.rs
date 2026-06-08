@@ -236,9 +236,55 @@ fn spec_browse_commands_render_search_list_and_detail_without_run_form() {
     assert!(html.contains("style=\"max-height: 30rem\""));
     assert!(html.contains("data-spec-search=\"true\""));
     assert!(html.contains("data-spec-detail=\"true\""));
+    assert!(html.contains("aria-label=\"Spec kind tabs\""));
+    assert!(html.contains("data-spec-kind-tab=\"philosophy\""));
+    assert!(html.contains("data-spec-kind-tab=\"policy\""));
+    assert!(html.contains("data-spec-kind-tab=\"requirement\""));
+    assert!(html.contains("data-spec-kind-tab=\"feature\""));
     assert!(html.contains("name=\"query\" value=\"REQ-WORKBENCH\""));
     assert!(html.contains("name=\"spec_query\" value=\"browser\""));
     assert!(!html.contains("name=\"run\" value=\"1\""));
+}
+
+#[test]
+fn spec_browser_kind_tabs_filter_to_selected_layer() {
+    let mut ui = build_demo_state();
+    ui.set_spec_kind("requirement");
+    ui.select_cli_command("cli.show");
+    ui.spec_browser = Some(SpecBrowserModel {
+        sections: vec![
+            SpecBrowserSection {
+                label: "Philosophy".to_string(),
+                documents: vec![SpecBrowserDocument {
+                    path: "philosophy.yaml".to_string(),
+                    title: "Philosophy".to_string(),
+                    folder_segments: Vec::new(),
+                    items: vec![test_spec_item("PHIL-ONLY", "Hidden philosophy", None)],
+                }],
+            },
+            SpecBrowserSection {
+                label: "Requirements".to_string(),
+                documents: vec![SpecBrowserDocument {
+                    path: "requirements.yaml".to_string(),
+                    title: "Requirements".to_string(),
+                    folder_segments: Vec::new(),
+                    items: vec![test_spec_item("REQ-ONLY", "Visible requirement", None)],
+                }],
+            },
+        ],
+        selected_item_id: Some("REQ-ONLY".to_string()),
+    });
+
+    let html = render_element(rsx! {
+        AppShell { ui, active_pane: WorkbenchPane::Items, sidebar_open: true }
+    });
+
+    assert!(html.contains("data-spec-kind-panel=\"requirement\""));
+    assert!(html.contains("data-spec-kind-tab=\"requirement\""));
+    assert!(html.contains("aria-current=\"page\""));
+    assert!(html.contains("name=\"spec_kind\" value=\"requirement\""));
+    assert!(html.contains("REQ-ONLY"));
+    assert!(!html.contains("PHIL-ONLY"));
 }
 
 #[test]
@@ -318,9 +364,14 @@ fn spec_browser_groups_documents_into_explorer_folders() {
         1,
         "{html}"
     );
+    assert!(html.contains("data-spec-folder-icon=\"true\""));
+    assert!(html.contains("data-spec-folder-toggle=\"true\""));
+    assert!(html.contains("folder"));
     assert!(!html.contains("features / cli"));
     assert!(html.contains("data-spec-document-path=\"features/cli/commands.yaml\""));
     assert!(html.contains("data-spec-document-path=\"features/cli/navigation.yaml\""));
+    assert!(html.contains("data-spec-item-target=\"FEAT-CLI-001\""));
+    assert!(html.contains("data-spec-detail-card=\"FEAT-CLI-001\""));
     assert!(html.contains("FEAT-CLI-001"));
     assert!(html.contains("FEAT-CLI-002"));
 }

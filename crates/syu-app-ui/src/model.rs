@@ -298,6 +298,7 @@ pub struct WorkbenchUiState {
     pub command_palette_open: bool,
     pub command_query: String,
     pub spec_query: String,
+    pub spec_kind: String,
     pub command_category: Option<CommandCategory>,
     pub selected_action_id: Option<WorkbenchActionId>,
     pub selected_cli_command_id: Option<String>,
@@ -316,6 +317,7 @@ impl WorkbenchUiState {
             command_palette_open: true,
             command_query: String::new(),
             spec_query: String::new(),
+            spec_kind: String::new(),
             command_category: None,
             selected_action_id: None,
             selected_cli_command_id: None,
@@ -339,6 +341,7 @@ impl WorkbenchUiState {
             command_palette_open: true,
             command_query: String::new(),
             spec_query: String::new(),
+            spec_kind: String::new(),
             command_category: None,
             selected_action_id: None,
             selected_cli_command_id: None,
@@ -365,6 +368,10 @@ impl WorkbenchUiState {
 
     pub fn set_spec_query(&mut self, query: impl Into<String>) {
         self.spec_query = query.into();
+    }
+
+    pub fn set_spec_kind(&mut self, kind: impl Into<String>) {
+        self.spec_kind = kind.into();
     }
 
     pub fn set_command_category(&mut self, category: Option<CommandCategory>) {

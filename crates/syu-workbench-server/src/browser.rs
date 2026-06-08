@@ -55,6 +55,9 @@ async fn render_workbench(
     if let Some(query) = view.spec_query {
         ui.set_spec_query(query);
     }
+    if let Some(kind) = view.spec_kind {
+        ui.set_spec_kind(kind);
+    }
     ui.set_command_category(
         view.category
             .as_deref()
@@ -895,6 +898,25 @@ pub(super) fn workbench_document(shell: String, locale: Locale) -> String {
             for (const candidate of surface.querySelectorAll('[data-result-item]')) {{
               candidate.setAttribute('aria-current', candidate === item ? 'page' : 'false');
             }}
+          }});
+        }}
+        for (const item of root.querySelectorAll('[data-spec-tree-item]:not([data-enhanced])')) {{
+          item.dataset.enhanced = 'true';
+          item.addEventListener('click', (event) => {{
+            const id = item.dataset.specItemTarget;
+            const surface = item.closest('[data-spec-kind-panel]');
+            if (!id || !surface) return;
+            const detail = surface.querySelector(`[data-spec-detail-card="${{CSS.escape(id)}}"]`);
+            if (!detail) return;
+            event.preventDefault();
+            for (const card of surface.querySelectorAll('[data-spec-detail-card]')) {{
+              card.hidden = card !== detail;
+            }}
+            for (const candidate of surface.querySelectorAll('[data-spec-tree-item]')) {{
+              candidate.setAttribute('aria-current', candidate === item ? 'page' : 'false');
+            }}
+            const url = new URL(item.href, window.location.href);
+            history.pushState({{ syuWorkbench: true }}, '', url.href);
           }});
         }}
         for (const form of root.querySelectorAll('form:not([data-enhanced])')) {{
