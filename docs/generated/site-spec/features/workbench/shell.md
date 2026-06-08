@@ -38,7 +38,7 @@ description: "Generated reference for docs/syu/features/workbench/shell.yaml"
           - AppShell
           - CommandPalette
           - WorkbenchPane
-          - WorkspacePulse
+          - RequestIntakeCanvas
           - GoalRail
           - GoalCanvas
           - EvidencePanel
@@ -94,7 +94,7 @@ features:
             - AppShell
             - CommandPalette
             - WorkbenchPane
-            - WorkspacePulse
+            - RequestIntakeCanvas
             - GoalRail
             - GoalCanvas
             - EvidencePanel
