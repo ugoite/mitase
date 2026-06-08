@@ -55,6 +55,42 @@ fn command_palette_preserves_selected_locale_across_search_links_and_run_forms()
 }
 
 #[test]
+fn navigation_links_clear_command_context_but_keep_locale() {
+    let mut ui = build_demo_state();
+    ui.set_locale(Locale::Ja);
+    ui.set_query("show");
+    ui.set_spec_query("workbench");
+    ui.select_cli_command("cli.show");
+
+    let html = render_element(rsx! {
+        AppShell { ui, active_pane: WorkbenchPane::Items, sidebar_open: true }
+    });
+
+    assert!(html.contains("href=\"?pane=pulse&#38;sidebar=1&#38;lang=ja\""));
+    assert!(html.contains("href=\"?pane=branch&#38;sidebar=1&#38;lang=ja\""));
+    assert!(html.contains("href=\"?pane=diagnostics&#38;sidebar=1&#38;lang=ja\""));
+    assert!(!html.contains("href=\"?pane=pulse&#38;sidebar=1&#38;lang=ja&#38;cli=cli.show"));
+    assert!(!html.contains("href=\"?pane=branch&#38;sidebar=1&#38;lang=ja&#38;cli=cli.show"));
+    assert!(!html.contains("href=\"?pane=diagnostics&#38;sidebar=1&#38;lang=ja&#38;cli=cli.show"));
+}
+
+#[test]
+fn role_subview_links_clear_command_context() {
+    let mut ui = build_demo_state();
+    ui.set_query("show");
+    ui.select_cli_command("cli.show");
+
+    let html = render_element(rsx! {
+        AppShell { ui, active_pane: WorkbenchPane::Pulse, sidebar_open: true }
+    });
+
+    assert!(html.contains("href=\"?pane=request&#38;sidebar=1&#38;lang=en\""));
+    assert!(html.contains("href=\"?pane=goals&#38;sidebar=1&#38;lang=en\""));
+    assert!(!html.contains("href=\"?pane=request&#38;sidebar=1&#38;lang=en&#38;cli=cli.show"));
+    assert!(!html.contains("href=\"?pane=goals&#38;sidebar=1&#38;lang=en&#38;cli=cli.show"));
+}
+
+#[test]
 fn runnable_cli_forms_preserve_selected_locale() {
     let mut ui = build_demo_state();
     ui.set_locale(Locale::Ja);
@@ -231,6 +267,58 @@ fn spec_browser_filters_tree_without_changing_palette_query() {
     assert!(html.contains("name=\"spec_query\" value=\"matching summary\""));
     assert!(html.contains("REQ-MATCH"));
     assert!(!html.contains("REQ-HIDDEN"));
+}
+
+#[test]
+fn spec_browser_groups_documents_into_explorer_folders() {
+    let mut ui = build_demo_state();
+    ui.select_cli_command("cli.show");
+    ui.spec_browser = Some(SpecBrowserModel {
+        sections: vec![SpecBrowserSection {
+            label: "Features".to_string(),
+            documents: vec![
+                SpecBrowserDocument {
+                    path: "features/cli/commands.yaml".to_string(),
+                    title: "Commands".to_string(),
+                    folder_segments: vec!["features".to_string(), "cli".to_string()],
+                    items: vec![test_spec_item("FEAT-CLI-001", "Command palette", None)],
+                },
+                SpecBrowserDocument {
+                    path: "features/cli/navigation.yaml".to_string(),
+                    title: "Navigation".to_string(),
+                    folder_segments: vec!["features".to_string(), "cli".to_string()],
+                    items: vec![test_spec_item("FEAT-CLI-002", "Navigation", None)],
+                },
+                SpecBrowserDocument {
+                    path: "features/workbench/items.yaml".to_string(),
+                    title: "Items".to_string(),
+                    folder_segments: vec!["features".to_string(), "workbench".to_string()],
+                    items: vec![test_spec_item("FEAT-WB-001", "Items tree", None)],
+                },
+            ],
+        }],
+        selected_item_id: Some("FEAT-CLI-001".to_string()),
+    });
+
+    let html = render_element(rsx! {
+        AppShell { ui, active_pane: WorkbenchPane::Items, sidebar_open: true }
+    });
+
+    assert_eq!(
+        html.matches("data-spec-folder-path=\"cli\"").count(),
+        1,
+        "{html}"
+    );
+    assert_eq!(
+        html.matches("data-spec-folder-path=\"workbench\"").count(),
+        1,
+        "{html}"
+    );
+    assert!(!html.contains("features / cli"));
+    assert!(html.contains("data-spec-document-path=\"features/cli/commands.yaml\""));
+    assert!(html.contains("data-spec-document-path=\"features/cli/navigation.yaml\""));
+    assert!(html.contains("FEAT-CLI-001"));
+    assert!(html.contains("FEAT-CLI-002"));
 }
 
 #[test]

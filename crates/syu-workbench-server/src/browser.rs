@@ -156,7 +156,8 @@ async fn render_workbench(
         ui.payload.state.goals.selected_goal_id = Some(goal_id);
     }
     let requested_pane = view.pane.as_deref();
-    let active_pane = if matches!(requested_pane, Some("commands" | "palette")) {
+    let requested_is_palette = matches!(requested_pane, Some("commands" | "palette"));
+    let active_pane = if requested_is_palette {
         ui.selected_cli_command_id
             .as_deref()
             .map(WorkbenchPane::for_cli)
@@ -167,6 +168,23 @@ async fn render_workbench(
             .and_then(WorkbenchPane::from_slug)
             .unwrap_or(WorkbenchPane::Pulse)
     };
+    if !requested_is_palette {
+        if ui
+            .selected_cli_command_id
+            .as_deref()
+            .is_some_and(|id| WorkbenchPane::for_cli(id).role() != active_pane.role())
+        {
+            ui.selected_cli_command_id = None;
+            ui.cli_preview = None;
+        }
+        if ui
+            .selected_action_id
+            .is_some_and(|id| WorkbenchPane::for_action(id).role() != active_pane.role())
+        {
+            ui.selected_action_id = None;
+            ui.preview = None;
+        }
+    }
     let sidebar_open = view
         .sidebar
         .as_deref()

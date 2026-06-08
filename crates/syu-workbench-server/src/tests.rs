@@ -165,6 +165,70 @@ async fn role_menu_routes_commands_to_items_and_diagnostics() {
 }
 
 #[tokio::test]
+async fn explicit_navigation_panes_drop_stale_cli_selection() {
+    let server = test_server();
+    let router = server.router();
+    let stale = "cli=cli.show&spec_item=REQ-WORKBENCH-001";
+
+    let (_, items_html) = text_response(
+        router.clone(),
+        Request::builder()
+            .uri(format!("/?pane=items&sidebar=1&lang=en&{stale}"))
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    assert!(items_html.contains("href=\"?pane=pulse&#38;sidebar=1&#38;lang=en\""));
+    assert!(!items_html.contains("href=\"?pane=pulse&#38;sidebar=1&#38;lang=en&#38;cli=cli.show"));
+
+    let (_, work_html) = text_response(
+        router.clone(),
+        Request::builder()
+            .uri(format!("/?pane=pulse&sidebar=1&lang=en&{stale}"))
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    assert!(work_html.contains(">Work</h1>"));
+    assert!(work_html.contains("data-role-subviews=\"true\""));
+    assert!(!work_html.contains("data-items-toolbar=\"true\""));
+
+    let (_, scope_html) = text_response(
+        router.clone(),
+        Request::builder()
+            .uri(format!("/?pane=branch&sidebar=1&lang=en&{stale}"))
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    assert!(scope_html.contains(">Scope</h1>"));
+    assert!(scope_html.contains("data-scope-overview=\"true\""));
+    assert!(!scope_html.contains("data-items-toolbar=\"true\""));
+
+    let (_, diagnostics_html) = text_response(
+        router.clone(),
+        Request::builder()
+            .uri(format!("/?pane=diagnostics&sidebar=1&lang=en&{stale}"))
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    assert!(diagnostics_html.contains(">Diagnostics</h1>"));
+    assert!(diagnostics_html.contains("data-diagnostics-overview=\"true\""));
+    assert!(!diagnostics_html.contains("data-items-toolbar=\"true\""));
+
+    let (_, palette_html) = text_response(
+        router,
+        Request::builder()
+            .uri(format!("/?pane=commands&sidebar=1&lang=en&{stale}"))
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    assert!(palette_html.contains("data-items-toolbar=\"true\""));
+}
+
+#[tokio::test]
 async fn diagnostics_refresh_all_runs_unique_tools_and_skips_missing_goal() {
     let server = test_server();
     let (status, html) = text_response(

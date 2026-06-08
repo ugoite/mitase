@@ -112,9 +112,8 @@ impl WorkbenchPane {
         match command_id {
             "cli.browse" | "cli.list" | "cli.show" | "cli.search" | "cli.explain"
             | "cli.relate" | "cli.log" | "cli.add" | "cli.init" | "cli.templates" => Self::Items,
-            "cli.audit" | "cli.doctor" | "cli.validate" | "cli.report" | "cli.task.check" => {
-                Self::Diagnostics
-            }
+            "cli.audit" | "cli.doctor" | "cli.validate" | "cli.report" | "cli.task.check"
+            | "diagnostics.all" => Self::Diagnostics,
             "cli.trace" | "cli.task.scope" | "cli.task.infer" => Self::Branch,
             _ => Self::Pulse,
         }
@@ -132,7 +131,7 @@ impl WorkbenchPane {
         }
     }
 
-    fn role(self) -> Self {
+    pub fn role(self) -> Self {
         match self {
             Self::Goals | Self::Request | Self::Assignment | Self::Evidence | Self::Commands => {
                 Self::Pulse
@@ -348,6 +347,15 @@ fn view_href(
     format!("?{}", params.join("&"))
 }
 
+fn navigation_href(pane: WorkbenchPane, sidebar_open: bool, locale: Locale) -> String {
+    format!(
+        "?pane={}&sidebar={}&lang={}",
+        pane.slug(),
+        if sidebar_open { "1" } else { "0" },
+        locale.slug()
+    )
+}
+
 #[component]
 pub fn WorkbenchSidebar(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Element {
     let copy = ui.copy();
@@ -428,7 +436,7 @@ fn SidebarPaneButton(
     rsx! {
         a {
             class: base,
-            href: view_href(&ui, pane, !collapsed, ui.locale, ui.help_topic),
+            href: navigation_href(pane, !collapsed, ui.locale),
             title: copy.pane_summary(pane),
             span { class: "grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-background text-xs text-foreground/75 transition group-hover:bg-panel",
                 "{pane.icon()}"
@@ -452,9 +460,18 @@ pub fn WorkbenchStage(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
             .as_deref()
             .and_then(|id| ui.cli_command_preview(id))
     });
-    let selected_action = ui.selected_action().cloned();
+    let cli_preview = cli_preview.filter(|preview| command_matches_pane(&preview.id, active_pane));
+    let selected_action = ui
+        .selected_action()
+        .filter(|action| action_matches_pane(action.id, active_pane))
+        .cloned();
+    let action_preview = action_preview.filter(|preview| {
+        selected_action
+            .as_ref()
+            .is_some_and(|action| action.id == preview.action_id)
+    });
     let item_edit_preview = ui.item_edit_preview.clone();
-    let show_pane_detail = ui.selected_cli_command_id.is_none() && ui.selected_action_id.is_none();
+    let show_pane_detail = cli_preview.is_none() && selected_action.is_none();
     rsx! {
         main { class: "min-w-0 flex-1",
             section { class: "min-w-0 rounded-lg border border-border bg-panel p-4 shadow-sm",
@@ -512,6 +529,20 @@ pub fn WorkbenchStage(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
     }
 }
 
+fn command_matches_pane(command_id: &str, active_pane: WorkbenchPane) -> bool {
+    if active_pane == WorkbenchPane::Commands {
+        return true;
+    }
+    WorkbenchPane::for_cli(command_id).role() == active_pane.role()
+}
+
+fn action_matches_pane(action_id: WorkbenchActionId, active_pane: WorkbenchPane) -> bool {
+    if active_pane == WorkbenchPane::Commands {
+        return true;
+    }
+    WorkbenchPane::for_action(action_id).role() == active_pane.role()
+}
+
 #[component]
 fn ItemEditPreviewPanel(preview: crate::model::ItemEditPreview) -> Element {
     rsx! {
@@ -560,7 +591,7 @@ fn RoleSubviewNav(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Element {
             for pane in panes {
                 a {
                     class: if *pane == active_pane { "whitespace-nowrap rounded-lg border border-foreground bg-foreground px-3 py-2 text-xs font-medium text-background" } else { "whitespace-nowrap rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground/70 hover:bg-panel-muted" },
-                    href: view_href(&ui, *pane, true, ui.locale, None),
+                    href: navigation_href(*pane, true, ui.locale),
                     aria_current: if *pane == active_pane { "page" } else { "false" },
                     "{ui.copy().pane_title(*pane)}"
                 }
@@ -930,16 +961,14 @@ fn SpecInfoBrowser(
                         for section in &browser.sections {
                             div { class: "mb-3 last:mb-0",
                                 p { class: "px-2 pb-1 text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{section.label}" }
-                                for document in &section.documents {
-                                    SpecDocumentTree {
-                                        document: document.clone(),
-                                        selected_id: selected.as_ref().map(|selected| selected.id.clone()),
-                                        command_id: command_id.clone(),
-                                        locale,
-                                        category: category_value.to_string(),
-                                        command_query: command_query.clone(),
-                                        spec_query: spec_query.clone(),
-                                    }
+                                SpecSectionTree {
+                                    section: section.clone(),
+                                    selected_id: selected.as_ref().map(|selected| selected.id.clone()),
+                                    command_id: command_id.clone(),
+                                    locale,
+                                    category: category_value.to_string(),
+                                    command_query: command_query.clone(),
+                                    spec_query: spec_query.clone(),
                                 }
                             }
                         }
@@ -960,6 +989,166 @@ fn SpecInfoBrowser(
 }
 
 #[component]
+fn SpecSectionTree(
+    section: SpecBrowserSection,
+    selected_id: Option<String>,
+    command_id: String,
+    locale: Locale,
+    category: String,
+    command_query: String,
+    spec_query: String,
+) -> Element {
+    let tree = SpecFolderNode::from_section(&section);
+    rsx! {
+        div { class: "grid gap-0.5", "data-spec-section-tree": section.label.clone(),
+            for document in &tree.documents {
+                SpecDocumentTree {
+                    document: document.clone(),
+                    selected_id: selected_id.clone(),
+                    command_id: command_id.clone(),
+                    locale,
+                    category: category.clone(),
+                    command_query: command_query.clone(),
+                    spec_query: spec_query.clone(),
+                }
+            }
+            for folder in &tree.folders {
+                SpecFolderTree {
+                    folder: folder.clone(),
+                    selected_id: selected_id.clone(),
+                    command_id: command_id.clone(),
+                    locale,
+                    category: category.clone(),
+                    command_query: command_query.clone(),
+                    spec_query: spec_query.clone(),
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+struct SpecFolderNode {
+    name: String,
+    path: String,
+    folders: Vec<SpecFolderNode>,
+    documents: Vec<SpecBrowserDocument>,
+}
+
+impl SpecFolderNode {
+    fn from_section(section: &SpecBrowserSection) -> Self {
+        let mut root = Self::default();
+        for document in &section.documents {
+            root.insert(
+                normalized_folder_segments(section, document),
+                document.clone(),
+            );
+        }
+        root
+    }
+
+    fn insert(&mut self, segments: Vec<String>, document: SpecBrowserDocument) {
+        if let Some((first, rest)) = segments.split_first() {
+            let path = if self.path.is_empty() {
+                first.clone()
+            } else {
+                format!("{}/{}", self.path, first)
+            };
+            let index = self
+                .folders
+                .iter()
+                .position(|folder| folder.name == *first)
+                .unwrap_or_else(|| {
+                    self.folders.push(Self {
+                        name: first.clone(),
+                        path,
+                        folders: Vec::new(),
+                        documents: Vec::new(),
+                    });
+                    self.folders.len() - 1
+                });
+            self.folders[index].insert(rest.to_vec(), document);
+        } else {
+            self.documents.push(document);
+        }
+    }
+}
+
+fn normalized_folder_segments(
+    section: &SpecBrowserSection,
+    document: &SpecBrowserDocument,
+) -> Vec<String> {
+    let mut segments = document.folder_segments.clone();
+    if let Some(root) = section_root_segment(&section.label)
+        && segments
+            .first()
+            .is_some_and(|segment| segment.eq_ignore_ascii_case(root))
+    {
+        segments.remove(0);
+    }
+    segments
+}
+
+fn section_root_segment(label: &str) -> Option<&'static str> {
+    match label.to_ascii_lowercase().as_str() {
+        "philosophy" => Some("philosophy"),
+        "policies" => Some("policies"),
+        "requirements" => Some("requirements"),
+        "features" => Some("features"),
+        _ => None,
+    }
+}
+
+#[component]
+fn SpecFolderTree(
+    folder: SpecFolderNode,
+    selected_id: Option<String>,
+    command_id: String,
+    locale: Locale,
+    category: String,
+    command_query: String,
+    spec_query: String,
+) -> Element {
+    rsx! {
+        details {
+            class: "group",
+            open: true,
+            "data-spec-folder": "true",
+            "data-spec-folder-path": folder.path.clone(),
+            summary { class: "flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-foreground/65 hover:bg-panel-muted",
+                span { class: "w-3 text-[10px] text-foreground/40 group-open:rotate-90", ">" }
+                span { class: "text-[10px] uppercase tracking-[0.12em] text-foreground/40", "dir" }
+                span { class: "truncate", "{folder.name}" }
+            }
+            div { class: "ml-3 grid gap-0.5 border-l border-border pl-2",
+                for document in &folder.documents {
+                    SpecDocumentTree {
+                        document: document.clone(),
+                        selected_id: selected_id.clone(),
+                        command_id: command_id.clone(),
+                        locale,
+                        category: category.clone(),
+                        command_query: command_query.clone(),
+                        spec_query: spec_query.clone(),
+                    }
+                }
+                for child in &folder.folders {
+                    SpecFolderTree {
+                        folder: child.clone(),
+                        selected_id: selected_id.clone(),
+                        command_id: command_id.clone(),
+                        locale,
+                        category: category.clone(),
+                        command_query: command_query.clone(),
+                        spec_query: spec_query.clone(),
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
 fn SpecDocumentTree(
     document: SpecBrowserDocument,
     selected_id: Option<String>,
@@ -969,12 +1158,18 @@ fn SpecDocumentTree(
     command_query: String,
     spec_query: String,
 ) -> Element {
-    let content = rsx! {
-        details { class: "group", open: true, "data-spec-document": "true",
-            summary { class: "cursor-pointer list-none rounded-md px-2 py-1 text-xs font-medium text-foreground/65 hover:bg-panel-muted",
-                "{document.title}"
+    rsx! {
+        details {
+            class: "group",
+            open: true,
+            "data-spec-document": "true",
+            "data-spec-document-path": document.path.clone(),
+            summary { class: "flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-foreground/65 hover:bg-panel-muted",
+                span { class: "w-3 text-[10px] text-foreground/40 group-open:rotate-90", ">" }
+                span { class: "text-[10px] uppercase tracking-[0.12em] text-foreground/40", "doc" }
+                span { class: "truncate", "{document.title}" }
             }
-            div { class: "ml-3 border-l border-border pl-2",
+            div { class: "ml-3 grid gap-0.5 border-l border-border pl-2",
                 for item in &document.items {
                     a {
                         class: spec_tree_item_class(selected_id.as_deref() == Some(item.id.as_str())),
@@ -986,18 +1181,6 @@ fn SpecDocumentTree(
                         span { class: "truncate text-[11px] text-foreground/55", "{item.title}" }
                     }
                 }
-            }
-        }
-    };
-    if document.folder_segments.is_empty() {
-        content
-    } else {
-        rsx! {
-            details { class: "group", open: true, "data-spec-folder": "true",
-                summary { class: "cursor-pointer list-none rounded-md px-2 py-1 text-[10px] font-medium text-foreground/50 hover:bg-panel-muted",
-                    "▾ {document.folder_segments.join(\" / \")}"
-                }
-                div { class: "ml-3 border-l border-border pl-2", {content} }
             }
         }
     }
@@ -1024,9 +1207,9 @@ fn spec_item_href(
 
 fn spec_tree_item_class(active: bool) -> &'static str {
     if active {
-        "grid gap-0.5 rounded-md border border-foreground bg-foreground px-2 py-2 text-background"
+        "grid gap-0.5 rounded-md border border-foreground bg-foreground px-2 py-1.5 text-background"
     } else {
-        "grid gap-0.5 rounded-md border border-transparent px-2 py-2 text-foreground hover:border-border hover:bg-panel-muted"
+        "grid gap-0.5 rounded-md border border-transparent px-2 py-1.5 text-foreground hover:border-border hover:bg-panel-muted"
     }
 }
 
