@@ -779,71 +779,176 @@ pub(super) fn workbench_document(shell: String, locale: Locale) -> String {
   <div id="syu-workbench-root" data-ui="dioxus-ssr">{shell}</div>
   <script>
     (() => {{
-      const palettes = document.querySelectorAll('[data-command-palette]');
-      for (const palette of palettes) {{
-        const input = palette.querySelector('[data-command-input]');
-        const items = Array.from(palette.querySelectorAll('[data-command-item]'));
-        if (!input || items.length === 0) continue;
-        const applyFilter = () => {{
-          const query = input.value.trim().toLowerCase();
-          const scored = [];
-          let visible = 0;
-          for (const item of items) {{
-            const text = (item.dataset.commandText || item.textContent || '').toLowerCase();
-            const id = (item.dataset.commandId || '').toLowerCase();
-            const title = (item.dataset.commandTitle || '').toLowerCase();
-            const match = query === '' || text.includes(query);
-            item.hidden = !match;
-            if (match) {{
-              const score = query === '' ? 3 : id.includes(query) ? 0 : title.includes(query) ? 1 : 2;
-              scored.push([score, item]);
-              visible += 1;
+      if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+      const rootSelector = '#syu-workbench-root';
+      const sameWorkbenchUrl = (url) => {{
+        try {{
+          const next = new URL(url, window.location.href);
+          return next.origin === window.location.origin && next.pathname === '/';
+        }} catch (_) {{
+          return false;
+        }}
+      }};
+      const replaceWorkbench = async (url, options = {{}}, push = true, historyUrl = url) => {{
+        const response = await fetch(url, {{
+          ...options,
+          headers: {{
+            Accept: 'text/html',
+            ...(options.headers || {{}}),
+          }},
+        }});
+        if (!response.ok) throw new Error(`Workbench request failed: ${{response.status}}`);
+        const html = await response.text();
+        const documentNext = new DOMParser().parseFromString(html, 'text/html');
+        const nextRoot = documentNext.querySelector(rootSelector);
+        const currentRoot = document.querySelector(rootSelector);
+        if (!nextRoot || !currentRoot) {{
+          window.location.assign(url);
+          return;
+        }}
+        const currentScrollY = window.scrollY;
+        nextRoot.style.minHeight = `${{Math.max(currentRoot.offsetHeight, window.scrollY + window.innerHeight)}}px`;
+        currentRoot.replaceWith(nextRoot);
+        document.documentElement.lang = documentNext.documentElement.lang || document.documentElement.lang;
+        if (push) history.pushState({{ syuWorkbench: true }}, '', historyUrl);
+        initWorkbench(nextRoot);
+        window.scrollTo(0, currentScrollY);
+        requestAnimationFrame(() => window.scrollTo(0, currentScrollY));
+        setTimeout(() => window.scrollTo(0, currentScrollY), 0);
+      }};
+      const formUrl = (form) => {{
+        const action = form.getAttribute('action') || window.location.href;
+        return new URL(action, window.location.href);
+      }};
+      const submitGetForm = (form) => {{
+        const url = formUrl(form);
+        const params = new URLSearchParams(new FormData(form));
+        url.search = params.toString();
+        return replaceWorkbench(url.href);
+      }};
+      const submitPostForm = (form) => {{
+        const url = formUrl(form);
+        const displayUrl = new URL('/', window.location.origin);
+        displayUrl.search = new URLSearchParams(new FormData(form)).toString();
+        return replaceWorkbench(url.href, {{
+          method: 'POST',
+          body: new URLSearchParams(new FormData(form)),
+        }}, true, displayUrl.href);
+      }};
+      const markRunning = (form) => {{
+        if (!form.matches('[data-command-run-form]')) return;
+        form.dataset.running = 'true';
+        const button = form.querySelector('[data-command-run-button]');
+        const status = form.querySelector('[data-command-run-status]');
+        const runningLabel = button?.dataset.runningLabel || 'Running...';
+        if (button) {{
+          button.disabled = true;
+          button.setAttribute('aria-disabled', 'true');
+          button.innerHTML = `<span class="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" aria-hidden="true"></span><span>${{runningLabel}}</span>`;
+          button.classList.add('inline-flex', 'items-center', 'justify-center', 'gap-2', 'opacity-80');
+        }}
+        if (status) {{
+          status.textContent = runningLabel;
+          status.classList.remove('hidden');
+        }}
+      }};
+      const initWorkbench = (root = document) => {{
+        const palettes = root.querySelectorAll('[data-command-palette]:not([data-enhanced])');
+        for (const palette of palettes) {{
+          palette.dataset.enhanced = 'true';
+          const input = palette.querySelector('[data-command-input]');
+          const items = Array.from(palette.querySelectorAll('[data-command-item]'));
+          if (!input || items.length === 0) continue;
+          const applyFilter = () => {{
+            const query = input.value.trim().toLowerCase();
+            const scored = [];
+            let visible = 0;
+            for (const item of items) {{
+              const text = (item.dataset.commandText || item.textContent || '').toLowerCase();
+              const id = (item.dataset.commandId || '').toLowerCase();
+              const title = (item.dataset.commandTitle || '').toLowerCase();
+              const match = query === '' || text.includes(query);
+              item.hidden = !match;
+              if (match) {{
+                const score = query === '' ? 3 : id.includes(query) ? 0 : title.includes(query) ? 1 : 2;
+                scored.push([score, item]);
+                visible += 1;
+              }}
             }}
-          }}
-          scored.sort((left, right) => left[0] - right[0]);
-          for (const [, item] of scored) item.parentElement.appendChild(item);
-          palette.dataset.empty = visible === 0 ? 'true' : 'false';
-        }};
-        input.addEventListener('input', applyFilter);
-        applyFilter();
-      }}
-      for (const item of document.querySelectorAll('[data-result-item]')) {{
-        item.addEventListener('click', (event) => {{
-          event.preventDefault();
-          const id = item.dataset.resultItem;
-          const surface = item.closest('[data-result-kind]');
-          if (!surface || !id) return;
-          for (const detail of surface.querySelectorAll('[data-result-detail]')) {{
-            detail.hidden = detail.dataset.resultDetail !== id;
-          }}
-          for (const candidate of surface.querySelectorAll('[data-result-item]')) {{
-            candidate.setAttribute('aria-current', candidate === item ? 'page' : 'false');
-          }}
-        }});
-      }}
-      for (const form of document.querySelectorAll('[data-command-run-form]')) {{
-        form.addEventListener('submit', (event) => {{
-          if (!form.checkValidity()) return;
-          if (form.dataset.running === 'true') {{
+            scored.sort((left, right) => left[0] - right[0]);
+            for (const [, item] of scored) item.parentElement.appendChild(item);
+            palette.dataset.empty = visible === 0 ? 'true' : 'false';
+          }};
+          input.addEventListener('input', applyFilter);
+          applyFilter();
+        }}
+        for (const item of root.querySelectorAll('[data-result-item]:not([data-enhanced])')) {{
+          item.dataset.enhanced = 'true';
+          item.addEventListener('click', (event) => {{
             event.preventDefault();
-            return;
-          }}
-          form.dataset.running = 'true';
-          const button = form.querySelector('[data-command-run-button]');
-          const status = form.querySelector('[data-command-run-status]');
-          const runningLabel = button?.dataset.runningLabel || 'Running...';
-          if (button) {{
-            button.disabled = true;
-            button.setAttribute('aria-disabled', 'true');
-            button.innerHTML = `<span class="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-r-transparent" aria-hidden="true"></span><span>${{runningLabel}}</span>`;
-            button.classList.add('inline-flex', 'items-center', 'justify-center', 'gap-2', 'opacity-80');
-          }}
-          if (status) {{
-            status.textContent = runningLabel;
-            status.classList.remove('hidden');
-          }}
-        }});
-      }}
+            const id = item.dataset.resultItem;
+            const surface = item.closest('[data-result-kind]');
+            if (!surface || !id) return;
+            for (const detail of surface.querySelectorAll('[data-result-detail]')) {{
+              detail.hidden = detail.dataset.resultDetail !== id;
+            }}
+            for (const candidate of surface.querySelectorAll('[data-result-item]')) {{
+              candidate.setAttribute('aria-current', candidate === item ? 'page' : 'false');
+            }}
+          }});
+        }}
+        for (const form of root.querySelectorAll('form:not([data-enhanced])')) {{
+          form.dataset.enhanced = 'true';
+          form.addEventListener('submit', async (event) => {{
+            if (!form.checkValidity()) return;
+            if (form.dataset.running === 'true') {{
+              event.preventDefault();
+              return;
+            }}
+            const method = (form.getAttribute('method') || 'get').toLowerCase();
+            const url = formUrl(form);
+            if (!sameWorkbenchUrl(url.href) && url.pathname !== '/run') return;
+            event.preventDefault();
+            markRunning(form);
+            try {{
+              if (method === 'post') {{
+                await submitPostForm(form);
+              }} else {{
+                await submitGetForm(form);
+              }}
+            }} catch (_) {{
+              form.submit();
+            }}
+          }});
+        }}
+      }};
+      document.addEventListener('click', async (event) => {{
+        if (!(event.target instanceof Element)) return;
+        const link = event.target.closest('a[href]');
+        if (!link || event.defaultPrevented) return;
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+        if (link.target && link.target !== '_self') return;
+        if (link.hasAttribute('download')) return;
+        const href = link.getAttribute('href') || '';
+        if (href.startsWith('#')) return;
+        const url = new URL(href, window.location.href);
+        if (!sameWorkbenchUrl(url.href)) return;
+        event.preventDefault();
+        try {{
+          await replaceWorkbench(url.href);
+        }} catch (_) {{
+          window.location.assign(url.href);
+        }}
+      }});
+      window.addEventListener('popstate', async () => {{
+        try {{
+          await replaceWorkbench(window.location.href, {{}}, false);
+        }} catch (_) {{
+          window.location.reload();
+        }}
+      }});
+      history.replaceState({{ syuWorkbench: true }}, '', window.location.href);
+      initWorkbench(document);
     }})();
   </script>
 </body>

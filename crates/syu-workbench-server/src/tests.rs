@@ -74,7 +74,13 @@ async fn index_route_renders_workbench_browser_entrypoint_and_css_asset() {
     assert!(html.contains(">Diagnostics</span>"));
     assert!(html.contains("Type a command"));
     assert!(html.contains("data-command-palette"));
-    assert!(html.contains("document.querySelectorAll('[data-command-run-form]')"));
+    assert!(html.contains("const rootSelector = '#syu-workbench-root'"));
+    assert!(html.contains("currentRoot.replaceWith(nextRoot)"));
+    assert!(html.contains("history.pushState"));
+    assert!(html.contains("window.addEventListener('popstate'"));
+    assert!(html.contains("fetch(url"));
+    assert!(html.contains("initWorkbench(nextRoot)"));
+    assert!(html.contains("form.dataset.enhanced = 'true'"));
     assert!(html.contains("if (!form.checkValidity()) return"));
     assert!(html.contains("form.dataset.running === 'true'"));
     assert!(html.contains("button.disabled = true"));
