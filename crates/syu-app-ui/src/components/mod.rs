@@ -17,5 +17,5 @@ pub use shell::{
     OutOfScopePanel, OwnershipBadge, OwnershipPanel, RequestClassificationPanel,
     RequestContextEditor, RequestIntakeCanvas, RequestScopePanel, ScaffoldPreviewPanel,
     ScopeGuardPreview, ScopeLegend, SpecImpactGraph, StatusBar, SuggestedGoalSplitPanel,
-    TestRecommendationPanel, WorkspacePulse,
+    TestRecommendationPanel,
 };

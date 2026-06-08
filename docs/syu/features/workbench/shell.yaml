@@ -23,7 +23,7 @@ features:
             - AppShell
             - CommandPalette
             - WorkbenchPane
-            - WorkspacePulse
+            - RequestIntakeCanvas
             - GoalRail
             - GoalCanvas
             - EvidencePanel

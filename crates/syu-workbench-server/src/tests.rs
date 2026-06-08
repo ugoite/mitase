@@ -184,8 +184,11 @@ async fn explicit_navigation_panes_drop_stale_cli_selection() {
             .expect("request"),
     )
     .await;
-    assert!(items_html.contains("href=\"?pane=pulse&#38;sidebar=1&#38;lang=en\""));
-    assert!(!items_html.contains("href=\"?pane=pulse&#38;sidebar=1&#38;lang=en&#38;cli=cli.show"));
+    assert!(items_html.contains("href=\"?pane=request&#38;sidebar=1&#38;lang=en\""));
+    assert!(
+        !items_html.contains("href=\"?pane=request&#38;sidebar=1&#38;lang=en&#38;cli=cli.show")
+    );
+    assert!(!items_html.contains("href=\"?pane=pulse"));
 
     let (_, work_html) = text_response(
         router.clone(),
@@ -195,9 +198,23 @@ async fn explicit_navigation_panes_drop_stale_cli_selection() {
             .expect("request"),
     )
     .await;
-    assert!(work_html.contains(">Work</h1>"));
+    assert!(work_html.contains(">Request intake</h1>"));
     assert!(work_html.contains("data-role-subviews=\"true\""));
     assert!(!work_html.contains("data-items-toolbar=\"true\""));
+    assert!(!work_html.contains(">Work</h1>"));
+
+    let (_, work_alias_html) = text_response(
+        router.clone(),
+        Request::builder()
+            .uri(format!("/?pane=work&sidebar=1&lang=en&{stale}"))
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    assert!(work_alias_html.contains(">Request intake</h1>"));
+    assert!(work_alias_html.contains("data-role-subviews=\"true\""));
+    assert!(!work_alias_html.contains("data-items-toolbar=\"true\""));
+    assert!(!work_alias_html.contains(">Work</h1>"));
 
     let (_, scope_html) = text_response(
         router.clone(),

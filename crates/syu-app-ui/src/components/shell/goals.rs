@@ -32,11 +32,9 @@ pub fn GoalCanvas(
     ui: WorkbenchUiState,
     on_run_action: Option<EventHandler<WorkbenchActionId>>,
 ) -> Element {
-    let summary = ui.pulse_summary();
     rsx! {
         Panel { class: classes::PANEL,
             div { class: classes::PANEL_INNER,
-                WorkspacePulse { summary: summary.clone() }
                 RequestIntakeCanvas {
                     ui: ui.clone(),
                     on_run_action: on_run_action,

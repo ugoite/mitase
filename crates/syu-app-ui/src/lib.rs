@@ -19,7 +19,6 @@ pub use components::{
     RequestContextEditor, RequestIntakeCanvas, RequestScopePanel, ScaffoldPreviewPanel,
     ScopeEvidenceView, ScopeGuardPreview, ScopeLegend, SpecImpactGraph, StatusBar,
     SuggestedGoalSplitPanel, TestEvidenceView, TestRecommendationPanel, ValidationEvidenceView,
-    WorkspacePulse,
 };
 pub use i18n::{HelpTopic, Locale};
 pub use model::{

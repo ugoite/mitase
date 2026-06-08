@@ -8,7 +8,7 @@ use crate::i18n::{HelpTopic, Locale};
 use crate::model::{
     CliCommandEntry, CliCommandPreview, CommandCategory, CommandResultItem, CommandResultStatus,
     SpecBrowserDocument, SpecBrowserItem, SpecBrowserModel, SpecBrowserSection, TypedCommandResult,
-    WorkbenchUiState, WorkspacePulseSummary, workbench_action_category,
+    WorkbenchUiState, workbench_action_category,
 };
 use dioxus::prelude::*;
 use std::collections::HashMap;
@@ -81,7 +81,7 @@ impl WorkbenchPane {
         match value {
             "items" => Some(Self::Items),
             "diagnostics" => Some(Self::Diagnostics),
-            "pulse" | "work" => Some(Self::Pulse),
+            "pulse" | "work" => Some(Self::Request),
             "goals" => Some(Self::Goals),
             "request" => Some(Self::Request),
             "assignment" => Some(Self::Assignment),
@@ -194,7 +194,7 @@ pub fn StatusBar(
         header { class: "z-40 border-b border-border bg-panel/95", style: "position: sticky; top: 0",
             nav { class: "mx-auto flex max-w-7xl items-center justify-between gap-4 py-3", "aria-label": "Global",
                 div { class: "flex lg:flex-1",
-                    a { class: "-m-1.5 p-1.5 text-base font-semibold text-foreground", href: view_href(&ui, WorkbenchPane::Pulse, false, ui.locale, None),
+                    a { class: "-m-1.5 p-1.5 text-base font-semibold text-foreground", href: navigation_href(WorkbenchPane::Request, false, ui.locale),
                         span { class: "sr-only", "{copy.app_title()}" }
                         "Syu"
                     }
@@ -350,10 +350,18 @@ fn view_href(
 fn navigation_href(pane: WorkbenchPane, sidebar_open: bool, locale: Locale) -> String {
     format!(
         "?pane={}&sidebar={}&lang={}",
-        pane.slug(),
+        route_pane_slug(pane),
         if sidebar_open { "1" } else { "0" },
         locale.slug()
     )
+}
+
+fn route_pane_slug(pane: WorkbenchPane) -> &'static str {
+    if pane == WorkbenchPane::Pulse {
+        WorkbenchPane::Request.slug()
+    } else {
+        pane.slug()
+    }
 }
 
 #[component]
@@ -574,7 +582,6 @@ fn ItemEditPreviewPanel(preview: crate::model::ItemEditPreview) -> Element {
 fn RoleSubviewNav(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Element {
     let panes: &[WorkbenchPane] = match active_pane.role() {
         WorkbenchPane::Pulse => &[
-            WorkbenchPane::Pulse,
             WorkbenchPane::Request,
             WorkbenchPane::Goals,
             WorkbenchPane::Assignment,
@@ -625,7 +632,7 @@ fn WorkbenchActionResult(
             }
             p { class: "mt-2 text-sm text-foreground/75", "{action.description}" }
             form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/run", method: "post", "data-command-run-form": "true",
-                input { type: "hidden", name: "pane", value: "{WorkbenchPane::for_action(action.id).slug()}" }
+                input { type: "hidden", name: "pane", value: "{route_pane_slug(WorkbenchPane::for_action(action.id))}" }
                 input { type: "hidden", name: "sidebar", value: "1" }
                 input { type: "hidden", name: "lang", value: "{locale.slug()}" }
                 input { type: "hidden", name: "action", value: "{action.id.label()}" }
@@ -699,7 +706,7 @@ fn CliCommandResult(preview: CliCommandPreview, locale: Locale, query: String) -
                 p { class: "mt-1 break-all text-sm font-medium text-foreground", "{preview.invocation}" }
             }
             form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/run", method: "post", "data-command-run-form": "true",
-                input { type: "hidden", name: "pane", value: "{WorkbenchPane::for_cli(&preview.id).slug()}" }
+                input { type: "hidden", name: "pane", value: "{route_pane_slug(WorkbenchPane::for_cli(&preview.id))}" }
                 input { type: "hidden", name: "sidebar", value: "1" }
                 input { type: "hidden", name: "lang", value: "{locale.slug()}" }
                 input { type: "hidden", name: "cli", value: "{preview.id}" }
@@ -1611,7 +1618,7 @@ fn selected_pane_detail(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Ele
             }
         }
         WorkbenchPane::Diagnostics => rsx! { DiagnosticsOverview { ui } },
-        WorkbenchPane::Pulse => rsx! { WorkbenchPulse { summary: ui.pulse_summary() } },
+        WorkbenchPane::Pulse => rsx! { RequestOverview { ui } },
         WorkbenchPane::Commands => rsx! { CommandSurfaceOverview { ui } },
         WorkbenchPane::Goals => rsx! { GoalsOverview { ui } },
         WorkbenchPane::Request => rsx! { RequestOverview { ui } },

@@ -286,10 +286,11 @@ pub fn CommandItem(
     };
     let category_param =
         category.map_or_else(String::new, |value| format!("&category={}", value.slug()));
+    let pane_slug = command_item_pane_slug(WorkbenchPane::for_action(entry.action.id));
     let href = if entry.availability.available && !entry.action.mutability.requires_confirmation() {
         format!(
             "?pane={}&sidebar=1&lang={}&action={}&run=1{}",
-            WorkbenchPane::for_action(entry.action.id).slug(),
+            pane_slug,
             locale.slug(),
             entry.action.id.label(),
             category_param,
@@ -297,7 +298,7 @@ pub fn CommandItem(
     } else {
         format!(
             "?pane={}&sidebar=1&lang={}&action={}{}",
-            WorkbenchPane::for_action(entry.action.id).slug(),
+            pane_slug,
             locale.slug(),
             entry.action.id.label(),
             category_param,
@@ -330,6 +331,14 @@ pub fn CommandItem(
                 }
             }
         }
+    }
+}
+
+fn command_item_pane_slug(pane: WorkbenchPane) -> &'static str {
+    if pane == WorkbenchPane::Pulse {
+        WorkbenchPane::Request.slug()
+    } else {
+        pane.slug()
     }
 }
 

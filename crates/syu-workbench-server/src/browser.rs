@@ -162,11 +162,11 @@ async fn render_workbench(
             .as_deref()
             .map(WorkbenchPane::for_cli)
             .or_else(|| ui.selected_action_id.map(WorkbenchPane::for_action))
-            .unwrap_or(WorkbenchPane::Pulse)
+            .unwrap_or(WorkbenchPane::Request)
     } else {
         requested_pane
             .and_then(WorkbenchPane::from_slug)
-            .unwrap_or(WorkbenchPane::Pulse)
+            .unwrap_or(WorkbenchPane::Request)
     };
     if !requested_is_palette {
         if ui

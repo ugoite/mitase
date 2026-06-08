@@ -66,12 +66,13 @@ fn navigation_links_clear_command_context_but_keep_locale() {
         AppShell { ui, active_pane: WorkbenchPane::Items, sidebar_open: true }
     });
 
-    assert!(html.contains("href=\"?pane=pulse&#38;sidebar=1&#38;lang=ja\""));
+    assert!(html.contains("href=\"?pane=request&#38;sidebar=1&#38;lang=ja\""));
     assert!(html.contains("href=\"?pane=branch&#38;sidebar=1&#38;lang=ja\""));
     assert!(html.contains("href=\"?pane=diagnostics&#38;sidebar=1&#38;lang=ja\""));
-    assert!(!html.contains("href=\"?pane=pulse&#38;sidebar=1&#38;lang=ja&#38;cli=cli.show"));
+    assert!(!html.contains("href=\"?pane=request&#38;sidebar=1&#38;lang=ja&#38;cli=cli.show"));
     assert!(!html.contains("href=\"?pane=branch&#38;sidebar=1&#38;lang=ja&#38;cli=cli.show"));
     assert!(!html.contains("href=\"?pane=diagnostics&#38;sidebar=1&#38;lang=ja&#38;cli=cli.show"));
+    assert!(!html.contains("href=\"?pane=pulse"));
 }
 
 #[test]
@@ -81,13 +82,16 @@ fn role_subview_links_clear_command_context() {
     ui.select_cli_command("cli.show");
 
     let html = render_element(rsx! {
-        AppShell { ui, active_pane: WorkbenchPane::Pulse, sidebar_open: true }
+        AppShell { ui, active_pane: WorkbenchPane::Request, sidebar_open: true }
     });
 
     assert!(html.contains("href=\"?pane=request&#38;sidebar=1&#38;lang=en\""));
     assert!(html.contains("href=\"?pane=goals&#38;sidebar=1&#38;lang=en\""));
+    assert!(html.contains("href=\"?pane=assignment&#38;sidebar=1&#38;lang=en\""));
+    assert!(html.contains("href=\"?pane=evidence&#38;sidebar=1&#38;lang=en\""));
     assert!(!html.contains("href=\"?pane=request&#38;sidebar=1&#38;lang=en&#38;cli=cli.show"));
     assert!(!html.contains("href=\"?pane=goals&#38;sidebar=1&#38;lang=en&#38;cli=cli.show"));
+    assert!(!html.contains("href=\"?pane=pulse"));
 }
 
 #[test]
@@ -420,14 +424,14 @@ fn goal_canvas_renders_a_read_only_action_preview_placeholder() {
         }
     });
 
-    let pulse = html.find("workspace").expect("workspace should render");
     let preview = html
         .find("Preview opened for")
         .expect("preview should render");
 
-    assert!(pulse < preview);
+    assert!(!html.contains("workspace"));
     assert!(html.contains("Preview opened for"));
     assert!(html.contains("Ready to review"));
+    assert!(preview > 0);
 }
 
 #[test]
