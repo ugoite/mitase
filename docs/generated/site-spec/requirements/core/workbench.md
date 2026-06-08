@@ -55,6 +55,9 @@ description: "Generated reference for docs/syu/requirements/core/workbench.yaml"
           - command_palette_renders_disabled_reason_for_unavailable_actions
           - goal_canvas_renders_a_read_only_action_preview_placeholder
           - evidence_panel_renders_placeholder_when_empty
+      - **file**: tests/workbench_command.rs
+        - **symbols**:
+          - workbench_help_lists_browser_launch_options
       - **file**: crates/syu-workbench-server/src/tests.rs
         - **symbols**:
           - role_menu_routes_commands_to_items_and_diagnostics
@@ -331,6 +334,9 @@ requirements:
             - command_palette_renders_disabled_reason_for_unavailable_actions
             - goal_canvas_renders_a_read_only_action_preview_placeholder
             - evidence_panel_renders_placeholder_when_empty
+        - file: tests/workbench_command.rs
+          symbols:
+            - workbench_help_lists_browser_launch_options
         - file: crates/syu-workbench-server/src/tests.rs
           symbols:
             - role_menu_routes_commands_to_items_and_diagnostics
