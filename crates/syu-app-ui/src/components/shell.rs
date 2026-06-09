@@ -1094,7 +1094,7 @@ fn SpecInfoBrowser(
                 for kind in SpecKindTab::ALL {
                     a {
                         class: spec_kind_tab_class(kind == active_kind),
-                        href: spec_kind_href(&command_id, locale, &category_value, &command_query, &spec_query, kind),
+                        href: spec_kind_href(&command_id, locale, category_value, &command_query, &spec_query, kind),
                         aria_current: if kind == active_kind { "page" } else { "false" },
                         "data-spec-kind-tab": kind.slug(),
                         "{kind.label()}"
