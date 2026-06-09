@@ -1,4 +1,4 @@
-use crate::i18n::{HelpTopic, Locale, UiCopy, copy};
+use crate::i18n::{Locale, UiCopy, copy};
 use std::collections::BTreeMap;
 use syu_task_model::{
     GoalPlanArtifact, GoalPlanCompletion, GoalPlanConfidence, GoalPlanCoverage,
@@ -307,7 +307,6 @@ pub struct WorkbenchUiState {
     pub spec_browser: Option<SpecBrowserModel>,
     pub item_edit_preview: Option<ItemEditPreview>,
     pub locale: Locale,
-    pub help_topic: Option<HelpTopic>,
 }
 
 impl WorkbenchUiState {
@@ -326,7 +325,6 @@ impl WorkbenchUiState {
             spec_browser: None,
             item_edit_preview: None,
             locale: Locale::En,
-            help_topic: None,
         }
     }
 
@@ -350,7 +348,6 @@ impl WorkbenchUiState {
             spec_browser: None,
             item_edit_preview: None,
             locale: Locale::En,
-            help_topic: None,
         }
     }
 
@@ -380,10 +377,6 @@ impl WorkbenchUiState {
 
     pub fn set_locale(&mut self, locale: Locale) {
         self.locale = locale;
-    }
-
-    pub fn set_help_topic(&mut self, help_topic: Option<HelpTopic>) {
-        self.help_topic = help_topic;
     }
 
     pub fn copy(&self) -> &'static dyn UiCopy {

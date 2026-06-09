@@ -89,7 +89,6 @@ pub trait UiCopy: Sync {
     fn sidebar_toggle_open(&self) -> &'static str;
     fn sidebar_toggle_close(&self) -> &'static str;
     fn help_label(&self) -> &'static str;
-    fn close_label(&self) -> &'static str;
     fn language_label(&self) -> &'static str;
     fn language_name(&self, locale: Locale) -> &'static str;
     fn pane_title(&self, pane: WorkbenchPane) -> &'static str;

@@ -54,10 +54,6 @@ impl UiCopy for Japanese {
         "ヘルプ"
     }
 
-    fn close_label(&self) -> &'static str {
-        "閉じる"
-    }
-
     fn language_label(&self) -> &'static str {
         "言語"
     }

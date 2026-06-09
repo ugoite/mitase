@@ -68,7 +68,7 @@ pub(super) fn GoalsOverview(ui: WorkbenchUiState) -> Element {
                         }
                         div { class: "flex items-center gap-2",
                             StatusDot { tone_class: goal_plan_tone, label: goal_plan_state.to_string() }
-                            HelpLink { ui: ui.clone(), active_pane: WorkbenchPane::Goals, sidebar_open: true, topic: HelpTopic::Goals }
+                            HelpLink { ui: ui.clone(), topic: HelpTopic::Goals }
                         }
                     }
                     div { class: "mt-4 grid gap-3 lg:grid-cols-[1.2fr_0.8fr]",
@@ -151,7 +151,7 @@ pub(super) fn GoalsOverview(ui: WorkbenchUiState) -> Element {
                             p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "No goal yet" }
                             p { class: "text-sm text-foreground/65", "A goal card appears here once planning starts." }
                         }
-                        HelpLink { ui: ui.clone(), active_pane: WorkbenchPane::Goals, sidebar_open: true, topic: HelpTopic::Goals }
+                        HelpLink { ui: ui.clone(), topic: HelpTopic::Goals }
                     }
                     div { class: "mt-4 grid gap-3 lg:grid-cols-[1.2fr_0.8fr]",
                         div { class: "rounded-2xl border border-dashed border-border bg-background p-4",
@@ -264,7 +264,7 @@ pub(super) fn RequestOverview(ui: WorkbenchUiState) -> Element {
                         }
                         div { class: "flex items-center gap-2",
                             StatusDot { tone_class: request_tone, label: classification.clone() }
-                            HelpLink { ui: ui.clone(), active_pane: WorkbenchPane::Request, sidebar_open: true, topic: HelpTopic::Request }
+                            HelpLink { ui: ui.clone(), topic: HelpTopic::Request }
                         }
                     }
                     div { class: "mt-4 grid gap-3 lg:grid-cols-[0.9fr_1.1fr]",
@@ -312,7 +312,7 @@ pub(super) fn RequestOverview(ui: WorkbenchUiState) -> Element {
                             p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "No request yet" }
                             p { class: "text-sm text-foreground/65", "A request card appears here after intake." }
                         }
-                        HelpLink { ui: ui.clone(), active_pane: WorkbenchPane::Request, sidebar_open: true, topic: HelpTopic::Request }
+                        HelpLink { ui: ui.clone(), topic: HelpTopic::Request }
                     }
                     div { class: "mt-4 grid gap-3 lg:grid-cols-[0.9fr_1.1fr]",
                         div { class: "space-y-3",
@@ -371,7 +371,7 @@ pub(super) fn BranchOverview(ui: WorkbenchUiState) -> Element {
                         }
                         div { class: "flex items-center gap-2",
                             StatusDot { tone_class: "bg-evidence-pass", label: report.confidence.label().to_string() }
-                            HelpLink { ui: ui.clone(), active_pane: WorkbenchPane::Branch, sidebar_open: true, topic: HelpTopic::Branch }
+                            HelpLink { ui: ui.clone(), topic: HelpTopic::Branch }
                         }
                     }
                     div { class: "mt-4 grid gap-3 lg:grid-cols-[1.1fr_0.9fr]",
@@ -432,7 +432,7 @@ pub(super) fn AssignmentOverview(ui: WorkbenchUiState) -> Element {
                                 tone_class: assignment_status_tone(assignment.status),
                                 label: assignment.status.label().to_string(),
                             }
-                            HelpLink { ui: ui.clone(), active_pane: WorkbenchPane::Assignment, sidebar_open: true, topic: HelpTopic::Assignment }
+                            HelpLink { ui: ui.clone(), topic: HelpTopic::Assignment }
                         }
                     }
                     div { class: "mt-4 grid gap-3 lg:grid-cols-[0.9fr_1.1fr]",
@@ -531,7 +531,7 @@ pub(super) fn GraphOverview(ui: WorkbenchUiState) -> Element {
                         }
                         div { class: "flex items-center gap-2",
                             StatusDot { tone_class: graph_tone, label: graph_status_label.to_string() }
-                            HelpLink { ui: ui.clone(), active_pane: WorkbenchPane::Graph, sidebar_open: true, topic: HelpTopic::Graph }
+                            HelpLink { ui: ui.clone(), topic: HelpTopic::Graph }
                         }
                     }
                     div { class: "mt-4 grid gap-3 md:grid-cols-3",
@@ -556,7 +556,7 @@ pub(super) fn GraphOverview(ui: WorkbenchUiState) -> Element {
                         }
                         div { class: "flex items-center gap-2",
                             StatusDot { tone_class: graph_tone, label: graph_status_label.to_string() }
-                            HelpLink { ui: ui.clone(), active_pane: WorkbenchPane::Graph, sidebar_open: true, topic: HelpTopic::Graph }
+                            HelpLink { ui: ui.clone(), topic: HelpTopic::Graph }
                         }
                     }
                     div { class: "mt-4 grid gap-3 md:grid-cols-3",
@@ -612,7 +612,7 @@ pub(super) fn EvidenceOverview(ui: WorkbenchUiState) -> Element {
                         }
                         div { class: "flex items-center gap-2",
                             EvidenceBadge { kind: record.kind }
-                            HelpLink { ui: ui.clone(), active_pane: WorkbenchPane::Evidence, sidebar_open: true, topic: HelpTopic::Evidence }
+                            HelpLink { ui: ui.clone(), topic: HelpTopic::Evidence }
                         }
                     }
                     div { class: "mt-4 grid gap-3 md:grid-cols-3",
@@ -649,7 +649,7 @@ pub(super) fn EvidenceOverview(ui: WorkbenchUiState) -> Element {
                         }
                         div { class: "flex items-center gap-2",
                             EvidenceBadge { kind: syu_workbench::WorkbenchEvidenceKind::AssignmentState }
-                            HelpLink { ui: ui.clone(), active_pane: WorkbenchPane::Evidence, sidebar_open: true, topic: HelpTopic::Evidence }
+                            HelpLink { ui: ui.clone(), topic: HelpTopic::Evidence }
                         }
                     }
                     div { class: "mt-4 space-y-3",

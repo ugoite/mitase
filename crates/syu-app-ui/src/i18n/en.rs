@@ -54,10 +54,6 @@ impl UiCopy for English {
         "help"
     }
 
-    fn close_label(&self) -> &'static str {
-        "close"
-    }
-
     fn language_label(&self) -> &'static str {
         "language"
     }

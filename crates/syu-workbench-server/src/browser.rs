@@ -66,9 +66,6 @@ async fn render_workbench(
     if let Some(locale) = view.lang.as_deref().and_then(Locale::from_slug) {
         ui.set_locale(locale);
     }
-    if let Some(help_topic) = view.help.as_deref().and_then(HelpTopic::from_slug) {
-        ui.set_help_topic(Some(help_topic));
-    }
     if let Some(action) = view.action.and_then(shared_action_id) {
         let _ = ui.select_action(action);
         if allow_run

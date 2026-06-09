@@ -154,14 +154,6 @@ pub fn AppShell(ui: WorkbenchUiState, active_pane: WorkbenchPane, sidebar_open: 
                     sidebar_open: false,
                     palette: rsx! { CommandPalette { ui: ui.clone(), active_pane: active_pane } },
                 }
-                if let Some(help_topic) = ui.help_topic {
-                    HelpPanel {
-                        ui: ui.clone(),
-                        active_pane: active_pane,
-                        sidebar_open: false,
-                        help_topic: help_topic,
-                    }
-                }
                 div { class: "workbench-layout",
                     if sidebar_open {
                         WorkbenchSidebar { ui: ui.clone(), active_pane }
@@ -208,8 +200,8 @@ pub fn StatusBar(
                         div { class: "absolute right-0 z-30 mt-2 w-80 rounded-lg border border-border bg-panel p-3 shadow-lg",
                             div { class: "space-y-3",
                                 div { class: "grid grid-cols-2 gap-2", "aria-label": copy.language_label(),
-                                    a { class: language_button_class(ui.locale == Locale::En), href: view_href(&ui, active_pane, false, Locale::En, ui.help_topic), "EN" }
-                                    a { class: language_button_class(ui.locale == Locale::Ja), href: view_href(&ui, active_pane, false, Locale::Ja, ui.help_topic), "日本語" }
+                                    a { class: language_button_class(ui.locale == Locale::En), href: view_href(&ui, active_pane, false, Locale::En), "EN" }
+                                    a { class: language_button_class(ui.locale == Locale::Ja), href: view_href(&ui, active_pane, false, Locale::Ja), "日本語" }
                                 }
                                 SettingsRow { label: copy.workspace_label().to_string(), value: summary.workspace.clone() }
                                 SettingsRow { label: copy.branch_label().to_string(), value: summary.branch.clone() }
@@ -249,62 +241,25 @@ fn language_button_class(active: bool) -> &'static str {
 }
 
 #[component]
-fn HelpLink(
-    ui: WorkbenchUiState,
-    active_pane: WorkbenchPane,
-    sidebar_open: bool,
-    topic: HelpTopic,
-) -> Element {
+fn HelpLink(ui: WorkbenchUiState, topic: HelpTopic) -> Element {
     let copy = ui.copy();
+    let tooltip_id = format!("help-tooltip-{}", topic.slug());
     rsx! {
-        a {
-            class: "inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-panel-muted text-xs text-foreground/70 hover:bg-background",
-            href: view_href(&ui, active_pane, sidebar_open, ui.locale, Some(topic)),
+        button {
+            class: "group relative inline-flex h-9 w-9 cursor-help items-center justify-center rounded-full border border-border bg-panel-muted text-xs text-foreground/70 transition hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/20",
+            type: "button",
             title: copy.help_label(),
-            "?"
-        }
-    }
-}
-
-#[component]
-fn HelpPanel(
-    ui: WorkbenchUiState,
-    active_pane: WorkbenchPane,
-    sidebar_open: bool,
-    help_topic: HelpTopic,
-) -> Element {
-    let copy = ui.copy();
-    rsx! {
-        section { class: "rounded-2xl border border-border bg-panel p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]",
-            div { class: "flex items-start justify-between gap-3",
-                div { class: "space-y-1",
-                    p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{copy.help_label()}" }
-                    h3 { class: "text-sm font-semibold text-foreground", "{copy.help_title(help_topic)}" }
-                }
-                a {
-                    class: "inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-panel-muted text-foreground/60 hover:bg-background",
-                    href: view_href(&ui, active_pane, sidebar_open, ui.locale, None),
-                    title: copy.close_label(),
-                    "×"
-                }
+            "aria-describedby": tooltip_id.clone(),
+            span { class: "pointer-events-none", "?" }
+            span {
+                id: tooltip_id,
+                class: "pointer-events-none absolute right-0 top-full z-50 mt-2 w-72 translate-y-1 rounded-2xl border border-border bg-panel px-4 py-3 text-left opacity-0 shadow-[0_18px_36px_rgba(15,23,42,0.14)] transition duration-150 ease-out group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100",
+                span { class: "absolute -top-1 right-4 h-2 w-2 rotate-45 border-l border-t border-border bg-panel" }
+                p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{copy.help_label()}" }
+                h3 { class: "mt-1 text-sm font-semibold text-foreground", "{copy.help_title(topic)}" }
+                p { class: "mt-2 text-sm leading-6 text-foreground/75", "{copy.help_body(topic)}" }
             }
-            p { class: "mt-3 text-sm text-foreground/75", "{copy.help_body(help_topic)}" }
         }
-    }
-}
-
-fn pane_help_topic(pane: WorkbenchPane) -> HelpTopic {
-    match pane {
-        WorkbenchPane::Items => HelpTopic::Items,
-        WorkbenchPane::Diagnostics => HelpTopic::Diagnostics,
-        WorkbenchPane::Pulse => HelpTopic::Pulse,
-        WorkbenchPane::Commands => HelpTopic::Palette,
-        WorkbenchPane::Goals => HelpTopic::Goals,
-        WorkbenchPane::Request => HelpTopic::Request,
-        WorkbenchPane::Branch => HelpTopic::Branch,
-        WorkbenchPane::Assignment => HelpTopic::Assignment,
-        WorkbenchPane::Graph => HelpTopic::Graph,
-        WorkbenchPane::Evidence => HelpTopic::Evidence,
     }
 }
 
@@ -313,7 +268,6 @@ fn view_href(
     pane: WorkbenchPane,
     sidebar_open: bool,
     locale: Locale,
-    help_topic: Option<HelpTopic>,
 ) -> String {
     let mut params = vec![
         format!("pane={}", pane.slug()),
@@ -344,9 +298,6 @@ fn view_href(
     if let Some(goal_id) = ui.payload.state.goals.selected_goal_id.as_ref() {
         params.push(format!("goal={}", urlencoding::encode(goal_id)));
     }
-    if let Some(help_topic) = help_topic.or(ui.help_topic) {
-        params.push(format!("help={}", help_topic.slug()));
-    }
     format!("?{}", params.join("&"))
 }
 
@@ -376,10 +327,10 @@ pub fn WorkbenchSidebar(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Ele
                 div { class: "flex items-center justify-between gap-3 px-1 pb-3",
                     p { class: "text-xs font-medium uppercase tracking-[0.24em] text-foreground/50", "{copy.sidebar_title()}" }
                     div { class: "flex items-center gap-2",
-                        HelpLink { ui: ui.clone(), active_pane: active_pane, sidebar_open: true, topic: HelpTopic::Sidebar }
+                        HelpLink { ui: ui.clone(), topic: HelpTopic::Sidebar }
                         a {
                             class: "inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-panel-muted text-foreground/60 hover:bg-background",
-                            href: view_href(&ui, active_pane, true, ui.locale, ui.help_topic),
+                            href: view_href(&ui, active_pane, true, ui.locale),
                             title: copy.sidebar_toggle_close(),
                             "◱"
                         }
@@ -410,7 +361,7 @@ pub fn WorkbenchSidebarRail(ui: WorkbenchUiState, active_pane: WorkbenchPane) ->
             nav { class: "rounded-2xl border border-border bg-panel p-2 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_18px_36px_rgba(15,23,42,0.06)]",
                 a {
                     class: "mb-2 inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-panel-muted text-foreground/60 hover:bg-background",
-                    href: view_href(&ui, active_pane, false, ui.locale, ui.help_topic),
+                    href: view_href(&ui, active_pane, false, ui.locale),
                     title: copy.sidebar_toggle_open(),
                     "☰"
                 }
@@ -493,7 +444,7 @@ pub fn WorkbenchStage(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
                     }
                     a {
                         class: "inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background text-xs text-foreground/70 hover:bg-panel-muted",
-                        href: view_href(&ui, active_pane, false, ui.locale, Some(pane_help_topic(active_pane))),
+                        href: view_href(&ui, active_pane, false, ui.locale),
                         title: ui.copy().help_label(),
                         "?"
                     }

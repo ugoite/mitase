@@ -26,7 +26,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use syu_app_ui::{
-    AppShell, HelpTopic, Locale, WorkbenchActionRunPreview, WorkbenchPane, WorkbenchUiState,
+    AppShell, Locale, WorkbenchActionRunPreview, WorkbenchPane, WorkbenchUiState,
     model::{
         CliCommandPreview, CommandCategory, CommandEffect, CommandResultItem, CommandResultStatus,
         ItemEditPreview, SpecBrowserDocument, SpecBrowserItem, SpecBrowserModel,
@@ -1021,8 +1021,6 @@ struct WorkbenchViewQuery {
     goal: Option<String>,
     #[serde(default)]
     lang: Option<String>,
-    #[serde(default)]
-    help: Option<String>,
 }
 
 #[cfg(test)]
