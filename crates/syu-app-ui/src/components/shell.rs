@@ -1322,9 +1322,9 @@ fn spec_item_href(
 
 fn spec_tree_item_class(active: bool) -> &'static str {
     if active {
-        "grid gap-0.5 rounded-md border border-foreground bg-foreground px-2 py-1.5 text-background"
+        "grid gap-0.5 rounded-md border border-foreground bg-foreground px-2 py-1.5 text-background aria-[current=page]:border-foreground aria-[current=page]:bg-foreground aria-[current=page]:text-background"
     } else {
-        "grid gap-0.5 rounded-md border border-transparent px-2 py-1.5 text-foreground hover:border-border hover:bg-panel-muted"
+        "grid gap-0.5 rounded-md border border-transparent px-2 py-1.5 text-foreground hover:border-border hover:bg-panel-muted aria-[current=page]:border-foreground aria-[current=page]:bg-foreground aria-[current=page]:text-background"
     }
 }
 

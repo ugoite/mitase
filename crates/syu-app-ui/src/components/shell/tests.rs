@@ -282,6 +282,7 @@ fn spec_browser_kind_tabs_filter_to_selected_layer() {
     assert!(html.contains("data-spec-kind-panel=\"requirement\""));
     assert!(html.contains("data-spec-kind-tab=\"requirement\""));
     assert!(html.contains("aria-current=\"page\""));
+    assert!(html.contains("aria-[current=page]:bg-foreground"));
     assert!(html.contains("name=\"spec_kind\" value=\"requirement\""));
     assert!(html.contains("REQ-ONLY"));
     assert!(!html.contains("PHIL-ONLY"));
