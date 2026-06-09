@@ -253,7 +253,7 @@ fn HelpLink(ui: WorkbenchUiState, topic: HelpTopic) -> Element {
             span { class: "pointer-events-none", "?" }
             span {
                 id: tooltip_id,
-                class: "pointer-events-none absolute right-0 top-full z-50 mt-2 w-72 translate-y-1 rounded-2xl border border-border bg-panel px-4 py-3 text-left opacity-0 shadow-[0_18px_36px_rgba(15,23,42,0.14)] transition duration-150 ease-out group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100",
+                class: "pointer-events-none absolute right-0 top-full z-50 mt-2 w-72 translate-y-1 rounded-2xl border border-border bg-panel px-4 py-3 text-left opacity-0 shadow-[0_18px_36px_rgba(15,23,42,0.14)] transition duration-150 ease-out group-hover:translate-y-0 group-hover:opacity-100",
                 span { class: "absolute -top-1 right-4 h-2 w-2 rotate-45 border-l border-t border-border bg-panel" }
                 p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{copy.help_label()}" }
                 h3 { class: "mt-1 text-sm font-semibold text-foreground", "{copy.help_title(topic)}" }
