@@ -637,6 +637,10 @@ pub struct ValidateArgs {
     #[arg(long, action = ArgAction::SetTrue)]
     pub spec_only: bool,
 
+    #[arg(help = "Disable in-memory validation caches for this run")]
+    #[arg(long, action = ArgAction::SetTrue)]
+    pub no_cache: bool,
+
     #[arg(
         help = "Apply conservative autofixes for trace docs, graph links, and feature registry drift"
     )]
