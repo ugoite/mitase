@@ -539,11 +539,31 @@ fn WorkbenchActionResult(
     let category_param = category.map_or_else(String::new, |value| value.slug().to_string());
     let action_title = workbench_action_title(locale, action.id).to_string();
     let action_description = workbench_action_description(locale, action.id).to_string();
-    let command_label = if locale == Locale::Ja { "コマンド" } else { "command" };
-    let execution_label = if locale == Locale::Ja { "実行" } else { "execution" };
-    let confirm_label = if locale == Locale::Ja { "確認" } else { "confirm" };
-    let ready_label = if locale == Locale::Ja { "準備完了" } else { "ready" };
-    let request_placeholder = if locale == Locale::Ja { "依頼" } else { "request" };
+    let command_label = if locale == Locale::Ja {
+        "コマンド"
+    } else {
+        "command"
+    };
+    let execution_label = if locale == Locale::Ja {
+        "実行"
+    } else {
+        "execution"
+    };
+    let confirm_label = if locale == Locale::Ja {
+        "確認"
+    } else {
+        "confirm"
+    };
+    let ready_label = if locale == Locale::Ja {
+        "準備完了"
+    } else {
+        "ready"
+    };
+    let request_placeholder = if locale == Locale::Ja {
+        "依頼"
+    } else {
+        "request"
+    };
     rsx! {
         section { class: "space-y-4",
           div { class: classes::DRAWER,
@@ -612,10 +632,26 @@ fn CliCommandResult(preview: CliCommandPreview, locale: Locale, query: String) -
     let copy = crate::i18n::copy(locale);
     let default_cli_arg = cli_input_placeholder(&preview.id);
     let needs_confirmation = preview.mutates_files;
-    let command_label = if locale == Locale::Ja { "コマンド" } else { "command" };
-    let execution_label = if locale == Locale::Ja { "実行" } else { "execution" };
-    let confirm_label = if locale == Locale::Ja { "確認" } else { "confirm" };
-    let ready_label = if locale == Locale::Ja { "準備完了" } else { "ready" };
+    let command_label = if locale == Locale::Ja {
+        "コマンド"
+    } else {
+        "command"
+    };
+    let execution_label = if locale == Locale::Ja {
+        "実行"
+    } else {
+        "execution"
+    };
+    let confirm_label = if locale == Locale::Ja {
+        "確認"
+    } else {
+        "confirm"
+    };
+    let ready_label = if locale == Locale::Ja {
+        "準備完了"
+    } else {
+        "ready"
+    };
 
     rsx! {
         section { class: "space-y-4",
@@ -672,7 +708,11 @@ fn CliCommandResult(preview: CliCommandPreview, locale: Locale, query: String) -
 }
 
 #[component]
-fn TypedResultView(result: TypedCommandResult, category: CommandCategory, locale: Locale) -> Element {
+fn TypedResultView(
+    result: TypedCommandResult,
+    category: CommandCategory,
+    locale: Locale,
+) -> Element {
     let pass_count = result
         .items
         .iter()
@@ -688,7 +728,11 @@ fn TypedResultView(result: TypedCommandResult, category: CommandCategory, locale
         .iter()
         .filter(|item| item.status == CommandResultStatus::Fail)
         .count();
-    let result_suffix = if locale == Locale::Ja { "結果" } else { "result" };
+    let result_suffix = if locale == Locale::Ja {
+        "結果"
+    } else {
+        "result"
+    };
     rsx! {
         section {
             class: "rounded-lg border border-border bg-panel p-4 shadow-sm",
@@ -811,12 +855,48 @@ fn ResultCategorySummary(
 
 fn result_list_label(locale: Locale, category: CommandCategory) -> &'static str {
     match category {
-        CommandCategory::Browse => if locale == Locale::Ja { "項目" } else { "Items" },
-        CommandCategory::Check => if locale == Locale::Ja { "検証項目" } else { "Checks" },
-        CommandCategory::Plan => if locale == Locale::Ja { "提案" } else { "Proposals" },
-        CommandCategory::Change => if locale == Locale::Ja { "変更" } else { "Changes" },
-        CommandCategory::Operate => if locale == Locale::Ja { "イベント" } else { "Events" },
-        CommandCategory::Generate => if locale == Locale::Ja { "成果物" } else { "Artifacts" },
+        CommandCategory::Browse => {
+            if locale == Locale::Ja {
+                "項目"
+            } else {
+                "Items"
+            }
+        }
+        CommandCategory::Check => {
+            if locale == Locale::Ja {
+                "検証項目"
+            } else {
+                "Checks"
+            }
+        }
+        CommandCategory::Plan => {
+            if locale == Locale::Ja {
+                "提案"
+            } else {
+                "Proposals"
+            }
+        }
+        CommandCategory::Change => {
+            if locale == Locale::Ja {
+                "変更"
+            } else {
+                "Changes"
+            }
+        }
+        CommandCategory::Operate => {
+            if locale == Locale::Ja {
+                "イベント"
+            } else {
+                "Events"
+            }
+        }
+        CommandCategory::Generate => {
+            if locale == Locale::Ja {
+                "成果物"
+            } else {
+                "Artifacts"
+            }
+        }
     }
 }
 

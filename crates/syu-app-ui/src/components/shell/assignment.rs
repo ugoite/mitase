@@ -135,7 +135,12 @@ pub fn AssignmentConstraintPanel(assignment: Assignment, locale: Locale) -> Elem
 }
 
 #[component]
-pub(super) fn ConstraintList(title: String, token: String, values: Vec<String>, locale: Locale) -> Element {
+pub(super) fn ConstraintList(
+    title: String,
+    token: String,
+    values: Vec<String>,
+    locale: Locale,
+) -> Element {
     rsx! {
         div { class: "rounded-xl border border-border bg-background/30 p-3",
             div { class: "flex items-center justify-between gap-2",

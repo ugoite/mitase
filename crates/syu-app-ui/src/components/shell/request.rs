@@ -71,7 +71,10 @@ pub fn RequestContextEditor(ui: WorkbenchUiState) -> Element {
 }
 
 #[component]
-pub fn RequestClassificationPanel(request: Option<syu_workbench::ActiveRequestState>, locale: Locale) -> Element {
+pub fn RequestClassificationPanel(
+    request: Option<syu_workbench::ActiveRequestState>,
+    locale: Locale,
+) -> Element {
     rsx! {
         Panel { class: classes::PANEL_MUTED,
             div { class: "flex flex-col gap-2 p-3",
@@ -99,7 +102,10 @@ pub fn RequestClassificationPanel(request: Option<syu_workbench::ActiveRequestSt
 }
 
 #[component]
-pub fn RequestScopePanel(request: Option<syu_workbench::ActiveRequestState>, locale: Locale) -> Element {
+pub fn RequestScopePanel(
+    request: Option<syu_workbench::ActiveRequestState>,
+    locale: Locale,
+) -> Element {
     rsx! {
         Panel { class: classes::PANEL_MUTED,
             div { class: "flex flex-col gap-2 p-3",
@@ -131,7 +137,10 @@ pub fn RequestScopePanel(request: Option<syu_workbench::ActiveRequestState>, loc
 }
 
 #[component]
-pub fn ScaffoldPreviewPanel(request: Option<syu_workbench::ActiveRequestState>, locale: Locale) -> Element {
+pub fn ScaffoldPreviewPanel(
+    request: Option<syu_workbench::ActiveRequestState>,
+    locale: Locale,
+) -> Element {
     rsx! {
         Panel { class: classes::PANEL_MUTED,
             div { class: "flex flex-col gap-2 p-3",

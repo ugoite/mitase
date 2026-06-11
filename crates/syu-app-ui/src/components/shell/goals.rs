@@ -2,7 +2,11 @@ use super::*;
 
 #[component]
 pub fn GoalRail(ui: WorkbenchUiState) -> Element {
-    let goal_empty_title = if ui.locale == Locale::Ja { "なし" } else { "None" };
+    let goal_empty_title = if ui.locale == Locale::Ja {
+        "なし"
+    } else {
+        "None"
+    };
     let goal_empty_body = if ui.locale == Locale::Ja {
         "最初のゴールはここに表示されます。"
     } else {

@@ -169,7 +169,10 @@ fn canonicalize_path_if_possible(path: &Path) -> Option<std::path::PathBuf> {
     fs::canonicalize(path).ok()
 }
 
-fn relative_workspace_root(workspace_root: &Path, current_dir: &Path) -> Option<std::path::PathBuf> {
+fn relative_workspace_root(
+    workspace_root: &Path,
+    current_dir: &Path,
+) -> Option<std::path::PathBuf> {
     if let Some(canonical_workspace_root) = canonicalize_path_if_possible(workspace_root)
         && let Ok(relative) = canonical_workspace_root.strip_prefix(current_dir)
     {

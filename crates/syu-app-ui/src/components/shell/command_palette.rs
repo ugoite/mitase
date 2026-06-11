@@ -64,11 +64,23 @@ pub(super) fn CliCommandItem(
     category: Option<CommandCategory>,
 ) -> Element {
     let state = if entry.mutates_files {
-        if locale == Locale::Ja { "確認" } else { "confirm" }
+        if locale == Locale::Ja {
+            "確認"
+        } else {
+            "confirm"
+        }
     } else if entry.requires_input {
-        if locale == Locale::Ja { "入力" } else { "input" }
+        if locale == Locale::Ja {
+            "入力"
+        } else {
+            "input"
+        }
     } else {
-        if locale == Locale::Ja { "準備完了" } else { "ready" }
+        if locale == Locale::Ja {
+            "準備完了"
+        } else {
+            "ready"
+        }
     };
     let category_param =
         category.map_or_else(String::new, |value| format!("&category={}", value.slug()));

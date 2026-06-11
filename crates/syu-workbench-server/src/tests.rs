@@ -834,17 +834,16 @@ async fn every_palette_cli_command_has_a_preview_and_argument_path() {
             command.id
         );
 
-        let preview =
-            run_cli_command_preview(
-                command.id,
-                tempdir.path(),
-                Some(cli_arg),
-                false,
-                false,
-                syu_app_ui::Locale::En,
-            )
-                .await
-                .unwrap_or_else(|| panic!("{} should produce a preview", command.id));
+        let preview = run_cli_command_preview(
+            command.id,
+            tempdir.path(),
+            Some(cli_arg),
+            false,
+            false,
+            syu_app_ui::Locale::En,
+        )
+        .await
+        .unwrap_or_else(|| panic!("{} should produce a preview", command.id));
         assert_eq!(preview.id, command.id);
         assert!(!preview.result_summary.trim().is_empty());
     }
@@ -861,8 +860,8 @@ async fn cli_preview_can_include_stdout_and_stderr_log_sections() {
         true,
         syu_app_ui::Locale::En,
     )
-        .await
-        .expect("templates preview");
+    .await
+    .expect("templates preview");
 
     assert!(preview.result_summary.contains("stdout:"));
     assert!(preview.result_summary.contains("stderr:"));
@@ -879,8 +878,8 @@ async fn cli_preview_hides_diagnostics_without_show_log() {
         false,
         syu_app_ui::Locale::En,
     )
-        .await
-        .expect("templates preview");
+    .await
+    .expect("templates preview");
 
     assert!(preview.result.diagnostics.is_none());
 }

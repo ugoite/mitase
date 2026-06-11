@@ -723,8 +723,15 @@ async fn run_all_diagnostics(
         }
     }
     if goal_available {
-        if let Some(preview) =
-            run_cli_command_preview("cli.task.check", workspace_root, None, false, show_log, locale).await
+        if let Some(preview) = run_cli_command_preview(
+            "cli.task.check",
+            workspace_root,
+            None,
+            false,
+            show_log,
+            locale,
+        )
+        .await
         {
             items.push(CommandResultItem {
                 id: "cli.task.check".to_string(),
@@ -1228,7 +1235,12 @@ pub(super) async fn run_cli_command_preview(
             } else {
                 format!("{} needs input before it can run.", command.invocation)
             },
-            if locale == Locale::Ja { "入力が必要" } else { "input required" }.to_string(),
+            if locale == Locale::Ja {
+                "入力が必要"
+            } else {
+                "input required"
+            }
+            .to_string(),
             CommandResultStatus::Pending,
             None,
             None,
@@ -1240,14 +1252,22 @@ pub(super) async fn run_cli_command_preview(
             *command,
             command.invocation.to_string(),
             if locale == Locale::Ja {
-                format!("{} はファイルを書き込む前に確認が必要です。", command.invocation)
+                format!(
+                    "{} はファイルを書き込む前に確認が必要です。",
+                    command.invocation
+                )
             } else {
                 format!(
                     "{} needs confirmation before writing files.",
                     command.invocation
                 )
             },
-            if locale == Locale::Ja { "確認が必要" } else { "confirmation required" }.to_string(),
+            if locale == Locale::Ja {
+                "確認が必要"
+            } else {
+                "confirmation required"
+            }
+            .to_string(),
             CommandResultStatus::Pending,
             None,
             None,
@@ -1265,7 +1285,12 @@ pub(super) async fn run_cli_command_preview(
             } else {
                 format!("failed to prepare command input: {error}")
             },
-            if locale == Locale::Ja { "失敗" } else { "failed" }.to_string(),
+            if locale == Locale::Ja {
+                "失敗"
+            } else {
+                "failed"
+            }
+            .to_string(),
             CommandResultStatus::Fail,
             None,
             None,
@@ -1282,7 +1307,12 @@ pub(super) async fn run_cli_command_preview(
             } else {
                 "Already represented by this Workbench session.".to_string()
             },
-            if locale == Locale::Ja { "実行中" } else { "running" }.to_string(),
+            if locale == Locale::Ja {
+                "実行中"
+            } else {
+                "running"
+            }
+            .to_string(),
             CommandResultStatus::Ready,
             None,
             None,
@@ -1344,7 +1374,12 @@ pub(super) async fn run_cli_command_preview(
             };
             (
                 summary,
-                if locale == Locale::Ja { "失敗" } else { "failed" }.to_string(),
+                if locale == Locale::Ja {
+                    "失敗"
+                } else {
+                    "failed"
+                }
+                .to_string(),
                 CommandResultStatus::Fail,
                 None,
                 None,

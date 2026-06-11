@@ -230,9 +230,7 @@ pub fn workbench_action_description(locale: Locale, action_id: WorkbenchActionId
             WorkbenchActionId::RequestScaffold => {
                 "Preview the spec and file updates needed to realize the active request."
             }
-            WorkbenchActionId::RequestPlan => {
-                "Turn the scoped request into a temporary Goal Plan."
-            }
+            WorkbenchActionId::RequestPlan => "Turn the scoped request into a temporary Goal Plan.",
             WorkbenchActionId::GoalTestSelect => {
                 "Choose the narrowest tests that cover the active Goal Plan."
             }
@@ -286,7 +284,9 @@ pub fn workbench_action_description(locale: Locale, action_id: WorkbenchActionId
             }
         },
         Locale::Ja => match action_id {
-            WorkbenchActionId::RequestNew => "現在のワークスペースに新しい依頼アーティファクトを作成します。",
+            WorkbenchActionId::RequestNew => {
+                "現在のワークスペースに新しい依頼アーティファクトを作成します。"
+            }
             WorkbenchActionId::RequestClassify => {
                 "現在の依頼が新規作成・変更・削除のどれかを判定します。"
             }
@@ -302,12 +302,8 @@ pub fn workbench_action_description(locale: Locale, action_id: WorkbenchActionId
             WorkbenchActionId::GoalTestSelect => {
                 "現在の Goal Plan を覆う最小限のテストを選びます。"
             }
-            WorkbenchActionId::GoalCheck => {
-                "現在の Goal Plan をブランチ範囲と照合します。"
-            }
-            WorkbenchActionId::BranchScope => {
-                "現在のブランチ範囲と見えている影響面を要約します。"
-            }
+            WorkbenchActionId::GoalCheck => "現在の Goal Plan をブランチ範囲と照合します。",
+            WorkbenchActionId::BranchScope => "現在のブランチ範囲と見えている影響面を要約します。",
             WorkbenchActionId::BranchInferGoal => {
                 "現在の diff と追跡済みスコープから Goal Plan を推定します。"
             }
@@ -323,9 +319,7 @@ pub fn workbench_action_description(locale: Locale, action_id: WorkbenchActionId
             WorkbenchActionId::ValidationRun => {
                 "現在のワークスペースに対してリポジトリ検証を実行します。"
             }
-            WorkbenchActionId::HistoryShow => {
-                "現在の依頼やゴールの証跡を表示します。"
-            }
+            WorkbenchActionId::HistoryShow => "現在の依頼やゴールの証跡を表示します。",
             WorkbenchActionId::AssignmentCreate => {
                 "明示的なスコープと証跡を付けて、現在のゴールを人または AI に割り当てます。"
             }
@@ -364,7 +358,9 @@ pub fn workbench_state_requirement_label(
             syu_workbench::WorkbenchStateRequirement::WorkspaceLoaded => "workspace 読み込み済み",
             syu_workbench::WorkbenchStateRequirement::ActiveRequest => "アクティブな依頼",
             syu_workbench::WorkbenchStateRequirement::ActiveGoalPlan => "アクティブな Goal Plan",
-            syu_workbench::WorkbenchStateRequirement::BranchScopeLoaded => "ブランチ範囲読み込み済み",
+            syu_workbench::WorkbenchStateRequirement::BranchScopeLoaded => {
+                "ブランチ範囲読み込み済み"
+            }
             syu_workbench::WorkbenchStateRequirement::AssignmentLoaded => "割り当て読み込み済み",
             syu_workbench::WorkbenchStateRequirement::ConfirmationMetadata => "確認メタデータ",
             syu_workbench::WorkbenchStateRequirement::BoundedScope => "境界づけられたスコープ",
@@ -988,8 +984,7 @@ fn cli_command_result_summary(locale: Locale, command: &CliCommandEntry) -> Stri
                     command.invocation
                 )
             } else if command.opens_spec_browser {
-                "下の構造化仕様を確認するか、コマンドを実行して端末出力を見てください。"
-                    .to_string()
+                "下の構造化仕様を確認するか、コマンドを実行して端末出力を見てください。".to_string()
             } else {
                 format!("{} は実行可能です。", command.invocation)
             }
