@@ -183,6 +183,28 @@ fn check_command_accepts_passing_workspace() {
 
 #[test]
 // REQ-CORE-001
+fn validate_no_cache_preserves_json_result() {
+    let workspace = fixture_path("passing");
+    let cached = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args(["validate", "--format", "json"])
+        .arg(&workspace)
+        .output()
+        .expect("cached validation should run");
+    let uncached = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args(["validate", "--format", "json", "--no-cache"])
+        .arg(&workspace)
+        .output()
+        .expect("uncached validation should run");
+
+    assert_eq!(cached.status.code(), uncached.status.code());
+    assert_eq!(cached.stdout, uncached.stdout);
+    assert_eq!(cached.stderr, uncached.stderr);
+}
+
+#[test]
+// REQ-CORE-001
 fn check_command_preserves_default_workspace_dot_in_next_steps() {
     let output = Command::cargo_bin("syu")
         .expect("binary should build")
