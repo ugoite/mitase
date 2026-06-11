@@ -95,6 +95,37 @@ fn role_subview_links_clear_command_context() {
 }
 
 #[test]
+fn stage_help_uses_active_pane_copy_without_collapsing_sidebar() {
+    let mut ui = build_demo_state();
+    ui.set_locale(Locale::En);
+    let request_html = render_element(rsx! {
+        WorkbenchStage { ui: ui.clone(), active_pane: WorkbenchPane::Request }
+    });
+
+    assert!(request_html.contains("help-tooltip-request"));
+    assert!(request_html.contains("Shows the request text, its classification, and the scope it opens."));
+    assert!(!request_html.contains("href=\"?pane=request&#38;sidebar=0"));
+
+    let commands_html = render_element(rsx! {
+        WorkbenchStage { ui, active_pane: WorkbenchPane::Commands }
+    });
+
+    assert!(commands_html.contains("help-tooltip-palette"));
+    assert!(commands_html.contains("Focus the top box, type a few letters, then choose a result."));
+    assert!(!commands_html.contains("href=\"?pane=commands&#38;sidebar=0"));
+}
+
+#[test]
+fn help_tooltip_is_visible_on_keyboard_focus() {
+    let html = render_element(rsx! {
+        WorkbenchStage { ui: build_demo_state(), active_pane: WorkbenchPane::Request }
+    });
+
+    assert!(html.contains("group-focus-within:opacity-100"));
+    assert!(html.contains("group-focus-within:translate-y-0"));
+}
+
+#[test]
 fn runnable_cli_forms_preserve_selected_locale() {
     let mut ui = build_demo_state();
     ui.set_locale(Locale::Ja);

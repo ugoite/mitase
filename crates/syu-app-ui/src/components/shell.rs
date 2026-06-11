@@ -253,7 +253,7 @@ fn HelpLink(ui: WorkbenchUiState, topic: HelpTopic) -> Element {
             span { class: "pointer-events-none", "?" }
             span {
                 id: tooltip_id,
-                class: "pointer-events-none absolute right-0 top-full z-50 mt-2 w-72 translate-y-1 rounded-2xl border border-border bg-panel px-4 py-3 text-left opacity-0 shadow-[0_18px_36px_rgba(15,23,42,0.14)] transition duration-150 ease-out group-hover:translate-y-0 group-hover:opacity-100",
+                class: "pointer-events-none absolute right-0 top-full z-50 mt-2 w-72 translate-y-1 rounded-2xl border border-border bg-panel px-4 py-3 text-left opacity-0 shadow-[0_18px_36px_rgba(15,23,42,0.14)] transition duration-150 ease-out group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100",
                 span { class: "absolute -top-1 right-4 h-2 w-2 rotate-45 border-l border-t border-border bg-panel" }
                 p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{copy.help_label()}" }
                 h3 { class: "mt-1 text-sm font-semibold text-foreground", "{copy.help_title(topic)}" }
@@ -315,6 +315,21 @@ fn route_pane_slug(pane: WorkbenchPane) -> &'static str {
         WorkbenchPane::Request.slug()
     } else {
         pane.slug()
+    }
+}
+
+fn pane_help_topic(pane: WorkbenchPane) -> HelpTopic {
+    match pane {
+        WorkbenchPane::Items => HelpTopic::Items,
+        WorkbenchPane::Diagnostics => HelpTopic::Diagnostics,
+        WorkbenchPane::Pulse => HelpTopic::Pulse,
+        WorkbenchPane::Commands => HelpTopic::Palette,
+        WorkbenchPane::Goals => HelpTopic::Goals,
+        WorkbenchPane::Request => HelpTopic::Request,
+        WorkbenchPane::Branch => HelpTopic::Branch,
+        WorkbenchPane::Assignment => HelpTopic::Assignment,
+        WorkbenchPane::Graph => HelpTopic::Graph,
+        WorkbenchPane::Evidence => HelpTopic::Evidence,
     }
 }
 
@@ -442,12 +457,7 @@ pub fn WorkbenchStage(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
                         p { class: "text-xs uppercase text-foreground/45", "result" }
                         h1 { class: "truncate text-lg font-semibold text-foreground", "{cli_preview.as_ref().map(|command| command.title.as_str()).or_else(|| selected_action.as_ref().map(|action| action.title.as_str())).unwrap_or(ui.copy().pane_title(active_pane))}" }
                     }
-                    a {
-                        class: "inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-background text-xs text-foreground/70 hover:bg-panel-muted",
-                        href: view_href(&ui, active_pane, false, ui.locale),
-                        title: ui.copy().help_label(),
-                        "?"
-                    }
+                    HelpLink { ui: ui.clone(), topic: pane_help_topic(active_pane) }
                 }
                 RoleSubviewNav { ui: ui.clone(), active_pane }
                 if show_pane_detail {
