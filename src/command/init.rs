@@ -1639,6 +1639,7 @@ mod tests {
             rule: Vec::new(),
             id: Vec::new(),
             spec_only: false,
+            no_cache: false,
             fix: false,
             dry_run: false,
             no_fix: false,

@@ -436,6 +436,7 @@ syu validate . --id REQ-001
 syu validate . --warning-exit-code 3
 syu validate . --fix
 syu validate . --no-fix
+syu validate . --no-cache
 syu validate . --allow-planned=false
 syu validate . --require-reciprocal-links=false
 syu validate . --require-symbol-trace-coverage
@@ -446,6 +447,8 @@ Use `--severity`, `--genre`, `--rule`, and `--id` to narrow the rendered issue l
 without changing the underlying validation result or exit code.
 Use the validate override flags for one-off stricter or looser runs without
 editing `syu.yaml`.
+Use `--no-cache` to bypass in-memory file and symbol inspection caches while
+debugging validation behavior.
 By default, warning-only runs still exit 0. Add `--warning-exit-code <CODE>` when
 CI or shell automation needs a distinct non-zero status for warnings while
 keeping error-bearing runs on exit code 1.

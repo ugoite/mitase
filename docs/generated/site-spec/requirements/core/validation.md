@@ -35,7 +35,8 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       both text and JSON output without changing the underlying validation
       result, MUST support a reviewer-friendly `--spec-only` mode that skips
       traced source checks while still validating the layered specification
-      itself, and `syu.yaml` MUST be able to disable reciprocal-link
+      itself, MUST provide `--no-cache` to bypass in-memory validation caches
+      without changing the validation result, and `syu.yaml` MUST be able to disable reciprocal-link
       enforcement without disabling missing-reference validation. `check` MAY
       remain as a compatibility alias, but `validate` is the canonical command
       name.
@@ -83,6 +84,7 @@ description: "Generated reference for docs/syu/requirements/core/validation.yaml
       - **file**: tests/help_command.rs
         - **symbols**:
           - validate_help_mentions_spec_only_mode
+          - validate_help_mentions_cache_bypass_mode
           - validate_help_mentions_dry_run_mode
       - **file**: src/command/check.rs
         - **symbols**:
@@ -289,7 +291,8 @@ requirements:
       both text and JSON output without changing the underlying validation
       result, MUST support a reviewer-friendly `--spec-only` mode that skips
       traced source checks while still validating the layered specification
-      itself, and `syu.yaml` MUST be able to disable reciprocal-link
+      itself, MUST provide `--no-cache` to bypass in-memory validation caches
+      without changing the validation result, and `syu.yaml` MUST be able to disable reciprocal-link
       enforcement without disabling missing-reference validation. `check` MAY
       remain as a compatibility alias, but `validate` is the canonical command
       name.
@@ -337,6 +340,7 @@ requirements:
         - file: tests/help_command.rs
           symbols:
             - validate_help_mentions_spec_only_mode
+            - validate_help_mentions_cache_bypass_mode
             - validate_help_mentions_dry_run_mode
         - file: src/command/check.rs
           symbols:
