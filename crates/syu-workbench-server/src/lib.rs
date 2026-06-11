@@ -956,8 +956,6 @@ struct WorkbenchViewQuery {
     #[serde(default)]
     pane: Option<String>,
     #[serde(default)]
-    sidebar: Option<String>,
-    #[serde(default)]
     query: Option<String>,
     #[serde(default)]
     spec_query: Option<String>,

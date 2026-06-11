@@ -259,7 +259,7 @@ pub fn GoalCard(goal_id: String, title: String, selected: bool) -> Element {
     rsx! {
         a {
             class: class,
-            href: format!("?pane=goals&sidebar=1&goal={goal_id}"),
+            href: format!("?pane=goals&goal={goal_id}"),
             aria_current: if selected { "page" } else { "false" },
             p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/55", "{goal_id}" }
             p { class: "mt-1 text-sm font-medium text-foreground/90", "{title}" }
@@ -289,7 +289,7 @@ pub fn CommandItem(
     let pane_slug = command_item_pane_slug(WorkbenchPane::for_action(entry.action.id));
     let href = if entry.availability.available && !entry.action.mutability.requires_confirmation() {
         format!(
-            "?pane={}&sidebar=1&lang={}&action={}&run=1{}",
+            "?pane={}&lang={}&action={}&run=1{}",
             pane_slug,
             locale.slug(),
             entry.action.id.label(),
@@ -297,7 +297,7 @@ pub fn CommandItem(
         )
     } else {
         format!(
-            "?pane={}&sidebar=1&lang={}&action={}{}",
+            "?pane={}&lang={}&action={}{}",
             pane_slug,
             locale.slug(),
             entry.action.id.label(),

@@ -138,7 +138,7 @@ pub fn SpecImpactGraph(ui: WorkbenchUiState) -> Element {
                         }
                         a {
                             class: "flex items-center justify-center rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground/80 hover:bg-panel-muted",
-                            href: "?pane=commands&sidebar=0&query=branch%20scope&action=branch.scope",
+                            href: "?pane=commands&query=branch%20scope&action=branch.scope",
                             "Load branch scope"
                         }
                     }

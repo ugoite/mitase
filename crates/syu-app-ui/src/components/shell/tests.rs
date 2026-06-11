@@ -48,10 +48,22 @@ fn command_palette_preserves_selected_locale_across_search_links_and_run_forms()
     });
 
     assert!(html.contains("name=\"lang\" value=\"ja\""));
-    assert!(
-        html.contains("href=\"?pane=diagnostics&#38;sidebar=1&#38;lang=ja&#38;cli=cli.validate\"")
-    );
+    assert!(html.contains("href=\"?pane=diagnostics&#38;lang=ja&#38;cli=cli.validate\""));
     assert!(html.contains("data-command-id=\"cli.validate\""));
+    assert!(!html.contains("sidebar=0"));
+}
+
+#[test]
+fn language_switch_keeps_the_full_sidebar() {
+    let html = render_element(rsx! {
+        AppShell { ui: build_demo_state(), active_pane: WorkbenchPane::Request, sidebar_open: false }
+    });
+
+    assert!(html.contains("navigation"));
+    assert!(html.contains(">Items</span>"));
+    assert!(html.contains("?pane=request&#38;lang=ja"));
+    assert!(!html.contains("sidebar=0"));
+    assert!(!html.contains("show sidebar"));
 }
 
 #[test]
@@ -66,12 +78,13 @@ fn navigation_links_clear_command_context_but_keep_locale() {
         AppShell { ui, active_pane: WorkbenchPane::Items, sidebar_open: true }
     });
 
-    assert!(html.contains("href=\"?pane=request&#38;sidebar=1&#38;lang=ja\""));
-    assert!(html.contains("href=\"?pane=branch&#38;sidebar=1&#38;lang=ja\""));
-    assert!(html.contains("href=\"?pane=diagnostics&#38;sidebar=1&#38;lang=ja\""));
-    assert!(!html.contains("href=\"?pane=request&#38;sidebar=1&#38;lang=ja&#38;cli=cli.show"));
-    assert!(!html.contains("href=\"?pane=branch&#38;sidebar=1&#38;lang=ja&#38;cli=cli.show"));
-    assert!(!html.contains("href=\"?pane=diagnostics&#38;sidebar=1&#38;lang=ja&#38;cli=cli.show"));
+    assert!(html.contains("href=\"?pane=request&#38;lang=ja\""));
+    assert!(html.contains("href=\"?pane=branch&#38;lang=ja\""));
+    assert!(html.contains("href=\"?pane=diagnostics&#38;lang=ja\""));
+    assert!(!html.contains("sidebar="));
+    assert!(!html.contains("href=\"?pane=request&#38;lang=ja&#38;cli=cli.show"));
+    assert!(!html.contains("href=\"?pane=branch&#38;lang=ja&#38;cli=cli.show"));
+    assert!(!html.contains("href=\"?pane=diagnostics&#38;lang=ja&#38;cli=cli.show"));
     assert!(!html.contains("href=\"?pane=pulse"));
 }
 
@@ -85,12 +98,13 @@ fn role_subview_links_clear_command_context() {
         AppShell { ui, active_pane: WorkbenchPane::Request, sidebar_open: true }
     });
 
-    assert!(html.contains("href=\"?pane=request&#38;sidebar=1&#38;lang=en\""));
-    assert!(html.contains("href=\"?pane=goals&#38;sidebar=1&#38;lang=en\""));
-    assert!(html.contains("href=\"?pane=assignment&#38;sidebar=1&#38;lang=en\""));
-    assert!(html.contains("href=\"?pane=evidence&#38;sidebar=1&#38;lang=en\""));
-    assert!(!html.contains("href=\"?pane=request&#38;sidebar=1&#38;lang=en&#38;cli=cli.show"));
-    assert!(!html.contains("href=\"?pane=goals&#38;sidebar=1&#38;lang=en&#38;cli=cli.show"));
+    assert!(html.contains("href=\"?pane=request&#38;lang=en\""));
+    assert!(html.contains("href=\"?pane=goals&#38;lang=en\""));
+    assert!(html.contains("href=\"?pane=assignment&#38;lang=en\""));
+    assert!(html.contains("href=\"?pane=evidence&#38;lang=en\""));
+    assert!(!html.contains("sidebar="));
+    assert!(!html.contains("href=\"?pane=request&#38;lang=en&#38;cli=cli.show"));
+    assert!(!html.contains("href=\"?pane=goals&#38;lang=en&#38;cli=cli.show"));
     assert!(!html.contains("href=\"?pane=pulse"));
 }
 

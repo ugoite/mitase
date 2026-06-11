@@ -9,7 +9,6 @@ pub fn CommandPalette(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
     rsx! {
         form { class: "group relative", action: "/", method: "get", "data-command-palette": "true",
             input { type: "hidden", name: "pane", value: route_pane_slug(active_pane) }
-            input { type: "hidden", name: "sidebar", value: "0" }
             input { type: "hidden", name: "lang", value: "{ui.locale.slug()}" }
             input { type: "hidden", name: "category", value: "{ui.command_category.map_or(\"\", CommandCategory::slug)}" }
             div { class: "flex items-center gap-2",
@@ -71,7 +70,7 @@ pub(super) fn CliCommandItem(
     let category_param =
         category.map_or_else(String::new, |value| format!("&category={}", value.slug()));
     let href = format!(
-        "?pane={}&sidebar=1&lang={}&cli={}{}",
+        "?pane={}&lang={}&cli={}{}",
         route_pane_slug(WorkbenchPane::for_cli(entry.id)),
         locale.slug(),
         entry.id,
@@ -117,7 +116,6 @@ fn category_href(
 ) -> String {
     let mut params = vec![
         format!("pane={}", route_pane_slug(active_pane)),
-        "sidebar=0".to_string(),
         format!("lang={}", ui.locale.slug()),
     ];
     if !ui.command_query.trim().is_empty() {

@@ -185,14 +185,9 @@ async fn render_workbench(
             ui.preview = None;
         }
     }
-    let sidebar_open = view
-        .sidebar
-        .as_deref()
-        .map(|value| value != "0" && value != "false")
-        .unwrap_or(true);
     let locale = ui.locale;
     let shell = render_element(rsx! {
-        AppShell { ui, active_pane, sidebar_open }
+        AppShell { ui, active_pane, sidebar_open: true }
     });
     Html(workbench_document(shell, locale))
 }

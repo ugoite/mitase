@@ -151,15 +151,10 @@ pub fn AppShell(ui: WorkbenchUiState, active_pane: WorkbenchPane, sidebar_open: 
                 StatusBar {
                     ui: ui.clone(),
                     active_pane: active_pane,
-                    sidebar_open: false,
                     palette: rsx! { CommandPalette { ui: ui.clone(), active_pane: active_pane } },
                 }
                 div { class: "workbench-layout",
-                    if sidebar_open {
-                        WorkbenchSidebar { ui: ui.clone(), active_pane }
-                    } else {
-                        WorkbenchSidebarRail { ui: ui.clone(), active_pane }
-                    }
+                    WorkbenchSidebar { ui: ui.clone(), active_pane }
                     div { class: classes::MAIN_GRID,
                         WorkbenchStage {
                             ui: ui.clone(),
@@ -176,17 +171,15 @@ pub fn AppShell(ui: WorkbenchUiState, active_pane: WorkbenchPane, sidebar_open: 
 pub fn StatusBar(
     ui: WorkbenchUiState,
     active_pane: WorkbenchPane,
-    sidebar_open: bool,
     palette: Element,
 ) -> Element {
-    let _ = sidebar_open;
     let summary = ui.pulse_summary();
     let copy = ui.copy();
     rsx! {
         header { class: "z-40 border-b border-border bg-panel/95", style: "position: sticky; top: 0",
             nav { class: "mx-auto flex max-w-7xl items-center justify-between gap-4 py-3", "aria-label": "Global",
                 div { class: "flex lg:flex-1",
-                    a { class: "-m-1.5 p-1.5 text-base font-semibold text-foreground", href: navigation_href(WorkbenchPane::Request, false, ui.locale),
+                    a { class: "-m-1.5 p-1.5 text-base font-semibold text-foreground", href: navigation_href(WorkbenchPane::Request, ui.locale),
                         span { class: "sr-only", "{copy.app_title()}" }
                         "Syu"
                     }
@@ -200,8 +193,8 @@ pub fn StatusBar(
                         div { class: "absolute right-0 z-30 mt-2 w-80 rounded-lg border border-border bg-panel p-3 shadow-lg",
                             div { class: "space-y-3",
                                 div { class: "grid grid-cols-2 gap-2", "aria-label": copy.language_label(),
-                                    a { class: language_button_class(ui.locale == Locale::En), href: view_href(&ui, active_pane, false, Locale::En), "EN" }
-                                    a { class: language_button_class(ui.locale == Locale::Ja), href: view_href(&ui, active_pane, false, Locale::Ja), "日本語" }
+                                    a { class: language_button_class(ui.locale == Locale::En), href: view_href(&ui, active_pane, Locale::En), "EN" }
+                                    a { class: language_button_class(ui.locale == Locale::Ja), href: view_href(&ui, active_pane, Locale::Ja), "日本語" }
                                 }
                                 SettingsRow { label: copy.workspace_label().to_string(), value: summary.workspace.clone() }
                                 SettingsRow { label: copy.branch_label().to_string(), value: summary.branch.clone() }
@@ -263,15 +256,9 @@ fn HelpLink(ui: WorkbenchUiState, topic: HelpTopic) -> Element {
     }
 }
 
-fn view_href(
-    ui: &WorkbenchUiState,
-    pane: WorkbenchPane,
-    sidebar_open: bool,
-    locale: Locale,
-) -> String {
+fn view_href(ui: &WorkbenchUiState, pane: WorkbenchPane, locale: Locale) -> String {
     let mut params = vec![
         format!("pane={}", pane.slug()),
-        format!("sidebar={}", if sidebar_open { "1" } else { "0" }),
         format!("lang={}", locale.slug()),
     ];
     if !ui.command_query.trim().is_empty() {
@@ -301,13 +288,8 @@ fn view_href(
     format!("?{}", params.join("&"))
 }
 
-fn navigation_href(pane: WorkbenchPane, sidebar_open: bool, locale: Locale) -> String {
-    format!(
-        "?pane={}&sidebar={}&lang={}",
-        route_pane_slug(pane),
-        if sidebar_open { "1" } else { "0" },
-        locale.slug()
-    )
+fn navigation_href(pane: WorkbenchPane, locale: Locale) -> String {
+    format!("?pane={}&lang={}", route_pane_slug(pane), locale.slug())
 }
 
 fn route_pane_slug(pane: WorkbenchPane) -> &'static str {
@@ -343,12 +325,6 @@ pub fn WorkbenchSidebar(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Ele
                     p { class: "text-xs font-medium uppercase tracking-[0.24em] text-foreground/50", "{copy.sidebar_title()}" }
                     div { class: "flex items-center gap-2",
                         HelpLink { ui: ui.clone(), topic: HelpTopic::Sidebar }
-                        a {
-                            class: "inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-panel-muted text-foreground/60 hover:bg-background",
-                            href: view_href(&ui, active_pane, true, ui.locale),
-                            title: copy.sidebar_toggle_close(),
-                            "◱"
-                        }
                     }
                 }
                 ul { class: "space-y-1",
@@ -359,35 +335,6 @@ pub fn WorkbenchSidebar(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Ele
                                 pane,
                                 active: pane == active_pane.role(),
                                 collapsed: false,
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-#[component]
-pub fn WorkbenchSidebarRail(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Element {
-    let copy = ui.copy();
-    rsx! {
-        aside { class: "w-full shrink-0 lg:w-16",
-            nav { class: "rounded-2xl border border-border bg-panel p-2 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_18px_36px_rgba(15,23,42,0.06)]",
-                a {
-                    class: "mb-2 inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-panel-muted text-foreground/60 hover:bg-background",
-                    href: view_href(&ui, active_pane, false, ui.locale),
-                    title: copy.sidebar_toggle_open(),
-                    "☰"
-                }
-                ul { class: "space-y-1",
-                    for pane in WorkbenchPane::ALL {
-                        li {
-                            SidebarPaneButton {
-                                ui: ui.clone(),
-                                pane,
-                                active: pane == active_pane.role(),
-                                collapsed: true,
                             }
                         }
                     }
@@ -413,7 +360,7 @@ fn SidebarPaneButton(
     rsx! {
         a {
             class: base,
-            href: navigation_href(pane, !collapsed, ui.locale),
+            href: navigation_href(pane, ui.locale),
             title: copy.pane_summary(pane),
             span { class: "grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-background text-xs text-foreground/75 transition group-hover:bg-panel",
                 "{pane.icon()}"
@@ -532,7 +479,6 @@ fn ItemEditPreviewPanel(preview: crate::model::ItemEditPreview) -> Element {
             if !preview.applied && !preview.apply_payload.is_empty() {
                 form { class: "mt-3", action: "/run", method: "post",
                     input { type: "hidden", name: "pane", value: "items" }
-                    input { type: "hidden", name: "sidebar", value: "1" }
                     input { type: "hidden", name: "item_edit", value: "{preview.item_id}" }
                     input { type: "hidden", name: "item_edit_apply", value: "1" }
                     input { type: "hidden", name: "item_edit_payload", value: "{preview.apply_payload}" }
@@ -563,7 +509,7 @@ fn RoleSubviewNav(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Element {
             for pane in panes {
                 a {
                     class: if *pane == active_pane { "whitespace-nowrap rounded-lg border border-foreground bg-foreground px-3 py-2 text-xs font-medium text-background" } else { "whitespace-nowrap rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground/70 hover:bg-panel-muted" },
-                    href: navigation_href(*pane, true, ui.locale),
+                    href: navigation_href(*pane, ui.locale),
                     aria_current: if *pane == active_pane { "page" } else { "false" },
                     "{ui.copy().pane_title(*pane)}"
                 }
@@ -598,7 +544,6 @@ fn WorkbenchActionResult(
             p { class: "mt-2 text-sm text-foreground/75", "{action.description}" }
             form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/run", method: "post", "data-command-run-form": "true",
                 input { type: "hidden", name: "pane", value: "{route_pane_slug(WorkbenchPane::for_action(action.id))}" }
-                input { type: "hidden", name: "sidebar", value: "1" }
                 input { type: "hidden", name: "lang", value: "{locale.slug()}" }
                 input { type: "hidden", name: "action", value: "{action.id.label()}" }
                 input { type: "hidden", name: "run", value: "1" }
@@ -672,7 +617,6 @@ fn CliCommandResult(preview: CliCommandPreview, locale: Locale, query: String) -
             }
             form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/run", method: "post", "data-command-run-form": "true",
                 input { type: "hidden", name: "pane", value: "{route_pane_slug(WorkbenchPane::for_cli(&preview.id))}" }
-                input { type: "hidden", name: "sidebar", value: "1" }
                 input { type: "hidden", name: "lang", value: "{locale.slug()}" }
                 input { type: "hidden", name: "cli", value: "{preview.id}" }
                 input { type: "hidden", name: "run", value: "1" }
@@ -985,7 +929,7 @@ fn spec_kind_href(
     kind: SpecKindTab,
 ) -> String {
     format!(
-        "?pane=items&sidebar=1&lang={}&cli={}&category={}&query={}&spec_query={}&spec_kind={}",
+        "?pane=items&lang={}&cli={}&category={}&query={}&spec_query={}&spec_kind={}",
         locale.slug(),
         urlencoding::encode(command_id),
         urlencoding::encode(category),
@@ -1020,8 +964,8 @@ fn SpecInfoBrowser(
                     p { class: "text-sm text-foreground/65", "Browse the layered files, follow linked items, or create a new specification item." }
                 }
                 div { class: "flex flex-wrap gap-2",
-                    a { class: "rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-panel-muted", href: "?pane=items&sidebar=1&cli=cli.add", "New item" }
-                    a { class: "rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-panel-muted", href: "?pane=items&sidebar=1&cli=cli.init", "Initialize workspace" }
+                    a { class: "rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-panel-muted", href: "?pane=items&cli=cli.add", "New item" }
+                    a { class: "rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-panel-muted", href: "?pane=items&cli=cli.init", "Initialize workspace" }
                 }
             }
             form {
@@ -1030,7 +974,6 @@ fn SpecInfoBrowser(
                 action: "/",
                 method: "get",
                 input { type: "hidden", name: "pane", value: "items" }
-                input { type: "hidden", name: "sidebar", value: "0" }
                 input { type: "hidden", name: "lang", value: "{locale.slug()}" }
                 input { type: "hidden", name: "cli", value: "{command_id}" }
                 input { type: "hidden", name: "category", value: "{category_value}" }
@@ -1319,7 +1262,7 @@ fn spec_item_href(
     item_id: &str,
 ) -> String {
     format!(
-        "?pane=items&sidebar=1&lang={}&cli={}&category={}&query={}&spec_query={}&spec_kind={}&spec_item={}",
+        "?pane=items&lang={}&cli={}&category={}&query={}&spec_query={}&spec_kind={}&spec_item={}",
         locale.slug(),
         urlencoding::encode(command_id),
         urlencoding::encode(category),
@@ -1451,7 +1394,6 @@ fn SpecModelCard(item: SpecBrowserItem) -> Element {
                 summary { class: "cursor-pointer text-sm font-semibold", "Edit item" }
                 form { class: "mt-3 grid gap-3", action: "/run", method: "post",
                     input { type: "hidden", name: "pane", value: "items" }
-                    input { type: "hidden", name: "sidebar", value: "1" }
                     input { type: "hidden", name: "item_edit", value: "{item.id}" }
                     label { class: "grid gap-1 text-xs text-foreground/60",
                         "Title"
@@ -1602,7 +1544,7 @@ fn LinkList(label: String, values: Vec<String>) -> Element {
                 for value in values {
                     a {
                         class: "rounded-md border border-border bg-panel px-2 py-1 text-xs font-medium text-foreground/70 hover:bg-panel-muted",
-                        href: format!("?pane=items&sidebar=1&cli=cli.show&spec_item={}", urlencoding::encode(&value)),
+                        href: format!("?pane=items&cli=cli.show&spec_item={}", urlencoding::encode(&value)),
                         "{value}"
                     }
                 }
@@ -1687,7 +1629,6 @@ fn DiagnosticsOverview(ui: WorkbenchUiState) -> Element {
                 }
                 form { action: "/run", method: "post", "data-diagnostics-refresh-all": "true",
                     input { type: "hidden", name: "pane", value: "diagnostics" }
-                    input { type: "hidden", name: "sidebar", value: "1" }
                     input { type: "hidden", name: "lang", value: "{ui.locale.slug()}" }
                     input { type: "hidden", name: "diagnostics_all", value: "1" }
                     button {
@@ -1701,7 +1642,7 @@ fn DiagnosticsOverview(ui: WorkbenchUiState) -> Element {
                 for (title, description, command_id, tool_id) in tools {
                     a {
                         class: "rounded-lg border border-border bg-background p-4 hover:bg-panel-muted",
-                        href: format!("?pane=diagnostics&sidebar=1&cli={command_id}"),
+                        href: format!("?pane=diagnostics&cli={command_id}"),
                         "data-diagnostic-tool": tool_id,
                         div { class: "flex items-start justify-between gap-3",
                             div {
@@ -1787,7 +1728,7 @@ fn FlowActionButton(
     rsx! {
         a {
             class: class,
-            href: format!("?pane=commands&sidebar=1&action={}", action_id.label()),
+            href: format!("?pane=commands&action={}", action_id.label()),
             aria_disabled: if available { "false" } else { "true" },
             span { "{label}" }
             span { class: "ml-2 text-xs opacity-75", "{action_id.label()}" }

@@ -42,14 +42,6 @@ impl UiCopy for English {
         "navigation"
     }
 
-    fn sidebar_toggle_open(&self) -> &'static str {
-        "show sidebar"
-    }
-
-    fn sidebar_toggle_close(&self) -> &'static str {
-        "hide sidebar"
-    }
-
     fn help_label(&self) -> &'static str {
         "help"
     }
@@ -120,7 +112,7 @@ impl UiCopy for English {
                 "Run workspace and goal checks, then jump from findings to affected items."
             }
             HelpTopic::Palette => "Focus the top box, type a few letters, then choose a result.",
-            HelpTopic::Sidebar => "Use the left sidebar to switch views and collapse the menu.",
+            HelpTopic::Sidebar => "Use the left sidebar to switch views.",
             HelpTopic::Pulse => "Shows the workspace, branch, and one action to open together.",
             HelpTopic::Goals => "Shows the current goal and the plan behind it.",
             HelpTopic::Request => {

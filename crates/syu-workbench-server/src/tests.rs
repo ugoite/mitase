@@ -179,21 +179,20 @@ async fn explicit_navigation_panes_drop_stale_cli_selection() {
     let (_, items_html) = text_response(
         router.clone(),
         Request::builder()
-            .uri(format!("/?pane=items&sidebar=1&lang=en&{stale}"))
+            .uri(format!("/?pane=items&lang=en&{stale}"))
             .body(Body::empty())
             .expect("request"),
     )
     .await;
-    assert!(items_html.contains("href=\"?pane=request&#38;sidebar=1&#38;lang=en\""));
-    assert!(
-        !items_html.contains("href=\"?pane=request&#38;sidebar=1&#38;lang=en&#38;cli=cli.show")
-    );
+    assert!(items_html.contains("href=\"?pane=request&#38;lang=en\""));
+    assert!(!items_html.contains("href=\"?pane=request&#38;lang=en&#38;cli=cli.show"));
+    assert!(!items_html.contains("sidebar="));
     assert!(!items_html.contains("href=\"?pane=pulse"));
 
     let (_, work_html) = text_response(
         router.clone(),
         Request::builder()
-            .uri(format!("/?pane=pulse&sidebar=1&lang=en&{stale}"))
+            .uri(format!("/?pane=pulse&lang=en&{stale}"))
             .body(Body::empty())
             .expect("request"),
     )
@@ -206,7 +205,7 @@ async fn explicit_navigation_panes_drop_stale_cli_selection() {
     let (_, work_alias_html) = text_response(
         router.clone(),
         Request::builder()
-            .uri(format!("/?pane=work&sidebar=1&lang=en&{stale}"))
+            .uri(format!("/?pane=work&lang=en&{stale}"))
             .body(Body::empty())
             .expect("request"),
     )
@@ -219,7 +218,7 @@ async fn explicit_navigation_panes_drop_stale_cli_selection() {
     let (_, scope_html) = text_response(
         router.clone(),
         Request::builder()
-            .uri(format!("/?pane=branch&sidebar=1&lang=en&{stale}"))
+            .uri(format!("/?pane=branch&lang=en&{stale}"))
             .body(Body::empty())
             .expect("request"),
     )
@@ -231,7 +230,7 @@ async fn explicit_navigation_panes_drop_stale_cli_selection() {
     let (_, diagnostics_html) = text_response(
         router.clone(),
         Request::builder()
-            .uri(format!("/?pane=diagnostics&sidebar=1&lang=en&{stale}"))
+            .uri(format!("/?pane=diagnostics&lang=en&{stale}"))
             .body(Body::empty())
             .expect("request"),
     )
@@ -243,7 +242,7 @@ async fn explicit_navigation_panes_drop_stale_cli_selection() {
     let (_, palette_html) = text_response(
         router,
         Request::builder()
-            .uri(format!("/?pane=commands&sidebar=1&lang=en&{stale}"))
+            .uri(format!("/?pane=commands&lang=en&{stale}"))
             .body(Body::empty())
             .expect("request"),
     )
@@ -262,7 +261,7 @@ async fn diagnostics_refresh_all_runs_unique_tools_and_skips_missing_goal() {
             .header("content-type", "application/x-www-form-urlencoded")
             .header("host", "localhost:3000")
             .header("origin", "http://localhost:3000")
-            .body(Body::from("pane=diagnostics&sidebar=1&diagnostics_all=1"))
+            .body(Body::from("pane=diagnostics&diagnostics_all=1"))
             .expect("request"),
     )
     .await;
@@ -293,7 +292,7 @@ async fn item_edit_requires_review_before_writing_source() {
             .header("host", "localhost:3000")
             .header("origin", "http://localhost:3000")
             .body(Body::from(
-                "pane=items&sidebar=1&item_edit=REQ-WORKBENCH-001&title=Preview+title&description=Preview+body&priority=medium&status=implemented&linked_policies=POL-005",
+                "pane=items&item_edit=REQ-WORKBENCH-001&title=Preview+title&description=Preview+body&priority=medium&status=implemented&linked_policies=POL-005",
             ))
             .expect("request"),
     )

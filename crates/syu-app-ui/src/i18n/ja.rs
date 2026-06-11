@@ -42,14 +42,6 @@ impl UiCopy for Japanese {
         "ナビゲーション"
     }
 
-    fn sidebar_toggle_open(&self) -> &'static str {
-        "サイドバーを表示"
-    }
-
-    fn sidebar_toggle_close(&self) -> &'static str {
-        "サイドバーを隠す"
-    }
-
     fn help_label(&self) -> &'static str {
         "ヘルプ"
     }
@@ -120,7 +112,7 @@ impl UiCopy for Japanese {
                 "ワークスペースとゴールの検査を実行し、問題のItemへ移動します。"
             }
             HelpTopic::Palette => "上部の入力欄にフォーカスして、少し入力すると候補が出ます。",
-            HelpTopic::Sidebar => "左のサイドバーで画面を切り替えたり、折りたたんだりできます。",
+            HelpTopic::Sidebar => "左のサイドバーで画面を切り替えられます。",
             HelpTopic::Pulse => "ワークスペース、ブランチ、開くものをまとめて表示します。",
             HelpTopic::Goals => "現在のゴールと、そのための計画を表示します。",
             HelpTopic::Request => "受付テキスト、分類、開くスコープを表示します。",
