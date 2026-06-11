@@ -7,7 +7,7 @@ pub fn CommandPalette(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
     let has_entries = !entries.is_empty() || !cli_entries.is_empty();
     let copy = ui.copy();
     rsx! {
-        form { class: "group relative", action: "/", method: "get", "data-command-palette": "true",
+        form { class: "group relative w-full min-w-0", action: "/", method: "get", "data-command-palette": "true",
             input { type: "hidden", name: "pane", value: route_pane_slug(active_pane) }
             input { type: "hidden", name: "lang", value: "{ui.locale.slug()}" }
             input { type: "hidden", name: "category", value: "{ui.command_category.map_or(\"\", CommandCategory::slug)}" }
@@ -25,7 +25,7 @@ pub fn CommandPalette(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
                     }
                 }
             }
-            div { class: "mt-2 flex flex-nowrap gap-1 overflow-x-auto pb-0.5", "aria-label": if ui.locale == Locale::Ja { "コマンド分類" } else { "Command categories" },
+            div { class: "mt-2 flex flex-wrap gap-1", "aria-label": if ui.locale == Locale::Ja { "コマンド分類" } else { "Command categories" },
                 a {
                     class: category_filter_class(ui.command_category.is_none()),
                     href: category_href(&ui, active_pane, None),

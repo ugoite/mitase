@@ -173,21 +173,15 @@ pub fn StatusBar(ui: WorkbenchUiState, active_pane: WorkbenchPane, palette: Elem
     let summary = ui.pulse_summary();
     let copy = ui.copy();
     rsx! {
-        header { class: "z-40 border-b border-border bg-panel/95", style: "position: sticky; top: 0",
-            nav { class: "mx-auto flex max-w-7xl items-center justify-between gap-4 py-3", "aria-label": "Global",
-                div { class: "flex lg:flex-1",
-                    a { class: "-m-1.5 p-1.5 text-base font-semibold text-foreground", href: navigation_href(WorkbenchPane::Request, ui.locale),
-                        span { class: "sr-only", "{copy.app_title()}" }
-                        "Syu"
-                    }
-                }
-                div { class: "hidden min-w-0 flex-1 lg:block", {palette.clone()} }
-                div { class: "flex flex-1 justify-end",
+        header { class: "z-40 border-b border-slate-200 bg-white", style: "position: sticky; top: 0",
+            nav { class: "flex min-h-16 min-w-0 items-start gap-4 px-4 py-3 sm:px-6 lg:ml-64 lg:px-8", "aria-label": "Global",
+                div { class: "hidden min-w-0 max-w-4xl flex-1 lg:block", {palette.clone()} }
+                div { class: "ml-auto flex shrink-0 items-center",
                     details { class: "relative",
-                        summary { class: "flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-full border border-border bg-background text-sm text-foreground/70 hover:bg-panel-muted", title: copy.language_label(),
-                            "⚙"
+                        summary { class: "flex h-9 w-9 cursor-pointer list-none items-center justify-center rounded-full text-slate-400 hover:bg-slate-50 hover:text-slate-600", title: copy.language_label(),
+                            span { class: "text-lg", "⚙" }
                         }
-                        div { class: "absolute right-0 z-30 mt-2 w-80 rounded-lg border border-border bg-panel p-3 shadow-lg",
+                        div { class: "absolute right-0 z-30 mt-2 w-[min(20rem,calc(100vw-2rem))] rounded-lg border border-border bg-panel p-3 shadow-lg",
                             div { class: "space-y-3",
                                 div { class: "grid grid-cols-2 gap-2", "aria-label": copy.language_label(),
                                     a { class: language_button_class(ui.locale == Locale::En), href: view_href(&ui, active_pane, Locale::En), "EN" }
@@ -204,7 +198,7 @@ pub fn StatusBar(ui: WorkbenchUiState, active_pane: WorkbenchPane, palette: Elem
                     }
                 }
             }
-            div { class: "pb-4 lg:hidden", {palette} }
+            div { class: "px-4 pb-3 lg:hidden", {palette} }
             div { class: "sr-only",
                 ScopeChip { label: format!("{} {}", summary.available_actions, copy.actions_label()) }
             }
@@ -325,13 +319,11 @@ fn pane_help_topic(pane: WorkbenchPane) -> HelpTopic {
 pub fn WorkbenchSidebar(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Element {
     let copy = ui.copy();
     rsx! {
-        aside { class: "w-full shrink-0 lg:w-72",
-            nav { class: "rounded-2xl border border-border bg-panel p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_18px_36px_rgba(15,23,42,0.06)]",
-                div { class: "flex items-center justify-between gap-3 px-1 pb-3",
-                    p { class: "text-xs font-medium uppercase tracking-[0.24em] text-foreground/50", "{copy.sidebar_title()}" }
-                    div { class: "flex items-center gap-2",
-                        HelpLink { ui: ui.clone(), topic: HelpTopic::Sidebar }
-                    }
+        aside { class: "w-full shrink-0 border-b border-slate-200 bg-white lg:fixed lg:inset-y-0 lg:left-0 lg:z-50 lg:w-64 lg:border-b-0 lg:border-r",
+            nav { class: "flex h-full flex-col px-4 py-4 lg:px-5 lg:py-5",
+                h2 { class: "sr-only", "{copy.sidebar_title()}" }
+                a { class: "mb-5 flex h-10 items-center px-3 text-sm font-semibold text-slate-950", href: navigation_href(WorkbenchPane::Request, ui.locale),
+                    "Syu"
                 }
                 ul { class: "space-y-1",
                     for pane in WorkbenchPane::ALL {
@@ -359,22 +351,35 @@ fn SidebarPaneButton(
 ) -> Element {
     let copy = ui.copy();
     let base = if active {
-        "group flex w-full items-start gap-3 rounded-2xl border border-border bg-foreground/5 px-3 py-3 text-left text-foreground shadow-[0_0_0_1px_rgba(15,23,42,0.02)]"
+        "flex min-w-0 flex-1 items-center gap-3 rounded-md bg-slate-950 px-3 py-2 text-left text-sm font-semibold text-white"
     } else {
-        "group flex w-full items-start gap-3 rounded-2xl border border-transparent bg-panel-muted px-3 py-3 text-left text-foreground/72 hover:border-border hover:bg-background"
+        "flex min-w-0 flex-1 items-center gap-3 rounded-md px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-950"
     };
+    let tooltip_id = format!("sidebar-tip-{}", pane.slug());
     rsx! {
-        a {
-            class: base,
-            href: navigation_href(pane, ui.locale),
-            title: copy.pane_summary(pane),
-            span { class: "grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-background text-xs text-foreground/75 transition group-hover:bg-panel",
-                "{pane.icon()}"
+        div { class: "group relative flex items-center",
+            a {
+                class: base,
+                href: navigation_href(pane, ui.locale),
+                span { class: if active { "grid h-6 w-6 shrink-0 place-items-center text-base font-normal text-white" } else { "grid h-6 w-6 shrink-0 place-items-center text-base font-normal text-slate-400 transition group-hover:text-slate-700" },
+                    "{pane.icon()}"
+                }
+                if !collapsed {
+                    span { class: "min-w-0 flex-1 truncate", "{copy.pane_title(pane)}" }
+                }
             }
-            if !collapsed {
-                span { class: "flex min-w-0 flex-1 flex-col",
-                    span { class: "text-sm font-medium text-foreground", "{copy.pane_title(pane)}" }
-                    span { class: "text-[10px] leading-4 tracking-[0.18em] text-foreground/45", "{copy.pane_summary(pane)}" }
+            details { class: "relative shrink-0", "name": "sidebar-tips",
+                summary {
+                    class: "mr-1 grid h-7 w-7 cursor-pointer list-none place-items-center rounded-full text-xs text-slate-400 opacity-0 transition hover:bg-slate-100 hover:text-slate-950 group-hover:opacity-100 group-focus-within:opacity-100",
+                    title: copy.help_label(),
+                    "aria-controls": tooltip_id.clone(),
+                    "?"
+                }
+                div {
+                    id: tooltip_id.clone(),
+                    class: "absolute left-full top-0 z-50 ml-2 w-64 rounded-lg border border-slate-200 bg-white p-3 text-left shadow-lg",
+                    p { class: "text-sm font-semibold text-slate-950", "{copy.pane_title(pane)}" }
+                    p { class: "mt-1 text-xs leading-5 text-slate-600", "{copy.pane_summary(pane)}" }
                 }
             }
         }

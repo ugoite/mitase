@@ -19,6 +19,8 @@ fn app_shell_renders_command_palette_first_shell() {
     assert!(html.contains("navigation"));
     assert!(html.contains(">Items</span>"));
     assert!(html.contains(">Diagnostics</span>"));
+    assert!(html.contains("aria-controls=\"sidebar-tip-items\""));
+    assert!(html.contains("bg-slate-950"));
     assert!(!html.contains("<select"));
     assert!(!html.contains(">focus</span>"));
     assert!(!html.contains(">filter</span>"));
