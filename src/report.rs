@@ -1,6 +1,6 @@
 // REQ-CORE-004
 
-use std::{collections::BTreeSet, env, fmt::Write, path::Path};
+use std::{collections::BTreeSet, env, fmt::Write, fs, path::Path};
 
 use crate::model::{CheckResult, Issue, Severity};
 
@@ -148,18 +148,58 @@ fn collect_suggestions(issues: &[Issue]) -> BTreeSet<String> {
 }
 
 fn display_workspace_root(workspace_root: &Path) -> String {
-    let Ok(current_dir) = env::current_dir() else {
+    let Some(current_dir) = env::current_dir()
+        .ok()
+        .and_then(|path| canonicalize_path_if_possible(&path))
+    else {
         return workspace_root.display().to_string();
     };
-    let Ok(relative) = workspace_root.strip_prefix(&current_dir) else {
-        return workspace_root.display().to_string();
-    };
-
-    if relative.as_os_str().is_empty() {
-        ".".to_string()
+    if let Some(relative) = relative_workspace_root(workspace_root, &current_dir) {
+        if relative.as_os_str().is_empty() {
+            ".".to_string()
+        } else {
+            relative.display().to_string()
+        }
     } else {
-        relative.display().to_string()
+        workspace_root.display().to_string()
     }
+}
+
+fn canonicalize_path_if_possible(path: &Path) -> Option<std::path::PathBuf> {
+    fs::canonicalize(path).ok()
+}
+
+fn relative_workspace_root(workspace_root: &Path, current_dir: &Path) -> Option<std::path::PathBuf> {
+    if let Some(canonical_workspace_root) = canonicalize_path_if_possible(workspace_root)
+        && let Ok(relative) = canonical_workspace_root.strip_prefix(current_dir)
+    {
+        return Some(relative.to_path_buf());
+    }
+
+    let (existing_ancestor, suffix) = existing_ancestor_and_suffix(workspace_root)?;
+    let canonical_ancestor = canonicalize_path_if_possible(&existing_ancestor)?;
+    if canonical_ancestor == current_dir {
+        return Some(suffix);
+    }
+
+    None
+}
+
+fn existing_ancestor_and_suffix(path: &Path) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
+    let mut ancestor = path;
+    let mut suffix_parts = Vec::new();
+
+    while !ancestor.exists() {
+        suffix_parts.push(ancestor.file_name()?.to_os_string());
+        ancestor = ancestor.parent()?;
+    }
+
+    let mut suffix = std::path::PathBuf::new();
+    for part in suffix_parts.iter().rev() {
+        suffix.push(part);
+    }
+
+    Some((ancestor.to_path_buf(), suffix))
 }
 
 fn severity_label(severity: &Severity) -> &'static str {
