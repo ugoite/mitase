@@ -424,6 +424,21 @@ fn validate_help_mentions_spec_only_mode() {
 }
 
 #[test]
+fn validate_help_mentions_cache_bypass_mode() {
+    let output = Command::cargo_bin("syu")
+        .expect("binary should build")
+        .args(["validate", "--help"])
+        .output()
+        .expect("help should render");
+
+    assert!(output.status.success(), "validate help should succeed");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--no-cache"));
+    assert!(stdout.contains("Disable in-memory validation caches"));
+}
+
+#[test]
 fn init_help_lists_starter_templates() {
     let output = Command::cargo_bin("syu")
         .expect("binary should build")

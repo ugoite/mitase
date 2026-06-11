@@ -16,8 +16,8 @@ use crate::{
     command::shell_quote_path,
     config::{SyuConfig, TraceOwnershipMode},
     coverage::{
-        normalize_relative_path, normalized_symbol_trace_coverage_ignored_paths,
-        path_matches_ignored_generated_directory, validate_symbol_trace_coverage,
+        collect_symbol_trace_coverage_issues, normalize_relative_path,
+        normalized_symbol_trace_coverage_ignored_paths, path_matches_ignored_generated_directory,
     },
     history::{HistoricalIdIndex, build_historical_id_index},
     inspect::{
@@ -73,8 +73,9 @@ struct RequirementValidationIndex<'a> {
     features_by_id: &'a HashMap<&'a str, &'a Feature>,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct TraceValidationCache {
+    enabled: bool,
     file_contents: HashMap<PathBuf, Result<String, String>>,
     rich_inspections: HashMap<TraceInspectionCacheKey, TraceInspectionCacheEntry>,
 }
@@ -82,8 +83,25 @@ struct TraceValidationCache {
 type TraceInspectionCacheKey = (String, PathBuf);
 type TraceInspectionCacheEntry = Result<Option<HashMap<String, SymbolInspection>>, String>;
 
+impl Default for TraceValidationCache {
+    fn default() -> Self {
+        Self::new(true)
+    }
+}
+
 impl TraceValidationCache {
+    fn new(enabled: bool) -> Self {
+        Self {
+            enabled,
+            file_contents: HashMap::new(),
+            rich_inspections: HashMap::new(),
+        }
+    }
+
     fn read_file(&mut self, path: &Path) -> Result<&str, String> {
+        if !self.enabled {
+            self.file_contents.clear();
+        }
         let entry = self
             .file_contents
             .entry(path.to_path_buf())
@@ -99,6 +117,9 @@ impl TraceValidationCache {
         contents: &str,
         symbol: &str,
     ) -> Result<Option<SymbolInspection>, String> {
+        if !self.enabled {
+            self.rich_inspections.clear();
+        }
         let key = (language.to_string(), path.to_path_buf());
         let entry = self.rich_inspections.entry(key).or_insert_with(|| {
             inspect_file_symbols(language, config, path, contents)
@@ -515,8 +536,11 @@ pub fn run_check_command(args: &CheckArgs) -> Result<i32> {
             } else {
                 with_validate_overrides(workspace, args)
             };
-            let mut result =
-                collect_check_result_from_workspace_with_mode(&workspace, args.spec_only);
+            let mut result = collect_check_result_from_workspace_with_mode(
+                &workspace,
+                args.spec_only,
+                !args.no_cache,
+            );
             apply_cli_override_issue_guidance(&mut result, args);
             let text_summary =
                 TextReportSummary::from_config(&workspace.config, &result.definition_counts);
@@ -611,12 +635,13 @@ pub fn collect_check_result(workspace_path: &Path) -> CheckResult {
 }
 
 pub fn collect_check_result_from_workspace(workspace: &Workspace) -> CheckResult {
-    collect_check_result_from_workspace_with_mode(workspace, false)
+    collect_check_result_from_workspace_with_mode(workspace, false, true)
 }
 
 fn collect_check_result_from_workspace_with_mode(
     workspace: &Workspace,
     spec_only: bool,
+    cache_enabled: bool,
 ) -> CheckResult {
     let definition_counts = DefinitionCounts {
         philosophies: workspace.philosophies.len(),
@@ -691,43 +716,57 @@ fn collect_check_result_from_workspace_with_mode(
         policies_by_id: &policies_by_id,
         features_by_id: &features_by_id,
     };
-    let mut trace_cache = TraceValidationCache::default();
+    let mut trace_cache = TraceValidationCache::new(cache_enabled);
 
-    for philosophy in &workspace.philosophies {
-        validate_philosophy(philosophy, &policies_by_id, &workspace.config, &mut issues);
-    }
+    let coverage_issues = std::thread::scope(|scope| {
+        let coverage_handle = (!spec_only && !cfg!(test))
+            .then(|| scope.spawn(|| collect_symbol_trace_coverage_issues(workspace)));
 
-    for policy in &workspace.policies {
-        validate_policy(
-            policy,
-            &philosophies_by_id,
-            &requirements_by_id,
-            &workspace.config,
-            &mut issues,
-        );
-    }
+        for philosophy in &workspace.philosophies {
+            validate_philosophy(philosophy, &policies_by_id, &workspace.config, &mut issues);
+        }
 
-    for requirement in &workspace.requirements {
-        validate_requirement_with_cache(
-            requirement,
-            requirement_validation_index,
-            validation_resources,
-            &mut issues,
-            &mut trace_summary.requirement_traces,
-            &mut trace_cache,
-        );
-    }
+        for policy in &workspace.policies {
+            validate_policy(
+                policy,
+                &philosophies_by_id,
+                &requirements_by_id,
+                &workspace.config,
+                &mut issues,
+            );
+        }
 
-    for feature in &workspace.features {
-        validate_feature_with_cache(
-            feature,
-            &requirements_by_id,
-            validation_resources,
-            &mut issues,
-            &mut trace_summary.feature_traces,
-            &mut trace_cache,
-        );
-    }
+        for requirement in &workspace.requirements {
+            validate_requirement_with_cache(
+                requirement,
+                requirement_validation_index,
+                validation_resources,
+                &mut issues,
+                &mut trace_summary.requirement_traces,
+                &mut trace_cache,
+            );
+        }
+
+        for feature in &workspace.features {
+            validate_feature_with_cache(
+                feature,
+                &requirements_by_id,
+                validation_resources,
+                &mut issues,
+                &mut trace_summary.feature_traces,
+                &mut trace_cache,
+            );
+        }
+
+        let concurrent_issues = coverage_handle.map(|handle| {
+            handle
+                .join()
+                .expect("symbol trace coverage thread should not panic")
+        });
+        concurrent_issues.or_else(|| {
+            (!spec_only && cfg!(test)).then(|| collect_symbol_trace_coverage_issues(workspace))
+        })
+    });
 
     if let Some(historical_ids) = historical_ids.as_ref() {
         validate_historical_id_reuse(workspace, historical_ids, &mut issues);
@@ -746,8 +785,8 @@ fn collect_check_result_from_workspace_with_mode(
     }
 
     validate_orphaned_definitions(workspace, &mut issues);
-    if !spec_only {
-        validate_symbol_trace_coverage(workspace, &mut issues);
+    if let Some(coverage_issues) = coverage_issues {
+        issues.extend(coverage_issues);
     }
 
     issues.sort_by(|left, right| {
@@ -4374,6 +4413,7 @@ mod tests {
             rule: Vec::new(),
             id: Vec::new(),
             spec_only: false,
+            no_cache: false,
             fix: false,
             dry_run: false,
             no_fix: false,
@@ -4404,6 +4444,7 @@ mod tests {
             rule: Vec::new(),
             id: Vec::new(),
             spec_only: false,
+            no_cache: false,
             fix: true,
             dry_run: false,
             no_fix: false,
@@ -4440,6 +4481,7 @@ mod tests {
             rule: Vec::new(),
             id: Vec::new(),
             spec_only: false,
+            no_cache: false,
             fix: false,
             dry_run: false,
             no_fix: false,
@@ -4515,6 +4557,7 @@ mod tests {
             rule: Vec::new(),
             id: Vec::new(),
             spec_only: false,
+            no_cache: false,
             fix: true,
             dry_run: false,
             no_fix: false,
@@ -4547,6 +4590,7 @@ mod tests {
             rule: Vec::new(),
             id: Vec::new(),
             spec_only: false,
+            no_cache: false,
             fix: true,
             dry_run: false,
             no_fix: false,
@@ -4604,6 +4648,7 @@ mod tests {
             rule: Vec::new(),
             id: Vec::new(),
             spec_only: false,
+            no_cache: false,
             fix: false,
             dry_run: true,
             no_fix: false,
