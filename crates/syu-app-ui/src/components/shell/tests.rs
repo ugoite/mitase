@@ -54,6 +54,63 @@ fn command_palette_preserves_selected_locale_across_search_links_and_run_forms()
 }
 
 #[test]
+fn diagnostics_overview_preserves_selected_locale_on_validation_links() {
+    let mut ui = build_demo_state();
+    ui.set_locale(Locale::Ja);
+
+    let html = render_element(rsx! {
+        AppShell { ui, active_pane: WorkbenchPane::Diagnostics, sidebar_open: true }
+    });
+
+    assert!(html.contains("href=\"?pane=diagnostics&#38;lang=ja&#38;cli=cli.validate\""));
+    assert!(html.contains("href=\"?pane=diagnostics&#38;lang=ja&#38;cli=cli.doctor\""));
+    assert!(html.contains("href=\"?pane=diagnostics&#38;lang=ja&#38;cli=cli.audit\""));
+}
+
+#[test]
+fn browse_and_action_links_preserve_selected_locale() {
+    let mut ui = build_demo_state();
+    ui.set_locale(Locale::Ja);
+    let mut linked_item = test_spec_item("REQ-ONLY", "Only item", None);
+    linked_item
+        .linked_requirements
+        .push("REQ-RELATED".to_string());
+    ui.spec_browser = Some(SpecBrowserModel {
+        sections: vec![SpecBrowserSection {
+            label: "Requirements".to_string(),
+            documents: vec![SpecBrowserDocument {
+                path: "requirements.yaml".to_string(),
+                title: "Requirements".to_string(),
+                folder_segments: Vec::new(),
+                items: vec![linked_item],
+            }],
+        }],
+        selected_item_id: Some("REQ-ONLY".to_string()),
+    });
+
+    let browse_html = render_element(rsx! {
+        AppShell { ui: ui.clone(), active_pane: WorkbenchPane::Items, sidebar_open: true }
+    });
+
+    assert!(
+        browse_html.contains(
+            "href=\"?pane=items&#38;lang=ja&#38;cli=cli.show&#38;spec_item=REQ-RELATED\""
+        )
+    );
+
+    let action_html = render_element(rsx! {
+        FlowActionButton {
+            label: "Validate".to_string(),
+            action_id: WorkbenchActionId::ValidationRun,
+            ui,
+            onclick: None,
+        }
+    });
+
+    assert!(action_html.contains("href=\"?pane=commands&#38;lang=ja&#38;action=validation.run\""));
+}
+
+#[test]
 fn language_switch_keeps_the_full_sidebar() {
     let html = render_element(rsx! {
         AppShell { ui: build_demo_state(), active_pane: WorkbenchPane::Request, sidebar_open: false }
@@ -117,7 +174,10 @@ fn stage_help_uses_active_pane_copy_without_collapsing_sidebar() {
     });
 
     assert!(request_html.contains("help-tooltip-request"));
-    assert!(request_html.contains("Shows the request text, its classification, and the scope it opens."));
+    assert!(
+        request_html
+            .contains("Shows the request text, its classification, and the scope it opens.")
+    );
     assert!(!request_html.contains("href=\"?pane=request&#38;sidebar=0"));
 
     let commands_html = render_element(rsx! {

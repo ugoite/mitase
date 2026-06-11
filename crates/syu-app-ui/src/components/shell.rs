@@ -168,11 +168,7 @@ pub fn AppShell(ui: WorkbenchUiState, active_pane: WorkbenchPane, sidebar_open: 
 }
 
 #[component]
-pub fn StatusBar(
-    ui: WorkbenchUiState,
-    active_pane: WorkbenchPane,
-    palette: Element,
-) -> Element {
+pub fn StatusBar(ui: WorkbenchUiState, active_pane: WorkbenchPane, palette: Element) -> Element {
     let summary = ui.pulse_summary();
     let copy = ui.copy();
     rsx! {
@@ -288,8 +284,17 @@ fn view_href(ui: &WorkbenchUiState, pane: WorkbenchPane, locale: Locale) -> Stri
     format!("?{}", params.join("&"))
 }
 
+fn pane_href(pane: WorkbenchPane, locale: Locale, extra: &[(&str, String)]) -> String {
+    let mut params = vec![
+        format!("pane={}", route_pane_slug(pane)),
+        format!("lang={}", locale.slug()),
+    ];
+    params.extend(extra.iter().map(|(key, value)| format!("{key}={value}")));
+    format!("?{}", params.join("&"))
+}
+
 fn navigation_href(pane: WorkbenchPane, locale: Locale) -> String {
-    format!("?pane={}&lang={}", route_pane_slug(pane), locale.slug())
+    pane_href(pane, locale, &[])
 }
 
 fn route_pane_slug(pane: WorkbenchPane) -> &'static str {
@@ -964,8 +969,8 @@ fn SpecInfoBrowser(
                     p { class: "text-sm text-foreground/65", "Browse the layered files, follow linked items, or create a new specification item." }
                 }
                 div { class: "flex flex-wrap gap-2",
-                    a { class: "rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-panel-muted", href: "?pane=items&cli=cli.add", "New item" }
-                    a { class: "rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-panel-muted", href: "?pane=items&cli=cli.init", "Initialize workspace" }
+                    a { class: "rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-panel-muted", href: pane_href(WorkbenchPane::Items, locale, &[("cli", "cli.add".to_string())]), "New item" }
+                    a { class: "rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium hover:bg-panel-muted", href: pane_href(WorkbenchPane::Items, locale, &[("cli", "cli.init".to_string())]), "Initialize workspace" }
                 }
             }
             form {
@@ -1032,7 +1037,7 @@ fn SpecInfoBrowser(
                             div {
                                 hidden: selected_id.as_deref() != Some(item.id.as_str()),
                                 "data-spec-detail-card": item.id.clone(),
-                                SpecModelCard { item: item.clone() }
+                                SpecModelCard { item: item.clone(), locale }
                             }
                         }
                     } else if !spec_query.trim().is_empty() {
@@ -1354,7 +1359,7 @@ fn spec_item_matches(item: &SpecBrowserItem, needle: &str) -> bool {
 }
 
 #[component]
-fn SpecModelCard(item: SpecBrowserItem) -> Element {
+fn SpecModelCard(item: SpecBrowserItem, locale: Locale) -> Element {
     rsx! {
         article { class: "rounded-lg border border-border bg-background p-4",
             div { class: "flex flex-wrap items-start justify-between gap-3",
@@ -1384,10 +1389,10 @@ fn SpecModelCard(item: SpecBrowserItem) -> Element {
             if let Some(guideline) = item.coding_guideline.clone() {
                 ModelCardSection { title: "Coding guideline".to_string(), body: guideline }
             }
-            LinkList { label: "philosophies".to_string(), values: item.linked_philosophies.clone() }
-            LinkList { label: "policies".to_string(), values: item.linked_policies.clone() }
-            LinkList { label: "requirements".to_string(), values: item.linked_requirements.clone() }
-            LinkList { label: "features".to_string(), values: item.linked_features.clone() }
+            LinkList { label: "philosophies".to_string(), values: item.linked_philosophies.clone(), locale }
+            LinkList { label: "policies".to_string(), values: item.linked_policies.clone(), locale }
+            LinkList { label: "requirements".to_string(), values: item.linked_requirements.clone(), locale }
+            LinkList { label: "features".to_string(), values: item.linked_features.clone(), locale }
             TraceGroups { label: "tests".to_string(), groups: item.tests.clone() }
             TraceGroups { label: "implementations".to_string(), groups: item.implementations.clone() }
             details { class: "mt-4 rounded-lg border border-border bg-panel p-3", "data-item-editor": "true",
@@ -1533,7 +1538,7 @@ fn ModelCardSection(title: String, body: String) -> Element {
 }
 
 #[component]
-fn LinkList(label: String, values: Vec<String>) -> Element {
+fn LinkList(label: String, values: Vec<String>, locale: Locale) -> Element {
     if values.is_empty() {
         return rsx! {};
     }
@@ -1544,7 +1549,14 @@ fn LinkList(label: String, values: Vec<String>) -> Element {
                 for value in values {
                     a {
                         class: "rounded-md border border-border bg-panel px-2 py-1 text-xs font-medium text-foreground/70 hover:bg-panel-muted",
-                        href: format!("?pane=items&cli=cli.show&spec_item={}", urlencoding::encode(&value)),
+                        href: pane_href(
+                            WorkbenchPane::Items,
+                            locale,
+                            &[
+                                ("cli", "cli.show".to_string()),
+                                ("spec_item", urlencoding::encode(&value).to_string()),
+                            ],
+                        ),
                         "{value}"
                     }
                 }
@@ -1642,7 +1654,11 @@ fn DiagnosticsOverview(ui: WorkbenchUiState) -> Element {
                 for (title, description, command_id, tool_id) in tools {
                     a {
                         class: "rounded-lg border border-border bg-background p-4 hover:bg-panel-muted",
-                        href: format!("?pane=diagnostics&cli={command_id}"),
+                        href: pane_href(
+                            WorkbenchPane::Diagnostics,
+                            ui.locale,
+                            &[("cli", command_id.to_string())],
+                        ),
                         "data-diagnostic-tool": tool_id,
                         div { class: "flex items-start justify-between gap-3",
                             div {
@@ -1728,7 +1744,11 @@ fn FlowActionButton(
     rsx! {
         a {
             class: class,
-            href: format!("?pane=commands&action={}", action_id.label()),
+            href: pane_href(
+                WorkbenchPane::Commands,
+                ui.locale,
+                &[("action", action_id.label().to_string())],
+            ),
             aria_disabled: if available { "false" } else { "true" },
             span { "{label}" }
             span { class: "ml-2 text-xs opacity-75", "{action_id.label()}" }
