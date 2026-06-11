@@ -1403,6 +1403,7 @@ pub(super) async fn run_cli_command_preview(
     ))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn typed_cli_preview(
     locale: Locale,
     command: syu_app_ui::model::CliCommandEntry,
@@ -1481,6 +1482,7 @@ fn typed_action_preview(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn typed_result(
     _locale: Locale,
     category: CommandCategory,
