@@ -91,6 +91,12 @@ pub fn validate_symbol_trace_coverage(workspace: &Workspace, issues: &mut Vec<Is
     );
 }
 
+pub fn collect_symbol_trace_coverage_issues(workspace: &Workspace) -> Vec<Issue> {
+    let mut issues = Vec::new();
+    validate_symbol_trace_coverage(workspace, &mut issues);
+    issues
+}
+
 fn validate_symbol_trace_coverage_with(
     workspace: &Workspace,
     issues: &mut Vec<Issue>,
@@ -100,91 +106,41 @@ fn validate_symbol_trace_coverage_with(
         return;
     }
 
-    let mut targets = match (discoverers.rust)(&workspace.config, &workspace.root) {
-        Ok(output) => {
-            issues.extend(output.issues);
-            output.targets
-        }
-        Err(issue) => {
-            issues.push(*issue);
-            return;
-        }
+    let discoveries = [
+        discoverers.rust,
+        discoverers.python,
+        discoverers.ruby,
+        discoverers.go,
+        discoverers.java,
+        discoverers.csharp,
+        discoverers.kotlin,
+        discoverers.typescript,
+    ];
+    let results = if cfg!(test) {
+        discoveries.map(|discover| discover(&workspace.config, &workspace.root))
+    } else {
+        std::thread::scope(|scope| {
+            discoveries
+                .map(|discover| scope.spawn(move || discover(&workspace.config, &workspace.root)))
+                .map(|handle| {
+                    handle
+                        .join()
+                        .expect("coverage discovery thread should not panic")
+                })
+        })
     };
 
-    match (discoverers.python)(&workspace.config, &workspace.root) {
-        Ok(output) => {
-            issues.extend(output.issues);
-            targets.extend(output.targets);
-        }
-        Err(issue) => {
-            issues.push(*issue);
-            return;
-        }
-    }
-
-    match (discoverers.ruby)(&workspace.config, &workspace.root) {
-        Ok(output) => {
-            issues.extend(output.issues);
-            targets.extend(output.targets);
-        }
-        Err(issue) => {
-            issues.push(*issue);
-            return;
-        }
-    }
-
-    match (discoverers.go)(&workspace.config, &workspace.root) {
-        Ok(output) => {
-            issues.extend(output.issues);
-            targets.extend(output.targets);
-        }
-        Err(issue) => {
-            issues.push(*issue);
-            return;
-        }
-    }
-
-    match (discoverers.java)(&workspace.config, &workspace.root) {
-        Ok(output) => {
-            issues.extend(output.issues);
-            targets.extend(output.targets);
-        }
-        Err(issue) => {
-            issues.push(*issue);
-            return;
-        }
-    }
-
-    match (discoverers.csharp)(&workspace.config, &workspace.root) {
-        Ok(output) => {
-            issues.extend(output.issues);
-            targets.extend(output.targets);
-        }
-        Err(issue) => {
-            issues.push(*issue);
-            return;
-        }
-    }
-
-    match (discoverers.kotlin)(&workspace.config, &workspace.root) {
-        Ok(output) => {
-            issues.extend(output.issues);
-            targets.extend(output.targets);
-        }
-        Err(issue) => {
-            issues.push(*issue);
-            return;
-        }
-    }
-
-    match (discoverers.typescript)(&workspace.config, &workspace.root) {
-        Ok(output) => {
-            issues.extend(output.issues);
-            targets.extend(output.targets);
-        }
-        Err(issue) => {
-            issues.push(*issue);
-            return;
+    let mut targets = Vec::new();
+    for result in results {
+        match result {
+            Ok(output) => {
+                issues.extend(output.issues);
+                targets.extend(output.targets);
+            }
+            Err(issue) => {
+                issues.push(*issue);
+                return;
+            }
         }
     }
 
