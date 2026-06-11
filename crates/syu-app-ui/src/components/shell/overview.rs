@@ -437,21 +437,21 @@ pub(super) fn AssignmentOverview(ui: WorkbenchUiState) -> Element {
                     }
                     div { class: "mt-4 grid gap-3 lg:grid-cols-[0.9fr_1.1fr]",
                         div { class: "space-y-3",
-                            AssigneeSelector { assignee: assignment.assignee.clone() }
+                            AssigneeSelector { assignee: assignment.assignee.clone(), locale: ui.locale }
                             div { class: "rounded-xl border border-border bg-background/30 p-3",
                                 p { class: "text-xs uppercase tracking-[0.18em] text-foreground/55", "run mode" }
                                 MiniSelect { label: "mode".to_string(), value: assignment.run_mode.label().to_string() }
                                 MiniSelect { label: "evidence".to_string(), value: if assignment.evidence_requirements.is_empty() { "none".to_string() } else { format!("{} items", assignment.evidence_requirements.len()) } }
                             }
                         }
-                        ScopeGuardPreview { result: assignment.scope_guard.clone() }
+                        ScopeGuardPreview { result: assignment.scope_guard.clone(), locale: ui.locale }
                     }
                     div { class: "mt-4 grid gap-3 lg:grid-cols-2",
-                        AssignmentPromptPreview { assignment: assignment.clone() }
-                        AssignmentEvidencePanel { assignment: assignment.clone() }
+                        AssignmentPromptPreview { assignment: assignment.clone(), locale: ui.locale }
+                        AssignmentEvidencePanel { assignment: assignment.clone(), locale: ui.locale }
                     }
                     div { class: "mt-4",
-                        AssignmentConstraintPanel { assignment: assignment.clone() }
+                        AssignmentConstraintPanel { assignment: assignment.clone(), locale: ui.locale }
                     }
                 }
             }

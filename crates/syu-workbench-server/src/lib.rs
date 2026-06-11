@@ -32,6 +32,7 @@ use syu_app_ui::{
         ItemEditPreview, SpecBrowserDocument, SpecBrowserItem, SpecBrowserModel,
         SpecBrowserSection, SpecBrowserTraceGroup, SpecBrowserTraceReference, TypedCommandResult,
         category_result_kind, cli_command_catalog, workbench_action_category,
+        workbench_action_title,
     },
 };
 use syu_code_intel::{

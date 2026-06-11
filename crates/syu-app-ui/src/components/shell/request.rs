@@ -6,24 +6,25 @@ pub fn RequestIntakeCanvas(
     on_run_action: Option<EventHandler<WorkbenchActionId>>,
 ) -> Element {
     let request = ui.payload.state.request.clone();
+    let locale = ui.locale;
     rsx! {
         Panel { class: classes::PANEL_MUTED,
             div { class: "flex flex-col gap-4 p-4",
                 div { class: classes::SECTION_HEADER,
-                    h2 { class: classes::SECTION_TITLE, "Request Intake" }
+                    h2 { class: classes::SECTION_TITLE, if locale == Locale::Ja { "依頼受付" } else { "Request Intake" } }
                     ScopeChip { label: temporary_artifact_label(&ui) }
                 }
                 RequestContextEditor { ui: ui.clone() }
                 div { class: "grid gap-2 md:grid-cols-4",
-                    FlowActionButton { label: "Classify".to_string(), action_id: WorkbenchActionId::RequestClassify, ui: ui.clone(), onclick: on_run_action }
-                    FlowActionButton { label: "Scope".to_string(), action_id: WorkbenchActionId::RequestScope, ui: ui.clone(), onclick: on_run_action }
-                    FlowActionButton { label: "Preview scaffold".to_string(), action_id: WorkbenchActionId::RequestScaffold, ui: ui.clone(), onclick: on_run_action }
-                    FlowActionButton { label: "Generate plan".to_string(), action_id: WorkbenchActionId::RequestPlan, ui: ui.clone(), onclick: on_run_action }
+                    FlowActionButton { label: if locale == Locale::Ja { "分類".to_string() } else { "Classify".to_string() }, action_id: WorkbenchActionId::RequestClassify, ui: ui.clone(), onclick: on_run_action }
+                    FlowActionButton { label: if locale == Locale::Ja { "スコープ".to_string() } else { "Scope".to_string() }, action_id: WorkbenchActionId::RequestScope, ui: ui.clone(), onclick: on_run_action }
+                    FlowActionButton { label: if locale == Locale::Ja { "雛形を確認".to_string() } else { "Preview scaffold".to_string() }, action_id: WorkbenchActionId::RequestScaffold, ui: ui.clone(), onclick: on_run_action }
+                    FlowActionButton { label: if locale == Locale::Ja { "計画を生成".to_string() } else { "Generate plan".to_string() }, action_id: WorkbenchActionId::RequestPlan, ui: ui.clone(), onclick: on_run_action }
                 }
                 div { class: "grid gap-3 xl:grid-cols-3",
-                    RequestClassificationPanel { request: request.clone() }
-                    RequestScopePanel { request: request.clone() }
-                    ScaffoldPreviewPanel { request }
+                    RequestClassificationPanel { request: request.clone(), locale }
+                    RequestScopePanel { request: request.clone(), locale }
+                    ScaffoldPreviewPanel { request, locale }
                 }
             }
         }
@@ -42,24 +43,27 @@ pub fn RequestContextEditor(ui: WorkbenchUiState) -> Element {
         Panel { class: classes::PANEL_MUTED,
             div { class: "flex flex-col gap-3 p-3",
                 div { class: classes::SECTION_HEADER,
-                    h3 { class: "text-sm font-semibold", "Change request" }
+                    h3 { class: "text-sm font-semibold", if ui.locale == Locale::Ja { "変更依頼" } else { "Change request" } }
                     EvidenceBadge { kind: syu_workbench::WorkbenchEvidenceKind::RequestArtifact }
                 }
                 if let Some(artifact) = request {
                     p { class: "text-base leading-7 text-foreground", "{artifact.request}" }
                     div { class: "flex flex-wrap gap-2",
                         if let Some(area) = &artifact.context.affected_area {
-                            ScopeChip { label: format!("area: {area}") }
+                            ScopeChip { label: if ui.locale == Locale::Ja { format!("範囲: {area}") } else { format!("area: {area}") } }
                         }
                         for id in &artifact.context.linked_ids {
                             ScopeChip { label: id.clone() }
                         }
                     }
                     for constraint in &artifact.context.repository_constraints {
-                        p { class: "text-sm text-foreground/70", "constraint: {constraint}" }
+                    p { class: "text-sm text-foreground/70", { if ui.locale == Locale::Ja { format!("制約: {constraint}") } else { format!("constraint: {constraint}") } } }
                     }
                 } else {
-                    EmptyState { title: "Paste a request".to_string(), body: "Request text becomes a temporary Workbench artifact before any spec content changes.".to_string() }
+                    EmptyState {
+                        title: if ui.locale == Locale::Ja { "依頼を貼り付け".to_string() } else { "Paste a request".to_string() },
+                        body: (if ui.locale == Locale::Ja { "依頼テキストは、仕様を変更する前に一時的な Workbench アーティファクトになります。" } else { "Request text becomes a temporary Workbench artifact before any spec content changes." }).to_string()
+                    }
                 }
             }
         }
@@ -67,12 +71,12 @@ pub fn RequestContextEditor(ui: WorkbenchUiState) -> Element {
 }
 
 #[component]
-pub fn RequestClassificationPanel(request: Option<syu_workbench::ActiveRequestState>) -> Element {
+pub fn RequestClassificationPanel(request: Option<syu_workbench::ActiveRequestState>, locale: Locale) -> Element {
     rsx! {
         Panel { class: classes::PANEL_MUTED,
             div { class: "flex flex-col gap-2 p-3",
                 div { class: classes::SECTION_HEADER,
-                    h3 { class: "text-sm font-semibold", "Classify" }
+                    h3 { class: "text-sm font-semibold", if locale == Locale::Ja { "分類" } else { "Classify" } }
                     EvidenceBadge { kind: syu_workbench::WorkbenchEvidenceKind::ClassificationOutcome }
                 }
                 if let Some(classification) = request.as_ref().and_then(|request| request.classification.as_ref()) {
@@ -84,7 +88,10 @@ pub fn RequestClassificationPanel(request: Option<syu_workbench::ActiveRequestSt
                         p { class: "text-xs uppercase tracking-[0.16em] text-foreground/60", "{item.kind}: {item.id}" }
                     }
                 } else {
-                    EmptyState { title: "Not classified".to_string(), body: "Run request.classify from this canvas or the command palette.".to_string() }
+                    EmptyState {
+                        title: if locale == Locale::Ja { "未分類".to_string() } else { "Not classified".to_string() },
+                        body: (if locale == Locale::Ja { "このキャンバスまたはコマンドパレットから request.classify を実行してください。" } else { "Run request.classify from this canvas or the command palette." }).to_string()
+                    }
                 }
             }
         }
@@ -92,12 +99,12 @@ pub fn RequestClassificationPanel(request: Option<syu_workbench::ActiveRequestSt
 }
 
 #[component]
-pub fn RequestScopePanel(request: Option<syu_workbench::ActiveRequestState>) -> Element {
+pub fn RequestScopePanel(request: Option<syu_workbench::ActiveRequestState>, locale: Locale) -> Element {
     rsx! {
         Panel { class: classes::PANEL_MUTED,
             div { class: "flex flex-col gap-2 p-3",
                 div { class: classes::SECTION_HEADER,
-                    h3 { class: "text-sm font-semibold", "Scope" }
+                    h3 { class: "text-sm font-semibold", if locale == Locale::Ja { "スコープ" } else { "Scope" } }
                     EvidenceBadge { kind: syu_workbench::WorkbenchEvidenceKind::ScopeOutcome }
                 }
                 if let Some(scope) = request.as_ref().and_then(|request| request.scope.as_ref()) {
@@ -113,7 +120,10 @@ pub fn RequestScopePanel(request: Option<syu_workbench::ActiveRequestState>) -> 
                         p { class: "text-sm text-foreground/75", "{note}" }
                     }
                 } else {
-                    EmptyState { title: "Scope pending".to_string(), body: "Map the request to relevant specs before planning implementation work.".to_string() }
+                    EmptyState {
+                        title: if locale == Locale::Ja { "スコープ待ち".to_string() } else { "Scope pending".to_string() },
+                        body: (if locale == Locale::Ja { "実装計画の前に、依頼を関連する仕様へ対応付けてください。" } else { "Map the request to relevant specs before planning implementation work." }).to_string()
+                    }
                 }
             }
         }
@@ -121,12 +131,12 @@ pub fn RequestScopePanel(request: Option<syu_workbench::ActiveRequestState>) -> 
 }
 
 #[component]
-pub fn ScaffoldPreviewPanel(request: Option<syu_workbench::ActiveRequestState>) -> Element {
+pub fn ScaffoldPreviewPanel(request: Option<syu_workbench::ActiveRequestState>, locale: Locale) -> Element {
     rsx! {
         Panel { class: classes::PANEL_MUTED,
             div { class: "flex flex-col gap-2 p-3",
                 div { class: classes::SECTION_HEADER,
-                    h3 { class: "text-sm font-semibold", "Scaffold Preview" }
+                    h3 { class: "text-sm font-semibold", if locale == Locale::Ja { "雛形プレビュー" } else { "Scaffold Preview" } }
                     EvidenceBadge { kind: syu_workbench::WorkbenchEvidenceKind::ScaffoldPlan }
                 }
                 if let Some(scaffold) = request.as_ref().and_then(|request| request.scaffold.as_ref()) {
@@ -144,7 +154,10 @@ pub fn ScaffoldPreviewPanel(request: Option<syu_workbench::ActiveRequestState>) 
                         }
                     }
                 } else {
-                    EmptyState { title: "No scaffold preview".to_string(), body: "Preview spec updates without treating them as committed persistent content.".to_string() }
+                    EmptyState {
+                        title: if locale == Locale::Ja { "雛形プレビューなし".to_string() } else { "No scaffold preview".to_string() },
+                        body: (if locale == Locale::Ja { "確定した永続コンテンツとして扱わずに仕様更新をプレビューします。" } else { "Preview spec updates without treating them as committed persistent content." }).to_string()
+                    }
                 }
             }
         }
@@ -157,14 +170,18 @@ pub fn GoalPlanCanvas(
     on_run_action: Option<EventHandler<WorkbenchActionId>>,
 ) -> Element {
     let goals = ui.payload.state.goals.active.clone();
+    let locale = ui.locale;
     rsx! {
         section { class: "flex flex-col gap-3",
             div { class: classes::SECTION_HEADER,
-                h2 { class: classes::SECTION_TITLE, "Goal Plan" }
+                h2 { class: classes::SECTION_TITLE, if locale == Locale::Ja { "ゴール計画" } else { "Goal Plan" } }
                 ScopeChip { label: format!("{} temporary cards", goals.len()) }
             }
             if goals.is_empty() {
-                EmptyState { title: "No generated Goal Plan".to_string(), body: "Run request.plan after the request is classified and scoped.".to_string() }
+                EmptyState {
+                    title: if locale == Locale::Ja { "生成された Goal Plan なし".to_string() } else { "No generated Goal Plan".to_string() },
+                    body: (if locale == Locale::Ja { "依頼の分類とスコープが終わったら request.plan を実行してください。" } else { "Run request.plan after the request is classified and scoped." }).to_string()
+                }
             } else {
                 for goal in goals {
                     if let Some(plan) = goal.goal_plan.clone() {
@@ -172,9 +189,9 @@ pub fn GoalPlanCanvas(
                     }
                 }
                 div { class: "grid gap-2 md:grid-cols-3",
-                    FlowActionButton { label: "Select tests".to_string(), action_id: WorkbenchActionId::GoalTestSelect, ui: ui.clone(), onclick: on_run_action }
-                    FlowActionButton { label: "Check goal".to_string(), action_id: WorkbenchActionId::GoalCheck, ui: ui.clone(), onclick: on_run_action }
-                    FlowActionButton { label: "Assign next".to_string(), action_id: WorkbenchActionId::AssignmentCreate, ui: ui.clone(), onclick: on_run_action }
+                    FlowActionButton { label: if locale == Locale::Ja { "テスト選択".to_string() } else { "Select tests".to_string() }, action_id: WorkbenchActionId::GoalTestSelect, ui: ui.clone(), onclick: on_run_action }
+                    FlowActionButton { label: if locale == Locale::Ja { "ゴール確認".to_string() } else { "Check goal".to_string() }, action_id: WorkbenchActionId::GoalCheck, ui: ui.clone(), onclick: on_run_action }
+                    FlowActionButton { label: if locale == Locale::Ja { "次を割り当て".to_string() } else { "Assign next".to_string() }, action_id: WorkbenchActionId::AssignmentCreate, ui: ui.clone(), onclick: on_run_action }
                 }
             }
         }

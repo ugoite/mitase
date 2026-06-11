@@ -8,7 +8,8 @@ use crate::i18n::{HelpTopic, Locale};
 use crate::model::{
     CliCommandEntry, CliCommandPreview, CommandCategory, CommandResultItem, CommandResultStatus,
     SpecBrowserDocument, SpecBrowserItem, SpecBrowserModel, SpecBrowserSection, TypedCommandResult,
-    WorkbenchUiState, workbench_action_category,
+    WorkbenchUiState, command_category_label, command_effect_label, command_result_status_label,
+    workbench_action_category, workbench_action_description, workbench_action_title,
 };
 use dioxus::prelude::*;
 use std::collections::HashMap;
@@ -406,8 +407,8 @@ pub fn WorkbenchStage(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
             section { class: "min-w-0 rounded-lg border border-border bg-panel p-4 shadow-sm",
                 div { class: "mb-4 flex items-center justify-between gap-3",
                     div { class: "min-w-0",
-                        p { class: "text-xs uppercase text-foreground/45", "result" }
-                        h1 { class: "truncate text-lg font-semibold text-foreground", "{cli_preview.as_ref().map(|command| command.title.as_str()).or_else(|| selected_action.as_ref().map(|action| action.title.as_str())).unwrap_or(ui.copy().pane_title(active_pane))}" }
+                        p { class: "text-xs uppercase text-foreground/45", if ui.locale == Locale::Ja { "結果" } else { "result" } }
+                        h1 { class: "truncate text-lg font-semibold text-foreground", "{cli_preview.as_ref().map(|command| command.title.as_str()).or_else(|| selected_action.as_ref().map(|action| workbench_action_title(ui.locale, action.id))).unwrap_or(ui.copy().pane_title(active_pane))}" }
                     }
                     HelpLink { ui: ui.clone(), topic: pane_help_topic(active_pane) }
                 }
@@ -441,7 +442,7 @@ pub fn WorkbenchStage(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
                         if let Some(action) = selected_action {
                             WorkbenchActionResult { action, locale: ui.locale, result: Some(preview.result.clone()), category: ui.command_category, query: ui.command_query.clone() }
                         } else {
-                            TypedResultView { result: preview.result.clone(), category: preview.category }
+                            TypedResultView { result: preview.result.clone(), category: preview.category, locale: ui.locale }
                         }
                     }
                 } else if let Some(action) = selected_action {
@@ -536,17 +537,24 @@ fn WorkbenchActionResult(
     let needs_confirmation = action.mutability.requires_confirmation();
     let action_category = workbench_action_category(action.id);
     let category_param = category.map_or_else(String::new, |value| value.slug().to_string());
+    let action_title = workbench_action_title(locale, action.id).to_string();
+    let action_description = workbench_action_description(locale, action.id).to_string();
+    let command_label = if locale == Locale::Ja { "コマンド" } else { "command" };
+    let execution_label = if locale == Locale::Ja { "実行" } else { "execution" };
+    let confirm_label = if locale == Locale::Ja { "確認" } else { "confirm" };
+    let ready_label = if locale == Locale::Ja { "準備完了" } else { "ready" };
+    let request_placeholder = if locale == Locale::Ja { "依頼" } else { "request" };
     rsx! {
         section { class: "space-y-4",
           div { class: classes::DRAWER,
-            div { class: "flex items-center justify-between gap-3",
-                h3 { class: "text-sm font-semibold", "{action.title}" }
+                div { class: "flex items-center justify-between gap-3",
+                h3 { class: "text-sm font-semibold", "{action_title}" }
                 div { class: "flex gap-2",
-                    ScopeChip { label: action_category.label().to_string() }
-                    ScopeChip { label: if needs_confirmation { "confirm".to_string() } else { "ready".to_string() } }
+                    ScopeChip { label: command_category_label(locale, action_category).to_string() }
+                    ScopeChip { label: if needs_confirmation { confirm_label.to_string() } else { ready_label.to_string() } }
                 }
             }
-            p { class: "mt-2 text-sm text-foreground/75", "{action.description}" }
+            p { class: "mt-2 text-sm text-foreground/75", "{action_description}" }
             form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/run", method: "post", "data-command-run-form": "true",
                 input { type: "hidden", name: "pane", value: "{route_pane_slug(WorkbenchPane::for_action(action.id))}" }
                 input { type: "hidden", name: "lang", value: "{locale.slug()}" }
@@ -558,7 +566,7 @@ fn WorkbenchActionResult(
                     input {
                         class: "min-w-0 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-foreground/20",
                         name: "action_input",
-                        placeholder: "request",
+                        placeholder: request_placeholder,
                         autocomplete: "off",
                     }
                 } else {
@@ -567,7 +575,7 @@ fn WorkbenchActionResult(
                 if needs_confirmation {
                     label { class: "inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground/70",
                         input { type: "checkbox", name: "action_confirm", value: "1" }
-                        span { "confirm" }
+                        span { "{confirm_label}" }
                     }
                 }
                 button {
@@ -581,7 +589,7 @@ fn WorkbenchActionResult(
             }
           }
           if let Some(result) = result {
-              TypedResultView { result, category: action_category }
+              TypedResultView { result, category: action_category, locale }
           }
         }
     }
@@ -604,20 +612,24 @@ fn CliCommandResult(preview: CliCommandPreview, locale: Locale, query: String) -
     let copy = crate::i18n::copy(locale);
     let default_cli_arg = cli_input_placeholder(&preview.id);
     let needs_confirmation = preview.mutates_files;
+    let command_label = if locale == Locale::Ja { "コマンド" } else { "command" };
+    let execution_label = if locale == Locale::Ja { "実行" } else { "execution" };
+    let confirm_label = if locale == Locale::Ja { "確認" } else { "confirm" };
+    let ready_label = if locale == Locale::Ja { "準備完了" } else { "ready" };
 
     rsx! {
         section { class: "space-y-4",
           div { class: classes::DRAWER,
             div { class: "flex items-center justify-between gap-3",
-                p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "command" }
+                p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{command_label}" }
                 div { class: "flex gap-2",
-                    ScopeChip { label: preview.category.label().to_string() }
-                    ScopeChip { label: preview.effect.label().to_string() }
-                    ScopeChip { label: if needs_confirmation { "confirm".to_string() } else if preview.requires_input { "input".to_string() } else { "ready".to_string() } }
+                    ScopeChip { label: command_category_label(locale, preview.category).to_string() }
+                    ScopeChip { label: command_effect_label(locale, preview.effect).to_string() }
+                    ScopeChip { label: if needs_confirmation { confirm_label.to_string() } else if preview.requires_input { if locale == Locale::Ja { "入力".to_string() } else { "input".to_string() } } else { ready_label.to_string() } }
                 }
             }
             div { class: "mt-3 rounded-lg border border-border bg-background p-3",
-                p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "execution" }
+                p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{execution_label}" }
                 p { class: "mt-1 break-all text-sm font-medium text-foreground", "{preview.invocation}" }
             }
             form { class: "mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]", action: "/run", method: "post", "data-command-run-form": "true",
@@ -641,7 +653,7 @@ fn CliCommandResult(preview: CliCommandPreview, locale: Locale, query: String) -
                 if preview.mutates_files {
                     label { class: "inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground/70",
                         input { type: "checkbox", name: "cli_confirm", value: "1" }
-                        span { "confirm" }
+                        span { "{confirm_label}" }
                     }
                 }
                 button {
@@ -654,13 +666,13 @@ fn CliCommandResult(preview: CliCommandPreview, locale: Locale, query: String) -
                 p { class: "hidden text-xs text-foreground/60 sm:col-span-2", "aria-live": "polite", "data-command-run-status": "true" }
             }
           }
-          TypedResultView { result: preview.result.clone(), category: preview.category }
+          TypedResultView { result: preview.result.clone(), category: preview.category, locale }
         }
     }
 }
 
 #[component]
-fn TypedResultView(result: TypedCommandResult, category: CommandCategory) -> Element {
+fn TypedResultView(result: TypedCommandResult, category: CommandCategory, locale: Locale) -> Element {
     let pass_count = result
         .items
         .iter()
@@ -676,6 +688,7 @@ fn TypedResultView(result: TypedCommandResult, category: CommandCategory) -> Ele
         .iter()
         .filter(|item| item.status == CommandResultStatus::Fail)
         .count();
+    let result_suffix = if locale == Locale::Ja { "結果" } else { "result" };
     rsx! {
         section {
             class: "rounded-lg border border-border bg-panel p-4 shadow-sm",
@@ -683,10 +696,10 @@ fn TypedResultView(result: TypedCommandResult, category: CommandCategory) -> Ele
             "data-category-layout": category.slug(),
             div { class: "mb-4 flex flex-wrap items-start justify-between gap-3",
                 div { class: "min-w-0",
-                    p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{category.label()} result" }
+                    p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{command_category_label(locale, category)} {result_suffix}" }
                     h3 { class: "mt-1 text-base font-semibold text-foreground", "{result.summary}" }
                 }
-                ScopeChip { label: result.status.label().to_string() }
+                ScopeChip { label: command_result_status_label(locale, result.status).to_string() }
             }
             ResultCategorySummary {
                 category,
@@ -694,15 +707,16 @@ fn TypedResultView(result: TypedCommandResult, category: CommandCategory) -> Ele
                 pass_count,
                 warn_count,
                 fail_count,
+                locale,
             }
             div { class: "grid gap-3 lg:grid-cols-3", "data-result-grid": "true",
                 nav {
                     class: "overflow-auto rounded-lg border border-border bg-background p-2",
                     style: "max-height: 30rem",
                     "aria-label": "Result items",
-                    p { class: "px-2 pb-2 text-[10px] uppercase tracking-[0.2em] text-foreground/45", "{result_list_label(category)}" }
+                    p { class: "px-2 pb-2 text-[10px] uppercase tracking-[0.2em] text-foreground/45", "{result_list_label(locale, category)}" }
                     for (index, item) in result.items.iter().enumerate() {
-                        ResultListItem { item: item.clone(), selected: index == 0 }
+                        ResultListItem { item: item.clone(), selected: index == 0, locale }
                     }
                 }
                 div {
@@ -721,7 +735,7 @@ fn TypedResultView(result: TypedCommandResult, category: CommandCategory) -> Ele
                                         p { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{item.id}" }
                                         h4 { class: "mt-1 text-sm font-semibold text-foreground", "{item.title}" }
                                     }
-                                    ScopeChip { label: item.status.label().to_string() }
+                            ScopeChip { label: command_result_status_label(locale, item.status).to_string() }
                                 }
                                 p { class: "mt-3 text-sm text-foreground/70", "{item.summary}" }
                                 pre { class: "mt-3 whitespace-pre-wrap break-words rounded-lg border border-border bg-panel-muted p-3 text-xs text-foreground/70", "{item.detail}" }
@@ -730,7 +744,7 @@ fn TypedResultView(result: TypedCommandResult, category: CommandCategory) -> Ele
                     }
                     if let Some(diagnostics) = result.diagnostics {
                         details { class: "mt-4",
-                            summary { class: "cursor-pointer text-xs font-medium text-foreground/60", "Diagnostics" }
+                            summary { class: "cursor-pointer text-xs font-medium text-foreground/60", if locale == Locale::Ja { "詳細診断" } else { "Diagnostics" } }
                             pre { class: "mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-panel-muted p-3 text-xs text-foreground/65", "{diagnostics}" }
                         }
                     }
@@ -747,66 +761,67 @@ fn ResultCategorySummary(
     pass_count: usize,
     warn_count: usize,
     fail_count: usize,
+    locale: Locale,
 ) -> Element {
     match category {
         CommandCategory::Browse => rsx! {
             div { class: "mb-4 rounded-lg border border-border bg-background p-3", "data-browse-context": "true",
-                p { class: "mb-1 text-[10px] uppercase tracking-[0.2em] text-foreground/45", "Search and context" }
+                p { class: "mb-1 text-[10px] uppercase tracking-[0.2em] text-foreground/45", if locale == Locale::Ja { "検索と文脈" } else { "Search and context" } }
                 input {
                     class: "w-full rounded-lg border border-border bg-panel-muted px-3 py-2 text-sm text-foreground/70",
                     value: "{result.summary}",
                     readonly: true,
-                    aria_label: "Browse result context",
+                    aria_label: if locale == Locale::Ja { "閲覧結果の文脈" } else { "Browse result context" },
                 }
             }
         },
         CommandCategory::Check => rsx! {
             div { class: "mb-4 grid gap-2 sm:grid-cols-3", "data-check-summary": "true",
-                MetricTile { label: "pass".to_string(), value: pass_count.to_string() }
-                MetricTile { label: "warn".to_string(), value: warn_count.to_string() }
-                MetricTile { label: "fail".to_string(), value: fail_count.to_string() }
+                MetricTile { label: command_result_status_label(locale, CommandResultStatus::Pass).to_string(), value: pass_count.to_string() }
+                MetricTile { label: command_result_status_label(locale, CommandResultStatus::Warn).to_string(), value: warn_count.to_string() }
+                MetricTile { label: command_result_status_label(locale, CommandResultStatus::Fail).to_string(), value: fail_count.to_string() }
             }
         },
         CommandCategory::Plan => rsx! {
             div { class: "mb-4 grid gap-2 sm:grid-cols-2", "data-plan-summary": "true",
-                MetricTile { label: "proposal status".to_string(), value: result.status.label().to_string() }
-                MetricTile { label: "generated proposals".to_string(), value: result.items.len().to_string() }
+                MetricTile { label: (if locale == Locale::Ja { "提案状態" } else { "proposal status" }).to_string(), value: command_result_status_label(locale, result.status).to_string() }
+                MetricTile { label: (if locale == Locale::Ja { "生成された提案" } else { "generated proposals" }).to_string(), value: result.items.len().to_string() }
             }
         },
         CommandCategory::Change => rsx! {
             div { class: "mb-4 rounded-lg border border-border bg-background p-3", "data-change-summary": "true",
-                p { class: "text-[10px] uppercase tracking-[0.2em] text-foreground/45", "Execution result" }
-                p { class: "mt-1 text-sm text-foreground/70", "Review the applied workspace or Workbench state changes below." }
+                p { class: "text-[10px] uppercase tracking-[0.2em] text-foreground/45", if locale == Locale::Ja { "実行結果" } else { "Execution result" } }
+                p { class: "mt-1 text-sm text-foreground/70", if locale == Locale::Ja { "適用されたワークスペースまたは Workbench 状態の変更を確認してください。" } else { "Review the applied workspace or Workbench state changes below." } }
             }
         },
         CommandCategory::Operate => rsx! {
             div { class: "mb-4 grid gap-2 sm:grid-cols-2", "data-operation-summary": "true",
-                MetricTile { label: "runtime status".to_string(), value: result.status.label().to_string() }
-                MetricTile { label: "events".to_string(), value: result.items.len().to_string() }
+                MetricTile { label: (if locale == Locale::Ja { "実行状態" } else { "runtime status" }).to_string(), value: command_result_status_label(locale, result.status).to_string() }
+                MetricTile { label: (if locale == Locale::Ja { "イベント" } else { "events" }).to_string(), value: result.items.len().to_string() }
             }
         },
         CommandCategory::Generate => rsx! {
             div { class: "mb-4 grid gap-2 sm:grid-cols-2", "data-generated-summary": "true",
-                MetricTile { label: "artifact status".to_string(), value: result.status.label().to_string() }
-                MetricTile { label: "generated artifacts".to_string(), value: result.items.len().to_string() }
+                MetricTile { label: (if locale == Locale::Ja { "成果物状態" } else { "artifact status" }).to_string(), value: command_result_status_label(locale, result.status).to_string() }
+                MetricTile { label: (if locale == Locale::Ja { "生成された成果物" } else { "generated artifacts" }).to_string(), value: result.items.len().to_string() }
             }
         },
     }
 }
 
-fn result_list_label(category: CommandCategory) -> &'static str {
+fn result_list_label(locale: Locale, category: CommandCategory) -> &'static str {
     match category {
-        CommandCategory::Browse => "Items",
-        CommandCategory::Check => "Checks",
-        CommandCategory::Plan => "Proposals",
-        CommandCategory::Change => "Changes",
-        CommandCategory::Operate => "Events",
-        CommandCategory::Generate => "Artifacts",
+        CommandCategory::Browse => if locale == Locale::Ja { "項目" } else { "Items" },
+        CommandCategory::Check => if locale == Locale::Ja { "検証項目" } else { "Checks" },
+        CommandCategory::Plan => if locale == Locale::Ja { "提案" } else { "Proposals" },
+        CommandCategory::Change => if locale == Locale::Ja { "変更" } else { "Changes" },
+        CommandCategory::Operate => if locale == Locale::Ja { "イベント" } else { "Events" },
+        CommandCategory::Generate => if locale == Locale::Ja { "成果物" } else { "Artifacts" },
     }
 }
 
 #[component]
-fn ResultListItem(item: CommandResultItem, selected: bool) -> Element {
+fn ResultListItem(item: CommandResultItem, selected: bool, locale: Locale) -> Element {
     rsx! {
         a {
             class: "mb-1 grid gap-1 rounded-md border border-transparent px-3 py-2 text-foreground hover:border-border hover:bg-panel-muted",
@@ -814,13 +829,13 @@ fn ResultListItem(item: CommandResultItem, selected: bool) -> Element {
             aria_current: if selected { "page" } else { "false" },
             "data-result-item": item.id.clone(),
             span { class: "text-xs font-medium", "{item.title}" }
-            span { class: "text-[10px] uppercase tracking-[0.16em] opacity-65", "{item.status.label()}" }
+            span { class: "text-[10px] uppercase tracking-[0.16em] opacity-65", "{command_result_status_label(locale, item.status)}" }
         }
     }
 }
 
 fn cli_command_opens_spec_browser(command_id: &str) -> bool {
-    crate::model::cli_command_catalog()
+    crate::model::cli_command_catalog(Locale::En)
         .iter()
         .any(|command| command.id == command_id && command.opens_spec_browser)
 }

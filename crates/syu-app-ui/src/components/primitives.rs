@@ -1,7 +1,10 @@
 use crate::WorkbenchPane;
 use crate::design::classes;
 use crate::i18n::Locale;
-use crate::model::CommandPaletteEntry;
+use crate::model::{
+    CommandPaletteEntry, command_category_label, workbench_action_description,
+    workbench_action_title,
+};
 use dioxus::prelude::*;
 use syu_workbench::{
     EvidenceAttachment, EvidenceCommand, EvidenceRecord, EvidenceStatus, WorkbenchEvidenceKind,
@@ -287,6 +290,8 @@ pub fn CommandItem(
     let category_param =
         category.map_or_else(String::new, |value| format!("&category={}", value.slug()));
     let pane_slug = command_item_pane_slug(WorkbenchPane::for_action(entry.action.id));
+    let action_title = workbench_action_title(locale, entry.action.id).to_string();
+    let action_description = workbench_action_description(locale, entry.action.id).to_string();
     let href = if entry.availability.available && !entry.action.mutability.requires_confirmation() {
         format!(
             "?pane={}&lang={}&action={}&run=1{}",
@@ -309,21 +314,21 @@ pub fn CommandItem(
         a {
             class: "{class} {disabled_class}",
             href,
-            title: "{entry.action.description}",
+            title: "{action_description}",
             "data-command-item": "true",
-            "data-command-text": format!("{} {} {}", entry.action.id.label(), entry.action.title, entry.action.description),
+            "data-command-text": format!("{} {} {}", entry.action.id.label(), action_title, action_description),
             "data-command-id": entry.action.id.label(),
-            "data-command-title": entry.action.title.clone(),
+            "data-command-title": action_title.clone(),
             "data-command-category": action_category.slug(),
             div { class: "flex items-start gap-3 text-left",
                 span { class: "grid h-8 w-8 shrink-0 place-items-center rounded-full border border-border bg-panel-muted text-xs text-foreground/70", "{action_icon(entry.action.id)}" }
                 div { class: "flex min-w-0 flex-col gap-1",
-                    span { class: "text-sm font-medium text-foreground", "{entry.action.title}" }
+                    span { class: "text-sm font-medium text-foreground", "{action_title}" }
                     span { class: "text-[10px] uppercase tracking-[0.24em] text-foreground/45", "{entry.action.id.label()}" }
                 }
             }
             div { class: "flex flex-col items-end gap-1 text-xs uppercase tracking-[0.18em]",
-                span { class: "rounded-full border border-border bg-background px-2 py-0.5 text-[9px] tracking-[0.16em] text-foreground/60", "{action_category.label()}" }
+                span { class: "rounded-full border border-border bg-background px-2 py-0.5 text-[9px] tracking-[0.16em] text-foreground/60", "{command_category_label(locale, action_category)}" }
                 if let Some(reason) = &entry.disabled_reason {
                     span { class: "max-w-[11rem] text-right normal-case tracking-normal text-foreground/50", "{reason}" }
                 } else {

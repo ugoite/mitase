@@ -25,17 +25,17 @@ pub fn CommandPalette(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
                     }
                 }
             }
-            div { class: "mt-2 flex flex-nowrap gap-1 overflow-x-auto pb-0.5", "aria-label": "Command categories",
+            div { class: "mt-2 flex flex-nowrap gap-1 overflow-x-auto pb-0.5", "aria-label": if ui.locale == Locale::Ja { "コマンド分類" } else { "Command categories" },
                 a {
                     class: category_filter_class(ui.command_category.is_none()),
                     href: category_href(&ui, active_pane, None),
-                    "All"
+                    if ui.locale == Locale::Ja { "すべて" } else { "All" }
                 }
                 for category in CommandCategory::ALL {
                     a {
                         class: category_filter_class(ui.command_category == Some(category)),
                         href: category_href(&ui, active_pane, Some(category)),
-                        "{category.label()}"
+                        "{crate::model::command_category_label(ui.locale, category)}"
                     }
                 }
             }
@@ -47,7 +47,10 @@ pub fn CommandPalette(ui: WorkbenchUiState, active_pane: WorkbenchPane) -> Eleme
                     CliCommandItem { entry, locale: ui.locale, category: ui.command_category }
                 }
                 if !has_entries {
-                    EmptyState { title: "No matches".to_string(), body: copy.palette_hint().to_string() }
+                    EmptyState {
+                        title: if ui.locale == Locale::Ja { "一致なし".to_string() } else { "No matches".to_string() },
+                        body: copy.palette_hint().to_string()
+                    }
                 }
             }
         }
@@ -61,11 +64,11 @@ pub(super) fn CliCommandItem(
     category: Option<CommandCategory>,
 ) -> Element {
     let state = if entry.mutates_files {
-        "confirm"
+        if locale == Locale::Ja { "確認" } else { "confirm" }
     } else if entry.requires_input {
-        "input"
+        if locale == Locale::Ja { "入力" } else { "input" }
     } else {
-        "ready"
+        if locale == Locale::Ja { "準備完了" } else { "ready" }
     };
     let category_param =
         category.map_or_else(String::new, |value| format!("&category={}", value.slug()));
@@ -94,7 +97,7 @@ pub(super) fn CliCommandItem(
                 }
             }
             div { class: "flex flex-col items-end gap-1 text-xs uppercase tracking-[0.18em]",
-                span { class: "rounded-full border border-border bg-background px-2 py-0.5 text-[9px] tracking-[0.16em] text-foreground/60", "{entry.category().label()}" }
+                span { class: "rounded-full border border-border bg-background px-2 py-0.5 text-[9px] tracking-[0.16em] text-foreground/60", "{crate::model::command_category_label(locale, entry.category())}" }
                 span { class: "normal-case tracking-normal text-foreground/50", "{state}" }
             }
         }

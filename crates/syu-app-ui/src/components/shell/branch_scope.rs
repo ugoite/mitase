@@ -15,15 +15,15 @@ pub fn BranchScopeLens(
         Panel { class: classes::PANEL_MUTED,
             div { class: "flex flex-col gap-4 p-4",
                 div { class: classes::SECTION_HEADER,
-                    h2 { class: classes::SECTION_TITLE, "Branch Scope Lens" }
-                    ScopeChip { label: report.as_ref().map(|report| report.range.clone()).unwrap_or_else(|| "range pending".to_string()) }
+                    h2 { class: classes::SECTION_TITLE, if ui.locale == Locale::Ja { "ブランチ範囲" } else { "Branch Scope Lens" } }
+                    ScopeChip { label: report.as_ref().map(|report| report.range.clone()).unwrap_or_else(|| if ui.locale == Locale::Ja { "範囲待ち".to_string() } else { "range pending".to_string() }) }
                 }
                 div { class: "grid gap-2 md:grid-cols-5",
-                    FlowActionButton { label: "Load scope".to_string(), action_id: WorkbenchActionId::BranchScope, ui: ui.clone(), onclick: on_run_action }
-                    FlowActionButton { label: "Infer goal".to_string(), action_id: WorkbenchActionId::BranchInferGoal, ui: ui.clone(), onclick: on_run_action }
-                    FlowActionButton { label: "Spec impact".to_string(), action_id: WorkbenchActionId::SpecImpact, ui: ui.clone(), onclick: on_run_action }
-                    FlowActionButton { label: "Trace range".to_string(), action_id: WorkbenchActionId::TraceRange, ui: ui.clone(), onclick: on_run_action }
-                    FlowActionButton { label: "Relate range".to_string(), action_id: WorkbenchActionId::RelateRange, ui: ui.clone(), onclick: on_run_action }
+                    FlowActionButton { label: if ui.locale == Locale::Ja { "範囲を読む".to_string() } else { "Load scope".to_string() }, action_id: WorkbenchActionId::BranchScope, ui: ui.clone(), onclick: on_run_action }
+                    FlowActionButton { label: if ui.locale == Locale::Ja { "ゴール推定".to_string() } else { "Infer goal".to_string() }, action_id: WorkbenchActionId::BranchInferGoal, ui: ui.clone(), onclick: on_run_action }
+                    FlowActionButton { label: if ui.locale == Locale::Ja { "影響を見る".to_string() } else { "Spec impact".to_string() }, action_id: WorkbenchActionId::SpecImpact, ui: ui.clone(), onclick: on_run_action }
+                    FlowActionButton { label: if ui.locale == Locale::Ja { "範囲を追跡".to_string() } else { "Trace range".to_string() }, action_id: WorkbenchActionId::TraceRange, ui: ui.clone(), onclick: on_run_action }
+                    FlowActionButton { label: if ui.locale == Locale::Ja { "関連を見る".to_string() } else { "Relate range".to_string() }, action_id: WorkbenchActionId::RelateRange, ui: ui.clone(), onclick: on_run_action }
                 }
                 if let Some(report) = report {
                     ImpactSummaryPanel { report: report.clone() }
@@ -40,7 +40,10 @@ pub fn BranchScopeLens(
                         TestRecommendationPanel { report: report.clone() }
                     }
                 } else {
-                    EmptyState { title: "Branch scope pending".to_string(), body: "Load branch.scope to inspect changed files, owners, affected specs, test impact, and strict review status.".to_string() }
+                    EmptyState {
+                        title: if ui.locale == Locale::Ja { "ブランチ範囲待ち".to_string() } else { "Branch scope pending".to_string() },
+                        body: (if ui.locale == Locale::Ja { "branch.scope を読み込むと、変更ファイル、所有者、影響を受ける仕様、テストへの影響、厳格レビュー状態を確認できます。" } else { "Load branch.scope to inspect changed files, owners, affected specs, test impact, and strict review status." }).to_string()
+                    }
                 }
             }
         }
@@ -78,7 +81,7 @@ pub fn SpecImpactGraph(ui: WorkbenchUiState) -> Element {
         Panel { class: classes::PANEL_MUTED,
             div { class: "flex flex-col gap-4 p-4",
                 div { class: classes::SECTION_HEADER,
-                    h2 { class: classes::SECTION_TITLE, "Spec Impact Graph" }
+                    h2 { class: classes::SECTION_TITLE, if ui.locale == Locale::Ja { "仕様影響グラフ" } else { "Spec Impact Graph" } }
                     ScopeLegend {}
                 }
                 if let (Some(report), Some((node_positions, svg_height, view_box))) = (report, graph_layout) {
@@ -133,13 +136,13 @@ pub fn SpecImpactGraph(ui: WorkbenchUiState) -> Element {
                 } else {
                     div { class: "grid gap-3 md:grid-cols-[minmax(0,1fr)_14rem]",
                         EmptyState {
-                            title: "Branch scope not loaded".to_string(),
-                            body: "Open Load branch scope from the command palette to build this graph.".to_string(),
+                            title: if ui.locale == Locale::Ja { "ブランチ範囲未読込".to_string() } else { "Branch scope not loaded".to_string() },
+                            body: (if ui.locale == Locale::Ja { "コマンドパレットから「範囲を読む」を開いてこのグラフを作成します。" } else { "Open Load branch scope from the command palette to build this graph." }).to_string(),
                         }
                         a {
                             class: "flex items-center justify-center rounded-lg border border-border bg-background px-3 py-2 text-sm font-medium text-foreground/80 hover:bg-panel-muted",
                             href: "?pane=commands&query=branch%20scope&action=branch.scope",
-                            "Load branch scope"
+                            { if ui.locale == Locale::Ja { "範囲を読む" } else { "Load branch scope" } }
                         }
                     }
                 }
@@ -228,7 +231,7 @@ pub fn ScopeLegend() -> Element {
             for label in ["spec-linked", "code-linked", "test-linked", "scope-in", "scope-out", "scope-ambiguous", "ownership-known", "ownership-missing", "ownership-ambiguous", "evidence-pass", "evidence-warn", "evidence-fail", "evidence-pending"] {
                 span { class: "inline-flex items-center gap-1 text-[10px] uppercase text-foreground/70",
                     span { class: "h-2 w-2 rounded-full {graph_state_class(label)} bg-current" }
-                    span { "{label}" }
+                    span { if label == "spec-linked" { "仕様連携" } else if label == "code-linked" { "コード連携" } else if label == "test-linked" { "テスト連携" } else if label == "scope-in" { "範囲内" } else if label == "scope-out" { "範囲外" } else if label == "scope-ambiguous" { "範囲あいまい" } else if label == "ownership-known" { "所有者あり" } else if label == "ownership-missing" { "所有者なし" } else if label == "ownership-ambiguous" { "所有者あいまい" } else if label == "evidence-pass" { "合格" } else if label == "evidence-warn" { "警告" } else if label == "evidence-fail" { "失敗" } else { "保留" } }
                 }
             }
         }

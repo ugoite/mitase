@@ -474,6 +474,7 @@ async fn category_filter_and_typed_check_result_render_from_browser_route() {
 #[test]
 fn structured_results_use_short_category_summaries_instead_of_json_headings() {
     let result = typed_result_from_json(
+        Locale::En,
         CommandCategory::Check,
         r#"{"issues":[{"severity":"error","message":"broken link"}]}"#.to_string(),
         CommandResultStatus::Fail,
@@ -490,6 +491,7 @@ fn structured_results_use_short_category_summaries_instead_of_json_headings() {
 #[test]
 fn structured_object_results_split_into_readable_field_items() {
     let result = typed_result_from_json(
+        Locale::En,
         CommandCategory::Check,
         String::new(),
         CommandResultStatus::Pass,
@@ -658,7 +660,7 @@ async fn every_palette_cli_command_can_be_selected_and_submitted_from_browser_ro
     )
     .await;
 
-    for command in cli_command_catalog() {
+    for command in cli_command_catalog(syu_app_ui::Locale::En) {
         assert!(
             palette_html.contains(&format!("data-command-id=\"{}\"", command.id)),
             "{} should be visible in the command palette",
@@ -810,7 +812,7 @@ fn cli_task_check_preview_passes_required_range_argument() {
 async fn every_palette_cli_command_has_a_preview_and_argument_path() {
     let tempdir = tempfile::tempdir().expect("tempdir");
 
-    for command in cli_command_catalog() {
+    for command in cli_command_catalog(syu_app_ui::Locale::En) {
         let cli_arg = match command.id {
             "cli.show" | "cli.log" => "REQ-WORKBENCH-001",
             "cli.search" => "workbench",
@@ -833,7 +835,14 @@ async fn every_palette_cli_command_has_a_preview_and_argument_path() {
         );
 
         let preview =
-            run_cli_command_preview(command.id, tempdir.path(), Some(cli_arg), false, false)
+            run_cli_command_preview(
+                command.id,
+                tempdir.path(),
+                Some(cli_arg),
+                false,
+                false,
+                syu_app_ui::Locale::En,
+            )
                 .await
                 .unwrap_or_else(|| panic!("{} should produce a preview", command.id));
         assert_eq!(preview.id, command.id);
@@ -844,7 +853,14 @@ async fn every_palette_cli_command_has_a_preview_and_argument_path() {
 #[tokio::test]
 async fn cli_preview_can_include_stdout_and_stderr_log_sections() {
     let tempdir = tempfile::tempdir().expect("tempdir");
-    let preview = run_cli_command_preview("cli.templates", tempdir.path(), None, false, true)
+    let preview = run_cli_command_preview(
+        "cli.templates",
+        tempdir.path(),
+        None,
+        false,
+        true,
+        syu_app_ui::Locale::En,
+    )
         .await
         .expect("templates preview");
 
@@ -855,7 +871,14 @@ async fn cli_preview_can_include_stdout_and_stderr_log_sections() {
 #[tokio::test]
 async fn cli_preview_hides_diagnostics_without_show_log() {
     let tempdir = tempfile::tempdir().expect("tempdir");
-    let preview = run_cli_command_preview("cli.templates", tempdir.path(), None, false, false)
+    let preview = run_cli_command_preview(
+        "cli.templates",
+        tempdir.path(),
+        None,
+        false,
+        false,
+        syu_app_ui::Locale::En,
+    )
         .await
         .expect("templates preview");
 

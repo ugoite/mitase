@@ -40,7 +40,7 @@ fn registry_loaded_from_server_payload() {
 
 #[test]
 fn cli_catalog_exposes_top_level_and_task_commands() {
-    let ids = cli_command_catalog()
+    let ids = cli_command_catalog(Locale::En)
         .iter()
         .map(|command| command.id)
         .collect::<Vec<_>>();
@@ -51,10 +51,21 @@ fn cli_catalog_exposes_top_level_and_task_commands() {
     assert!(ids.contains(&"cli.task.check"));
     assert!(ids.contains(&"cli.add"));
     assert!(
-        cli_command_catalog()
+        cli_command_catalog(Locale::En)
             .iter()
             .any(|command| command.id == "cli.list" && command.opens_spec_browser)
     );
+}
+
+#[test]
+fn japanese_cli_catalog_localizes_titles_and_descriptions() {
+    let command = cli_command_catalog(Locale::Ja)
+        .iter()
+        .find(|command| command.id == "cli.validate")
+        .expect("validate command");
+
+    assert_eq!(command.title, "ワークスペースを検証");
+    assert!(command.description.contains("検証"));
 }
 
 #[test]
@@ -72,7 +83,7 @@ fn filters_cli_commands_by_query_and_previews_invocation() {
 
 #[test]
 fn every_command_has_a_category_effect_and_typed_result_kind() {
-    for command in cli_command_catalog() {
+    for command in cli_command_catalog(Locale::En) {
         assert_eq!(
             command.result_kind(),
             category_result_kind(command.category())

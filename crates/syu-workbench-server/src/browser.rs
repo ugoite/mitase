@@ -75,6 +75,7 @@ async fn render_workbench(
                 action.label(),
                 view.action_input.as_deref(),
                 view.action_confirm.as_deref() == Some("1"),
+                ui.locale,
             )
             .await
         {
@@ -91,6 +92,7 @@ async fn render_workbench(
                 view.cli_arg.as_deref(),
                 view.cli_confirm.as_deref() == Some("1"),
                 server.inner.config.show_log || view.show_log.as_deref() == Some("1"),
+                ui.locale,
             )
             .await
         {
@@ -104,6 +106,7 @@ async fn render_workbench(
                 server.inner.config.workspace_root.as_path(),
                 !ui.payload.state.goals.active.is_empty(),
                 server.inner.config.show_log || view.show_log.as_deref() == Some("1"),
+                ui.locale,
             )
             .await,
         );
@@ -670,16 +673,38 @@ async fn run_all_diagnostics(
     workspace_root: &FsPath,
     goal_available: bool,
     show_log: bool,
+    locale: Locale,
 ) -> CliCommandPreview {
     let mut items = Vec::new();
     let mut overall = CommandResultStatus::Pass;
     for (id, title) in [
-        ("cli.validate", "Workspace validation"),
-        ("cli.doctor", "Contributor doctor"),
-        ("cli.audit", "Specification audit"),
+        (
+            "cli.validate",
+            if locale == Locale::Ja {
+                "ワークスペース検証"
+            } else {
+                "Workspace validation"
+            },
+        ),
+        (
+            "cli.doctor",
+            if locale == Locale::Ja {
+                "コントリビュータ診断"
+            } else {
+                "Contributor doctor"
+            },
+        ),
+        (
+            "cli.audit",
+            if locale == Locale::Ja {
+                "仕様監査"
+            } else {
+                "Specification audit"
+            },
+        ),
     ] {
         if let Some(preview) =
-            run_cli_command_preview(id, workspace_root, None, false, show_log).await
+            run_cli_command_preview(id, workspace_root, None, false, show_log, locale).await
         {
             if preview.result.status == CommandResultStatus::Fail {
                 overall = CommandResultStatus::Fail;
@@ -699,11 +724,15 @@ async fn run_all_diagnostics(
     }
     if goal_available {
         if let Some(preview) =
-            run_cli_command_preview("cli.task.check", workspace_root, None, false, show_log).await
+            run_cli_command_preview("cli.task.check", workspace_root, None, false, show_log, locale).await
         {
             items.push(CommandResultItem {
                 id: "cli.task.check".to_string(),
-                title: "Goal check".to_string(),
+                title: if locale == Locale::Ja {
+                    "ゴール検証".to_string()
+                } else {
+                    "Goal check".to_string()
+                },
                 summary: preview.result.summary.clone(),
                 detail: preview.result.summary,
                 status: preview.result.status,
@@ -712,17 +741,41 @@ async fn run_all_diagnostics(
     } else {
         items.push(CommandResultItem {
             id: "cli.task.check".to_string(),
-            title: "Goal check".to_string(),
-            summary: "Skipped because no active Goal Plan is available.".to_string(),
-            detail: "Create or select a Goal Plan, then refresh diagnostics again.".to_string(),
+            title: if locale == Locale::Ja {
+                "ゴール検証".to_string()
+            } else {
+                "Goal check".to_string()
+            },
+            summary: if locale == Locale::Ja {
+                "アクティブな Goal Plan がないためスキップされました。".to_string()
+            } else {
+                "Skipped because no active Goal Plan is available.".to_string()
+            },
+            detail: if locale == Locale::Ja {
+                "Goal Plan を作成または選択してから、再度診断を更新してください。".to_string()
+            } else {
+                "Create or select a Goal Plan, then refresh diagnostics again.".to_string()
+            },
             status: CommandResultStatus::Pending,
         });
     }
     CliCommandPreview {
         id: "diagnostics.all".to_string(),
-        title: "Refresh all diagnostics".to_string(),
-        invocation: "Workbench diagnostics refresh".to_string(),
-        result_summary: "Refreshed all available diagnostics.".to_string(),
+        title: if locale == Locale::Ja {
+            "診断をすべて更新".to_string()
+        } else {
+            "Refresh all diagnostics".to_string()
+        },
+        invocation: if locale == Locale::Ja {
+            "Workbench 診断の更新".to_string()
+        } else {
+            "Workbench diagnostics refresh".to_string()
+        },
+        result_summary: if locale == Locale::Ja {
+            "利用可能な診断をすべて更新しました。".to_string()
+        } else {
+            "Refreshed all available diagnostics.".to_string()
+        },
         evidence_summary: format!("{} tools", items.len()),
         requires_input: false,
         mutates_files: false,
@@ -731,7 +784,11 @@ async fn run_all_diagnostics(
         result: TypedCommandResult {
             kind: syu_app_ui::model::CommandResultKind::CheckDetail,
             status: overall,
-            summary: "All diagnostics refreshed".to_string(),
+            summary: if locale == Locale::Ja {
+                "診断をすべて更新しました".to_string()
+            } else {
+                "All diagnostics refreshed".to_string()
+            },
             items,
             diagnostics: None,
         },
@@ -977,6 +1034,7 @@ pub(super) async fn run_workbench_action_preview(
     action_id: &str,
     action_input: Option<&str>,
     confirmed: bool,
+    locale: Locale,
 ) -> Option<WorkbenchActionRunPreview> {
     let action_input = action_input.unwrap_or("").trim();
     if workbench_action_needs_confirmation(action_id) && !confirmed {
@@ -984,8 +1042,17 @@ pub(super) async fn run_workbench_action_preview(
             typed_action_preview(
                 action,
                 action_id,
-                "This command can change Workbench state or files. Confirm before running.",
-                "confirmation required",
+                locale,
+                if locale == Locale::Ja {
+                    "このコマンドは Workbench の状態やファイルを変更する可能性があります。実行前に確認してください。"
+                } else {
+                    "This command can change Workbench state or files. Confirm before running."
+                },
+                if locale == Locale::Ja {
+                    "確認が必要です"
+                } else {
+                    "confirmation required"
+                },
                 CommandResultStatus::Pending,
                 None,
             )
@@ -999,8 +1066,13 @@ pub(super) async fn run_workbench_action_preview(
             typed_action_preview(
                 action,
                 action_id,
-                "This command needs request, goal, assignment, or confirmation input before it can run.",
-                "input required",
+                locale,
+                if locale == Locale::Ja {
+                    "このコマンドは、実行前に依頼・ゴール・割り当て・確認入力のいずれかが必要です。"
+                } else {
+                    "This command needs request, goal, assignment, or confirmation input before it can run."
+                },
+                if locale == Locale::Ja { "入力が必要です" } else { "input required" },
                 CommandResultStatus::Pending,
                 None,
             )
@@ -1031,6 +1103,7 @@ pub(super) async fn run_workbench_action_preview(
     Some(typed_action_preview(
         action,
         action_id,
+        locale,
         &result_summary,
         &evidence_summary,
         status,
@@ -1139,17 +1212,23 @@ pub(super) async fn run_cli_command_preview(
     cli_arg: Option<&str>,
     confirmed: bool,
     show_log: bool,
+    locale: Locale,
 ) -> Option<CliCommandPreview> {
-    let command = cli_command_catalog()
+    let command = cli_command_catalog(locale)
         .iter()
         .find(|command| command.id == command_id)?;
     let cli_arg = cli_arg.unwrap_or("").trim();
     if command.requires_input && cli_arg.is_empty() {
         return Some(typed_cli_preview(
+            locale,
             *command,
             command.invocation.to_string(),
-            format!("{} needs input before it can run.", command.invocation),
-            "input required".to_string(),
+            if locale == Locale::Ja {
+                format!("{} は入力がないと実行できません。", command.invocation)
+            } else {
+                format!("{} needs input before it can run.", command.invocation)
+            },
+            if locale == Locale::Ja { "入力が必要" } else { "input required" }.to_string(),
             CommandResultStatus::Pending,
             None,
             None,
@@ -1157,13 +1236,18 @@ pub(super) async fn run_cli_command_preview(
     }
     if command.mutates_files && !confirmed {
         return Some(typed_cli_preview(
+            locale,
             *command,
             command.invocation.to_string(),
-            format!(
-                "{} needs confirmation before writing files.",
-                command.invocation
-            ),
-            "confirmation required".to_string(),
+            if locale == Locale::Ja {
+                format!("{} はファイルを書き込む前に確認が必要です。", command.invocation)
+            } else {
+                format!(
+                    "{} needs confirmation before writing files.",
+                    command.invocation
+                )
+            },
+            if locale == Locale::Ja { "確認が必要" } else { "confirmation required" }.to_string(),
             CommandResultStatus::Pending,
             None,
             None,
@@ -1173,10 +1257,15 @@ pub(super) async fn run_cli_command_preview(
     let cli_arg = cli_default_arg(command.id, cli_arg);
     if let Err(error) = ensure_cli_task_fixture(command.id, workspace_root, cli_arg) {
         return Some(typed_cli_preview(
+            locale,
             *command,
             command.invocation.to_string(),
-            format!("failed to prepare command input: {error}"),
-            "failed".to_string(),
+            if locale == Locale::Ja {
+                format!("コマンド入力の準備に失敗しました: {error}")
+            } else {
+                format!("failed to prepare command input: {error}")
+            },
+            if locale == Locale::Ja { "失敗" } else { "failed" }.to_string(),
             CommandResultStatus::Fail,
             None,
             None,
@@ -1185,10 +1274,15 @@ pub(super) async fn run_cli_command_preview(
     let args = cli_command_args(command.id, cli_arg)?;
     if matches!(command.id, "cli.workbench" | "cli.lsp") {
         return Some(typed_cli_preview(
+            locale,
             *command,
             command.invocation.to_string(),
-            "Already represented by this Workbench session.".to_string(),
-            "running".to_string(),
+            if locale == Locale::Ja {
+                "この Workbench セッションですでに表現されています。".to_string()
+            } else {
+                "Already represented by this Workbench session.".to_string()
+            },
+            if locale == Locale::Ja { "実行中" } else { "running" }.to_string(),
             CommandResultStatus::Ready,
             None,
             None,
@@ -1242,16 +1336,24 @@ pub(super) async fn run_cli_command_preview(
                 serde_json::from_str::<Value>(&body).ok(),
             )
         }
-        Err(error) => (
-            format!("failed to run {}: {error}", command.invocation),
-            "failed".to_string(),
-            CommandResultStatus::Fail,
-            None,
-            None,
-        ),
+        Err(error) => {
+            let summary = if locale == Locale::Ja {
+                format!("{} の実行に失敗しました: {error}", command.invocation)
+            } else {
+                format!("failed to run {}: {error}", command.invocation)
+            };
+            (
+                summary,
+                if locale == Locale::Ja { "失敗" } else { "failed" }.to_string(),
+                CommandResultStatus::Fail,
+                None,
+                None,
+            )
+        }
     };
 
     Some(typed_cli_preview(
+        locale,
         *command,
         if cli_arg.is_empty() {
             command.invocation.to_string()
@@ -1267,6 +1369,7 @@ pub(super) async fn run_cli_command_preview(
 }
 
 fn typed_cli_preview(
+    locale: Locale,
     command: syu_app_ui::model::CliCommandEntry,
     invocation: String,
     summary: String,
@@ -1278,6 +1381,7 @@ fn typed_cli_preview(
     let result = structured.map_or_else(
         || {
             typed_result(
+                locale,
                 command.category(),
                 command.id,
                 command.title,
@@ -1287,7 +1391,7 @@ fn typed_cli_preview(
                 diagnostics,
             )
         },
-        |value| typed_result_from_json(command.category(), summary.clone(), status, value),
+        |value| typed_result_from_json(locale, command.category(), summary.clone(), status, value),
     );
     CliCommandPreview {
         id: command.id.to_string(),
@@ -1306,6 +1410,7 @@ fn typed_cli_preview(
 fn typed_action_preview(
     action_id: shared_workbench::WorkbenchActionId,
     action_label: &str,
+    locale: Locale,
     summary: &str,
     detail: &str,
     status: CommandResultStatus,
@@ -1318,7 +1423,7 @@ fn typed_action_preview(
         .unwrap_or(CommandEffect::ReadOnly);
     WorkbenchActionRunPreview {
         action_id,
-        title: action_label.replace('.', " "),
+        title: workbench_action_title(locale, action_id).to_string(),
         result_summary: summary.to_string(),
         evidence_summary: detail.to_string(),
         category,
@@ -1326,21 +1431,23 @@ fn typed_action_preview(
         result: structured.map_or_else(
             || {
                 typed_result(
+                    locale,
                     category,
                     action_label,
-                    &action_label.replace('.', " "),
+                    workbench_action_title(locale, action_id),
                     summary.to_string(),
                     detail.to_string(),
                     status,
                     None,
                 )
             },
-            |value| typed_result_from_json(category, summary.to_string(), status, value),
+            |value| typed_result_from_json(locale, category, summary.to_string(), status, value),
         ),
     }
 }
 
 fn typed_result(
+    _locale: Locale,
     category: CommandCategory,
     id: &str,
     title: &str,
@@ -1365,6 +1472,7 @@ fn typed_result(
 }
 
 pub(super) fn typed_result_from_json(
+    locale: Locale,
     category: CommandCategory,
     _summary: String,
     status: CommandResultStatus,
@@ -1380,7 +1488,7 @@ pub(super) fn typed_result_from_json(
                 .unwrap_or_else(|| format!("result-{}", index + 1));
             let title = json_string(&value, &["title", "summary", "message", "kind"])
                 .or_else(|| field_name.as_deref().map(humanize_json_key))
-                .unwrap_or_else(|| default_result_item_title(category, index));
+                .unwrap_or_else(|| default_result_item_title(locale, category, index));
             let item_status = json_status(&value).unwrap_or(status);
             CommandResultItem {
                 id,
@@ -1408,7 +1516,7 @@ pub(super) fn typed_result_from_json(
     TypedCommandResult {
         kind: category_result_kind(category),
         status: aggregate_status,
-        summary: typed_result_summary(category, items.len(), aggregate_status),
+        summary: typed_result_summary(locale, category, items.len(), aggregate_status),
         items,
         diagnostics: None,
     }
@@ -1454,29 +1562,52 @@ fn humanize_json_key(key: &str) -> String {
 }
 
 fn typed_result_summary(
+    locale: Locale,
     category: CommandCategory,
     item_count: usize,
     status: CommandResultStatus,
 ) -> String {
-    let noun = match category {
-        CommandCategory::Browse => "items",
-        CommandCategory::Check => "checks",
-        CommandCategory::Plan => "proposals",
-        CommandCategory::Change => "changes",
-        CommandCategory::Operate => "events",
-        CommandCategory::Generate => "artifacts",
+    let noun = match (locale, category) {
+        (Locale::En, CommandCategory::Browse) => "items",
+        (Locale::En, CommandCategory::Check) => "checks",
+        (Locale::En, CommandCategory::Plan) => "proposals",
+        (Locale::En, CommandCategory::Change) => "changes",
+        (Locale::En, CommandCategory::Operate) => "events",
+        (Locale::En, CommandCategory::Generate) => "artifacts",
+        (Locale::Ja, CommandCategory::Browse) => "項目",
+        (Locale::Ja, CommandCategory::Check) => "検証",
+        (Locale::Ja, CommandCategory::Plan) => "提案",
+        (Locale::Ja, CommandCategory::Change) => "変更",
+        (Locale::Ja, CommandCategory::Operate) => "イベント",
+        (Locale::Ja, CommandCategory::Generate) => "成果物",
     };
-    format!("{item_count} {noun} · {}", status.label())
+    let status_label = match locale {
+        Locale::En => status.label(),
+        Locale::Ja => match status {
+            CommandResultStatus::Ready => "準備完了",
+            CommandResultStatus::Pass => "成功",
+            CommandResultStatus::Warn => "警告",
+            CommandResultStatus::Fail => "失敗",
+            CommandResultStatus::Pending => "保留",
+        },
+    };
+    format!("{item_count} {noun} · {status_label}")
 }
 
-fn default_result_item_title(category: CommandCategory, index: usize) -> String {
-    let noun = match category {
-        CommandCategory::Browse => "Item",
-        CommandCategory::Check => "Check",
-        CommandCategory::Plan => "Proposal",
-        CommandCategory::Change => "Change",
-        CommandCategory::Operate => "Event",
-        CommandCategory::Generate => "Artifact",
+fn default_result_item_title(locale: Locale, category: CommandCategory, index: usize) -> String {
+    let noun = match (locale, category) {
+        (Locale::En, CommandCategory::Browse) => "Item",
+        (Locale::En, CommandCategory::Check) => "Check",
+        (Locale::En, CommandCategory::Plan) => "Proposal",
+        (Locale::En, CommandCategory::Change) => "Change",
+        (Locale::En, CommandCategory::Operate) => "Event",
+        (Locale::En, CommandCategory::Generate) => "Artifact",
+        (Locale::Ja, CommandCategory::Browse) => "項目",
+        (Locale::Ja, CommandCategory::Check) => "検証",
+        (Locale::Ja, CommandCategory::Plan) => "提案",
+        (Locale::Ja, CommandCategory::Change) => "変更",
+        (Locale::Ja, CommandCategory::Operate) => "イベント",
+        (Locale::Ja, CommandCategory::Generate) => "成果物",
     };
     format!("{noun} {}", index + 1)
 }
