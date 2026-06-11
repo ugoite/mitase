@@ -564,6 +564,8 @@ fn WorkbenchActionResult(
     } else {
         "request"
     };
+    let _ = command_label;
+    let _ = execution_label;
     rsx! {
         section { class: "space-y-4",
           div { class: classes::DRAWER,
@@ -652,6 +654,8 @@ fn CliCommandResult(preview: CliCommandPreview, locale: Locale, query: String) -
     } else {
         "ready"
     };
+    let _ = command_label;
+    let _ = execution_label;
 
     rsx! {
         section { class: "space-y-4",
