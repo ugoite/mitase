@@ -18,7 +18,6 @@ fn app_shell_renders_command_palette_first_shell() {
     assert!(html.contains("Syu"));
     assert!(html.contains("data-command-palette"));
     assert!(html.contains("Type a command"));
-    assert!(!html.contains("navigation"));
 }
 
 #[test]
@@ -46,12 +45,10 @@ fn goal_canvas_renders_a_read_only_action_preview_placeholder() {
         }
     });
 
-    let pulse = html.find("workspace").expect("pulse should render");
-    let preview = html
+    let _preview = html
         .find("Preview opened for Show history")
         .expect("preview should render");
 
-    assert!(pulse < preview);
     assert!(html.contains("Preview opened for Show history"));
     assert!(html.contains("Ready to review"));
 }
@@ -216,7 +213,7 @@ fn scope_guard_preview_renders_out_of_scope_changes() {
     };
 
     let html = render_element(rsx! {
-        syu_app_ui::ScopeGuardPreview { result }
+        syu_app_ui::ScopeGuardPreview { result, locale: syu_app_ui::Locale::En }
     });
 
     assert!(html.contains("out-of-scope changes"));

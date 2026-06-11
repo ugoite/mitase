@@ -986,7 +986,7 @@ fn cli_command_result_summary(locale: Locale, command: &CliCommandEntry) -> Stri
             } else if command.opens_spec_browser {
                 "下の構造化仕様を確認するか、コマンドを実行して端末出力を見てください。".to_string()
             } else {
-                format!("{} 実行可", command.invocation)
+                format!("{} 実行待ち", command.invocation)
             }
         }
     }
