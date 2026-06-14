@@ -106,7 +106,7 @@ impl UiCopy for English {
     fn help_body(&self, topic: HelpTopic) -> &'static str {
         match topic {
             HelpTopic::Items => {
-                "Browse the layered file tree, follow links, and manage specification items."
+                "Search the layered tree, follow linked items, create an item in the selected layer, or edit the selected item."
             }
             HelpTopic::Diagnostics => {
                 "Run workspace and goal checks, then jump from findings to affected items."

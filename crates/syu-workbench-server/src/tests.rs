@@ -80,6 +80,9 @@ async fn index_route_renders_workbench_browser_entrypoint_and_css_asset() {
     assert!(html.contains("window.addEventListener('popstate'"));
     assert!(html.contains("fetch(url"));
     assert!(html.contains("initWorkbench(nextRoot)"));
+    assert!(html.contains("data-scroll-key"));
+    assert!(html.contains("scrollPositions"));
+    assert!(html.contains("data-item-edit-toggle"));
     assert!(html.contains("form.dataset.enhanced = 'true'"));
     assert!(html.contains("if (!form.checkValidity()) return"));
     assert!(html.contains("form.dataset.running === 'true'"));
@@ -116,6 +119,24 @@ async fn items_surface_opens_before_workspace_initialization() {
     server
         .spawn_watcher()
         .expect("uninitialized workspace should be watchable");
+}
+
+#[tokio::test]
+async fn initialized_items_surface_hides_workspace_initialization() {
+    let server = test_server();
+    let (status, html) = text_response(
+        server.router(),
+        Request::builder()
+            .uri("/?pane=items&spec_kind=requirement")
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(!html.contains("data-initialize-workspace=\"true\""));
+    assert!(html.contains("data-new-spec-item=\"requirement\""));
+    assert!(html.contains("+ New requirement"));
 }
 
 #[tokio::test]
@@ -301,6 +322,7 @@ async fn item_edit_requires_review_before_writing_source() {
     assert!(html.contains("data-item-edit-preview=\"true\""));
     assert!(html.contains("Review this source-preserving item diff before applying it."));
     assert!(html.contains("Apply reviewed change"));
+    assert!(html.contains("name=\"spec_item\" value=\"REQ-WORKBENCH-001\""));
     assert_eq!(
         fs::read_to_string(source).expect("source after preview"),
         before

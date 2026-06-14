@@ -96,7 +96,7 @@ fn browse_and_action_links_preserve_selected_locale() {
 
     assert!(
         browse_html.contains(
-            "href=\"?pane=items&#38;lang=ja&#38;cli=cli.show&#38;spec_item=REQ-RELATED\""
+            "href=\"?pane=items&#38;lang=ja&#38;cli=cli.show&#38;spec_kind=requirement&#38;spec_item=REQ-RELATED\""
         )
     );
 
@@ -340,7 +340,7 @@ fn spec_browse_commands_render_search_list_and_detail_without_run_form() {
     assert!(html.contains("data-category-layout=\"browse\""));
     assert!(html.contains("Search specs"));
     assert!(html.contains("aria-label=\"Spec tree\""));
-    assert!(html.contains("style=\"max-height: 30rem\""));
+    assert!(html.contains("data-scroll-key=\"spec-tree-requirement\""));
     assert!(html.contains("data-spec-search=\"true\""));
     assert!(html.contains("data-spec-detail=\"true\""));
     assert!(html.contains("aria-label=\"Spec kind tabs\""));
@@ -350,6 +350,8 @@ fn spec_browse_commands_render_search_list_and_detail_without_run_form() {
     assert!(html.contains("data-spec-kind-tab=\"feature\""));
     assert!(html.contains("name=\"query\" value=\"REQ-WORKBENCH\""));
     assert!(html.contains("name=\"spec_query\" value=\"browser\""));
+    assert!(!html.contains("Persistent specification"));
+    assert!(!html.contains("Browse the layered files"));
     assert!(!html.contains("name=\"run\" value=\"1\""));
 }
 
@@ -472,16 +474,51 @@ fn spec_browser_groups_documents_into_explorer_folders() {
         1,
         "{html}"
     );
-    assert!(html.contains("data-spec-folder-icon=\"true\""));
-    assert!(html.contains("data-spec-folder-toggle=\"true\""));
-    assert!(html.contains("folder"));
+    assert!(html.contains("data-spec-folder-icon=\"open\""));
+    assert!(html.contains("data-spec-folder-icon=\"closed\""));
+    assert!(html.contains("data-spec-document-icon=\"true\""));
+    assert!(!html.contains(">folder<"));
+    assert!(!html.contains(">doc<"));
     assert!(!html.contains("features / cli"));
     assert!(html.contains("data-spec-document-path=\"features/cli/commands.yaml\""));
     assert!(html.contains("data-spec-document-path=\"features/cli/navigation.yaml\""));
     assert!(html.contains("data-spec-item-target=\"FEAT-CLI-001\""));
     assert!(html.contains("data-spec-detail-card=\"FEAT-CLI-001\""));
+    assert!(html.contains("data-new-spec-item=\"feature\""));
+    assert!(html.contains("+ New feature"));
     assert!(html.contains("FEAT-CLI-001"));
     assert!(html.contains("FEAT-CLI-002"));
+}
+
+#[test]
+fn spec_browser_marks_only_the_selected_tree_item_current() {
+    let mut ui = build_demo_state();
+    ui.set_spec_kind("requirement");
+    ui.spec_browser = Some(SpecBrowserModel {
+        sections: vec![SpecBrowserSection {
+            label: "Requirements".to_string(),
+            documents: vec![SpecBrowserDocument {
+                path: "requirements.yaml".to_string(),
+                title: "Requirements".to_string(),
+                folder_segments: Vec::new(),
+                items: vec![
+                    test_spec_item("REQ-ONE", "First", None),
+                    test_spec_item("REQ-TWO", "Second", None),
+                ],
+            }],
+        }],
+        selected_item_id: Some("REQ-TWO".to_string()),
+    });
+
+    let html = render_element(rsx! {
+        AppShell { ui, active_pane: WorkbenchPane::Items, sidebar_open: true }
+    });
+
+    assert_eq!(html.matches("aria-current=\"page\"").count(), 2);
+    assert!(html.contains("data-spec-item-target=\"REQ-TWO\""));
+    assert!(html.contains("data-item-edit-toggle=\"true\""));
+    assert!(html.contains("data-item-edit-cancel=\"true\""));
+    assert!(!html.contains(">requirements</p>"));
 }
 
 #[test]

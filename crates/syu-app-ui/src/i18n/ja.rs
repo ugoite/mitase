@@ -106,7 +106,7 @@ impl UiCopy for Japanese {
     fn help_body(&self, topic: HelpTopic) -> &'static str {
         match topic {
             HelpTopic::Items => {
-                "階層ファイルツリーから仕様を閲覧し、リンクを辿って項目を管理します。"
+                "階層ツリーを検索し、リンクを辿り、選択中のレイヤーへの追加やItemの編集を行います。"
             }
             HelpTopic::Diagnostics => {
                 "ワークスペースとゴールの検査を実行し、問題のItemへ移動します。"

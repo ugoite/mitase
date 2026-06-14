@@ -822,8 +822,7 @@ pub(super) fn workbench_document(shell: String, locale: Locale) -> String {
       color: var(--color-background);
     }}
     @media (min-width: 64rem) {{
-      [data-result-grid] [data-result-detail-panel],
-      [data-spec-browser-grid] [data-spec-detail] {{
+      [data-result-grid] [data-result-detail-panel] {{
         grid-column: span 2 / span 2;
       }}
       [data-spec-browser-grid] [data-spec-search] {{
@@ -849,6 +848,15 @@ pub(super) fn workbench_document(shell: String, locale: Locale) -> String {
         }}
       }};
       const replaceWorkbench = async (url, options = {{}}, push = true, historyUrl = url) => {{
+        const currentUrl = new URL(window.location.href);
+        const nextUrl = new URL(historyUrl, window.location.href);
+        const preserveSpecTree = currentUrl.searchParams.get('spec_kind') === nextUrl.searchParams.get('spec_kind');
+        const scrollPositions = new Map();
+        if (preserveSpecTree) {{
+          for (const element of document.querySelectorAll('[data-scroll-key]')) {{
+            scrollPositions.set(element.dataset.scrollKey, [element.scrollLeft, element.scrollTop]);
+          }}
+        }}
         const response = await fetch(url, {{
           ...options,
           headers: {{
@@ -871,6 +879,10 @@ pub(super) fn workbench_document(shell: String, locale: Locale) -> String {
         document.documentElement.lang = documentNext.documentElement.lang || document.documentElement.lang;
         if (push) history.pushState({{ syuWorkbench: true }}, '', historyUrl);
         initWorkbench(nextRoot);
+        for (const element of nextRoot.querySelectorAll('[data-scroll-key]')) {{
+          const position = scrollPositions.get(element.dataset.scrollKey);
+          if (position) [element.scrollLeft, element.scrollTop] = position;
+        }}
         window.scrollTo(0, currentScrollY);
         requestAnimationFrame(() => window.scrollTo(0, currentScrollY));
         setTimeout(() => window.scrollTo(0, currentScrollY), 0);
@@ -965,6 +977,9 @@ pub(super) fn workbench_document(shell: String, locale: Locale) -> String {
             const detail = surface.querySelector(`[data-spec-detail-card="${{CSS.escape(id)}}"]`);
             if (!detail) return;
             event.preventDefault();
+            const currentScrollY = window.scrollY;
+            const tree = item.closest('[data-scroll-key]');
+            const treeScrollTop = tree?.scrollTop;
             for (const card of surface.querySelectorAll('[data-spec-detail-card]')) {{
               card.hidden = card !== detail;
             }}
@@ -973,6 +988,26 @@ pub(super) fn workbench_document(shell: String, locale: Locale) -> String {
             }}
             const url = new URL(item.href, window.location.href);
             history.pushState({{ syuWorkbench: true }}, '', url.href);
+            if (tree && treeScrollTop !== undefined) tree.scrollTop = treeScrollTop;
+            window.scrollTo(0, currentScrollY);
+          }});
+        }}
+        for (const card of root.querySelectorAll('[data-spec-item-card]:not([data-edit-enhanced])')) {{
+          card.dataset.editEnhanced = 'true';
+          const view = card.querySelector('[data-item-view]');
+          const editor = card.querySelector('[data-item-editor]');
+          const toggle = card.querySelector('[data-item-edit-toggle]');
+          const cancel = card.querySelector('[data-item-edit-cancel]');
+          if (!view || !editor || !toggle || !cancel) continue;
+          toggle.addEventListener('click', () => {{
+            view.hidden = true;
+            editor.hidden = false;
+            editor.querySelector('input:not([type="hidden"]), textarea')?.focus({{ preventScroll: true }});
+          }});
+          cancel.addEventListener('click', () => {{
+            editor.hidden = true;
+            view.hidden = false;
+            toggle.focus({{ preventScroll: true }});
           }});
         }}
         for (const form of root.querySelectorAll('form:not([data-enhanced])')) {{
