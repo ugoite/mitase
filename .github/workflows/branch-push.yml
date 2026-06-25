@@ -23,7 +23,7 @@ jobs:
     outputs:
       has_open_pr: ${{ steps.check.outputs.has_open_pr }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Detect open pull request
         id: check
@@ -43,7 +43,7 @@ jobs:
     if: needs.duplicate-check.outputs.has_open_pr == 'false'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Python with pip cache
         id: setup-python
@@ -87,7 +87,7 @@ jobs:
     if: needs.duplicate-check.outputs.has_open_pr == 'false'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Rust for fast quality gates
         uses: ./.github/actions/setup-rust
