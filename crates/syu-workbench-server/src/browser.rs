@@ -38,7 +38,7 @@ pub(super) fn validate_same_origin(headers: &HeaderMap) -> Result<(), StatusCode
 
 async fn render_workbench(
     server: WorkbenchServer,
-    view: WorkbenchViewQuery,
+    mut view: WorkbenchViewQuery,
     allow_mutation: bool,
 ) -> Html<String> {
     let active_page = view
@@ -74,7 +74,7 @@ async fn render_workbench(
         ui.set_locale(locale);
     }
     ui.settings = Some(load_workspace_settings(&server));
-    if allow_mutation && let Some(item_id) = view.item_edit.as_deref() {
+    if allow_mutation && let Some(item_id) = view.item_edit.clone() {
         let values = if let Some(payload) = view.item_edit_payload.as_deref() {
             serde_json::from_str(payload).ok()
         } else {
@@ -99,7 +99,7 @@ async fn render_workbench(
             Some(values) => Some(
                 match preview_or_apply_item_edit(
                     &server,
-                    item_id,
+                    &item_id,
                     values,
                     view.item_edit_apply.as_deref() == Some("1"),
                 )
@@ -107,7 +107,7 @@ async fn render_workbench(
                 {
                     Ok(preview) => preview,
                     Err(error) => ItemEditPreview {
-                        item_id: item_id.to_string(),
+                        item_id: item_id.clone(),
                         diff: error.to_string(),
                         apply_payload: String::new(),
                         applied: false,
@@ -117,6 +117,7 @@ async fn render_workbench(
             ),
             None => None,
         };
+        view.entity = Some(item_id);
     }
     if active_page == WorkbenchPage::Work
         && let Some(goal_id) = view.entity.as_ref()
@@ -991,6 +992,42 @@ pub(super) fn workbench_document(shell: String, locale: Locale) -> String {
             for (const item of items) item.hidden = query !== '' && !(item.dataset.commandText || '').toLowerCase().includes(query);
           }});
         }}
+        const workSelector = root.querySelector('[data-work-selector]');
+        workSelector?.addEventListener('change', async () => {{
+          const params = new URLSearchParams({{
+            page: 'work',
+            section: workSelector.dataset.workSection || 'brief',
+            entity: workSelector.value,
+            lang: workSelector.dataset.workLang || document.documentElement.lang || 'en',
+          }});
+          await replaceWorkbench('/?' + params.toString());
+        }});
+        const diagnosticFilter = root.querySelector('[data-diagnostics-filter]');
+        diagnosticFilter?.addEventListener('input', () => {{
+          const query = diagnosticFilter.value.trim().toLowerCase();
+          for (const check of root.querySelectorAll('[data-diagnostic-check]')) {{
+            check.hidden = query !== '' && !check.textContent.toLowerCase().includes(query);
+          }}
+        }});
+        const scopeMode = root.querySelector('[data-scope-mode]');
+        const scopeTarget = root.querySelector('[data-scope-target]');
+        const navigateScope = async (mode) => {{
+          if (!scopeTarget) return;
+          const options = [...scopeTarget.options];
+          for (const option of options) option.hidden = option.dataset.scopeSource !== mode;
+          const selected = options.find((option) => option.dataset.scopeSource === mode);
+          if (!selected) return;
+          if (selected.hidden || scopeTarget.selectedOptions[0]?.dataset.scopeSource !== mode) scopeTarget.value = selected.value;
+          const params = new URLSearchParams({{
+            page: 'scope',
+            section: scopeTarget.dataset.scopeSection || 'code-tests',
+            lang: scopeTarget.dataset.scopeLang || document.documentElement.lang || 'en',
+          }});
+          if (mode === 'goal' && scopeTarget.value) params.set('entity', scopeTarget.value);
+          await replaceWorkbench('/?' + params.toString());
+        }};
+        scopeMode?.addEventListener('change', () => navigateScope(scopeMode.value));
+        scopeTarget?.addEventListener('change', () => navigateScope(scopeMode?.value || 'branch'));
         const target = root.querySelector('[data-command-target].border-red-500');
         if (target) {{
           const largeTarget = target.getBoundingClientRect().height > innerHeight * 0.5;
@@ -1012,7 +1049,32 @@ pub(super) fn workbench_document(shell: String, locale: Locale) -> String {
             const response = await fetch('/api/items/' + encodeURIComponent(id) + '/work', {{ method: 'POST' }});
             if (!response.ok) throw new Error('Item-driven Work creation failed');
             const plan = await response.json();
-            await replaceWorkbench('/?page=work&section=brief&entity=' + encodeURIComponent(plan.goal.id));
+            const params = new URLSearchParams({{ page: 'work', section: 'brief', entity: plan.goal.id, lang: button.dataset.workLang || document.documentElement.lang || 'en' }});
+            await replaceWorkbench('/?' + params.toString());
+          }});
+        }}
+        for (const button of root.querySelectorAll('[data-create-work-from-branch]')) {{
+          button.addEventListener('click', async () => {{
+            const originalLabel = button.textContent;
+            button.disabled = true;
+            button.textContent = button.dataset.runningLabel || 'Creating Work…';
+            try {{
+              const response = await fetch('/api/actions/branch.infer_goal/run', {{
+                method: 'POST',
+                headers: {{ 'Content-Type': 'application/json' }},
+                body: JSON.stringify({{ range: button.dataset.createWorkFromBranch || 'origin/main...HEAD' }}),
+              }});
+              if (!response.ok) throw new Error('Branch-driven Work creation failed');
+              const action = await response.json();
+              const goalId = action.result?.goal?.id;
+              if (!goalId) throw new Error('Created Work did not return a Goal id');
+              const params = new URLSearchParams({{ page: 'work', section: 'brief', entity: goalId, lang: button.dataset.workLang || document.documentElement.lang || 'en' }});
+              await replaceWorkbench('/?' + params.toString());
+            }} catch (error) {{
+              button.disabled = false;
+              button.textContent = originalLabel;
+              throw error;
+            }}
           }});
         }}
         const settingsForm = root.querySelector('[data-settings-form]');
@@ -1048,8 +1110,17 @@ pub(super) fn workbench_document(shell: String, locale: Locale) -> String {
           if (action.pathname !== '/' && action.pathname !== '/run') return;
           event.preventDefault();
           const data = new URLSearchParams(new FormData(form));
-          if ((form.method || 'get').toLowerCase() === 'post') await replaceWorkbench(action.href, {{ method: 'POST', body: data }}, true);
-          else {{ action.search = data.toString(); await replaceWorkbench(action.href); }}
+          if ((form.method || 'get').toLowerCase() === 'post') {{
+            await replaceWorkbench(action.href, {{ method: 'POST', body: data }}, false);
+            const destination = new URL('/', location.origin);
+            for (const key of ['page', 'section', 'entity', 'focus', 'lang']) {{
+              const value = data.get(key);
+              if (value) destination.searchParams.set(key, value);
+            }}
+            const editedItem = data.get('item_edit');
+            if (editedItem) destination.searchParams.set('entity', editedItem);
+            history.pushState({{ workbench: true }}, '', destination);
+          }} else {{ action.search = data.toString(); await replaceWorkbench(action.href); }}
         }});
       }};
       document.addEventListener('click', async (event) => {{

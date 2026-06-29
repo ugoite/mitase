@@ -72,7 +72,7 @@ pub fn WorkbenchStage(
     focus_anchor: Option<String>,
 ) -> Element {
     match active_page {
-        WorkbenchPage::Work => rsx! { WorkPage { ui, section, focus_anchor } },
+        WorkbenchPage::Work => rsx! { WorkPage { ui, section, entity, focus_anchor } },
         WorkbenchPage::Scope => rsx! { ScopePage { ui, section, entity, focus_anchor } },
         WorkbenchPage::Items => rsx! { ItemsPage { ui, section, entity, focus_anchor } },
         WorkbenchPage::Diagnostics => {

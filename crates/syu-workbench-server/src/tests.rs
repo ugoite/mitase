@@ -68,10 +68,118 @@ async fn index_renders_new_page_contract_and_navigation_script() {
     assert!(html.contains("data-command-palette"));
     assert!(html.contains("new EventSource('/api/events')"));
     assert!(html.contains("/api/diagnostics/run"));
+    assert!(html.contains("[data-work-selector]"));
+    assert!(html.contains("[data-diagnostics-filter]"));
+    assert!(html.contains("[data-scope-mode]"));
+    assert!(html.contains("/api/actions/branch.infer_goal/run"));
+    assert!(html.contains("data.get('item_edit')"));
     assert!(!html.contains("data-result-kind"));
     for legacy in ["page=commands", "page=pulse", "page=goals", "page=request"] {
         assert!(!html.contains(legacy));
     }
+}
+
+#[tokio::test]
+async fn new_work_page_exposes_working_item_and_branch_creation_paths() {
+    let (status, html) = text_response(
+        test_server().router(),
+        Request::builder()
+            .uri("/?page=work&section=brief&entity=new&focus=create&lang=ja")
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(html.contains("新しい Work の作成方法"));
+    assert!(html.contains("data-create-work-from-branch=\"origin/main...HEAD\""));
+    assert!(html.contains("Item から作成"));
+    assert!(html.contains("data-work-lang=\"ja\""));
+}
+
+#[tokio::test]
+async fn branch_creation_action_adds_a_selectable_work() {
+    let server = test_server();
+    let (status, action) = json_response(
+        server.router(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/actions/branch.infer_goal/run")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"range":"HEAD...HEAD"}"#))
+            .expect("request"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(action["result"]["goal"]["id"], "GOAL-BRANCH-001");
+
+    let (page_status, html) = text_response(
+        server.router(),
+        Request::builder()
+            .uri("/?page=work&section=brief&entity=GOAL-BRANCH-001&lang=en")
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    assert_eq!(page_status, StatusCode::OK);
+    assert!(html.contains("GOAL-BRANCH-001 Infer goal from branch"));
+    assert!(html.contains("data-work-selector=\"true\""));
+
+    let (second_status, second_action) = json_response(
+        server.router(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/actions/branch.infer_goal/run")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"range":"HEAD...HEAD"}"#))
+            .expect("request"),
+    )
+    .await;
+    assert_eq!(second_status, StatusCode::OK);
+    assert_eq!(second_action["result"]["goal"]["id"], "GOAL-BRANCH-002");
+}
+
+#[tokio::test]
+async fn item_search_filters_results_and_draft_id_is_submitted() {
+    let server = test_server();
+    let (_, filtered) = text_response(
+        server.router(),
+        Request::builder()
+            .uri("/?page=items&section=requirement&spec_query=definitely-not-an-item")
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    assert!(filtered.contains("No Items in this layer"));
+    assert!(!filtered.contains("REQ-WORKBENCH-001 ·"));
+
+    let (_, draft) = text_response(
+        server.router(),
+        Request::builder()
+            .uri("/?page=items&section=requirement&entity=draft")
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    assert!(draft.contains("name=\"item_edit\""));
+    assert!(draft.contains("value=\"REQ-NEW-001\""));
+    assert!(draft.contains(" required"));
+
+    let (preview_status, preview) = text_response(
+        server.router(),
+        Request::builder()
+            .method("POST")
+            .uri("/run")
+            .header("host", "127.0.0.1:3000")
+            .header("origin", "http://127.0.0.1:3000")
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body(Body::from("page=items&section=requirement&lang=ja&entity=REQ-NEW-001&item_edit=REQ-CODEX-PREVIEW-001&title=Preview+item&status=planned&item_edit_apply=0"))
+            .expect("request"),
+    )
+    .await;
+    assert_eq!(preview_status, StatusCode::OK);
+    assert!(preview.contains("REQ-CODEX-PREVIEW-001"));
+    assert!(preview.contains("Preview item"));
+    assert!(preview.contains(">適用</button>"));
 }
 
 #[tokio::test]
@@ -281,6 +389,31 @@ async fn item_driven_work_records_item_source_and_goal() {
             .active
             .iter()
             .any(|goal| goal.goal_id == "GOAL-REQ-WORKBENCH-001")
+    );
+    drop(state);
+    let (repeat_status, repeat_plan) = json_response(
+        server.router(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/items/REQ-WORKBENCH-001/work")
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    assert_eq!(repeat_status, StatusCode::OK);
+    assert_eq!(repeat_plan["goal"]["id"], "GOAL-REQ-WORKBENCH-001");
+    assert_eq!(
+        server
+            .inner
+            .state
+            .read()
+            .await
+            .goals
+            .active
+            .iter()
+            .filter(|goal| goal.goal_id == "GOAL-REQ-WORKBENCH-001")
+            .count(),
+        1
     );
 }
 

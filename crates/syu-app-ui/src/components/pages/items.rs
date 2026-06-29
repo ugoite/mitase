@@ -25,6 +25,7 @@ pub fn ItemsPage(
         .filter(|tab| TABS.contains(tab))
         .unwrap_or_else(|| section_from_kind(&ui.spec_kind).unwrap_or(PageSection::Requirement));
     let kind = kind_for_section(selected_tab);
+    let query = ui.spec_query.trim().to_lowercase();
     let items = ui
         .spec_browser
         .as_ref()
@@ -35,11 +36,25 @@ pub fn ItemsPage(
                 .flat_map(|section| section.documents.iter())
                 .flat_map(|document| document.items.iter())
                 .filter(|item| item.kind == kind)
+                .filter(|item| {
+                    query.is_empty()
+                        || item.id.to_lowercase().contains(&query)
+                        || item.title.to_lowercase().contains(&query)
+                        || item
+                            .summary
+                            .as_deref()
+                            .is_some_and(|summary| summary.to_lowercase().contains(&query))
+                })
                 .cloned()
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    let draft = entity.as_deref() == Some("draft");
+    let preview_draft_id = ui
+        .item_edit_preview
+        .as_ref()
+        .map(|preview| preview.item_id.as_str());
+    let draft = entity.as_deref() == Some("draft")
+        || preview_draft_id.is_some_and(|id| entity.as_deref() == Some(id));
     let selected_id = if draft {
         Some("draft".to_string())
     } else {
@@ -84,7 +99,7 @@ pub fn ItemsPage(
 #[component]
 fn ItemDetail(ui: WorkbenchUiState, section: PageSection, item: SpecBrowserItem) -> Element {
     rsx! {
-        div { class: "flex flex-wrap items-start justify-between gap-3", div { p { class: "text-[10px] uppercase tracking-[0.2em] text-slate-400", "{ui.copy().section_title(section)} · source of truth" } h2 { class: "mt-1 text-lg font-semibold", "{item.id} · {item.title}" } } div { class: "flex flex-wrap gap-2", button { class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold", type: "button", "data-create-work-from-item": "{item.id}", if ui.locale == Locale::Ja { "この Item から Work を作成" } else { "Create Work from Item" } } a { class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold", href: page_href(WorkbenchPage::Scope, ui.locale, Some(PageSection::CodeTests), Some(&item.id), None), if ui.locale == Locale::Ja { "実装範囲を調べる" } else { "Explore implementation scope" } } } }
+        div { class: "flex flex-wrap items-start justify-between gap-3", div { p { class: "text-[10px] uppercase tracking-[0.2em] text-slate-400", "{ui.copy().section_title(section)} · source of truth" } h2 { class: "mt-1 text-lg font-semibold", "{item.id} · {item.title}" } } div { class: "flex flex-wrap gap-2", button { class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold", type: "button", "data-create-work-from-item": "{item.id}", "data-work-lang": "{ui.locale.slug()}", if ui.locale == Locale::Ja { "この Item から Work を作成" } else { "Create Work from Item" } } a { class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold", href: page_href(WorkbenchPage::Scope, ui.locale, Some(PageSection::CodeTests), Some(&item.id), None), if ui.locale == Locale::Ja { "実装範囲を調べる" } else { "Explore implementation scope" } } } }
         div { class: "mt-4 grid gap-3 md:grid-cols-2", ItemField { label: "ID".to_string(), value: item.id.clone() } ItemField { label: if ui.locale == Locale::Ja { "状態".to_string() } else { "Status".to_string() }, value: item.status.clone().unwrap_or_else(|| "—".to_string()) } ItemField { label: if ui.locale == Locale::Ja { "概要".to_string() } else { "Summary".to_string() }, value: item.summary.clone().unwrap_or_default() } ItemField { label: if ui.locale == Locale::Ja { "説明".to_string() } else { "Description".to_string() }, value: item.description.clone().unwrap_or_default() } }
         details { class: "mt-3 rounded-lg border border-slate-200 bg-white p-4", summary { class: "cursor-pointer text-sm font-semibold", if ui.locale == Locale::Ja { "編集" } else { "Edit Item" } } div { class: "mt-4", ItemEditor { ui: ui.clone(), section, item: Some(item.clone()) } } }
         details { class: "mt-3 rounded-lg border border-slate-200 bg-white p-4", summary { class: "cursor-pointer text-sm font-semibold", if ui.locale == Locale::Ja { "関連コード・テストと履歴" } else { "Related code, tests, and history" } } div { class: "mt-3 space-y-2 text-sm", for group in item.implementations.iter().chain(item.tests.iter()) { for reference in &group.references { p { "{reference.file}" } } } } }
@@ -100,7 +115,12 @@ fn ItemEditor(
     let id = item
         .as_ref()
         .map(|item| item.id.clone())
-        .unwrap_or_else(|| draft_id(section));
+        .unwrap_or_else(|| {
+            ui.item_edit_preview
+                .as_ref()
+                .map(|preview| preview.item_id.clone())
+                .unwrap_or_else(|| draft_id(section))
+        });
     let title = item
         .as_ref()
         .map(|item| item.title.clone())
@@ -124,9 +144,9 @@ fn ItemEditor(
             input { type: "hidden", name: "section", value: "{section.slug()}" }
             input { type: "hidden", name: "entity", value: "{id}" }
             input { type: "hidden", name: "lang", value: "{ui.locale.slug()}" }
-            input { type: "hidden", name: "item_edit", value: "{id}" }
-            div { class: "grid gap-3 md:grid-cols-2", label { class: "grid gap-1 text-xs uppercase tracking-wide text-slate-500", "ID" input { class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-900", value: "{id}", disabled: item.is_some() } } label { class: "grid gap-1 text-xs uppercase tracking-wide text-slate-500", if ui.locale == Locale::Ja { "状態" } else { "Status" } input { class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-900", name: "status", value: "{status}" } } }
-            label { class: "grid gap-1 text-xs uppercase tracking-wide text-slate-500", if ui.locale == Locale::Ja { "タイトル" } else { "Title" } input { class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-900", name: "title", value: "{title}" } }
+            if item.is_some() { input { type: "hidden", name: "item_edit", value: "{id}" } }
+            div { class: "grid gap-3 md:grid-cols-2", label { class: "grid gap-1 text-xs uppercase tracking-wide text-slate-500", "ID" input { class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-900", name: if item.is_none() { "item_edit" } else { "" }, value: "{id}", disabled: item.is_some(), required: true } } label { class: "grid gap-1 text-xs uppercase tracking-wide text-slate-500", if ui.locale == Locale::Ja { "状態" } else { "Status" } input { class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-900", name: "status", value: "{status}" } } }
+            label { class: "grid gap-1 text-xs uppercase tracking-wide text-slate-500", if ui.locale == Locale::Ja { "タイトル" } else { "Title" } input { class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-900", name: "title", value: "{title}", required: true } }
             label { class: "grid gap-1 text-xs uppercase tracking-wide text-slate-500", if ui.locale == Locale::Ja { "概要" } else { "Summary" } textarea { class: "min-h-20 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-900", name: "summary", "{summary}" } }
             label { class: "grid gap-1 text-xs uppercase tracking-wide text-slate-500", if ui.locale == Locale::Ja { "説明" } else { "Description" } textarea { class: "min-h-24 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm normal-case text-slate-900", name: "description", "{description}" } }
             div { class: "flex justify-end gap-2", button { class: "rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold", name: "item_edit_apply", value: "0", type: "submit", if ui.locale == Locale::Ja { "変更をプレビュー" } else { "Preview changes" } } }

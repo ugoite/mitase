@@ -183,6 +183,19 @@ pub(super) async fn execute_action(
             } else {
                 build_branch_scope(&server.inner.config.workspace_root, range).await?
             };
+            let goal_id = {
+                let state = server.inner.state.read().await;
+                (1..)
+                    .map(|index| format!("GOAL-BRANCH-{index:03}"))
+                    .find(|candidate| {
+                        state
+                            .goals
+                            .active
+                            .iter()
+                            .all(|goal| goal.goal_id != *candidate)
+                    })
+                    .expect("the Goal id space is unbounded")
+            };
             let plan = GoalPlanArtifact {
                 version: 1,
                 kind: "syu.goal_plan".to_string(),
@@ -190,7 +203,7 @@ pub(super) async fn execute_action(
                 request: Some(format!("Infer goal from {range}")),
                 classification: Some(RequestClassification::Change.label().to_string()),
                 goal: GoalPlanGoal {
-                    id: "GOAL-BRANCH-001".to_string(),
+                    id: goal_id,
                     title: "Infer goal from branch".to_string(),
                     statement: format!(
                         "Review {} changed files from {range}",

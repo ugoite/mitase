@@ -149,6 +149,7 @@ pub fn ScopePage(
         );
     }
     let selected_id = entity
+        .clone()
         .filter(|id| slices.iter().any(|slice| slice.id == *id))
         .or_else(|| slices.first().map(|slice| slice.id.clone()));
     let selected_slice = selected_id
@@ -156,18 +157,38 @@ pub fn ScopePage(
         .and_then(|id| slices.iter().find(|slice| slice.id == *id))
         .cloned();
     let focused = focus_anchor.as_deref() == Some("scope-selector");
+    let goal_selected = entity.as_deref().is_some_and(|id| {
+        ui.payload
+            .state
+            .goals
+            .active
+            .iter()
+            .any(|goal| goal.goal_id == id)
+    });
     rsx! {
-        PageHeader { kicker: "Workbench".to_string(), title: copy.page_title(WorkbenchPage::Scope).to_string(), description: copy.page_summary(WorkbenchPage::Scope).to_string(), actions: rsx! { a { class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold", href: page_href(WorkbenchPage::Work, ui.locale, Some(PageSection::WorkScope), selected_id.as_deref(), None), if ui.locale == Locale::Ja { "Goal に昇格" } else { "Promote to Goal" } } } }
+        PageHeader { kicker: "Workbench".to_string(), title: copy.page_title(WorkbenchPage::Scope).to_string(), description: copy.page_summary(WorkbenchPage::Scope).to_string(), actions: rsx! {
+            if let Some(slice) = selected_slice.as_ref() {
+                match slice.source {
+                    SliceSource::ActiveGoal => rsx! { a { class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold", href: page_href(WorkbenchPage::Work, ui.locale, Some(PageSection::WorkScope), Some(&slice.id), None), if ui.locale == Locale::Ja { "Goal を開く" } else { "Open Goal" } } },
+                    SliceSource::ItemDriven => rsx! { button { class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold", type: "button", "data-create-work-from-item": "{slice.id}", "data-work-lang": "{ui.locale.slug()}", if ui.locale == Locale::Ja { "Goal に昇格" } else { "Promote to Goal" } } },
+                    SliceSource::BranchDiff => rsx! { button { class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold", type: "button", "data-create-work-from-branch": "origin/main...HEAD", "data-work-lang": "{ui.locale.slug()}", "data-running-label": if ui.locale == Locale::Ja { "Goal を生成中…" } else { "Creating Goal…" }, if ui.locale == Locale::Ja { "Goal に昇格" } else { "Promote to Goal" } } },
+                    SliceSource::Manual => rsx! { a { class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold", href: page_href(WorkbenchPage::Work, ui.locale, Some(PageSection::Brief), Some("new"), None), if ui.locale == Locale::Ja { "新しい Work を作成" } else { "Create new Work" } } },
+                }
+            }
+        } }
         div { id: "scope-selector", "data-command-target": "scope-selector", tabindex: "-1", class: if focused { "mb-4 grid gap-2 rounded-lg border-2 border-red-500 p-2 md:grid-cols-[8rem_minmax(0,1fr)]" } else { "mb-4 grid gap-2 md:grid-cols-[8rem_minmax(0,1fr)]" },
-            select { class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm", option { if ui.locale == Locale::Ja { "ブランチ" } else { "Branch" } } option { if ui.locale == Locale::Ja { "Goal" } else { "Goal" } } }
-            select { class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm", if let Some(report) = report { option { "{report.range}" } } else { option { if ui.locale == Locale::Ja { "現在のブランチ" } else { "Current branch" } } } }
+            select { class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm", "data-scope-mode": "true", "data-scope-lang": "{ui.locale.slug()}", "data-scope-section": "{selected_tab.slug()}", option { value: "branch", selected: !goal_selected, if ui.locale == Locale::Ja { "ブランチ" } else { "Branch" } } option { value: "goal", selected: goal_selected, disabled: ui.payload.state.goals.active.is_empty(), "Goal" } }
+            select { class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm", "data-scope-target": "true", "data-scope-lang": "{ui.locale.slug()}", "data-scope-section": "{selected_tab.slug()}",
+                option { value: "", "data-scope-source": "branch", hidden: goal_selected, selected: !goal_selected, if let Some(report) = report { "{report.range}" } else if ui.locale == Locale::Ja { "現在のブランチ" } else { "Current branch" } }
+                for goal in &ui.payload.state.goals.active { option { value: "{goal.goal_id}", "data-scope-source": "goal", hidden: !goal_selected, selected: entity.as_deref() == Some(goal.goal_id.as_str()), "{goal.goal_id}" } }
+            }
         }
         nav { class: "mb-3 flex flex-wrap gap-1 border-b border-slate-200", "aria-label": "Scope sections", for tab in TABS { a { class: tab_class(tab == selected_tab), href: page_href(WorkbenchPage::Scope, ui.locale, Some(tab), selected_id.as_deref(), None), "{tab_icon(tab)} {copy.section_title(tab)}" } } }
         div { class: "grid items-start gap-3 lg:grid-cols-[18rem_minmax(0,1fr)]",
             aside { class: "rounded-lg border border-slate-200 bg-slate-50 p-2", "aria-label": "Implementation slices",
                 div { class: "flex items-center justify-between px-2 py-2", span { class: "text-xs font-medium uppercase text-slate-500", "Implementation slices" } span { class: "rounded-full border bg-white px-2 py-0.5 text-xs", "{slices.len()}" } }
                 for slice in &slices { a { class: if selected_id.as_deref() == Some(slice.id.as_str()) { "mb-1 block rounded-lg bg-slate-950 p-3 text-white" } else { "mb-1 block rounded-lg p-3 hover:bg-white" }, href: page_href(WorkbenchPage::Scope, ui.locale, Some(selected_tab), Some(&slice.id), None),
-                    div { class: "flex items-start gap-2", StatusCircle { status: ownership_indicator(slice.ownership), label: ownership_label(ui.locale, slice.ownership).to_string(), count: None } div { strong { class: "block text-sm", "{slice.title}" } span { class: "mt-1 block text-xs opacity-70", "{confidence_label(ui.locale, slice.confidence)} · " if ui.locale == Locale::Ja { "推論" } else { "inferred" } } } }
+                    div { class: "flex items-start gap-2", StatusCircle { status: ownership_indicator(slice.ownership), label: ownership_label(ui.locale, slice.ownership).to_string(), count: Some(usize::from(slice.ownership != OwnershipStatus::Owned)) } div { strong { class: "block text-sm", "{slice.title}" } span { class: "mt-1 block text-xs opacity-70", "{confidence_label(ui.locale, slice.confidence)} · " if ui.locale == Locale::Ja { "推論" } else { "inferred" } } } }
                 } }
                 if slices.is_empty() { p { class: "px-2 py-6 text-center text-sm text-slate-500", if ui.locale == Locale::Ja { "Implementation Slice はまだありません。" } else { "No implementation slices yet." } } }
             }

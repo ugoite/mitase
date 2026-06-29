@@ -17,6 +17,7 @@ const TABS: [PageSection; 4] = [
 pub fn WorkPage(
     ui: WorkbenchUiState,
     section: Option<PageSection>,
+    entity: Option<String>,
     focus_anchor: Option<String>,
 ) -> Element {
     let copy = ui.copy();
@@ -24,7 +25,8 @@ pub fn WorkPage(
         .filter(|section| TABS.contains(section))
         .unwrap_or(PageSection::Brief);
     let goals = &ui.payload.state.goals;
-    let active_goal = goals.active_goal().cloned();
+    let creating = entity.as_deref() == Some("new");
+    let active_goal = (!creating).then(|| goals.active_goal().cloned()).flatten();
     let focused = focus_anchor.as_deref();
     rsx! {
         PageHeader {
@@ -35,10 +37,10 @@ pub fn WorkPage(
                 a { class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold", href: page_href(WorkbenchPage::Work, ui.locale, Some(PageSection::Brief), Some("new"), None), "{copy.new_work()}" }
             }
         }
-        if !goals.active.is_empty() {
+        if !creating && !goals.active.is_empty() {
             div { class: "mb-4 flex flex-wrap items-center gap-2",
                 label { class: "sr-only", for: "work-selector", if ui.locale == Locale::Ja { "Work を選択" } else { "Select work" } }
-                select { id: "work-selector", class: "min-w-72 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm",
+                select { id: "work-selector", class: "min-w-72 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm", "data-work-selector": "true", "data-work-section": "{selected.slug()}", "data-work-lang": "{ui.locale.slug()}",
                     for goal in &goals.active { option { value: "{goal.goal_id}", selected: Some(goal.goal_id.as_str()) == goals.selected_goal_id.as_deref(), "{goal_title(goal)}" } }
                 }
             }
@@ -51,13 +53,15 @@ pub fn WorkPage(
                 aside { class: "rounded-lg border border-slate-200 bg-slate-50 p-2", "aria-label": "Goals",
                     for goal in &goals.active {
                         a { class: if goals.active_goal().is_some_and(|active| active.goal_id == goal.goal_id) { "mb-1 block rounded-lg bg-slate-950 p-3 text-white" } else { "mb-1 block rounded-lg p-3 hover:bg-white" }, href: page_href(WorkbenchPage::Work, ui.locale, Some(selected), Some(&goal.goal_id), None),
-                            div { class: "flex items-center gap-2", StatusCircle { status: goal_status(goal), label: goal_status_label(ui.locale, goal).to_string(), count: None } strong { class: "text-sm", "{goal_title(goal)}" } }
+                            div { class: "flex items-center gap-2", StatusCircle { status: goal_status(goal), label: goal_status_label(ui.locale, goal).to_string(), count: Some(goal_issue_count(goal)) } strong { class: "text-sm", "{goal_title(goal)}" } }
                         }
                     }
                 }
             }
             section { class: focus_class(focused, anchor_for(selected)), "data-command-target": anchor_for(selected), tabindex: if focused == Some(anchor_for(selected)) { "-1" } else { "0" },
-                match active_goal {
+                if creating {
+                    NewWorkStart { ui: ui.clone() }
+                } else { match active_goal {
                     Some(goal) => match selected {
                         PageSection::Brief => rsx! { Brief { ui: ui.clone(), goal } },
                         PageSection::WorkScope => rsx! { WorkScope { ui: ui.clone(), goal } },
@@ -66,8 +70,32 @@ pub fn WorkPage(
                         _ => rsx! {},
                     },
                     None => rsx! { EmptyDetail { title: if ui.locale == Locale::Ja { "Work がありません".to_string() } else { "No work yet".to_string() }, body: if ui.locale == Locale::Ja { "新しい Work を作成すると、目的・スコープ・完了条件がここに表示されます。".to_string() } else { "Create a Work to review its purpose, scope, and completion conditions here.".to_string() } } },
+                } }
+            }
+        }
+    }
+}
+
+#[component]
+fn NewWorkStart(ui: WorkbenchUiState) -> Element {
+    rsx! {
+        div { class: "mx-auto max-w-3xl py-4",
+            p { class: "text-[10px] uppercase tracking-[0.2em] text-slate-400", if ui.locale == Locale::Ja { "New Work · source first" } else { "New Work · source first" } }
+            h2 { class: "mt-1 text-xl font-semibold", if ui.locale == Locale::Ja { "新しい Work の作成方法" } else { "Choose how to create the new Work" } }
+            p { class: "mt-2 text-sm leading-6 text-slate-600", if ui.locale == Locale::Ja { "根拠のない空の Work は作らず、Item または現在のブランチを起点に Goal Plan を生成します。" } else { "Start from an Item or the current branch so every Work begins with traceable evidence." } }
+            div { class: "mt-5 grid gap-3 md:grid-cols-2",
+                a { class: "group rounded-xl border border-slate-200 bg-white p-5 transition hover:border-slate-400 hover:shadow-sm", href: page_href(WorkbenchPage::Items, ui.locale, Some(PageSection::Requirement), None, None),
+                    span { class: "grid h-9 w-9 place-items-center rounded-full bg-slate-950 text-white", "▤" }
+                    strong { class: "mt-4 block text-sm", if ui.locale == Locale::Ja { "Item から作成" } else { "Create from an Item" } }
+                    span { class: "mt-1 block text-xs leading-5 text-slate-500", if ui.locale == Locale::Ja { "仕様 Item を選び、相互リンクと実装根拠を引き継ぎます。" } else { "Select a specification Item and carry its links and implementation evidence forward." } }
+                }
+                button { class: "group rounded-xl border border-slate-200 bg-white p-5 text-left transition hover:border-slate-400 hover:shadow-sm disabled:opacity-60", type: "button", "data-create-work-from-branch": "origin/main...HEAD", "data-work-lang": "{ui.locale.slug()}", "data-running-label": if ui.locale == Locale::Ja { "ブランチを分析中…" } else { "Analyzing branch…" },
+                    span { class: "grid h-9 w-9 place-items-center rounded-full bg-blue-600 text-white", "↗" }
+                    strong { class: "mt-4 block text-sm", if ui.locale == Locale::Ja { "現在のブランチから推論" } else { "Infer from the current branch" } }
+                    span { class: "mt-1 block text-xs leading-5 text-slate-500", if ui.locale == Locale::Ja { "差分を Implementation Scope と完了条件へ変換します。" } else { "Turn the branch diff into implementation scope and completion conditions." } }
                 }
             }
+            div { class: "mt-5 flex justify-end", a { class: "rounded-lg px-3 py-2 text-sm font-semibold text-slate-500 hover:bg-slate-100", href: page_href(WorkbenchPage::Work, ui.locale, Some(PageSection::Brief), None, None), if ui.locale == Locale::Ja { "キャンセル" } else { "Cancel" } } }
         }
     }
 }
@@ -114,6 +142,12 @@ fn goal_status(goal: &syu_workbench::ActiveGoalState) -> IndicatorStatus {
     } else {
         IndicatorStatus::Disabled
     }
+}
+fn goal_issue_count(goal: &syu_workbench::ActiveGoalState) -> usize {
+    goal.check_report
+        .as_ref()
+        .map(|report| report.error_count() + report.warning_count())
+        .unwrap_or(0)
 }
 fn goal_status_label(locale: Locale, goal: &syu_workbench::ActiveGoalState) -> &'static str {
     if goal.goal_plan.is_some() {

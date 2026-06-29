@@ -20,6 +20,7 @@ struct DiagnosticCheck {
     summary_en: String,
     summary_ja: String,
     status: IndicatorStatus,
+    issue_count: usize,
     detail_en: String,
     detail_ja: String,
     raw: Option<String>,
@@ -52,7 +53,7 @@ pub fn DiagnosticsPage(
         div { class: "grid items-start gap-3 lg:grid-cols-[18rem_minmax(0,1fr)]",
             aside { class: "rounded-lg border border-slate-200 bg-slate-50 p-2", "aria-label": "Diagnostic checks",
                 div { class: "flex items-center justify-between px-2 py-2", span { class: "text-xs font-medium uppercase text-slate-500", "{copy.section_title(tab)} checks" } span { class: "rounded-full border bg-white px-2 py-0.5 text-xs", "{checks.len()}" } }
-                for check in &checks { a { "data-diagnostic-check": "true", class: if selected_id.as_deref() == Some(check.id) { "mb-1 block rounded-lg bg-slate-950 p-3 text-white" } else { "mb-1 block rounded-lg p-3 hover:bg-white" }, href: page_href(WorkbenchPage::Diagnostics, ui.locale, Some(tab), Some(check.id), None), div { class: "flex items-start gap-2", StatusCircle { status: check.status, label: local(ui.locale, check.title_en, check.title_ja).to_string(), count: None } div { strong { class: "block text-sm", "{local(ui.locale, check.title_en, check.title_ja)}" } span { class: "mt-1 block text-xs opacity-70", "{local_owned(ui.locale, &check.summary_en, &check.summary_ja)}" } } } } }
+                for check in &checks { a { "data-diagnostic-check": "true", class: if selected_id.as_deref() == Some(check.id) { "mb-1 block rounded-lg bg-slate-950 p-3 text-white" } else { "mb-1 block rounded-lg p-3 hover:bg-white" }, href: page_href(WorkbenchPage::Diagnostics, ui.locale, Some(tab), Some(check.id), None), div { class: "flex items-start gap-2", StatusCircle { status: check.status, label: local(ui.locale, check.title_en, check.title_ja).to_string(), count: Some(check.issue_count) } div { strong { class: "block text-sm", "{local(ui.locale, check.title_en, check.title_ja)}" } span { class: "mt-1 block text-xs opacity-70", "{local_owned(ui.locale, &check.summary_en, &check.summary_ja)}" } } } } }
             }
             section { class: "rounded-lg border border-slate-200 bg-slate-50 p-4",
                 if let Some(check) = selected { DiagnosticDetail { ui: ui.clone(), check } }
@@ -64,7 +65,7 @@ pub fn DiagnosticsPage(
 #[component]
 fn DiagnosticDetail(ui: WorkbenchUiState, check: DiagnosticCheck) -> Element {
     rsx! {
-        div { class: "flex flex-wrap items-start justify-between gap-3", div { p { class: "text-[10px] uppercase tracking-[0.2em] text-slate-400", "Diagnostic check · {check.id}" } h2 { class: "mt-1 text-lg font-semibold", "{local(ui.locale, check.title_en, check.title_ja)}" } } StatusCircle { status: check.status, label: local_owned(ui.locale, &check.summary_en, &check.summary_ja).to_string(), count: None } }
+        div { class: "flex flex-wrap items-start justify-between gap-3", div { p { class: "text-[10px] uppercase tracking-[0.2em] text-slate-400", "Diagnostic check · {check.id}" } h2 { class: "mt-1 text-lg font-semibold", "{local(ui.locale, check.title_en, check.title_ja)}" } } StatusCircle { status: check.status, label: local_owned(ui.locale, &check.summary_en, &check.summary_ja).to_string(), count: Some(check.issue_count) } }
         div { class: status_callout(check.status), p { class: "text-sm leading-6", "{local_owned(ui.locale, &check.detail_en, &check.detail_ja)}" } }
         div { class: "mt-3 grid gap-3 md:grid-cols-2", section { class: "rounded-lg border border-slate-200 bg-white p-4", h3 { class: "text-[10px] uppercase tracking-[0.18em] text-slate-500", if ui.locale == Locale::Ja { "推奨する修正" } else { "Recommended action" } } ol { class: "mt-2 list-decimal space-y-1 pl-5 text-sm", li { if ui.locale == Locale::Ja { "対象と根拠を確認する" } else { "Review the affected subject and evidence" } } li { if ui.locale == Locale::Ja { "必要な修正を適用する" } else { "Apply the required correction" } } li { if ui.locale == Locale::Ja { "診断を再実行する" } else { "Run diagnostics again" } } } } section { class: "rounded-lg border border-slate-200 bg-white p-4", h3 { class: "text-[10px] uppercase tracking-[0.18em] text-slate-500", if ui.locale == Locale::Ja { "診断の根拠" } else { "Diagnostic evidence" } } p { class: "mt-2 text-sm text-slate-700", "{local_owned(ui.locale, &check.summary_en, &check.summary_ja)}" } } }
         if let Some(raw) = check.raw { details { class: "mt-3 rounded-lg border border-slate-200 bg-white p-4", summary { class: "cursor-pointer text-sm font-semibold", if ui.locale == Locale::Ja { "raw 診断を表示" } else { "Show raw diagnostics" } } pre { class: "mt-3 max-h-64 overflow-auto rounded bg-slate-950 p-3 text-xs text-slate-100", "{raw}" } } }
@@ -90,16 +91,16 @@ fn checks_for(ui: &WorkbenchUiState, tab: PageSection) -> Vec<DiagnosticCheck> {
                 IndicatorStatus::Disabled
             };
             vec![
-                DiagnosticCheck { id: "reciprocal-links", title_en: "Reciprocal links", title_ja: "相互リンク", summary_en: summary.clone().unwrap_or_else(|| "not run".to_string()), summary_ja: summary.clone().unwrap_or_else(|| "未実行".to_string()), status, detail_en: "Checks adjacent specification links in both directions so Item-driven scope stays reliable.".to_string(), detail_ja: "隣接する仕様リンクを双方向に検査し、Item 起点のスコープを信頼できる状態にします。".to_string(), raw: None },
-                DiagnosticCheck { id: "document-schema", title_en: "Document schema", title_ja: "文書スキーマ", summary_en: summary.clone().unwrap_or_else(|| "not run".to_string()), summary_ja: summary.clone().unwrap_or_else(|| "未実行".to_string()), status, detail_en: "Validates specification document structure and field types.".to_string(), detail_ja: "仕様文書の構造とフィールド型を検証します。".to_string(), raw: None },
-                DiagnosticCheck { id: "generated-docs", title_en: "Generated docs", title_ja: "生成文書", summary_en: "freshness is checked by repository validation".to_string(), summary_ja: "リポジトリ検証で鮮度を確認".to_string(), status, detail_en: "Checks whether generated specification and report files match their sources.".to_string(), detail_ja: "生成された仕様文書とレポートがソースと一致するか確認します。".to_string(), raw: None },
-                DiagnosticCheck { id: "workspace-validation", title_en: "Workspace validation", title_ja: "ワークスペース検証", summary_en: summary.clone().unwrap_or_else(|| "not run".to_string()), summary_ja: summary.unwrap_or_else(|| "未実行".to_string()), status, detail_en: "Checks the specification workspace and reports structural or semantic failures.".to_string(), detail_ja: "仕様ワークスペースを検査し、構造・意味上の問題を報告します。".to_string(), raw: None },
+                DiagnosticCheck { id: "reciprocal-links", title_en: "Reciprocal links", title_ja: "相互リンク", summary_en: summary.clone().unwrap_or_else(|| "not run".to_string()), summary_ja: summary.clone().unwrap_or_else(|| "未実行".to_string()), status, issue_count: 0, detail_en: "Checks adjacent specification links in both directions so Item-driven scope stays reliable.".to_string(), detail_ja: "隣接する仕様リンクを双方向に検査し、Item 起点のスコープを信頼できる状態にします。".to_string(), raw: None },
+                DiagnosticCheck { id: "document-schema", title_en: "Document schema", title_ja: "文書スキーマ", summary_en: summary.clone().unwrap_or_else(|| "not run".to_string()), summary_ja: summary.clone().unwrap_or_else(|| "未実行".to_string()), status, issue_count: 0, detail_en: "Validates specification document structure and field types.".to_string(), detail_ja: "仕様文書の構造とフィールド型を検証します。".to_string(), raw: None },
+                DiagnosticCheck { id: "generated-docs", title_en: "Generated docs", title_ja: "生成文書", summary_en: "freshness is checked by repository validation".to_string(), summary_ja: "リポジトリ検証で鮮度を確認".to_string(), status, issue_count: 0, detail_en: "Checks whether generated specification and report files match their sources.".to_string(), detail_ja: "生成された仕様文書とレポートがソースと一致するか確認します。".to_string(), raw: None },
+                DiagnosticCheck { id: "workspace-validation", title_en: "Workspace validation", title_ja: "ワークスペース検証", summary_en: summary.clone().unwrap_or_else(|| "not run".to_string()), summary_ja: summary.unwrap_or_else(|| "未実行".to_string()), status, issue_count: 0, detail_en: "Checks the specification workspace and reports structural or semantic failures.".to_string(), detail_ja: "仕様ワークスペースを検査し、構造・意味上の問題を報告します。".to_string(), raw: None },
             ]
         }
         PageSection::GoalPlan => {
             let goal = ui.payload.state.goals.active_goal();
             let report = goal.and_then(|goal| goal.check_report.as_ref());
-            vec![DiagnosticCheck { id: "goal-plan-check", title_en: "Goal Plan check", title_ja: "Goal Plan 検証", summary_en: report.map(|report| format!("{} errors, {} warnings", report.error_count(), report.warning_count())).unwrap_or_else(|| "no active result".to_string()), summary_ja: report.map(|report| format!("エラー {} 件、警告 {} 件", report.error_count(), report.warning_count())).unwrap_or_else(|| "結果なし".to_string()), status: if running { IndicatorStatus::Running } else if report.is_some_and(|report| report.error_count() > 0) { IndicatorStatus::Error } else if report.is_some_and(|report| report.warning_count() > 0) { IndicatorStatus::Warning } else if report.is_some() { IndicatorStatus::Success } else { IndicatorStatus::Disabled }, detail_en: "Compares the active Goal Plan with its branch range, required tests, and completion commands.".to_string(), detail_ja: "アクティブな Goal Plan をブランチ範囲、必須テスト、完了コマンドと照合します。".to_string(), raw: report.and_then(|report| serde_yaml::to_string(report).ok()) }]
+            vec![DiagnosticCheck { id: "goal-plan-check", title_en: "Goal Plan check", title_ja: "Goal Plan 検証", summary_en: report.map(|report| format!("{} errors, {} warnings", report.error_count(), report.warning_count())).unwrap_or_else(|| "no active result".to_string()), summary_ja: report.map(|report| format!("エラー {} 件、警告 {} 件", report.error_count(), report.warning_count())).unwrap_or_else(|| "結果なし".to_string()), status: if running { IndicatorStatus::Running } else if report.is_some_and(|report| report.error_count() > 0) { IndicatorStatus::Error } else if report.is_some_and(|report| report.warning_count() > 0) { IndicatorStatus::Warning } else if report.is_some() { IndicatorStatus::Success } else { IndicatorStatus::Disabled }, issue_count: report.map(|report| report.error_count() + report.warning_count()).unwrap_or(0), detail_en: "Compares the active Goal Plan with its branch range, required tests, and completion commands.".to_string(), detail_ja: "アクティブな Goal Plan をブランチ範囲、必須テスト、完了コマンドと照合します。".to_string(), raw: report.and_then(|report| serde_yaml::to_string(report).ok()) }]
         }
         PageSection::Trace => {
             let report = ui
@@ -127,6 +128,9 @@ fn checks_for(ui: &WorkbenchUiState, tab: PageSection) -> Vec<DiagnosticCheck> {
                 } else {
                     IndicatorStatus::Disabled
                 },
+                issue_count: report
+                    .map(|item| item.trace_ownership.unowned_files)
+                    .unwrap_or(0),
                 detail_en: "Explains whether changed code is owned by traced specification Items."
                     .to_string(),
                 detail_ja: "変更コードが仕様 Item によって所有されているかを説明します。"
@@ -157,6 +161,7 @@ fn checks_for(ui: &WorkbenchUiState, tab: PageSection) -> Vec<DiagnosticCheck> {
             } else {
                 IndicatorStatus::Disabled
             },
+            issue_count: 0,
             detail_en:
                 "Checks repository connectivity, current branch, and generated documentation state."
                     .to_string(),

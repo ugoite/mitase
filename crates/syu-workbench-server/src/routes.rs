@@ -200,6 +200,23 @@ pub(super) async fn item_work(
     State(server): State<WorkbenchServer>,
     Path(id): Path<String>,
 ) -> Result<Json<GoalPlanArtifact>, StatusCode> {
+    if let Some(existing) = {
+        let state = server.inner.state.read().await;
+        state.goals.active.iter().find_map(|goal| {
+            goal.goal_plan.as_ref().and_then(|plan| {
+                (plan
+                    .source
+                    .evidence
+                    .as_ref()
+                    .and_then(|evidence| evidence.item_id.as_deref())
+                    == Some(id.as_str()))
+                .then(|| plan.clone())
+            })
+        })
+    } {
+        server.inner.state.write().await.goals.selected_goal_id = Some(existing.goal.id.clone());
+        return Ok(Json(existing));
+    }
     let item = {
         let workspace = server.inner.browser_workspace.read().await;
         workspace
