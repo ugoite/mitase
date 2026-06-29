@@ -3,8 +3,8 @@ version: 1
 
 features:
   - id: FEAT-WORKBENCH-SHELL-001
-    title: Command-palette Workbench shell
-    summary: Keep the command palette as the keyboard-first action surface inside a shared shell with four persistent roles (Items, Work, Scope, and Diagnostics), focused Work and Scope subviews, command-to-role routing, a collapsible and editable spec tree, and distinct refreshable diagnostics.
+    title: Page-oriented Workbench shell
+    summary: Provide Work, Scope, Items, and Diagnostics as the only persistent roles; keep Work as the default; navigate the global palette through typed page targets; and expose Settings only as a workspace utility.
     status: implemented
     linked_requirements:
       - REQ-WORKBENCH-001
@@ -12,41 +12,35 @@ features:
       - REQ-WORKBENCH-007
     implementations:
       rust:
-        - file: crates/syu-workbench/src/lib.rs
+        - file: crates/syu-app-ui/src/model/navigation.rs
           symbols:
-            - WorkbenchState
-            - CommandPaletteState
-            - WorkbenchActionRegistry
-            - WorkbenchActionAvailability
-        - file: crates/syu-app-ui/src/lib.rs
-          symbols:
-            - AppShell
-            - CommandPalette
-            - WorkbenchPane
-            - RequestIntakeCanvas
-            - GoalRail
-            - GoalCanvas
-            - EvidencePanel
-            - StatusBar
+            - WorkbenchPage
+            - CommandTarget
+            - FocusIntent
+            - target_for_command
+            - target_for_action
         - file: crates/syu-app-ui/src/components/shell.rs
           symbols:
-            - SpecInfoBrowser
+            - AppShell
+            - WorkbenchSidebar
+            - CommandPalette
+            - WorkbenchStage
+        - file: crates/syu-app-ui/src/components/explorer.rs
+          symbols:
+            - PageHeader
+            - page_href
+        - file: crates/syu-app-ui/src/components/indicators.rs
+          symbols:
+            - StatusCircle
+            - EvidenceStamp
         - file: tests/workbench_smoke.rs
           symbols:
-            - app_shell_renders_command_palette_first_shell
-            - command_palette_renders_disabled_reason_for_unavailable_actions
-            - goal_canvas_renders_a_read_only_action_preview_placeholder
-            - evidence_panel_renders_placeholder_when_empty
-        - file: crates/syu-workbench-server/src/tests.rs
-          symbols:
-            - role_menu_routes_commands_to_items_and_diagnostics
-            - item_edit_previews_and_applies_reciprocal_links_together
-            - diagnostics_refresh_all_runs_unique_tools_and_skips_missing_goal
-            - items_surface_opens_before_workspace_initialization
+            - sidebar_has_only_four_roles_in_required_order
+            - palette_history_targets_work_evidence
+            - diagnostics_and_settings_have_localized_japanese_copy
       markdown:
         - file: docs/guide/workbench.md
           symbols:
-            - command palette registry
-            - WorkbenchState
-            - CommandPaletteState
-            - request.classify
+            - Stable pages
+            - Explorer Frame
+            - CommandTarget navigation

@@ -31,26 +31,24 @@ description: "Generated reference for docs/syu/features/workbench/assignment.yam
           - ScopeGuard
           - CommandAgentAdapter
           - EvidenceCollector
-      - **file**: crates/syu-app-ui/src/components/shell/assignment.rs
+      - **file**: crates/syu-app-ui/src/components/pages/work.rs
         - **symbols**:
-          - AssignGoalDialog
-          - ScopeGuardPreview
-          - AgentRunPanel
+          - Delivery
+          - InfoBlock
       - **file**: crates/syu-workbench/src/lib.rs
         - **symbols**:
           - assignment_blocker_logic_rejects_ambiguous_ai_scope
           - dry_run_command_adapter_captures_stdout_stderr_and_evidence
       - **file**: tests/workbench_smoke.rs
         - **symbols**:
-          - assignment_preview_renders_blocked_state_with_scope_tokens
-          - assignment_actions_are_exposed_in_the_command_palette
-          - scope_guard_preview_renders_out_of_scope_changes
+          - work_is_human_readable_default_page
+          - palette_history_targets_work_evidence
     - **markdown**:
       - **file**: docs/guide/workbench.md
         - **symbols**:
           - assignment
           - evidence
-          - human or AI
+          - assignment and execution
 
 ## Source YAML
 
@@ -73,24 +71,22 @@ features:
             - ScopeGuard
             - CommandAgentAdapter
             - EvidenceCollector
-        - file: crates/syu-app-ui/src/components/shell/assignment.rs
+        - file: crates/syu-app-ui/src/components/pages/work.rs
           symbols:
-            - AssignGoalDialog
-            - ScopeGuardPreview
-            - AgentRunPanel
+            - Delivery
+            - InfoBlock
         - file: crates/syu-workbench/src/lib.rs
           symbols:
             - assignment_blocker_logic_rejects_ambiguous_ai_scope
             - dry_run_command_adapter_captures_stdout_stderr_and_evidence
         - file: tests/workbench_smoke.rs
           symbols:
-            - assignment_preview_renders_blocked_state_with_scope_tokens
-            - assignment_actions_are_exposed_in_the_command_palette
-            - scope_guard_preview_renders_out_of_scope_changes
+            - work_is_human_readable_default_page
+            - palette_history_targets_work_evidence
       markdown:
         - file: docs/guide/workbench.md
           symbols:
             - assignment
             - evidence
-            - human or AI
+            - assignment and execution
 ```

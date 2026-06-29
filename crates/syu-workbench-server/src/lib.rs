@@ -26,13 +26,11 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use syu_app_ui::{
-    AppShell, Locale, WorkbenchActionRunPreview, WorkbenchPane, WorkbenchUiState,
+    AppShell, FocusIntent, Locale, PageSection, WorkbenchPage, WorkbenchUiState,
     model::{
-        CliCommandPreview, CommandCategory, CommandEffect, CommandResultItem, CommandResultStatus,
         ItemEditPreview, SpecBrowserDocument, SpecBrowserItem, SpecBrowserModel,
-        SpecBrowserSection, SpecBrowserTraceGroup, SpecBrowserTraceReference, TypedCommandResult,
-        category_result_kind, cli_command_catalog, workbench_action_category,
-        workbench_action_title,
+        SpecBrowserSection, SpecBrowserTraceGroup, SpecBrowserTraceReference,
+        WorkspaceSettingsState,
     },
 };
 use syu_code_intel::{
@@ -50,10 +48,9 @@ use syu_task_model::{
     GoalPlanImplementationPlan, GoalPlanPersistentItem, GoalPlanPersistentItemDetails,
     GoalPlanPersistentItems, GoalPlanScope, GoalPlanScopeInclude, GoalPlanSelectionMode,
     GoalPlanSource, GoalPlanSourceEvidence, GoalPlanSourceMode, GoalPlanSpecMapping,
-    GoalPlanTestPlan, RequestArtifact, RequestArtifactContext, RequestClassification,
-    ScaffoldAction, ScaffoldPlan, ScaffoldUpdate, ScaffoldUpdateKind, ScopeFeatureCandidate,
-    ScopeOutcome, ScopeSignals, SearchResult, TaskTestSelectionCommand,
-    TaskTestSelectionEscalation, TaskTestSelectionPlan,
+    GoalPlanTestPlan, RequestArtifact, RequestClassification, ScaffoldAction, ScaffoldPlan,
+    ScaffoldUpdate, ScaffoldUpdateKind, ScopeFeatureCandidate, ScopeOutcome, ScopeSignals,
+    SearchResult, TaskTestSelectionCommand, TaskTestSelectionEscalation, TaskTestSelectionPlan,
 };
 use syu_workbench as shared_workbench;
 use tokio::{
@@ -762,7 +759,7 @@ pub struct SpecItemResponse {
     pub item: BrowserItem,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestPlanRequest {
     pub request: RequestArtifact,
     #[serde(default)]
@@ -798,6 +795,27 @@ pub struct ActionRunResponse {
     pub action_id: String,
     pub event: WorkbenchEvent,
     pub result: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SettingsUpdate {
+    pub spec_root: String,
+    pub bind: String,
+    pub port: u16,
+    #[serde(default)]
+    pub strict_review: bool,
+    #[serde(default)]
+    pub source_hash: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SettingsPreview {
+    pub valid: bool,
+    pub applied: bool,
+    pub diff: String,
+    pub message: String,
+    pub source_hash: String,
+    pub update: SettingsUpdate,
 }
 
 #[derive(Debug)]
@@ -849,8 +867,12 @@ impl WorkbenchServer {
             .route("/api/workspace/snapshot", get(workspace_snapshot))
             .route("/api/actions", get(list_actions))
             .route("/api/actions/{id}/run", post(run_action))
+            .route("/api/diagnostics/run", post(run_diagnostics))
+            .route("/api/settings/preview", post(settings_preview))
+            .route("/api/settings/apply", post(settings_apply))
             .route("/api/spec/graph", get(spec_graph))
             .route("/api/spec/item/{id}", get(spec_item))
+            .route("/api/items/{id}/work", post(item_work))
             .route("/api/branch/scope", get(branch_scope))
             .route("/api/request/classify", post(request_classify))
             .route("/api/request/scope", post(request_scope))
@@ -955,33 +977,19 @@ impl WorkbenchServer {
 #[derive(Debug, Clone, Default, Deserialize)]
 struct WorkbenchViewQuery {
     #[serde(default)]
-    pane: Option<String>,
+    page: Option<String>,
+    #[serde(default)]
+    section: Option<String>,
+    #[serde(default)]
+    entity: Option<String>,
+    #[serde(default)]
+    focus: Option<String>,
     #[serde(default)]
     query: Option<String>,
     #[serde(default)]
     spec_query: Option<String>,
     #[serde(default)]
     spec_kind: Option<String>,
-    #[serde(default)]
-    category: Option<String>,
-    #[serde(default)]
-    action: Option<String>,
-    #[serde(default)]
-    run: Option<String>,
-    #[serde(default)]
-    action_input: Option<String>,
-    #[serde(default)]
-    action_confirm: Option<String>,
-    #[serde(default)]
-    cli: Option<String>,
-    #[serde(default)]
-    cli_arg: Option<String>,
-    #[serde(default)]
-    cli_confirm: Option<String>,
-    #[serde(default)]
-    show_log: Option<String>,
-    #[serde(default)]
-    diagnostics_all: Option<String>,
     #[serde(default)]
     item_edit: Option<String>,
     #[serde(default)]
@@ -1014,10 +1022,6 @@ struct WorkbenchViewQuery {
     tests_yaml: Option<String>,
     #[serde(default)]
     implementations_yaml: Option<String>,
-    #[serde(default)]
-    spec_item: Option<String>,
-    #[serde(default)]
-    goal: Option<String>,
     #[serde(default)]
     lang: Option<String>,
 }

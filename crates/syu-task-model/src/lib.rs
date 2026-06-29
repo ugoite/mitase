@@ -135,6 +135,8 @@ pub struct GoalPlanArtifact {
 #[serde(deny_unknown_fields)]
 pub struct GoalPlanSourceEvidence {
     #[serde(default)]
+    pub item_id: Option<String>,
+    #[serde(default)]
     pub changed_files: Vec<String>,
     #[serde(default)]
     pub traced_requirements: Vec<String>,
@@ -183,6 +185,8 @@ pub enum GoalPlanSourceMode {
     RequestDriven,
     #[serde(rename = "diff_inferred")]
     DiffInferred,
+    #[serde(rename = "item_driven")]
+    ItemDriven,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -580,7 +584,7 @@ mod tests {
     }
 
     #[test]
-    fn supports_request_driven_and_diff_inferred_sources() {
+    fn supports_request_diff_and_item_driven_sources() {
         let request_driven: GoalPlanArtifact = serde_yaml::from_str(
             "version: 1\nkind: syu.goal_plan\nsource:\n  mode: request_driven\ngoal:\n  id: GOAL-001\n  title: Example\n  statement: Example\nimplementation_plan:\n  scope:\n    include: []\n    exclude: []\n  steps: []\ntest_plan:\n  selection_mode: minimal\n  required_tests: {}\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\ncompletion:\n  must_pass: []\n",
         )
@@ -605,6 +609,19 @@ mod tests {
         assert_eq!(
             diff_inferred.source.confidence,
             Some(GoalPlanConfidence::Medium)
+        );
+
+        let item_driven: GoalPlanArtifact = serde_yaml::from_str(
+            "version: 1\nkind: syu.goal_plan\nsource:\n  mode: item_driven\n  evidence:\n    item_id: REQ-WORKBENCH-001\ngoal:\n  id: GOAL-ITEM-001\n  title: Item Work\n  statement: Implement the Item\nimplementation_plan:\n  scope:\n    include: []\n    exclude: []\n  steps: []\ntest_plan:\n  selection_mode: minimal\n  required_tests: {}\n  suggested_tests: {}\ncoverage:\n  mode: changed_lines\n  threshold: 100\ncompletion:\n  must_pass: []\n",
+        )
+        .expect("item-driven plan should parse");
+        assert_eq!(item_driven.source.mode, GoalPlanSourceMode::ItemDriven);
+        assert_eq!(
+            item_driven
+                .source
+                .evidence
+                .and_then(|evidence| evidence.item_id),
+            Some("REQ-WORKBENCH-001".to_string())
         );
     }
 

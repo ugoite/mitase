@@ -1,137 +1,93 @@
 use super::{HelpTopic, Locale, UiCopy};
-use crate::WorkbenchPane;
+use crate::model::{PageSection, WorkbenchPage};
 
 pub struct Japanese;
-
 pub static JA: Japanese = Japanese;
 
 impl UiCopy for Japanese {
-    fn app_title(&self) -> &'static str {
-        "Syu Workbench"
-    }
-
-    fn app_tagline(&self) -> &'static str {
-        "コマンドパレット中心の作業画面"
-    }
-
     fn workspace_label(&self) -> &'static str {
         "ワークスペース"
     }
-
     fn branch_label(&self) -> &'static str {
         "ブランチ"
     }
-
     fn health_label(&self) -> &'static str {
         "状態"
     }
-
-    fn actions_label(&self) -> &'static str {
-        "候補"
-    }
-
     fn palette_placeholder(&self) -> &'static str {
-        "コマンドを入力"
+        "コマンド、タスク、Item を検索"
     }
-
-    fn palette_hint(&self) -> &'static str {
-        "入力すると候補が出ます"
-    }
-
     fn sidebar_title(&self) -> &'static str {
-        "ナビゲーション"
+        "Workbench ナビゲーション"
     }
-
     fn help_label(&self) -> &'static str {
         "ヘルプ"
     }
-
     fn language_label(&self) -> &'static str {
         "言語"
     }
-
     fn language_name(&self, locale: Locale) -> &'static str {
         match locale {
-            Locale::En => "EN",
+            Locale::En => "英語",
             Locale::Ja => "日本語",
         }
     }
-
-    fn pane_title(&self, pane: WorkbenchPane) -> &'static str {
-        match pane {
-            WorkbenchPane::Items => "Item一覧",
-            WorkbenchPane::Diagnostics => "診断",
-            WorkbenchPane::Pulse => "作業",
-            WorkbenchPane::Commands => "コマンドパレット",
-            WorkbenchPane::Goals => "ゴール計画",
-            WorkbenchPane::Request => "受付",
-            WorkbenchPane::Branch => "スコープ",
-            WorkbenchPane::Assignment => "割り当て",
-            WorkbenchPane::Graph => "仕様グラフ",
-            WorkbenchPane::Evidence => "証跡",
+    fn page_title(&self, page: WorkbenchPage) -> &'static str {
+        match page {
+            WorkbenchPage::Work => "Work",
+            WorkbenchPage::Scope => "Scope",
+            WorkbenchPage::Items => "Items",
+            WorkbenchPage::Diagnostics => "Diagnostics",
+            WorkbenchPage::Settings => "設定",
         }
     }
-
-    fn pane_summary(&self, pane: WorkbenchPane) -> &'static str {
-        match pane {
-            WorkbenchPane::Items => "永続仕様を閲覧・編集する",
-            WorkbenchPane::Diagnostics => "ワークスペースとゴールの検査を更新する",
-            WorkbenchPane::Pulse => "依頼、ゴール、割り当て、証跡をまとめて見る",
-            WorkbenchPane::Commands => "上部の入力欄から操作を呼ぶ",
-            WorkbenchPane::Goals => "いまのゴールと、その計画を見る",
-            WorkbenchPane::Request => "受付中の依頼を見る",
-            WorkbenchPane::Branch => "ブランチ範囲と仕様への影響を見る",
-            WorkbenchPane::Assignment => "引き継ぎ先を見る",
-            WorkbenchPane::Graph => "仕様・コード・テストのつながりを見る",
-            WorkbenchPane::Evidence => "最新のイベントと出力を見る",
+    fn page_summary(&self, page: WorkbenchPage) -> &'static str {
+        match page {
+            WorkbenchPage::Work => "実装作業を理解し、割り当て、証拠を確認します",
+            WorkbenchPage::Scope => "コード・仕様・テストの境界と根拠を確認します",
+            WorkbenchPage::Items => "仕様の正本を閲覧・編集します",
+            WorkbenchPage::Diagnostics => "スコープと実行を信頼できるか診断します",
+            WorkbenchPage::Settings => "ワークスペースを安全に設定します",
         }
     }
-
-    fn help_title(&self, topic: HelpTopic) -> &'static str {
-        match topic {
-            HelpTopic::Items => "Item一覧",
-            HelpTopic::Diagnostics => "診断",
-            HelpTopic::Palette => "コマンドパレット",
-            HelpTopic::Sidebar => "サイドバー",
-            HelpTopic::Pulse => "ワークスペース",
-            HelpTopic::Goals => "ゴール計画",
-            HelpTopic::Request => "受付",
-            HelpTopic::Branch => "ブランチ",
-            HelpTopic::Assignment => "割り当て",
-            HelpTopic::Graph => "仕様グラフ",
-            HelpTopic::Evidence => "証跡",
+    fn section_title(&self, section: PageSection) -> &'static str {
+        match section {
+            PageSection::Brief => "概要",
+            PageSection::WorkScope => "スコープ",
+            PageSection::Delivery => "引き渡し",
+            PageSection::Evidence => "証拠",
+            PageSection::CodeTests => "コードとテスト",
+            PageSection::Feature => "機能",
+            PageSection::Requirement => "要件",
+            PageSection::Policy => "ポリシー",
+            PageSection::Philosophy => "理念",
+            PageSection::Workspace => "ワークスペース",
+            PageSection::GoalPlan => "Goal Plan",
+            PageSection::Trace => "トレース",
+            PageSection::Repository => "リポジトリ",
+            PageSection::General => "一般",
+            PageSection::SyuYaml => "syu.yaml",
+            PageSection::Integrations => "連携",
         }
     }
-
+    fn new_work(&self) -> &'static str {
+        "+ 新しい Work"
+    }
+    fn search(&self) -> &'static str {
+        "検索"
+    }
+    fn run_diagnostics(&self) -> &'static str {
+        "診断"
+    }
     fn help_body(&self, topic: HelpTopic) -> &'static str {
         match topic {
-            HelpTopic::Items => {
-                "階層ツリーを検索し、リンクを辿り、選択中のレイヤーへの追加やItemの編集を行います。"
-            }
-            HelpTopic::Diagnostics => {
-                "ワークスペースとゴールの検査を実行し、問題のItemへ移動します。"
-            }
-            HelpTopic::Palette => "上部の入力欄にフォーカスして、少し入力すると候補が出ます。",
-            HelpTopic::Sidebar => "左のサイドバーで画面を切り替えられます。",
-            HelpTopic::Pulse => "ワークスペース、ブランチ、開くものをまとめて表示します。",
-            HelpTopic::Goals => "現在のゴールと、そのための計画を表示します。",
-            HelpTopic::Request => "受付テキスト、分類、開くスコープを表示します。",
-            HelpTopic::Branch => "ブランチ範囲、変更ファイル、影響を表示します。",
-            HelpTopic::Assignment => "引き継ぎ先と実行方法を表示します。",
-            HelpTopic::Graph => "仕様・コード・テストのつながりを表示します。",
-            HelpTopic::Evidence => "新しいイベントと出力を新しい順に表示します。",
+            HelpTopic::Palette => "候補を選ぶと該当ページへ移動し、必要な操作にフォーカスします。",
+            HelpTopic::Sidebar => "4つの固定された Workbench ページを切り替えます。",
+            HelpTopic::Work => "目的を先に読み、スコープ、引き渡し、証拠を確認します。",
+            HelpTopic::Scope => "Implementation Slice と推論した境界の根拠を確認します。",
+            HelpTopic::Items => "仕様 Item を管理し、Item 起点の Work を開始します。",
+            HelpTopic::Diagnostics => "全診断を開始し、グループ別の構造化された結果を確認します。",
+            HelpTopic::Settings => "適用前にワークスペース設定を検証し、差分を確認します。",
         }
-    }
-
-    fn command_surface_body(&self) -> &'static str {
-        "上部の入力欄にフォーカスすると候補が出ます。候補を選んで進めます。"
-    }
-
-    fn run_label(&self) -> &'static str {
-        "実行"
-    }
-
-    fn running_label(&self) -> &'static str {
-        "実行中..."
     }
 }

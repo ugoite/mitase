@@ -2,20 +2,20 @@ category: Core Workbench
 prefix: REQ-WORKBENCH
 requirements:
   - id: REQ-WORKBENCH-001
-    title: Role-oriented, command-palette-first Workbench
+    title: Page-oriented, human-readable Workbench
     description: |
       The Workbench MUST keep the command palette as its keyboard-first action
-      surface while exposing only four persistent role menus: Items, Work,
-      Scope, and Diagnostics. A selected palette command MUST open in its
-      appropriate role instead of leaving the user in a generic command result.
-      Items MUST provide a collapsible spec tree, linked-item navigation,
+      surface while exposing only four persistent role menus in this order:
+      Work, Scope, Items, and Diagnostics. Work MUST be the default. A selected
+      palette command MUST resolve to a page, section, entity, stable component
+      anchor, focus intent, and safe execution policy instead of opening a
+      generic command result. Items MUST provide linked-item navigation,
       source-preserving item editing with mandatory diff review, reciprocal
-      adjacent-layer link updates, and workspace initialization when specs do
-      not exist. Diagnostics MUST expose distinct workspace checks and refresh
-      all available checks together. Work and Scope MAY expose focused
-      subviews without adding more persistent roles. The shared header MUST
-      remain visible above these roles, and the shell SHOULD use centralized
-      design tokens and reusable classes.
+      adjacent-layer link updates, Item-driven Work and scope entry points, and
+      workspace initialization when specs do not exist. Diagnostics MUST use a
+      single action to queue all checks and update item status through jobs and
+      SSE. Settings MUST be a full-page utility opened from the gear and MUST
+      preview, validate, stale-check, and source-preserve syu.yaml changes.
     priority: medium
     status: implemented
     linked_policies:
@@ -27,26 +27,27 @@ requirements:
       markdown:
         - file: docs/guide/workbench.md
           symbols:
-            - command-palette-first
-            - command palette registry
-            - Role-oriented navigation
-            - WorkbenchActionRegistry
+            - Stable pages
+            - Explorer Frame
+            - CommandTarget navigation
+            - Live state and APIs
       rust:
         - file: tests/workbench_smoke.rs
           symbols:
-            - app_shell_renders_command_palette_first_shell
-            - command_palette_renders_disabled_reason_for_unavailable_actions
-            - goal_canvas_renders_a_read_only_action_preview_placeholder
-            - evidence_panel_renders_placeholder_when_empty
+            - sidebar_has_only_four_roles_in_required_order
+            - work_is_human_readable_default_page
+            - item_draft_uses_the_same_detail_canvas
+            - palette_history_targets_work_evidence
+            - diagnostics_and_settings_have_localized_japanese_copy
         - file: tests/workbench_command.rs
           symbols:
             - workbench_help_lists_browser_launch_options
         - file: crates/syu-workbench-server/src/tests.rs
           symbols:
-            - role_menu_routes_commands_to_items_and_diagnostics
-            - item_edit_previews_and_applies_reciprocal_links_together
-            - diagnostics_refresh_all_runs_unique_tools_and_skips_missing_goal
-            - items_surface_opens_before_workspace_initialization
+            - index_renders_new_page_contract_and_navigation_script
+            - diagnostics_run_exposes_job_lifecycle_and_evidence
+            - item_driven_work_records_item_source_and_goal
+            - settings_preview_and_apply_preserve_comments_and_unknown_fields
         - file: src/command/workbench.rs
           symbols:
             - uninitialized_directory_resolves_to_a_workbench_launch
@@ -81,14 +82,12 @@ requirements:
       rust:
         - file: tests/workbench_smoke.rs
           symbols:
-            - filters_actions_by_query
-            - read_only_action_returns_placeholder_preview
-            - registry_loaded_from_server_payload
-            - evidence_panel_renders_goal_scoped_timeline
-        - file: crates/syu-app-ui/src/model/tests.rs
+            - work_is_human_readable_default_page
+            - palette_history_targets_work_evidence
+        - file: crates/syu-app-ui/src/model/navigation.rs
           symbols:
-            - cli_catalog_exposes_top_level_and_task_commands
-            - filters_cli_commands_by_query_and_previews_invocation
+            - every_palette_command_has_one_page_target
+            - legacy_page_slugs_are_rejected
   - id: REQ-WORKBENCH-003
     title: Goal splitting for large change requests
     description: |
@@ -120,9 +119,8 @@ requirements:
       rust:
         - file: tests/workbench_smoke.rs
           symbols:
-            - request_intake_flow_renders_generated_goal_plan
-            - request_flow_actions_are_exposed_in_the_command_palette
-            - goal_plan_export_panel_marks_yaml_as_temporary_artifact
+            - work_is_human_readable_default_page
+            - palette_history_targets_work_evidence
   - id: REQ-WORKBENCH-004
     title: Spec impact and branch scope visualization
     description: |
@@ -153,10 +151,10 @@ requirements:
         - file: crates/syu-code-intel/src/branch_scope.rs
           symbols:
             - branch_scope_report_includes_typed_graph_nodes_and_edges
-        - file: tests/workbench_smoke.rs
+        - file: crates/syu-app-ui/src/components/pages/scope.rs
           symbols:
-            - branch_scope_lens_renders_scope_ownership_and_tests
-            - spec_impact_graph_renders_typed_nodes_edges_and_legend
+            - ScopePage
+            - SliceDetail
   - id: REQ-WORKBENCH-005
     title: Human and AI assignment with explicit scope and evidence
     description: |
@@ -185,11 +183,10 @@ requirements:
           symbols:
             - assignment_blocker_logic_rejects_ambiguous_ai_scope
             - dry_run_command_adapter_captures_stdout_stderr_and_evidence
-        - file: tests/workbench_smoke.rs
+        - file: crates/syu-app-ui/src/components/pages/work.rs
           symbols:
-            - assignment_preview_renders_blocked_state_with_scope_tokens
-            - assignment_actions_are_exposed_in_the_command_palette
-            - scope_guard_preview_renders_out_of_scope_changes
+            - Delivery
+            - Evidence
   - id: REQ-WORKBENCH-006
     title: Shared browser and desktop Workbench behavior
     description: |
@@ -214,9 +211,8 @@ requirements:
       markdown:
         - file: docs/guide/workbench.md
           symbols:
-            - browser and desktop
-            - same way
-            - shared Dioxus Workbench UI
+            - Browser, desktop, and CI
+            - same AppShell
       rust:
         - file: crates/syu-desktop/src/lib.rs
           symbols:
@@ -224,9 +220,9 @@ requirements:
             - desktop_shell_renders_the_shared_dioxus_workbench_ui
         - file: crates/syu-workbench-server/src/tests.rs
           symbols:
-            - index_route_renders_workbench_browser_entrypoint_and_css_asset
-            - css_route_serves_the_shared_tailwind_asset
-            - server_smoke_covers_root_css_health_and_actions
+            - index_renders_new_page_contract_and_navigation_script
+            - css_and_event_stream_are_available
+            - health_and_actions_endpoints_report_live_server_state
   - id: REQ-WORKBENCH-007
     title: Rust-native UI and server architecture
     description: |
@@ -252,10 +248,8 @@ requirements:
       markdown:
         - file: docs/guide/workbench.md
           symbols:
-            - Rust-native UI
-            - server architecture
-            - browser and desktop
-            - Workbench CI
+            - Rust-native Dioxus
+            - Browser, desktop, and CI
       shell:
         - file: scripts/ci/check-workbench.sh
           symbols:

@@ -162,6 +162,8 @@ pub struct WorkbenchConfig {
     pub bind: String,
     #[serde(default = "default_workbench_port")]
     pub port: u16,
+    #[serde(default)]
+    pub strict_review: bool,
 }
 
 impl Default for WorkbenchConfig {
@@ -169,6 +171,7 @@ impl Default for WorkbenchConfig {
         Self {
             bind: default_workbench_bind(),
             port: default_workbench_port(),
+            strict_review: false,
         }
     }
 }
@@ -488,6 +491,7 @@ mod tests {
         assert!(rendered.contains("workbench:"));
         assert!(rendered.contains("bind: 127.0.0.1"));
         assert!(rendered.contains("port: 3000"));
+        assert!(rendered.contains("strict_review: false"));
         assert!(!rendered.contains("report:"));
         assert!(rendered.contains("runtimes:"));
         assert!(rendered.contains("python:"));

@@ -3,8 +3,8 @@ version: 1
 
 features:
   - id: FEAT-WORKBENCH-COMMAND-PALETTE-001
-    title: Workbench command palette registry
-    summary: Keep request, goal, evidence, and assignment actions explicit, classify palette commands by user intent, and render every execution through a typed category result instead of a generic command-output string.
+    title: Page-targeted Workbench command palette
+    summary: Keep typed action availability while resolving each palette entry to a page, section, entity, stable component anchor, focus intent, and safe execution policy instead of a generic result surface.
     status: implemented
     linked_requirements:
       - REQ-WORKBENCH-002
@@ -14,61 +14,24 @@ features:
           symbols:
             - WorkbenchAction
             - WorkbenchActionAvailability
-            - WorkbenchActionContext
-            - WorkbenchActionId
-            - WorkbenchActionInput
             - WorkbenchActionRegistry
             - WorkbenchActionResult
-            - WorkbenchState
-            - CommandPaletteState
-        - file: crates/syu-app-ui/src/model.rs
+        - file: crates/syu-app-ui/src/model/navigation.rs
           symbols:
-            - WorkbenchUiState
-            - CommandPaletteEntry
-            - CommandCategory
-            - TypedCommandResult
-        - file: crates/syu-app-ui/src/components/shell/command_palette.rs
+            - CommandTarget
+            - CommandExecution
+            - target_for_command
+            - target_for_action
+            - every_palette_command_has_one_page_target
+        - file: crates/syu-app-ui/src/components/shell.rs
           symbols:
             - CommandPalette
-        - file: crates/syu-app-ui/src/components/shell/goals.rs
+        - file: crates/syu-workbench-server/src/browser.rs
           symbols:
-            - GoalCanvas
-        - file: tests/workbench_smoke.rs
-          symbols:
-            - filters_actions_by_query
-            - read_only_action_returns_placeholder_preview
-            - registry_loaded_from_server_payload
-        - file: crates/syu-actions/src/lib.rs
-          symbols:
-            - classify_request
-            - scope_request
-            - scaffold_request
-            - generate_goal_plan
-            - infer_goal_plan_from_diff
-            - select_goal_tests
-            - check_goal_plan
-            - validate_workspace
-            - browse_workspace
-            - list_items
-            - show_item
-            - search_items
-            - audit_workspace
-            - trace_selector
-            - trace_range
-            - relate_selector
-            - relate_range
-            - explain_selector
-            - history_for_item
-            - doctor_workspace
+            - render_workbench
+            - workbench_document
       markdown:
         - file: docs/guide/workbench.md
           symbols:
-            - command palette registry
-            - WorkbenchState
-            - request.scope
-            - goal.test_select
-            - branch.scope
-            - branch.infer_goal
-            - spec.impact
-            - trace.range
-            - relate.range
+            - CommandTarget navigation
+            - Live state and APIs

@@ -1,170 +1,125 @@
 # Workbench flow
 
-Use this guide when a request needs to become a goal-centered Workbench flow
-instead of just another CLI invocation. Run `syu workbench` for the local
-browser Workbench; its root page server-renders the shared Dioxus Workbench UI
-with the same Tailwind asset used by desktop. The first screen is
-command-palette-first, with the goal canvas and evidence rail already visible.
+Syu Workbench turns a request, specification Item, or branch diff into bounded,
+human-readable implementation work. Run `syu workbench` to open the shared
+Rust-native Dioxus UI used by the browser and desktop shells.
 
-The browser and desktop clients work the same way through one Rust-native UI
-and server architecture so the same request, goal, assignment, and evidence
-flow stays visible in both places.
-
-## Role-oriented navigation
-
-The fixed header keeps Syu, the command palette, and settings available while
-the left menu separates the Workbench into four persistent roles:
-
-- **Items** shows philosophy, policy, requirement, and feature documents as a
-  collapsible file tree. Linked items open in the same role. Item fields,
-  links, tests, and implementations can be edited without renaming or moving
-  IDs or files; every edit requires a source-preserving diff preview, and
-  adjacent-layer reciprocal links are reviewed and applied together. When
-  `docs/syu` does not exist yet, workspace initialization starts here.
-- **Work** contains the pulse, request, goals, assignment, and evidence
-  subviews for the goal-centered delivery flow.
-- **Scope** contains branch scope and the spec impact graph.
-- **Diagnostics** keeps validation, contributor doctor, specification audit,
-  and Goal Plan check results distinct, and can refresh all available checks.
-
-The command palette remains the primary action launcher. Selecting or running a
-command routes to its owning role, so browse and add commands open Items,
-scope and graph commands open Scope, and checks open Diagnostics.
-
-## Workbench CI
-
-CI validates the Workbench as a Rust-native architecture. The Workbench gate
-runs focused package checks for the task model, actions, code intelligence,
-Workbench state, Workbench server, Dioxus UI crate, and the no-default-features
-desktop shell compile path. Full Tauri runtime checks remain local/platform
-checks when system UI libraries are not available in CI.
-
-Tailwind is constrained to `crates/syu-app-ui/`: `crates/syu-app-ui/tailwind.css`
-is the source, `crates/syu-app-ui/assets/tailwind.css` is the served asset, and
-CI uses the scoped Tailwind CLI to rebuild that asset and verify the build path.
-It must not add a Vite, React, TypeScript, Playwright, or old browser-app
-package setup for the Workbench. The installed-binary smoke starts `syu
-workbench`, checks `/`, `/assets/tailwind.css`, `/api/health`, `/api/actions`,
-and `/api/workspace/snapshot`, and verifies the shared CSS asset is loaded by
-the Workbench shell.
-
-The target product flow is:
+## Product flow
 
 ```text
-Request
-  → classification
-  → scope
-  → scaffold preview
-  → Goal Plan
-  → assignment
-  → execution
-  → evidence
-  → completion check
+Request / Item / branch diff
+  -> specification graph and repository evidence
+  -> Implementation Slices
+  -> human-readable Work and Goal Plan
+  -> assignment and execution
+  -> goal-scoped evidence
+  -> completion decision
 ```
 
-## Request Intake and Goal Splitter
+Workbench is not an IDE, Kanban board, AI chat, or graphical copy of the CLI.
+Purpose, outcome, boundaries, uncertainty, and completion conditions appear
+before file paths, commands, JSON, or raw logs.
 
-Request Intake is the focused Workbench canvas for turning a plain text request
-into a temporary Workbench planning artifact. The request flow should remain
-goal-centered: the user can inspect classification, relevant workspace/spec
-context, scope, and scaffold preview before generating a Goal Plan.
+## Stable pages
 
-The Goal Splitter renders the generated Goal Plan as one or more reviewable Goal
-cards. Each card should keep non-goals, linked persistent spec items, required
-spec updates, include/exclude scope, implementation steps, required or suggested
-tests, completion commands, and evidence expectations visible. These Goal Plans
-are temporary Workbench planning artifacts under `.syu/workbench/requests/` and
-`.syu/workbench/goals/` until the user explicitly exports or commits them.
+The Role Sidebar contains exactly four pages in this order:
 
-Goal Plan YAML exported from the Workbench must stay compatible with
-`syu task check`; the UI must not invent a separate Goal Plan format.
+1. **Work** is the default. Brief explains the purpose, outcome, non-goals,
+   warnings, confidence, and linked specifications. Scope explains the bounded
+   Implementation Slices. Delivery keeps assignment, allowed and forbidden
+   scope, tests, completion commands, and evidence requirements together.
+   Evidence shows a goal-scoped timeline with raw attachments collapsed.
+2. **Scope** starts with Code & Tests and groups branch-, Goal-, or Item-driven
+   evidence into human-readable `ImplementationSlice` records. Each slice
+   carries rationale, source, confidence, include/exclude boundaries, files,
+   symbols, tests, specification IDs, ownership, evidence, and warnings.
+3. **Items** remains the source of truth for Philosophy, Policy, Requirement,
+   and Feature Items. New Items appear as drafts in the same Context Rail and
+   Detail Canvas used for existing Items. Preview/apply preserves source,
+   validates reciprocal links, and rejects stale source. An Item can start Work
+   or an Item-driven scope review.
+4. **Diagnostics** is an Explorer, not a launcher grid. Workspace, Goal Plan,
+   Trace, and Repository tabs aggregate small accessible Status Circles. A
+   single Run diagnostics action starts a job and updates checks through
+   `/api/events` as queued, running, completed, or failed.
 
-## What each step means
+Settings is a full-page utility opened from the gear, never a fifth Role.
+Its syu.yaml view offers structured fields, read-only raw YAML, schema and
+semantic validation, a source-preserving diff, stale-source protection, and
+Apply. Existing comments and unknown fields are retained.
 
-- Request: capture the user intent, constraints, and expected outcome.
-- Classification: decide whether the request is a create, change, or delete.
-- Scope: map the request onto the current spec graph, branch scope, and likely
-  impact.
-- Scaffold preview: show the planned spec changes before anything is applied.
-- Goal Plan: keep the delivery plan temporary instead of turning it into a
-  fifth persistent spec layer.
-- Assignment: give the goal to a human or AI with explicit scope and evidence
-  expectations.
-- Execution: carry out the bounded work for the assigned goal.
-- Evidence: attach proof that the work happened and still matches the request.
-- Completion check: compare the result against the goal plan and required
-  evidence before closing the loop.
+## Explorer Frame
 
-The Workbench evidence rail keeps a goal-scoped timeline of typed evidence
-records. Each record carries a status, source, timestamp, summary, and optional
-attachment so the panel can show validation, test selection, goal checks, and
-manual decisions without collapsing them into a single log blob.
+Pages use the lightest useful combination of Page Toolbar, Section Tabs,
+Context Rail, and Detail Canvas. The hierarchy never exceeds Tabs -> Rail ->
+Canvas. A Rail is omitted when only one meaningful selection exists. Detail
+Canvas uses headings, separators, and at most two columns instead of nested
+card stacks.
 
-## Spec Impact and Branch Scope
+Status Circle meanings are consistent across pages: green success, orange
+warning or inferred state, red error, blue running, and gray disabled. Every
+circle has an accessible label, so state never depends on color alone.
+Confidence, evidence source, scope, and ownership are explicit when values are
+inferred.
 
-Spec Impact Graph shows how philosophy, policy, requirement, feature, changed
-file or symbol, and test nodes connect. Branch Scope Lens shows the selected
-Git range, changed files, traced owners, unowned files, ambiguous ownership,
-out-of-scope files, affected spec IDs, suggested goal split, test
-recommendations, and strict review status.
+## CommandTarget navigation
 
-The action surface for this view is `branch.scope`, `branch.infer_goal`,
-`spec.impact`, `trace.range`, and `relate.range`. Graph nodes, edges, badges,
-and evidence states must use Workbench token names such as `spec-linked`,
-`code-linked`, `test-linked`, `scope-in`, `scope-out`, `scope-ambiguous`,
-`ownership-known`, `ownership-missing`, `ownership-ambiguous`,
-`evidence-pass`, `evidence-warn`, `evidence-fail`, and `evidence-pending`.
+The Command Palette remains global, but it does not open or replace the page
+with a command result. Every entry resolves to a typed `CommandTarget`:
 
-## Command palette registry
+```text
+page + section + entity + component anchor + focus intent + execution policy
+```
 
-The Workbench UI should render actions from a registry instead of hardcoding
-workflow buttons. The command palette registry should be exposed by
-`WorkbenchActionRegistry`, and the registry needs to expose title, description, required
-state, input schema, mutability, risk, output event, evidence kind, and AI
-eligibility so the same action list can drive both browser and desktop views.
+Navigation restores page, section, and entity through URL state. The target is
+focused, scrolled into view, and outlined briefly with a red Focus Ring. The
+ring disappears after three seconds and does not animate when reduced motion
+is requested. Destructive actions only prepare the relevant page form; Enter
+never performs them immediately.
 
-The core state surface is:
+Representative targets:
 
-- `WorkbenchState`
-- `WorkspaceSnapshot`
-- `ActiveRequestState`
-- `ActiveGoalState`
-- `GoalListState`
-- `BranchScopeState`
-- `EvidenceTimelineState`
-- `AssignmentState`
-- `JobState`
-- `CommandPaletteState`
+- show, browse, search -> Items search or selected Item;
+- add -> Items draft editor;
+- Item history -> Items history section;
+- Work history -> Work / Evidence timeline;
+- validate, doctor, audit, report -> Diagnostics;
+- branch scope, trace, relate -> Scope / Code & Tests;
+- request classify or plan -> Work create/Brief;
+- assignment and agent run -> Work / Delivery;
+- init and configuration -> Settings.
 
-The registry should make these availability rules explicit:
+The old command-result page, legacy pane slugs, preview queries, generic result
+lists, and Commands/Pulse compatibility views do not exist.
 
-- no request means `request.scope` is unavailable;
-- an active request makes `request.classify` available;
-- an active request makes `request.scope`, `request.scaffold`, and
-  `request.plan` visible from the same command palette registry;
-- an active Goal Plan makes `goal.test_select` available;
-- an active Goal Plan makes `goal.check` available for evidence-ready review;
-- a loaded branch scope makes `branch.infer_goal` available;
-- mutating actions require confirmation metadata;
-- AI-eligible actions require a bounded scope.
+## Live state and APIs
 
-Palette commands are also classified by intent so the selected command opens
-in a predictable result surface:
+The first HTML response is server-rendered Dioxus. Workspace snapshots, request
+and Goal APIs, assignment and evidence models, job APIs, and SSE remain typed.
+Diagnostics uses `POST /api/diagnostics/run`, `/api/jobs/*`, and
+`/api/events`. Item-driven Work uses `POST /api/items/{id}/work` and records
+`GoalPlanSourceMode::ItemDriven` plus the source Item ID. Settings uses
+`/api/settings/preview` and `/api/settings/apply`.
 
-- **Browse** commands show search or context above a result list and detail;
-- **Check** commands show the overall pass, warn, or fail result above a check
-  list and selected detail;
-- **Plan** commands show their input and generated proposals;
-- **Change** commands keep input and confirmation above the execution result;
-- **Operate** commands show runtime state, controls, and events;
-- **Generate** commands show generation options and the resulting artifact.
+Raw JSON and command output are evidence attachments, not the primary UI.
 
-Every action and CLI command must produce a typed result for one of these
-surfaces. Raw command output is retained only as optional diagnostics.
+## Browser, desktop, and CI
 
-## Why it exists
+Browser and desktop render the same `AppShell`, `WorkbenchPage`,
+`CommandTarget`, Explorer components, page components, indicators, and
+Tailwind asset. No React, Vite, TypeScript, or second frontend is introduced.
 
-The Workbench keeps large changes reviewable by making the request, goal,
-assignment, and evidence story explicit. That lets a user split work without
-losing the parent request, and it keeps the goal centered even when the
-implementation happens across more than one session or client.
+CI rebuilds the scoped Tailwind asset and tests page/section/entity restoration,
+all palette mappings, Item draft and Item-driven flows, source-preserving
+settings, diagnostics job transitions, accessibility labels, Rust-native server
+routes, and desktop compilation.
+
+## Model and migration terms
+
+The Rust-native UI and Workbench server architecture still share the typed
+`WorkbenchState`, `ActiveRequestState`, `ActiveGoalState`, and `AssignmentState`
+domain models. Request Intake and Goal Splitter are creation concepts inside
+Work, not persistent sidebar roles. A scaffold preview remains part of Work
+creation, and a completion check remains the final evidence decision. This is
+the same AppShell in browser and desktop; no separate client implementation is
+maintained.

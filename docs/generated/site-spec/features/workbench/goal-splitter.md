@@ -19,71 +19,68 @@ description: "Generated reference for docs/syu/features/workbench/goal-splitter.
 
 - **id**: FEAT-WORKBENCH-003
   - **title**: Goal splitter for large requests
-  - **summary**: Split large requests into smaller scoped goals and temporary Goal Plans while preserving the parent request and the reviewable delivery path.
+  - **summary**: Split large requests into smaller scoped goals while preserving the parent request and a reviewable Work delivery path.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-WORKBENCH-003
     - REQ-WORKBENCH-002
   - **implementations**:
+    - **rust**:
+      - **file**: crates/syu-app-ui/src/components/pages/work.rs
+        - **symbols**:
+          - WorkPage
+          - Brief
+          - WorkScope
+          - Delivery
+          - Evidence
     - **markdown**:
       - **file**: docs/guide/workbench.md
         - **symbols**:
-          - scaffold preview
-          - Goal Plan
-          - assignment
+          - Product flow
+          - Stable pages
 - **id**: FEAT-WORKBENCH-REQUEST-INTAKE-001
-  - **title**: Request Intake canvas
-  - **summary**: Turn a plain-text change request into a classified, scoped, evidence-ready Workbench planning artifact without creating a raw YAML editor or a separate frontend surface.
+  - **title**: Work creation flow
+  - **summary**: Treat Request Intake as a Work creation state that lands on Brief instead of a persistent role or a generic command screen.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-WORKBENCH-003
   - **implementations**:
     - **rust**:
-      - **file**: crates/syu-app-ui/src/components/shell/request.rs
+      - **file**: crates/syu-app-ui/src/model/navigation.rs
         - **symbols**:
-          - RequestIntakeCanvas
-          - RequestContextEditor
-          - RequestClassificationPanel
-          - RequestScopePanel
-          - ScaffoldPreviewPanel
-      - **file**: crates/syu-app-ui/src/model/demo.rs
+          - target_for_command
+      - **file**: crates/syu-app-ui/src/components/pages/work.rs
         - **symbols**:
-          - build_demo_state
-      - **file**: tests/workbench_smoke.rs
-        - **symbols**:
-          - request_intake_flow_renders_generated_goal_plan
-          - request_flow_actions_are_exposed_in_the_command_palette
+          - WorkPage
+          - Brief
     - **markdown**:
       - **file**: docs/guide/workbench.md
         - **symbols**:
-          - Request Intake
-          - temporary Workbench planning artifact
-          - request.classify
+          - Work
+          - Request
 - **id**: FEAT-WORKBENCH-GOAL-SPLITTER-001
-  - **title**: Goal Splitter canvas
-  - **summary**: Render generated temporary Goal Plans as reusable Workbench Goal cards with linked specs, non-goals, scope include/exclude, implementation steps, tests, evidence, completion commands, and exportable YAML.
+  - **title**: Human-readable Goal delivery
+  - **summary**: Present Goal statement, non-goals, scope, implementation steps, tests, assignment, evidence, and completion commands in one Work lifecycle.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-WORKBENCH-003
   - **implementations**:
     - **rust**:
-      - **file**: crates/syu-app-ui/src/components/shell/request.rs
+      - **file**: crates/syu-app-ui/src/components/pages/work.rs
         - **symbols**:
-          - GoalPlanCanvas
-          - GoalDependencyView
-          - GoalScopePanel
-          - GoalTestPlanPanel
-          - GoalPlanExportPanel
-      - **file**: tests/workbench_smoke.rs
+          - Brief
+          - WorkScope
+          - Delivery
+          - Evidence
+      - **file**: crates/syu-task-model/src/lib.rs
         - **symbols**:
-          - request_intake_flow_renders_generated_goal_plan
-          - goal_plan_export_panel_marks_yaml_as_temporary_artifact
+          - GoalPlanSourceMode
+          - ItemDriven
     - **markdown**:
       - **file**: docs/guide/workbench.md
         - **symbols**:
-          - Goal Splitter
-          - Goal Plan YAML
-          - syu task check
+          - Product flow
+          - Item-driven
 
 ## Source YAML
 
@@ -94,69 +91,66 @@ version: 1
 features:
   - id: FEAT-WORKBENCH-003
     title: Goal splitter for large requests
-    summary: Split large requests into smaller scoped goals and temporary Goal Plans while preserving the parent request and the reviewable delivery path.
+    summary: Split large requests into smaller scoped goals while preserving the parent request and a reviewable Work delivery path.
     status: implemented
     linked_requirements:
       - REQ-WORKBENCH-003
       - REQ-WORKBENCH-002
     implementations:
+      rust:
+        - file: crates/syu-app-ui/src/components/pages/work.rs
+          symbols:
+            - WorkPage
+            - Brief
+            - WorkScope
+            - Delivery
+            - Evidence
       markdown:
         - file: docs/guide/workbench.md
           symbols:
-            - scaffold preview
-            - Goal Plan
-            - assignment
+            - Product flow
+            - Stable pages
   - id: FEAT-WORKBENCH-REQUEST-INTAKE-001
-    title: Request Intake canvas
-    summary: Turn a plain-text change request into a classified, scoped, evidence-ready Workbench planning artifact without creating a raw YAML editor or a separate frontend surface.
+    title: Work creation flow
+    summary: Treat Request Intake as a Work creation state that lands on Brief instead of a persistent role or a generic command screen.
     status: implemented
     linked_requirements:
       - REQ-WORKBENCH-003
     implementations:
       rust:
-        - file: crates/syu-app-ui/src/components/shell/request.rs
+        - file: crates/syu-app-ui/src/model/navigation.rs
           symbols:
-            - RequestIntakeCanvas
-            - RequestContextEditor
-            - RequestClassificationPanel
-            - RequestScopePanel
-            - ScaffoldPreviewPanel
-        - file: crates/syu-app-ui/src/model/demo.rs
+            - target_for_command
+        - file: crates/syu-app-ui/src/components/pages/work.rs
           symbols:
-            - build_demo_state
-        - file: tests/workbench_smoke.rs
-          symbols:
-            - request_intake_flow_renders_generated_goal_plan
-            - request_flow_actions_are_exposed_in_the_command_palette
+            - WorkPage
+            - Brief
       markdown:
         - file: docs/guide/workbench.md
           symbols:
-            - Request Intake
-            - temporary Workbench planning artifact
-            - request.classify
+            - Work
+            - Request
   - id: FEAT-WORKBENCH-GOAL-SPLITTER-001
-    title: Goal Splitter canvas
-    summary: Render generated temporary Goal Plans as reusable Workbench Goal cards with linked specs, non-goals, scope include/exclude, implementation steps, tests, evidence, completion commands, and exportable YAML.
+    title: Human-readable Goal delivery
+    summary: Present Goal statement, non-goals, scope, implementation steps, tests, assignment, evidence, and completion commands in one Work lifecycle.
     status: implemented
     linked_requirements:
       - REQ-WORKBENCH-003
     implementations:
       rust:
-        - file: crates/syu-app-ui/src/components/shell/request.rs
+        - file: crates/syu-app-ui/src/components/pages/work.rs
           symbols:
-            - GoalPlanCanvas
-            - GoalDependencyView
-            - GoalScopePanel
-            - GoalTestPlanPanel
-            - GoalPlanExportPanel
-        - file: tests/workbench_smoke.rs
+            - Brief
+            - WorkScope
+            - Delivery
+            - Evidence
+        - file: crates/syu-task-model/src/lib.rs
           symbols:
-            - request_intake_flow_renders_generated_goal_plan
-            - goal_plan_export_panel_marks_yaml_as_temporary_artifact
+            - GoalPlanSourceMode
+            - ItemDriven
       markdown:
         - file: docs/guide/workbench.md
           symbols:
-            - Goal Splitter
-            - Goal Plan YAML
-            - syu task check
+            - Product flow
+            - Item-driven
 ```

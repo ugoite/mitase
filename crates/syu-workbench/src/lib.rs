@@ -7,9 +7,9 @@ use std::{
 };
 
 pub use syu_code_intel::{
-    AffectedSpecItem, BranchScopeEvidence, BranchScopeReport, ChangedFileReport, OutOfScopeChange,
-    OwnershipStatus, SpecImpactGraphEdge, SpecImpactGraphNode, SpecImpactGraphReport,
-    SpecImpactReport, SuggestedGoalSplit,
+    AffectedSpecItem, BranchScopeConfidence, BranchScopeEvidence, BranchScopeReport,
+    ChangedFileReport, OutOfScopeChange, OwnershipStatus, SpecImpactGraphEdge, SpecImpactGraphNode,
+    SpecImpactGraphReport, SpecImpactReport, SuggestedGoalSplit,
 };
 pub use syu_domain::{Issue, Severity};
 pub use syu_task_model::{
@@ -2477,8 +2477,10 @@ mod tests {
 
     #[test]
     fn request_classify_is_available_with_an_active_request() {
-        let mut state = WorkbenchState::default();
-        state.request = Some(ActiveRequestState::default());
+        let state = WorkbenchState {
+            request: Some(ActiveRequestState::default()),
+            ..WorkbenchState::default()
+        };
 
         let availability =
             action(WorkbenchActionId::RequestClassify).availability(&state.action_context());
@@ -2721,12 +2723,14 @@ mod tests {
 
     #[test]
     fn agent_runs_preserve_the_triggering_job_action_id() {
-        let mut state = WorkbenchState::default();
-        state.assignment = Some(Assignment {
-            id: "assignment-1".to_string(),
-            goal_id: Some("goal-1".to_string()),
-            ..Assignment::default()
-        });
+        let mut state = WorkbenchState {
+            assignment: Some(Assignment {
+                id: "assignment-1".to_string(),
+                goal_id: Some("goal-1".to_string()),
+                ..Assignment::default()
+            }),
+            ..WorkbenchState::default()
+        };
 
         state.apply_result(
             WorkbenchActionId::AssignmentRun,
@@ -2827,21 +2831,23 @@ mod tests {
 
     #[test]
     fn branch_infer_goal_is_available_with_branch_scope() {
-        let mut state = WorkbenchState::default();
-        state.branch_scope = Some(BranchScopeState {
-            range: Some("HEAD~1..HEAD".to_string()),
-            bounded_scope: Some(BoundedScope {
+        let state = WorkbenchState {
+            branch_scope: Some(BranchScopeState {
                 range: Some("HEAD~1..HEAD".to_string()),
-                allowed_ids: vec!["REQ-WORKBENCH-001".to_string()],
-                max_files: Some(3),
+                bounded_scope: Some(BoundedScope {
+                    range: Some("HEAD~1..HEAD".to_string()),
+                    allowed_ids: vec!["REQ-WORKBENCH-001".to_string()],
+                    max_files: Some(3),
+                }),
+                ..BranchScopeState::default()
             }),
-            ..BranchScopeState::default()
-        });
-        state.confirmation = Some(WorkbenchConfirmationMetadata {
-            confirmed_by: "tester".to_string(),
-            rationale: Some("needed for the mutating action".to_string()),
-            scope_token: Some("scope-token".to_string()),
-        });
+            confirmation: Some(WorkbenchConfirmationMetadata {
+                confirmed_by: "tester".to_string(),
+                rationale: Some("needed for the mutating action".to_string()),
+                scope_token: Some("scope-token".to_string()),
+            }),
+            ..WorkbenchState::default()
+        };
 
         let availability =
             action(WorkbenchActionId::BranchInferGoal).availability(&state.action_context());

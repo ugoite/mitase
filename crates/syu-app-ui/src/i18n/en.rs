@@ -1,139 +1,99 @@
 use super::{HelpTopic, Locale, UiCopy};
-use crate::WorkbenchPane;
+use crate::model::{PageSection, WorkbenchPage};
 
 pub struct English;
-
 pub static EN: English = English;
 
 impl UiCopy for English {
-    fn app_title(&self) -> &'static str {
-        "Syu Workbench"
-    }
-
-    fn app_tagline(&self) -> &'static str {
-        "command-palette-first workspace"
-    }
-
     fn workspace_label(&self) -> &'static str {
-        "workspace"
+        "Workspace"
     }
-
     fn branch_label(&self) -> &'static str {
-        "branch"
+        "Branch"
     }
-
     fn health_label(&self) -> &'static str {
-        "health"
+        "Health"
     }
-
-    fn actions_label(&self) -> &'static str {
-        "suggestions"
-    }
-
     fn palette_placeholder(&self) -> &'static str {
-        "Type a command"
+        "Search commands, tasks, and Items"
     }
-
-    fn palette_hint(&self) -> &'static str {
-        "Results appear as you type"
-    }
-
     fn sidebar_title(&self) -> &'static str {
-        "navigation"
+        "Workbench navigation"
     }
-
     fn help_label(&self) -> &'static str {
-        "help"
+        "Help"
     }
-
     fn language_label(&self) -> &'static str {
-        "language"
+        "Language"
     }
-
     fn language_name(&self, locale: Locale) -> &'static str {
         match locale {
-            Locale::En => "EN",
-            Locale::Ja => "日本語",
+            Locale::En => "English",
+            Locale::Ja => "Japanese",
         }
     }
-
-    fn pane_title(&self, pane: WorkbenchPane) -> &'static str {
-        match pane {
-            WorkbenchPane::Items => "Items",
-            WorkbenchPane::Diagnostics => "Diagnostics",
-            WorkbenchPane::Pulse => "Work",
-            WorkbenchPane::Commands => "Command palette",
-            WorkbenchPane::Goals => "Goal plan",
-            WorkbenchPane::Request => "Request intake",
-            WorkbenchPane::Branch => "Scope",
-            WorkbenchPane::Assignment => "Assignment",
-            WorkbenchPane::Graph => "Spec graph",
-            WorkbenchPane::Evidence => "Evidence",
+    fn page_title(&self, page: WorkbenchPage) -> &'static str {
+        match page {
+            WorkbenchPage::Work => "Work",
+            WorkbenchPage::Scope => "Scope",
+            WorkbenchPage::Items => "Items",
+            WorkbenchPage::Diagnostics => "Diagnostics",
+            WorkbenchPage::Settings => "Settings",
         }
     }
-
-    fn pane_summary(&self, pane: WorkbenchPane) -> &'static str {
-        match pane {
-            WorkbenchPane::Items => "browse and edit the persistent specification",
-            WorkbenchPane::Diagnostics => "refresh workspace and goal checks",
-            WorkbenchPane::Pulse => "requests, goals, assignment, and evidence",
-            WorkbenchPane::Commands => "the top box that launches actions",
-            WorkbenchPane::Goals => "the current goal and the plan behind it",
-            WorkbenchPane::Request => "the request you are classifying",
-            WorkbenchPane::Branch => "branch scope and specification impact",
-            WorkbenchPane::Assignment => "who owns the handoff",
-            WorkbenchPane::Graph => "how specs, code, and tests connect",
-            WorkbenchPane::Evidence => "what happened most recently",
+    fn page_summary(&self, page: WorkbenchPage) -> &'static str {
+        match page {
+            WorkbenchPage::Work => "Understand, assign, and verify implementation work",
+            WorkbenchPage::Scope => "Explain the code, spec, and test boundary",
+            WorkbenchPage::Items => "Browse and edit the specification source of truth",
+            WorkbenchPage::Diagnostics => "Check whether scope and execution can be trusted",
+            WorkbenchPage::Settings => "Configure this workspace safely",
         }
     }
-
-    fn help_title(&self, topic: HelpTopic) -> &'static str {
-        match topic {
-            HelpTopic::Items => "Items",
-            HelpTopic::Diagnostics => "Diagnostics",
-            HelpTopic::Palette => "Command palette",
-            HelpTopic::Sidebar => "Sidebar navigation",
-            HelpTopic::Pulse => "Workspace pulse",
-            HelpTopic::Goals => "Goal plan",
-            HelpTopic::Request => "Request intake",
-            HelpTopic::Branch => "Branch",
-            HelpTopic::Assignment => "Assignment",
-            HelpTopic::Graph => "Spec graph",
-            HelpTopic::Evidence => "Evidence",
+    fn section_title(&self, section: PageSection) -> &'static str {
+        match section {
+            PageSection::Brief => "Brief",
+            PageSection::WorkScope => "Scope",
+            PageSection::Delivery => "Delivery",
+            PageSection::Evidence => "Evidence",
+            PageSection::CodeTests => "Code & Tests",
+            PageSection::Feature => "Feature",
+            PageSection::Requirement => "Requirement",
+            PageSection::Policy => "Policy",
+            PageSection::Philosophy => "Philosophy",
+            PageSection::Workspace => "Workspace",
+            PageSection::GoalPlan => "Goal Plan",
+            PageSection::Trace => "Trace",
+            PageSection::Repository => "Repository",
+            PageSection::General => "General",
+            PageSection::SyuYaml => "syu.yaml",
+            PageSection::Integrations => "Integrations",
         }
     }
-
+    fn new_work(&self) -> &'static str {
+        "+ New Work"
+    }
+    fn search(&self) -> &'static str {
+        "Search"
+    }
+    fn run_diagnostics(&self) -> &'static str {
+        "Run diagnostics"
+    }
     fn help_body(&self, topic: HelpTopic) -> &'static str {
         match topic {
-            HelpTopic::Items => {
-                "Search the layered tree, follow linked items, create an item in the selected layer, or edit the selected item."
+            HelpTopic::Palette => {
+                "Choose a result to move to its page and focus the relevant control."
             }
-            HelpTopic::Diagnostics => {
-                "Run workspace and goal checks, then jump from findings to affected items."
+            HelpTopic::Sidebar => "Switch among the four stable Workbench pages.",
+            HelpTopic::Work => "Read the purpose first, then review scope, delivery, and evidence.",
+            HelpTopic::Scope => {
+                "Review implementation slices and the evidence behind each inferred boundary."
             }
-            HelpTopic::Palette => "Focus the top box, type a few letters, then choose a result.",
-            HelpTopic::Sidebar => "Use the left sidebar to switch views.",
-            HelpTopic::Pulse => "Shows the workspace, branch, and one action to open together.",
-            HelpTopic::Goals => "Shows the current goal and the plan behind it.",
-            HelpTopic::Request => {
-                "Shows the request text, its classification, and the scope it opens."
+            HelpTopic::Items => "Maintain specification Items and start Item-driven work.",
+            HelpTopic::Diagnostics => "Run all checks and inspect structured findings by group.",
+            HelpTopic::Settings => {
+                "Preview and validate workspace configuration before applying it."
             }
-            HelpTopic::Branch => "Shows the branch range, changed files, and impact.",
-            HelpTopic::Assignment => "Shows who owns the handoff and how it runs.",
-            HelpTopic::Graph => "Shows how specs, files, and tests connect.",
-            HelpTopic::Evidence => "Shows the newest events and outputs first.",
         }
-    }
-
-    fn command_surface_body(&self) -> &'static str {
-        "Focus the top box, type to filter, and pick a result."
-    }
-
-    fn run_label(&self) -> &'static str {
-        "Run"
-    }
-
-    fn running_label(&self) -> &'static str {
-        "Running..."
     }
 }

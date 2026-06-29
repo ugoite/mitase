@@ -204,6 +204,7 @@ pub(super) async fn execute_action(
                     range: Some(range.to_string()),
                     confidence: Some(GoalPlanConfidence::Medium),
                     evidence: Some(GoalPlanSourceEvidence {
+                        item_id: None,
                         changed_files: report
                             .changed_files
                             .iter()

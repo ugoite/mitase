@@ -272,6 +272,7 @@ pub(super) async fn goal_plan_from_request(
             range: None,
             confidence: Some(GoalPlanConfidence::Medium),
             evidence: Some(GoalPlanSourceEvidence {
+                item_id: None,
                 changed_files: Vec::new(),
                 traced_requirements: explicit_ids.clone(),
                 traced_features: Vec::new(),

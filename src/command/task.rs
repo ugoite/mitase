@@ -4161,6 +4161,7 @@ mod tests {
                     range: Some("origin/main...HEAD".to_string()),
                     confidence,
                     evidence: Some(GoalPlanSourceEvidence {
+                        item_id: None,
                         changed_files: vec!["src/command/task.rs".to_string()],
                         traced_requirements: vec!["REQ-CORE-032".to_string()],
                         traced_features: vec!["FEAT-TASK-005".to_string()],

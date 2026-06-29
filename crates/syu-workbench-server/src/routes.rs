@@ -37,6 +37,130 @@ pub(super) async fn run_action(
     Ok(Json(response))
 }
 
+pub(super) async fn run_diagnostics(State(server): State<WorkbenchServer>) -> Json<JobRecord> {
+    let job_id = format!("diagnostics-{}", evidence_timestamp());
+    let record = JobRecord {
+        id: job_id.clone(),
+        action_id: Some("diagnostics.run".to_string()),
+        status: "queued".to_string(),
+        message: Some("all diagnostic checks queued".to_string()),
+    };
+    server
+        .inner
+        .jobs
+        .write()
+        .await
+        .insert(job_id.clone(), record.clone());
+    {
+        let mut state = server.inner.state.write().await;
+        state.job = JobState {
+            status: JobStatus::Queued,
+            action_id: Some("diagnostics.run".to_string()),
+            message: record.message.clone(),
+        };
+    }
+    server
+        .inner
+        .events
+        .send(WorkbenchEvent::JobStarted {
+            job_id: job_id.clone(),
+        })
+        .ok();
+    let worker = server.clone();
+    let worker_id = job_id.clone();
+    task::spawn(async move {
+        {
+            if let Some(job) = worker.inner.jobs.write().await.get_mut(&worker_id) {
+                job.status = "running".to_string();
+                job.message = Some("workspace and Goal Plan checks are running".to_string());
+            }
+            worker.inner.state.write().await.job.status = JobStatus::Running;
+        }
+        worker
+            .inner
+            .events
+            .send(WorkbenchEvent::JobOutput {
+                job_id: worker_id.clone(),
+                line: "workspace validation running".to_string(),
+            })
+            .ok();
+        let validation = execute_action(&worker, "validation.run", serde_json::json!({})).await;
+        let has_goal = worker.inner.state.read().await.goals.has_active_goal_plan();
+        let goal = if has_goal {
+            execute_action(&worker, "goal.check", serde_json::json!({}))
+                .await
+                .ok()
+        } else {
+            None
+        };
+        let failed = validation.is_err();
+        {
+            if let Some(job) = worker.inner.jobs.write().await.get_mut(&worker_id) {
+                job.status = if failed { "failed" } else { "completed" }.to_string();
+                job.message = Some(
+                    if failed {
+                        "diagnostics failed"
+                    } else if goal.is_some() {
+                        "workspace and Goal Plan checks completed"
+                    } else {
+                        "workspace checks completed; Goal Plan check disabled"
+                    }
+                    .to_string(),
+                );
+            }
+            let mut state = worker.inner.state.write().await;
+            state.job.status = if failed {
+                JobStatus::Failed
+            } else {
+                JobStatus::Completed
+            };
+            state.job.message = Some(
+                if failed {
+                    "diagnostics failed"
+                } else {
+                    "diagnostics completed"
+                }
+                .to_string(),
+            );
+        }
+        worker
+            .inner
+            .events
+            .send(WorkbenchEvent::JobCompleted { job_id: worker_id })
+            .ok();
+    });
+    Json(record)
+}
+
+pub(super) async fn settings_preview(
+    State(server): State<WorkbenchServer>,
+    Json(update): Json<SettingsUpdate>,
+) -> Result<Json<SettingsPreview>, StatusCode> {
+    preview_or_apply_settings(&server, update, false)
+        .map(Json)
+        .map_err(|_| StatusCode::BAD_REQUEST)
+}
+
+pub(super) async fn settings_apply(
+    State(server): State<WorkbenchServer>,
+    headers: HeaderMap,
+    Json(update): Json<SettingsUpdate>,
+) -> Result<Json<SettingsPreview>, StatusCode> {
+    validate_same_origin(&headers)?;
+    let preview =
+        preview_or_apply_settings(&server, update, true).map_err(|_| StatusCode::BAD_REQUEST)?;
+    server
+        .inner
+        .events
+        .send(WorkbenchEvent::WorkspaceReloaded {
+            workspace_root: server.inner.config.workspace_root.display().to_string(),
+            spec_root: preview.update.spec_root.clone(),
+            item_count: server.inner.browser_workspace.read().await.item_index.len(),
+        })
+        .ok();
+    Ok(Json(preview))
+}
+
 pub(super) async fn spec_graph(State(server): State<WorkbenchServer>) -> Json<BrowserWorkspace> {
     Json(server.inner.browser_workspace.read().await.clone())
 }
@@ -70,6 +194,133 @@ pub(super) async fn spec_item(
         document_path,
         item,
     }))
+}
+
+pub(super) async fn item_work(
+    State(server): State<WorkbenchServer>,
+    Path(id): Path<String>,
+) -> Result<Json<GoalPlanArtifact>, StatusCode> {
+    let item = {
+        let workspace = server.inner.browser_workspace.read().await;
+        workspace
+            .sections
+            .iter()
+            .flat_map(|section| section.documents.iter())
+            .flat_map(|document| document.items.iter())
+            .find(|item| item.id == id)
+            .cloned()
+            .ok_or(StatusCode::NOT_FOUND)?
+    };
+    let mut persistent_items = GoalPlanPersistentItems::default();
+    let persistent = GoalPlanPersistentItem::Id(item.id.clone());
+    match item.kind {
+        SectionKind::Philosophy => persistent_items.philosophies.push(persistent),
+        SectionKind::Policies => persistent_items.policies.push(persistent),
+        SectionKind::Requirements => persistent_items.requirements.push(persistent),
+        SectionKind::Features => persistent_items.features.push(persistent),
+    }
+    let include = item
+        .implementations
+        .iter()
+        .flat_map(|group| group.references.iter())
+        .map(|reference| {
+            GoalPlanScopeInclude::Entry(syu_task_model::GoalPlanScopeIncludeDetails {
+                file: reference.file.clone(),
+                symbols: reference.symbols.clone(),
+            })
+        })
+        .collect::<Vec<_>>();
+    let goal_id = format!("GOAL-{}", item.id);
+    let plan = GoalPlanArtifact {
+        version: 1,
+        kind: "syu.goal_plan".to_string(),
+        request_path: None,
+        request: Some(format!("Create Work from {}", item.id)),
+        classification: Some(RequestClassification::Change.label().to_string()),
+        source: GoalPlanSource {
+            mode: GoalPlanSourceMode::ItemDriven,
+            confidence: Some(GoalPlanConfidence::High),
+            evidence: Some(GoalPlanSourceEvidence {
+                item_id: Some(item.id.clone()),
+                ..GoalPlanSourceEvidence::default()
+            }),
+            ..GoalPlanSource::default()
+        },
+        goal: GoalPlanGoal {
+            id: goal_id.clone(),
+            title: item.title.clone(),
+            statement: item
+                .summary
+                .clone()
+                .or(item.description.clone())
+                .unwrap_or_else(|| format!("Implement {}", item.title)),
+            non_goals: vec!["Do not change unrelated specification Items.".to_string()],
+            inferred: false,
+        },
+        spec_mapping: GoalPlanSpecMapping {
+            persistent_items,
+            ..GoalPlanSpecMapping::default()
+        },
+        implementation_plan: GoalPlanImplementationPlan {
+            confidence: Some(GoalPlanConfidence::High),
+            scope: GoalPlanScope {
+                include,
+                exclude: vec!["target/**".to_string(), "docs/generated/**".to_string()],
+            },
+            steps: vec![
+                "Confirm the Item acceptance criteria and linked code.".to_string(),
+                "Implement the bounded change and collect evidence.".to_string(),
+            ],
+        },
+        test_plan: GoalPlanTestPlan {
+            selection_mode: GoalPlanSelectionMode::Minimal,
+            confidence: Some(GoalPlanConfidence::Medium),
+            required_tests: BTreeMap::new(),
+            suggested_tests: BTreeMap::new(),
+        },
+        coverage: GoalPlanCoverage {
+            mode: GoalPlanCoverageMode::ChangedLines,
+            threshold: 100,
+            include: Vec::new(),
+            exclude: Vec::new(),
+        },
+        completion: GoalPlanCompletion {
+            must_pass: vec!["cargo test".to_string(), "syu validate .".to_string()],
+        },
+        warnings: if item.implementations.is_empty() {
+            vec!["No implementation trace is linked; confirm scope before assignment.".to_string()]
+        } else {
+            Vec::new()
+        },
+    };
+    {
+        let mut state = server.inner.state.write().await;
+        state.goals.selected_goal_id = Some(goal_id.clone());
+        state.goals.active.push(ActiveGoalState {
+            goal_id: goal_id.clone(),
+            goal_plan: Some(plan.clone()),
+            ..ActiveGoalState::default()
+        });
+        state.evidence_timeline.append(evidence_entry(
+            WorkbenchEvidenceKind::GoalPlanArtifact,
+            EvidenceStatus::Pass,
+            format!("Item-driven Work created from {}", item.id),
+            Some(goal_id),
+            Some("item.work".to_string()),
+            Some(EvidenceSource::System {
+                component: "items".to_string(),
+            }),
+            vec![json_attachment(&plan)],
+        ));
+    }
+    server
+        .inner
+        .events
+        .send(WorkbenchEvent::GoalPlanGenerated {
+            goal_id: plan.goal.id.clone(),
+        })
+        .ok();
+    Ok(Json(plan))
 }
 
 #[derive(Debug, Deserialize)]

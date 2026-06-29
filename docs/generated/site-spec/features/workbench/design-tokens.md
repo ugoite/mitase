@@ -58,8 +58,8 @@ description: "Generated reference for docs/syu/features/workbench/design-tokens.
           - EMPTY_STATE
       - **file**: tests/workbench_smoke.rs
         - **symbols**:
-          - app_shell_renders_command_palette_first_shell
-          - goal_canvas_renders_a_read_only_action_preview_placeholder
+          - sidebar_has_only_four_roles_in_required_order
+          - diagnostics_and_settings_have_localized_japanese_copy
 
 ## Source YAML
 
@@ -109,6 +109,6 @@ features:
             - EMPTY_STATE
         - file: tests/workbench_smoke.rs
           symbols:
-            - app_shell_renders_command_palette_first_shell
-            - goal_canvas_renders_a_read_only_action_preview_placeholder
+            - sidebar_has_only_four_roles_in_required_order
+            - diagnostics_and_settings_have_localized_japanese_copy
 ```
