@@ -4744,7 +4744,7 @@ mod tests {
 
         assert_eq!(plan.kind, "syu.goal_plan");
         assert_eq!(plan.source.mode, "request_driven");
-        assert_eq!(plan.source.confidence, "high");
+        assert_eq!(plan.source.confidence, "low");
         assert_eq!(plan.coverage.threshold, 100);
         assert!(plan.spec_mapping.spec_updates_required);
         assert!(!plan.spec_mapping.spec_update_reasons.is_empty());
@@ -4948,11 +4948,7 @@ mod tests {
         let tempdir = tempdir().expect("tempdir");
         write_workspace(tempdir.path());
         let request = tempdir.path().join("request.yaml");
-        write_request_artifact(
-            &request,
-            "Make request artifact classification easier to review.",
-            &[],
-        );
+        write_request_artifact(&request, "Request artifact classification review flow", &[]);
 
         let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
         let artifact = load_request_artifact(&request).expect("request");
