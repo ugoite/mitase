@@ -4746,14 +4746,20 @@ mod tests {
         assert_eq!(plan.source.mode, "request_driven");
         assert_eq!(plan.source.confidence, "low");
         assert_eq!(plan.coverage.threshold, 100);
-        assert!(plan.spec_mapping.spec_updates_required);
-        assert!(!plan.spec_mapping.spec_update_reasons.is_empty());
+        assert!(plan.work.mutations.iter().all(|mutation| matches!(
+            mutation,
+            syu_task_model::WorkMutation::ModifyRepository { .. }
+                | syu_task_model::WorkMutation::CreateRepository { .. }
+                | syu_task_model::WorkMutation::DeleteRepository { .. }
+                | syu_task_model::WorkMutation::MoveRepository { .. }
+                | syu_task_model::WorkMutation::UpdateTrace { .. }
+        )));
         assert!(
-            plan.implementation_plan
-                .scope
-                .include
+            plan.work
+                .intent
+                .seeds
                 .iter()
-                .any(|entry| entry.file.contains("src/command/task.rs"))
+                .any(|seed| seed.id == "FEAT-TASK-003")
         );
 
         let text = render_goal_plan_output(
@@ -4948,7 +4954,7 @@ mod tests {
         let tempdir = tempdir().expect("tempdir");
         write_workspace(tempdir.path());
         let request = tempdir.path().join("request.yaml");
-        write_request_artifact(&request, "Request artifact classification review flow", &[]);
+        write_request_artifact(&request, "Request artifact classification", &[]);
 
         let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
         let artifact = load_request_artifact(&request).expect("request");
@@ -4962,10 +4968,8 @@ mod tests {
         )
         .expect("goal plan");
 
-        assert!(
-            !plan.work.intent.seeds.is_empty(),
-            "natural-language request should promote a related item into the typed work seeds"
-        );
+        assert!(!scope_outcome.classification.related_items.is_empty());
+        assert!(!plan.work.intent.seeds.is_empty());
     }
 
     #[test]
