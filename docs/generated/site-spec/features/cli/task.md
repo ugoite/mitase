@@ -202,7 +202,7 @@ description: "Generated reference for docs/syu/features/cli/task.yaml"
           - syu task test-select goal-plan.yaml
 - **id**: FEAT-TASK-007
   - **title**: Shared typed Work planner
-  - **summary**: Resolve typed Work intent, graph impact, mutation previews, and WorkKind-specific verification through a UI-independent action API.
+  - **summary**: Resolve typed Work intent, graph impact, mutation previews, and WorkKind-specific verification through one UI-independent engine shared by CLI, automation, diff inference, and Workbench adapters.
   - **status**: implemented
   - **linked_requirements**:
     - REQ-CORE-034
@@ -214,16 +214,34 @@ description: "Generated reference for docs/syu/features/cli/task.yaml"
           - WorkOperation
           - WorkSurface
           - WorkMode
+          - SourceRole
           - ImpactRole
           - WorkIntent
           - WorkImpact
           - WorkMutation
           - WorkKindProfile
+          - SurfaceRequirement
+          - CompletionCheck
           - resolve_work_intent
+          - work_request_text
           - work_kind_profile
+          - plan_work
+          - goal_plan_from_work_plan
       - **file**: crates/syu-actions/src/lib.rs
         - **symbols**:
           - plan_request_work
+          - plan_request_work_with_constraints
+          - plan_item_work
+      - **file**: src/command/task.rs
+        - **symbols**:
+          - build_shared_request_work_plan
+          - build_goal_plan
+          - build_diff_inferred_goal_plan
+      - **file**: crates/syu-workbench-server/src/lib.rs
+        - **symbols**:
+          - shared_work_plan_with_options
+          - shared_work_plan_input
+          - build_shared_goal_plan
 
 ## Source YAML
 
@@ -417,7 +435,7 @@ features:
             - syu task test-select goal-plan.yaml
   - id: FEAT-TASK-007
     title: Shared typed Work planner
-    summary: Resolve typed Work intent, graph impact, mutation previews, and WorkKind-specific verification through a UI-independent action API.
+    summary: Resolve typed Work intent, graph impact, mutation previews, and WorkKind-specific verification through one UI-independent engine shared by CLI, automation, diff inference, and Workbench adapters.
     status: implemented
     linked_requirements:
       - REQ-CORE-034
@@ -429,14 +447,32 @@ features:
             - WorkOperation
             - WorkSurface
             - WorkMode
+            - SourceRole
             - ImpactRole
             - WorkIntent
             - WorkImpact
             - WorkMutation
             - WorkKindProfile
+            - SurfaceRequirement
+            - CompletionCheck
             - resolve_work_intent
+            - work_request_text
             - work_kind_profile
+            - plan_work
+            - goal_plan_from_work_plan
         - file: crates/syu-actions/src/lib.rs
           symbols:
             - plan_request_work
+            - plan_request_work_with_constraints
+            - plan_item_work
+        - file: src/command/task.rs
+          symbols:
+            - build_shared_request_work_plan
+            - build_goal_plan
+            - build_diff_inferred_goal_plan
+        - file: crates/syu-workbench-server/src/lib.rs
+          symbols:
+            - shared_work_plan_with_options
+            - shared_work_plan_input
+            - build_shared_goal_plan
 ```

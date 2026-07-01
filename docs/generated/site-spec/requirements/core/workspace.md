@@ -890,16 +890,20 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
   - **title**: Plan typed work consistently across automation entry points
   - **description**:
     - |
-      The reusable action layer MUST represent planned work with independent,
+      The shared planning engine MUST represent planned work with independent,
       typed kind, operation, surface, mode, impact-role, mutation, and
       verification axes. It MUST support Deliver, Specify, Govern,
       Restructure, Verify, Repair, Maintain, Retire, Review, and Adopt work,
       MUST prefer explicit intent over inferred intent, and MUST expand Item
       seeds through the specification graph without including unrelated sibling
       branches. Each WorkKind MUST control its mutation constraints, required
-      surfaces, completion commands, and broad cargo-test fallback. Review work
-      MUST be mutation-free. The shared API MUST remain independent of
-      Workbench and other user-interface code.
+      surfaces, typed completion checks, and broad cargo-test fallback. It MUST
+      keep seed provenance separate from direct/context/follow-up/blocker impact,
+      MUST reject unknown seeds and incomplete operation payloads, and MUST
+      produce typed repository, test, edge, diagnostic, and split impacts.
+      Review work MUST be mutation-free. CLI request planning, diff inference,
+      automation, and Workbench request planning MUST use the same engine while
+      the engine remains independent of user-interface code.
   - **priority**: high
   - **status**: implemented
   - **linked_policies**:
@@ -910,13 +914,23 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
     - **rust**:
       - **file**: crates/syu-task-model/src/work.rs
         - **symbols**:
-          - explicit_kind_wins_and_axes_stay_independent
-          - review_profile_forbids_mutation_without_test_fallback
-          - classifies_representative_requests
+          - classifier_respects_tokens_and_infers_all_axes
+          - govern_traverses_philosophy_to_features_with_queue
+          - deliver_changes_owned_code_and_tests_not_feature_spec
+          - deliver_excludes_sibling_features
+          - unknown_seed_and_missing_contract_are_blockers
+          - operation_payload_and_forbidden_surface_fail_closed
+          - every_work_kind_applies_its_surface_contract
+          - completion_commands_render_valid_cli_shapes
+          - serialization_is_deterministic
       - **file**: crates/syu-actions/src/lib.rs
         - **symbols**:
           - request_planner_expands_item_seed_through_the_spec_graph
           - review_override_produces_evidence_only_plan
+          - item_and_request_entry_points_have_planner_parity
+      - **file**: crates/syu-workbench-server/src/lib.rs
+        - **symbols**:
+          - request_plan_endpoint_returns_goal_plan
 
 ## Source YAML
 
@@ -1778,16 +1792,20 @@ requirements:
   - id: REQ-CORE-034
     title: Plan typed work consistently across automation entry points
     description: |
-      The reusable action layer MUST represent planned work with independent,
+      The shared planning engine MUST represent planned work with independent,
       typed kind, operation, surface, mode, impact-role, mutation, and
       verification axes. It MUST support Deliver, Specify, Govern,
       Restructure, Verify, Repair, Maintain, Retire, Review, and Adopt work,
       MUST prefer explicit intent over inferred intent, and MUST expand Item
       seeds through the specification graph without including unrelated sibling
       branches. Each WorkKind MUST control its mutation constraints, required
-      surfaces, completion commands, and broad cargo-test fallback. Review work
-      MUST be mutation-free. The shared API MUST remain independent of
-      Workbench and other user-interface code.
+      surfaces, typed completion checks, and broad cargo-test fallback. It MUST
+      keep seed provenance separate from direct/context/follow-up/blocker impact,
+      MUST reject unknown seeds and incomplete operation payloads, and MUST
+      produce typed repository, test, edge, diagnostic, and split impacts.
+      Review work MUST be mutation-free. CLI request planning, diff inference,
+      automation, and Workbench request planning MUST use the same engine while
+      the engine remains independent of user-interface code.
     priority: high
     status: implemented
     linked_policies:
@@ -1798,11 +1816,21 @@ requirements:
       rust:
         - file: crates/syu-task-model/src/work.rs
           symbols:
-            - explicit_kind_wins_and_axes_stay_independent
-            - review_profile_forbids_mutation_without_test_fallback
-            - classifies_representative_requests
+            - classifier_respects_tokens_and_infers_all_axes
+            - govern_traverses_philosophy_to_features_with_queue
+            - deliver_changes_owned_code_and_tests_not_feature_spec
+            - deliver_excludes_sibling_features
+            - unknown_seed_and_missing_contract_are_blockers
+            - operation_payload_and_forbidden_surface_fail_closed
+            - every_work_kind_applies_its_surface_contract
+            - completion_commands_render_valid_cli_shapes
+            - serialization_is_deterministic
         - file: crates/syu-actions/src/lib.rs
           symbols:
             - request_planner_expands_item_seed_through_the_spec_graph
             - review_override_produces_evidence_only_plan
+            - item_and_request_entry_points_have_planner_parity
+        - file: crates/syu-workbench-server/src/lib.rs
+          symbols:
+            - request_plan_endpoint_returns_goal_plan
 ```

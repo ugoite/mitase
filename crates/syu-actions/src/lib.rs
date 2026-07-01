@@ -105,6 +105,85 @@ pub fn scope_request(
 ///
 /// Explicit axes take precedence over inference. Related spec items are expanded through the
 /// existing workspace graph and annotated according to the selected WorkKind profile.
+pub fn plan_request_work_with_constraints(
+    workspace: impl AsRef<Path>,
+    request: &RequestArtifact,
+    explicit_kind: Option<WorkKind>,
+    explicit_operation: Option<WorkOperation>,
+    explicit_mode: Option<WorkMode>,
+    constraints: syu_task_model::WorkConstraints,
+) -> Result<WorkPlan> {
+    use syu_task_model::{SourceRole, WorkGraphNode, WorkPlanningInput, plan_work};
+
+    let workspace = syu::workspace::load_workspace(workspace.as_ref())?;
+    let seeds = request
+        .explicit_ids()
+        .into_iter()
+        .map(|id| WorkSeed {
+            surface: surface_for_id(&id),
+            id,
+            source_role: SourceRole::Seed,
+        })
+        .collect();
+    let nodes = workspace
+        .philosophies
+        .iter()
+        .map(|item| WorkGraphNode {
+            id: item.id.clone(),
+            surface: WorkSurface::Philosophy,
+            document_path: None,
+            status: None,
+            linked_ids: item.linked_policies.clone(),
+            implementations: Vec::new(),
+            tests: Vec::new(),
+        })
+        .chain(workspace.policies.iter().map(|item| WorkGraphNode {
+            id: item.id.clone(),
+            surface: WorkSurface::Policy,
+            document_path: None,
+            status: None,
+            linked_ids: item.linked_requirements.clone(),
+            implementations: Vec::new(),
+            tests: Vec::new(),
+        }))
+        .chain(workspace.requirements.iter().map(|item| {
+            WorkGraphNode {
+                id: item.id.clone(),
+                surface: WorkSurface::Requirement,
+                document_path: None,
+                status: Some(item.status.clone()),
+                linked_ids: item
+                    .linked_policies
+                    .iter()
+                    .chain(&item.linked_features)
+                    .cloned()
+                    .collect(),
+                implementations: Vec::new(),
+                tests: trace_targets(&item.tests),
+            }
+        }))
+        .chain(workspace.features.iter().map(|item| WorkGraphNode {
+            id: item.id.clone(),
+            surface: WorkSurface::Feature,
+            document_path: None,
+            status: Some(item.status.clone()),
+            linked_ids: item.linked_requirements.clone(),
+            implementations: trace_targets(&item.implementations),
+            tests: Vec::new(),
+        }))
+        .collect();
+    Ok(plan_work(WorkPlanningInput {
+        request: syu_task_model::work_request_text(request),
+        explicit_kind,
+        explicit_operation,
+        explicit_mode,
+        seeds,
+        nodes,
+        constraints,
+        ..Default::default()
+    }))
+}
+
 pub fn plan_request_work(
     workspace: impl AsRef<Path>,
     request: &RequestArtifact,
@@ -112,256 +191,66 @@ pub fn plan_request_work(
     explicit_operation: Option<WorkOperation>,
     explicit_mode: Option<WorkMode>,
 ) -> Result<WorkPlan> {
-    use syu_task_model::{
-        ImpactRole, ImpactedItem, WorkImpact, WorkMutation, WorkVerification, resolve_work_intent,
-        work_kind_profile,
-    };
-
-    let workspace = syu::workspace::load_workspace(workspace.as_ref())?;
-    let scope = syu::command::task::scope_request(&workspace, request)?;
-    let seeds = request
-        .explicit_ids()
-        .into_iter()
-        .filter_map(|id| surface_for_spec_id(&id).map(|surface| WorkSeed { id, surface }))
-        .collect::<Vec<_>>();
-    let intent_text = std::iter::once(request.request.as_str())
-        .chain(request.context.affected_area.as_deref())
-        .chain(
-            request
-                .context
-                .repository_constraints
-                .iter()
-                .map(String::as_str),
-        )
-        .collect::<Vec<_>>()
-        .join("\n");
-    let intent = resolve_work_intent(
-        &intent_text,
+    plan_request_work_with_constraints(
+        workspace,
+        request,
         explicit_kind,
         explicit_operation,
         explicit_mode,
-        seeds,
-    );
-    let profile = work_kind_profile(intent.kind);
-    let seed_ids = intent
-        .seeds
-        .iter()
-        .map(|seed| seed.id.as_str())
-        .collect::<std::collections::BTreeSet<_>>();
-    let mut candidates = Vec::new();
-    candidates.extend(
-        scope
-            .philosophies
-            .iter()
-            .map(|item| (item.id.clone(), WorkSurface::Philosophy)),
-    );
-    candidates.extend(
-        scope
-            .policies
-            .iter()
-            .map(|item| (item.id.clone(), WorkSurface::Policy)),
-    );
-    candidates.extend(
-        scope
-            .requirements
-            .iter()
-            .map(|item| (item.id.clone(), WorkSurface::Requirement)),
-    );
-    candidates.extend(
-        scope
-            .features
-            .iter()
-            .map(|item| (item.id.clone(), WorkSurface::Feature)),
-    );
-    candidates.extend(
-        intent
-            .seeds
-            .iter()
-            .map(|seed| (seed.id.clone(), seed.surface)),
-    );
-    let mut graph_items = candidates
-        .iter()
-        .cloned()
-        .collect::<std::collections::BTreeMap<_, _>>();
-    // Traverse directionally so a feature seed reaches its upstream contract without pulling in
-    // unrelated sibling features from the same policy branch.
-    let seeded_features = intent
-        .seeds
-        .iter()
-        .filter(|seed| seed.surface == WorkSurface::Feature)
-        .map(|seed| seed.id.as_str())
-        .collect::<std::collections::BTreeSet<_>>();
-    let seeded_requirements = intent
-        .seeds
-        .iter()
-        .filter(|seed| seed.surface == WorkSurface::Requirement)
-        .map(|seed| seed.id.as_str())
-        .collect::<std::collections::BTreeSet<_>>();
-    for feature in &workspace.features {
-        if seeded_features.contains(feature.id.as_str()) {
-            for requirement_id in &feature.linked_requirements {
-                graph_items.insert(requirement_id.clone(), WorkSurface::Requirement);
-            }
-        }
-    }
-    if matches!(
-        intent.kind,
-        WorkKind::Deliver | WorkKind::Specify | WorkKind::Govern | WorkKind::Retire
-    ) {
-        for requirement in &workspace.requirements {
-            if seeded_requirements.contains(requirement.id.as_str())
-                || (intent.kind == WorkKind::Govern && graph_items.contains_key(&requirement.id))
-                || (intent.kind == WorkKind::Retire && graph_items.contains_key(&requirement.id))
-            {
-                for feature_id in &requirement.linked_features {
-                    graph_items.insert(feature_id.clone(), WorkSurface::Feature);
-                }
-            }
-        }
-    }
-    let reached_requirements = graph_items
-        .iter()
-        .filter(|(_, surface)| **surface == WorkSurface::Requirement)
-        .map(|(id, _)| id.clone())
-        .collect::<std::collections::BTreeSet<_>>();
-    for requirement in &workspace.requirements {
-        if reached_requirements.contains(&requirement.id) {
-            for policy_id in &requirement.linked_policies {
-                graph_items.insert(policy_id.clone(), WorkSurface::Policy);
-            }
-        }
-    }
-    for policy in &workspace.policies {
-        if graph_items.contains_key(&policy.id) && intent.kind == WorkKind::Govern {
-            for requirement_id in &policy.linked_requirements {
-                graph_items.insert(requirement_id.clone(), WorkSurface::Requirement);
-            }
-        }
-    }
-    let reached_policies = graph_items
-        .iter()
-        .filter(|(_, surface)| **surface == WorkSurface::Policy)
-        .map(|(id, _)| id.clone())
-        .collect::<std::collections::BTreeSet<_>>();
-    for philosophy in &workspace.philosophies {
-        if philosophy
-            .linked_policies
-            .iter()
-            .any(|id| reached_policies.contains(id))
-        {
-            graph_items.insert(philosophy.id.clone(), WorkSurface::Philosophy);
-        }
-    }
-    candidates = graph_items.into_iter().collect();
-    candidates.sort();
-    candidates.dedup();
-
-    let items = candidates
-        .into_iter()
-        .map(|(id, surface)| {
-            let role = if seed_ids.contains(id.as_str()) {
-                ImpactRole::Seed
-            } else {
-                impact_role(intent.kind, surface, &profile.direct_surfaces)
-            };
-            ImpactedItem {
-                reason: impact_reason(intent.kind, role).to_string(),
-                id,
-                surface,
-                role,
-            }
-        })
-        .collect::<Vec<_>>();
-    let mutations = if profile.mutation_forbidden || intent.mode == WorkMode::ReviewOnly {
-        Vec::new()
-    } else {
-        items
-            .iter()
-            .filter(|item| {
-                matches!(item.role, ImpactRole::Seed | ImpactRole::DirectChange)
-                    && matches!(
-                        item.surface,
-                        WorkSurface::Philosophy
-                            | WorkSurface::Policy
-                            | WorkSurface::Requirement
-                            | WorkSurface::Feature
-                    )
-            })
-            .map(|item| WorkMutation::SpecItem {
-                id: item.id.clone(),
-                operation: intent.operation,
-            })
-            .collect()
-    };
-    Ok(WorkPlan {
-        intent,
-        impact: WorkImpact {
-            items,
-            ..WorkImpact::default()
-        },
-        mutations,
-        verification: WorkVerification {
-            required_surfaces: profile.required_surfaces,
-            completion_commands: profile.default_completion,
-            cargo_test_fallback: profile.cargo_test_fallback,
-            mutation_forbidden: profile.mutation_forbidden,
-        },
-    })
+        Default::default(),
+    )
 }
 
-fn surface_for_spec_id(id: &str) -> Option<WorkSurface> {
+/// Plan from an Item seed through the same shared engine used for requests.
+pub fn plan_item_work(
+    workspace: impl AsRef<Path>,
+    item_id: &str,
+    explicit_kind: Option<WorkKind>,
+    explicit_operation: Option<WorkOperation>,
+    explicit_mode: Option<WorkMode>,
+) -> Result<WorkPlan> {
+    plan_request_work(
+        workspace,
+        &RequestArtifact {
+            version: 1,
+            request: format!("Plan work for {item_id}"),
+            context: syu_task_model::RequestArtifactContext {
+                linked_ids: vec![item_id.to_string()],
+                ..Default::default()
+            },
+        },
+        explicit_kind,
+        explicit_operation,
+        explicit_mode,
+    )
+}
+
+fn surface_for_id(id: &str) -> WorkSurface {
     if id.starts_with("PHIL-") {
-        Some(WorkSurface::Philosophy)
+        WorkSurface::Philosophy
     } else if id.starts_with("POL-") {
-        Some(WorkSurface::Policy)
-    } else if id.starts_with("REQ-") {
-        Some(WorkSurface::Requirement)
+        WorkSurface::Policy
     } else if id.starts_with("FEAT-") {
-        Some(WorkSurface::Feature)
+        WorkSurface::Feature
     } else {
-        None
+        WorkSurface::Requirement
     }
 }
 
-fn impact_role(
-    kind: WorkKind,
-    surface: WorkSurface,
-    direct_surfaces: &std::collections::BTreeSet<WorkSurface>,
-) -> syu_task_model::ImpactRole {
-    use syu_task_model::ImpactRole;
-    match kind {
-        WorkKind::Govern if matches!(surface, WorkSurface::Requirement | WorkSurface::Feature) => {
-            ImpactRole::FollowUp
-        }
-        WorkKind::Specify if matches!(surface, WorkSurface::Philosophy | WorkSurface::Policy) => {
-            ImpactRole::Context
-        }
-        WorkKind::Specify => ImpactRole::FollowUp,
-        WorkKind::Deliver if matches!(surface, WorkSurface::Philosophy | WorkSurface::Policy) => {
-            ImpactRole::Context
-        }
-        WorkKind::Review
-        | WorkKind::Maintain
-        | WorkKind::Verify
-        | WorkKind::Repair
-        | WorkKind::Adopt => ImpactRole::Context,
-        _ if direct_surfaces.contains(&surface) => ImpactRole::DirectChange,
-        _ => ImpactRole::Context,
-    }
-}
-
-fn impact_reason(kind: WorkKind, role: syu_task_model::ImpactRole) -> &'static str {
-    use syu_task_model::ImpactRole;
-    match role {
-        ImpactRole::Seed => "explicit request seed",
-        ImpactRole::DirectChange => "selected by the WorkKind direct-change profile",
-        ImpactRole::Context => "graph context required to assess the change",
-        ImpactRole::FollowUp if kind == WorkKind::Govern => {
-            "downstream contract affected by governance work"
-        }
-        ImpactRole::FollowUp => "linked contract may require a separate follow-up",
-        ImpactRole::Blocker => "unresolved condition blocks this work",
-    }
+fn trace_targets(
+    map: &BTreeMap<String, Vec<syu_domain::TraceReference>>,
+) -> Vec<syu_task_model::TraceTarget> {
+    map.iter()
+        .flat_map(|(language, references)| {
+            references
+                .iter()
+                .map(move |reference| syu_task_model::TraceTarget {
+                    language: language.clone(),
+                    file: reference.file.display().to_string(),
+                    symbols: reference.symbols.clone(),
+                })
+        })
+        .collect()
 }
 
 pub fn scaffold_request(
@@ -886,11 +775,11 @@ fn find_item(
 #[cfg(test)]
 mod tests {
     use super::{
-        LookupKind, RequestArtifact, WorkKind, WorkMode, WorkOperation, plan_request_work,
-        search_items,
+        LookupKind, RequestArtifact, WorkKind, WorkMode, WorkOperation, plan_item_work,
+        plan_request_work, search_items,
     };
     use std::path::PathBuf;
-    use syu_task_model::{ImpactRole, RequestArtifactContext};
+    use syu_task_model::{RequestArtifactContext, SourceRole};
 
     fn fixture_path(name: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -941,10 +830,9 @@ mod tests {
         assert_eq!(plan.intent.kind, WorkKind::Deliver);
         assert_eq!(plan.intent.operation, WorkOperation::Modify);
         assert!(
-            plan.impact
-                .items
-                .iter()
-                .any(|item| { item.id == "FEAT-TRACE-002" && item.role == ImpactRole::Seed })
+            plan.impact.items.iter().any(|item| {
+                item.id == "FEAT-TRACE-002" && item.source_role == SourceRole::Seed
+            })
         );
         assert!(
             plan.impact
@@ -985,5 +873,34 @@ mod tests {
         assert!(plan.mutations.is_empty());
         assert!(plan.verification.mutation_forbidden);
         assert!(!plan.verification.cargo_test_fallback);
+    }
+
+    #[test]
+    fn item_and_request_entry_points_have_planner_parity() {
+        let request = RequestArtifact {
+            version: 1,
+            request: "Plan work for FEAT-TRACE-002".to_string(),
+            context: RequestArtifactContext {
+                linked_ids: vec!["FEAT-TRACE-002".to_string()],
+                ..RequestArtifactContext::default()
+            },
+        };
+        let request_plan = plan_request_work(
+            fixture_path("passing"),
+            &request,
+            Some(WorkKind::Deliver),
+            Some(WorkOperation::Modify),
+            None,
+        )
+        .expect("request plan");
+        let item_plan = plan_item_work(
+            fixture_path("passing"),
+            "FEAT-TRACE-002",
+            Some(WorkKind::Deliver),
+            Some(WorkOperation::Modify),
+            None,
+        )
+        .expect("item plan");
+        assert_eq!(request_plan, item_plan);
     }
 }

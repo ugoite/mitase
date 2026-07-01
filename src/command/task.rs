@@ -18,12 +18,14 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 use regex::Regex;
 use serde::Serialize;
 use syu_task_model::{
-    ClassificationOutcome, GoalPlanArtifact, GoalPlanCheckReport, GoalPlanConfidence,
-    GoalPlanScope, GoalPlanScopeInclude, GoalPlanSelectionMode, GoalPlanSourceMode,
-    RequestArtifact, RequestArtifactContext, RequestClassification as RequirementAction,
-    ScaffoldAction, ScaffoldPlan, ScaffoldUpdate, ScaffoldUpdateKind, ScopeFeatureCandidate,
-    ScopeOutcome, ScopeSignals, SearchResult as TaskSearchResult, TaskTestSelectionCommand,
-    TaskTestSelectionEscalation, TaskTestSelectionPlan,
+    ClassificationOutcome, CompletionCheck, GoalPlanArtifact, GoalPlanCheckReport,
+    GoalPlanConfidence, GoalPlanScope, GoalPlanScopeInclude, GoalPlanSelectionMode,
+    GoalPlanSourceMode, RequestArtifact, RequestArtifactContext,
+    RequestClassification as RequirementAction, ScaffoldAction, ScaffoldPlan, ScaffoldUpdate,
+    ScaffoldUpdateKind, ScopeFeatureCandidate, ScopeOutcome, ScopeSignals,
+    SearchResult as TaskSearchResult, SourceRole, TaskTestSelectionCommand,
+    TaskTestSelectionEscalation, TaskTestSelectionPlan, TraceTarget, WorkGraphNode,
+    WorkPlanningInput, WorkSeed, WorkSurface, plan_work,
 };
 
 use crate::{
@@ -127,6 +129,7 @@ pub struct JsonTaskPlanOutput {
     request_path: String,
     request: String,
     classification: String,
+    work: syu_task_model::WorkPlan,
     source: JsonTaskPlanSource,
     goal: JsonTaskPlanGoal,
     spec_mapping: JsonTaskPlanSpecMapping,
@@ -570,17 +573,31 @@ pub fn build_goal_plan(
     request_path: &Path,
     output_path: Option<&Path>,
 ) -> Result<JsonTaskPlanOutput> {
+    let work_plan = build_shared_request_work_plan(workspace, outcome, explicit_ids, &[]);
     let lookup = WorkspaceLookup::new(workspace);
     let persistent_items = collect_task_plan_persistent_items(&lookup, outcome)?;
     let spec_update_reasons = determine_spec_update_reasons(outcome, &persistent_items);
     let spec_updates_required = !spec_update_reasons.is_empty();
-    let scope_include = collect_task_plan_scope_entries(
+    let mut scope_include = collect_task_plan_scope_entries(
         workspace,
         &lookup,
         &persistent_items,
         outcome,
         explicit_ids,
     )?;
+    let direct_work_scope = work_plan
+        .impact
+        .repository
+        .iter()
+        .filter(|impact| impact.impact_role == syu_task_model::ImpactRole::DirectChange)
+        .map(|impact| JsonTaskPlanScopeEntry {
+            file: impact.path.clone(),
+            symbols: Vec::new(),
+        })
+        .collect::<Vec<_>>();
+    if !direct_work_scope.is_empty() {
+        scope_include = direct_work_scope;
+    }
     let test_plan = collect_task_plan_tests(&lookup, &persistent_items, outcome)?;
 
     let source_confidence = if outcome.classification.explicit_items.is_empty()
@@ -599,11 +616,12 @@ pub fn build_goal_plan(
         kind: "syu.goal_plan".to_string(),
         request_path: request_path.display().to_string(),
         request: outcome.classification.request.clone(),
-        classification: outcome.classification.classification.label().to_string(),
+        classification: format!("{:?}", work_plan.intent.kind).to_lowercase(),
+        work: work_plan.clone(),
         source: JsonTaskPlanSource {
             mode: "request_driven".to_string(),
             request_artifact: Some(request_path.display().to_string()),
-            classification: Some(outcome.classification.classification.label().to_string()),
+            classification: Some(format!("{:?}", work_plan.intent.kind).to_lowercase()),
             range: None,
             confidence: source_confidence.to_string(),
             evidence: None,
@@ -640,21 +658,163 @@ pub fn build_goal_plan(
             threshold: 100,
         },
         completion: JsonTaskPlanCompletion {
-            must_pass: task_plan_completion_checks(output_path),
+            must_pass: render_work_completion(&work_plan, output_path),
         },
-        warnings: collect_task_plan_warnings(outcome),
+        warnings: collect_task_plan_warnings(outcome)
+            .into_iter()
+            .chain(
+                work_plan
+                    .impact
+                    .diagnostics
+                    .iter()
+                    .map(|diagnostic| format!("{}: {}", diagnostic.rule, diagnostic.reason)),
+            )
+            .collect(),
     })
 }
 
-fn task_plan_completion_checks(output_path: Option<&Path>) -> Vec<String> {
+fn build_shared_request_work_plan(
+    workspace: &crate::workspace::Workspace,
+    outcome: &ScopeOutcome,
+    explicit_ids: &[String],
+    changed_files: &[PathBuf],
+) -> syu_task_model::WorkPlan {
+    let seeds = explicit_ids
+        .iter()
+        .map(|id| WorkSeed {
+            id: id.clone(),
+            surface: work_surface_from_id(id),
+            source_role: SourceRole::Seed,
+        })
+        .collect();
+    let search_candidates = outcome
+        .classification
+        .related_items
+        .iter()
+        .filter_map(|item| {
+            work_surface_from_label(&item.kind).map(|surface| WorkSeed {
+                id: item.id.clone(),
+                surface,
+                source_role: SourceRole::SearchCandidate,
+            })
+        })
+        .collect();
+    let nodes = workspace
+        .philosophies
+        .iter()
+        .map(|item| WorkGraphNode {
+            id: item.id.clone(),
+            surface: WorkSurface::Philosophy,
+            document_path: None,
+            status: None,
+            linked_ids: item.linked_policies.clone(),
+            implementations: Vec::new(),
+            tests: Vec::new(),
+        })
+        .chain(workspace.policies.iter().map(|item| WorkGraphNode {
+            id: item.id.clone(),
+            surface: WorkSurface::Policy,
+            document_path: None,
+            status: None,
+            linked_ids: item.linked_requirements.clone(),
+            implementations: Vec::new(),
+            tests: Vec::new(),
+        }))
+        .chain(workspace.requirements.iter().map(|item| {
+            WorkGraphNode {
+                id: item.id.clone(),
+                surface: WorkSurface::Requirement,
+                document_path: None,
+                status: Some(item.status.clone()),
+                linked_ids: item
+                    .linked_policies
+                    .iter()
+                    .chain(&item.linked_features)
+                    .cloned()
+                    .collect(),
+                implementations: Vec::new(),
+                tests: task_trace_targets(&item.tests),
+            }
+        }))
+        .chain(workspace.features.iter().map(|item| WorkGraphNode {
+            id: item.id.clone(),
+            surface: WorkSurface::Feature,
+            document_path: None,
+            status: Some(item.status.clone()),
+            linked_ids: item.linked_requirements.clone(),
+            implementations: task_trace_targets(&item.implementations),
+            tests: Vec::new(),
+        }))
+        .collect();
+    plan_work(WorkPlanningInput {
+        request: outcome.classification.request.clone(),
+        seeds,
+        search_candidates,
+        nodes,
+        repository_changes: changed_files
+            .iter()
+            .map(|path| syu_task_model::RepositoryChange {
+                path: path_label(path),
+                owner_ids: Vec::new(),
+            })
+            .collect(),
+        ..Default::default()
+    })
+}
+
+fn task_trace_targets(map: &BTreeMap<String, Vec<syu_domain::TraceReference>>) -> Vec<TraceTarget> {
+    map.iter()
+        .flat_map(|(language, references)| {
+            references.iter().map(move |reference| TraceTarget {
+                language: language.clone(),
+                file: reference.file.display().to_string(),
+                symbols: reference.symbols.clone(),
+            })
+        })
+        .collect()
+}
+
+fn work_surface_from_id(id: &str) -> WorkSurface {
+    if id.starts_with("PHIL-") {
+        WorkSurface::Philosophy
+    } else if id.starts_with("POL-") {
+        WorkSurface::Policy
+    } else if id.starts_with("FEAT-") {
+        WorkSurface::Feature
+    } else {
+        WorkSurface::Requirement
+    }
+}
+
+fn work_surface_from_label(label: &str) -> Option<WorkSurface> {
+    match label {
+        "philosophy" => Some(WorkSurface::Philosophy),
+        "policy" => Some(WorkSurface::Policy),
+        "requirement" => Some(WorkSurface::Requirement),
+        "feature" => Some(WorkSurface::Feature),
+        _ => None,
+    }
+}
+
+fn render_work_completion(
+    plan: &syu_task_model::WorkPlan,
+    output_path: Option<&Path>,
+) -> Vec<String> {
     let plan_path = output_path
         .map(|path| path.display().to_string())
         .unwrap_or_else(|| ".syu/tasks/current.yaml".to_string());
-
-    vec![
-        format!("syu task check {plan_path} --range origin/main...HEAD"),
-        "syu validate .".to_string(),
-    ]
+    plan.verification
+        .completion
+        .iter()
+        .map(|check| match check {
+            CompletionCheck::GoalPlanCheck { range, .. } => CompletionCheck::GoalPlanCheck {
+                plan_path: plan_path.clone(),
+                range: range.clone(),
+            }
+            .render(),
+            _ => check.render(),
+        })
+        .collect()
 }
 
 fn inferred_goal_plan_completion_checks(range: &str, output_path: Option<&Path>) -> Vec<String> {
@@ -1311,6 +1471,15 @@ pub fn build_diff_inferred_goal_plan(
 ) -> Result<JsonTaskPlanOutput> {
     let lookup = WorkspaceLookup::new(workspace);
     let inference = infer_diff_plan(workspace, &lookup, range, changed_files)?;
+    let direct_ids = inference
+        .scope
+        .classification
+        .explicit_items
+        .iter()
+        .map(|item| item.id.clone())
+        .collect::<Vec<_>>();
+    let work_plan =
+        build_shared_request_work_plan(workspace, &inference.scope, &direct_ids, changed_files);
     let persistent_items = collect_task_plan_persistent_items(&lookup, &inference.scope)?;
     let spec_update_reasons = determine_spec_update_reasons(&inference.scope, &persistent_items);
     let spec_updates_required = !spec_update_reasons.is_empty();
@@ -1330,12 +1499,8 @@ pub fn build_diff_inferred_goal_plan(
         kind: "syu.goal_plan".to_string(),
         request_path: range.to_string(),
         request: format!("git diff {range}"),
-        classification: inference
-            .scope
-            .classification
-            .classification
-            .label()
-            .to_string(),
+        classification: format!("{:?}", work_plan.intent.kind).to_lowercase(),
+        work: work_plan.clone(),
         source: JsonTaskPlanSource {
             mode: "diff_inferred".to_string(),
             request_artifact: None,
@@ -1371,7 +1536,17 @@ pub fn build_diff_inferred_goal_plan(
         completion: JsonTaskPlanCompletion {
             must_pass: inferred_goal_plan_completion_checks(range, output_path),
         },
-        warnings: inference.warnings,
+        warnings: inference
+            .warnings
+            .into_iter()
+            .chain(
+                work_plan
+                    .impact
+                    .diagnostics
+                    .iter()
+                    .map(|diagnostic| format!("{}: {}", diagnostic.rule, diagnostic.reason)),
+            )
+            .collect(),
     })
 }
 
