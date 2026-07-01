@@ -104,6 +104,12 @@ pub struct WorkConstraints {
     #[serde(default)]
     pub related_item_ids: Vec<String>,
     #[serde(default)]
+    pub remove_edges: Vec<SpecEdge>,
+    #[serde(default)]
+    pub add_edges: Vec<SpecEdge>,
+    #[serde(default)]
+    pub redistribution: Vec<RelationshipMove>,
+    #[serde(default)]
     pub notes: Vec<String>,
 }
 
@@ -337,8 +343,25 @@ pub enum WorkMutation {
     ModifyRepository {
         path: String,
     },
+    CreateRepository {
+        path: String,
+    },
+    DeleteRepository {
+        path: String,
+    },
+    MoveRepository {
+        path: String,
+        destination: String,
+    },
     ModifyConfig {
         path: String,
+    },
+    CreateConfig {
+        path: String,
+    },
+    MoveConfig {
+        path: String,
+        destination: String,
     },
 }
 
@@ -431,10 +454,33 @@ pub struct WorkPlan {
     pub executable: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GoalPlanConversionContext {
+    pub goal_id: String,
+    pub source_mode: GoalPlanSourceMode,
+    pub source_path: Option<String>,
+    pub plan_output_path: String,
+    pub range: Option<String>,
+    pub confidence: GoalPlanConfidence,
+}
+
+impl Default for GoalPlanConversionContext {
+    fn default() -> Self {
+        Self {
+            goal_id: "GOAL-WORK-001".to_string(),
+            source_mode: GoalPlanSourceMode::RequestDriven,
+            source_path: None,
+            plan_output_path: ".syu/tasks/current.yaml".to_string(),
+            range: None,
+            confidence: GoalPlanConfidence::High,
+        }
+    }
+}
+
 pub fn goal_plan_from_work_plan(
     request: &str,
-    request_path: &str,
     plan: &WorkPlan,
+    context: &GoalPlanConversionContext,
 ) -> GoalPlanArtifact {
     let mut items = GoalPlanPersistentItems::default();
     for item in &plan.impact.items {
@@ -458,7 +504,18 @@ pub fn goal_plan_from_work_plan(
         .verification
         .completion
         .iter()
-        .map(CompletionCheck::render)
+        .map(|check| match check {
+            CompletionCheck::GoalPlanCheck { range, .. } => CompletionCheck::GoalPlanCheck {
+                plan_path: context.plan_output_path.clone(),
+                range: context.range.clone().unwrap_or_else(|| range.clone()),
+            }
+            .render(),
+            CompletionCheck::TestSelection { .. } => CompletionCheck::TestSelection {
+                plan_path: context.plan_output_path.clone(),
+            }
+            .render(),
+            other => other.render(),
+        })
         .collect();
     let mut required_tests = BTreeMap::<String, Vec<TraceReference>>::new();
     for impact in &plan.impact.tests {
@@ -482,26 +539,26 @@ pub fn goal_plan_from_work_plan(
         .map(|diagnostic| format!("{}: {}", diagnostic.rule, diagnostic.reason))
         .collect();
     GoalPlanArtifact {
-        version: 2,
+        version: 1,
         kind: "syu.goal_plan".to_string(),
-        request_path: Some(request_path.to_string()),
+        request_path: context.source_path.clone(),
         request: Some(request.to_string()),
         classification: Some(format!("{:?}", plan.intent.kind).to_lowercase()),
         work: Some(plan.clone()),
         source: GoalPlanSource {
-            mode: GoalPlanSourceMode::RequestDriven,
-            request_artifact: Some(request_path.to_string()),
+            mode: context.source_mode,
+            request_artifact: context.source_path.clone(),
             classification: Some(format!("{:?}", plan.intent.kind).to_lowercase()),
-            range: None,
+            range: context.range.clone(),
             confidence: Some(if plan.executable {
-                GoalPlanConfidence::High
+                context.confidence
             } else {
                 GoalPlanConfidence::Low
             }),
             evidence: Some(GoalPlanSourceEvidence::default()),
         },
         goal: GoalPlanGoal {
-            id: "GOAL-WORK-001".to_string(),
+            id: context.goal_id.clone(),
             title: format!("Plan {:?} work", plan.intent.kind),
             statement: request.to_string(),
             non_goals: vec!["Do not create a fifth persistent spec layer".to_string()],
@@ -514,6 +571,9 @@ pub fn goal_plan_from_work_plan(
                 !matches!(
                     mutation,
                     WorkMutation::ModifyRepository { .. }
+                        | WorkMutation::CreateRepository { .. }
+                        | WorkMutation::DeleteRepository { .. }
+                        | WorkMutation::MoveRepository { .. }
                         | WorkMutation::UpdateTrace { .. }
                         | WorkMutation::RepairDiagnostic { .. }
                 )
@@ -526,7 +586,7 @@ pub fn goal_plan_from_work_plan(
         },
         implementation_plan: GoalPlanImplementationPlan {
             confidence: Some(if plan.executable {
-                GoalPlanConfidence::High
+                context.confidence
             } else {
                 GoalPlanConfidence::Low
             }),
@@ -542,7 +602,7 @@ pub fn goal_plan_from_work_plan(
         },
         test_plan: GoalPlanTestPlan {
             selection_mode: GoalPlanSelectionMode::Affected,
-            confidence: Some(GoalPlanConfidence::High),
+            confidence: Some(context.confidence),
             required_tests,
             suggested_tests: BTreeMap::new(),
         },
@@ -743,6 +803,16 @@ fn goal_check() -> CompletionCheck {
 pub fn plan_work(mut input: WorkPlanningInput) -> WorkPlan {
     input.seeds.sort_by(|a, b| a.id.cmp(&b.id));
     input.seeds.dedup_by(|a, b| a.id == b.id);
+    input.search_candidates.sort_by(|a, b| a.id.cmp(&b.id));
+    input.search_candidates.dedup_by(|a, b| a.id == b.id);
+    if input.seeds.is_empty()
+        && let Some(candidate) = input.search_candidates.first().cloned()
+    {
+        input.seeds.push(WorkSeed {
+            source_role: SourceRole::Inferred,
+            ..candidate
+        });
+    }
     let mut intent = resolve_work_intent(
         &input.request,
         input.explicit_kind,
@@ -758,7 +828,7 @@ pub fn plan_work(mut input: WorkPlanningInput) -> WorkPlan {
         .map(|node| (node.id.clone(), node))
         .collect();
     let mut impact = WorkImpact::default();
-    let mut visited = BTreeMap::<String, SourceRole>::new();
+    let mut visited = BTreeMap::<String, TraversalVisit>::new();
     let mut queue = VecDeque::new();
     for seed in &intent.seeds {
         if let Some(node) = nodes.get(&seed.id) {
@@ -785,8 +855,15 @@ pub fn plan_work(mut input: WorkPlanningInput) -> WorkPlan {
                 );
                 continue;
             }
-            visited.insert(seed.id.clone(), seed.source_role);
-            queue.push_back(seed.id.clone());
+            let state = TraversalVisit {
+                source_role: seed.source_role,
+                seed_surface: seed.surface,
+                arrived_from: None,
+                depth: 0,
+                branch_root: seed.id.clone(),
+            };
+            visited.insert(seed.id.clone(), state.clone());
+            queue.push_back((seed.id.clone(), state));
         } else if intent.operation != WorkOperation::Create {
             blocker(
                 &mut impact,
@@ -806,17 +883,33 @@ pub fn plan_work(mut input: WorkPlanningInput) -> WorkPlan {
     }
     for candidate in &input.search_candidates {
         if nodes.contains_key(&candidate.id) {
-            visited
+            let entry = visited
                 .entry(candidate.id.clone())
-                .or_insert(SourceRole::SearchCandidate);
+                .or_insert(TraversalVisit {
+                    source_role: SourceRole::SearchCandidate,
+                    seed_surface: candidate.surface,
+                    arrived_from: None,
+                    depth: 0,
+                    branch_root: candidate.id.clone(),
+                });
+            if entry.source_role == SourceRole::SearchCandidate {
+                queue.push_back((candidate.id.clone(), entry.clone()));
+            }
         }
     }
-    while let Some(id) = queue.pop_front() {
+    while let Some((id, state)) = queue.pop_front() {
         let Some(node) = nodes.get(&id) else { continue };
-        for linked in neighbors(intent.kind, node, &nodes) {
+        for linked in neighbors(intent.kind, &state, node, &nodes) {
             if !visited.contains_key(&linked) {
-                visited.insert(linked.clone(), SourceRole::Inferred);
-                queue.push_back(linked.clone());
+                let next = TraversalVisit {
+                    source_role: SourceRole::Inferred,
+                    seed_surface: state.seed_surface,
+                    arrived_from: Some(node.surface),
+                    depth: state.depth + 1,
+                    branch_root: state.branch_root.clone(),
+                };
+                visited.insert(linked.clone(), next.clone());
+                queue.push_back((linked.clone(), next));
             }
             impact.edges.push(ImpactedEdge {
                 from: id.clone(),
@@ -826,17 +919,17 @@ pub fn plan_work(mut input: WorkPlanningInput) -> WorkPlan {
             });
         }
     }
-    for (id, source_role) in &visited {
+    for (id, visit) in &visited {
         let node = &nodes[id];
-        let impact_role = item_role(intent.kind, node.surface, *source_role);
+        let impact_role = item_role(intent.kind, node.surface, visit);
         impact.items.push(ImpactedItem {
             id: id.clone(),
             surface: node.surface,
-            source_role: *source_role,
+            source_role: visit.source_role,
             impact_role,
             reason: role_reason(intent.kind, impact_role).to_string(),
         });
-        add_owned_impacts(intent.kind, node, &mut impact);
+        add_owned_impacts(intent.kind, node, visit, &mut impact);
     }
     for change in input.repository_changes {
         impact.repository.push(RepositoryImpact {
@@ -862,23 +955,9 @@ pub fn plan_work(mut input: WorkPlanningInput) -> WorkPlan {
             reason: diagnostic.message,
         });
     }
-    if intent.kind == WorkKind::Govern {
-        let features = impact
-            .items
-            .iter()
-            .filter(|item| item.surface == WorkSurface::Feature)
-            .map(|item| item.id.clone())
-            .collect::<Vec<_>>();
-        if features.len() > 1 {
-            impact.split_suggestions.push(GoalSplitSuggestion {
-                reason: "governance work affects independent downstream feature branches"
-                    .to_string(),
-                item_ids: features,
-            });
-        }
-    }
+    validate_operation_compatibility(&intent, &mut impact);
     validate_operation_payload(&intent, &mut impact);
-    let mut mutations = build_mutations(&intent, &nodes, &impact);
+    let mut mutations = build_mutations(&intent, &impact);
     if profile.mutation_forbidden || intent.mode == WorkMode::ReviewOnly {
         mutations.clear();
     }
@@ -902,6 +981,15 @@ pub fn plan_work(mut input: WorkPlanningInput) -> WorkPlan {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TraversalVisit {
+    source_role: SourceRole,
+    seed_surface: WorkSurface,
+    arrived_from: Option<WorkSurface>,
+    depth: usize,
+    branch_root: String,
+}
+
 fn validate_operation_payload(intent: &WorkIntent, impact: &mut WorkImpact) {
     let missing = match intent.operation {
         WorkOperation::Rename | WorkOperation::Supersede
@@ -912,11 +1000,17 @@ fn validate_operation_payload(intent: &WorkIntent, impact: &mut WorkImpact) {
         WorkOperation::Move if intent.constraints.destination_document.is_none() => {
             Some("destination_document")
         }
-        WorkOperation::Split if intent.constraints.related_item_ids.is_empty() => {
-            Some("related_item_ids")
+        WorkOperation::Split
+            if intent.constraints.related_item_ids.is_empty()
+                || intent.constraints.redistribution.is_empty() =>
+        {
+            Some("related_item_ids and redistribution")
         }
-        WorkOperation::Relink if intent.constraints.related_item_ids.is_empty() => {
-            Some("related_item_ids")
+        WorkOperation::Relink
+            if intent.constraints.remove_edges.is_empty()
+                && intent.constraints.add_edges.is_empty() =>
+        {
+            Some("remove_edges or add_edges")
         }
         WorkOperation::Merge
             if intent.constraints.target_id.is_none()
@@ -941,52 +1035,52 @@ fn validate_operation_payload(intent: &WorkIntent, impact: &mut WorkImpact) {
     }
 }
 
+fn validate_operation_compatibility(intent: &WorkIntent, impact: &mut WorkImpact) {
+    use WorkKind as K;
+    use WorkOperation as O;
+    let allowed = match intent.kind {
+        K::Deliver | K::Specify | K::Verify | K::Maintain => {
+            matches!(intent.operation, O::Create | O::Modify | O::Delete)
+        }
+        K::Govern => matches!(intent.operation, O::Create | O::Modify | O::Supersede),
+        K::Restructure => matches!(
+            intent.operation,
+            O::Rename | O::Move | O::Relink | O::Split | O::Merge | O::Promote | O::Demote
+        ),
+        K::Repair => matches!(intent.operation, O::Modify | O::Relink | O::Validate),
+        K::Retire => matches!(intent.operation, O::Delete | O::Supersede),
+        K::Review => intent.operation == O::Validate,
+        K::Adopt => matches!(intent.operation, O::Create | O::Modify | O::Move),
+    };
+    if !allowed {
+        blocker(
+            impact,
+            "WORK_OPERATION_INCOMPATIBLE",
+            &format!("{:?}+{:?}", intent.kind, intent.operation),
+            "WorkKind does not support the requested operation",
+        );
+    }
+}
+
 fn neighbors(
     kind: WorkKind,
+    state: &TraversalVisit,
     node: &WorkGraphNode,
     nodes: &BTreeMap<String, WorkGraphNode>,
 ) -> Vec<String> {
-    let allowed = |from: WorkSurface, to: WorkSurface| match kind {
-        WorkKind::Deliver => matches!(
-            (from, to),
-            (WorkSurface::Feature, WorkSurface::Requirement)
-                | (WorkSurface::Requirement, WorkSurface::Policy)
-                | (WorkSurface::Policy, WorkSurface::Philosophy)
-        ),
-        WorkKind::Specify => matches!(
-            (from, to),
-            (WorkSurface::Requirement, WorkSurface::Feature)
-                | (WorkSurface::Feature, WorkSurface::Requirement)
-                | (WorkSurface::Requirement, WorkSurface::Policy)
-                | (WorkSurface::Policy, WorkSurface::Philosophy)
-        ),
-        WorkKind::Govern => matches!(
-            (from, to),
-            (WorkSurface::Philosophy, WorkSurface::Policy)
-                | (WorkSurface::Policy, WorkSurface::Requirement)
-                | (WorkSurface::Requirement, WorkSurface::Feature)
-        ),
-        WorkKind::Restructure => true,
-        WorkKind::Retire => true,
-        _ => matches!(
-            (from, to),
-            (WorkSurface::Feature, WorkSurface::Requirement)
-                | (WorkSurface::Requirement, WorkSurface::Policy)
-                | (WorkSurface::Policy, WorkSurface::Philosophy)
-        ),
-    };
     let mut result = node
         .linked_ids
         .iter()
         .filter(|id| {
             nodes
                 .get(*id)
-                .is_some_and(|target| allowed(node.surface, target.surface))
+                .is_some_and(|target| traversal_allows(kind, state, node, target))
         })
         .cloned()
         .collect::<Vec<_>>();
     for candidate in nodes.values() {
-        if candidate.linked_ids.contains(&node.id) && allowed(node.surface, candidate.surface) {
+        if candidate.linked_ids.contains(&node.id) && traversal_allows(kind, state, node, candidate)
+        {
             result.push(candidate.id.clone());
         }
     }
@@ -995,19 +1089,28 @@ fn neighbors(
     result
 }
 
-fn item_role(kind: WorkKind, surface: WorkSurface, source: SourceRole) -> ImpactRole {
-    if source == SourceRole::SearchCandidate {
+fn item_role(kind: WorkKind, surface: WorkSurface, visit: &TraversalVisit) -> ImpactRole {
+    if visit.source_role == SourceRole::SearchCandidate {
         return ImpactRole::Context;
     }
     match kind {
-        WorkKind::Specify if matches!(surface, WorkSurface::Requirement | WorkSurface::Feature) => {
+        WorkKind::Specify if visit.source_role == SourceRole::Seed => ImpactRole::DirectChange,
+        WorkKind::Specify
+            if visit.source_role == SourceRole::Inferred && surface == visit.seed_surface =>
+        {
             ImpactRole::DirectChange
+        }
+        WorkKind::Specify
+            if visit.seed_surface == WorkSurface::Requirement
+                && surface == WorkSurface::Feature =>
+        {
+            ImpactRole::FollowUp
         }
         WorkKind::Govern if matches!(surface, WorkSurface::Philosophy | WorkSurface::Policy) => {
             ImpactRole::DirectChange
         }
         WorkKind::Govern => ImpactRole::FollowUp,
-        WorkKind::Restructure | WorkKind::Retire if source == SourceRole::Seed => {
+        WorkKind::Restructure | WorkKind::Retire if visit.source_role == SourceRole::Seed => {
             ImpactRole::DirectChange
         }
         WorkKind::Review
@@ -1020,12 +1123,13 @@ fn item_role(kind: WorkKind, surface: WorkSurface, source: SourceRole) -> Impact
     }
 }
 
-fn add_owned_impacts(kind: WorkKind, node: &WorkGraphNode, impact: &mut WorkImpact) {
-    let repository_role = if matches!(kind, WorkKind::Deliver | WorkKind::Retire) {
-        ImpactRole::DirectChange
-    } else {
-        ImpactRole::Context
-    };
+fn add_owned_impacts(
+    kind: WorkKind,
+    node: &WorkGraphNode,
+    visit: &TraversalVisit,
+    impact: &mut WorkImpact,
+) {
+    let repository_role = owned_repository_role(kind, visit, node.surface);
     for target in &node.implementations {
         impact.repository.push(RepositoryImpact {
             path: target.file.clone(),
@@ -1034,14 +1138,7 @@ fn add_owned_impacts(kind: WorkKind, node: &WorkGraphNode, impact: &mut WorkImpa
             reason: format!("owned by {}", node.id),
         });
     }
-    let test_role = if matches!(
-        kind,
-        WorkKind::Deliver | WorkKind::Verify | WorkKind::Retire
-    ) {
-        ImpactRole::DirectChange
-    } else {
-        ImpactRole::Context
-    };
+    let test_role = owned_test_role(kind, visit, node.surface);
     for target in &node.tests {
         impact.tests.push(TestImpact {
             target: target.clone(),
@@ -1051,11 +1148,7 @@ fn add_owned_impacts(kind: WorkKind, node: &WorkGraphNode, impact: &mut WorkImpa
     }
 }
 
-fn build_mutations(
-    intent: &WorkIntent,
-    nodes: &BTreeMap<String, WorkGraphNode>,
-    impact: &WorkImpact,
-) -> Vec<WorkMutation> {
+fn build_mutations(intent: &WorkIntent, impact: &WorkImpact) -> Vec<WorkMutation> {
     let direct = impact
         .items
         .iter()
@@ -1068,9 +1161,7 @@ fn build_mutations(
                 .repository
                 .iter()
                 .filter(|item| item.impact_role == ImpactRole::DirectChange)
-                .map(|item| WorkMutation::ModifyRepository {
-                    path: item.path.clone(),
-                }),
+                .filter_map(|item| repository_mutation(intent.operation, &item.path, None)),
         );
         out.extend(
             impact
@@ -1089,13 +1180,21 @@ fn build_mutations(
                 .tests
                 .iter()
                 .filter(|item| item.impact_role == ImpactRole::DirectChange)
-                .map(|item| WorkMutation::ModifyRepository {
-                    path: item.target.file.clone(),
-                }),
+                .filter_map(|item| repository_mutation(intent.operation, &item.target.file, None)),
         );
         return out;
     }
     if intent.kind == WorkKind::Repair {
+        if intent.operation == WorkOperation::Relink {
+            out.push(WorkMutation::Relink {
+                remove: intent.constraints.remove_edges.clone(),
+                add: intent.constraints.add_edges.clone(),
+            });
+            return out;
+        }
+        if intent.operation == WorkOperation::Validate {
+            return out;
+        }
         out.extend(
             impact
                 .diagnostics
@@ -1114,9 +1213,7 @@ fn build_mutations(
                 .repository
                 .iter()
                 .filter(|item| item.impact_role == ImpactRole::DirectChange)
-                .map(|item| WorkMutation::ModifyRepository {
-                    path: item.path.clone(),
-                }),
+                .filter_map(|item| repository_mutation(intent.operation, &item.path, None)),
         );
         return out;
     }
@@ -1126,8 +1223,24 @@ fn build_mutations(
                 .repository
                 .iter()
                 .filter(|item| item.impact_role == ImpactRole::DirectChange)
-                .map(|item| WorkMutation::ModifyConfig {
-                    path: item.path.clone(),
+                .filter_map(|item| match intent.operation {
+                    WorkOperation::Create => Some(WorkMutation::CreateConfig {
+                        path: item.path.clone(),
+                    }),
+                    WorkOperation::Modify => Some(WorkMutation::ModifyConfig {
+                        path: item.path.clone(),
+                    }),
+                    WorkOperation::Move => {
+                        intent
+                            .constraints
+                            .destination_document
+                            .as_ref()
+                            .map(|destination| WorkMutation::MoveConfig {
+                                path: item.path.clone(),
+                                destination: destination.clone(),
+                            })
+                    }
+                    _ => None,
                 }),
         );
         return out;
@@ -1166,27 +1279,8 @@ fn build_mutations(
                 }
             }
             WorkOperation::Relink => out.push(WorkMutation::Relink {
-                remove: nodes
-                    .get(&item.id)
-                    .map(|node| {
-                        node.linked_ids
-                            .iter()
-                            .map(|to| SpecEdge {
-                                from: item.id.clone(),
-                                to: to.clone(),
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                add: intent
-                    .constraints
-                    .related_item_ids
-                    .iter()
-                    .map(|to| SpecEdge {
-                        from: item.id.clone(),
-                        to: to.clone(),
-                    })
-                    .collect(),
+                remove: intent.constraints.remove_edges.clone(),
+                add: intent.constraints.add_edges.clone(),
             }),
             WorkOperation::Split => {
                 let targets = intent
@@ -1200,27 +1294,10 @@ fn build_mutations(
                         })
                     })
                     .collect::<Vec<_>>();
-                let redistribution = nodes
-                    .get(&item.id)
-                    .into_iter()
-                    .flat_map(|node| node.linked_ids.iter())
-                    .enumerate()
-                    .filter_map(|(index, linked)| {
-                        targets
-                            .get(index % targets.len().max(1))
-                            .map(|target| RelationshipMove {
-                                relationship: SpecEdge {
-                                    from: item.id.clone(),
-                                    to: linked.clone(),
-                                },
-                                target_id: target.id.clone(),
-                            })
-                    })
-                    .collect();
                 out.push(WorkMutation::SplitItem {
                     source: item.id.clone(),
                     targets,
-                    redistribution,
+                    redistribution: intent.constraints.redistribution.clone(),
                 });
             }
             WorkOperation::Merge => out.push(WorkMutation::MergeItems {
@@ -1254,6 +1331,112 @@ fn build_mutations(
         }
     }
     out
+}
+
+fn traversal_allows(
+    kind: WorkKind,
+    state: &TraversalVisit,
+    node: &WorkGraphNode,
+    target: &WorkGraphNode,
+) -> bool {
+    use WorkKind as K;
+    use WorkSurface as S;
+
+    match kind {
+        K::Deliver => matches!(
+            (
+                state.seed_surface,
+                node.surface,
+                target.surface,
+                state.depth,
+            ),
+            (S::Requirement, S::Requirement, S::Feature, 0)
+                | (S::Requirement, S::Requirement, S::Policy, _)
+                | (S::Requirement, S::Policy, S::Philosophy, _)
+                | (S::Feature, S::Feature, S::Requirement, 0)
+                | (S::Feature, S::Requirement, S::Policy, _)
+                | (S::Feature, S::Policy, S::Philosophy, _)
+                | (S::Policy, S::Policy, S::Philosophy, _)
+                | (S::Policy, S::Policy, S::Requirement, _)
+                | (S::Policy, S::Requirement, S::Feature, 0)
+        ),
+        K::Specify => matches!(
+            (
+                state.seed_surface,
+                node.surface,
+                target.surface,
+                state.depth,
+            ),
+            (S::Requirement, S::Requirement, S::Feature, 0)
+                | (S::Requirement, S::Requirement, S::Policy, _)
+                | (S::Requirement, S::Policy, S::Philosophy, _)
+                | (S::Feature, S::Feature, S::Requirement, 0)
+                | (S::Feature, S::Requirement, S::Policy, _)
+                | (S::Feature, S::Policy, S::Philosophy, _)
+        ),
+        K::Govern => matches!(
+            (node.surface, target.surface),
+            (S::Philosophy, S::Policy) | (S::Policy, S::Requirement) | (S::Requirement, S::Feature)
+        ),
+        K::Restructure | K::Retire => state.arrived_from != Some(target.surface),
+        _ => matches!(
+            (node.surface, target.surface),
+            (S::Feature, S::Requirement) | (S::Requirement, S::Policy) | (S::Policy, S::Philosophy)
+        ),
+    }
+}
+
+fn owned_repository_role(
+    kind: WorkKind,
+    visit: &TraversalVisit,
+    surface: WorkSurface,
+) -> ImpactRole {
+    if visit.source_role == SourceRole::SearchCandidate {
+        return ImpactRole::Context;
+    }
+    if matches!(kind, WorkKind::Deliver | WorkKind::Retire) && surface == WorkSurface::Feature {
+        ImpactRole::DirectChange
+    } else {
+        ImpactRole::Context
+    }
+}
+
+fn owned_test_role(kind: WorkKind, visit: &TraversalVisit, surface: WorkSurface) -> ImpactRole {
+    if visit.source_role == SourceRole::SearchCandidate {
+        return ImpactRole::Context;
+    }
+    if matches!(
+        kind,
+        WorkKind::Deliver | WorkKind::Verify | WorkKind::Retire
+    ) && surface == WorkSurface::Requirement
+    {
+        ImpactRole::DirectChange
+    } else {
+        ImpactRole::Context
+    }
+}
+
+fn repository_mutation(
+    operation: WorkOperation,
+    path: &str,
+    destination: Option<&str>,
+) -> Option<WorkMutation> {
+    match operation {
+        WorkOperation::Create => Some(WorkMutation::CreateRepository {
+            path: path.to_string(),
+        }),
+        WorkOperation::Modify => Some(WorkMutation::ModifyRepository {
+            path: path.to_string(),
+        }),
+        WorkOperation::Delete => Some(WorkMutation::DeleteRepository {
+            path: path.to_string(),
+        }),
+        WorkOperation::Move => destination.map(|destination| WorkMutation::MoveRepository {
+            path: path.to_string(),
+            destination: destination.to_string(),
+        }),
+        _ => None,
+    }
 }
 
 fn validate_contract(
@@ -1340,12 +1523,17 @@ fn mutation_surfaces(mutations: &[WorkMutation]) -> BTreeSet<WorkSurface> {
             | WorkMutation::SplitItem { source: id, .. }
             | WorkMutation::ChangeItemKind { id, .. }
             | WorkMutation::Supersede { old: id, .. } => surface_from_id(id),
-            WorkMutation::ModifyRepository { .. } => Some(WorkSurface::Implementation),
+            WorkMutation::ModifyRepository { .. }
+            | WorkMutation::CreateRepository { .. }
+            | WorkMutation::DeleteRepository { .. }
+            | WorkMutation::MoveRepository { .. } => Some(WorkSurface::Implementation),
             WorkMutation::UpdateTrace { .. } | WorkMutation::Relink { .. } => {
                 Some(WorkSurface::Trace)
             }
             WorkMutation::RepairDiagnostic { .. } => Some(WorkSurface::Trace),
-            WorkMutation::ModifyConfig { .. } => Some(WorkSurface::Config),
+            WorkMutation::ModifyConfig { .. }
+            | WorkMutation::CreateConfig { .. }
+            | WorkMutation::MoveConfig { .. } => Some(WorkSurface::Config),
             WorkMutation::MergeItems { target, .. } => surface_from_id(target),
         })
         .collect()
@@ -1722,6 +1910,236 @@ mod tests {
                 .any(|m| matches!(m, WorkMutation::ModifyItem { .. }))
         );
     }
+
+    #[test]
+    fn deliver_requirement_seed_reaches_feature_without_siblings() {
+        let mut requirement = node("REQ-1", WorkSurface::Requirement, &["FEAT-A", "POL-1"]);
+        requirement.tests.push(TraceTarget {
+            language: "rust".into(),
+            file: "tests/req.rs".into(),
+            symbols: vec!["req_behavior".into()],
+        });
+        let mut feature_a = node("FEAT-A", WorkSurface::Feature, &["REQ-1"]);
+        feature_a.implementations.push(TraceTarget {
+            language: "rust".into(),
+            file: "src/a.rs".into(),
+            symbols: vec!["run_a".into()],
+        });
+        let mut feature_b = node("FEAT-B", WorkSurface::Feature, &["REQ-2"]);
+        feature_b.implementations.push(TraceTarget {
+            language: "rust".into(),
+            file: "src/b.rs".into(),
+            symbols: vec!["run_b".into()],
+        });
+        let plan = plan_work(WorkPlanningInput {
+            request: "deliver REQ-1".into(),
+            explicit_kind: Some(WorkKind::Deliver),
+            seeds: vec![seed("REQ-1", WorkSurface::Requirement)],
+            nodes: vec![
+                requirement,
+                feature_a,
+                feature_b,
+                node("POL-1", WorkSurface::Policy, &["PHIL-1"]),
+                node("PHIL-1", WorkSurface::Philosophy, &[]),
+            ],
+            ..Default::default()
+        });
+        assert!(plan.executable, "{:?}", plan.impact.diagnostics);
+        assert!(
+            plan.impact
+                .repository
+                .iter()
+                .any(|item| item.path == "src/a.rs" && item.impact_role == ImpactRole::DirectChange)
+        );
+        assert!(
+            !plan
+                .impact
+                .repository
+                .iter()
+                .any(|item| item.path == "src/b.rs" && item.impact_role == ImpactRole::DirectChange)
+        );
+    }
+
+    #[test]
+    fn specify_feature_seed_excludes_sibling_features() {
+        let plan = plan_work(WorkPlanningInput {
+            request: "specify FEAT-A".into(),
+            explicit_kind: Some(WorkKind::Specify),
+            seeds: vec![seed("FEAT-A", WorkSurface::Feature)],
+            nodes: vec![
+                node("FEAT-A", WorkSurface::Feature, &["REQ-1"]),
+                node(
+                    "REQ-1",
+                    WorkSurface::Requirement,
+                    &["FEAT-A", "FEAT-B", "POL-1"],
+                ),
+                node("FEAT-B", WorkSurface::Feature, &["REQ-1"]),
+                node("POL-1", WorkSurface::Policy, &[]),
+            ],
+            ..Default::default()
+        });
+        assert!(plan.executable, "{:?}", plan.impact.diagnostics);
+        assert!(
+            plan.impact
+                .items
+                .iter()
+                .any(|item| item.id == "FEAT-A" && item.impact_role == ImpactRole::DirectChange)
+        );
+        assert!(!plan.impact.items.iter().any(|item| item.id == "FEAT-B"));
+    }
+
+    #[test]
+    fn specify_requirement_seed_marks_linked_features_follow_up() {
+        let plan = plan_work(WorkPlanningInput {
+            request: "specify REQ-1".into(),
+            explicit_kind: Some(WorkKind::Specify),
+            seeds: vec![seed("REQ-1", WorkSurface::Requirement)],
+            nodes: vec![
+                node("REQ-1", WorkSurface::Requirement, &["FEAT-A", "POL-1"]),
+                node("FEAT-A", WorkSurface::Feature, &["REQ-1"]),
+                node("POL-1", WorkSurface::Policy, &[]),
+            ],
+            ..Default::default()
+        });
+        assert!(plan.executable, "{:?}", plan.impact.diagnostics);
+        assert!(
+            plan.impact
+                .items
+                .iter()
+                .any(|item| item.id == "REQ-1" && item.impact_role == ImpactRole::DirectChange)
+        );
+        assert!(
+            plan.impact
+                .items
+                .iter()
+                .any(|item| item.id == "FEAT-A" && item.impact_role == ImpactRole::FollowUp)
+        );
+    }
+
+    #[test]
+    fn deliver_delete_maps_to_repository_delete() {
+        let mut feature = node("FEAT-1", WorkSurface::Feature, &[]);
+        feature.implementations.push(TraceTarget {
+            language: "rust".into(),
+            file: "src/delete_me.rs".into(),
+            symbols: vec!["delete_me".into()],
+        });
+        let plan = plan_work(WorkPlanningInput {
+            request: "remove FEAT-1".into(),
+            explicit_kind: Some(WorkKind::Deliver),
+            explicit_operation: Some(WorkOperation::Delete),
+            seeds: vec![seed("FEAT-1", WorkSurface::Feature)],
+            nodes: vec![feature],
+            ..Default::default()
+        });
+        assert!(plan.executable, "{:?}", plan.impact.diagnostics);
+        assert!(plan.mutations.iter().any(
+            |mutation| matches!(mutation, WorkMutation::DeleteRepository { path } if path == "src/delete_me.rs")
+        ));
+    }
+
+    #[test]
+    fn verify_create_maps_to_repository_create() {
+        let mut requirement = node("REQ-1", WorkSurface::Requirement, &[]);
+        requirement.tests.push(TraceTarget {
+            language: "rust".into(),
+            file: "tests/new_case.rs".into(),
+            symbols: vec!["new_case".into()],
+        });
+        let plan = plan_work(WorkPlanningInput {
+            request: "add tests for REQ-1".into(),
+            explicit_kind: Some(WorkKind::Verify),
+            explicit_operation: Some(WorkOperation::Create),
+            seeds: vec![seed("REQ-1", WorkSurface::Requirement)],
+            nodes: vec![requirement],
+            ..Default::default()
+        });
+        assert!(plan.executable, "{:?}", plan.impact.diagnostics);
+        assert!(plan.mutations.iter().any(
+            |mutation| matches!(mutation, WorkMutation::CreateRepository { path } if path == "tests/new_case.rs")
+        ));
+    }
+
+    #[test]
+    fn relink_requires_exact_edge_payload() {
+        let plan = plan_work(WorkPlanningInput {
+            request: "relink FEAT-1".into(),
+            explicit_kind: Some(WorkKind::Restructure),
+            explicit_operation: Some(WorkOperation::Relink),
+            seeds: vec![seed("FEAT-1", WorkSurface::Feature)],
+            nodes: vec![node("FEAT-1", WorkSurface::Feature, &["REQ-1"])],
+            constraints: WorkConstraints {
+                remove_edges: vec![SpecEdge {
+                    from: "FEAT-1".into(),
+                    to: "REQ-OLD".into(),
+                }],
+                add_edges: vec![SpecEdge {
+                    from: "FEAT-1".into(),
+                    to: "REQ-NEW".into(),
+                }],
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        assert!(plan.executable, "{:?}", plan.impact.diagnostics);
+        assert!(plan.mutations.iter().any(|mutation| matches!(
+            mutation,
+            WorkMutation::Relink { remove, add }
+                if remove == &vec![SpecEdge { from: "FEAT-1".into(), to: "REQ-OLD".into() }]
+                    && add == &vec![SpecEdge { from: "FEAT-1".into(), to: "REQ-NEW".into() }]
+        )));
+    }
+
+    #[test]
+    fn split_without_redistribution_is_blocked() {
+        let plan = plan_work(WorkPlanningInput {
+            request: "split FEAT-1".into(),
+            explicit_kind: Some(WorkKind::Restructure),
+            explicit_operation: Some(WorkOperation::Split),
+            seeds: vec![seed("FEAT-1", WorkSurface::Feature)],
+            nodes: vec![node("FEAT-1", WorkSurface::Feature, &["REQ-1"])],
+            constraints: WorkConstraints {
+                related_item_ids: vec!["FEAT-1A".into(), "FEAT-1B".into()],
+                ..Default::default()
+            },
+            ..Default::default()
+        });
+        assert!(!plan.executable);
+        assert!(plan.impact.diagnostics.iter().any(|diagnostic| {
+            diagnostic.rule == "WORK_OPERATION_PAYLOAD"
+                && diagnostic.subject == "related_item_ids and redistribution"
+        }));
+    }
+
+    #[test]
+    fn natural_language_request_promotes_best_search_candidate() {
+        let mut feature = node("FEAT-TRACE-001", WorkSurface::Feature, &["REQ-TRACE-001"]);
+        feature.implementations.push(TraceTarget {
+            language: "rust".into(),
+            file: "src/trace.rs".into(),
+            symbols: vec!["lookup".into()],
+        });
+        let plan = plan_work(WorkPlanningInput {
+            request: "implement a simpler trace lookup command".into(),
+            explicit_kind: Some(WorkKind::Deliver),
+            search_candidates: vec![WorkSeed {
+                id: "FEAT-TRACE-001".into(),
+                surface: WorkSurface::Feature,
+                source_role: SourceRole::SearchCandidate,
+            }],
+            nodes: vec![
+                feature,
+                node("REQ-TRACE-001", WorkSurface::Requirement, &[]),
+            ],
+            ..Default::default()
+        });
+        assert!(plan.executable, "{:?}", plan.impact.diagnostics);
+        assert_eq!(plan.intent.seeds.len(), 1);
+        assert_eq!(plan.intent.seeds[0].source_role, SourceRole::Inferred);
+        assert!(plan.impact.repository.iter().any(
+            |item| item.path == "src/trace.rs" && item.impact_role == ImpactRole::DirectChange
+        ));
+    }
     #[test]
     fn unknown_seed_and_missing_contract_are_blockers() {
         let plan = plan_work(WorkPlanningInput {
@@ -1807,8 +2225,12 @@ mod tests {
                 WorkPlanningInput {
                     request: "restructure".into(),
                     explicit_kind: Some(WorkKind::Restructure),
-                    explicit_operation: Some(WorkOperation::Modify),
+                    explicit_operation: Some(WorkOperation::Rename),
                     seeds: vec![seed("FEAT-1", WorkSurface::Feature)],
+                    constraints: WorkConstraints {
+                        target_id: Some("FEAT-2".into()),
+                        ..Default::default()
+                    },
                     nodes: vec![node("FEAT-1", WorkSurface::Feature, &[])],
                     ..Default::default()
                 },

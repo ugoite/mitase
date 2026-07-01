@@ -30,12 +30,13 @@ use syu_core::{
 };
 use syu_domain::Issue;
 use syu_task_model::{
-    ClassificationOutcome, GoalPlanArtifact, GoalPlanCheckReport, RequestArtifact,
-    RequestClassification, ScaffoldAction, ScaffoldPlan, ScaffoldUpdate, ScaffoldUpdateKind,
-    ScopeFeatureCandidate, ScopeOutcome, ScopeSignals, SearchResult, SourceRole,
-    TaskTestSelectionCommand, TaskTestSelectionEscalation, TaskTestSelectionPlan, TraceTarget,
-    WorkConstraints, WorkGraphNode, WorkKind, WorkMode, WorkOperation, WorkPlan, WorkPlanningInput,
-    WorkSeed, WorkSurface, goal_plan_from_work_plan, plan_work,
+    ClassificationOutcome, GoalPlanArtifact, GoalPlanCheckReport, GoalPlanConfidence,
+    GoalPlanConversionContext, GoalPlanSourceMode, RequestArtifact, RequestClassification,
+    ScaffoldAction, ScaffoldPlan, ScaffoldUpdate, ScaffoldUpdateKind, ScopeFeatureCandidate,
+    ScopeOutcome, ScopeSignals, SearchResult, SourceRole, TaskTestSelectionCommand,
+    TaskTestSelectionEscalation, TaskTestSelectionPlan, TraceTarget, WorkConstraints,
+    WorkGraphNode, WorkKind, WorkMode, WorkOperation, WorkPlan, WorkPlanningInput, WorkSeed,
+    WorkSurface, goal_plan_from_work_plan, plan_work,
 };
 use tokio::{
     sync::{RwLock, broadcast, mpsc},
@@ -736,6 +737,10 @@ pub struct RequestPlanRequest {
     pub request: RequestArtifact,
     #[serde(default)]
     pub request_path: Option<String>,
+    #[serde(default)]
+    pub goal_id: Option<String>,
+    #[serde(default)]
+    pub plan_output_path: Option<String>,
     #[serde(default)]
     pub kind: Option<WorkKind>,
     #[serde(default)]
@@ -1491,72 +1496,69 @@ async fn classify_request(
     server: &WorkbenchServer,
     request: &RequestArtifact,
 ) -> ClassificationOutcome {
-    let explicit_items = search_request_items(server, request).await;
-    let classification = if request.request.to_ascii_lowercase().contains("delete")
-        || request.request.to_ascii_lowercase().contains("remove")
-    {
-        RequestClassification::Delete
-    } else if request.request.to_ascii_lowercase().contains("update")
-        || request.request.to_ascii_lowercase().contains("change")
-        || request.request.to_ascii_lowercase().contains("replace")
-    {
-        RequestClassification::Change
-    } else {
-        RequestClassification::Create
-    };
+    let plan = shared_work_plan_input(
+        server,
+        request,
+        None,
+        None,
+        None,
+        WorkConstraints::default(),
+    )
+    .await;
+    let explicit_items = explicit_request_items(server, request).await;
+    let related_items = search_request_items(server, request).await;
     ClassificationOutcome {
-        classification,
+        classification: request_classification_from_work_plan(&plan),
         reasons: vec![format!(
-            "classified from request text as {classification:?}"
+            "shared planner resolved {:?} + {:?}",
+            plan.intent.kind, plan.intent.operation
         )],
-        explicit_items: explicit_items.clone(),
-        related_items: explicit_items,
+        explicit_items,
+        related_items,
         request: request.request.clone(),
         context: request.context.clone(),
     }
 }
 
 async fn scope_request(server: &WorkbenchServer, request: &RequestArtifact) -> ScopeOutcome {
+    let plan = shared_work_plan_input(
+        server,
+        request,
+        None,
+        None,
+        None,
+        WorkConstraints::default(),
+    )
+    .await;
     let classification = classify_request(server, request).await;
-    let items = search_request_items(server, request).await;
-    let requirements = items
-        .iter()
-        .filter(|item| item.kind == "requirement")
-        .cloned()
-        .collect::<Vec<_>>();
-    let features = items
-        .iter()
-        .filter(|item| item.kind == "feature")
-        .map(|item| ScopeFeatureCandidate {
-            id: item.id.clone(),
-            title: item.title.clone(),
-            status: "implemented".to_string(),
-            linked_requirements: request.context.linked_ids.clone(),
-            planned_state_update: false,
-        })
-        .collect::<Vec<_>>();
-    let policies = items
-        .iter()
-        .filter(|item| item.kind == "policy")
-        .cloned()
-        .collect::<Vec<_>>();
-    let philosophies = items
-        .iter()
-        .filter(|item| item.kind == "philosophy")
-        .cloned()
-        .collect::<Vec<_>>();
+    let workspace = server.inner.browser_workspace.read().await;
+    let requirements = collect_scope_search_results(&workspace, &plan, WorkSurface::Requirement);
+    let policies = collect_scope_search_results(&workspace, &plan, WorkSurface::Policy);
+    let philosophies = collect_scope_search_results(&workspace, &plan, WorkSurface::Philosophy);
+    let features = collect_scope_feature_candidates(&workspace, &plan);
     ScopeOutcome {
         classification,
         signals: ScopeSignals {
-            policy_discussion: !policies.is_empty(),
-            philosophy_discussion: !philosophies.is_empty(),
-            planned_feature_updates: !features.is_empty(),
+            policy_discussion: !policies.is_empty()
+                || plan
+                    .intent
+                    .requested_surfaces
+                    .contains(&WorkSurface::Policy),
+            philosophy_discussion: !philosophies.is_empty()
+                || plan
+                    .intent
+                    .requested_surfaces
+                    .contains(&WorkSurface::Philosophy),
+            planned_feature_updates: features.iter().any(|feature| feature.planned_state_update),
         },
         requirements,
         features,
         policies,
         philosophies,
-        notes: vec!["derived from request text".to_string()],
+        notes: vec![format!(
+            "shared planner resolved {:?} + {:?}",
+            plan.intent.kind, plan.intent.operation
+        )],
     }
 }
 
@@ -1587,7 +1589,54 @@ async fn build_shared_goal_plan(
         .clone()
         .unwrap_or_else(|| "request.yaml".to_string());
     let plan = shared_work_plan_with_options(server, request).await;
-    goal_plan_from_work_plan(&request.request.request, &request_path, &plan)
+    let context = GoalPlanConversionContext {
+        goal_id: request
+            .goal_id
+            .clone()
+            .unwrap_or_else(|| default_goal_id_for_request(&request.request, &request_path)),
+        source_mode: GoalPlanSourceMode::RequestDriven,
+        source_path: Some(request_path),
+        plan_output_path: request
+            .plan_output_path
+            .clone()
+            .unwrap_or_else(|| ".syu/tasks/current.yaml".to_string()),
+        range: None,
+        confidence: if plan.executable {
+            GoalPlanConfidence::High
+        } else {
+            GoalPlanConfidence::Low
+        },
+    };
+    goal_plan_from_work_plan(&request.request.request, &plan, &context)
+}
+
+fn default_goal_id_for_request(request: &RequestArtifact, request_path: &str) -> String {
+    if let Some(id) = request.explicit_ids().first() {
+        return format!("GOAL-{id}");
+    }
+    let stem = FsPath::new(request_path)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("request");
+    let compact = stem
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_uppercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .split('-')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+    format!(
+        "GOAL-{}",
+        if compact.is_empty() { "WORK" } else { &compact }
+    )
 }
 
 #[cfg(test)]
@@ -1790,28 +1839,29 @@ async fn build_goal_check(
     }
 }
 
-async fn search_request_items(
+fn request_classification_from_work_plan(plan: &WorkPlan) -> RequestClassification {
+    match plan.intent.operation {
+        WorkOperation::Create => RequestClassification::Create,
+        WorkOperation::Delete | WorkOperation::Supersede => RequestClassification::Delete,
+        _ => RequestClassification::Change,
+    }
+}
+
+async fn explicit_request_items(
     server: &WorkbenchServer,
     request: &RequestArtifact,
 ) -> Vec<SearchResult> {
-    let query = request.request.to_ascii_lowercase();
+    let ids = request.explicit_ids();
+    if ids.is_empty() {
+        return Vec::new();
+    }
     let workspace = server.inner.browser_workspace.read().await;
-    let mut results = Vec::new();
+    let mut items = Vec::new();
     for section in &workspace.sections {
         for document in &section.documents {
             for item in &document.items {
-                if item.id.to_ascii_lowercase().contains(&query)
-                    || item.title.to_ascii_lowercase().contains(&query)
-                    || item
-                        .summary
-                        .as_ref()
-                        .is_some_and(|value| value.to_ascii_lowercase().contains(&query))
-                    || item
-                        .description
-                        .as_ref()
-                        .is_some_and(|value| value.to_ascii_lowercase().contains(&query))
-                {
-                    results.push(SearchResult {
+                if ids.iter().any(|id| id == &item.id) {
+                    items.push(SearchResult {
                         id: item.id.clone(),
                         kind: section.kind.label().to_string(),
                         title: item.title.clone(),
@@ -1820,7 +1870,174 @@ async fn search_request_items(
             }
         }
     }
+    items.sort_by(|a, b| a.id.cmp(&b.id));
+    items.dedup_by(|a, b| a.id == b.id);
+    items
+}
+
+fn collect_scope_search_results(
+    workspace: &BrowserWorkspace,
+    plan: &WorkPlan,
+    surface: WorkSurface,
+) -> Vec<SearchResult> {
+    let mut results = Vec::new();
+    for impacted in plan
+        .impact
+        .items
+        .iter()
+        .filter(|item| item.surface == surface)
+    {
+        if let Some(result) = browser_search_result(workspace, &impacted.id) {
+            results.push(result);
+        }
+    }
+    results.sort_by(|a, b| a.id.cmp(&b.id));
+    results.dedup_by(|a, b| a.id == b.id);
     results
+}
+
+fn collect_scope_feature_candidates(
+    workspace: &BrowserWorkspace,
+    plan: &WorkPlan,
+) -> Vec<ScopeFeatureCandidate> {
+    let mut features = Vec::new();
+    for impacted in plan
+        .impact
+        .items
+        .iter()
+        .filter(|item| item.surface == WorkSurface::Feature)
+    {
+        if let Some((status, linked_requirements, title)) =
+            browser_feature_details(workspace, &impacted.id)
+        {
+            features.push(ScopeFeatureCandidate {
+                id: impacted.id.clone(),
+                title,
+                planned_state_update: impacted.impact_role == syu_task_model::ImpactRole::FollowUp
+                    || status.eq_ignore_ascii_case("planned"),
+                status,
+                linked_requirements,
+            });
+        }
+    }
+    features.sort_by(|a, b| a.id.cmp(&b.id));
+    features.dedup_by(|a, b| a.id == b.id);
+    features
+}
+
+fn browser_search_result(workspace: &BrowserWorkspace, id: &str) -> Option<SearchResult> {
+    for section in &workspace.sections {
+        for document in &section.documents {
+            for item in &document.items {
+                if item.id == id {
+                    return Some(SearchResult {
+                        id: item.id.clone(),
+                        kind: section.kind.label().to_string(),
+                        title: item.title.clone(),
+                    });
+                }
+            }
+        }
+    }
+    None
+}
+
+fn browser_feature_details(
+    workspace: &BrowserWorkspace,
+    id: &str,
+) -> Option<(String, Vec<String>, String)> {
+    for section in &workspace.sections {
+        for document in &section.documents {
+            for item in &document.items {
+                if item.id == id {
+                    return Some((
+                        item.status
+                            .clone()
+                            .unwrap_or_else(|| "implemented".to_string()),
+                        item.linked_requirements.clone(),
+                        item.title.clone(),
+                    ));
+                }
+            }
+        }
+    }
+    None
+}
+
+async fn search_request_items(
+    server: &WorkbenchServer,
+    request: &RequestArtifact,
+) -> Vec<SearchResult> {
+    let query = syu_task_model::work_request_text(request);
+    let query_lower = query.to_ascii_lowercase();
+    let query_tokens = query_lower
+        .split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_')
+        .filter(|token| !token.is_empty())
+        .collect::<Vec<_>>();
+    let explicit_ids = request.explicit_ids();
+    let workspace = server.inner.browser_workspace.read().await;
+    let mut results = Vec::new();
+    for section in &workspace.sections {
+        for document in &section.documents {
+            for item in &document.items {
+                let mut score = 0usize;
+                if explicit_ids.iter().any(|id| id == &item.id) {
+                    score += 100;
+                }
+                let id_lower = item.id.to_ascii_lowercase();
+                let title_lower = item.title.to_ascii_lowercase();
+                let summary_lower = item
+                    .summary
+                    .clone()
+                    .unwrap_or_default()
+                    .to_ascii_lowercase();
+                let description_lower = item
+                    .description
+                    .clone()
+                    .unwrap_or_default()
+                    .to_ascii_lowercase();
+                if title_lower.contains(&query_lower) || summary_lower.contains(&query_lower) {
+                    score += 24;
+                }
+                if description_lower.contains(&query_lower) {
+                    score += 12;
+                }
+                for token in &query_tokens {
+                    if id_lower.contains(token) {
+                        score += 8;
+                    }
+                    if title_lower
+                        .split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_')
+                        .any(|word| word == *token)
+                    {
+                        score += 6;
+                    }
+                    if summary_lower.contains(token) {
+                        score += 3;
+                    }
+                    if description_lower.contains(token) {
+                        score += 1;
+                    }
+                }
+                if score > 0 {
+                    results.push((
+                        score,
+                        SearchResult {
+                            id: item.id.clone(),
+                            kind: section.kind.label().to_string(),
+                            title: item.title.clone(),
+                        },
+                    ));
+                }
+            }
+        }
+    }
+    results.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.id.cmp(&b.1.id)));
+    results
+        .into_iter()
+        .map(|(_, result)| result)
+        .take(5)
+        .collect()
 }
 
 async fn execute_action(
@@ -1895,6 +2112,8 @@ async fn execute_action(
                 &RequestPlanRequest {
                     request,
                     request_path: None,
+                    goal_id: None,
+                    plan_output_path: None,
                     kind: None,
                     operation: None,
                     mode: None,
@@ -2281,7 +2500,7 @@ mod tests {
 
         assert_eq!(status, StatusCode::OK);
         assert_eq!(json["kind"], "syu.goal_plan");
-        assert_eq!(json["goal"]["id"], "GOAL-WORK-001");
+        assert_eq!(json["goal"]["id"], "GOAL-REQ-WORKBENCH-006");
         assert!(json["work"].is_object());
         assert_eq!(json["work"]["executable"], true);
         assert_eq!(json["classification"], "verify");
@@ -2308,6 +2527,65 @@ mod tests {
         )
         .await;
         assert!(!work_plan.impact.tests.is_empty());
+    }
+
+    #[tokio::test]
+    async fn request_classify_endpoint_matches_shared_planner() {
+        let server = test_server();
+        let request = RequestArtifact {
+            version: 1,
+            request: "retire old feature".to_string(),
+            context: Default::default(),
+        };
+
+        let outcome = classify_request(&server, &request).await;
+        let plan = shared_work_plan(&server, &request).await;
+
+        assert_eq!(
+            outcome.classification,
+            request_classification_from_work_plan(&plan)
+        );
+        assert!(
+            outcome
+                .reasons
+                .iter()
+                .any(|reason| reason.contains("shared planner resolved"))
+        );
+    }
+
+    #[tokio::test]
+    async fn request_plan_respects_custom_output_path_in_completion() {
+        let server = test_server();
+        let body = serde_json::json!({
+            "request": {
+                "version": 1,
+                "request": "Implement FEAT-TASK-003",
+                "context": {
+                    "linked_ids": ["FEAT-TASK-003"]
+                }
+            },
+            "request_path": "request.yaml",
+            "plan_output_path": "docs/syu/plans/review.yaml"
+        });
+        let (status, json) = json_response(
+            server.router(),
+            Request::builder()
+                .method("POST")
+                .uri("/api/request/plan")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .expect("request"),
+        )
+        .await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert!(
+            json["completion"]["must_pass"]
+                .as_array()
+                .is_some_and(|checks| checks.iter().any(|check| check
+                    .as_str()
+                    .is_some_and(|check| check.contains("docs/syu/plans/review.yaml"))))
+        );
     }
 
     #[tokio::test]
@@ -2386,6 +2664,8 @@ mod tests {
                     context: Default::default(),
                 },
                 request_path: Some("request.yaml".to_string()),
+                goal_id: None,
+                plan_output_path: None,
                 kind: None,
                 operation: None,
                 mode: None,
@@ -2440,6 +2720,8 @@ mod tests {
                     context: Default::default(),
                 },
                 request_path: Some("request.yaml".to_string()),
+                goal_id: None,
+                plan_output_path: None,
                 kind: None,
                 operation: None,
                 mode: None,

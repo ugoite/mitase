@@ -18,14 +18,14 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 use regex::Regex;
 use serde::Serialize;
 use syu_task_model::{
-    ClassificationOutcome, CompletionCheck, GoalPlanArtifact, GoalPlanCheckReport,
-    GoalPlanConfidence, GoalPlanScope, GoalPlanScopeInclude, GoalPlanSelectionMode,
+    ClassificationOutcome, GoalPlanArtifact, GoalPlanCheckReport, GoalPlanConfidence,
+    GoalPlanConversionContext, GoalPlanScope, GoalPlanScopeInclude, GoalPlanSelectionMode,
     GoalPlanSourceMode, RequestArtifact, RequestArtifactContext,
     RequestClassification as RequirementAction, ScaffoldAction, ScaffoldPlan, ScaffoldUpdate,
     ScaffoldUpdateKind, ScopeFeatureCandidate, ScopeOutcome, ScopeSignals,
     SearchResult as TaskSearchResult, SourceRole, TaskTestSelectionCommand,
     TaskTestSelectionEscalation, TaskTestSelectionPlan, TraceTarget, WorkGraphNode,
-    WorkPlanningInput, WorkSeed, WorkSurface, plan_work,
+    WorkPlanningInput, WorkSeed, WorkSurface, goal_plan_from_work_plan, plan_work,
 };
 
 use crate::{
@@ -235,6 +235,7 @@ struct JsonTaskPlanTestPlan {
     selection_mode: String,
     confidence: String,
     required_tests: BTreeMap<String, Vec<JsonTaskPlanScopeEntry>>,
+    suggested_tests: BTreeMap<String, Vec<JsonTaskPlanScopeEntry>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -574,103 +575,21 @@ pub fn build_goal_plan(
     output_path: Option<&Path>,
 ) -> Result<JsonTaskPlanOutput> {
     let work_plan = build_shared_request_work_plan(workspace, outcome, explicit_ids, &[]);
-    let lookup = WorkspaceLookup::new(workspace);
-    let persistent_items = collect_task_plan_persistent_items(&lookup, outcome)?;
-    let spec_update_reasons = determine_spec_update_reasons(outcome, &persistent_items);
-    let spec_updates_required = !spec_update_reasons.is_empty();
-    let mut scope_include = collect_task_plan_scope_entries(
-        workspace,
-        &lookup,
-        &persistent_items,
-        outcome,
-        explicit_ids,
-    )?;
-    let direct_work_scope = work_plan
-        .impact
-        .repository
-        .iter()
-        .filter(|impact| impact.impact_role == syu_task_model::ImpactRole::DirectChange)
-        .map(|impact| JsonTaskPlanScopeEntry {
-            file: impact.path.clone(),
-            symbols: Vec::new(),
-        })
-        .collect::<Vec<_>>();
-    if !direct_work_scope.is_empty() {
-        scope_include = direct_work_scope;
-    }
-    let test_plan = collect_task_plan_tests(&lookup, &persistent_items, outcome)?;
-
-    let source_confidence = if outcome.classification.explicit_items.is_empty()
-        && outcome.classification.related_items.is_empty()
-    {
-        "low"
-    } else if outcome.classification.explicit_items.is_empty() {
-        "medium"
-    } else {
-        "high"
-    };
-    let implementation_confidence = task_plan_confidence(scope_include.len(), outcome);
-
-    Ok(JsonTaskPlanOutput {
-        version: 1,
-        kind: "syu.goal_plan".to_string(),
-        request_path: request_path.display().to_string(),
-        request: outcome.classification.request.clone(),
-        classification: format!("{:?}", work_plan.intent.kind).to_lowercase(),
-        work: work_plan.clone(),
-        source: JsonTaskPlanSource {
-            mode: "request_driven".to_string(),
-            request_artifact: Some(request_path.display().to_string()),
-            classification: Some(format!("{:?}", work_plan.intent.kind).to_lowercase()),
+    let artifact = goal_plan_from_work_plan(
+        &outcome.classification.request,
+        &work_plan,
+        &GoalPlanConversionContext {
+            goal_id: build_goal_plan_id(request_path, output_path, explicit_ids),
+            source_mode: GoalPlanSourceMode::RequestDriven,
+            source_path: Some(request_path.display().to_string()),
+            plan_output_path: output_path
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| ".syu/tasks/current.yaml".to_string()),
             range: None,
-            confidence: source_confidence.to_string(),
-            evidence: None,
+            confidence: request_plan_confidence(outcome),
         },
-        goal: JsonTaskPlanGoal {
-            id: "GOAL-TASK-PLAN-001".to_string(),
-            title: "Generate request-driven Goal Plans".to_string(),
-            statement: format!(
-                "Turn the scoped request into a temporary implementation plan linked to the current spec graph: {}",
-                summarize_request(&outcome.classification.request)
-            ),
-            non_goals: vec![
-                "Do not modify persistent spec files.".to_string(),
-                "Do not add a fifth persistent spec layer.".to_string(),
-                "Do not skip validation or coverage checks.".to_string(),
-            ],
-            inferred: false,
-        },
-        spec_mapping: JsonTaskPlanSpecMapping {
-            persistent_items,
-            spec_updates_required,
-            spec_update_reasons,
-        },
-        implementation_plan: JsonTaskPlanImplementationPlan {
-            confidence: implementation_confidence.to_string(),
-            scope: JsonTaskPlanScope {
-                include: scope_include,
-                exclude: vec!["docs/generated/**".to_string(), "target/**".to_string()],
-            },
-        },
-        test_plan,
-        coverage: JsonTaskPlanCoverage {
-            mode: "changed_lines".to_string(),
-            threshold: 100,
-        },
-        completion: JsonTaskPlanCompletion {
-            must_pass: render_work_completion(&work_plan, output_path),
-        },
-        warnings: collect_task_plan_warnings(outcome)
-            .into_iter()
-            .chain(
-                work_plan
-                    .impact
-                    .diagnostics
-                    .iter()
-                    .map(|diagnostic| format!("{}: {}", diagnostic.rule, diagnostic.reason)),
-            )
-            .collect(),
-    })
+    );
+    json_task_plan_from_artifact(artifact)
 }
 
 fn build_shared_request_work_plan(
@@ -679,14 +598,14 @@ fn build_shared_request_work_plan(
     explicit_ids: &[String],
     changed_files: &[PathBuf],
 ) -> syu_task_model::WorkPlan {
-    let seeds = explicit_ids
+    let mut seeds = explicit_ids
         .iter()
         .map(|id| WorkSeed {
             id: id.clone(),
             surface: work_surface_from_id(id),
             source_role: SourceRole::Seed,
         })
-        .collect();
+        .collect::<Vec<_>>();
     let search_candidates = outcome
         .classification
         .related_items
@@ -698,7 +617,16 @@ fn build_shared_request_work_plan(
                 source_role: SourceRole::SearchCandidate,
             })
         })
-        .collect();
+        .collect::<Vec<_>>();
+    if seeds.is_empty()
+        && let Some(candidate) = search_candidates.first()
+    {
+        seeds.push(WorkSeed {
+            id: candidate.id.clone(),
+            surface: candidate.surface,
+            source_role: SourceRole::Inferred,
+        });
+    }
     let nodes = workspace
         .philosophies
         .iter()
@@ -762,6 +690,269 @@ fn build_shared_request_work_plan(
     })
 }
 
+fn request_plan_confidence(outcome: &ScopeOutcome) -> GoalPlanConfidence {
+    if outcome.classification.explicit_items.is_empty()
+        && outcome.classification.related_items.is_empty()
+    {
+        GoalPlanConfidence::Low
+    } else if outcome.classification.explicit_items.is_empty() {
+        GoalPlanConfidence::Medium
+    } else {
+        GoalPlanConfidence::High
+    }
+}
+
+fn build_goal_plan_id(
+    request_path: &Path,
+    output_path: Option<&Path>,
+    explicit_ids: &[String],
+) -> String {
+    if let Some(id) = explicit_ids.first() {
+        return format!("GOAL-{}", sanitize_goal_plan_id(id));
+    }
+    let source = output_path.unwrap_or(request_path);
+    let stem = source
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("request");
+    format!("GOAL-{}", sanitize_goal_plan_id(stem))
+}
+
+fn build_diff_goal_plan_id(range: &str, output_path: Option<&Path>) -> String {
+    if let Some(path) = output_path
+        && let Some(stem) = path.file_stem().and_then(|value| value.to_str())
+        && !stem.is_empty()
+    {
+        return format!("GOAL-{}", sanitize_goal_plan_id(stem));
+    }
+    format!("GOAL-{}", sanitize_goal_plan_id(range))
+}
+
+fn sanitize_goal_plan_id(value: &str) -> String {
+    let sanitized = value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_uppercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>();
+    let compact = sanitized
+        .split('-')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+    if compact.is_empty() {
+        "WORK".to_string()
+    } else {
+        compact
+    }
+}
+
+fn inferred_confidence(value: &str) -> GoalPlanConfidence {
+    match value {
+        "high" => GoalPlanConfidence::High,
+        "medium" => GoalPlanConfidence::Medium,
+        _ => GoalPlanConfidence::Low,
+    }
+}
+
+fn goal_plan_source_evidence(
+    evidence: JsonTaskPlanSourceEvidence,
+) -> syu_task_model::GoalPlanSourceEvidence {
+    syu_task_model::GoalPlanSourceEvidence {
+        changed_files: evidence.changed_files,
+        traced_requirements: evidence.traced_requirements,
+        traced_features: evidence.traced_features,
+        traced_policies: evidence.traced_policies,
+        traced_philosophies: evidence.traced_philosophies,
+    }
+}
+
+fn json_task_plan_from_artifact(artifact: GoalPlanArtifact) -> Result<JsonTaskPlanOutput> {
+    let work = artifact
+        .work
+        .clone()
+        .context("shared Goal Plan conversion requires a typed WorkPlan")?;
+    Ok(JsonTaskPlanOutput {
+        version: artifact.version,
+        kind: artifact.kind,
+        request_path: artifact.request_path.unwrap_or_default(),
+        request: artifact.request.unwrap_or_default(),
+        classification: artifact.classification.unwrap_or_default(),
+        work,
+        source: JsonTaskPlanSource {
+            mode: match artifact.source.mode {
+                GoalPlanSourceMode::RequestDriven => "request_driven".to_string(),
+                GoalPlanSourceMode::DiffInferred => "diff_inferred".to_string(),
+            },
+            request_artifact: artifact.source.request_artifact,
+            classification: artifact.source.classification,
+            range: artifact.source.range,
+            confidence: artifact
+                .source
+                .confidence
+                .map(goal_plan_confidence_label)
+                .unwrap_or("low")
+                .to_string(),
+            evidence: artifact
+                .source
+                .evidence
+                .map(|evidence| JsonTaskPlanSourceEvidence {
+                    changed_files: evidence.changed_files,
+                    traced_requirements: evidence.traced_requirements,
+                    traced_features: evidence.traced_features,
+                    traced_policies: evidence.traced_policies,
+                    traced_philosophies: evidence.traced_philosophies,
+                }),
+        },
+        goal: JsonTaskPlanGoal {
+            id: artifact.goal.id,
+            title: artifact.goal.title,
+            statement: artifact.goal.statement,
+            non_goals: artifact.goal.non_goals,
+            inferred: artifact.goal.inferred,
+        },
+        spec_mapping: JsonTaskPlanSpecMapping {
+            persistent_items: json_persistent_items_from_goal_plan(
+                artifact.spec_mapping.persistent_items,
+            ),
+            spec_updates_required: artifact.spec_mapping.spec_updates_required,
+            spec_update_reasons: artifact.spec_mapping.spec_update_reasons,
+        },
+        implementation_plan: JsonTaskPlanImplementationPlan {
+            confidence: artifact
+                .implementation_plan
+                .confidence
+                .map(goal_plan_confidence_label)
+                .unwrap_or("low")
+                .to_string(),
+            scope: JsonTaskPlanScope {
+                include: artifact
+                    .implementation_plan
+                    .scope
+                    .include
+                    .into_iter()
+                    .map(json_scope_entry_from_goal_plan)
+                    .collect(),
+                exclude: artifact.implementation_plan.scope.exclude,
+            },
+        },
+        test_plan: JsonTaskPlanTestPlan {
+            selection_mode: goal_plan_selection_mode_label(artifact.test_plan.selection_mode)
+                .to_string(),
+            confidence: artifact
+                .test_plan
+                .confidence
+                .map(goal_plan_confidence_label)
+                .unwrap_or("low")
+                .to_string(),
+            required_tests: artifact
+                .test_plan
+                .required_tests
+                .into_iter()
+                .map(|(language, references)| {
+                    (
+                        language,
+                        references
+                            .into_iter()
+                            .map(|reference| JsonTaskPlanScopeEntry {
+                                file: path_label(&reference.file),
+                                symbols: reference.symbols,
+                            })
+                            .collect(),
+                    )
+                })
+                .collect(),
+            suggested_tests: artifact
+                .test_plan
+                .suggested_tests
+                .into_iter()
+                .map(|(language, references)| {
+                    (
+                        language,
+                        references
+                            .into_iter()
+                            .map(|reference| JsonTaskPlanScopeEntry {
+                                file: path_label(&reference.file),
+                                symbols: reference.symbols,
+                            })
+                            .collect(),
+                    )
+                })
+                .collect(),
+        },
+        coverage: JsonTaskPlanCoverage {
+            mode: goal_plan_coverage_mode_label(artifact.coverage.mode).to_string(),
+            threshold: u8::try_from(artifact.coverage.threshold).unwrap_or(u8::MAX),
+        },
+        completion: JsonTaskPlanCompletion {
+            must_pass: artifact.completion.must_pass,
+        },
+        warnings: artifact.warnings,
+    })
+}
+
+fn json_persistent_items_from_goal_plan(
+    items: syu_task_model::GoalPlanPersistentItems,
+) -> JsonTaskPlanPersistentItems {
+    JsonTaskPlanPersistentItems {
+        philosophies: items
+            .philosophies
+            .into_iter()
+            .map(json_persistent_item_from_goal_plan)
+            .collect(),
+        policies: items
+            .policies
+            .into_iter()
+            .map(json_persistent_item_from_goal_plan)
+            .collect(),
+        requirements: items
+            .requirements
+            .into_iter()
+            .map(json_persistent_item_from_goal_plan)
+            .collect(),
+        features: items
+            .features
+            .into_iter()
+            .map(json_persistent_item_from_goal_plan)
+            .collect(),
+    }
+}
+
+fn json_persistent_item_from_goal_plan(
+    item: syu_task_model::GoalPlanPersistentItem,
+) -> JsonTaskPlanItem {
+    match item {
+        syu_task_model::GoalPlanPersistentItem::Id(id) => JsonTaskPlanItem {
+            id,
+            title: String::new(),
+            document_path: None,
+        },
+        syu_task_model::GoalPlanPersistentItem::Item(item) => JsonTaskPlanItem {
+            id: item.id,
+            title: item.title.unwrap_or_default(),
+            document_path: item.document_path,
+        },
+    }
+}
+
+fn json_scope_entry_from_goal_plan(entry: GoalPlanScopeInclude) -> JsonTaskPlanScopeEntry {
+    match entry {
+        GoalPlanScopeInclude::Pattern(file) => JsonTaskPlanScopeEntry {
+            file,
+            symbols: Vec::new(),
+        },
+        GoalPlanScopeInclude::Entry(entry) => JsonTaskPlanScopeEntry {
+            file: entry.file,
+            symbols: entry.symbols,
+        },
+    }
+}
+
 fn task_trace_targets(map: &BTreeMap<String, Vec<syu_domain::TraceReference>>) -> Vec<TraceTarget> {
     map.iter()
         .flat_map(|(language, references)| {
@@ -794,38 +985,6 @@ fn work_surface_from_label(label: &str) -> Option<WorkSurface> {
         "feature" => Some(WorkSurface::Feature),
         _ => None,
     }
-}
-
-fn render_work_completion(
-    plan: &syu_task_model::WorkPlan,
-    output_path: Option<&Path>,
-) -> Vec<String> {
-    let plan_path = output_path
-        .map(|path| path.display().to_string())
-        .unwrap_or_else(|| ".syu/tasks/current.yaml".to_string());
-    plan.verification
-        .completion
-        .iter()
-        .map(|check| match check {
-            CompletionCheck::GoalPlanCheck { range, .. } => CompletionCheck::GoalPlanCheck {
-                plan_path: plan_path.clone(),
-                range: range.clone(),
-            }
-            .render(),
-            _ => check.render(),
-        })
-        .collect()
-}
-
-fn inferred_goal_plan_completion_checks(range: &str, output_path: Option<&Path>) -> Vec<String> {
-    let plan_path = output_path
-        .map(|path| path.display().to_string())
-        .unwrap_or_else(|| "target/syu/inferred-goal.yaml".to_string());
-
-    vec![
-        format!("syu task check {plan_path} --range {range}"),
-        "syu validate .".to_string(),
-    ]
 }
 
 // FEAT-TASK-005
@@ -1183,6 +1342,22 @@ fn goal_plan_selection_mode_label(mode: GoalPlanSelectionMode) -> &'static str {
     }
 }
 
+fn goal_plan_confidence_label(confidence: GoalPlanConfidence) -> &'static str {
+    match confidence {
+        GoalPlanConfidence::High => "high",
+        GoalPlanConfidence::Medium => "medium",
+        GoalPlanConfidence::Low => "low",
+    }
+}
+
+fn goal_plan_coverage_mode_label(mode: syu_task_model::GoalPlanCoverageMode) -> &'static str {
+    match mode {
+        syu_task_model::GoalPlanCoverageMode::ChangedLines => "changed_lines",
+        syu_task_model::GoalPlanCoverageMode::Affected => "affected",
+        syu_task_model::GoalPlanCoverageMode::Full => "full",
+    }
+}
+
 fn rust_test_target_name(file: &str) -> Option<String> {
     let path = Path::new(file);
     let stem = path.file_stem().and_then(|stem| stem.to_str())?;
@@ -1481,11 +1656,6 @@ pub fn build_diff_inferred_goal_plan(
     let work_plan =
         build_shared_request_work_plan(workspace, &inference.scope, &direct_ids, changed_files);
     let persistent_items = collect_task_plan_persistent_items(&lookup, &inference.scope)?;
-    let spec_update_reasons = determine_spec_update_reasons(&inference.scope, &persistent_items);
-    let spec_updates_required = !spec_update_reasons.is_empty();
-    let test_plan = collect_task_plan_tests(&lookup, &persistent_items, &inference.scope)?;
-    let mut test_plan = test_plan;
-    test_plan.selection_mode = "affected".to_string();
     let goal_title = build_inferred_goal_title(&inference.scope, changed_files, &lookup);
     let goal_statement = build_inferred_goal_statement(
         &inference.scope,
@@ -1493,61 +1663,28 @@ pub fn build_diff_inferred_goal_plan(
         &persistent_items,
         inference.confidence,
     );
-
-    Ok(JsonTaskPlanOutput {
-        version: GOAL_PLAN_VERSION,
-        kind: "syu.goal_plan".to_string(),
-        request_path: range.to_string(),
-        request: format!("git diff {range}"),
-        classification: format!("{:?}", work_plan.intent.kind).to_lowercase(),
-        work: work_plan.clone(),
-        source: JsonTaskPlanSource {
-            mode: "diff_inferred".to_string(),
-            request_artifact: None,
-            classification: None,
+    let mut artifact = goal_plan_from_work_plan(
+        &format!("git diff {range}"),
+        &work_plan,
+        &GoalPlanConversionContext {
+            goal_id: build_diff_goal_plan_id(range, output_path),
+            source_mode: GoalPlanSourceMode::DiffInferred,
+            source_path: None,
+            plan_output_path: output_path
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "target/syu/inferred-goal.yaml".to_string()),
             range: Some(range.to_string()),
-            confidence: inference.confidence.to_string(),
-            evidence: Some(inference.source),
+            confidence: inferred_confidence(inference.confidence),
         },
-        goal: JsonTaskPlanGoal {
-            id: "GOAL-INFERRED-001".to_string(),
-            title: goal_title,
-            statement: goal_statement,
-            non_goals: build_inferred_goal_non_goals(inference.confidence),
-            inferred: true,
-        },
-        spec_mapping: JsonTaskPlanSpecMapping {
-            persistent_items,
-            spec_updates_required,
-            spec_update_reasons,
-        },
-        implementation_plan: JsonTaskPlanImplementationPlan {
-            confidence: inference.confidence.to_string(),
-            scope: JsonTaskPlanScope {
-                include: inference.scope_entries,
-                exclude: vec!["docs/generated/**".to_string(), "target/**".to_string()],
-            },
-        },
-        test_plan,
-        coverage: JsonTaskPlanCoverage {
-            mode: "changed_lines".to_string(),
-            threshold: 100,
-        },
-        completion: JsonTaskPlanCompletion {
-            must_pass: inferred_goal_plan_completion_checks(range, output_path),
-        },
-        warnings: inference
-            .warnings
-            .into_iter()
-            .chain(
-                work_plan
-                    .impact
-                    .diagnostics
-                    .iter()
-                    .map(|diagnostic| format!("{}: {}", diagnostic.rule, diagnostic.reason)),
-            )
-            .collect(),
-    })
+    );
+    artifact.request_path = Some(range.to_string());
+    artifact.source.evidence = Some(goal_plan_source_evidence(inference.source));
+    artifact.goal.title = goal_title;
+    artifact.goal.statement = goal_statement;
+    artifact.goal.non_goals = build_inferred_goal_non_goals(inference.confidence);
+    artifact.goal.inferred = true;
+    artifact.warnings.extend(inference.warnings);
+    json_task_plan_from_artifact(artifact)
 }
 
 fn infer_diff_plan(
@@ -2347,237 +2484,6 @@ fn collect_task_plan_persistent_items(
     Ok(items)
 }
 
-fn determine_spec_update_reasons(
-    outcome: &ScopeOutcome,
-    persistent_items: &JsonTaskPlanPersistentItems,
-) -> Vec<String> {
-    let mut reasons = Vec::new();
-    if persistent_items.requirements.is_empty() {
-        reasons.push(
-            "No durable requirement was identified, so a new or expanded requirement is likely needed before implementation."
-                .to_string(),
-        );
-    }
-    if persistent_items.features.is_empty() {
-        reasons.push(
-            "No feature anchor was identified, so the plan is still provisional and may need a new feature definition."
-                .to_string(),
-        );
-    }
-    if outcome.classification.explicit_items.is_empty() {
-        reasons.push(
-            "The request does not name concrete spec IDs, so the mapping is inferred from the current graph and request text."
-                .to_string(),
-        );
-    }
-    if outcome.classification.related_items.is_empty() {
-        reasons.push(
-            "No close graph matches were found, which is a strong signal that spec updates are likely required."
-                .to_string(),
-        );
-    }
-    if outcome.signals.planned_feature_updates {
-        reasons.push(
-            "The scoped feature candidates suggest planned-state updates may be required before implementation."
-                .to_string(),
-        );
-    }
-
-    reasons
-}
-
-fn collect_task_plan_scope_entries(
-    workspace: &crate::workspace::Workspace,
-    lookup: &WorkspaceLookup<'_>,
-    persistent_items: &JsonTaskPlanPersistentItems,
-    outcome: &ScopeOutcome,
-    explicit_ids: &[String],
-) -> Result<Vec<JsonTaskPlanScopeEntry>> {
-    let mut files = BTreeMap::<String, BTreeSet<String>>::new();
-
-    let feature_ids = persistent_items
-        .features
-        .iter()
-        .map(|item| item.id.as_str())
-        .chain(
-            explicit_ids
-                .iter()
-                .map(|id| id.as_str())
-                .filter(|id| id.starts_with("FEAT-")),
-        );
-
-    for feature_id in feature_ids {
-        collect_feature_scope_entries(workspace, feature_id, &mut files);
-    }
-
-    for requirement in persistent_items
-        .requirements
-        .iter()
-        .filter_map(|item| lookup.requirement(&item.id))
-    {
-        for feature_id in &requirement.linked_features {
-            collect_feature_scope_entries(workspace, feature_id, &mut files);
-        }
-    }
-
-    if files.is_empty() && !outcome.features.is_empty() {
-        for feature in &outcome.features {
-            collect_feature_scope_entries(workspace, &feature.id, &mut files);
-        }
-    }
-
-    let mut entries = files
-        .into_iter()
-        .map(|(file, symbols)| JsonTaskPlanScopeEntry {
-            file,
-            symbols: symbols.into_iter().collect(),
-        })
-        .collect::<Vec<_>>();
-    entries.sort_by(|a, b| a.file.cmp(&b.file));
-    entries.dedup_by(|a, b| a.file == b.file && a.symbols == b.symbols);
-    Ok(entries)
-}
-
-fn collect_feature_scope_entries(
-    workspace: &crate::workspace::Workspace,
-    feature_id: &str,
-    files: &mut BTreeMap<String, BTreeSet<String>>,
-) {
-    let Some(feature) = workspace.features.iter().find(|item| item.id == feature_id) else {
-        return;
-    };
-
-    for references in feature.implementations.values() {
-        for reference in references {
-            let file = normalize_relative_path(&reference.file)
-                .display()
-                .to_string();
-            let symbols = files.entry(file).or_default();
-            for symbol in &reference.symbols {
-                symbols.insert(symbol.clone());
-            }
-        }
-    }
-}
-
-fn collect_task_plan_tests(
-    lookup: &WorkspaceLookup<'_>,
-    persistent_items: &JsonTaskPlanPersistentItems,
-    outcome: &ScopeOutcome,
-) -> Result<JsonTaskPlanTestPlan> {
-    let mut required_tests = BTreeMap::<String, Vec<JsonTaskPlanScopeEntry>>::new();
-    let mut seen = BTreeSet::new();
-
-    for requirement in persistent_items
-        .requirements
-        .iter()
-        .filter_map(|item| lookup.requirement(&item.id))
-    {
-        for (language, tests) in &requirement.tests {
-            let entries = required_tests.entry(language.clone()).or_default();
-            for reference in tests {
-                let file = normalize_relative_path(&reference.file)
-                    .display()
-                    .to_string();
-                let key = format!("{language}:{file}:{}", reference.symbols.join(","));
-                if !seen.insert(key) {
-                    continue;
-                }
-                entries.push(JsonTaskPlanScopeEntry {
-                    file,
-                    symbols: reference.symbols.clone(),
-                });
-            }
-        }
-    }
-
-    for feature in persistent_items
-        .features
-        .iter()
-        .filter_map(|item| lookup.feature(&item.id))
-    {
-        for requirement_id in &feature.linked_requirements {
-            if let Some(requirement) = lookup.requirement(requirement_id) {
-                for (language, tests) in &requirement.tests {
-                    let entries = required_tests.entry(language.clone()).or_default();
-                    for reference in tests {
-                        let file = normalize_relative_path(&reference.file)
-                            .display()
-                            .to_string();
-                        let key = format!("{language}:{file}:{}", reference.symbols.join(","));
-                        if !seen.insert(key) {
-                            continue;
-                        }
-                        entries.push(JsonTaskPlanScopeEntry {
-                            file,
-                            symbols: reference.symbols.clone(),
-                        });
-                    }
-                }
-            }
-        }
-    }
-
-    for entries in required_tests.values_mut() {
-        entries.sort_by(|a, b| a.file.cmp(&b.file));
-        entries.dedup_by(|a, b| a.file == b.file && a.symbols == b.symbols);
-    }
-
-    let selection_mode = if required_tests.is_empty() {
-        "minimal"
-    } else {
-        "linked-declarations"
-    };
-    let confidence = task_plan_confidence_for_tests(required_tests.len(), outcome);
-
-    Ok(JsonTaskPlanTestPlan {
-        selection_mode: selection_mode.to_string(),
-        confidence: confidence.to_string(),
-        required_tests,
-    })
-}
-
-fn task_plan_confidence(scope_include_count: usize, outcome: &ScopeOutcome) -> &'static str {
-    if scope_include_count == 0 || outcome.classification.related_items.is_empty() {
-        "low"
-    } else if outcome.classification.explicit_items.is_empty() {
-        "medium"
-    } else {
-        "high"
-    }
-}
-
-fn task_plan_confidence_for_tests(test_group_count: usize, outcome: &ScopeOutcome) -> &'static str {
-    if test_group_count == 0 || outcome.classification.related_items.is_empty() {
-        "low"
-    } else {
-        "high"
-    }
-}
-
-fn collect_task_plan_warnings(outcome: &ScopeOutcome) -> Vec<String> {
-    let mut warnings = Vec::new();
-    if outcome.classification.explicit_items.is_empty() {
-        warnings.push(
-            "The plan is inferred from request text and graph matches, so review the proposed scope carefully."
-                .to_string(),
-        );
-    }
-    if outcome.classification.related_items.is_empty() {
-        warnings.push(
-            "No close graph matches were found, so the plan may need a new requirement or feature before implementation."
-                .to_string(),
-        );
-    }
-    if outcome.features.is_empty() {
-        warnings.push(
-            "No implementation scope could be inferred from feature candidates, so the plan is intentionally conservative."
-                .to_string(),
-        );
-    }
-    warnings
-}
-
 fn load_request_artifact(path: &PathBuf) -> Result<RequestArtifact> {
     let raw = fs::read_to_string(path)
         .with_context(|| format!("failed to read request artifact `{}`", path.display()))?;
@@ -3157,8 +3063,10 @@ pub fn check_goal_plan(
         .map(|path| path_label(path))
         .collect::<Vec<_>>();
     let mut issues = Vec::new();
+    let requires_implementation_scope = goal_plan_requires_implementation_scope(artifact);
+    let requires_required_tests = goal_plan_requires_required_tests(artifact);
 
-    if artifact.implementation_plan.scope.include.is_empty() {
+    if requires_implementation_scope && artifact.implementation_plan.scope.include.is_empty() {
         issues.push(Issue::error(
             "GOAL-TASK-PLAN-004",
             "implementation_plan.scope.include",
@@ -3184,7 +3092,7 @@ pub fn check_goal_plan(
         ));
     }
 
-    if artifact.test_plan.required_tests.is_empty() {
+    if requires_required_tests && artifact.test_plan.required_tests.is_empty() {
         issues.push(Issue::warning(
             "GOAL-TASK-PLAN-006",
             "test_plan.required_tests",
@@ -3212,7 +3120,7 @@ pub fn check_goal_plan(
         .collect::<Vec<_>>();
     let include_matcher = build_globset(&include_patterns)?;
     let exclude_matcher = build_globset(&artifact.implementation_plan.scope.exclude)?;
-    if !artifact.implementation_plan.scope.include.is_empty() {
+    if requires_implementation_scope && !artifact.implementation_plan.scope.include.is_empty() {
         for file in &changed_files {
             if !path_matches_scope(file, include_matcher.as_ref(), exclude_matcher.as_ref()) {
                 let file_string = path_label(file);
@@ -3249,11 +3157,41 @@ pub fn check_goal_plan(
     validate_goal_plan_required_tests(workspace, artifact, &mut issues)?;
 
     Ok(GoalPlanCheckReport {
-        plan_path: String::new(),
+        plan_path: artifact
+            .request_path
+            .clone()
+            .or_else(|| artifact.source.request_artifact.clone())
+            .unwrap_or_else(|| "in-memory".to_string()),
         range: range.to_string(),
         changed_files: changed_file_strings,
         issues,
     })
+}
+
+fn goal_plan_requires_implementation_scope(artifact: &GoalPlanArtifact) -> bool {
+    artifact
+        .work
+        .as_ref()
+        .map(|plan| {
+            plan.impact
+                .repository
+                .iter()
+                .any(|impact| impact.impact_role == syu_task_model::ImpactRole::DirectChange)
+        })
+        .unwrap_or(true)
+}
+
+fn goal_plan_requires_required_tests(artifact: &GoalPlanArtifact) -> bool {
+    artifact
+        .work
+        .as_ref()
+        .map(|plan| {
+            plan.impact
+                .tests
+                .iter()
+                .any(|impact| impact.impact_role == syu_task_model::ImpactRole::DirectChange)
+        })
+        .unwrap_or(true)
 }
 
 fn push_goal_plan_source_confidence_issues(
@@ -4052,11 +3990,12 @@ mod tests {
     use crate::model::TraceReference;
     use syu_task_model::{
         ClassificationOutcome, GoalPlanArtifact, GoalPlanCompletion, GoalPlanConfidence,
-        GoalPlanCoverage, GoalPlanCoverageMode, GoalPlanGoal, GoalPlanImplementationPlan,
-        GoalPlanPersistentItem, GoalPlanPersistentItemDetails, GoalPlanPersistentItems,
-        GoalPlanScope, GoalPlanScopeInclude, GoalPlanScopeIncludeDetails, GoalPlanSelectionMode,
-        GoalPlanSource, GoalPlanSourceEvidence, GoalPlanSourceMode, GoalPlanSpecMapping,
-        GoalPlanSpecUpdates, GoalPlanTestPlan,
+        GoalPlanConversionContext, GoalPlanCoverage, GoalPlanCoverageMode, GoalPlanGoal,
+        GoalPlanImplementationPlan, GoalPlanPersistentItem, GoalPlanPersistentItemDetails,
+        GoalPlanPersistentItems, GoalPlanScope, GoalPlanScopeInclude, GoalPlanScopeIncludeDetails,
+        GoalPlanSelectionMode, GoalPlanSource, GoalPlanSourceEvidence, GoalPlanSourceMode,
+        GoalPlanSpecMapping, GoalPlanSpecUpdates, GoalPlanTestPlan, WorkGraphNode, WorkKind,
+        WorkPlanningInput, WorkSeed, WorkSurface, goal_plan_from_work_plan, plan_work,
     };
 
     use super::{
@@ -4876,6 +4815,160 @@ mod tests {
                     "syu task check {}",
                     custom_output.display()
                 )))
+        );
+    }
+
+    #[test]
+    fn goal_plan_yaml_round_trip_accepts_shared_artifact_version() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        let request = tempdir.path().join("request.yaml");
+        write_request_artifact(
+            &request,
+            "Generate a plan for request artifact classification.",
+            &[],
+        );
+
+        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
+        let artifact = load_request_artifact(&request).expect("request");
+        let scope_outcome = scope_request(&workspace, &artifact).expect("scope");
+        let plan = build_goal_plan(
+            &workspace,
+            &scope_outcome,
+            &artifact.explicit_ids(),
+            &request,
+            None,
+        )
+        .expect("goal plan");
+        let yaml = render_goal_plan_output(
+            "request",
+            &request.display().to_string(),
+            &plan,
+            TaskPlanFormat::Yaml,
+        )
+        .expect("yaml render");
+        let plan_path = tempdir.path().join("goal-plan.yaml");
+        fs::write(&plan_path, yaml).expect("write goal plan");
+
+        let loaded = load_goal_plan_artifact(&plan_path).expect("load goal plan");
+        assert_eq!(loaded.version, super::GOAL_PLAN_VERSION);
+        assert!(loaded.work.is_some());
+    }
+
+    #[test]
+    fn check_goal_plan_allows_review_and_govern_without_repo_scope() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        init_git_repo(tempdir.path());
+        commit_all(tempdir.path(), "base");
+        update_origin_main(tempdir.path());
+
+        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
+        let review = plan_work(WorkPlanningInput {
+            request: "review request planning".into(),
+            explicit_kind: Some(WorkKind::Review),
+            explicit_mode: Some(syu_task_model::WorkMode::ReviewOnly),
+            ..Default::default()
+        });
+        let review_artifact = goal_plan_from_work_plan(
+            "review request planning",
+            &review,
+            &GoalPlanConversionContext {
+                goal_id: "GOAL-REVIEW".into(),
+                source_mode: GoalPlanSourceMode::RequestDriven,
+                source_path: Some("request.yaml".into()),
+                plan_output_path: ".syu/tasks/current.yaml".into(),
+                range: None,
+                confidence: GoalPlanConfidence::High,
+            },
+        );
+        let review_report = check_goal_plan(&workspace, &review_artifact, "origin/main...HEAD")
+            .expect("review check");
+        assert!(
+            !review_report
+                .issues
+                .iter()
+                .any(|issue| issue.subject == "implementation_plan.scope.include")
+        );
+
+        let govern = plan_work(WorkPlanningInput {
+            request: "govern PHIL-001".into(),
+            explicit_kind: Some(WorkKind::Govern),
+            seeds: vec![WorkSeed {
+                id: "PHIL-001".into(),
+                surface: WorkSurface::Philosophy,
+                source_role: syu_task_model::SourceRole::Seed,
+            }],
+            nodes: vec![
+                WorkGraphNode {
+                    id: "PHIL-001".into(),
+                    surface: WorkSurface::Philosophy,
+                    document_path: None,
+                    status: None,
+                    linked_ids: vec!["POL-001".into()],
+                    implementations: Vec::new(),
+                    tests: Vec::new(),
+                },
+                WorkGraphNode {
+                    id: "POL-001".into(),
+                    surface: WorkSurface::Policy,
+                    document_path: None,
+                    status: None,
+                    linked_ids: vec!["REQ-CORE-028".into()],
+                    implementations: Vec::new(),
+                    tests: Vec::new(),
+                },
+            ],
+            ..Default::default()
+        });
+        let govern_artifact = goal_plan_from_work_plan(
+            "govern PHIL-001",
+            &govern,
+            &GoalPlanConversionContext {
+                goal_id: "GOAL-GOVERN".into(),
+                source_mode: GoalPlanSourceMode::RequestDriven,
+                source_path: Some("request.yaml".into()),
+                plan_output_path: ".syu/tasks/current.yaml".into(),
+                range: None,
+                confidence: GoalPlanConfidence::High,
+            },
+        );
+        let govern_report = check_goal_plan(&workspace, &govern_artifact, "origin/main...HEAD")
+            .expect("govern check");
+        assert!(
+            !govern_report
+                .issues
+                .iter()
+                .any(|issue| issue.subject == "implementation_plan.scope.include")
+        );
+    }
+
+    #[test]
+    fn build_goal_plan_promotes_related_item_for_requests_without_ids() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        let request = tempdir.path().join("request.yaml");
+        write_request_artifact(
+            &request,
+            "Make request artifact classification easier to review.",
+            &[],
+        );
+
+        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
+        let artifact = load_request_artifact(&request).expect("request");
+        let scope_outcome = scope_request(&workspace, &artifact).expect("scope");
+        let plan = build_goal_plan(
+            &workspace,
+            &scope_outcome,
+            &artifact.explicit_ids(),
+            &request,
+            None,
+        )
+        .expect("goal plan");
+
+        assert!(
+            !plan.work.intent.seeds.is_empty(),
+            "natural-language request should promote a related item into the typed work seeds"
         );
     }
 

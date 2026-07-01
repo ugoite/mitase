@@ -116,7 +116,7 @@ pub fn plan_request_work_with_constraints(
     use syu_task_model::{SourceRole, WorkGraphNode, WorkPlanningInput, plan_work};
 
     let workspace = syu::workspace::load_workspace(workspace.as_ref())?;
-    let seeds = request
+    let mut seeds = request
         .explicit_ids()
         .into_iter()
         .map(|id| WorkSeed {
@@ -124,7 +124,29 @@ pub fn plan_request_work_with_constraints(
             id,
             source_role: SourceRole::Seed,
         })
-        .collect();
+        .collect::<Vec<_>>();
+    let scope = syu::command::task::scope_request(&workspace, request)?;
+    let search_candidates = scope
+        .classification
+        .related_items
+        .iter()
+        .filter_map(|item| {
+            surface_for_label(&item.kind).map(|surface| WorkSeed {
+                id: item.id.clone(),
+                surface,
+                source_role: SourceRole::SearchCandidate,
+            })
+        })
+        .collect::<Vec<_>>();
+    if seeds.is_empty()
+        && let Some(candidate) = search_candidates.first()
+    {
+        seeds.push(WorkSeed {
+            id: candidate.id.clone(),
+            surface: candidate.surface,
+            source_role: SourceRole::Inferred,
+        });
+    }
     let nodes = workspace
         .philosophies
         .iter()
@@ -178,6 +200,7 @@ pub fn plan_request_work_with_constraints(
         explicit_operation,
         explicit_mode,
         seeds,
+        search_candidates,
         nodes,
         constraints,
         ..Default::default()
@@ -234,6 +257,16 @@ fn surface_for_id(id: &str) -> WorkSurface {
         WorkSurface::Feature
     } else {
         WorkSurface::Requirement
+    }
+}
+
+fn surface_for_label(label: &str) -> Option<WorkSurface> {
+    match label {
+        "philosophy" => Some(WorkSurface::Philosophy),
+        "policy" => Some(WorkSurface::Policy),
+        "requirement" => Some(WorkSurface::Requirement),
+        "feature" => Some(WorkSurface::Feature),
+        _ => None,
     }
 }
 
