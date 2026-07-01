@@ -200,6 +200,30 @@ description: "Generated reference for docs/syu/features/cli/task.yaml"
       - **file**: docs/guide/command-card.md
         - **symbols**:
           - syu task test-select goal-plan.yaml
+- **id**: FEAT-TASK-007
+  - **title**: Shared typed Work planner
+  - **summary**: Resolve typed Work intent, graph impact, mutation previews, and WorkKind-specific verification through a UI-independent action API.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-034
+  - **implementations**:
+    - **rust**:
+      - **file**: crates/syu-task-model/src/work.rs
+        - **symbols**:
+          - WorkKind
+          - WorkOperation
+          - WorkSurface
+          - WorkMode
+          - ImpactRole
+          - WorkIntent
+          - WorkImpact
+          - WorkMutation
+          - WorkKindProfile
+          - resolve_work_intent
+          - work_kind_profile
+      - **file**: crates/syu-actions/src/lib.rs
+        - **symbols**:
+          - plan_request_work
 
 ## Source YAML
 
@@ -391,4 +415,28 @@ features:
         - file: docs/guide/command-card.md
           symbols:
             - syu task test-select goal-plan.yaml
+  - id: FEAT-TASK-007
+    title: Shared typed Work planner
+    summary: Resolve typed Work intent, graph impact, mutation previews, and WorkKind-specific verification through a UI-independent action API.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-034
+    implementations:
+      rust:
+        - file: crates/syu-task-model/src/work.rs
+          symbols:
+            - WorkKind
+            - WorkOperation
+            - WorkSurface
+            - WorkMode
+            - ImpactRole
+            - WorkIntent
+            - WorkImpact
+            - WorkMutation
+            - WorkKindProfile
+            - resolve_work_intent
+            - work_kind_profile
+        - file: crates/syu-actions/src/lib.rs
+          symbols:
+            - plan_request_work
 ```

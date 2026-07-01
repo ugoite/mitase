@@ -886,6 +886,37 @@ description: "Generated reference for docs/syu/requirements/core/workspace.yaml"
       - **file**: docs/guide/command-card.md
         - **symbols**:
           - syu task test-select goal-plan.yaml
+- **id**: REQ-CORE-034
+  - **title**: Plan typed work consistently across automation entry points
+  - **description**:
+    - |
+      The reusable action layer MUST represent planned work with independent,
+      typed kind, operation, surface, mode, impact-role, mutation, and
+      verification axes. It MUST support Deliver, Specify, Govern,
+      Restructure, Verify, Repair, Maintain, Retire, Review, and Adopt work,
+      MUST prefer explicit intent over inferred intent, and MUST expand Item
+      seeds through the specification graph without including unrelated sibling
+      branches. Each WorkKind MUST control its mutation constraints, required
+      surfaces, completion commands, and broad cargo-test fallback. Review work
+      MUST be mutation-free. The shared API MUST remain independent of
+      Workbench and other user-interface code.
+  - **priority**: high
+  - **status**: implemented
+  - **linked_policies**:
+    - POL-001
+  - **linked_features**:
+    - FEAT-TASK-007
+  - **tests**:
+    - **rust**:
+      - **file**: crates/syu-task-model/src/work.rs
+        - **symbols**:
+          - explicit_kind_wins_and_axes_stay_independent
+          - review_profile_forbids_mutation_without_test_fallback
+          - classifies_representative_requests
+      - **file**: crates/syu-actions/src/lib.rs
+        - **symbols**:
+          - request_planner_expands_item_seed_through_the_spec_graph
+          - review_override_produces_evidence_only_plan
 
 ## Source YAML
 
@@ -1744,4 +1775,34 @@ requirements:
         - file: docs/guide/command-card.md
           symbols:
             - syu task test-select goal-plan.yaml
+  - id: REQ-CORE-034
+    title: Plan typed work consistently across automation entry points
+    description: |
+      The reusable action layer MUST represent planned work with independent,
+      typed kind, operation, surface, mode, impact-role, mutation, and
+      verification axes. It MUST support Deliver, Specify, Govern,
+      Restructure, Verify, Repair, Maintain, Retire, Review, and Adopt work,
+      MUST prefer explicit intent over inferred intent, and MUST expand Item
+      seeds through the specification graph without including unrelated sibling
+      branches. Each WorkKind MUST control its mutation constraints, required
+      surfaces, completion commands, and broad cargo-test fallback. Review work
+      MUST be mutation-free. The shared API MUST remain independent of
+      Workbench and other user-interface code.
+    priority: high
+    status: implemented
+    linked_policies:
+      - POL-001
+    linked_features:
+      - FEAT-TASK-007
+    tests:
+      rust:
+        - file: crates/syu-task-model/src/work.rs
+          symbols:
+            - explicit_kind_wins_and_axes_stay_independent
+            - review_profile_forbids_mutation_without_test_fallback
+            - classifies_representative_requests
+        - file: crates/syu-actions/src/lib.rs
+          symbols:
+            - request_planner_expands_item_seed_through_the_spec_graph
+            - review_override_produces_evidence_only_plan
 ```

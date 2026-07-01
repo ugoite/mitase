@@ -4,6 +4,10 @@ use std::collections::BTreeMap;
 pub use syu_domain::{GitRange, LanguageName, SpecId, SpecKind, WorkspaceRoot};
 use syu_domain::{Issue, Severity, TraceReference};
 
+mod work;
+
+pub use work::*;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SearchResult {
