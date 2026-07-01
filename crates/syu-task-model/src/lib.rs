@@ -123,6 +123,8 @@ pub struct GoalPlanArtifact {
     #[serde(default)]
     pub classification: Option<String>,
     #[serde(default)]
+    pub work: Option<WorkPlan>,
+    #[serde(default)]
     pub source: GoalPlanSource,
     pub goal: GoalPlanGoal,
     #[serde(default)]

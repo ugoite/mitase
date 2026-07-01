@@ -4328,6 +4328,7 @@ mod tests {
                 request_path: Some("request.yaml".to_string()),
                 request: Some("Keep temporary planning explicit".to_string()),
                 classification: Some("request_driven".to_string()),
+                work: None,
                 warnings: vec!["inferred from request text".to_string()],
                 source: GoalPlanSource {
                     mode: GoalPlanSourceMode::DiffInferred,

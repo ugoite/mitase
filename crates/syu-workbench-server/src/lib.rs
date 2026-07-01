@@ -2282,6 +2282,8 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         assert_eq!(json["kind"], "syu.goal_plan");
         assert_eq!(json["goal"]["id"], "GOAL-WORK-001");
+        assert!(json["work"].is_object());
+        assert_eq!(json["work"]["executable"], true);
         assert_eq!(json["classification"], "verify");
         assert!(
             json["test_plan"]["required_tests"]

@@ -487,6 +487,7 @@ pub fn goal_plan_from_work_plan(
         request_path: Some(request_path.to_string()),
         request: Some(request.to_string()),
         classification: Some(format!("{:?}", plan.intent.kind).to_lowercase()),
+        work: Some(plan.clone()),
         source: GoalPlanSource {
             mode: GoalPlanSourceMode::RequestDriven,
             request_artifact: Some(request_path.to_string()),
