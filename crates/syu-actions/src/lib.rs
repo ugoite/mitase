@@ -131,20 +131,28 @@ pub fn plan_request_work_with_constraints(
         .related_items
         .iter()
         .filter_map(|item| {
-            surface_for_label(&item.kind).map(|surface| WorkSeed {
+            surface_for_label(&item.kind).map(|surface| syu_task_model::WorkCandidate {
                 id: item.id.clone(),
                 surface,
-                source_role: SourceRole::SearchCandidate,
+                score: 20,
+                match_reasons: vec!["scoped related item".to_string()],
             })
         })
         .collect::<Vec<_>>();
-    if seeds.is_empty()
-        && let Some(candidate) = search_candidates.first()
-    {
+    let mut diagnostics = Vec::new();
+    if seeds.is_empty() && search_candidates.len() == 1 {
+        let candidate = &search_candidates[0];
         seeds.push(WorkSeed {
             id: candidate.id.clone(),
             surface: candidate.surface,
             source_role: SourceRole::Inferred,
+        });
+    } else if seeds.is_empty() && !search_candidates.is_empty() {
+        diagnostics.push(syu_task_model::WorkDiagnostic {
+            rule: "WORK_AMBIGUOUS_SEED".to_string(),
+            subject: syu_task_model::work_request_text(request),
+            message: "request matched multiple candidate Items without a confident unique winner"
+                .to_string(),
         });
     }
     let nodes = workspace
@@ -203,6 +211,7 @@ pub fn plan_request_work_with_constraints(
         search_candidates,
         nodes,
         constraints,
+        diagnostics,
         ..Default::default()
     }))
 }

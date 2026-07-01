@@ -35,8 +35,8 @@ use syu_task_model::{
     ScaffoldAction, ScaffoldPlan, ScaffoldUpdate, ScaffoldUpdateKind, ScopeFeatureCandidate,
     ScopeOutcome, ScopeSignals, SearchResult, SourceRole, TaskTestSelectionCommand,
     TaskTestSelectionEscalation, TaskTestSelectionPlan, TraceTarget, WorkConstraints,
-    WorkGraphNode, WorkKind, WorkMode, WorkOperation, WorkPlan, WorkPlanningInput, WorkSeed,
-    WorkSurface, goal_plan_from_work_plan, plan_work,
+    WorkDiagnostic, WorkGraphNode, WorkKind, WorkMode, WorkOperation, WorkPlan, WorkPlanningInput,
+    WorkSeed, WorkSurface, goal_plan_from_work_plan, plan_work,
 };
 use tokio::{
     sync::{RwLock, broadcast, mpsc},
@@ -1678,16 +1678,18 @@ async fn shared_work_plan_input(
     let search_candidates = search_request_items(server, request)
         .await
         .into_iter()
-        .filter_map(|item| {
-            work_surface_from_label(&item.kind).map(|surface| WorkSeed {
+        .enumerate()
+        .filter_map(|(index, item)| {
+            work_surface_from_label(&item.kind).map(|surface| syu_task_model::WorkCandidate {
                 id: item.id,
                 surface,
-                source_role: SourceRole::SearchCandidate,
+                score: 50u32.saturating_sub((index as u32) * 10),
+                match_reasons: vec!["workbench request search candidate".to_string()],
             })
         })
-        .collect();
+        .collect::<Vec<_>>();
     let workspace = server.inner.browser_workspace.read().await;
-    let seeds = request
+    let mut seeds = request
         .explicit_ids()
         .into_iter()
         .map(|id| WorkSeed {
@@ -1695,7 +1697,23 @@ async fn shared_work_plan_input(
             id,
             source_role: SourceRole::Seed,
         })
-        .collect();
+        .collect::<Vec<_>>();
+    let mut diagnostics = Vec::new();
+    if seeds.is_empty() && search_candidates.len() == 1 {
+        let candidate = &search_candidates[0];
+        seeds.push(WorkSeed {
+            id: candidate.id.clone(),
+            surface: candidate.surface,
+            source_role: SourceRole::Inferred,
+        });
+    } else if seeds.is_empty() && !search_candidates.is_empty() {
+        diagnostics.push(WorkDiagnostic {
+            rule: "WORK_AMBIGUOUS_SEED".to_string(),
+            subject: syu_task_model::work_request_text(request),
+            message: "request matched multiple candidate Items without a confident unique winner"
+                .to_string(),
+        });
+    }
     let nodes = workspace
         .sections
         .iter()
@@ -1728,6 +1746,7 @@ async fn shared_work_plan_input(
         search_candidates,
         nodes,
         constraints,
+        diagnostics,
         ..Default::default()
     })
 }

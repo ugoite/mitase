@@ -274,6 +274,13 @@ pub struct DiffInferenceOutcome {
     pub branch_scope: BranchScopeReport,
 }
 
+#[derive(Debug, Clone)]
+struct RankedRelatedItem {
+    result: SearchResult,
+    score: u32,
+    reasons: Vec<String>,
+}
+
 #[derive(Debug, Default)]
 struct TaskTestSelectionEntry {
     symbols: BTreeSet<String>,
@@ -606,25 +613,36 @@ fn build_shared_request_work_plan(
             source_role: SourceRole::Seed,
         })
         .collect::<Vec<_>>();
-    let search_candidates = outcome
-        .classification
-        .related_items
+    let ranked_candidates = collect_ranked_related_items(
+        &WorkspaceLookup::new(workspace),
+        &outcome.classification.request,
+    );
+    let search_candidates = ranked_candidates
         .iter()
         .filter_map(|item| {
-            work_surface_from_label(&item.kind).map(|surface| WorkSeed {
-                id: item.id.clone(),
+            work_surface_from_label(item.result.kind).map(|surface| syu_task_model::WorkCandidate {
+                id: item.result.id.clone(),
                 surface,
-                source_role: SourceRole::SearchCandidate,
+                score: item.score,
+                match_reasons: item.reasons.clone(),
             })
         })
         .collect::<Vec<_>>();
+    let mut diagnostics = Vec::new();
     if seeds.is_empty()
-        && let Some(candidate) = search_candidates.first()
+        && let Some(candidate) = unique_candidate_seed(&search_candidates)
     {
         seeds.push(WorkSeed {
             id: candidate.id.clone(),
             surface: candidate.surface,
             source_role: SourceRole::Inferred,
+        });
+    } else if seeds.is_empty() && !search_candidates.is_empty() {
+        diagnostics.push(syu_task_model::WorkDiagnostic {
+            rule: "WORK_AMBIGUOUS_SEED".to_string(),
+            subject: outcome.classification.request.clone(),
+            message: "request matched multiple candidate Items without a confident unique winner"
+                .to_string(),
         });
     }
     let nodes = workspace
@@ -686,6 +704,7 @@ fn build_shared_request_work_plan(
                 owner_ids: Vec::new(),
             })
             .collect(),
+        diagnostics,
         ..Default::default()
     })
 }
@@ -1016,14 +1035,22 @@ pub fn build_task_test_selection(
     let medium_confidence = matches!(artifact.source.confidence, Some(GoalPlanConfidence::Medium));
     let shared_utilities_changed = goal_plan_mentions_shared_utilities(artifact);
     let scope_ambiguous = goal_plan_scope_is_ambiguous(&artifact.implementation_plan.scope);
+    let work_verification = artifact.work.as_ref().map(|plan| &plan.verification);
 
     let escalation = if selected_test_count == 0 {
-        warnings.push(
-            "Goal Plan does not declare required or suggested tests, so the selection falls back to the full Rust test suite.".to_string(),
-        );
-        TaskTestSelectionEscalation {
-            level: "full".to_string(),
-            reason: "Goal Plan does not declare required or suggested tests".to_string(),
+        if work_verification.is_some_and(|verification| !verification.cargo_test_fallback) {
+            TaskTestSelectionEscalation {
+                level: "goal".to_string(),
+                reason: "WorkPlan does not require repository test selection".to_string(),
+            }
+        } else {
+            warnings.push(
+                "Goal Plan does not declare required or suggested tests, so the selection falls back to the full Rust test suite.".to_string(),
+            );
+            TaskTestSelectionEscalation {
+                level: "full".to_string(),
+                reason: "Goal Plan does not declare required or suggested tests".to_string(),
+            }
         }
     } else if matches!(
         artifact.test_plan.selection_mode,
@@ -2535,11 +2562,19 @@ pub fn classify_request(
 
     let explicit_ids = artifact.explicit_ids();
     let explicit_items = collect_explicit_items(&lookup, &explicit_ids);
-    let mut related_items = collect_related_items(&lookup, &artifact.request);
-    merge_related_items(&mut related_items, lookup.search(&analysis_text, None));
+    let mut related_items = collect_ranked_related_items(&lookup, &artifact.request);
+    merge_related_items(
+        &mut related_items,
+        collect_ranked_related_items(&lookup, &analysis_text),
+    );
     related_items.truncate(5);
     let explicit_task_items = to_task_search_results(&explicit_items);
-    let related_task_items = to_task_search_results(&related_items);
+    let related_task_items = to_task_search_results(
+        &related_items
+            .iter()
+            .map(|item| item.result.clone())
+            .collect::<Vec<_>>(),
+    );
 
     let mut reasons = Vec::new();
     if delete_hits > 0 {
@@ -2575,7 +2610,7 @@ pub fn classify_request(
             "closest spec graph matches are {}",
             related_items
                 .iter()
-                .map(|item| format!("{} {}", item.kind, item.id))
+                .map(|item| format!("{} {}", item.result.kind, item.result.id))
                 .collect::<Vec<_>>()
                 .join(", ")
         ));
@@ -2824,12 +2859,61 @@ fn collect_explicit_items(lookup: &WorkspaceLookup<'_>, ids: &[String]) -> Vec<S
     items.into_values().collect()
 }
 
-fn collect_related_items(lookup: &WorkspaceLookup<'_>, request: &str) -> Vec<SearchResult> {
-    let mut items = BTreeMap::<String, SearchResult>::new();
+fn collect_ranked_related_items(
+    lookup: &WorkspaceLookup<'_>,
+    request: &str,
+) -> Vec<RankedRelatedItem> {
+    let query = request.trim();
+    let query_lower = query.to_ascii_lowercase();
+    let query_tokens = query_lower
+        .split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_')
+        .filter(|token| !token.is_empty())
+        .collect::<Vec<_>>();
+    let mut items = BTreeMap::<String, RankedRelatedItem>::new();
     for result in lookup.search(request, None) {
-        items.insert(result.id.clone(), result);
+        let mut score = 0u32;
+        let mut reasons = Vec::new();
+        let id_lower = result.id.to_ascii_lowercase();
+        let title_lower = result.title.to_ascii_lowercase();
+        if id_lower == query_lower {
+            score += 100;
+            reasons.push("exact ID match".to_string());
+        }
+        if title_lower == query_lower {
+            score += 80;
+            reasons.push("exact title match".to_string());
+        }
+        if !query_lower.is_empty() && title_lower.contains(&query_lower) {
+            score += 30;
+            reasons.push("title contains full query".to_string());
+        }
+        for token in &query_tokens {
+            if id_lower.contains(token) {
+                score += 12;
+            }
+            if title_lower
+                .split(|ch: char| !ch.is_ascii_alphanumeric() && ch != '_')
+                .any(|word| word == *token)
+            {
+                score += 10;
+            }
+        }
+        items.insert(
+            result.id.clone(),
+            RankedRelatedItem {
+                result,
+                score,
+                reasons,
+            },
+        );
     }
-    items.into_values().collect()
+    let mut ranked = items.into_values().collect::<Vec<_>>();
+    ranked.sort_by(|a, b| {
+        b.score
+            .cmp(&a.score)
+            .then_with(|| a.result.id.cmp(&b.result.id))
+    });
+    ranked
 }
 
 fn collect_scoped_results(
@@ -2881,15 +2965,44 @@ fn collect_feature_candidates(
     items.into_values().take(limit).collect()
 }
 
-fn merge_related_items(related_items: &mut Vec<SearchResult>, additional_items: Vec<SearchResult>) {
-    let mut merged = BTreeMap::<String, SearchResult>::new();
+fn merge_related_items(
+    related_items: &mut Vec<RankedRelatedItem>,
+    additional_items: Vec<RankedRelatedItem>,
+) {
+    let mut merged = BTreeMap::<String, RankedRelatedItem>::new();
     for item in related_items.drain(..) {
-        merged.insert(item.id.clone(), item);
+        merged.insert(item.result.id.clone(), item);
     }
     for item in additional_items {
-        merged.insert(item.id.clone(), item);
+        merged
+            .entry(item.result.id.clone())
+            .and_modify(|existing| {
+                if item.score > existing.score {
+                    *existing = item.clone();
+                }
+            })
+            .or_insert(item);
     }
     *related_items = merged.into_values().collect();
+    related_items.sort_by(|a, b| {
+        b.score
+            .cmp(&a.score)
+            .then_with(|| a.result.id.cmp(&b.result.id))
+    });
+}
+
+fn unique_candidate_seed(
+    candidates: &[syu_task_model::WorkCandidate],
+) -> Option<&syu_task_model::WorkCandidate> {
+    let top = candidates.first()?;
+    let second_score = candidates
+        .get(1)
+        .map(|candidate| candidate.score)
+        .unwrap_or(0);
+    let threshold = 20;
+    let uniqueness_margin = 10;
+    (top.score >= threshold && top.score.saturating_sub(second_score) >= uniqueness_margin)
+        .then_some(top)
 }
 
 fn item_to_search_result(item: WorkspaceEntity<'_>) -> SearchResult {
@@ -3066,6 +3179,8 @@ pub fn check_goal_plan(
     let requires_implementation_scope = goal_plan_requires_implementation_scope(artifact);
     let requires_required_tests = goal_plan_requires_required_tests(artifact);
 
+    validate_goal_plan_work_blockers(artifact, &mut issues);
+
     if requires_implementation_scope && artifact.implementation_plan.scope.include.is_empty() {
         issues.push(Issue::error(
             "GOAL-TASK-PLAN-004",
@@ -3168,6 +3283,23 @@ pub fn check_goal_plan(
     })
 }
 
+fn validate_goal_plan_work_blockers(artifact: &GoalPlanArtifact, issues: &mut Vec<Issue>) {
+    let Some(work) = &artifact.work else {
+        return;
+    };
+    for diagnostic in &work.impact.diagnostics {
+        if diagnostic.impact_role == syu_task_model::ImpactRole::Blocker {
+            issues.push(Issue::error(
+                "GOAL-WORK-PLAN-BLOCKER",
+                &diagnostic.subject,
+                None,
+                &diagnostic.reason,
+                Some("Resolve the WorkPlan blocker before execution.".to_string()),
+            ));
+        }
+    }
+}
+
 fn goal_plan_requires_implementation_scope(artifact: &GoalPlanArtifact) -> bool {
     artifact
         .work
@@ -3177,6 +3309,10 @@ fn goal_plan_requires_implementation_scope(artifact: &GoalPlanArtifact) -> bool 
                 .repository
                 .iter()
                 .any(|impact| impact.impact_role == syu_task_model::ImpactRole::DirectChange)
+                || plan.impact.repository_targets.iter().any(|impact| {
+                    impact.impact_role == syu_task_model::ImpactRole::DirectChange
+                        && impact.path.is_some()
+                })
         })
         .unwrap_or(true)
 }
@@ -3190,6 +3326,10 @@ fn goal_plan_requires_required_tests(artifact: &GoalPlanArtifact) -> bool {
                 .tests
                 .iter()
                 .any(|impact| impact.impact_role == syu_task_model::ImpactRole::DirectChange)
+                || plan.impact.test_targets.iter().any(|impact| {
+                    impact.impact_role == syu_task_model::ImpactRole::DirectChange
+                        && impact.path.is_some()
+                })
         })
         .unwrap_or(true)
 }
@@ -3228,6 +3368,13 @@ fn goal_plan_medium_confidence_warning() -> Issue {
 }
 
 fn validate_goal_plan_completion(artifact: &GoalPlanArtifact, issues: &mut Vec<Issue>) {
+    if artifact
+        .work
+        .as_ref()
+        .is_some_and(|plan| plan.verification.completion.is_empty())
+    {
+        return;
+    }
     if artifact.completion.must_pass.is_empty() {
         issues.push(Issue::error(
             "GOAL-TASK-PLAN-007",
@@ -4627,20 +4774,28 @@ mod tests {
             .expect_err("external feature docs should be rejected");
         assert!(error.to_string().contains("must stay under"));
 
-        let mut related = vec![super::SearchResult {
-            id: "REQ-CORE-028".to_string(),
-            kind: "requirement",
-            title: "Classify request artifacts into requirement actions".to_string(),
+        let mut related = vec![super::RankedRelatedItem {
+            result: super::SearchResult {
+                id: "REQ-CORE-028".to_string(),
+                kind: "requirement",
+                title: "Classify request artifacts into requirement actions".to_string(),
+            },
+            score: 10,
+            reasons: vec!["seed".to_string()],
         }];
         super::merge_related_items(
             &mut related,
-            vec![super::SearchResult {
-                id: "FEAT-TASK-001".to_string(),
-                kind: "feature",
-                title: "Request artifact classification".to_string(),
+            vec![super::RankedRelatedItem {
+                result: super::SearchResult {
+                    id: "FEAT-TASK-001".to_string(),
+                    kind: "feature",
+                    title: "Request artifact classification".to_string(),
+                },
+                score: 30,
+                reasons: vec!["better".to_string()],
             }],
         );
-        assert!(related.iter().any(|item| item.id == "FEAT-TASK-001"));
+        assert!(related.iter().any(|item| item.result.id == "FEAT-TASK-001"));
     }
 
     #[test]
@@ -4970,6 +5125,133 @@ mod tests {
 
         assert!(!scope_outcome.classification.related_items.is_empty());
         assert!(!plan.work.intent.seeds.is_empty());
+    }
+
+    #[test]
+    fn build_goal_plan_marks_ambiguous_requests_plan_only() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        let request = tempdir.path().join("request.yaml");
+        write_request_artifact(&request, "request artifact", &[]);
+
+        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
+        let artifact = load_request_artifact(&request).expect("request");
+        let scope_outcome = scope_request(&workspace, &artifact).expect("scope");
+        let plan = build_goal_plan(
+            &workspace,
+            &scope_outcome,
+            &artifact.explicit_ids(),
+            &request,
+            None,
+        )
+        .expect("goal plan");
+
+        assert_eq!(plan.work.intent.mode, syu_task_model::WorkMode::PlanOnly);
+        assert!(
+            plan.work
+                .impact
+                .diagnostics
+                .iter()
+                .any(|diagnostic| { diagnostic.rule == "WORK_AMBIGUOUS_SEED" })
+        );
+    }
+
+    #[test]
+    fn build_task_test_selection_respects_work_verification_without_fallback() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
+        let review = plan_work(WorkPlanningInput {
+            request: "review request planning".into(),
+            explicit_kind: Some(WorkKind::Review),
+            explicit_mode: Some(syu_task_model::WorkMode::ReviewOnly),
+            ..Default::default()
+        });
+        let artifact = goal_plan_from_work_plan(
+            "review request planning",
+            &review,
+            &GoalPlanConversionContext {
+                goal_id: "GOAL-REVIEW".into(),
+                source_mode: GoalPlanSourceMode::RequestDriven,
+                source_path: Some("request.yaml".into()),
+                plan_output_path: ".syu/tasks/current.yaml".into(),
+                range: None,
+                confidence: GoalPlanConfidence::High,
+            },
+        );
+
+        let selection = super::build_task_test_selection(&workspace, &artifact).expect("selection");
+
+        assert_eq!(selection.escalation.level, "goal");
+        assert_eq!(
+            selection.escalation.reason,
+            "WorkPlan does not require repository test selection"
+        );
+        assert!(selection.commands.is_empty());
+    }
+
+    #[test]
+    fn check_goal_plan_reports_work_plan_blockers() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        init_git_repo(tempdir.path());
+        commit_all(tempdir.path(), "base");
+        update_origin_main(tempdir.path());
+
+        let workspace = crate::workspace::load_workspace(tempdir.path()).expect("workspace");
+        let mut feature = WorkGraphNode {
+            id: "FEAT-NEW-001".into(),
+            surface: WorkSurface::Feature,
+            document_path: None,
+            status: Some("planned".into()),
+            linked_ids: vec!["REQ-NEW-001".into()],
+            implementations: Vec::new(),
+            tests: Vec::new(),
+        };
+        feature.linked_ids.sort();
+        let requirement = WorkGraphNode {
+            id: "REQ-NEW-001".into(),
+            surface: WorkSurface::Requirement,
+            document_path: None,
+            status: Some("planned".into()),
+            linked_ids: vec!["FEAT-NEW-001".into()],
+            implementations: Vec::new(),
+            tests: Vec::new(),
+        };
+        let plan = plan_work(WorkPlanningInput {
+            request: "implement FEAT-NEW-001".into(),
+            explicit_kind: Some(WorkKind::Deliver),
+            seeds: vec![WorkSeed {
+                id: "FEAT-NEW-001".into(),
+                surface: WorkSurface::Feature,
+                source_role: syu_task_model::SourceRole::Seed,
+            }],
+            nodes: vec![feature, requirement],
+            ..Default::default()
+        });
+        assert!(!plan.executable);
+
+        let artifact = goal_plan_from_work_plan(
+            "implement FEAT-NEW-001",
+            &plan,
+            &GoalPlanConversionContext {
+                goal_id: "GOAL-BLOCKED".into(),
+                source_mode: GoalPlanSourceMode::RequestDriven,
+                source_path: Some("request.yaml".into()),
+                plan_output_path: ".syu/tasks/current.yaml".into(),
+                range: None,
+                confidence: GoalPlanConfidence::High,
+            },
+        );
+        let report =
+            check_goal_plan(&workspace, &artifact, "origin/main...HEAD").expect("blocked check");
+
+        assert!(report.issues.iter().any(|issue| {
+            issue.code == "GOAL-WORK-PLAN-BLOCKER"
+                && issue
+                    .message
+                    .contains("repository target path must be confirmed")
+        }));
     }
 
     #[test]
