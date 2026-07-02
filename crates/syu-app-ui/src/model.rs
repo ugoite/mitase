@@ -553,6 +553,7 @@ fn demo_goal_plan() -> GoalPlanArtifact {
         request_path: Some(".syu/workbench/requests/request-739.yaml".to_string()),
         request: Some("Add a Workbench request intake flow.".to_string()),
         classification: Some("requirement_change".to_string()),
+        work: None,
         source: GoalPlanSource {
             request_artifact: Some(".syu/workbench/requests/request-739.yaml".to_string()),
             classification: Some("requirement_change".to_string()),
