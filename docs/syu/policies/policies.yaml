@@ -30,6 +30,7 @@ policies:
       - REQ-CORE-031
       - REQ-CORE-032
       - REQ-CORE-033
+      - REQ-CORE-034
 
   - id: POL-002
     title: Validation should explain the current state instead of only failing
