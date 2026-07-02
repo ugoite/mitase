@@ -16,7 +16,8 @@ pub use syu::command::{
 pub use syu::model::CheckResult as ValidationReport;
 pub use syu_task_model::{
     ClassificationOutcome, GoalPlanArtifact, GoalPlanCheckReport, RequestArtifact, ScaffoldPlan,
-    ScopeOutcome, TaskTestSelectionPlan,
+    ScopeOutcome, TaskTestSelectionPlan, WorkIntent, WorkKind, WorkMode, WorkOperation, WorkPlan,
+    WorkSeed, WorkSurface,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -98,6 +99,200 @@ pub fn scope_request(
 ) -> Result<ScopeOutcome> {
     let workspace = syu::workspace::load_workspace(workspace.as_ref())?;
     syu::command::task::scope_request(&workspace, request)
+}
+
+/// Build a UI-independent, typed Work plan from a natural-language request.
+///
+/// Explicit axes take precedence over inference. Related spec items are expanded through the
+/// existing workspace graph and annotated according to the selected WorkKind profile.
+pub fn plan_request_work_with_constraints(
+    workspace: impl AsRef<Path>,
+    request: &RequestArtifact,
+    explicit_kind: Option<WorkKind>,
+    explicit_operation: Option<WorkOperation>,
+    explicit_mode: Option<WorkMode>,
+    constraints: syu_task_model::WorkConstraints,
+) -> Result<WorkPlan> {
+    use syu_task_model::{SourceRole, WorkGraphNode, WorkPlanningInput, plan_work};
+
+    let workspace = syu::workspace::load_workspace(workspace.as_ref())?;
+    let mut seeds = request
+        .explicit_ids()
+        .into_iter()
+        .map(|id| WorkSeed {
+            surface: surface_for_id(&id),
+            id,
+            source_role: SourceRole::Seed,
+        })
+        .collect::<Vec<_>>();
+    let scope = syu::command::task::scope_request(&workspace, request)?;
+    let search_candidates = scope
+        .classification
+        .related_items
+        .iter()
+        .filter_map(|item| {
+            surface_for_label(&item.kind).map(|surface| syu_task_model::WorkCandidate {
+                id: item.id.clone(),
+                surface,
+                score: 20,
+                match_reasons: vec!["scoped related item".to_string()],
+            })
+        })
+        .collect::<Vec<_>>();
+    let mut diagnostics = Vec::new();
+    if seeds.is_empty() && search_candidates.len() == 1 {
+        let candidate = &search_candidates[0];
+        seeds.push(WorkSeed {
+            id: candidate.id.clone(),
+            surface: candidate.surface,
+            source_role: SourceRole::Inferred,
+        });
+    } else if seeds.is_empty() && !search_candidates.is_empty() {
+        diagnostics.push(syu_task_model::WorkDiagnostic {
+            rule: "WORK_AMBIGUOUS_SEED".to_string(),
+            subject: syu_task_model::work_request_text(request),
+            message: "request matched multiple candidate Items without a confident unique winner"
+                .to_string(),
+        });
+    }
+    let nodes = workspace
+        .philosophies
+        .iter()
+        .map(|item| WorkGraphNode {
+            id: item.id.clone(),
+            surface: WorkSurface::Philosophy,
+            document_path: None,
+            status: None,
+            linked_ids: item.linked_policies.clone(),
+            implementations: Vec::new(),
+            tests: Vec::new(),
+        })
+        .chain(workspace.policies.iter().map(|item| WorkGraphNode {
+            id: item.id.clone(),
+            surface: WorkSurface::Policy,
+            document_path: None,
+            status: None,
+            linked_ids: item.linked_requirements.clone(),
+            implementations: Vec::new(),
+            tests: Vec::new(),
+        }))
+        .chain(workspace.requirements.iter().map(|item| {
+            WorkGraphNode {
+                id: item.id.clone(),
+                surface: WorkSurface::Requirement,
+                document_path: None,
+                status: Some(item.status.clone()),
+                linked_ids: item
+                    .linked_policies
+                    .iter()
+                    .chain(&item.linked_features)
+                    .cloned()
+                    .collect(),
+                implementations: Vec::new(),
+                tests: trace_targets(&item.tests),
+            }
+        }))
+        .chain(workspace.features.iter().map(|item| WorkGraphNode {
+            id: item.id.clone(),
+            surface: WorkSurface::Feature,
+            document_path: None,
+            status: Some(item.status.clone()),
+            linked_ids: item.linked_requirements.clone(),
+            implementations: trace_targets(&item.implementations),
+            tests: Vec::new(),
+        }))
+        .collect();
+    Ok(plan_work(WorkPlanningInput {
+        request: syu_task_model::work_request_text(request),
+        explicit_kind,
+        explicit_operation,
+        explicit_mode,
+        seeds,
+        search_candidates,
+        nodes,
+        constraints,
+        diagnostics,
+        ..Default::default()
+    }))
+}
+
+pub fn plan_request_work(
+    workspace: impl AsRef<Path>,
+    request: &RequestArtifact,
+    explicit_kind: Option<WorkKind>,
+    explicit_operation: Option<WorkOperation>,
+    explicit_mode: Option<WorkMode>,
+) -> Result<WorkPlan> {
+    plan_request_work_with_constraints(
+        workspace,
+        request,
+        explicit_kind,
+        explicit_operation,
+        explicit_mode,
+        Default::default(),
+    )
+}
+
+/// Plan from an Item seed through the same shared engine used for requests.
+pub fn plan_item_work(
+    workspace: impl AsRef<Path>,
+    item_id: &str,
+    explicit_kind: Option<WorkKind>,
+    explicit_operation: Option<WorkOperation>,
+    explicit_mode: Option<WorkMode>,
+) -> Result<WorkPlan> {
+    plan_request_work(
+        workspace,
+        &RequestArtifact {
+            version: 1,
+            request: format!("Plan work for {item_id}"),
+            context: syu_task_model::RequestArtifactContext {
+                linked_ids: vec![item_id.to_string()],
+                ..Default::default()
+            },
+        },
+        explicit_kind,
+        explicit_operation,
+        explicit_mode,
+    )
+}
+
+fn surface_for_id(id: &str) -> WorkSurface {
+    if id.starts_with("PHIL-") {
+        WorkSurface::Philosophy
+    } else if id.starts_with("POL-") {
+        WorkSurface::Policy
+    } else if id.starts_with("FEAT-") {
+        WorkSurface::Feature
+    } else {
+        WorkSurface::Requirement
+    }
+}
+
+fn surface_for_label(label: &str) -> Option<WorkSurface> {
+    match label {
+        "philosophy" => Some(WorkSurface::Philosophy),
+        "policy" => Some(WorkSurface::Policy),
+        "requirement" => Some(WorkSurface::Requirement),
+        "feature" => Some(WorkSurface::Feature),
+        _ => None,
+    }
+}
+
+fn trace_targets(
+    map: &BTreeMap<String, Vec<syu_domain::TraceReference>>,
+) -> Vec<syu_task_model::TraceTarget> {
+    map.iter()
+        .flat_map(|(language, references)| {
+            references
+                .iter()
+                .map(move |reference| syu_task_model::TraceTarget {
+                    language: language.clone(),
+                    file: reference.file.display().to_string(),
+                    symbols: reference.symbols.clone(),
+                })
+        })
+        .collect()
 }
 
 pub fn scaffold_request(
@@ -621,8 +816,12 @@ fn find_item(
 
 #[cfg(test)]
 mod tests {
-    use super::{LookupKind, search_items};
+    use super::{
+        LookupKind, RequestArtifact, WorkKind, WorkMode, WorkOperation, plan_item_work,
+        plan_request_work, search_items,
+    };
     use std::path::PathBuf;
+    use syu_task_model::{RequestArtifactContext, SourceRole};
 
     fn fixture_path(name: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -654,5 +853,96 @@ mod tests {
                 .to_string()
                 .contains("search query must not be empty or whitespace")
         );
+    }
+
+    #[test]
+    fn request_planner_expands_item_seed_through_the_spec_graph() {
+        let request = RequestArtifact {
+            version: 1,
+            request: "Implement FEAT-TRACE-002".to_string(),
+            context: RequestArtifactContext {
+                linked_ids: vec!["FEAT-TRACE-002".to_string()],
+                ..RequestArtifactContext::default()
+            },
+        };
+
+        let plan = plan_request_work(fixture_path("passing"), &request, None, None, None)
+            .expect("work plan");
+
+        assert_eq!(plan.intent.kind, WorkKind::Deliver);
+        assert_eq!(plan.intent.operation, WorkOperation::Modify);
+        assert!(
+            plan.impact.items.iter().any(|item| {
+                item.id == "FEAT-TRACE-002" && item.source_role == SourceRole::Seed
+            })
+        );
+        assert!(
+            plan.impact
+                .items
+                .iter()
+                .any(|item| item.id.starts_with("REQ-"))
+        );
+        assert!(
+            !plan
+                .impact
+                .items
+                .iter()
+                .any(|item| item.id == "FEAT-TRACE-001")
+        );
+        assert!(plan.verification.cargo_test_fallback);
+    }
+
+    #[test]
+    fn review_override_produces_evidence_only_plan() {
+        let request = RequestArtifact {
+            version: 1,
+            request: "Inspect FEAT-TRACE-002".to_string(),
+            context: RequestArtifactContext {
+                linked_ids: vec!["FEAT-TRACE-002".to_string()],
+                ..RequestArtifactContext::default()
+            },
+        };
+
+        let plan = plan_request_work(
+            fixture_path("passing"),
+            &request,
+            Some(WorkKind::Review),
+            None,
+            Some(WorkMode::ReviewOnly),
+        )
+        .expect("review plan");
+
+        assert!(plan.mutations.is_empty());
+        assert!(plan.verification.mutation_forbidden);
+        assert!(!plan.verification.cargo_test_fallback);
+    }
+
+    #[test]
+    fn item_and_request_entry_points_have_planner_parity() {
+        let request = RequestArtifact {
+            version: 1,
+            request: "Plan work for FEAT-TRACE-002".to_string(),
+            context: RequestArtifactContext {
+                linked_ids: vec!["FEAT-TRACE-002".to_string()],
+                ..RequestArtifactContext::default()
+            },
+        };
+        let request_plan = plan_request_work(
+            fixture_path("passing"),
+            &request,
+            Some(WorkKind::Deliver),
+            Some(WorkOperation::Modify),
+            None,
+        )
+        .expect("request plan");
+        let item_plan = plan_item_work(
+            fixture_path("passing"),
+            "FEAT-TRACE-002",
+            Some(WorkKind::Deliver),
+            Some(WorkOperation::Modify),
+            None,
+        )
+        .expect("item plan");
+        assert_eq!(request_plan, item_plan);
     }
 }

@@ -14,9 +14,9 @@ features:
         - file: crates/syu-app-ui/src/components/pages/work.rs
           symbols:
             - WorkPage
-            - Brief
-            - WorkScope
-            - Delivery
+            - WorkDetails
+            - ImpactSection
+            - VerificationSection
             - Evidence
       markdown:
         - file: docs/guide/workbench.md
@@ -53,9 +53,9 @@ features:
       rust:
         - file: crates/syu-app-ui/src/components/pages/work.rs
           symbols:
-            - Brief
-            - WorkScope
-            - Delivery
+            - WorkDetails
+            - ImpactSection
+            - VerificationSection
             - Evidence
         - file: crates/syu-task-model/src/lib.rs
           symbols:

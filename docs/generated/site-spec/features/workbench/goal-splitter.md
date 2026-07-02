@@ -29,9 +29,9 @@ description: "Generated reference for docs/syu/features/workbench/goal-splitter.
       - **file**: crates/syu-app-ui/src/components/pages/work.rs
         - **symbols**:
           - WorkPage
-          - Brief
-          - WorkScope
-          - Delivery
+          - WorkDetails
+          - ImpactSection
+          - VerificationSection
           - Evidence
     - **markdown**:
       - **file**: docs/guide/workbench.md
@@ -68,9 +68,9 @@ description: "Generated reference for docs/syu/features/workbench/goal-splitter.
     - **rust**:
       - **file**: crates/syu-app-ui/src/components/pages/work.rs
         - **symbols**:
-          - Brief
-          - WorkScope
-          - Delivery
+          - WorkDetails
+          - ImpactSection
+          - VerificationSection
           - Evidence
       - **file**: crates/syu-task-model/src/lib.rs
         - **symbols**:
@@ -101,9 +101,9 @@ features:
         - file: crates/syu-app-ui/src/components/pages/work.rs
           symbols:
             - WorkPage
-            - Brief
-            - WorkScope
-            - Delivery
+            - WorkDetails
+            - ImpactSection
+            - VerificationSection
             - Evidence
       markdown:
         - file: docs/guide/workbench.md
@@ -140,9 +140,9 @@ features:
       rust:
         - file: crates/syu-app-ui/src/components/pages/work.rs
           symbols:
-            - Brief
-            - WorkScope
-            - Delivery
+            - WorkDetails
+            - ImpactSection
+            - VerificationSection
             - Evidence
         - file: crates/syu-task-model/src/lib.rs
           symbols:

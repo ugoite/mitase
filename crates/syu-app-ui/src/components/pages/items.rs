@@ -1,7 +1,8 @@
 #![allow(unused_braces)]
 
 use crate::components::explorer::{EmptyDetail, PageHeader, page_href};
-use crate::components::indicators::{IndicatorStatus, StatusCircle};
+use crate::components::icons::{IconName, SyuIcon};
+use crate::components::indicators::{CompactAction, IndicatorStatus, StatusCircle};
 use crate::i18n::Locale;
 use crate::model::{PageSection, SpecBrowserItem, WorkbenchPage, WorkbenchUiState};
 use dioxus::prelude::*;
@@ -82,7 +83,7 @@ pub fn ItemsPage(
             input { class: if focused_search { "min-w-0 flex-1 rounded-lg border-2 border-red-500 px-3 py-2 text-sm" } else { "min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" }, name: "spec_query", value: "{ui.spec_query}", placeholder: if ui.locale == Locale::Ja { "Item を検索" } else { "Search Items" } }
             button { class: "rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white", type: "submit", "{copy.search()}" }
         }
-        nav { class: "mb-3 flex flex-wrap gap-1 border-b border-slate-200", "aria-label": "Item kinds", for tab in TABS { a { class: tab_class(tab == selected_tab), href: page_href(WorkbenchPage::Items, ui.locale, Some(tab), None, None), "{tab_icon(tab)} {copy.section_title(tab)}" } } }
+        nav { class: "mb-3 flex flex-wrap gap-1 border-b border-slate-200", "aria-label": "Item kinds", for tab in TABS { a { class: tab_class(tab == selected_tab), href: page_href(WorkbenchPage::Items, ui.locale, Some(tab), None, None), SyuIcon { name: tab.icon(), size: 16 } "{copy.section_title(tab)}" } } }
         div { class: "grid items-start gap-3 lg:grid-cols-[18rem_minmax(0,1fr)]",
             aside { class: "rounded-lg border border-slate-200 bg-slate-50 p-2", "aria-label": "Items",
                 div { class: "flex items-center justify-between px-2 py-2", span { class: "text-xs font-medium uppercase text-slate-500", "{copy.section_title(selected_tab)}" } a { class: "rounded-full border border-slate-300 bg-white px-2.5 py-1 text-xs", href: page_href(WorkbenchPage::Items, ui.locale, Some(selected_tab), Some("draft"), None), "+ Draft" } }
@@ -98,10 +99,17 @@ pub fn ItemsPage(
 
 #[component]
 fn ItemDetail(ui: WorkbenchUiState, section: PageSection, item: SpecBrowserItem) -> Element {
+    let goal_href = format!("#create-work-{}", item.id);
+    let scope_href = page_href(
+        WorkbenchPage::Scope,
+        ui.locale,
+        Some(PageSection::CodeTests),
+        Some(&item.id),
+        None,
+    );
     rsx! {
-        div { class: "flex flex-wrap items-start justify-between gap-3", div { p { class: "text-[10px] uppercase tracking-[0.2em] text-slate-400", "{ui.copy().section_title(section)} · source of truth" } h2 { class: "mt-1 text-lg font-semibold", "{item.id} · {item.title}" } } div { class: "flex flex-wrap gap-2", button { class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold", type: "button", "data-create-work-from-item": "{item.id}", "data-work-lang": "{ui.locale.slug()}", if ui.locale == Locale::Ja { "この Item から Work を作成" } else { "Create Work from Item" } } a { class: "rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold", href: page_href(WorkbenchPage::Scope, ui.locale, Some(PageSection::CodeTests), Some(&item.id), None), if ui.locale == Locale::Ja { "実装範囲を調べる" } else { "Explore implementation scope" } } } }
-        div { class: "mt-4 grid gap-3 md:grid-cols-2", ItemField { label: "ID".to_string(), value: item.id.clone() } ItemField { label: if ui.locale == Locale::Ja { "状態".to_string() } else { "Status".to_string() }, value: item.status.clone().unwrap_or_else(|| "—".to_string()) } ItemField { label: if ui.locale == Locale::Ja { "概要".to_string() } else { "Summary".to_string() }, value: item.summary.clone().unwrap_or_default() } ItemField { label: if ui.locale == Locale::Ja { "説明".to_string() } else { "Description".to_string() }, value: item.description.clone().unwrap_or_default() } }
-        details { class: "mt-3 rounded-lg border border-slate-200 bg-white p-4", summary { class: "cursor-pointer text-sm font-semibold", if ui.locale == Locale::Ja { "編集" } else { "Edit Item" } } div { class: "mt-4", ItemEditor { ui: ui.clone(), section, item: Some(item.clone()) } } }
+        div { class: "flex flex-wrap items-start justify-between gap-3", div { p { class: "text-[10px] uppercase tracking-[0.2em] text-slate-400", "{ui.copy().section_title(section)} · source of truth" } h2 { class: "mt-1 text-lg font-semibold", "{item.id}" } } div { class: "flex flex-wrap gap-2", span { id: "create-work-{item.id}", "data-create-work-from-item": "{item.id}", "data-work-lang": "{ui.locale.slug()}", CompactAction { icon: IconName::Goal, label: "Goal".to_string(), href: goal_href, aria_label: format!("Create Goal from {}", item.id) } } CompactAction { icon: IconName::Scope, label: "Scope".to_string(), href: scope_href, aria_label: format!("Open scope for {}", item.id) } } }
+        section { class: "mt-3 rounded-lg border border-slate-200 bg-white p-4", "data-inline-editor": "true", ItemEditor { ui: ui.clone(), section, item: Some(item.clone()) } }
         details { class: "mt-3 rounded-lg border border-slate-200 bg-white p-4", summary { class: "cursor-pointer text-sm font-semibold", if ui.locale == Locale::Ja { "関連コード・テストと履歴" } else { "Related code, tests, and history" } } div { class: "mt-3 space-y-2 text-sm", for group in item.implementations.iter().chain(item.tests.iter()) { for reference in &group.references { p { "{reference.file}" } } } } }
     }
 }
@@ -175,15 +183,6 @@ fn kind_for_section(section: PageSection) -> &'static str {
         PageSection::Requirement => "requirements",
         PageSection::Feature => "features",
         _ => "requirements",
-    }
-}
-fn tab_icon(tab: PageSection) -> &'static str {
-    match tab {
-        PageSection::Philosophy => "○",
-        PageSection::Policy => "◌",
-        PageSection::Requirement => "□",
-        PageSection::Feature => "◇",
-        _ => "",
     }
 }
 fn tab_class(active: bool) -> &'static str {

@@ -66,6 +66,7 @@ impl UiCopy for Japanese {
             PageSection::Trace => "トレース",
             PageSection::Repository => "リポジトリ",
             PageSection::General => "一般",
+            PageSection::App => "アプリ",
             PageSection::SyuYaml => "syu.yaml",
             PageSection::Integrations => "連携",
         }

@@ -1,4 +1,5 @@
 use super::CommandCategory;
+use crate::components::icons::IconName;
 use crate::i18n::Locale;
 use syu_workbench::WorkbenchActionId;
 
@@ -36,13 +37,13 @@ impl WorkbenchPage {
         }
     }
 
-    pub const fn icon(self) -> &'static str {
+    pub const fn icon(self) -> IconName {
         match self {
-            Self::Work => "◉",
-            Self::Scope => "↗",
-            Self::Items => "▤",
-            Self::Diagnostics => "✓",
-            Self::Settings => "⚙",
+            Self::Work => IconName::Work,
+            Self::Scope => IconName::Scope,
+            Self::Items => IconName::Items,
+            Self::Diagnostics => IconName::Diagnostics,
+            Self::Settings => IconName::Settings,
         }
     }
 }
@@ -63,11 +64,30 @@ pub enum PageSection {
     Trace,
     Repository,
     General,
+    App,
     SyuYaml,
     Integrations,
 }
 
 impl PageSection {
+    pub const fn icon(self) -> IconName {
+        match self {
+            Self::CodeTests => IconName::CodeTests,
+            Self::Feature => IconName::Feature,
+            Self::Requirement => IconName::Requirement,
+            Self::Policy => IconName::Policy,
+            Self::Philosophy => IconName::Philosophy,
+            Self::Workspace => IconName::Workspace,
+            Self::GoalPlan => IconName::WorkPlan,
+            Self::Trace => IconName::Trace,
+            Self::Repository => IconName::Repository,
+            Self::General | Self::SyuYaml => IconName::General,
+            Self::App => IconName::App,
+            Self::Integrations => IconName::Integrations,
+            _ => IconName::Work,
+        }
+    }
+
     pub const fn slug(self) -> &'static str {
         match self {
             Self::Brief => "brief",
@@ -84,6 +104,7 @@ impl PageSection {
             Self::Trace => "trace",
             Self::Repository => "repository",
             Self::General => "general",
+            Self::App => "app",
             Self::SyuYaml => "syu-yaml",
             Self::Integrations => "integrations",
         }
@@ -105,6 +126,7 @@ impl PageSection {
             "trace" => Self::Trace,
             "repository" => Self::Repository,
             "general" => Self::General,
+            "app" => Self::App,
             "syu-yaml" => Self::SyuYaml,
             "integrations" => Self::Integrations,
             _ => return None,

@@ -44,13 +44,15 @@ use syu_core::{
 use syu_domain::Issue;
 use syu_task_model::{
     ClassificationOutcome, GoalPlanArtifact, GoalPlanCheckReport, GoalPlanCompletion,
-    GoalPlanConfidence, GoalPlanCoverage, GoalPlanCoverageMode, GoalPlanGoal,
-    GoalPlanImplementationPlan, GoalPlanPersistentItem, GoalPlanPersistentItemDetails,
-    GoalPlanPersistentItems, GoalPlanScope, GoalPlanScopeInclude, GoalPlanSelectionMode,
-    GoalPlanSource, GoalPlanSourceEvidence, GoalPlanSourceMode, GoalPlanSpecMapping,
-    GoalPlanTestPlan, RequestArtifact, RequestClassification, ScaffoldAction, ScaffoldPlan,
-    ScaffoldUpdate, ScaffoldUpdateKind, ScopeFeatureCandidate, ScopeOutcome, ScopeSignals,
-    SearchResult, TaskTestSelectionCommand, TaskTestSelectionEscalation, TaskTestSelectionPlan,
+    GoalPlanConfidence, GoalPlanConversionContext, GoalPlanCoverage, GoalPlanCoverageMode,
+    GoalPlanGoal, GoalPlanImplementationPlan, GoalPlanPersistentItem, GoalPlanPersistentItems,
+    GoalPlanScope, GoalPlanScopeInclude, GoalPlanSelectionMode, GoalPlanSource,
+    GoalPlanSourceEvidence, GoalPlanSourceMode, GoalPlanSpecMapping, GoalPlanTestPlan,
+    RequestArtifact, RequestClassification, ScaffoldAction, ScaffoldPlan, ScaffoldUpdate,
+    ScaffoldUpdateKind, ScopeFeatureCandidate, ScopeOutcome, ScopeSignals, SearchResult,
+    SourceRole, TaskTestSelectionCommand, TaskTestSelectionEscalation, TaskTestSelectionPlan,
+    TraceTarget, WorkConstraints, WorkDiagnostic, WorkGraphNode, WorkKind, WorkMode, WorkOperation,
+    WorkPlan, WorkPlanningInput, WorkSeed, WorkSurface, goal_plan_from_work_plan, plan_work,
 };
 use syu_workbench as shared_workbench;
 use tokio::{
@@ -764,6 +766,18 @@ pub struct RequestPlanRequest {
     pub request: RequestArtifact,
     #[serde(default)]
     pub request_path: Option<String>,
+    #[serde(default)]
+    pub goal_id: Option<String>,
+    #[serde(default)]
+    pub plan_output_path: Option<String>,
+    #[serde(default)]
+    pub kind: Option<WorkKind>,
+    #[serde(default)]
+    pub operation: Option<WorkOperation>,
+    #[serde(default)]
+    pub mode: Option<WorkMode>,
+    #[serde(default)]
+    pub constraints: WorkConstraints,
 }
 
 #[derive(Debug, Clone, Deserialize)]

@@ -1,4 +1,5 @@
 use crate::components::explorer::page_href;
+use crate::components::icons::{IconName, SyuIcon};
 use crate::components::pages::{DiagnosticsPage, ItemsPage, ScopePage, SettingsPage, WorkPage};
 use crate::i18n::Locale;
 use crate::model::{
@@ -41,7 +42,6 @@ pub fn StatusBar(ui: WorkbenchUiState, active_page: WorkbenchPage) -> Element {
         header { class: "sticky top-0 z-40 border-b border-slate-200 bg-white",
             div { class: "flex min-h-20 items-start gap-3 px-4 py-3 lg:ml-64 lg:px-8",
                 div { class: "min-w-0 flex-1", CommandPalette { ui: ui.clone() } }
-                a { class: "grid h-10 w-10 shrink-0 place-items-center rounded-full text-slate-500 hover:bg-slate-100", href: page_href(WorkbenchPage::Settings, ui.locale, Some(PageSection::SyuYaml), None, None), title: copy.page_title(WorkbenchPage::Settings), "aria-label": copy.page_title(WorkbenchPage::Settings), "⚙" }
             }
             div { class: "sr-only", "{copy.page_title(active_page)}" }
         }
@@ -56,8 +56,11 @@ pub fn WorkbenchSidebar(ui: WorkbenchUiState, active_page: WorkbenchPage) -> Ele
         aside { class: "w-full border-b border-slate-200 bg-white lg:fixed lg:inset-y-0 lg:left-0 lg:z-50 lg:w-64 lg:border-b-0 lg:border-r",
             nav { class: "flex h-full flex-col px-4 py-4 lg:px-5 lg:py-5", "aria-label": copy.sidebar_title(),
                 a { class: "mb-5 flex h-10 items-center px-3 text-sm font-semibold", href: page_href(WorkbenchPage::Work, ui.locale, None, None, None), "Syu" }
-                ul { class: "space-y-1", for page in WorkbenchPage::ROLES { li { a { class: sidebar_class(page == active_page), href: page_href(page, ui.locale, None, None, None), span { class: "grid h-6 w-6 place-items-center text-base font-normal", "{page.icon()}" } span { "{copy.page_title(page)}" } } } } }
-                div { class: "mt-auto hidden border-t border-slate-200 px-3 pt-4 text-xs text-slate-500 lg:block", strong { class: "block text-slate-800", "ugoite / syu" } p { class: "mt-1 truncate", "{copy.branch_label()}: {summary.branch}" } p { class: "mt-1 flex items-center gap-2", span { class: "h-2 w-2 rounded-full bg-emerald-500" } "workspace connected" } }
+                ul { class: "space-y-1", for page in WorkbenchPage::ROLES { li { a { class: sidebar_class(page == active_page), href: page_href(page, ui.locale, None, None, None), span { class: "grid h-6 w-6 place-items-center", SyuIcon { name: page.icon(), size: 19 } } span { "{copy.page_title(page)}" } } } } }
+                div { class: "mt-auto hidden lg:block",
+                    a { class: sidebar_class(active_page == WorkbenchPage::Settings), href: page_href(WorkbenchPage::Settings, ui.locale, Some(PageSection::General), None, None), SyuIcon { name: IconName::Settings, size: 19 } span { "{copy.page_title(WorkbenchPage::Settings)}" } }
+                    div { class: "mt-3 border-t border-slate-200 px-3 pt-4 text-xs text-slate-500", strong { class: "block text-slate-800", "ugoite / syu" } p { class: "mt-1 truncate", "{copy.branch_label()}: {summary.branch}" } p { class: "mt-1 flex items-center gap-2", span { class: "h-2 w-2 rounded-full bg-emerald-500" } "workspace connected" } }
+                }
             }
         }
     }
@@ -126,7 +129,7 @@ pub fn CommandPalette(ui: WorkbenchUiState) -> Element {
         div { class: "relative", "data-command-palette": "true",
             label { class: "sr-only", for: "command-palette-input", "{copy.palette_placeholder()}" }
             input { id: "command-palette-input", class: "w-full rounded-lg border border-slate-300 bg-white px-11 py-3 text-sm shadow-sm outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200", value: "{ui.command_query}", placeholder: copy.palette_placeholder(), autocomplete: "off", "data-command-input": "true" }
-            span { class: "pointer-events-none absolute left-4 top-3.5 text-slate-400", "⌘" }
+            span { class: "pointer-events-none absolute left-4 top-3.5 text-slate-400", SyuIcon { name: IconName::Scope, size: 18 } }
             div { class: "mt-2 flex flex-wrap gap-1.5", for category in CommandCategory::ALL { span { class: if category == CommandCategory::Browse { "rounded-full bg-slate-950 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-white" } else { "rounded-full border border-slate-300 px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-slate-500" }, "{category_label(category)}" } } }
             div { class: "command-palette-results absolute left-0 right-0 z-50 mt-2 hidden max-h-[28rem] overflow-auto rounded-xl border border-slate-200 bg-white p-2 shadow-2xl", role: "listbox",
                 for (id, title, description, category, target, disabled) in entries {

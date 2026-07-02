@@ -31,7 +31,18 @@ fn sidebar_has_only_four_roles_in_required_order() {
     let items = html.find(">Items<").unwrap();
     let diagnostics = html.find(">Diagnostics<").unwrap();
     assert!(work < scope && scope < items && items < diagnostics);
-    assert!(!html.contains(">Settings<"));
+    let settings = html.find(">Settings<").unwrap();
+    let workspace_card = html.find("ugoite / syu").unwrap();
+    assert!(diagnostics < settings && settings < workspace_card);
+    for mdi in [
+        "mdi-clipboard-edit-outline",
+        "mdi-selection-search",
+        "mdi-format-list-bulleted-square",
+        "mdi-stethoscope",
+        "mdi-cog-outline",
+    ] {
+        assert!(html.contains(mdi));
+    }
     for legacy in [
         "Command palette</",
         "Goal plan</",
@@ -53,7 +64,8 @@ fn work_is_human_readable_default_page() {
         None,
     );
     assert!(html.contains("Understand, assign, and verify implementation work"));
-    assert!(html.contains("Brief"));
+    assert!(!html.contains("Work sections"));
+    assert!(!html.contains("data-work-selector"));
     assert!(html.contains("No work yet"));
 }
 

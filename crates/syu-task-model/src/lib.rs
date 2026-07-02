@@ -4,6 +4,10 @@ use std::collections::BTreeMap;
 pub use syu_domain::{GitRange, LanguageName, SpecId, SpecKind, WorkspaceRoot};
 use syu_domain::{Issue, Severity, TraceReference};
 
+mod work;
+
+pub use work::*;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SearchResult {
@@ -118,6 +122,8 @@ pub struct GoalPlanArtifact {
     pub request: Option<String>,
     #[serde(default)]
     pub classification: Option<String>,
+    #[serde(default)]
+    pub work: Option<WorkPlan>,
     #[serde(default)]
     pub source: GoalPlanSource,
     pub goal: GoalPlanGoal,

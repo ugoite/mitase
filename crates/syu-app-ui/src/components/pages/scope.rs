@@ -1,6 +1,7 @@
 #![allow(unused_braces)]
 
 use crate::components::explorer::{EmptyDetail, PageHeader, page_href};
+use crate::components::icons::SyuIcon;
 use crate::components::indicators::{EvidenceStamp, IndicatorStatus, StatusCircle};
 use crate::i18n::Locale;
 use crate::model::{
@@ -183,7 +184,7 @@ pub fn ScopePage(
                 for goal in &ui.payload.state.goals.active { option { value: "{goal.goal_id}", "data-scope-source": "goal", hidden: !goal_selected, selected: entity.as_deref() == Some(goal.goal_id.as_str()), "{goal.goal_id}" } }
             }
         }
-        nav { class: "mb-3 flex flex-wrap gap-1 border-b border-slate-200", "aria-label": "Scope sections", for tab in TABS { a { class: tab_class(tab == selected_tab), href: page_href(WorkbenchPage::Scope, ui.locale, Some(tab), selected_id.as_deref(), None), "{tab_icon(tab)} {copy.section_title(tab)}" } } }
+        nav { class: "mb-3 flex flex-wrap gap-1 border-b border-slate-200", "aria-label": "Scope sections", for tab in TABS { a { class: tab_class(tab == selected_tab), href: page_href(WorkbenchPage::Scope, ui.locale, Some(tab), selected_id.as_deref(), None), SyuIcon { name: tab.icon(), size: 16 } "{copy.section_title(tab)}" } } }
         div { class: "grid items-start gap-3 lg:grid-cols-[18rem_minmax(0,1fr)]",
             aside { class: "rounded-lg border border-slate-200 bg-slate-50 p-2", "aria-label": "Implementation slices",
                 div { class: "flex items-center justify-between px-2 py-2", span { class: "text-xs font-medium uppercase text-slate-500", "Implementation slices" } span { class: "rounded-full border bg-white px-2 py-0.5 text-xs", "{slices.len()}" } }
@@ -227,16 +228,6 @@ fn tab_class(active: bool) -> &'static str {
         "border-b-2 border-slate-950 px-3 py-2 text-sm font-semibold"
     } else {
         "px-3 py-2 text-sm font-semibold text-slate-500"
-    }
-}
-fn tab_icon(tab: PageSection) -> &'static str {
-    match tab {
-        PageSection::CodeTests => "⌘",
-        PageSection::Feature => "◇",
-        PageSection::Requirement => "□",
-        PageSection::Policy => "◌",
-        PageSection::Philosophy => "○",
-        _ => "",
     }
 }
 fn confidence_label(locale: Locale, confidence: BranchScopeConfidence) -> &'static str {

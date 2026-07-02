@@ -1,5 +1,6 @@
 use crate::components::explorer::{PageHeader, page_href};
-use crate::components::indicators::{IndicatorStatus, StatusCircle};
+use crate::components::icons::{IconName, SyuIcon};
+use crate::components::indicators::{CompactAction, IndicatorStatus, StatusCircle};
 use crate::i18n::Locale;
 use crate::model::{PageSection, WorkbenchPage, WorkbenchUiState};
 use dioxus::prelude::*;
@@ -49,7 +50,7 @@ pub fn DiagnosticsPage(
     rsx! {
         PageHeader { kicker: "Workbench".to_string(), title: copy.page_title(WorkbenchPage::Diagnostics).to_string(), description: copy.page_summary(WorkbenchPage::Diagnostics).to_string(), actions: rsx! { button { id: "diagnostics-run", class: if focused { "rounded-lg border-2 border-red-500 bg-slate-950 px-4 py-2 text-sm font-semibold text-white" } else { "rounded-lg bg-slate-950 px-4 py-2 text-sm font-semibold text-white" }, type: "button", "data-command-target": "diagnostics-run", "data-run-diagnostics": "true", "data-running-label": if ui.locale == Locale::Ja { "診断中…" } else { "Running…" }, "{copy.run_diagnostics()}" } } }
         div { class: "mb-4 flex gap-2", input { class: "min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm", placeholder: if ui.locale == Locale::Ja { "診断項目を検索" } else { "Search diagnostic checks" }, "data-diagnostics-filter": "true" } }
-        nav { class: "mb-3 flex flex-wrap gap-1 border-b border-slate-200", "aria-label": "Diagnostic groups", for item in TABS { a { class: tab_class(item == tab), href: page_href(WorkbenchPage::Diagnostics, ui.locale, Some(item), None, None), "{tab_icon(item)} {copy.section_title(item)} " StatusCircle { status: aggregate_status(&ui, item), label: aggregate_label(ui.locale, item).to_string(), count: Some(error_count(&ui, item)) } } } }
+        nav { class: "mb-3 flex flex-wrap gap-1 border-b border-slate-200", "aria-label": "Diagnostic groups", for item in TABS { a { class: tab_class(item == tab), href: page_href(WorkbenchPage::Diagnostics, ui.locale, Some(item), None, None), SyuIcon { name: item.icon(), size: 16 } "{copy.section_title(item)} " StatusCircle { status: aggregate_status(&ui, item), label: aggregate_label(ui.locale, item).to_string(), count: Some(error_count(&ui, item)) } } } }
         div { class: "grid items-start gap-3 lg:grid-cols-[18rem_minmax(0,1fr)]",
             aside { class: "rounded-lg border border-slate-200 bg-slate-50 p-2", "aria-label": "Diagnostic checks",
                 div { class: "flex items-center justify-between px-2 py-2", span { class: "text-xs font-medium uppercase text-slate-500", "{copy.section_title(tab)} checks" } span { class: "rounded-full border bg-white px-2 py-0.5 text-xs", "{checks.len()}" } }
@@ -64,8 +65,12 @@ pub fn DiagnosticsPage(
 
 #[component]
 fn DiagnosticDetail(ui: WorkbenchUiState, check: DiagnosticCheck) -> Element {
+    let repairable = matches!(
+        check.status,
+        IndicatorStatus::Warning | IndicatorStatus::Error
+    );
     rsx! {
-        div { class: "flex flex-wrap items-start justify-between gap-3", div { p { class: "text-[10px] uppercase tracking-[0.2em] text-slate-400", "Diagnostic check · {check.id}" } h2 { class: "mt-1 text-lg font-semibold", "{local(ui.locale, check.title_en, check.title_ja)}" } } StatusCircle { status: check.status, label: local_owned(ui.locale, &check.summary_en, &check.summary_ja).to_string(), count: Some(check.issue_count) } }
+        div { class: "flex flex-wrap items-start justify-between gap-3", div { p { class: "text-[10px] uppercase tracking-[0.2em] text-slate-400", "Diagnostic check · {check.id}" } h2 { class: "mt-1 text-lg font-semibold", "{local(ui.locale, check.title_en, check.title_ja)}" } } div { class: "flex items-center gap-2", if repairable { span { "data-repair-source": check.id, CompactAction { icon: IconName::Repair, label: "Repair".to_string(), href: page_href(WorkbenchPage::Work, ui.locale, None, Some("new"), None), aria_label: format!("Create Repair Work from {}", check.id) } } } StatusCircle { status: check.status, label: local_owned(ui.locale, &check.summary_en, &check.summary_ja).to_string(), count: Some(check.issue_count) } } }
         div { class: status_callout(check.status), p { class: "text-sm leading-6", "{local_owned(ui.locale, &check.detail_en, &check.detail_ja)}" } }
         div { class: "mt-3 grid gap-3 md:grid-cols-2", section { class: "rounded-lg border border-slate-200 bg-white p-4", h3 { class: "text-[10px] uppercase tracking-[0.18em] text-slate-500", if ui.locale == Locale::Ja { "推奨する修正" } else { "Recommended action" } } ol { class: "mt-2 list-decimal space-y-1 pl-5 text-sm", li { if ui.locale == Locale::Ja { "対象と根拠を確認する" } else { "Review the affected subject and evidence" } } li { if ui.locale == Locale::Ja { "必要な修正を適用する" } else { "Apply the required correction" } } li { if ui.locale == Locale::Ja { "診断を再実行する" } else { "Run diagnostics again" } } } } section { class: "rounded-lg border border-slate-200 bg-white p-4", h3 { class: "text-[10px] uppercase tracking-[0.18em] text-slate-500", if ui.locale == Locale::Ja { "診断の根拠" } else { "Diagnostic evidence" } } p { class: "mt-2 text-sm text-slate-700", "{local_owned(ui.locale, &check.summary_en, &check.summary_ja)}" } } }
         if let Some(raw) = check.raw { details { class: "mt-3 rounded-lg border border-slate-200 bg-white p-4", summary { class: "cursor-pointer text-sm font-semibold", if ui.locale == Locale::Ja { "raw 診断を表示" } else { "Show raw diagnostics" } } pre { class: "mt-3 max-h-64 overflow-auto rounded bg-slate-950 p-3 text-xs text-slate-100", "{raw}" } } }
@@ -226,15 +231,6 @@ fn tab_class(active: bool) -> &'static str {
         "flex items-center gap-2 border-b-2 border-slate-950 px-3 py-2 text-sm font-semibold"
     } else {
         "flex items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-500"
-    }
-}
-fn tab_icon(tab: PageSection) -> &'static str {
-    match tab {
-        PageSection::Workspace => "▣",
-        PageSection::GoalPlan => "◎",
-        PageSection::Trace => "↗",
-        PageSection::Repository => "⌘",
-        _ => "",
     }
 }
 fn status_callout(status: IndicatorStatus) -> &'static str {

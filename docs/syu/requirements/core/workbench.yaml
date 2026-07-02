@@ -185,7 +185,8 @@ requirements:
             - dry_run_command_adapter_captures_stdout_stderr_and_evidence
         - file: crates/syu-app-ui/src/components/pages/work.rs
           symbols:
-            - Delivery
+            - WorkDetails
+            - VerificationSection
             - Evidence
   - id: REQ-WORKBENCH-006
     title: Shared browser and desktop Workbench behavior

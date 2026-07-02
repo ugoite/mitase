@@ -91,11 +91,17 @@ pub(super) async fn execute_action(
         }
         "request.plan" => {
             let request = request.context("request artifact required")?;
-            let plan = goal_plan_from_request(
+            let plan = build_shared_goal_plan(
                 server,
                 &RequestPlanRequest {
                     request: request.clone(),
                     request_path: None,
+                    goal_id: None,
+                    plan_output_path: None,
+                    kind: None,
+                    operation: None,
+                    mode: None,
+                    constraints: WorkConstraints::default(),
                 },
             )
             .await;
@@ -202,6 +208,7 @@ pub(super) async fn execute_action(
                 request_path: Some(format!("branch:{range}")),
                 request: Some(format!("Infer goal from {range}")),
                 classification: Some(RequestClassification::Change.label().to_string()),
+                work: None,
                 goal: GoalPlanGoal {
                     id: goal_id,
                     title: "Infer goal from branch".to_string(),

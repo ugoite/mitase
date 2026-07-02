@@ -2499,6 +2499,7 @@ mod tests {
                 request_path: None,
                 request: None,
                 classification: None,
+                work: None,
                 source: Default::default(),
                 goal: syu_task_model::GoalPlanGoal {
                     id: "goal-1".to_string(),
@@ -2548,6 +2549,7 @@ mod tests {
                 request_path: None,
                 request: None,
                 classification: None,
+                work: None,
                 source: Default::default(),
                 goal: syu_task_model::GoalPlanGoal {
                     id: "goal-1".to_string(),

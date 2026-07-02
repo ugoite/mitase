@@ -254,6 +254,7 @@ pub(super) async fn item_work(
         request_path: None,
         request: Some(format!("Create Work from {}", item.id)),
         classification: Some(RequestClassification::Change.label().to_string()),
+        work: None,
         source: GoalPlanSource {
             mode: GoalPlanSourceMode::ItemDriven,
             confidence: Some(GoalPlanConfidence::High),
@@ -418,7 +419,7 @@ pub(super) async fn request_plan(
     State(server): State<WorkbenchServer>,
     Json(request): Json<RequestPlanRequest>,
 ) -> Json<GoalPlanArtifact> {
-    let plan = goal_plan_from_request(&server, &request).await;
+    let plan = build_shared_goal_plan(&server, &request).await;
     server
         .inner
         .events

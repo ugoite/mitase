@@ -66,6 +66,7 @@ impl UiCopy for English {
             PageSection::Trace => "Trace",
             PageSection::Repository => "Repository",
             PageSection::General => "General",
+            PageSection::App => "App",
             PageSection::SyuYaml => "syu.yaml",
             PageSection::Integrations => "Integrations",
         }

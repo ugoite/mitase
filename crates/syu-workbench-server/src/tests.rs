@@ -122,7 +122,8 @@ async fn branch_creation_action_adds_a_selectable_work() {
     .await;
     assert_eq!(page_status, StatusCode::OK);
     assert!(html.contains("GOAL-BRANCH-001 Infer goal from branch"));
-    assert!(html.contains("data-work-selector=\"true\""));
+    assert!(html.contains("data-goal-rail=\"true\""));
+    assert!(!html.contains("data-work-selector=\"true\""));
 
     let (second_status, second_action) = json_response(
         server.router(),
@@ -318,7 +319,9 @@ async fn request_plan_and_branch_scope_feed_page_models() {
             "request": "Add Workbench planning coverage",
             "context": { "linked_ids": ["REQ-WORKBENCH-006"] }
         },
-        "request_path": "request.yaml"
+        "request_path": "request.yaml",
+        "kind": "govern",
+        "operation": "modify"
     });
     let (plan_status, plan) = json_response(
         server.router(),
@@ -332,6 +335,31 @@ async fn request_plan_and_branch_scope_feed_page_models() {
     .await;
     assert_eq!(plan_status, StatusCode::OK);
     assert_eq!(plan["kind"], "syu.goal_plan");
+    assert_eq!(plan["work"]["intent"]["kind"], "govern");
+    assert_eq!(plan["work"]["intent"]["operation"], "modify");
+    assert!(plan["work"]["verification"]["completion"].is_array());
+    let artifact: GoalPlanArtifact = serde_json::from_value(plan).expect("typed goal plan");
+    {
+        let mut state = server.inner.state.write().await;
+        state.goals.selected_goal_id = Some(artifact.goal.id.clone());
+        state.goals.active.push(ActiveGoalState {
+            goal_id: artifact.goal.id.clone(),
+            goal_plan: Some(artifact),
+            ..ActiveGoalState::default()
+        });
+    }
+    let (_, work_html) = text_response(
+        server.router(),
+        Request::builder()
+            .uri("/?page=work&lang=en")
+            .body(Body::empty())
+            .expect("request"),
+    )
+    .await;
+    assert!(work_html.contains("data-work-kind=\"govern\""));
+    assert!(work_html.contains("data-work-section=\"impact\""));
+    assert!(work_html.contains("data-work-section=\"verification\""));
+    assert!(!work_html.contains("data-work-selector=\"true\""));
 
     let (scope_status, scope) = json_response(
         server.router(),

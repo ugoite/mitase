@@ -155,26 +155,25 @@ pub(super) async fn classify_request(
     server: &WorkbenchServer,
     request: &RequestArtifact,
 ) -> ClassificationOutcome {
-    let explicit_items = search_request_items(server, request).await;
-    let classification = if request.request.to_ascii_lowercase().contains("delete")
-        || request.request.to_ascii_lowercase().contains("remove")
-    {
-        RequestClassification::Delete
-    } else if request.request.to_ascii_lowercase().contains("update")
-        || request.request.to_ascii_lowercase().contains("change")
-        || request.request.to_ascii_lowercase().contains("replace")
-    {
-        RequestClassification::Change
-    } else {
-        RequestClassification::Create
-    };
+    let plan = shared_work_plan_input(
+        server,
+        request,
+        None,
+        None,
+        None,
+        WorkConstraints::default(),
+    )
+    .await;
+    let explicit_items = explicit_request_items(server, request).await;
+    let related_items = search_request_items(server, request).await;
     ClassificationOutcome {
-        classification,
+        classification: request_classification_from_work_plan(&plan),
         reasons: vec![format!(
-            "classified from request text as {classification:?}"
+            "shared planner resolved {:?} + {:?}",
+            plan.intent.kind, plan.intent.operation
         )],
-        explicit_items: explicit_items.clone(),
-        related_items: explicit_items,
+        explicit_items,
+        related_items,
         request: request.request.clone(),
         context: request.context.clone(),
     }
@@ -184,46 +183,44 @@ pub(super) async fn scope_request(
     server: &WorkbenchServer,
     request: &RequestArtifact,
 ) -> ScopeOutcome {
+    let plan = shared_work_plan_input(
+        server,
+        request,
+        None,
+        None,
+        None,
+        WorkConstraints::default(),
+    )
+    .await;
     let classification = classify_request(server, request).await;
-    let items = search_request_items(server, request).await;
-    let requirements = items
-        .iter()
-        .filter(|item| item.kind == "requirement")
-        .cloned()
-        .collect::<Vec<_>>();
-    let features = items
-        .iter()
-        .filter(|item| item.kind == "feature")
-        .map(|item| ScopeFeatureCandidate {
-            id: item.id.clone(),
-            title: item.title.clone(),
-            status: "implemented".to_string(),
-            linked_requirements: request.context.linked_ids.clone(),
-            planned_state_update: false,
-        })
-        .collect::<Vec<_>>();
-    let policies = items
-        .iter()
-        .filter(|item| item.kind == "policy")
-        .cloned()
-        .collect::<Vec<_>>();
-    let philosophies = items
-        .iter()
-        .filter(|item| item.kind == "philosophy")
-        .cloned()
-        .collect::<Vec<_>>();
+    let workspace = server.inner.browser_workspace.read().await;
+    let requirements = collect_scope_search_results(&workspace, &plan, WorkSurface::Requirement);
+    let policies = collect_scope_search_results(&workspace, &plan, WorkSurface::Policy);
+    let philosophies = collect_scope_search_results(&workspace, &plan, WorkSurface::Philosophy);
+    let features = collect_scope_feature_candidates(&workspace, &plan);
     ScopeOutcome {
         classification,
         signals: ScopeSignals {
-            policy_discussion: !policies.is_empty(),
-            philosophy_discussion: !philosophies.is_empty(),
-            planned_feature_updates: !features.is_empty(),
+            policy_discussion: !policies.is_empty()
+                || plan
+                    .intent
+                    .requested_surfaces
+                    .contains(&WorkSurface::Policy),
+            philosophy_discussion: !philosophies.is_empty()
+                || plan
+                    .intent
+                    .requested_surfaces
+                    .contains(&WorkSurface::Philosophy),
+            planned_feature_updates: features.iter().any(|feature| feature.planned_state_update),
         },
         requirements,
         features,
         policies,
         philosophies,
-        notes: vec!["derived from request text".to_string()],
+        notes: vec![format!(
+            "shared planner resolved {:?} + {:?}",
+            plan.intent.kind, plan.intent.operation
+        )],
     }
 }
 
@@ -248,124 +245,322 @@ pub(super) async fn scaffold_request(
     }
 }
 
-pub(super) async fn goal_plan_from_request(
+pub(super) async fn build_shared_goal_plan(
     server: &WorkbenchServer,
     request: &RequestPlanRequest,
 ) -> GoalPlanArtifact {
-    let classification = classify_request(server, &request.request).await;
-    let scope = scope_request(server, &request.request).await;
-    let explicit_ids = request.request.explicit_ids();
     let request_path = request
         .request_path
         .clone()
         .unwrap_or_else(|| "request.yaml".to_string());
-    GoalPlanArtifact {
-        version: 1,
-        kind: "syu.goal_plan".to_string(),
-        request_path: Some(request_path.clone()),
-        request: Some(request.request.request.clone()),
-        classification: Some(classification.classification.label().to_string()),
-        source: GoalPlanSource {
-            mode: GoalPlanSourceMode::RequestDriven,
-            request_artifact: Some(request_path),
-            classification: Some(classification.classification.label().to_string()),
-            range: None,
-            confidence: Some(GoalPlanConfidence::Medium),
-            evidence: Some(GoalPlanSourceEvidence {
-                item_id: None,
-                changed_files: Vec::new(),
-                traced_requirements: explicit_ids.clone(),
-                traced_features: Vec::new(),
-                traced_policies: Vec::new(),
-                traced_philosophies: Vec::new(),
-            }),
+    let plan = shared_work_plan_with_options(server, request).await;
+    let context = GoalPlanConversionContext {
+        goal_id: request
+            .goal_id
+            .clone()
+            .unwrap_or_else(|| default_goal_id_for_request(&request.request, &request_path)),
+        source_mode: GoalPlanSourceMode::RequestDriven,
+        source_path: Some(request_path),
+        plan_output_path: request
+            .plan_output_path
+            .clone()
+            .unwrap_or_else(|| ".syu/tasks/current.yaml".to_string()),
+        range: None,
+        confidence: if plan.executable {
+            GoalPlanConfidence::High
+        } else {
+            GoalPlanConfidence::Low
         },
-        goal: GoalPlanGoal {
-            id: "GOAL-001".to_string(),
-            title: "Plan the requested Workbench change".to_string(),
-            statement: request.request.request.clone(),
-            non_goals: vec!["Do not create a persistent spec layer".to_string()],
-            inferred: false,
-        },
-        spec_mapping: GoalPlanSpecMapping {
-            persistent_items: GoalPlanPersistentItems {
-                requirements: scope
-                    .requirements
-                    .iter()
-                    .map(|item| {
-                        GoalPlanPersistentItem::Item(GoalPlanPersistentItemDetails {
-                            id: item.id.clone(),
-                            title: Some(item.title.clone()),
-                            document_path: None,
-                        })
-                    })
-                    .collect(),
-                features: scope
-                    .features
-                    .iter()
-                    .map(|item| {
-                        GoalPlanPersistentItem::Item(GoalPlanPersistentItemDetails {
-                            id: item.id.clone(),
-                            title: Some(item.title.clone()),
-                            document_path: None,
-                        })
-                    })
-                    .collect(),
-                policies: scope
-                    .policies
-                    .iter()
-                    .map(|item| {
-                        GoalPlanPersistentItem::Item(GoalPlanPersistentItemDetails {
-                            id: item.id.clone(),
-                            title: Some(item.title.clone()),
-                            document_path: None,
-                        })
-                    })
-                    .collect(),
-                philosophies: scope
-                    .philosophies
-                    .iter()
-                    .map(|item| {
-                        GoalPlanPersistentItem::Item(GoalPlanPersistentItemDetails {
-                            id: item.id.clone(),
-                            title: Some(item.title.clone()),
-                            document_path: None,
-                        })
-                    })
-                    .collect(),
-            },
-            spec_updates: Default::default(),
-            spec_updates_required: false,
-            spec_update_reasons: Vec::new(),
-        },
-        implementation_plan: GoalPlanImplementationPlan {
-            confidence: Some(GoalPlanConfidence::Medium),
-            scope: GoalPlanScope {
-                include: vec![GoalPlanScopeInclude::Pattern("src/**".to_string())],
-                exclude: vec!["docs/generated/**".to_string()],
-            },
-            steps: vec![
-                "Review the request".to_string(),
-                "Update the smallest typed surface".to_string(),
-            ],
-        },
-        test_plan: GoalPlanTestPlan {
-            selection_mode: GoalPlanSelectionMode::Minimal,
-            confidence: Some(GoalPlanConfidence::Medium),
-            required_tests: BTreeMap::new(),
-            suggested_tests: BTreeMap::new(),
-        },
-        coverage: GoalPlanCoverage {
-            mode: GoalPlanCoverageMode::ChangedLines,
-            threshold: 100,
-            include: Vec::new(),
-            exclude: Vec::new(),
-        },
-        completion: GoalPlanCompletion {
-            must_pass: vec!["syu validate .".to_string()],
-        },
-        warnings: Vec::new(),
+    };
+    goal_plan_from_work_plan(&request.request.request, &plan, &context)
+}
+
+fn default_goal_id_for_request(request: &RequestArtifact, request_path: &str) -> String {
+    if let Some(id) = request.explicit_ids().first() {
+        return format!("GOAL-{id}");
     }
+    let stem = FsPath::new(request_path)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("request");
+    let compact = stem
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_uppercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .split('-')
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+    format!(
+        "GOAL-{}",
+        if compact.is_empty() { "WORK" } else { &compact }
+    )
+}
+
+async fn shared_work_plan_with_options(
+    server: &WorkbenchServer,
+    request: &RequestPlanRequest,
+) -> WorkPlan {
+    shared_work_plan_input(
+        server,
+        &request.request,
+        request.kind,
+        request.operation,
+        request.mode,
+        request.constraints.clone(),
+    )
+    .await
+}
+
+async fn shared_work_plan_input(
+    server: &WorkbenchServer,
+    request: &RequestArtifact,
+    explicit_kind: Option<WorkKind>,
+    explicit_operation: Option<WorkOperation>,
+    explicit_mode: Option<WorkMode>,
+    constraints: WorkConstraints,
+) -> WorkPlan {
+    let search_candidates = search_request_items(server, request)
+        .await
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, item)| {
+            work_surface_from_label(&item.kind).map(|surface| syu_task_model::WorkCandidate {
+                id: item.id,
+                surface,
+                score: 50u32.saturating_sub((index as u32) * 10),
+                match_reasons: vec!["workbench request search candidate".to_string()],
+            })
+        })
+        .collect::<Vec<_>>();
+    let workspace = server.inner.browser_workspace.read().await;
+    let mut seeds = request
+        .explicit_ids()
+        .into_iter()
+        .map(|id| WorkSeed {
+            surface: work_surface_from_id(&id),
+            id,
+            source_role: SourceRole::Seed,
+        })
+        .collect::<Vec<_>>();
+    let mut diagnostics = Vec::new();
+    if seeds.is_empty() && search_candidates.len() == 1 {
+        let candidate = &search_candidates[0];
+        seeds.push(WorkSeed {
+            id: candidate.id.clone(),
+            surface: candidate.surface,
+            source_role: SourceRole::Inferred,
+        });
+    } else if seeds.is_empty() && !search_candidates.is_empty() {
+        diagnostics.push(WorkDiagnostic {
+            rule: "WORK_AMBIGUOUS_SEED".to_string(),
+            subject: syu_task_model::work_request_text(request),
+            message: "request matched multiple candidate Items without a confident unique winner"
+                .to_string(),
+        });
+    }
+    let nodes = workspace
+        .sections
+        .iter()
+        .flat_map(|section| section.documents.iter())
+        .flat_map(|document| {
+            document.items.iter().map(|item| WorkGraphNode {
+                id: item.id.clone(),
+                surface: work_surface_from_section(item.kind),
+                document_path: Some(document.path.clone()),
+                status: item.status.clone(),
+                linked_ids: item
+                    .linked_philosophies
+                    .iter()
+                    .chain(&item.linked_policies)
+                    .chain(&item.linked_requirements)
+                    .chain(&item.linked_features)
+                    .cloned()
+                    .collect(),
+                implementations: browser_trace_targets(&item.implementations),
+                tests: browser_trace_targets(&item.tests),
+            })
+        })
+        .collect();
+    plan_work(WorkPlanningInput {
+        request: syu_task_model::work_request_text(request),
+        explicit_kind,
+        explicit_operation,
+        explicit_mode,
+        seeds,
+        search_candidates,
+        nodes,
+        constraints,
+        diagnostics,
+        ..Default::default()
+    })
+}
+
+fn browser_trace_targets(groups: &[syu_core::BrowserTraceGroup]) -> Vec<TraceTarget> {
+    groups
+        .iter()
+        .flat_map(|group| {
+            group.references.iter().map(|reference| TraceTarget {
+                language: group.language.clone(),
+                file: reference.file.clone(),
+                symbols: reference.symbols.clone(),
+            })
+        })
+        .collect()
+}
+
+fn work_surface_from_section(section: SectionKind) -> WorkSurface {
+    match section {
+        SectionKind::Philosophy => WorkSurface::Philosophy,
+        SectionKind::Policies => WorkSurface::Policy,
+        SectionKind::Requirements => WorkSurface::Requirement,
+        SectionKind::Features => WorkSurface::Feature,
+    }
+}
+
+fn work_surface_from_label(label: &str) -> Option<WorkSurface> {
+    match label {
+        "philosophy" => Some(WorkSurface::Philosophy),
+        "policy" => Some(WorkSurface::Policy),
+        "requirement" => Some(WorkSurface::Requirement),
+        "feature" => Some(WorkSurface::Feature),
+        _ => None,
+    }
+}
+
+fn work_surface_from_id(id: &str) -> WorkSurface {
+    if id.starts_with("PHIL-") {
+        WorkSurface::Philosophy
+    } else if id.starts_with("POL-") {
+        WorkSurface::Policy
+    } else if id.starts_with("FEAT-") {
+        WorkSurface::Feature
+    } else {
+        WorkSurface::Requirement
+    }
+}
+
+fn request_classification_from_work_plan(plan: &WorkPlan) -> RequestClassification {
+    match plan.intent.operation {
+        WorkOperation::Create => RequestClassification::Create,
+        WorkOperation::Delete | WorkOperation::Supersede => RequestClassification::Delete,
+        _ => RequestClassification::Change,
+    }
+}
+
+async fn explicit_request_items(
+    server: &WorkbenchServer,
+    request: &RequestArtifact,
+) -> Vec<SearchResult> {
+    let ids = request.explicit_ids();
+    if ids.is_empty() {
+        return Vec::new();
+    }
+    let workspace = server.inner.browser_workspace.read().await;
+    let mut items = workspace
+        .sections
+        .iter()
+        .flat_map(|section| {
+            section.documents.iter().flat_map(|document| {
+                document.items.iter().filter_map(|item| {
+                    ids.iter().any(|id| id == &item.id).then(|| SearchResult {
+                        id: item.id.clone(),
+                        kind: section.kind.label().to_string(),
+                        title: item.title.clone(),
+                    })
+                })
+            })
+        })
+        .collect::<Vec<_>>();
+    items.sort_by(|a, b| a.id.cmp(&b.id));
+    items.dedup_by(|a, b| a.id == b.id);
+    items
+}
+
+fn collect_scope_search_results(
+    workspace: &BrowserWorkspace,
+    plan: &WorkPlan,
+    surface: WorkSurface,
+) -> Vec<SearchResult> {
+    let mut results = plan
+        .impact
+        .items
+        .iter()
+        .filter(|item| item.surface == surface)
+        .filter_map(|item| browser_search_result(workspace, &item.id))
+        .collect::<Vec<_>>();
+    results.sort_by(|a, b| a.id.cmp(&b.id));
+    results.dedup_by(|a, b| a.id == b.id);
+    results
+}
+
+fn collect_scope_feature_candidates(
+    workspace: &BrowserWorkspace,
+    plan: &WorkPlan,
+) -> Vec<ScopeFeatureCandidate> {
+    let mut features = plan
+        .impact
+        .items
+        .iter()
+        .filter(|item| item.surface == WorkSurface::Feature)
+        .filter_map(|item| {
+            let (status, linked_requirements, title) =
+                browser_feature_details(workspace, &item.id)?;
+            Some(ScopeFeatureCandidate {
+                id: item.id.clone(),
+                title,
+                planned_state_update: item.impact_role == syu_task_model::ImpactRole::FollowUp
+                    || status.eq_ignore_ascii_case("planned"),
+                status,
+                linked_requirements,
+            })
+        })
+        .collect::<Vec<_>>();
+    features.sort_by(|a, b| a.id.cmp(&b.id));
+    features.dedup_by(|a, b| a.id == b.id);
+    features
+}
+
+fn browser_search_result(workspace: &BrowserWorkspace, id: &str) -> Option<SearchResult> {
+    workspace.sections.iter().find_map(|section| {
+        section.documents.iter().find_map(|document| {
+            document.items.iter().find_map(|item| {
+                (item.id == id).then(|| SearchResult {
+                    id: item.id.clone(),
+                    kind: section.kind.label().to_string(),
+                    title: item.title.clone(),
+                })
+            })
+        })
+    })
+}
+
+fn browser_feature_details(
+    workspace: &BrowserWorkspace,
+    id: &str,
+) -> Option<(String, Vec<String>, String)> {
+    workspace.sections.iter().find_map(|section| {
+        section.documents.iter().find_map(|document| {
+            document.items.iter().find_map(|item| {
+                (item.id == id).then(|| {
+                    (
+                        item.status
+                            .clone()
+                            .unwrap_or_else(|| "implemented".to_string()),
+                        item.linked_requirements.clone(),
+                        item.title.clone(),
+                    )
+                })
+            })
+        })
+    })
 }
 
 pub(super) async fn build_branch_scope(

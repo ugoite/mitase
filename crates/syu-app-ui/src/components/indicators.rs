@@ -1,4 +1,6 @@
+use crate::components::icons::{IconName, SyuIcon};
 use dioxus::prelude::*;
+use syu_task_model::{ImpactRole, WorkKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IndicatorStatus {
@@ -55,6 +57,48 @@ pub fn EvidenceStamp(label: String, inferred: bool) -> Element {
         "border-emerald-200 bg-emerald-50 text-emerald-700"
     };
     rsx! { span { class: "inline-flex rounded-full border px-2.5 py-1 text-xs {class}", "{label}" } }
+}
+
+fn kind_icon(kind: WorkKind) -> IconName {
+    match kind {
+        WorkKind::Deliver => IconName::Deliver,
+        WorkKind::Specify => IconName::Specify,
+        WorkKind::Govern => IconName::Govern,
+        WorkKind::Restructure => IconName::Restructure,
+        WorkKind::Verify => IconName::Verify,
+        WorkKind::Repair => IconName::Repair,
+        WorkKind::Maintain => IconName::Maintain,
+        WorkKind::Retire => IconName::Retire,
+        WorkKind::Review => IconName::Review,
+        WorkKind::Adopt => IconName::Adopt,
+    }
+}
+
+#[component]
+pub fn WorkKindBadge(kind: WorkKind) -> Element {
+    rsx! { span { class: "inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-800", "data-work-kind": format!("{kind:?}").to_lowercase(), SyuIcon { name: kind_icon(kind), size: 15 } "{kind:?}" } }
+}
+
+#[component]
+pub fn ImpactRoleBadge(role: ImpactRole) -> Element {
+    let class = match role {
+        ImpactRole::DirectChange => "border-blue-200 bg-blue-50 text-blue-800",
+        ImpactRole::Context => "border-slate-200 bg-slate-50 text-slate-700",
+        ImpactRole::FollowUp => "border-amber-200 bg-amber-50 text-amber-800",
+        ImpactRole::Blocker => "border-red-200 bg-red-50 text-red-800",
+    };
+    let label = match role {
+        ImpactRole::DirectChange => "Direct",
+        ImpactRole::Context => "Context",
+        ImpactRole::FollowUp => "Follow-up",
+        ImpactRole::Blocker => "Blocker",
+    };
+    rsx! { span { class: "rounded-full border px-2 py-0.5 text-[10px] font-semibold {class}", "data-impact-role": label.to_lowercase(), "{label}" } }
+}
+
+#[component]
+pub fn CompactAction(icon: IconName, label: String, href: String, aria_label: String) -> Element {
+    rsx! { a { class: "inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold hover:border-slate-500", href, "aria-label": aria_label, SyuIcon { name: icon, size: 16 } "{label}" } }
 }
 
 #[cfg(test)]

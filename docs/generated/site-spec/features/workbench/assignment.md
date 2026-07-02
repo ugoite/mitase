@@ -33,8 +33,9 @@ description: "Generated reference for docs/syu/features/workbench/assignment.yam
           - EvidenceCollector
       - **file**: crates/syu-app-ui/src/components/pages/work.rs
         - **symbols**:
-          - Delivery
-          - InfoBlock
+          - WorkDetails
+          - VerificationSection
+          - Activity
       - **file**: crates/syu-workbench/src/lib.rs
         - **symbols**:
           - assignment_blocker_logic_rejects_ambiguous_ai_scope
@@ -73,8 +74,9 @@ features:
             - EvidenceCollector
         - file: crates/syu-app-ui/src/components/pages/work.rs
           symbols:
-            - Delivery
-            - InfoBlock
+            - WorkDetails
+            - VerificationSection
+            - Activity
         - file: crates/syu-workbench/src/lib.rs
           symbols:
             - assignment_blocker_logic_rejects_ambiguous_ai_scope
