@@ -49,6 +49,7 @@ description: "Generated reference for docs/syu/policies/policies.yaml"
     - REQ-CORE-031
     - REQ-CORE-032
     - REQ-CORE-033
+    - REQ-CORE-034
 - **id**: POL-002
   - **title**: Validation should explain the current state instead of only failing
   - **summary**: Errors, reports, and browsing should make the layered model legible even when the workspace is broken.
@@ -251,6 +252,7 @@ policies:
       - REQ-CORE-031
       - REQ-CORE-032
       - REQ-CORE-033
+      - REQ-CORE-034
 
   - id: POL-002
     title: Validation should explain the current state instead of only failing
