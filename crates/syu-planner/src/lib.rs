@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 use anyhow::{Context, Result, bail};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use syu_diagnostics::Diagnostic;
 use syu_spec_model::{ArtifactBinding, BoundTargetRef, LocalAnchorKind, SpecAnchor};
 use syu_work_model::*;
@@ -73,12 +73,7 @@ pub fn plan(
     let mut slices = Vec::new();
     if request.requested_targets.is_empty() {
         for criterion in criteria {
-            let implementations = index
-                .criteria_to_implementations
-                .get(&criterion)
-                .cloned()
-                .unwrap_or_default();
-            for implementation in implementations {
+            for implementation in primary_bindings(request, index, &criterion) {
                 if !request.constraints.include_facets.is_empty()
                     && index.bindings.get(&implementation).is_some_and(|binding| {
                         !request.constraints.include_facets.contains(&binding.facet)
@@ -127,6 +122,18 @@ pub fn plan(
                         )?);
                     }
                 }
+                syu_spec_model::BindingRole::Documentation => {
+                    for criterion in &binding.documents {
+                        slices.push(build_documentation_slice(
+                            request,
+                            workspace,
+                            index,
+                            criterion,
+                            &requested.binding,
+                            Some(requested),
+                        )?);
+                    }
+                }
                 _ => {
                     return Ok(blocked_plan(
                         request,
@@ -142,6 +149,11 @@ pub fn plan(
             }
         }
     }
+    let mut expanded_slices = Vec::new();
+    for slice in slices {
+        expanded_slices.extend(split_slice_if_needed(request, workspace, &slice)?);
+    }
+    let mut slices = expanded_slices;
     slices.sort_by(|a, b| a.id.cmp(&b.id));
     if let Some(max) = request.constraints.max_slices
         && slices.len() > max
@@ -210,6 +222,33 @@ fn expand_seed(index: &SpecIndex, seed: &SpecAnchor, criteria: &mut BTreeSet<Spe
         _ => {}
     }
 }
+
+fn primary_bindings(
+    request: &WorkRequest,
+    index: &SpecIndex,
+    criterion: &SpecAnchor,
+) -> Vec<SpecAnchor> {
+    let mut bindings = match request.operation {
+        WorkOperation::Document => index
+            .bindings
+            .iter()
+            .filter(|(_, binding)| {
+                binding.role == syu_spec_model::BindingRole::Documentation
+                    && binding.documents.contains(criterion)
+            })
+            .map(|(anchor, _)| anchor.clone())
+            .collect::<Vec<_>>(),
+        _ => index
+            .criteria_to_implementations
+            .get(criterion)
+            .cloned()
+            .unwrap_or_default(),
+    };
+    bindings.sort();
+    bindings.dedup();
+    bindings
+}
+
 fn build_implementation_slice(
     request: &WorkRequest,
     workspace: &SpecWorkspace,
@@ -265,6 +304,77 @@ fn build_implementation_slice(
         &format!("{}-{}", criterion.local_id, implementation.local_id),
         format!("{}: {}", request.summary, binding.responsibility),
         anchors,
+        editable,
+        verification,
+        readonly,
+        contracts,
+        blockers,
+    )
+}
+
+fn build_documentation_slice(
+    request: &WorkRequest,
+    workspace: &SpecWorkspace,
+    index: &SpecIndex,
+    criterion: &SpecAnchor,
+    documentation: &SpecAnchor,
+    exact_target: Option<&BoundTargetRef>,
+) -> Result<ExecutionSlice> {
+    let binding = index.bindings.get(documentation).expect("indexed binding");
+    let mut blockers = vec![];
+    let mut editable = if let Some(target) = exact_target {
+        exact_target_plan(
+            workspace,
+            index,
+            target,
+            TargetAccessMode::Editable,
+            "Requested documentation target.",
+            &mut blockers,
+        )
+    } else {
+        targets(
+            workspace,
+            documentation,
+            binding,
+            TargetAccessMode::Editable,
+            "Primary documentation target for the selected criterion.",
+            &mut blockers,
+        )
+    };
+    let verification = Vec::new();
+    let mut readonly = Vec::new();
+    let mut contracts = Vec::new();
+    let implementations = index
+        .criteria_to_implementations
+        .get(criterion)
+        .cloned()
+        .unwrap_or_default();
+    for implementation in implementations {
+        if let Some(other) = index.bindings.get(&implementation) {
+            readonly.extend(targets(
+                workspace,
+                &implementation,
+                other,
+                TargetAccessMode::Readonly,
+                "Implementation context referenced by the selected documentation target.",
+                &mut blockers,
+            ));
+        }
+        let (more_readonly, more_contracts) =
+            contract_readonly_context(workspace, index, &implementation, &mut blockers);
+        readonly.extend(more_readonly);
+        contracts.extend(more_contracts);
+    }
+    dedup(&mut editable);
+    dedup(&mut readonly);
+    finalize_slice(
+        request,
+        workspace,
+        index,
+        criterion,
+        &format!("{}-{}", criterion.local_id, documentation.local_id),
+        format!("{}: {}", request.summary, binding.responsibility),
+        vec![criterion.clone(), documentation.clone()],
         editable,
         verification,
         readonly,
@@ -336,7 +446,12 @@ fn build_verification_slice(
         blockers,
     )
 }
-fn completion_checks(verification: &[PlannedTarget]) -> Vec<CompletionCheck> {
+fn completion_checks(
+    request: &WorkRequest,
+    editable: &[PlannedTarget],
+    verification: &[PlannedTarget],
+    contracts: &[SpecAnchor],
+) -> Vec<CompletionCheck> {
     let mut checks = verification
         .iter()
         .filter_map(|target| {
@@ -366,9 +481,37 @@ fn completion_checks(verification: &[PlannedTarget]) -> Vec<CompletionCheck> {
             })
         })
         .collect::<Vec<_>>();
+    match request.operation {
+        WorkOperation::Add => {
+            for target in editable {
+                checks.push(CompletionCheck::TargetExists {
+                    target: target.reference.clone(),
+                });
+            }
+            checks.push(CompletionCheck::DiffWithinScope);
+        }
+        WorkOperation::Remove => {
+            checks.push(CompletionCheck::DiffWithinScope);
+        }
+        WorkOperation::Refactor => {
+            checks.push(CompletionCheck::DiffWithinScope);
+            for contract in contracts {
+                checks.push(CompletionCheck::ContractConsistent {
+                    contract: contract.clone(),
+                });
+            }
+        }
+        WorkOperation::Document => {
+            checks.push(CompletionCheck::DiffWithinScope);
+        }
+        WorkOperation::Investigate => {}
+        WorkOperation::Modify => {}
+    }
     checks.push(CompletionCheck::Validate {
         preset: "agent-ready".into(),
     });
+    checks.sort_by(|a, b| format!("{a:?}").cmp(&format!("{b:?}")));
+    checks.dedup();
     checks
 }
 
@@ -478,6 +621,7 @@ fn finalize_slice(
             "work-plan",
         ));
     }
+    let completion = completion_checks(request, &editable, &verification, &contracts);
     Ok(ExecutionSlice {
         id: id.into(),
         goal,
@@ -491,7 +635,7 @@ fn finalize_slice(
         }],
         contracts,
         non_goals: default_non_goals(request),
-        completion: completion_checks(&verification),
+        completion,
         budget,
         confidence: PlanConfidence::Exact,
         blockers,
@@ -508,6 +652,16 @@ fn default_non_goals(request: &WorkRequest) -> Vec<NonGoal> {
         WorkOperation::Refactor => non_goals.push(NonGoal {
             code: "preserve-behavior".into(),
             statement: "Preserve externally visible behavior and contract guarantees.".into(),
+        }),
+        WorkOperation::Add => non_goals.push(NonGoal {
+            code: "no-regression-removal".into(),
+            statement: "Do not remove existing required behaviors while adding the new change."
+                .into(),
+        }),
+        WorkOperation::Remove => non_goals.push(NonGoal {
+            code: "remove-only".into(),
+            statement: "Do not introduce replacement behavior unless the request explicitly requires it."
+                .into(),
         }),
         WorkOperation::Document => non_goals.push(NonGoal {
             code: "no-code-drift".into(),
@@ -742,6 +896,195 @@ fn blocked_plan(
         slices: vec![],
         diagnostics: vec![Diagnostic::error(rule, message, "work-request")],
     })
+}
+
+fn split_slice_if_needed(
+    request: &WorkRequest,
+    workspace: &SpecWorkspace,
+    slice: &ExecutionSlice,
+) -> Result<Vec<ExecutionSlice>> {
+    if !slice_exceeds_limits(slice, &workspace.config.work.slicing) {
+        return Ok(vec![slice.clone()]);
+    }
+    let criterion = slice
+        .acceptance
+        .first()
+        .map(|acceptance| acceptance.anchor.clone())
+        .context("slice is missing acceptance criterion")?;
+    let Some(groups) = split_groups(slice) else {
+        return Ok(vec![slice.clone()]);
+    };
+    let mut out = Vec::new();
+    for (index, group) in groups.into_iter().enumerate() {
+        let candidate =
+            rebuild_split_slice(request, workspace, &criterion, slice, group, index + 1)?;
+        let mut nested = split_slice_if_needed(request, workspace, &candidate)?;
+        out.append(&mut nested);
+    }
+    Ok(out)
+}
+
+enum SliceGroup {
+    Editable(Vec<PlannedTarget>),
+    Verification(Vec<PlannedTarget>),
+    Readonly(Vec<PlannedTarget>),
+}
+
+fn split_groups(slice: &ExecutionSlice) -> Option<Vec<SliceGroup>> {
+    if let Some(groups) = target_groups(&slice.editable_targets) {
+        return Some(groups.into_iter().map(SliceGroup::Editable).collect());
+    }
+    if let Some(groups) = target_groups(&slice.verification_targets) {
+        return Some(groups.into_iter().map(SliceGroup::Verification).collect());
+    }
+    if let Some(groups) = target_groups(&slice.readonly_context) {
+        return Some(groups.into_iter().map(SliceGroup::Readonly).collect());
+    }
+    None
+}
+
+fn target_groups(targets: &[PlannedTarget]) -> Option<Vec<Vec<PlannedTarget>>> {
+    [
+        group_targets(targets, |target| target.facet.clone()),
+        group_targets(targets, |target| target.reference.binding.to_string()),
+        group_targets(targets, |target| target.resolved_path.clone()),
+        group_targets(targets, |target| target.reference.to_string()),
+    ]
+    .into_iter()
+    .find(|groups| groups.len() > 1)
+}
+
+fn group_targets(
+    targets: &[PlannedTarget],
+    key: impl Fn(&PlannedTarget) -> String,
+) -> Vec<Vec<PlannedTarget>> {
+    let mut grouped = BTreeMap::<String, Vec<PlannedTarget>>::new();
+    for target in targets {
+        grouped.entry(key(target)).or_default().push(target.clone());
+    }
+    grouped.into_values().collect()
+}
+
+fn rebuild_split_slice(
+    request: &WorkRequest,
+    workspace: &SpecWorkspace,
+    _criterion: &SpecAnchor,
+    original: &ExecutionSlice,
+    group: SliceGroup,
+    part: usize,
+) -> Result<ExecutionSlice> {
+    let blockers = original
+        .blockers
+        .iter()
+        .filter(|diagnostic| diagnostic.rule_id != "SYU-WORK-003")
+        .cloned()
+        .collect::<Vec<_>>();
+    let (editable_targets, verification_targets, readonly_context) = match group {
+        SliceGroup::Editable(editable) => (
+            editable,
+            original.verification_targets.clone(),
+            original.readonly_context.clone(),
+        ),
+        SliceGroup::Verification(verification) => (
+            original.editable_targets.clone(),
+            verification,
+            original.readonly_context.clone(),
+        ),
+        SliceGroup::Readonly(readonly) => (
+            original.editable_targets.clone(),
+            original.verification_targets.clone(),
+            readonly,
+        ),
+    };
+    let contracts = original.contracts.clone();
+    let completion = completion_checks(
+        request,
+        &editable_targets,
+        &verification_targets,
+        &contracts,
+    );
+    let budget = slice_budget(&editable_targets, &verification_targets, &readonly_context);
+    let mut blockers = blockers;
+    if editable_targets
+        .iter()
+        .chain(verification_targets.iter())
+        .all(|target| target.access != TargetAccessMode::Editable)
+        && request.operation != WorkOperation::Investigate
+    {
+        blockers.push(Diagnostic::error(
+            "SYU-WORK-004",
+            "slice has no editable target after exact target selection",
+            "work-plan",
+        ));
+    }
+    if slice_budget_exceeds(&budget, &workspace.config.work.slicing) {
+        blockers.push(Diagnostic::error(
+            "SYU-WORK-003",
+            "slice exceeds configured budget",
+            "work-plan",
+        ));
+    }
+    Ok(ExecutionSlice {
+        id: format!("{}-part{:02}", original.id, part),
+        goal: original.goal.clone(),
+        anchors: original.anchors.clone(),
+        editable_targets,
+        verification_targets,
+        readonly_context,
+        acceptance: original.acceptance.clone(),
+        contracts,
+        non_goals: default_non_goals(request),
+        completion,
+        budget,
+        confidence: original.confidence,
+        blockers,
+    })
+}
+
+fn slice_budget(
+    editable_targets: &[PlannedTarget],
+    verification_targets: &[PlannedTarget],
+    readonly_context: &[PlannedTarget],
+) -> SliceBudgetUsage {
+    let editable_scope = editable_targets
+        .iter()
+        .chain(verification_targets.iter())
+        .filter(|target| target.access == TargetAccessMode::Editable)
+        .collect::<Vec<_>>();
+    SliceBudgetUsage {
+        editable_files: editable_scope
+            .iter()
+            .map(|target| target.resolved_path.as_str())
+            .collect::<BTreeSet<_>>()
+            .len(),
+        editable_symbols: editable_scope
+            .iter()
+            .map(|target| target.resolved_selector.symbols.len())
+            .sum(),
+        verification_targets: verification_targets.len(),
+        readonly_targets: readonly_context.len(),
+        total_bytes: editable_targets
+            .iter()
+            .chain(verification_targets)
+            .chain(readonly_context)
+            .map(|target| target.byte_end.saturating_sub(target.byte_start))
+            .sum(),
+    }
+}
+
+fn slice_exceeds_limits(slice: &ExecutionSlice, limits: &syu_project_model::SliceLimits) -> bool {
+    slice_budget_exceeds(&slice.budget, limits)
+}
+
+fn slice_budget_exceeds(
+    budget: &SliceBudgetUsage,
+    limits: &syu_project_model::SliceLimits,
+) -> bool {
+    budget.editable_files > limits.max_editable_files
+        || budget.editable_symbols > limits.max_editable_symbols
+        || budget.verification_targets > limits.max_verification_targets
+        || budget.readonly_targets > limits.max_readonly_targets
+        || budget.total_bytes > limits.max_total_bytes
 }
 
 pub fn export_context(

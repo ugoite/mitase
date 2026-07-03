@@ -556,6 +556,7 @@ dependencies = [
  "syu-spec-model",
  "syu-validation",
  "syu-work-model",
+ "syu-workbench-server",
  "syu-workspace",
  "tempfile",
 ]

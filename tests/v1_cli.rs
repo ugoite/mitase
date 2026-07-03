@@ -1,7 +1,25 @@
 use assert_cmd::Command;
 use std::fs;
+use std::path::Path;
 use std::process::Command as ProcessCommand;
 use tempfile::tempdir;
+
+fn git(dir: &Path, args: &[&str]) {
+    let status = ProcessCommand::new("git")
+        .args(args)
+        .current_dir(dir)
+        .status()
+        .unwrap();
+    assert!(status.success(), "git {:?} failed", args);
+}
+
+fn init_workspace_repo(root: &Path) {
+    git(root, &["init"]);
+    git(root, &["config", "user.name", "Codex"]);
+    git(root, &["config", "user.email", "codex@example.com"]);
+    git(root, &["add", "."]);
+    git(root, &["commit", "-m", "init"]);
+}
 
 #[test]
 fn validates_repository_and_plans_fixture() {
@@ -242,6 +260,449 @@ fn exact_requested_targets_are_exact_and_verification_can_be_editable() {
     assert!(text.contains("access: editable"));
     assert!(!text.contains("id: invalid-credentials-ui"));
     assert!(!text.contains("id: invalid-credentials-backend\n  goal"));
+}
+
+#[test]
+fn oversized_slice_is_split_deterministically() {
+    let temp = tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("spec")).unwrap();
+    fs::create_dir_all(temp.path().join("src")).unwrap();
+    fs::create_dir_all(temp.path().join("tests")).unwrap();
+    fs::write(
+        temp.path().join("syu.yaml"),
+        concat!(
+            "schema: syu/config/v1\n",
+            "workspace:\n",
+            "  spec_roots: [spec]\n",
+            "  artifact_roots: [src, tests]\n",
+            "  excludes: []\n",
+            "profiles: { active: [], custom: {} }\n",
+            "validation:\n",
+            "  preset: standard\n",
+            "  deny_warnings: false\n",
+            "  rules: {}\n",
+            "  changed:\n",
+            "    require_owned_changes: false\n",
+            "work:\n",
+            "  slicing:\n",
+            "    max_editable_files: 1\n",
+            "    max_editable_symbols: 4\n",
+            "    max_verification_targets: 2\n",
+            "    max_readonly_targets: 4\n",
+            "    max_total_bytes: 4096\n",
+            "  context:\n",
+            "    include_parent_principles: false\n",
+            "    include_parent_rules: false\n",
+            "adapters: { enabled: [rust] }\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/requirement.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: requirements\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "requirements:\n",
+            "  - id: REQ-SAMPLE-001\n",
+            "    title: Sample\n",
+            "    description: Sample requirement.\n",
+            "    priority: medium\n",
+            "    status: planned\n",
+            "    criteria:\n",
+            "      - id: multi\n",
+            "        kind: behavior\n",
+            "        statement: Keep behavior aligned across files.\n",
+            "        governed_by: []\n",
+            "    bindings:\n",
+            "      - id: tests\n",
+            "        role: verification\n",
+            "        facet: verification\n",
+            "        responsibility: Verify the split behavior.\n",
+            "        targets:\n",
+            "          - { id: case, adapter: rust, path: tests/check.rs, selector: { kind: symbol, names: [check_behavior] } }\n",
+            "        verifies: [REQ-SAMPLE-001#criterion.multi]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/feature.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: features\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "features:\n",
+            "  - id: FEAT-SAMPLE-001\n",
+            "    title: Sample\n",
+            "    summary: Multi-file implementation.\n",
+            "    status: implemented\n",
+            "    bindings:\n",
+            "      - id: app\n",
+            "        role: implementation\n",
+            "        facet: backend\n",
+            "        responsibility: Update both files.\n",
+            "        targets:\n",
+            "          - { id: alpha, adapter: rust, path: src/a.rs, selector: { kind: symbol, names: [alpha] } }\n",
+            "          - { id: beta, adapter: rust, path: src/b.rs, selector: { kind: symbol, names: [beta] } }\n",
+            "        satisfies: [REQ-SAMPLE-001#criterion.multi]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(temp.path().join("src/a.rs"), "fn alpha() {}\n").unwrap();
+    fs::write(temp.path().join("src/b.rs"), "fn beta() {}\n").unwrap();
+    fs::write(
+        temp.path().join("tests/check.rs"),
+        "fn check_behavior() {}\n",
+    )
+    .unwrap();
+    let request = temp.path().join("work.yaml");
+    fs::write(
+        &request,
+        concat!(
+            "schema: syu/work-request/v1\n",
+            "id: WORK-SPLIT-001\n",
+            "summary: Split a multi-file change.\n",
+            "operation: modify\n",
+            "seeds: [REQ-SAMPLE-001#criterion.multi]\n",
+            "constraints: { include_facets: [], exclude_paths: [], max_slices: 4 }\n",
+        ),
+    )
+    .unwrap();
+    init_workspace_repo(temp.path());
+    let plan = temp.path().join("plan.yaml");
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["work", "plan", "--request"])
+        .arg(&request)
+        .args(["--out"])
+        .arg(&plan)
+        .args(["--workspace"])
+        .arg(temp.path())
+        .assert()
+        .success();
+    let text = fs::read_to_string(plan).unwrap();
+    assert!(text.contains("status: ready"));
+    assert!(text.contains("part01"));
+    assert!(text.contains("part02"));
+    assert!(text.contains("resolved_path: src/a.rs"));
+    assert!(text.contains("resolved_path: src/b.rs"));
+}
+
+#[test]
+fn split_respects_max_slices_constraint() {
+    let temp = tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("spec")).unwrap();
+    fs::create_dir_all(temp.path().join("src")).unwrap();
+    fs::write(
+        temp.path().join("syu.yaml"),
+        concat!(
+            "schema: syu/config/v1\n",
+            "workspace:\n",
+            "  spec_roots: [spec]\n",
+            "  artifact_roots: [src]\n",
+            "  excludes: []\n",
+            "profiles: { active: [], custom: {} }\n",
+            "validation:\n",
+            "  preset: standard\n",
+            "  deny_warnings: false\n",
+            "  rules: {}\n",
+            "  changed:\n",
+            "    require_owned_changes: false\n",
+            "work:\n",
+            "  slicing:\n",
+            "    max_editable_files: 1\n",
+            "    max_editable_symbols: 4\n",
+            "    max_verification_targets: 1\n",
+            "    max_readonly_targets: 1\n",
+            "    max_total_bytes: 4096\n",
+            "  context:\n",
+            "    include_parent_principles: false\n",
+            "    include_parent_rules: false\n",
+            "adapters: { enabled: [rust] }\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/requirement.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: requirements\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "requirements:\n",
+            "  - id: REQ-SAMPLE-002\n",
+            "    title: Sample\n",
+            "    description: Multi-file implementation.\n",
+            "    priority: medium\n",
+            "    status: planned\n",
+            "    criteria:\n",
+            "      - id: multi\n",
+            "        kind: behavior\n",
+            "        statement: Keep behavior aligned across files.\n",
+            "        governed_by: []\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/feature.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: features\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "features:\n",
+            "  - id: FEAT-SAMPLE-002\n",
+            "    title: Sample\n",
+            "    summary: Multi-file implementation.\n",
+            "    status: implemented\n",
+            "    bindings:\n",
+            "      - id: app\n",
+            "        role: implementation\n",
+            "        facet: backend\n",
+            "        responsibility: Update both files.\n",
+            "        targets:\n",
+            "          - { id: alpha, adapter: rust, path: src/a.rs, selector: { kind: symbol, names: [alpha] } }\n",
+            "          - { id: beta, adapter: rust, path: src/b.rs, selector: { kind: symbol, names: [beta] } }\n",
+            "        satisfies: [REQ-SAMPLE-002#criterion.multi]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(temp.path().join("src/a.rs"), "fn alpha() {}\n").unwrap();
+    fs::write(temp.path().join("src/b.rs"), "fn beta() {}\n").unwrap();
+    let request = temp.path().join("work.yaml");
+    fs::write(
+        &request,
+        concat!(
+            "schema: syu/work-request/v1\n",
+            "id: WORK-SPLIT-002\n",
+            "summary: Split but cap slice count.\n",
+            "operation: modify\n",
+            "seeds: [REQ-SAMPLE-002#criterion.multi]\n",
+            "constraints: { include_facets: [], exclude_paths: [], max_slices: 1 }\n",
+        ),
+    )
+    .unwrap();
+    init_workspace_repo(temp.path());
+    let plan = temp.path().join("plan.yaml");
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["work", "plan", "--request"])
+        .arg(&request)
+        .args(["--out"])
+        .arg(&plan)
+        .args(["--workspace"])
+        .arg(temp.path())
+        .assert()
+        .failure();
+    let text = fs::read_to_string(plan).unwrap();
+    assert!(text.contains("status: blocked"));
+    assert!(text.contains("exceed requested maximum 1"));
+}
+
+#[test]
+fn exact_documentation_target_builds_document_slice() {
+    let temp = tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("spec")).unwrap();
+    fs::create_dir_all(temp.path().join("src")).unwrap();
+    fs::create_dir_all(temp.path().join("docs")).unwrap();
+    fs::write(
+        temp.path().join("syu.yaml"),
+        concat!(
+            "schema: syu/config/v1\n",
+            "workspace:\n",
+            "  spec_roots: [spec]\n",
+            "  artifact_roots: [src, docs]\n",
+            "  excludes: []\n",
+            "profiles: { active: [], custom: {} }\n",
+            "validation:\n",
+            "  preset: standard\n",
+            "  deny_warnings: false\n",
+            "  rules: {}\n",
+            "  changed:\n",
+            "    require_owned_changes: false\n",
+            "work:\n",
+            "  slicing:\n",
+            "    max_editable_files: 2\n",
+            "    max_editable_symbols: 4\n",
+            "    max_verification_targets: 1\n",
+            "    max_readonly_targets: 4\n",
+            "    max_total_bytes: 4096\n",
+            "  context:\n",
+            "    include_parent_principles: false\n",
+            "    include_parent_rules: false\n",
+            "adapters: { enabled: [rust, markdown] }\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/requirement.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: requirements\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "requirements:\n",
+            "  - id: REQ-DOC-001\n",
+            "    title: Docs\n",
+            "    description: Documentation is first-class.\n",
+            "    priority: medium\n",
+            "    status: planned\n",
+            "    criteria:\n",
+            "      - id: explain\n",
+            "        kind: behavior\n",
+            "        statement: Users can read the architecture note.\n",
+            "        governed_by: []\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/feature.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: features\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "features:\n",
+            "  - id: FEAT-DOC-001\n",
+            "    title: Docs\n",
+            "    summary: Documentation is first-class.\n",
+            "    status: implemented\n",
+            "    bindings:\n",
+            "      - id: impl\n",
+            "        role: implementation\n",
+            "        facet: backend\n",
+            "        responsibility: Provide runtime behavior.\n",
+            "        targets:\n",
+            "          - { id: code, adapter: rust, path: src/lib.rs, selector: { kind: symbol, names: [alpha] } }\n",
+            "        satisfies: [REQ-DOC-001#criterion.explain]\n",
+            "      - id: guide\n",
+            "        role: documentation\n",
+            "        facet: docs\n",
+            "        responsibility: Describe the architecture.\n",
+            "        targets:\n",
+            "          - { id: architecture, adapter: markdown, path: docs/guide.md, selector: { kind: heading, value: Architecture } }\n",
+            "        documents: [REQ-DOC-001#criterion.explain]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(temp.path().join("src/lib.rs"), "fn alpha() {}\n").unwrap();
+    fs::write(
+        temp.path().join("docs/guide.md"),
+        "# Architecture\n\nDetails.\n",
+    )
+    .unwrap();
+    let request = temp.path().join("work.yaml");
+    fs::write(
+        &request,
+        concat!(
+            "schema: syu/work-request/v1\n",
+            "id: WORK-DOC-001\n",
+            "summary: Update the documentation.\n",
+            "operation: document\n",
+            "seeds: []\n",
+            "requested_targets:\n",
+            "  - FEAT-DOC-001#binding.guide/target.architecture\n",
+            "constraints: { include_facets: [], exclude_paths: [], max_slices: 2 }\n",
+        ),
+    )
+    .unwrap();
+    init_workspace_repo(temp.path());
+    let plan = temp.path().join("plan.yaml");
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["work", "plan", "--request"])
+        .arg(&request)
+        .args(["--out"])
+        .arg(&plan)
+        .args(["--workspace"])
+        .arg(temp.path())
+        .assert()
+        .success();
+    let text = fs::read_to_string(plan).unwrap();
+    assert!(text.contains("status: ready"));
+    assert!(text.contains("resolved_path: docs/guide.md"));
+    assert!(text.contains("kind: diff-within-scope"));
+    assert!(text.contains("no-code-drift"));
+}
+
+#[test]
+fn refactor_plan_adds_contract_consistency_completion() {
+    let temp = tempdir().unwrap();
+    let request = temp.path().join("request.yaml");
+    let plan = temp.path().join("plan.yaml");
+    fs::write(
+        &request,
+        concat!(
+            "schema: syu/work-request/v1\n",
+            "id: WORK-REFACTOR-001\n",
+            "summary: Refactor login flow.\n",
+            "operation: refactor\n",
+            "seeds: [REQ-AUTH-001#criterion.invalid-credentials]\n",
+            "constraints: { include_facets: [ui, backend], exclude_paths: [], max_slices: 4 }\n",
+        ),
+    )
+    .unwrap();
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["work", "plan", "--request"])
+        .arg(&request)
+        .args(["--out"])
+        .arg(&plan)
+        .args(["--workspace", "fixtures/v1/valid-web-app"])
+        .assert()
+        .success();
+    let text = fs::read_to_string(plan).unwrap();
+    assert!(text.contains("kind: contract-consistent"));
+    assert!(text.contains("kind: diff-within-scope"));
+    assert!(text.contains("preserve-behavior"));
+}
+
+#[test]
+fn workbench_project_exports_canonical_projection() {
+    let temp = tempdir().unwrap();
+    let request = temp.path().join("request.yaml");
+    fs::write(
+        &request,
+        concat!(
+            "schema: syu/work-request/v1\n",
+            "id: WORK-WORKBENCH-001\n",
+            "summary: Project workbench state.\n",
+            "operation: modify\n",
+            "seeds: [REQ-AUTH-001#criterion.invalid-credentials]\n",
+            "constraints: { include_facets: [ui, backend], exclude_paths: [], max_slices: 4 }\n",
+        ),
+    )
+    .unwrap();
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args([
+            "workbench",
+            "project",
+            "--workspace",
+            "fixtures/v1/valid-web-app",
+            "--request",
+        ])
+        .arg(&request)
+        .assert()
+        .success();
+    let output = Command::cargo_bin("syu")
+        .unwrap()
+        .args([
+            "workbench",
+            "project",
+            "--workspace",
+            "fixtures/v1/valid-web-app",
+            "--request",
+        ])
+        .arg(&request)
+        .output()
+        .unwrap();
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains("\"plan\""));
+    assert!(text.contains("\"validation\""));
+    assert!(text.contains("invalid-credentials"));
 }
 
 #[test]

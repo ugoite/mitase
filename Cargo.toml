@@ -53,6 +53,7 @@ syu-project-model = { path = "crates/syu-project-model" }
 syu-spec-model = { path = "crates/syu-spec-model" }
 syu-validation = { path = "crates/syu-validation" }
 syu-work-model = { path = "crates/syu-work-model" }
+syu-workbench-server = { path = "crates/syu-workbench-server" }
 syu-workspace = { path = "crates/syu-workspace" }
 
 [dev-dependencies]

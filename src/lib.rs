@@ -11,6 +11,7 @@ use syu_project_model::{ChangeBaseline, GitRef};
 use syu_spec_model::RepoPath;
 use syu_validation::{ChangeStatus, ChangedFile, ChangedRange, ValidationContext, validate};
 use syu_work_model::{WorkPlan, WorkRequest};
+use syu_workbench_server::project as project_workbench;
 use syu_workspace::SpecWorkspace;
 
 #[derive(Debug, Parser)]
@@ -23,6 +24,7 @@ struct Cli {
 enum CommandKind {
     Validate(ValidateArgs),
     Work(WorkArgs),
+    Workbench(WorkbenchArgs),
 }
 #[derive(Debug, Args)]
 struct ValidateArgs {
@@ -43,6 +45,11 @@ struct ValidateArgs {
 struct WorkArgs {
     #[command(subcommand)]
     command: WorkCommand,
+}
+#[derive(Debug, Args)]
+struct WorkbenchArgs {
+    #[command(subcommand)]
+    command: WorkbenchCommand,
 }
 #[derive(Debug, Subcommand)]
 enum WorkCommand {
@@ -69,16 +76,33 @@ enum WorkCommand {
         out: Option<PathBuf>,
     },
 }
+#[derive(Debug, Subcommand)]
+enum WorkbenchCommand {
+    Project {
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+        #[arg(long)]
+        request: Option<PathBuf>,
+        #[arg(long, value_enum, default_value = "json")]
+        format: WorkbenchFormat,
+    },
+}
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum Format {
     Text,
     Json,
+}
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum WorkbenchFormat {
+    Json,
+    Yaml,
 }
 
 pub fn run() -> Result<i32> {
     match Cli::parse().command {
         CommandKind::Validate(args) => run_validate(args),
         CommandKind::Work(args) => run_work(args),
+        CommandKind::Workbench(args) => run_workbench(args),
     }
 }
 fn run_validate(args: ValidateArgs) -> Result<i32> {
@@ -178,6 +202,32 @@ fn run_work(args: WorkArgs) -> Result<i32> {
                 println!("wrote {}", path.display());
             } else {
                 print!("{yaml}");
+            }
+            Ok(0)
+        }
+    }
+}
+fn run_workbench(args: WorkbenchArgs) -> Result<i32> {
+    match args.command {
+        WorkbenchCommand::Project {
+            workspace,
+            request,
+            format,
+        } => {
+            let workspace = SpecWorkspace::load(workspace)?;
+            let request = request
+                .as_ref()
+                .map(|path| read_yaml::<WorkRequest>(path))
+                .transpose()?;
+            let projection =
+                project_workbench(&workspace, request.as_ref(), &revision(&workspace.root)?)?;
+            match format {
+                WorkbenchFormat::Json => {
+                    println!("{}", serde_json::to_string_pretty(&projection)?);
+                }
+                WorkbenchFormat::Yaml => {
+                    print!("{}", serde_yaml::to_string(&projection)?);
+                }
             }
             Ok(0)
         }
