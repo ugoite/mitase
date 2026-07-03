@@ -1,5 +1,6 @@
 use assert_cmd::Command;
 use std::fs;
+use std::process::Command as ProcessCommand;
 use tempfile::tempdir;
 
 #[test]
@@ -29,7 +30,9 @@ fn validates_repository_and_plans_fixture() {
     assert!(text.contains("Contract counterpart; readonly"));
     assert!(text.contains("PHIL-AUTH-001#principle.generic-failure"));
     assert!(text.contains("POL-AUTH-001#rule.generic-failure"));
-    assert!(text.contains("command: cargo test invalid_credentials"));
+    assert!(text.contains("kind: command"));
+    assert!(text.contains("program: cargo"));
+    assert!(text.contains("- invalid_credentials"));
     Command::cargo_bin("syu")
         .unwrap()
         .args(["validate", "fixtures/v1/valid-web-app", "--plan"])
@@ -243,6 +246,11 @@ fn exact_requested_targets_are_exact_and_verification_can_be_editable() {
 
 #[test]
 fn validate_uses_configured_baseline_without_explicit_range() {
+    let status = ProcessCommand::new("git")
+        .args(["update-ref", "refs/remotes/origin/main", "HEAD"])
+        .status()
+        .unwrap();
+    assert!(status.success(), "git update-ref failed");
     Command::cargo_bin("syu")
         .unwrap()
         .args(["validate", "fixtures/v1/valid-web-app"])

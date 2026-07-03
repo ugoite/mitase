@@ -347,15 +347,22 @@ fn completion_checks(verification: &[PlannedTarget]) -> Vec<CompletionCheck> {
                 {
                     return None;
                 }
-                let command = match target.adapter.as_str() {
-                    "rust" => format!("cargo test {symbol}"),
-                    "typescript" => format!("npm test -- {symbol}"),
-                    "python" => format!("pytest -k {symbol}"),
-                    "go" => format!("go test ./... -run {symbol}"),
-                    "shell" => format!("bash -n {}", target.resolved_path),
+                let (program, args) = match target.adapter.as_str() {
+                    "rust" => ("cargo", vec!["test".into(), symbol.clone()]),
+                    "typescript" => ("npm", vec!["test".into(), "--".into(), symbol.clone()]),
+                    "python" => ("pytest", vec!["-k".into(), symbol.clone()]),
+                    "go" => (
+                        "go",
+                        vec!["test".into(), "./...".into(), "-run".into(), symbol.clone()],
+                    ),
+                    "shell" => ("bash", vec!["-n".into(), target.resolved_path.clone()]),
                     _ => return None,
                 };
-                Some(CompletionCheck::Command { command })
+                Some(CompletionCheck::Command {
+                    program: program.into(),
+                    args,
+                    cwd: None,
+                })
             })
         })
         .collect::<Vec<_>>();

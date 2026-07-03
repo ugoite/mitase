@@ -2,7 +2,9 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use syu_diagnostics::Diagnostic;
-use syu_spec_model::{BindingRole, BoundTargetRef, ContractKind, SpecAnchor, SpecItemRef};
+use syu_spec_model::{
+    BindingRole, BoundTargetRef, ContractKind, RepoPath, SpecAnchor, SpecItemRef,
+};
 
 pub const WORK_REQUEST_SCHEMA: &str = "syu/work-request/v1";
 pub const WORK_PLAN_SCHEMA: &str = "syu/work-plan/v1";
@@ -116,12 +118,26 @@ pub struct NonGoal {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum CompletionCheck {
-    Command { command: String },
-    Validate { preset: String },
-    RuleSet { rules: Vec<String> },
-    TargetExists { target: BoundTargetRef },
+    Command {
+        program: String,
+        #[serde(default)]
+        args: Vec<String>,
+        #[serde(default)]
+        cwd: Option<RepoPath>,
+    },
+    Validate {
+        preset: String,
+    },
+    RuleSet {
+        rules: Vec<String>,
+    },
+    TargetExists {
+        target: BoundTargetRef,
+    },
     DiffWithinScope,
-    ContractConsistent { contract: SpecAnchor },
+    ContractConsistent {
+        contract: SpecAnchor,
+    },
 }
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
