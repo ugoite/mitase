@@ -1,6 +1,0 @@
-version: "0.0.1-alpha.8"
-updated: "2026-03"
-
-files:
-  - kind: traceability
-    file: traceability/core.yaml

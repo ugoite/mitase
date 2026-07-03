@@ -1,0 +1,812 @@
+#![forbid(unsafe_code)]
+use std::{collections::BTreeSet, path::PathBuf};
+use syu_diagnostics::{Diagnostic, ValidationResult};
+use syu_project_model::{ProjectConfig, ValidationPreset};
+use syu_spec_model::{
+    BindingRole, ItemStatus, LocalAnchorKind, RuleLevel, Selector, SpecAnchor, SpecDocument,
+};
+use syu_work_model::{ExecutionSlice, PlanConfidence, WORK_PLAN_SCHEMA, WorkPlan};
+use syu_workspace::{AnchorValue, SpecIndex, SpecWorkspace, resolve_target};
+
+#[derive(Debug, Clone, Copy)]
+pub struct RuleMetadata {
+    pub id: &'static str,
+    pub title: &'static str,
+    pub default_error: bool,
+    pub presets: &'static [ValidationPreset],
+}
+macro_rules! metadata {
+    ($id:literal) => {
+        RuleMetadata {
+            id: $id,
+            title: $id,
+            default_error: true,
+            presets: &[ValidationPreset::Standard],
+        }
+    };
+}
+pub static RULES: &[RuleMetadata] = &[
+    metadata!("SYU-SCHEMA-001"),
+    metadata!("SYU-SCHEMA-002"),
+    metadata!("SYU-ID-001"),
+    metadata!("SYU-ID-002"),
+    metadata!("SYU-ANCHOR-001"),
+    metadata!("SYU-ANCHOR-002"),
+    metadata!("SYU-ANCHOR-003"),
+    metadata!("SYU-PHILOSOPHY-001"),
+    metadata!("SYU-POLICY-001"),
+    metadata!("SYU-POLICY-002"),
+    metadata!("SYU-POLICY-003"),
+    metadata!("SYU-REQUIREMENT-001"),
+    metadata!("SYU-REQUIREMENT-002"),
+    metadata!("SYU-FEATURE-001"),
+    metadata!("SYU-COVERAGE-001"),
+    metadata!("SYU-COVERAGE-002"),
+    metadata!("SYU-COVERAGE-003"),
+    metadata!("SYU-BINDING-001"),
+    metadata!("SYU-BINDING-002"),
+    metadata!("SYU-BINDING-003"),
+    metadata!("SYU-BINDING-004"),
+    metadata!("SYU-TARGET-001"),
+    metadata!("SYU-TARGET-002"),
+    metadata!("SYU-TARGET-003"),
+    metadata!("SYU-TARGET-004"),
+    metadata!("SYU-TARGET-005"),
+    metadata!("SYU-FACET-001"),
+    metadata!("SYU-FACET-002"),
+    metadata!("SYU-CONTRACT-001"),
+    metadata!("SYU-CONTRACT-002"),
+    metadata!("SYU-CONTRACT-003"),
+    metadata!("SYU-CONTRACT-004"),
+    metadata!("SYU-CONTRACT-005"),
+    metadata!("SYU-CONTRACT-006"),
+    metadata!("SYU-CONTRACT-007"),
+    metadata!("SYU-DOC-001"),
+    metadata!("SYU-DOC-002"),
+    metadata!("SYU-GENERATED-001"),
+    metadata!("SYU-GENERATED-002"),
+    metadata!("SYU-OPERATION-001"),
+    metadata!("SYU-CHANGE-001"),
+    metadata!("SYU-CHANGE-002"),
+    metadata!("SYU-CHANGE-003"),
+    metadata!("SYU-CHANGE-004"),
+    metadata!("SYU-CHANGE-005"),
+    metadata!("SYU-WORK-001"),
+    metadata!("SYU-WORK-002"),
+    metadata!("SYU-WORK-003"),
+    metadata!("SYU-WORK-004"),
+    metadata!("SYU-WORK-005"),
+    metadata!("SYU-WORK-006"),
+    metadata!("SYU-WORK-007"),
+    metadata!("SYU-WORK-008"),
+    metadata!("SYU-WORK-009"),
+    metadata!("SYU-WORK-010"),
+    metadata!("SYU-WORK-011"),
+    metadata!("SYU-WORK-012"),
+];
+
+pub struct ValidationContext<'a> {
+    pub config: &'a ProjectConfig,
+    pub workspace: &'a SpecWorkspace,
+    pub index: &'a SpecIndex,
+    pub changed_paths: Option<&'a [PathBuf]>,
+    pub work_plan: Option<&'a WorkPlan>,
+    pub selected_slice: Option<&'a ExecutionSlice>,
+    pub preset: ValidationPreset,
+    pub revision: &'a str,
+}
+pub trait ValidationRule {
+    fn metadata(&self) -> &'static RuleMetadata;
+    fn evaluate(&self, ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>);
+}
+
+pub fn validate(ctx: &ValidationContext<'_>) -> ValidationResult {
+    let mut diagnostics = Vec::new();
+    validate_document_shapes(ctx, &mut diagnostics);
+    validate_graph(ctx, &mut diagnostics);
+    validate_targets(ctx, &mut diagnostics);
+    validate_contracts(ctx, &mut diagnostics);
+    if let Some(plan) = ctx.work_plan {
+        validate_plan(ctx, plan, &mut diagnostics);
+    }
+    diagnostics.sort_by(|a, b| {
+        (&a.rule_id, &a.primary.path, &a.message).cmp(&(&b.rule_id, &b.primary.path, &b.message))
+    });
+    ValidationResult { diagnostics }
+}
+fn validate_document_shapes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
+    for loaded in &ctx.workspace.documents {
+        let path = loaded.path.to_string_lossy().into_owned();
+        match &loaded.document {
+            SpecDocument::Philosophies { philosophies, .. } => {
+                for item in philosophies {
+                    if item.principles.is_empty() {
+                        push(
+                            out,
+                            "SYU-PHILOSOPHY-001",
+                            "philosophy has no Principle",
+                            &path,
+                            None,
+                        );
+                    }
+                    if item.bindings.iter().any(|binding| {
+                        !matches!(
+                            binding.role,
+                            BindingRole::Documentation | BindingRole::Evidence
+                        )
+                    }) {
+                        push(
+                            out,
+                            "SYU-BINDING-002",
+                            "philosophy binding role is not allowed",
+                            &path,
+                            None,
+                        );
+                    }
+                }
+            }
+            SpecDocument::Policies { policies, .. } => {
+                for item in policies {
+                    if item.rules.is_empty() {
+                        push(out, "SYU-POLICY-001", "policy has no Rule", &path, None);
+                    }
+                }
+            }
+            SpecDocument::Requirements { requirements, .. } => {
+                for item in requirements {
+                    if item.status == ItemStatus::Implemented && item.criteria.is_empty() {
+                        push(
+                            out,
+                            "SYU-REQUIREMENT-001",
+                            "implemented requirement has no Criterion",
+                            &path,
+                            None,
+                        );
+                    }
+                    if item
+                        .bindings
+                        .iter()
+                        .any(|binding| binding.role == BindingRole::Implementation)
+                    {
+                        push(
+                            out,
+                            "SYU-BINDING-002",
+                            "requirement cannot own implementation bindings",
+                            &path,
+                            None,
+                        );
+                    }
+                }
+            }
+            SpecDocument::Features { features, .. } => {
+                for item in features {
+                    if item.status == ItemStatus::Implemented
+                        && !item
+                            .bindings
+                            .iter()
+                            .any(|binding| binding.role == BindingRole::Implementation)
+                    {
+                        push(
+                            out,
+                            "SYU-FEATURE-001",
+                            "implemented feature has no implementation binding",
+                            &path,
+                            None,
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+fn push(
+    out: &mut Vec<Diagnostic>,
+    rule: &str,
+    msg: impl Into<String>,
+    path: impl Into<String>,
+    anchor: Option<SpecAnchor>,
+) {
+    let mut d = Diagnostic::error(rule, msg, path);
+    d.anchor = anchor;
+    out.push(d);
+}
+
+fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
+    for (anchor, value) in &ctx.index.anchors {
+        let path = ctx
+            .index
+            .item_paths
+            .get(&anchor.item)
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+        match value {
+            AnchorValue::Principle(_) => {}
+            AnchorValue::Rule(rule) => {
+                if rule.governed_by.is_empty() {
+                    push(
+                        out,
+                        "SYU-POLICY-002",
+                        "rule has no governing Principle",
+                        &path,
+                        Some(anchor.clone()),
+                    );
+                }
+                for target in &rule.governed_by {
+                    check_kind(ctx, out, target, LocalAnchorKind::Principle, &path);
+                }
+                if rule.level == RuleLevel::Must {
+                    let covered = ctx
+                        .index
+                        .bindings
+                        .values()
+                        .any(|b| b.enforces.contains(anchor) || b.evidences.contains(anchor))
+                        || rule.enforcement.is_some();
+                    if !covered {
+                        push(
+                            out,
+                            "SYU-POLICY-003",
+                            "must rule has no enforcement or evidence",
+                            &path,
+                            Some(anchor.clone()),
+                        );
+                    }
+                }
+            }
+            AnchorValue::Criterion(criterion) => {
+                if criterion.governed_by.is_empty() {
+                    push(
+                        out,
+                        "SYU-REQUIREMENT-002",
+                        "criterion has no governing Rule",
+                        &path,
+                        Some(anchor.clone()),
+                    );
+                }
+                for target in &criterion.governed_by {
+                    check_kind(ctx, out, target, LocalAnchorKind::Rule, &path);
+                }
+                if !ctx.index.criteria_to_implementations.contains_key(anchor) {
+                    push(
+                        out,
+                        "SYU-COVERAGE-001",
+                        "criterion has no implementation binding",
+                        &path,
+                        Some(anchor.clone()),
+                    );
+                }
+                if !ctx.index.criteria_to_verifications.contains_key(anchor) {
+                    push(
+                        out,
+                        "SYU-COVERAGE-002",
+                        "criterion has no verification binding",
+                        &path,
+                        Some(anchor.clone()),
+                    );
+                }
+            }
+            AnchorValue::Binding(binding) => {
+                if binding.responsibility.trim().is_empty() {
+                    push(
+                        out,
+                        "SYU-BINDING-003",
+                        "binding responsibility is empty",
+                        &path,
+                        Some(anchor.clone()),
+                    );
+                }
+                if binding.targets.is_empty() {
+                    push(
+                        out,
+                        "SYU-BINDING-004",
+                        "binding has no exact target",
+                        &path,
+                        Some(anchor.clone()),
+                    );
+                }
+                let relation = match binding.role {
+                    BindingRole::Implementation => &binding.satisfies,
+                    BindingRole::Verification => &binding.verifies,
+                    BindingRole::Documentation => &binding.documents,
+                    BindingRole::Enforcement => &binding.enforces,
+                    BindingRole::Evidence => &binding.evidences,
+                    _ => &Vec::new(),
+                };
+                if matches!(
+                    binding.role,
+                    BindingRole::Implementation
+                        | BindingRole::Verification
+                        | BindingRole::Documentation
+                        | BindingRole::Enforcement
+                        | BindingRole::Evidence
+                ) && relation.is_empty()
+                {
+                    push(
+                        out,
+                        "SYU-BINDING-001",
+                        "binding role requires its canonical relation",
+                        &path,
+                        Some(anchor.clone()),
+                    );
+                }
+                for target in relation {
+                    if !ctx.index.anchors.contains_key(target) {
+                        push(
+                            out,
+                            "SYU-ANCHOR-002",
+                            format!("unresolved relation {target}"),
+                            &path,
+                            Some(anchor.clone()),
+                        );
+                    }
+                }
+                let relation_count = [
+                    binding.satisfies.len(),
+                    binding.verifies.len(),
+                    binding.documents.len(),
+                    binding.enforces.len(),
+                    binding.evidences.len(),
+                ]
+                .into_iter()
+                .filter(|count| *count > 0)
+                .count();
+                if relation_count > usize::from(!relation.is_empty()) {
+                    push(
+                        out,
+                        "SYU-BINDING-002",
+                        "binding contains a relation field incompatible with its role",
+                        &path,
+                        Some(anchor.clone()),
+                    );
+                }
+                let expected_kind = match binding.role {
+                    BindingRole::Implementation | BindingRole::Verification => {
+                        Some(LocalAnchorKind::Criterion)
+                    }
+                    BindingRole::Enforcement => Some(LocalAnchorKind::Rule),
+                    BindingRole::Documentation | BindingRole::Evidence => None,
+                    _ => None,
+                };
+                if let Some(expected) = expected_kind {
+                    for target in relation {
+                        check_kind(ctx, out, target, expected, &path);
+                    }
+                }
+                if binding.role == BindingRole::Generated && binding.generated_from.is_empty() {
+                    push(
+                        out,
+                        "SYU-GENERATED-001",
+                        "generated binding has no generated_from target",
+                        &path,
+                        Some(anchor.clone()),
+                    );
+                }
+            }
+            AnchorValue::Contract(contract) => {
+                if ctx.index.target(&contract.source).is_none() {
+                    push(
+                        out,
+                        "SYU-CONTRACT-001",
+                        "contract source target does not exist",
+                        &path,
+                        Some(anchor.clone()),
+                    );
+                } else if ctx
+                    .index
+                    .bindings
+                    .get(&contract.source.binding)
+                    .map(|b| b.role)
+                    != Some(BindingRole::ContractSource)
+                {
+                    push(
+                        out,
+                        "SYU-CONTRACT-002",
+                        "contract source is not owned by a contract-source binding",
+                        &path,
+                        Some(anchor.clone()),
+                    );
+                }
+                for p in &contract.participants {
+                    if !ctx.index.bindings.contains_key(&p.binding) {
+                        push(
+                            out,
+                            "SYU-CONTRACT-003",
+                            format!("contract participant {} does not exist", p.binding),
+                            &path,
+                            Some(anchor.clone()),
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+fn check_kind(
+    ctx: &ValidationContext<'_>,
+    out: &mut Vec<Diagnostic>,
+    target: &SpecAnchor,
+    expected: LocalAnchorKind,
+    path: &str,
+) {
+    if ctx.index.anchor(target).is_some() {
+        if target.kind != expected {
+            push(
+                out,
+                "SYU-ANCHOR-003",
+                format!("{target} must reference a {}", expected.label()),
+                path,
+                Some(target.clone()),
+            );
+        }
+    } else {
+        push(
+            out,
+            "SYU-ANCHOR-002",
+            format!("unresolved anchor {target}"),
+            path,
+            Some(target.clone()),
+        );
+    }
+}
+
+fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
+    let known_facets = ctx
+        .config
+        .profiles
+        .active
+        .iter()
+        .filter_map(|name| ctx.config.profiles.custom.get(name))
+        .flat_map(|profile| profile.facets.keys())
+        .collect::<BTreeSet<_>>();
+    let facet_rules = ctx
+        .config
+        .profiles
+        .active
+        .iter()
+        .filter_map(|name| ctx.config.profiles.custom.get(name))
+        .flat_map(|profile| profile.facets.iter())
+        .collect::<Vec<_>>();
+    for (anchor, binding) in &ctx.index.bindings {
+        let path = ctx
+            .index
+            .item_paths
+            .get(&anchor.item)
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+        if !known_facets.is_empty() && !known_facets.contains(&binding.facet) {
+            push(
+                out,
+                "SYU-FACET-001",
+                format!(
+                    "facet {} is not defined by an active profile",
+                    binding.facet
+                ),
+                &path,
+                Some(anchor.clone()),
+            );
+        }
+        let mut ids = BTreeSet::new();
+        for target in &binding.targets {
+            if !ids.insert(&target.id) {
+                push(
+                    out,
+                    "SYU-TARGET-003",
+                    format!("duplicate target id {}", target.id),
+                    target.path.to_string_lossy(),
+                    Some(anchor.clone()),
+                );
+            }
+            let expected = match &target.selector {
+                Selector::File => true,
+                Selector::Symbol { .. } => {
+                    matches!(target.adapter.as_str(), "rust" | "typescript" | "shell")
+                }
+                Selector::Operation { .. } => target.adapter == "openapi",
+                Selector::Heading { .. } => target.adapter == "markdown",
+                Selector::JsonPointer { .. } => {
+                    matches!(target.adapter.as_str(), "yaml" | "json" | "openapi")
+                }
+                Selector::Marker { .. } => true,
+            };
+            if !expected {
+                push(
+                    out,
+                    "SYU-TARGET-005",
+                    "adapter and selector kind are incompatible",
+                    target.path.to_string_lossy(),
+                    Some(anchor.clone()),
+                );
+            }
+            if binding.role == BindingRole::Implementation
+                && matches!(target.selector, Selector::File)
+                && ctx.preset == ValidationPreset::AgentReady
+            {
+                push(
+                    out,
+                    "SYU-TARGET-004",
+                    "implementation target is file-only and too broad for executable work",
+                    target.path.to_string_lossy(),
+                    Some(anchor.clone()),
+                );
+            }
+            if let Some((_, rule)) = facet_rules
+                .iter()
+                .find(|(facet, _)| facet.as_str() == binding.facet)
+            {
+                let target_path = target.path.to_string_lossy();
+                let matches = rule.include.iter().any(|pattern| {
+                    pattern
+                        .strip_suffix("/**")
+                        .map_or(target_path == pattern.as_str(), |prefix| {
+                            target_path == prefix || target_path.starts_with(&format!("{prefix}/"))
+                        })
+                });
+                if !matches {
+                    push(
+                        out,
+                        "SYU-FACET-002",
+                        format!(
+                            "target path {} contradicts facet {}",
+                            target.path.display(),
+                            binding.facet
+                        ),
+                        target.path.to_string_lossy(),
+                        Some(anchor.clone()),
+                    );
+                }
+            }
+            if let Err(e) = resolve_target(&ctx.workspace.root, target) {
+                push(
+                    out,
+                    "SYU-TARGET-002",
+                    e.to_string(),
+                    target.path.to_string_lossy(),
+                    Some(anchor.clone()),
+                );
+            }
+        }
+    }
+}
+
+fn validate_contracts(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
+    let profiles = ctx
+        .config
+        .profiles
+        .active
+        .iter()
+        .filter_map(|n| ctx.config.profiles.custom.get(n));
+    for (anchor, contract) in &ctx.index.contracts {
+        let path = ctx
+            .index
+            .item_paths
+            .get(&anchor.item)
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+        for profile in profiles.clone() {
+            for rule in &profile.contract_rules {
+                let kind = format!("{:?}", contract.kind).to_ascii_lowercase();
+                if rule.kind != kind {
+                    continue;
+                }
+                for required in &rule.require_participants {
+                    let count = contract
+                        .participants
+                        .iter()
+                        .filter(|p| {
+                            p.role == required.role
+                                && ctx
+                                    .index
+                                    .bindings
+                                    .get(&p.binding)
+                                    .is_some_and(|b| required.facets.contains(&b.facet))
+                        })
+                        .count();
+                    if count < required.min {
+                        push(
+                            out,
+                            "SYU-CONTRACT-004",
+                            format!(
+                                "contract requires at least {} {} participant(s)",
+                                required.min, required.role
+                            ),
+                            &path,
+                            Some(anchor.clone()),
+                        );
+                    }
+                }
+            }
+        }
+    }
+    for (criterion, implementations) in &ctx.index.criteria_to_implementations {
+        let facets = implementations
+            .iter()
+            .filter_map(|anchor| ctx.index.bindings.get(anchor))
+            .map(|binding| binding.facet.as_str())
+            .collect::<BTreeSet<_>>();
+        if facets.len() > 1 {
+            let connected = ctx.index.contracts.values().any(|contract| {
+                implementations.iter().all(|implementation| {
+                    contract
+                        .participants
+                        .iter()
+                        .any(|participant| &participant.binding == implementation)
+                })
+            });
+            if !connected {
+                push(
+                    out,
+                    "SYU-CONTRACT-006",
+                    "cross-facet implementations of a criterion are not connected by one contract",
+                    "workspace",
+                    Some(criterion.clone()),
+                );
+            }
+        }
+    }
+}
+
+fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Diagnostic>) {
+    if plan.schema != WORK_PLAN_SCHEMA {
+        push(
+            out,
+            "SYU-SCHEMA-001",
+            format!("plan schema must be {WORK_PLAN_SCHEMA}"),
+            "work-plan",
+            None,
+        );
+    }
+    if plan.basis.revision != ctx.revision
+        || plan.basis.workspace_fingerprint != ctx.workspace.fingerprint()
+    {
+        push(
+            out,
+            "SYU-WORK-009",
+            "plan basis revision or workspace fingerprint is stale",
+            "work-plan",
+            None,
+        );
+    }
+    let slices: Vec<&ExecutionSlice> = ctx
+        .selected_slice
+        .map_or_else(|| plan.slices.iter().collect(), |s| vec![s]);
+    for slice in slices {
+        if slice.completion.is_empty() {
+            push(
+                out,
+                "SYU-WORK-011",
+                "slice has no completion check",
+                "work-plan",
+                None,
+            );
+        }
+        if slice.confidence == PlanConfidence::Low && !slice.editable_targets.is_empty() {
+            push(
+                out,
+                "SYU-WORK-010",
+                "low-confidence target cannot be executable",
+                "work-plan",
+                None,
+            );
+        }
+        let limits = &ctx.config.work.slicing;
+        if slice.budget.editable_files > limits.max_editable_files
+            || slice.budget.editable_symbols > limits.max_editable_symbols
+            || slice.budget.verification_targets > limits.max_verification_targets
+            || slice.budget.readonly_targets > limits.max_readonly_targets
+            || slice.budget.total_bytes > limits.max_total_bytes
+        {
+            push(
+                out,
+                "SYU-WORK-003",
+                "slice exceeds configured budget",
+                "work-plan",
+                None,
+            );
+        }
+        let editable: BTreeSet<_> = slice
+            .editable_targets
+            .iter()
+            .map(|t| t.resolved_path.as_str())
+            .collect();
+        for target in slice
+            .editable_targets
+            .iter()
+            .chain(&slice.verification_targets)
+            .chain(&slice.readonly_context)
+        {
+            match ctx
+                .index
+                .target(&target.reference)
+                .and_then(|declared| resolve_target(&ctx.workspace.root, declared).ok())
+            {
+                Some(resolved) if resolved.content_hash == target.content_hash => {}
+                _ => push(
+                    out,
+                    "SYU-WORK-009",
+                    format!("target snapshot is stale: {}", target.reference),
+                    &target.resolved_path,
+                    Some(target.reference.binding.clone()),
+                ),
+            }
+        }
+        for required in slice
+            .acceptance
+            .iter()
+            .filter_map(|a| ctx.index.criteria_to_verifications.get(&a.anchor))
+            .flatten()
+        {
+            if !slice
+                .verification_targets
+                .iter()
+                .any(|target| &target.reference.binding == required)
+            {
+                push(
+                    out,
+                    "SYU-WORK-007",
+                    format!("required verification binding is missing: {required}"),
+                    "work-plan",
+                    Some(required.clone()),
+                );
+            }
+        }
+        for contract_anchor in &slice.contracts {
+            if let Some(contract) = ctx.index.contracts.get(contract_anchor) {
+                for participant in &contract.participants {
+                    if !slice.anchors.contains(&participant.binding)
+                        && !slice
+                            .readonly_context
+                            .iter()
+                            .any(|target| target.reference.binding == participant.binding)
+                    {
+                        push(
+                            out,
+                            "SYU-WORK-008",
+                            format!("contract counterpart is absent: {}", participant.binding),
+                            "work-plan",
+                            Some(contract_anchor.clone()),
+                        );
+                    }
+                }
+            }
+        }
+        let readonly: BTreeSet<_> = slice
+            .readonly_context
+            .iter()
+            .map(|t| t.resolved_path.as_str())
+            .collect();
+        if let Some(paths) = ctx.changed_paths {
+            for changed in paths {
+                let value = changed.to_string_lossy();
+                if readonly.contains(value.as_ref()) {
+                    push(
+                        out,
+                        "SYU-WORK-005",
+                        format!("readonly target changed: {value}"),
+                        value.to_string(),
+                        None,
+                    );
+                } else if !editable.contains(value.as_ref()) {
+                    push(
+                        out,
+                        "SYU-WORK-006",
+                        format!("change is outside editable scope: {value}"),
+                        value.to_string(),
+                        None,
+                    );
+                }
+            }
+        }
+        for acceptance in &slice.acceptance {
+            if let Some(AnchorValue::Criterion(c)) = ctx.index.anchor(&acceptance.anchor)
+                && c.statement != acceptance.statement
+            {
+                push(
+                    out,
+                    "SYU-WORK-012",
+                    "acceptance statement differs from criterion",
+                    "work-plan",
+                    Some(acceptance.anchor.clone()),
+                );
+            }
+        }
+    }
+}

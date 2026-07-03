@@ -1,0 +1,17 @@
+schema: syu/spec/v1
+kind: policies
+namespace: auth
+category: Authentication
+policies:
+  - id: POL-AUTH-001
+    title: Generic failures
+    summary: Login failures use one public shape.
+    description: Enforced by integration evidence.
+    rules:
+      - id: generic-failure
+        level: must
+        statement: Login failures expose one generic response.
+        governed_by: [PHIL-AUTH-001#principle.generic-failure]
+        applies_to: { roles: [implementation] }
+        enforcement: external
+    bindings: []

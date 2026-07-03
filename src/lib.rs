@@ -1,591 +1,215 @@
-// FEAT-ADD-001
-// FEAT-LOG-001
-// FEAT-RELATE-001
-// FEAT-SEARCH-001
-// FEAT-TRACE-001
-// FEAT-BROWSE-001
-// FEAT-LSP-001
-// FEAT-TASK-001
-// FEAT-TASK-003
-// FEAT-TASK-004
-// FEAT-TASK-005
-// REQ-CORE-021
-// REQ-CORE-023
-// REQ-CORE-024
-// REQ-CORE-028
-// REQ-CORE-030
-// REQ-CORE-031
+#![forbid(unsafe_code)]
+use anyhow::{Context, Result, bail};
+use clap::{Args, Parser, Subcommand, ValueEnum};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
+use syu_planner::{export_context, plan};
+use syu_validation::{ValidationContext, validate};
+use syu_work_model::{WorkPlan, WorkRequest};
+use syu_workspace::SpecWorkspace;
 
-pub mod cli;
-pub mod command;
-pub mod config;
-pub mod coverage;
-pub mod history;
-pub mod inspect;
-pub mod language;
-mod lsp;
-pub mod model;
-pub mod report;
-pub mod rules;
-pub mod runtime;
-pub mod workspace;
-
-use anyhow::Result;
-use clap::{CommandFactory, Parser};
-use std::io::IsTerminal;
-
-#[cfg(test)]
-pub(crate) mod test_support {
-    use std::{
-        env,
-        path::{Path, PathBuf},
-        sync::{LazyLock, Mutex, MutexGuard},
-    };
-
-    static CURRENT_DIR_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
-
-    pub(crate) struct CurrentDirGuard {
-        previous: PathBuf,
-        _lock: MutexGuard<'static, ()>,
-    }
-
-    impl CurrentDirGuard {
-        pub(crate) fn chdir(path: &Path) -> Self {
-            let lock = CURRENT_DIR_LOCK
-                .lock()
-                .expect("cwd test lock should not be poisoned");
-            let previous = env::current_dir().expect("cwd should be readable");
-            env::set_current_dir(path).expect("should chdir into tempdir");
-            Self {
-                previous,
-                _lock: lock,
-            }
-        }
-    }
-
-    impl Drop for CurrentDirGuard {
-        fn drop(&mut self) {
-            env::set_current_dir(&self.previous).expect("should restore cwd");
-        }
-    }
+#[derive(Debug, Parser)]
+#[command(name="syu", version=env!("SYU_GIT_VERSION"), about="Exact specification work planning and validation")]
+struct Cli {
+    #[command(subcommand)]
+    command: CommandKind,
 }
-
-enum Dispatch {
-    Browse(cli::BrowseArgs),
-    Workbench(cli::WorkbenchArgs),
-    List(cli::ListArgs),
-    Show(cli::ShowArgs),
-    Search(cli::SearchArgs),
-    Task(cli::TaskArgs),
-    Audit(cli::AuditArgs),
-    Log(cli::LogArgs),
-    Explain(cli::ExplainArgs),
-    Relate(cli::RelateArgs),
-    Trace(cli::TraceArgs),
-    Doctor(cli::DoctorArgs),
-    PrintHelp,
-    Validate(cli::ValidateArgs),
-    Report(cli::ReportArgs),
-    Init(cli::InitArgs),
-    Templates(cli::TemplatesArgs),
-    Completion(cli::CompletionArgs),
-    Add(cli::AddArgs),
-    Lsp,
+#[derive(Debug, Subcommand)]
+enum CommandKind {
+    Validate(ValidateArgs),
+    Work(WorkArgs),
 }
-
-fn dispatch(cli: cli::Cli, stdin_is_terminal: bool, stdout_is_terminal: bool) -> Dispatch {
-    match cli.command {
-        Some(cli::Commands::Browse(args)) => Dispatch::Browse(args),
-        Some(cli::Commands::Workbench(args)) => Dispatch::Workbench(args),
-        Some(cli::Commands::List(args)) => Dispatch::List(args),
-        Some(cli::Commands::Show(args)) => Dispatch::Show(args),
-        Some(cli::Commands::Search(args)) => Dispatch::Search(args),
-        Some(cli::Commands::Task(args)) => Dispatch::Task(args),
-        Some(cli::Commands::Audit(args)) => Dispatch::Audit(args),
-        Some(cli::Commands::Log(args)) => Dispatch::Log(args),
-        Some(cli::Commands::Explain(args)) => Dispatch::Explain(args),
-        Some(cli::Commands::Relate(args)) => Dispatch::Relate(args),
-        Some(cli::Commands::Trace(args)) => Dispatch::Trace(args),
-        Some(cli::Commands::Doctor(args)) => Dispatch::Doctor(args),
-        None if stdin_is_terminal && stdout_is_terminal => {
-            Dispatch::Browse(cli::BrowseArgs::default())
-        }
-        None => Dispatch::PrintHelp,
-        Some(cli::Commands::Validate(args)) => Dispatch::Validate(args),
-        Some(cli::Commands::Report(args)) => Dispatch::Report(args),
-        Some(cli::Commands::Init(args)) => Dispatch::Init(args),
-        Some(cli::Commands::Templates(args)) => Dispatch::Templates(args),
-        Some(cli::Commands::Completion(args)) => Dispatch::Completion(args),
-        Some(cli::Commands::Add(args)) => Dispatch::Add(args),
-        Some(cli::Commands::Lsp) => Dispatch::Lsp,
-    }
+#[derive(Debug, Args)]
+struct ValidateArgs {
+    #[arg(default_value = ".")]
+    workspace: PathBuf,
+    #[arg(long)]
+    range: Option<String>,
+    #[arg(long)]
+    plan: Option<PathBuf>,
+    #[arg(long)]
+    slice: Option<String>,
+    #[arg(long, value_enum, default_value = "text")]
+    format: Format,
 }
-
-fn run_dispatch(dispatch: Dispatch) -> Result<i32> {
-    match dispatch {
-        Dispatch::Browse(args) => command::browse::run_browse_command(&args),
-        Dispatch::Workbench(args) => command::workbench::run_workbench_command(&args),
-        Dispatch::List(args) => command::list::run_list_command(&args),
-        Dispatch::Show(args) => command::show::run_show_command(&args),
-        Dispatch::Search(args) => command::search::run_search_command(&args),
-        Dispatch::Task(args) => command::task::run_task_command(&args),
-        Dispatch::Audit(args) => command::audit::run_audit_command(&args),
-        Dispatch::Log(args) => command::log::run_log_command(&args),
-        Dispatch::Explain(args) => command::explain::run_explain_command(&args),
-        Dispatch::Relate(args) => command::relate::run_relate_command(&args),
-        Dispatch::Trace(args) => command::trace::run_trace_command(&args),
-        Dispatch::Doctor(args) => command::doctor::run_doctor_command(&args),
-        Dispatch::PrintHelp => {
-            let mut command = cli::Cli::command();
-            command.print_help()?;
-            println!();
-            Ok(0)
-        }
-        Dispatch::Validate(args) => command::check::run_check_command(&args),
-        Dispatch::Report(args) => command::report::run_report_command(&args),
-        Dispatch::Init(args) => command::init::run_init_command(&args),
-        Dispatch::Templates(args) => command::templates::run_templates_command(&args),
-        Dispatch::Completion(args) => command::completion::run_completion_command(&args),
-        Dispatch::Add(args) => command::add::run_add_command(&args),
-        Dispatch::Lsp => {
-            lsp::run_lsp_server()?;
-            Ok(0)
-        }
-    }
+#[derive(Debug, Args)]
+struct WorkArgs {
+    #[command(subcommand)]
+    command: WorkCommand,
+}
+#[derive(Debug, Subcommand)]
+enum WorkCommand {
+    Plan {
+        #[arg(long)]
+        request: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+    },
+    Show {
+        #[arg(long)]
+        plan: PathBuf,
+    },
+    ExportContext {
+        #[arg(long)]
+        plan: PathBuf,
+        #[arg(long)]
+        slice: String,
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
+}
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum Format {
+    Text,
+    Json,
 }
 
 pub fn run() -> Result<i32> {
-    let cli = cli::Cli::parse();
-    run_dispatch(dispatch(
-        cli,
-        std::io::stdin().is_terminal(),
-        std::io::stdout().is_terminal(),
-    ))
+    match Cli::parse().command {
+        CommandKind::Validate(args) => run_validate(args),
+        CommandKind::Work(args) => run_work(args),
+    }
 }
-
-#[cfg(test)]
-mod tests {
-    use std::path::{Path, PathBuf};
-
-    use crate::cli::{
-        AddArgs, AuditArgs, Cli, Commands, CompletionArgs, ExplainArgs, HistoryKind, ListArgs,
-        LogArgs, LookupKind, OutputFormat, RelateArgs, SearchArgs, ShowArgs, TaskArgs,
-        TaskCheckArgs, TaskClassifyArgs, TaskCommands, TaskPlanArgs, TaskPlanFormat, TaskScopeArgs,
-        TemplatesArgs, TraceArgs,
+fn run_validate(args: ValidateArgs) -> Result<i32> {
+    let workspace = SpecWorkspace::load(&args.workspace)?;
+    let index = workspace.index()?;
+    let revision = revision(&workspace.root)?;
+    let plan = args
+        .plan
+        .as_ref()
+        .map(|path| read_yaml::<WorkPlan>(path))
+        .transpose()?;
+    let selected = match (&plan, &args.slice) {
+        (Some(p), Some(id)) => Some(
+            p.slices
+                .iter()
+                .find(|s| &s.id == id)
+                .with_context(|| format!("slice {id} not found"))?,
+        ),
+        (None, Some(_)) => bail!("--slice requires --plan"),
+        _ => None,
     };
-    use clap_complete::Shell;
-
-    // REQ-CORE-015
-    #[test]
-    fn dispatches_interactive_bare_invocations_to_browse_defaults() {
-        let action = super::dispatch(Cli { command: None }, true, true);
-        assert!(matches!(
-            action,
-            super::Dispatch::Browse(crate::cli::BrowseArgs { workspace, .. })
-                if workspace == Path::new(".")
-        ));
+    let changed = args
+        .range
+        .as_ref()
+        .map(|r| changed_paths(&workspace.root, r))
+        .transpose()?;
+    let result = validate(&ValidationContext {
+        config: &workspace.config,
+        workspace: &workspace,
+        index: &index,
+        changed_paths: changed.as_deref(),
+        work_plan: plan.as_ref(),
+        selected_slice: selected,
+        preset: workspace.config.validation.preset,
+        revision: &revision,
+    });
+    match args.format {
+        Format::Json => println!("{}", serde_json::to_string_pretty(&result)?),
+        Format::Text => {
+            for d in &result.diagnostics {
+                println!(
+                    "{:?} {} {}: {}",
+                    d.severity, d.rule_id, d.primary.path, d.message
+                );
+            }
+            println!("{} diagnostic(s)", result.diagnostics.len());
+        }
     }
-
-    #[test]
-    // REQ-CORE-015
-    fn print_help_dispatch_renders_successfully() {
-        let code = super::run_dispatch(super::Dispatch::PrintHelp)
-            .expect("print help dispatch should succeed");
-        assert_eq!(code, 0);
-    }
-
-    #[test]
-    // REQ-CORE-018
-    fn dispatches_lookup_subcommands_without_rewriting_them() {
-        let list = super::dispatch(
-            Cli {
-                command: Some(Commands::List(ListArgs {
-                    positional: vec!["requirement".to_string(), "workspace".to_string()],
-                    format: OutputFormat::Json,
-                    with_path: true,
-                })),
-            },
-            true,
-            true,
-        );
-        assert!(matches!(
-            list,
-            super::Dispatch::List(crate::cli::ListArgs { ref positional, format, with_path })
-                if positional == &["requirement", "workspace"]
-                    && format == OutputFormat::Json
-                    && with_path
-        ));
-
-        let show = super::dispatch(
-            Cli {
-                command: Some(Commands::Show(ShowArgs {
-                    id: "REQ-CORE-018".to_string(),
-                    workspace: PathBuf::from("workspace"),
-                    format: OutputFormat::Text,
-                })),
-            },
-            true,
-            true,
-        );
-        assert!(matches!(
-            show,
-            super::Dispatch::Show(crate::cli::ShowArgs { id, workspace, format })
-                if id == "REQ-CORE-018"
-                    && workspace == Path::new("workspace")
-                    && format == OutputFormat::Text
-        ));
-
-        let explain = super::dispatch(
-            Cli {
-                command: Some(Commands::Explain(ExplainArgs {
-                    selector: "REQ-CORE-018".to_string(),
-                    workspace: PathBuf::from("workspace"),
-                    format: OutputFormat::Json,
-                })),
-            },
-            true,
-            true,
-        );
-        assert!(matches!(
-            explain,
-            super::Dispatch::Explain(crate::cli::ExplainArgs { selector, workspace, format })
-                if selector == "REQ-CORE-018"
-                    && workspace == Path::new("workspace")
-                    && format == OutputFormat::Json
-        ));
-
-        let templates = super::dispatch(
-            Cli {
-                command: Some(Commands::Templates(TemplatesArgs {
-                    format: OutputFormat::Json,
-                })),
-            },
-            true,
-            true,
-        );
-        assert!(matches!(
-            templates,
-            super::Dispatch::Templates(crate::cli::TemplatesArgs { format })
-                if format == OutputFormat::Json
-        ));
-
-        let completion = super::dispatch(
-            Cli {
-                command: Some(Commands::Completion(CompletionArgs { shell: Shell::Fish })),
-            },
-            true,
-            true,
-        );
-        assert!(matches!(
-            completion,
-            super::Dispatch::Completion(crate::cli::CompletionArgs { shell })
-                if shell == Shell::Fish
-        ));
-    }
-
-    #[test]
-    // REQ-CORE-021
-    fn dispatches_trace_subcommands_without_rewriting_them() {
-        let trace = super::dispatch(
-            Cli {
-                command: Some(Commands::Trace(TraceArgs {
-                    file: Some(PathBuf::from("src/lib.rs")),
-                    workspace: PathBuf::from("workspace"),
-                    symbol: Some("run".to_string()),
-                    range: None,
-                    allowed_id: Vec::new(),
-                    strict: false,
-                    format: OutputFormat::Json,
-                })),
-            },
-            true,
-            true,
-        );
-
-        assert!(matches!(
-            trace,
-            super::Dispatch::Trace(crate::cli::TraceArgs {
-                file,
-                workspace,
-                symbol,
-                format,
-                ..
-            }) if file == Some(PathBuf::from("src/lib.rs"))
-                && workspace == Path::new("workspace")
-                && symbol.as_deref() == Some("run")
-                && format == OutputFormat::Json
-        ));
-    }
-
-    #[test]
-    // REQ-CORE-019
-    fn dispatches_search_subcommands_without_rewriting_them() {
-        let search = super::dispatch(
-            Cli {
-                command: Some(Commands::Search(SearchArgs {
-                    query: "traceability".to_string(),
-                    workspace: PathBuf::from("workspace"),
-                    kind: Some(LookupKind::Feature),
-                    format: OutputFormat::Json,
-                })),
-            },
-            true,
-            true,
-        );
-
-        assert!(matches!(
-            search,
-            super::Dispatch::Search(crate::cli::SearchArgs { query, workspace, kind, format })
-                if query == "traceability"
-                    && workspace == Path::new("workspace")
-                    && kind == Some(LookupKind::Feature)
-                    && format == OutputFormat::Json
-        ));
-    }
-
-    #[test]
-    // REQ-CORE-028
-    fn dispatches_task_subcommands_without_rewriting_them() {
-        let task = super::dispatch(
-            Cli {
-                command: Some(Commands::Task(TaskArgs {
-                    command: TaskCommands::Classify(TaskClassifyArgs {
-                        request: PathBuf::from("request.yaml"),
-                        workspace: PathBuf::from("workspace"),
-                        format: OutputFormat::Json,
-                    }),
-                })),
-            },
-            true,
-            true,
-        );
-
-        let scope = super::dispatch(
-            Cli {
-                command: Some(Commands::Task(TaskArgs {
-                    command: TaskCommands::Scope(TaskScopeArgs {
-                        request: PathBuf::from("request.yaml"),
-                        workspace: PathBuf::from("workspace"),
-                        format: OutputFormat::Json,
-                    }),
-                })),
-            },
-            true,
-            true,
-        );
-
-        assert!(matches!(
-            task,
-            super::Dispatch::Task(crate::cli::TaskArgs {
-                command: TaskCommands::Classify(TaskClassifyArgs {
-                    request,
-                    workspace,
-                    format,
-                })
-            }) if request == Path::new("request.yaml")
-                && workspace == Path::new("workspace")
-                && format == OutputFormat::Json
-        ));
-        assert!(matches!(
-            scope,
-            super::Dispatch::Task(crate::cli::TaskArgs {
-                command: TaskCommands::Scope(TaskScopeArgs {
-                    request,
-                    workspace,
-                    format,
-                })
-            }) if request == Path::new("request.yaml")
-                && workspace == Path::new("workspace")
-                && format == OutputFormat::Json
-        ));
-        let plan = super::dispatch(
-            Cli {
-                command: Some(Commands::Task(TaskArgs {
-                    command: TaskCommands::Plan(TaskPlanArgs {
-                        request: PathBuf::from("request.yaml"),
-                        workspace: PathBuf::from("workspace"),
-                        output: Some(PathBuf::from(".syu/tasks/current.yaml")),
-                        format: TaskPlanFormat::Yaml,
-                    }),
-                })),
-            },
-            true,
-            true,
-        );
-        assert!(matches!(
+    Ok(if result.is_valid() { 0 } else { 1 })
+}
+fn run_work(args: WorkArgs) -> Result<i32> {
+    match args.command {
+        WorkCommand::Plan {
+            request,
+            out,
+            workspace,
+        } => {
+            let workspace = SpecWorkspace::load(workspace)?;
+            let index = workspace.index()?;
+            let request: WorkRequest = read_yaml(&request)?;
+            let plan = plan(&request, &workspace, &index, &revision(&workspace.root)?)?;
+            write_yaml(&out, &plan)?;
+            println!("wrote {} ({:?})", out.display(), plan.status);
+            Ok(
+                if matches!(plan.status, syu_work_model::PlanStatus::Ready) {
+                    0
+                } else {
+                    1
+                },
+            )
+        }
+        WorkCommand::Show { plan } => {
+            let plan: WorkPlan = read_yaml(&plan)?;
+            println!("{}", serde_yaml::to_string(&plan)?);
+            Ok(0)
+        }
+        WorkCommand::ExportContext {
             plan,
-            super::Dispatch::Task(crate::cli::TaskArgs {
-                command: TaskCommands::Plan(TaskPlanArgs {
-                    request,
-                    workspace,
-                    output,
-                    format,
-                })
-            }) if request == Path::new("request.yaml")
-                && workspace == Path::new("workspace")
-                && output.as_deref() == Some(Path::new(".syu/tasks/current.yaml"))
-                && format == TaskPlanFormat::Yaml
-        ));
+            slice,
+            workspace,
+            out,
+        } => {
+            let workspace = SpecWorkspace::load(workspace)?;
+            let index = workspace.index()?;
+            let plan: WorkPlan = read_yaml(&plan)?;
+            let selected = plan
+                .slices
+                .iter()
+                .find(|s| s.id == slice)
+                .with_context(|| format!("slice {slice} not found"))?;
+            let context = export_context(&plan, selected, &workspace, &index);
+            let yaml = serde_yaml::to_string(&context)?;
+            if let Some(path) = out {
+                fs::write(&path, yaml)?;
+                println!("wrote {}", path.display());
+            } else {
+                print!("{yaml}");
+            }
+            Ok(0)
+        }
     }
-
-    #[test]
-    fn dispatches_task_check_subcommands_without_rewriting_them() {
-        let check = super::dispatch(
-            Cli {
-                command: Some(Commands::Task(TaskArgs {
-                    command: TaskCommands::Check(TaskCheckArgs {
-                        plan: PathBuf::from("goal-plan.yaml"),
-                        range: "origin/main...HEAD".to_string(),
-                        workspace: PathBuf::from("workspace"),
-                        format: OutputFormat::Json,
-                    }),
-                })),
-            },
-            true,
-            true,
-        );
-        assert!(matches!(
-            check,
-            super::Dispatch::Task(crate::cli::TaskArgs {
-                command: TaskCommands::Check(TaskCheckArgs {
-                    plan,
-                    range,
-                    workspace,
-                    format,
-                })
-            }) if plan == Path::new("goal-plan.yaml")
-                && range == "origin/main...HEAD"
-                && workspace == Path::new("workspace")
-                && format == OutputFormat::Json
-        ));
+}
+fn read_yaml<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T> {
+    serde_yaml::from_str(
+        &fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?,
+    )
+    .with_context(|| format!("strict parse {}", path.display()))
+}
+fn write_yaml<T: serde::Serialize>(path: &Path, value: &T) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
     }
-
-    #[test]
-    // REQ-CORE-025
-    fn dispatches_audit_subcommands_without_rewriting_them() {
-        let audit = super::dispatch(
-            Cli {
-                command: Some(Commands::Audit(AuditArgs {
-                    workspace: PathBuf::from("workspace"),
-                    format: OutputFormat::Json,
-                })),
-            },
-            true,
-            true,
-        );
-
-        assert!(matches!(
-            audit,
-            super::Dispatch::Audit(crate::cli::AuditArgs { workspace, format })
-                if workspace == Path::new("workspace") && format == OutputFormat::Json
-        ));
+    fs::write(path, serde_yaml::to_string(value)?)?;
+    Ok(())
+}
+fn revision(root: &Path) -> Result<String> {
+    let output = Command::new("git")
+        .args(["rev-parse", "HEAD"])
+        .current_dir(root)
+        .output()?;
+    if !output.status.success() {
+        bail!("git rev-parse HEAD failed");
     }
-
-    #[test]
-    // REQ-CORE-024
-    fn dispatches_log_subcommands_without_rewriting_them() {
-        let log = super::dispatch(
-            Cli {
-                command: Some(Commands::Log(LogArgs {
-                    id: "REQ-CORE-024".to_string(),
-                    workspace: PathBuf::from("workspace"),
-                    kind: HistoryKind::Definition,
-                    path: Some(PathBuf::from("docs/syu/requirements")),
-                    include_related: true,
-                    merge_base_ref: Some("origin/main".to_string()),
-                    range: None,
-                    limit: 5,
-                    format: OutputFormat::Json,
-                })),
-            },
-            true,
-            true,
-        );
-
-        assert!(matches!(
-            log,
-            super::Dispatch::Log(crate::cli::LogArgs {
-                id,
-                workspace,
-                kind,
-                path,
-                include_related,
-                merge_base_ref,
-                range,
-                limit,
-                format
-            })
-                if id == "REQ-CORE-024"
-                    && workspace == Path::new("workspace")
-                    && kind == HistoryKind::Definition
-                    && path == Some(PathBuf::from("docs/syu/requirements"))
-                    && include_related
-                    && merge_base_ref.as_deref() == Some("origin/main")
-                    && range.is_none()
-                    && limit == 5
-                    && format == OutputFormat::Json
-        ));
+    Ok(String::from_utf8(output.stdout)?.trim().into())
+}
+fn changed_paths(root: &Path, range: &str) -> Result<Vec<PathBuf>> {
+    let output = Command::new("git")
+        .args(["diff", "--name-only", range])
+        .current_dir(root)
+        .output()?;
+    if !output.status.success() {
+        bail!("git diff --name-only {range} failed");
     }
-
-    #[test]
-    // REQ-CORE-023
-    fn dispatches_relate_subcommands_without_rewriting_them() {
-        let relate = super::dispatch(
-            Cli {
-                command: Some(Commands::Relate(RelateArgs {
-                    selector: Some("REQ-CORE-023".to_string()),
-                    workspace: PathBuf::from("workspace"),
-                    range: None,
-                    format: OutputFormat::Json,
-                })),
-            },
-            true,
-            true,
-        );
-
-        assert!(matches!(
-            relate,
-            super::Dispatch::Relate(crate::cli::RelateArgs { selector, workspace, format, .. })
-                if selector.as_deref() == Some("REQ-CORE-023")
-                    && workspace == Path::new("workspace")
-                    && format == OutputFormat::Json
-        ));
-    }
-
-    #[test]
-    // REQ-CORE-020
-    fn dispatches_add_subcommands_without_rewriting_them() {
-        let add = super::dispatch(
-            Cli {
-                command: Some(Commands::Add(AddArgs {
-                    layer: LookupKind::Feature,
-                    id: Some("FEAT-AUTH-001".to_string()),
-                    workspace: PathBuf::from("workspace"),
-                    interactive: false,
-                    file: Some(PathBuf::from("docs/syu/features/auth/login.yaml")),
-                    kind: Some("auth".to_string()),
-                })),
-            },
-            true,
-            true,
-        );
-
-        assert!(matches!(
-            add,
-            super::Dispatch::Add(crate::cli::AddArgs {
-                layer,
-                id,
-                workspace,
-                interactive,
-                file,
-                kind
-            })
-                if layer == LookupKind::Feature
-                    && id.as_deref() == Some("FEAT-AUTH-001")
-                    && workspace == Path::new("workspace")
-                    && !interactive
-                    && file == Some(PathBuf::from("docs/syu/features/auth/login.yaml"))
-                    && kind.as_deref() == Some("auth")
-        ));
-    }
+    Ok(String::from_utf8(output.stdout)?
+        .lines()
+        .map(PathBuf::from)
+        .collect())
 }

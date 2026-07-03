@@ -1,10 +1,10 @@
 [package]
-name = "syu-app-ui"
+name = "syu-work-model"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
+serde.workspace = true
 syu-diagnostics = { path = "../syu-diagnostics" }
-syu-work-model = { path = "../syu-work-model" }
-syu-workbench-server = { path = "../syu-workbench-server" }
+syu-spec-model = { path = "../syu-spec-model" }
