@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use std::collections::BTreeSet;
 use syu_diagnostics::Diagnostic;
 use syu_spec_model::{ArtifactBinding, BoundTargetRef, LocalAnchorKind, SpecAnchor};
@@ -104,15 +104,16 @@ pub fn plan(
             format!("{} slices exceed requested maximum {max}", slices.len()),
             "work-request",
         );
-        return Ok(WorkPlan {
+        return Ok(finalize_plan(WorkPlan {
             schema: WORK_PLAN_SCHEMA.into(),
             id: plan_id(request, revision),
             basis: basis(workspace, revision),
-            request: embed(request),
+            request: request.clone(),
+            canonical_digest: String::new(),
             status: PlanStatus::Blocked,
             slices,
             diagnostics: vec![d],
-        });
+        }));
     }
     if slices.is_empty() {
         return Ok(blocked_plan(
@@ -128,15 +129,16 @@ pub fn plan(
     } else {
         PlanStatus::Ready
     };
-    Ok(WorkPlan {
+    Ok(finalize_plan(WorkPlan {
         schema: WORK_PLAN_SCHEMA.into(),
         id: plan_id(request, revision),
         basis: basis(workspace, revision),
-        request: embed(request),
+        request: request.clone(),
+        canonical_digest: String::new(),
         status,
         slices,
         diagnostics: vec![],
-    })
+    }))
 }
 
 fn expand_seed(index: &SpecIndex, seed: &SpecAnchor, criteria: &mut BTreeSet<SpecAnchor>) {
@@ -174,6 +176,7 @@ fn build_slice(
         workspace,
         implementation,
         binding,
+        TargetAccessMode::Editable,
         "Primary implementation satisfying the selected criterion.",
         &mut blockers,
     );
@@ -192,6 +195,7 @@ fn build_slice(
                 workspace,
                 anchor,
                 b,
+                TargetAccessMode::RunOnly,
                 "Direct verification of the selected criterion.",
                 &mut blockers,
             ));
@@ -215,6 +219,7 @@ fn build_slice(
                     &contract.source,
                     source_binding,
                     target,
+                    TargetAccessMode::Readonly,
                     "Contract source constraining this implementation.",
                     &mut blockers,
                 ));
@@ -227,6 +232,7 @@ fn build_slice(
                         workspace,
                         &participant.binding,
                         other,
+                        TargetAccessMode::Readonly,
                         "Contract counterpart; readonly in this slice.",
                         &mut blockers,
                     ));
@@ -247,6 +253,9 @@ fn build_slice(
         });
     }
     if request.operation == WorkOperation::Investigate {
+        for target in &mut editable {
+            target.access = TargetAccessMode::Readonly;
+        }
         readonly.append(&mut editable);
         dedup(&mut readonly);
     }
@@ -370,6 +379,7 @@ fn targets(
     workspace: &SpecWorkspace,
     anchor: &SpecAnchor,
     binding: &ArtifactBinding,
+    access: TargetAccessMode,
     reason: &str,
     blockers: &mut Vec<Diagnostic>,
 ) -> Vec<PlannedTarget> {
@@ -385,6 +395,7 @@ fn targets(
                 },
                 binding,
                 t,
+                access,
                 reason,
                 blockers,
             )
@@ -396,6 +407,7 @@ fn one_target(
     reference: &BoundTargetRef,
     binding: &ArtifactBinding,
     target: &syu_spec_model::ArtifactTarget,
+    access: TargetAccessMode,
     reason: &str,
     blockers: &mut Vec<Diagnostic>,
 ) -> Vec<PlannedTarget> {
@@ -403,6 +415,7 @@ fn one_target(
     {
         Ok(r) => vec![PlannedTarget {
             reference: reference.clone(),
+            access,
             resolved_path: r.path.to_string_lossy().into_owned(),
             resolved_selector: ResolvedSelector {
                 description: r.description,
@@ -441,14 +454,6 @@ fn basis(workspace: &SpecWorkspace, revision: &str) -> PlanBasis {
         workspace_fingerprint: workspace.fingerprint(),
     }
 }
-fn embed(r: &WorkRequest) -> EmbeddedRequest {
-    EmbeddedRequest {
-        id: r.id.clone(),
-        summary: r.summary.clone(),
-        operation: r.operation,
-        seeds: r.seeds.clone(),
-    }
-}
 fn plan_id(r: &WorkRequest, revision: &str) -> String {
     format!(
         "PLAN-{}-{}",
@@ -463,25 +468,50 @@ fn blocked_plan(
     rule: &str,
     message: impl Into<String>,
 ) -> WorkPlan {
-    WorkPlan {
+    finalize_plan(WorkPlan {
         schema: WORK_PLAN_SCHEMA.into(),
         id: plan_id(request, revision),
         basis: basis(workspace, revision),
-        request: embed(request),
+        request: request.clone(),
+        canonical_digest: String::new(),
         status: PlanStatus::Blocked,
         slices: vec![],
         diagnostics: vec![Diagnostic::error(rule, message, "work-request")],
-    }
+    })
 }
 
 pub fn export_context(
-    plan: &WorkPlan,
-    slice: &ExecutionSlice,
+    work_plan: &WorkPlan,
+    slice_id: &str,
     workspace: &SpecWorkspace,
     index: &SpecIndex,
-) -> ContextPack {
+) -> Result<ContextPack> {
+    let revision = work_plan.basis.revision.clone();
+    let canonical = plan(&work_plan.request, workspace, index, &revision)?;
+    if canonical.basis != work_plan.basis {
+        bail!("work plan basis is stale");
+    }
+    if canonical.canonical_digest != work_plan.canonical_digest
+        || canonical.status != work_plan.status
+    {
+        bail!("work plan structure does not match the canonical plan");
+    }
+    if canonical.slices != work_plan.slices || canonical.diagnostics != work_plan.diagnostics {
+        bail!("work plan content is tampered");
+    }
+    if canonical.status != PlanStatus::Ready {
+        bail!("only ready work plans can be exported");
+    }
+    let selected = canonical
+        .slices
+        .iter()
+        .find(|candidate| candidate.id == slice_id)
+        .context("selected slice is missing from the canonical plan")?;
+    if !selected.blockers.is_empty() {
+        bail!("cannot export a blocked slice");
+    }
     let mut spec_context = Vec::new();
-    for anchor in &slice.anchors {
+    for anchor in &selected.anchors {
         let text = match index.anchor(anchor) {
             Some(AnchorValue::Principle(v)) => &v.statement,
             Some(AnchorValue::Rule(v)) => &v.statement,
@@ -497,15 +527,15 @@ pub fn export_context(
     let mut artifact_context = Vec::new();
     let mut included = BTreeSet::new();
     for (mode, targets) in [
-        (ContextMode::Editable, &slice.editable_targets),
-        (ContextMode::Verification, &slice.verification_targets),
-        (ContextMode::Readonly, &slice.readonly_context),
+        (ContextMode::Editable, &selected.editable_targets),
+        (ContextMode::Verification, &selected.verification_targets),
+        (ContextMode::Readonly, &selected.readonly_context),
     ] {
         for target in targets {
             if !included.insert(target.reference.clone()) {
                 continue;
             }
-            let excerpt = index
+            let resolved = index
                 .target(&target.reference)
                 .and_then(|declared| {
                     resolve_target_with_adapters(
@@ -515,26 +545,46 @@ pub fn export_context(
                     )
                     .ok()
                 })
-                .map(|resolved| resolved.excerpt)
-                .unwrap_or_default();
+                .context("target resolution failed while exporting context")?;
+            if resolved.excerpt.is_empty() {
+                bail!("target excerpt is empty for {}", target.reference);
+            }
             artifact_context.push(ArtifactExcerpt {
                 reference: target.reference.clone(),
                 mode,
-                excerpt,
+                access: target.access,
+                path: target.resolved_path.clone(),
+                selector: target.resolved_selector.clone(),
+                line_start: target.line_start,
+                line_end: target.line_end,
+                byte_start: target.byte_start,
+                byte_end: target.byte_end,
+                adapter: target.adapter.clone(),
+                facet: target.facet.clone(),
+                role: target.role,
+                content_hash: target.content_hash.clone(),
+                excerpt_hash: target.excerpt_hash.clone(),
+                reason: target.reason.clone(),
+                excerpt: resolved.excerpt,
             });
         }
     }
-    ContextPack {
+    Ok(ContextPack {
         schema: CONTEXT_PACK_SCHEMA.into(),
-        plan: plan.id.clone(),
-        slice: slice.id.clone(),
-        basis: plan.basis.clone(),
+        plan: canonical.id.clone(),
+        slice: selected.id.clone(),
+        basis: canonical.basis.clone(),
         instructions: ContextInstructions {
-            goal: slice.goal.clone(),
-            non_goals: slice.non_goals.clone(),
+            goal: selected.goal.clone(),
+            non_goals: selected.non_goals.clone(),
         },
         spec_context,
         artifact_context,
-        completion: slice.completion.clone(),
-    }
+        completion: selected.completion.clone(),
+    })
+}
+
+fn finalize_plan(mut plan: WorkPlan) -> WorkPlan {
+    plan.canonical_digest = work_plan_digest(&plan);
+    plan
 }

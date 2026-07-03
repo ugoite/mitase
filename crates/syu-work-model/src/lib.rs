@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use syu_diagnostics::Diagnostic;
 use syu_spec_model::{BindingRole, BoundTargetRef, SpecAnchor, SpecItemRef};
 
@@ -53,14 +54,6 @@ pub struct PlanBasis {
     pub revision: String,
     pub workspace_fingerprint: String,
 }
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct EmbeddedRequest {
-    pub id: String,
-    pub summary: String,
-    pub operation: WorkOperation,
-    pub seeds: Vec<WorkSeed>,
-}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum PlanStatus {
@@ -87,6 +80,7 @@ pub struct ResolvedSelector {
 pub struct PlannedTarget {
     #[serde(rename = "ref")]
     pub reference: BoundTargetRef,
+    pub access: TargetAccessMode,
     pub resolved_path: String,
     pub resolved_selector: ResolvedSelector,
     pub content_hash: String,
@@ -99,6 +93,13 @@ pub struct PlannedTarget {
     pub line_start: usize,
     pub line_end: usize,
     pub reason: String,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TargetAccessMode {
+    Editable,
+    RunOnly,
+    Readonly,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -150,7 +151,8 @@ pub struct WorkPlan {
     pub schema: String,
     pub id: String,
     pub basis: PlanBasis,
-    pub request: EmbeddedRequest,
+    pub request: WorkRequest,
+    pub canonical_digest: String,
     pub status: PlanStatus,
     pub slices: Vec<ExecutionSlice>,
     #[serde(default)]
@@ -176,6 +178,19 @@ pub struct ArtifactExcerpt {
     #[serde(rename = "ref")]
     pub reference: BoundTargetRef,
     pub mode: ContextMode,
+    pub access: TargetAccessMode,
+    pub path: String,
+    pub selector: ResolvedSelector,
+    pub line_start: usize,
+    pub line_end: usize,
+    pub byte_start: usize,
+    pub byte_end: usize,
+    pub adapter: String,
+    pub facet: String,
+    pub role: BindingRole,
+    pub content_hash: String,
+    pub excerpt_hash: String,
+    pub reason: String,
     pub excerpt: String,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -195,4 +210,13 @@ pub struct ContextPack {
     pub spec_context: Vec<SpecExcerpt>,
     pub artifact_context: Vec<ArtifactExcerpt>,
     pub completion: Vec<CompletionCheck>,
+}
+
+pub fn work_plan_digest(plan: &WorkPlan) -> String {
+    let mut copy = plan.clone();
+    copy.canonical_digest.clear();
+    let bytes = serde_json::to_vec(&copy).expect("serialize work plan digest");
+    let mut hash = Sha256::new();
+    hash.update(bytes);
+    format!("sha256:{:x}", hash.finalize())
 }

@@ -1,8 +1,8 @@
 schema: syu/config/v1
 workspace:
   spec_roots: [spec]
-  source_roots: [web, api, tests]
-  ignore: []
+  artifact_roots: [web, api, tests, openapi.yaml]
+  excludes: []
 profiles:
   active: [web-app]
   custom:
@@ -21,10 +21,8 @@ validation:
   preset: agent-ready
   deny_warnings: false
   rules: {}
-  changed: { base: merge-base, require_owned_changes: true, require_plan_scope: true }
+  changed: { baseline: merge-base, require_owned_changes: true }
 work:
-  executable_requires_explicit_binding: true
   slicing: { max_editable_files: 4, max_editable_symbols: 8, max_verification_targets: 6, max_readonly_targets: 12, max_total_bytes: 120000 }
-  context: { include_parent_principles: true, include_parent_rules: true, include_contract_counterparts: true, include_non_goals: true }
-  inference: { allow_suggestions: true, suggestions_are_executable: false }
+  context: { include_parent_principles: true, include_parent_rules: true }
 adapters: { enabled: [rust, typescript, openapi] }

@@ -160,12 +160,11 @@ fn run_work(args: WorkArgs) -> Result<i32> {
             let workspace = SpecWorkspace::load(workspace)?;
             let index = workspace.index()?;
             let plan: WorkPlan = read_yaml(&plan)?;
-            let selected = plan
-                .slices
+            plan.slices
                 .iter()
                 .find(|s| s.id == slice)
                 .with_context(|| format!("slice {slice} not found"))?;
-            let context = export_context(&plan, selected, &workspace, &index);
+            let context = export_context(&plan, &slice, &workspace, &index)?;
             let yaml = serde_yaml::to_string(&context)?;
             if let Some(path) = out {
                 fs::write(&path, yaml)?;

@@ -570,7 +570,6 @@ dependencies = [
  "syu-diagnostics",
  "syu-project-model",
  "syu-spec-model",
- "syu-validation",
  "syu-work-model",
  "syu-workspace",
 ]
@@ -595,6 +594,7 @@ name = "syu-validation"
 version = "0.1.0"
 dependencies = [
  "syu-diagnostics",
+ "syu-planner",
  "syu-project-model",
  "syu-spec-model",
  "syu-work-model",
@@ -606,6 +606,8 @@ name = "syu-work-model"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_json",
+ "sha2",
  "syu-diagnostics",
  "syu-spec-model",
 ]

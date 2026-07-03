@@ -10,6 +10,5 @@ sha2.workspace = true
 syu-diagnostics = { path = "../syu-diagnostics" }
 syu-project-model = { path = "../syu-project-model" }
 syu-spec-model = { path = "../syu-spec-model" }
-syu-validation = { path = "../syu-validation" }
 syu-work-model = { path = "../syu-work-model" }
 syu-workspace = { path = "../syu-workspace" }

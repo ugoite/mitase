@@ -1,8 +1,8 @@
 schema: syu/config/v1
 workspace:
   spec_roots: [docs/syu]
-  source_roots: [src, crates, docs, fixtures]
-  ignore: [target/**, node_modules/**, docs/generated/**]
+  artifact_roots: [src, crates, docs, fixtures]
+  excludes: [target/**, node_modules/**, docs/generated/**]
 profiles:
   active: [agent-ready]
   custom:
@@ -17,11 +17,9 @@ validation:
   deny_warnings: false
   rules: {}
   changed:
-    base: merge-base
+    baseline: merge-base
     require_owned_changes: true
-    require_plan_scope: true
 work:
-  executable_requires_explicit_binding: true
   slicing:
     max_editable_files: 4
     max_editable_symbols: 8
@@ -31,10 +29,5 @@ work:
   context:
     include_parent_principles: true
     include_parent_rules: true
-    include_contract_counterparts: true
-    include_non_goals: true
-  inference:
-    allow_suggestions: true
-    suggestions_are_executable: false
 adapters:
   enabled: [rust, typescript, markdown, openapi, yaml, json]

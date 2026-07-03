@@ -1,11 +1,14 @@
 #![forbid(unsafe_code)]
 use std::{collections::BTreeSet, path::PathBuf};
 use syu_diagnostics::{Diagnostic, Severity, ValidationResult};
+use syu_planner::plan as canonical_plan;
 use syu_project_model::{ProjectConfig, RuleOverride, ValidationPreset};
 use syu_spec_model::{
     BindingRole, ItemStatus, LocalAnchorKind, RuleLevel, Selector, SpecAnchor, SpecDocument,
 };
-use syu_work_model::{ExecutionSlice, PlanConfidence, WORK_PLAN_SCHEMA, WorkPlan};
+use syu_work_model::{
+    ExecutionSlice, PlanConfidence, WORK_PLAN_SCHEMA, WorkPlan, work_plan_digest,
+};
 use syu_workspace::{AnchorValue, SpecIndex, SpecWorkspace, resolve_target_with_adapters};
 
 #[derive(Debug, Clone, Copy)]
@@ -152,6 +155,14 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
         if is_spec || rendered == "syu.yaml" {
             continue;
         }
+        if !ctx.config.workspace.artifact_roots.is_empty()
+            && !path_within_roots(rendered.as_ref(), &ctx.config.workspace.artifact_roots)
+        {
+            continue;
+        }
+        if path_excluded(rendered.as_ref(), &ctx.config.workspace.excludes) {
+            continue;
+        }
         let owners = ctx.index.path_to_targets.get(rendered.as_ref());
         if ctx.config.validation.changed.require_owned_changes && owners.is_none() {
             push(
@@ -178,6 +189,22 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
             }
         }
     }
+}
+
+fn path_within_roots(path: &str, roots: &[String]) -> bool {
+    roots
+        .iter()
+        .any(|root| path == root || path.starts_with(&format!("{root}/")))
+}
+
+fn path_excluded(path: &str, patterns: &[String]) -> bool {
+    patterns.iter().any(|pattern| {
+        pattern
+            .strip_suffix("/**")
+            .map_or(path == pattern, |prefix| {
+                path == prefix || path.starts_with(&format!("{prefix}/"))
+            })
+    })
 }
 fn validate_document_shapes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
     for loaded in &ctx.workspace.documents {
@@ -753,10 +780,53 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
             None,
         );
     }
+    if plan.canonical_digest != work_plan_digest(plan) {
+        push(
+            out,
+            "SYU-WORK-009",
+            "plan canonical digest is tampered",
+            "work-plan",
+            None,
+        );
+    }
+    match canonical_plan(&plan.request, ctx.workspace, ctx.index, ctx.revision) {
+        Ok(canonical) => {
+            if canonical.status != plan.status
+                || canonical.slices != plan.slices
+                || canonical.diagnostics != plan.diagnostics
+                || canonical.canonical_digest != plan.canonical_digest
+            {
+                push(
+                    out,
+                    "SYU-WORK-009",
+                    "plan structure does not match the canonical planner output",
+                    "work-plan",
+                    None,
+                );
+            }
+        }
+        Err(error) => push(
+            out,
+            "SYU-WORK-009",
+            format!("plan request no longer replans cleanly: {error:#}"),
+            "work-plan",
+            None,
+        ),
+    }
+    let mut slice_ids = BTreeSet::new();
     let slices: Vec<&ExecutionSlice> = ctx
         .selected_slice
         .map_or_else(|| plan.slices.iter().collect(), |s| vec![s]);
     for slice in slices {
+        if !slice_ids.insert(slice.id.as_str()) {
+            push(
+                out,
+                "SYU-WORK-009",
+                format!("duplicate slice id: {}", slice.id),
+                "work-plan",
+                None,
+            );
+        }
         if slice.completion.is_empty() {
             push(
                 out,
@@ -862,6 +932,17 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                         && resolved.byte_end == target.byte_end
                         && resolved.line_start == target.line_start
                         && resolved.line_end == target.line_end
+                        && match target.access {
+                            syu_work_model::TargetAccessMode::Editable => {
+                                slice.editable_targets.contains(target)
+                            }
+                            syu_work_model::TargetAccessMode::RunOnly => {
+                                slice.verification_targets.contains(target)
+                            }
+                            syu_work_model::TargetAccessMode::Readonly => {
+                                slice.readonly_context.contains(target)
+                            }
+                        }
                         && ctx
                             .index
                             .bindings

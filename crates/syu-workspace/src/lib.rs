@@ -83,6 +83,9 @@ impl SpecWorkspace {
     }
     pub fn fingerprint(&self) -> String {
         let mut hash = Sha256::new();
+        if let Ok(config) = serde_yaml::to_string(&self.config) {
+            hash.update(config.as_bytes());
+        }
         for doc in &self.documents {
             hash.update(doc.path.to_string_lossy().as_bytes());
             hash.update(fs::read(&doc.path).unwrap_or_default());
@@ -181,6 +184,18 @@ impl SpecIndex {
         }
         for (anchor, binding) in &out.bindings {
             for target in &binding.targets {
+                let rendered = target.path.to_string_lossy();
+                if !workspace.config.workspace.artifact_roots.is_empty()
+                    && !path_is_within_roots(
+                        rendered.as_ref(),
+                        &workspace.config.workspace.artifact_roots,
+                    )
+                {
+                    bail!("target path {rendered} is outside workspace.artifact_roots");
+                }
+                if path_is_excluded(rendered.as_ref(), &workspace.config.workspace.excludes) {
+                    bail!("target path {rendered} is excluded by workspace.excludes");
+                }
                 out.path_to_targets
                     .entry(target.path.to_string_lossy().into_owned())
                     .or_default()
@@ -265,6 +280,22 @@ fn unique_item(ids: &mut BTreeSet<SpecId>, id: &SpecId) -> Result<()> {
         bail!("duplicate item id {id}");
     }
     Ok(())
+}
+
+fn path_is_within_roots(path: &str, roots: &[String]) -> bool {
+    roots
+        .iter()
+        .any(|root| path == root || path.starts_with(&format!("{root}/")))
+}
+
+fn path_is_excluded(path: &str, patterns: &[String]) -> bool {
+    patterns.iter().any(|pattern| {
+        pattern
+            .strip_suffix("/**")
+            .map_or(path == pattern, |prefix| {
+                path == prefix || path.starts_with(&format!("{prefix}/"))
+            })
+    })
 }
 fn find_root(start: &Path) -> Result<PathBuf> {
     let mut current = if start.is_file() {

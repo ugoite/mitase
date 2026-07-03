@@ -17,9 +17,9 @@ pub struct ProjectConfig {
 #[serde(deny_unknown_fields)]
 pub struct WorkspaceConfig {
     pub spec_roots: Vec<String>,
-    pub source_roots: Vec<String>,
+    pub artifact_roots: Vec<String>,
     #[serde(default)]
-    pub ignore: Vec<String>,
+    pub excludes: Vec<String>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -82,17 +82,20 @@ pub enum RuleOverride {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ChangedConfig {
-    pub base: String,
+    pub baseline: ChangeBaseline,
     pub require_owned_changes: bool,
-    pub require_plan_scope: bool,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ChangeBaseline {
+    MergeBase,
+    Head,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkConfig {
-    pub executable_requires_explicit_binding: bool,
     pub slicing: SliceLimits,
     pub context: ContextConfig,
-    pub inference: InferenceConfig,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -108,14 +111,6 @@ pub struct SliceLimits {
 pub struct ContextConfig {
     pub include_parent_principles: bool,
     pub include_parent_rules: bool,
-    pub include_contract_counterparts: bool,
-    pub include_non_goals: bool,
-}
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct InferenceConfig {
-    pub allow_suggestions: bool,
-    pub suggestions_are_executable: bool,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
