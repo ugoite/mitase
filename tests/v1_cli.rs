@@ -34,6 +34,7 @@ fn validates_repository_and_plans_fixture() {
         .unwrap()
         .args(["validate", "fixtures/v1/valid-web-app", "--plan"])
         .arg(plan)
+        .args(["--range", "HEAD..HEAD"])
         .assert()
         .success();
 }
@@ -198,6 +199,158 @@ fn export_context_uses_canonical_slice_and_rich_artifact_metadata() {
     assert!(context.contains("selector:"));
     assert!(context.contains("content_hash: sha256:"));
     assert!(context.contains("excerpt_hash: sha256:"));
+    assert!(context.contains("kind: http"));
+}
+
+#[test]
+fn exact_requested_targets_are_exact_and_verification_can_be_editable() {
+    let temp = tempdir().unwrap();
+    let request = temp.path().join("request.yaml");
+    let plan = temp.path().join("plan.yaml");
+    fs::write(
+        &request,
+        concat!(
+            "schema: syu/work-request/v1\n",
+            "id: WORK-EXACT-VERIFY\n",
+            "summary: Update the regression test.\n",
+            "operation: modify\n",
+            "seeds: []\n",
+            "requested_targets:\n",
+            "  - REQ-AUTH-001#binding.login-test/target.case\n",
+            "constraints:\n",
+            "  include_facets: [verification]\n",
+            "  exclude_paths: []\n",
+            "  max_slices: 3\n",
+        ),
+    )
+    .unwrap();
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["work", "plan", "--request"])
+        .arg(&request)
+        .args(["--out"])
+        .arg(&plan)
+        .args(["--workspace", "fixtures/v1/valid-web-app"])
+        .assert()
+        .success();
+    let text = fs::read_to_string(plan).unwrap();
+    assert!(text.contains("id: invalid-credentials-verify-case"));
+    assert!(text.contains("resolved_path: tests/login.rs"));
+    assert!(text.contains("access: editable"));
+    assert!(!text.contains("id: invalid-credentials-ui"));
+    assert!(!text.contains("id: invalid-credentials-backend\n  goal"));
+}
+
+#[test]
+fn validate_uses_configured_baseline_without_explicit_range() {
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["validate", "fixtures/v1/valid-web-app"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn export_context_rejects_stale_revision() {
+    let temp = tempdir().unwrap();
+    let plan = temp.path().join("plan.yaml");
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args([
+            "work",
+            "plan",
+            "--request",
+            "fixtures/v1/valid-web-app/work.yaml",
+            "--out",
+        ])
+        .arg(&plan)
+        .args(["--workspace", "fixtures/v1/valid-web-app"])
+        .assert()
+        .success();
+    let text = fs::read_to_string(&plan).unwrap();
+    let slice = text
+        .lines()
+        .find_map(|line| line.strip_prefix("- id: "))
+        .unwrap()
+        .to_string();
+    fs::write(&plan, text.replacen("revision: ", "revision: stale-", 1)).unwrap();
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args([
+            "work",
+            "export-context",
+            "--plan",
+            plan.to_str().unwrap(),
+            "--slice",
+            &slice,
+            "--workspace",
+            "fixtures/v1/valid-web-app",
+        ])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn normal_validate_does_not_require_git_repository() {
+    let temp = tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("spec")).unwrap();
+    fs::create_dir_all(temp.path().join("src")).unwrap();
+    fs::write(
+        temp.path().join("syu.yaml"),
+        concat!(
+            "schema: syu/config/v1\n",
+            "workspace:\n",
+            "  spec_roots: [spec]\n",
+            "  artifact_roots: [src]\n",
+            "  excludes: []\n",
+            "profiles: { active: [], custom: {} }\n",
+            "validation:\n",
+            "  preset: standard\n",
+            "  deny_warnings: false\n",
+            "  rules: {}\n",
+            "  changed:\n",
+            "    require_owned_changes: false\n",
+            "work:\n",
+            "  slicing:\n",
+            "    max_editable_files: 1\n",
+            "    max_editable_symbols: 1\n",
+            "    max_verification_targets: 1\n",
+            "    max_readonly_targets: 1\n",
+            "    max_total_bytes: 1024\n",
+            "  context:\n",
+            "    include_parent_principles: false\n",
+            "    include_parent_rules: false\n",
+            "adapters: { enabled: [rust] }\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/requirement.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: requirements\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "requirements:\n",
+            "  - id: REQ-SAMPLE-001\n",
+            "    title: Sample\n",
+            "    description: Sample requirement.\n",
+            "    priority: medium\n",
+            "    status: planned\n",
+            "    criteria:\n",
+            "      - id: check\n",
+            "        kind: behavior\n",
+            "        statement: Sample criterion.\n",
+            "        governed_by: []\n",
+        ),
+    )
+    .unwrap();
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["validate"])
+        .arg(temp.path())
+        .assert()
+        .failure();
 }
 
 #[test]

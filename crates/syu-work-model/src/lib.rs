@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use syu_diagnostics::Diagnostic;
-use syu_spec_model::{BindingRole, BoundTargetRef, SpecAnchor, SpecItemRef};
+use syu_spec_model::{BindingRole, BoundTargetRef, ContractKind, SpecAnchor, SpecItemRef};
 
 pub const WORK_REQUEST_SCHEMA: &str = "syu/work-request/v1";
 pub const WORK_PLAN_SCHEMA: &str = "syu/work-plan/v1";
@@ -108,6 +108,12 @@ pub struct AcceptanceRef {
     pub statement: String,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NonGoal {
+    pub code: String,
+    pub statement: String,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum CompletionCheck {
     Command { command: String },
@@ -139,7 +145,7 @@ pub struct ExecutionSlice {
     pub acceptance: Vec<AcceptanceRef>,
     #[serde(default)]
     pub contracts: Vec<SpecAnchor>,
-    pub non_goals: Vec<String>,
+    pub non_goals: Vec<NonGoal>,
     pub completion: Vec<CompletionCheck>,
     pub budget: SliceBudgetUsage,
     pub confidence: PlanConfidence,
@@ -168,9 +174,24 @@ pub enum ContextMode {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct SpecExcerpt {
-    pub anchor: SpecAnchor,
-    pub text: String,
+pub enum SpecContextEntry {
+    Statement {
+        anchor: SpecAnchor,
+        text: String,
+    },
+    Contract {
+        anchor: SpecAnchor,
+        kind: ContractKind,
+        source: BoundTargetRef,
+        guarantees: Vec<SpecAnchor>,
+        participants: Vec<ContractParticipantContext>,
+    },
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContractParticipantContext {
+    pub binding: SpecAnchor,
+    pub role: String,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -197,7 +218,7 @@ pub struct ArtifactExcerpt {
 #[serde(deny_unknown_fields)]
 pub struct ContextInstructions {
     pub goal: String,
-    pub non_goals: Vec<String>,
+    pub non_goals: Vec<NonGoal>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -207,7 +228,7 @@ pub struct ContextPack {
     pub slice: String,
     pub basis: PlanBasis,
     pub instructions: ContextInstructions,
-    pub spec_context: Vec<SpecExcerpt>,
+    pub spec_context: Vec<SpecContextEntry>,
     pub artifact_context: Vec<ArtifactExcerpt>,
     pub completion: Vec<CompletionCheck>,
 }

@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use syu_spec_model::RepoPath;
 
 pub const CONFIG_SCHEMA: &str = "syu/config/v1";
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -16,10 +17,10 @@ pub struct ProjectConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkspaceConfig {
-    pub spec_roots: Vec<String>,
-    pub artifact_roots: Vec<String>,
+    pub spec_roots: Vec<RepoPath>,
+    pub artifact_roots: Vec<RepoPath>,
     #[serde(default)]
-    pub excludes: Vec<String>,
+    pub excludes: Vec<RepoPathPattern>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -82,15 +83,23 @@ pub enum RuleOverride {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ChangedConfig {
-    pub baseline: ChangeBaseline,
+    #[serde(default)]
+    pub baseline: Option<ChangeBaseline>,
     pub require_owned_changes: bool,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "strategy", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum ChangeBaseline {
-    MergeBase,
-    Head,
+    MergeBase { against: GitRef },
+    Revision { revision: GitRef },
+    Parent,
 }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct GitRef(pub String);
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct RepoPathPattern(pub String);
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WorkConfig {

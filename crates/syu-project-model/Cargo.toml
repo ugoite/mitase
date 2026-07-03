@@ -6,3 +6,4 @@ license.workspace = true
 
 [dependencies]
 serde.workspace = true
+syu-spec-model = { path = "../syu-spec-model" }

@@ -26,11 +26,11 @@ pub fn project(
         config: &workspace.config,
         workspace,
         index: &index,
-        changed_paths: None,
+        changed_files: None,
         work_plan: plan.as_ref(),
         selected_slice: None,
         preset: workspace.config.validation.preset,
-        revision,
+        revision: Some(revision),
     });
     Ok(WorkspaceProjection { plan, validation })
 }

@@ -21,7 +21,11 @@ validation:
   preset: agent-ready
   deny_warnings: false
   rules: {}
-  changed: { baseline: merge-base, require_owned_changes: true }
+  changed:
+    baseline:
+      strategy: merge-base
+      against: origin/main
+    require_owned_changes: true
 work:
   slicing: { max_editable_files: 4, max_editable_symbols: 8, max_verification_targets: 6, max_readonly_targets: 12, max_total_bytes: 120000 }
   context: { include_parent_principles: true, include_parent_rules: true }

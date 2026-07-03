@@ -17,7 +17,6 @@ validation:
   deny_warnings: false
   rules: {}
   changed:
-    baseline: merge-base
     require_owned_changes: true
 work:
   slicing:

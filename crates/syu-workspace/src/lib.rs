@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 use anyhow::{Context, Result, bail};
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -15,11 +16,17 @@ pub struct LoadedDocument {
     pub path: PathBuf,
     pub document: SpecDocument,
 }
-#[derive(Debug, Clone)]
 pub struct SpecWorkspace {
     pub root: PathBuf,
     pub config: ProjectConfig,
     pub documents: Vec<LoadedDocument>,
+    matcher: WorkspaceMatcher,
+}
+#[derive(Debug)]
+struct WorkspaceMatcher {
+    spec_roots: Vec<RepoPath>,
+    artifact_roots: Vec<RepoPath>,
+    excludes: Option<GlobSet>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -58,9 +65,10 @@ impl SpecWorkspace {
         if config.schema != CONFIG_SCHEMA {
             bail!("config schema must be {CONFIG_SCHEMA}");
         }
+        let matcher = WorkspaceMatcher::build(&config)?;
         let mut paths = Vec::new();
         for spec_root in &config.workspace.spec_roots {
-            collect_yaml(&root.join(spec_root), &mut paths)?;
+            collect_yaml(&root, spec_root.as_path(), &mut paths)?;
         }
         paths.sort();
         let mut documents = Vec::new();
@@ -76,6 +84,7 @@ impl SpecWorkspace {
             root,
             config,
             documents,
+            matcher,
         })
     }
     pub fn index(&self) -> Result<SpecIndex> {
@@ -87,10 +96,21 @@ impl SpecWorkspace {
             hash.update(config.as_bytes());
         }
         for doc in &self.documents {
-            hash.update(doc.path.to_string_lossy().as_bytes());
+            if let Ok(relative) = doc.path.strip_prefix(&self.root) {
+                hash.update(relative.to_string_lossy().as_bytes());
+            }
             hash.update(fs::read(&doc.path).unwrap_or_default());
         }
         format!("sha256:{:x}", hash.finalize())
+    }
+    pub fn path_is_spec(&self, path: &Path) -> bool {
+        self.matcher.contains(&self.matcher.spec_roots, path)
+    }
+    pub fn path_is_artifact(&self, path: &Path) -> bool {
+        self.matcher.contains(&self.matcher.artifact_roots, path)
+    }
+    pub fn path_is_excluded(&self, path: &Path) -> bool {
+        self.matcher.is_excluded(path)
     }
 }
 
@@ -184,17 +204,20 @@ impl SpecIndex {
         }
         for (anchor, binding) in &out.bindings {
             for target in &binding.targets {
-                let rendered = target.path.to_string_lossy();
-                if !workspace.config.workspace.artifact_roots.is_empty()
-                    && !path_is_within_roots(
-                        rendered.as_ref(),
-                        &workspace.config.workspace.artifact_roots,
-                    )
-                {
-                    bail!("target path {rendered} is outside workspace.artifact_roots");
+                if workspace.config.workspace.artifact_roots.is_empty() {
+                    bail!("workspace.artifact_roots cannot be empty when bindings exist");
                 }
-                if path_is_excluded(rendered.as_ref(), &workspace.config.workspace.excludes) {
-                    bail!("target path {rendered} is excluded by workspace.excludes");
+                if !workspace.path_is_artifact(target.path.as_path()) {
+                    bail!(
+                        "target path {} is outside workspace.artifact_roots",
+                        target.path.display()
+                    );
+                }
+                if workspace.path_is_excluded(target.path.as_path()) {
+                    bail!(
+                        "target path {} is excluded by workspace.excludes",
+                        target.path.display()
+                    );
                 }
                 out.path_to_targets
                     .entry(target.path.to_string_lossy().into_owned())
@@ -282,21 +305,6 @@ fn unique_item(ids: &mut BTreeSet<SpecId>, id: &SpecId) -> Result<()> {
     Ok(())
 }
 
-fn path_is_within_roots(path: &str, roots: &[String]) -> bool {
-    roots
-        .iter()
-        .any(|root| path == root || path.starts_with(&format!("{root}/")))
-}
-
-fn path_is_excluded(path: &str, patterns: &[String]) -> bool {
-    patterns.iter().any(|pattern| {
-        pattern
-            .strip_suffix("/**")
-            .map_or(path == pattern, |prefix| {
-                path == prefix || path.starts_with(&format!("{prefix}/"))
-            })
-    })
-}
 fn find_root(start: &Path) -> Result<PathBuf> {
     let mut current = if start.is_file() {
         start.parent().unwrap_or(start).to_path_buf()
@@ -315,14 +323,32 @@ fn find_root(start: &Path) -> Result<PathBuf> {
         }
     }
 }
-fn collect_yaml(path: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
-    if !path.exists() {
-        bail!("spec root does not exist: {}", path.display());
+fn collect_yaml(root: &Path, relative: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
+    let candidate = root.join(relative);
+    let canonical_root = root.canonicalize()?;
+    let canonical = candidate
+        .canonicalize()
+        .with_context(|| format!("spec root does not exist: {}", relative.display()))?;
+    if !canonical.starts_with(&canonical_root) {
+        bail!("spec root escapes workspace: {}", relative.display());
     }
-    for entry in fs::read_dir(path)? {
+    if canonical.is_file() {
+        if matches!(
+            canonical.extension().and_then(|v| v.to_str()),
+            Some("yaml" | "yml")
+        ) {
+            out.push(canonical);
+            return Ok(());
+        }
+        bail!("spec root is not a yaml file: {}", relative.display());
+    }
+    for entry in fs::read_dir(canonical)? {
         let path = entry?.path();
         if path.is_dir() {
-            collect_yaml(&path, out)?;
+            let relative = path
+                .strip_prefix(root)
+                .context("spec path must stay relative to the workspace")?;
+            collect_yaml(root, relative, out)?;
         } else if matches!(
             path.extension().and_then(|v| v.to_str()),
             Some("yaml" | "yml")
@@ -331,6 +357,39 @@ fn collect_yaml(path: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
         }
     }
     Ok(())
+}
+
+impl WorkspaceMatcher {
+    fn build(config: &ProjectConfig) -> Result<Self> {
+        let excludes = compile_excludes(&config.workspace.excludes)?;
+        Ok(Self {
+            spec_roots: config.workspace.spec_roots.clone(),
+            artifact_roots: config.workspace.artifact_roots.clone(),
+            excludes,
+        })
+    }
+    fn contains(&self, roots: &[RepoPath], path: &Path) -> bool {
+        roots
+            .iter()
+            .any(|root| path == root.as_path() || path.starts_with(root.as_path()))
+    }
+    fn is_excluded(&self, path: &Path) -> bool {
+        self.excludes.as_ref().is_some_and(|set| set.is_match(path))
+    }
+}
+
+fn compile_excludes(patterns: &[syu_project_model::RepoPathPattern]) -> Result<Option<GlobSet>> {
+    if patterns.is_empty() {
+        return Ok(None);
+    }
+    let mut builder = GlobSetBuilder::new();
+    for pattern in patterns {
+        builder.add(
+            Glob::new(&pattern.0)
+                .with_context(|| format!("invalid workspace exclude pattern {}", pattern.0))?,
+        );
+    }
+    Ok(Some(builder.build()?))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

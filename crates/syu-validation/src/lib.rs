@@ -1,10 +1,11 @@
 #![forbid(unsafe_code)]
-use std::{collections::BTreeSet, path::PathBuf};
+use std::collections::BTreeSet;
 use syu_diagnostics::{Diagnostic, Severity, ValidationResult};
 use syu_planner::plan as canonical_plan;
 use syu_project_model::{ProjectConfig, RuleOverride, ValidationPreset};
 use syu_spec_model::{
-    BindingRole, ItemStatus, LocalAnchorKind, RuleLevel, Selector, SpecAnchor, SpecDocument,
+    BindingRole, ItemStatus, LocalAnchorKind, RepoPath, RuleLevel, Selector, SpecAnchor,
+    SpecDocument,
 };
 use syu_work_model::{
     ExecutionSlice, PlanConfidence, WORK_PLAN_SCHEMA, WorkPlan, work_plan_digest,
@@ -88,15 +89,39 @@ pub static RULES: &[RuleMetadata] = &[
     metadata!("SYU-WORK-012"),
 ];
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChangeStatus {
+    Added,
+    Modified,
+    Deleted,
+    Renamed,
+    Untracked,
+    Binary,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChangedRange {
+    pub old_start: usize,
+    pub old_end: usize,
+    pub new_start: usize,
+    pub new_end: usize,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChangedFile {
+    pub status: ChangeStatus,
+    pub old_path: Option<RepoPath>,
+    pub new_path: Option<RepoPath>,
+    pub hunks: Vec<ChangedRange>,
+}
+
 pub struct ValidationContext<'a> {
     pub config: &'a ProjectConfig,
     pub workspace: &'a SpecWorkspace,
     pub index: &'a SpecIndex,
-    pub changed_paths: Option<&'a [PathBuf]>,
+    pub changed_files: Option<&'a [ChangedFile]>,
     pub work_plan: Option<&'a WorkPlan>,
     pub selected_slice: Option<&'a ExecutionSlice>,
     pub preset: ValidationPreset,
-    pub revision: &'a str,
+    pub revision: Option<&'a str>,
 }
 pub trait ValidationRule {
     fn metadata(&self) -> &'static RuleMetadata;
@@ -141,28 +166,24 @@ pub fn validate(ctx: &ValidationContext<'_>) -> ValidationResult {
     ValidationResult { diagnostics }
 }
 fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
-    let Some(paths) = ctx.changed_paths else {
+    let Some(files) = ctx.changed_files else {
         return;
     };
-    for path in paths {
-        let rendered = path.to_string_lossy();
-        let is_spec = ctx
-            .config
-            .workspace
-            .spec_roots
-            .iter()
-            .any(|root| rendered == root.as_str() || rendered.starts_with(&format!("{root}/")));
-        if is_spec || rendered == "syu.yaml" {
+    for file in files {
+        let Some(path) = file.new_path.as_ref().or(file.old_path.as_ref()) else {
             continue;
-        }
-        if !ctx.config.workspace.artifact_roots.is_empty()
-            && !path_within_roots(rendered.as_ref(), &ctx.config.workspace.artifact_roots)
+        };
+        if ctx.workspace.path_is_spec(path.as_path())
+            || path.as_path() == std::path::Path::new("syu.yaml")
         {
             continue;
         }
-        if path_excluded(rendered.as_ref(), &ctx.config.workspace.excludes) {
+        if !ctx.workspace.path_is_artifact(path.as_path())
+            || ctx.workspace.path_is_excluded(path.as_path())
+        {
             continue;
         }
+        let rendered = path.to_string_lossy();
         let owners = ctx.index.path_to_targets.get(rendered.as_ref());
         if ctx.config.validation.changed.require_owned_changes && owners.is_none() {
             push(
@@ -189,22 +210,6 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
             }
         }
     }
-}
-
-fn path_within_roots(path: &str, roots: &[String]) -> bool {
-    roots
-        .iter()
-        .any(|root| path == root || path.starts_with(&format!("{root}/")))
-}
-
-fn path_excluded(path: &str, patterns: &[String]) -> bool {
-    patterns.iter().any(|pattern| {
-        pattern
-            .strip_suffix("/**")
-            .map_or(path == pattern, |prefix| {
-                path == prefix || path.starts_with(&format!("{prefix}/"))
-            })
-    })
 }
 fn validate_document_shapes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
     for loaded in &ctx.workspace.documents {
@@ -769,7 +774,9 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
             None,
         );
     }
-    if plan.basis.revision != ctx.revision
+    if ctx
+        .revision
+        .is_some_and(|revision| plan.basis.revision != revision)
         || plan.basis.workspace_fingerprint != ctx.workspace.fingerprint()
     {
         push(
@@ -789,7 +796,12 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
             None,
         );
     }
-    match canonical_plan(&plan.request, ctx.workspace, ctx.index, ctx.revision) {
+    match canonical_plan(
+        &plan.request,
+        ctx.workspace,
+        ctx.index,
+        &plan.basis.revision,
+    ) {
         Ok(canonical) => {
             if canonical.status != plan.status
                 || canonical.slices != plan.slices
@@ -867,12 +879,16 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
         let actual_files = slice
             .editable_targets
             .iter()
-            .map(|target| &target.resolved_path)
+            .chain(&slice.verification_targets)
+            .filter(|target| target.access == syu_work_model::TargetAccessMode::Editable)
+            .map(|target| target.resolved_path.as_str())
             .collect::<BTreeSet<_>>()
             .len();
         let actual_symbols: usize = slice
             .editable_targets
             .iter()
+            .chain(&slice.verification_targets)
+            .filter(|target| target.access == syu_work_model::TargetAccessMode::Editable)
             .map(|target| target.resolved_selector.symbols.len())
             .sum();
         if slice.budget.editable_files != actual_files
@@ -903,11 +919,6 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                 None,
             );
         }
-        let editable: BTreeSet<_> = slice
-            .editable_targets
-            .iter()
-            .map(|t| t.resolved_path.as_str())
-            .collect();
         for target in slice
             .editable_targets
             .iter()
@@ -932,17 +943,6 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                         && resolved.byte_end == target.byte_end
                         && resolved.line_start == target.line_start
                         && resolved.line_end == target.line_end
-                        && match target.access {
-                            syu_work_model::TargetAccessMode::Editable => {
-                                slice.editable_targets.contains(target)
-                            }
-                            syu_work_model::TargetAccessMode::RunOnly => {
-                                slice.verification_targets.contains(target)
-                            }
-                            syu_work_model::TargetAccessMode::Readonly => {
-                                slice.readonly_context.contains(target)
-                            }
-                        }
                         && ctx
                             .index
                             .bindings
@@ -1004,32 +1004,8 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                 }
             }
         }
-        let readonly: BTreeSet<_> = slice
-            .readonly_context
-            .iter()
-            .map(|t| t.resolved_path.as_str())
-            .collect();
-        if let Some(paths) = ctx.changed_paths {
-            for changed in paths {
-                let value = changed.to_string_lossy();
-                if readonly.contains(value.as_ref()) {
-                    push(
-                        out,
-                        "SYU-WORK-005",
-                        format!("readonly target changed: {value}"),
-                        value.to_string(),
-                        None,
-                    );
-                } else if !editable.contains(value.as_ref()) {
-                    push(
-                        out,
-                        "SYU-WORK-006",
-                        format!("change is outside editable scope: {value}"),
-                        value.to_string(),
-                        None,
-                    );
-                }
-            }
+        if let Some(files) = ctx.changed_files {
+            validate_slice_scope(files, slice, out);
         }
         for acceptance in &slice.acceptance {
             if let Some(AnchorValue::Criterion(c)) = ctx.index.anchor(&acceptance.anchor)
@@ -1045,4 +1021,89 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
             }
         }
     }
+}
+
+fn validate_slice_scope(files: &[ChangedFile], slice: &ExecutionSlice, out: &mut Vec<Diagnostic>) {
+    let editable_targets = slice
+        .editable_targets
+        .iter()
+        .chain(&slice.verification_targets)
+        .filter(|target| target.access == syu_work_model::TargetAccessMode::Editable)
+        .collect::<Vec<_>>();
+    let guarded_targets = slice
+        .verification_targets
+        .iter()
+        .filter(|target| target.access == syu_work_model::TargetAccessMode::RunOnly)
+        .chain(slice.readonly_context.iter())
+        .collect::<Vec<_>>();
+    for file in files {
+        let Some(path) = file.new_path.as_ref().or(file.old_path.as_ref()) else {
+            continue;
+        };
+        let hunks = if file.hunks.is_empty() {
+            vec![ChangedRange {
+                old_start: 1,
+                old_end: usize::MAX,
+                new_start: 1,
+                new_end: usize::MAX,
+            }]
+        } else {
+            file.hunks.clone()
+        };
+        for hunk in hunks {
+            let readonly_hit = guarded_targets
+                .iter()
+                .any(|target| target_hits_hunk(target, path, &hunk));
+            let editable_hit = editable_targets
+                .iter()
+                .any(|target| target_hits_hunk(target, path, &hunk));
+            if readonly_hit && !editable_hit {
+                push(
+                    out,
+                    "SYU-WORK-005",
+                    format!("readonly or run-only target changed: {}", path.display()),
+                    path.to_string_lossy(),
+                    None,
+                );
+            } else if !editable_hit {
+                push(
+                    out,
+                    "SYU-WORK-006",
+                    format!("change is outside editable scope: {}", path.display()),
+                    path.to_string_lossy(),
+                    None,
+                );
+            }
+        }
+    }
+}
+
+fn target_hits_hunk(
+    target: &syu_work_model::PlannedTarget,
+    changed_path: &RepoPath,
+    hunk: &ChangedRange,
+) -> bool {
+    if target.resolved_path != changed_path.to_string_lossy() {
+        return false;
+    }
+    if target.resolved_selector.description == "file" {
+        return true;
+    }
+    let start = if hunk.new_start == 0 {
+        hunk.old_start
+    } else {
+        hunk.new_start
+    };
+    let end = if hunk.new_end == 0 {
+        hunk.old_end
+    } else {
+        hunk.new_end
+    };
+    line_ranges_overlap(start, end, target.line_start, target.line_end)
+}
+
+fn line_ranges_overlap(a_start: usize, a_end: usize, b_start: usize, b_end: usize) -> bool {
+    let a_end = if a_end == 0 { a_start } else { a_end };
+    let b_end = if b_end == 0 { b_start } else { b_end };
+    a_start <= b_end && b_start <= a_end
 }

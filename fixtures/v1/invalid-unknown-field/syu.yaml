@@ -9,7 +9,11 @@ validation:
   preset: standard
   deny_warnings: false
   rules: {}
-  changed: { baseline: merge-base, require_owned_changes: false }
+  changed:
+    baseline:
+      strategy: merge-base
+      against: origin/main
+    require_owned_changes: false
 work:
   slicing: { max_editable_files: 1, max_editable_symbols: 1, max_verification_targets: 1, max_readonly_targets: 1, max_total_bytes: 1 }
   context: { include_parent_principles: false, include_parent_rules: false }
