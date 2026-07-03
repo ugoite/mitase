@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
+mod lsp;
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::{
@@ -25,6 +26,7 @@ enum CommandKind {
     Validate(ValidateArgs),
     Work(WorkArgs),
     Workbench(WorkbenchArgs),
+    Lsp,
 }
 #[derive(Debug, Args)]
 struct ValidateArgs {
@@ -103,6 +105,10 @@ pub fn run() -> Result<i32> {
         CommandKind::Validate(args) => run_validate(args),
         CommandKind::Work(args) => run_work(args),
         CommandKind::Workbench(args) => run_workbench(args),
+        CommandKind::Lsp => {
+            lsp::run_lsp_server()?;
+            Ok(0)
+        }
     }
 }
 fn run_validate(args: ValidateArgs) -> Result<i32> {

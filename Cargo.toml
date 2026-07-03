@@ -43,9 +43,11 @@ description = "Specification-driven work planning and validation"
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
+regex = "1.12.2"
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
+url = "2.5.7"
 syu-diagnostics = { path = "crates/syu-diagnostics" }
 syu-code-intel = { path = "crates/syu-code-intel" }
 syu-planner = { path = "crates/syu-planner" }

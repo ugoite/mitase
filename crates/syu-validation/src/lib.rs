@@ -25,7 +25,21 @@ macro_rules! metadata {
             id: $id,
             title: $id,
             default_error: true,
-            presets: &[ValidationPreset::Standard],
+            presets: &[
+                ValidationPreset::Standard,
+                ValidationPreset::Strict,
+                ValidationPreset::AgentReady,
+            ],
+        }
+    };
+}
+macro_rules! strict_metadata {
+    ($id:literal) => {
+        RuleMetadata {
+            id: $id,
+            title: $id,
+            default_error: true,
+            presets: &[ValidationPreset::Strict, ValidationPreset::AgentReady],
         }
     };
 }
@@ -70,11 +84,11 @@ pub static RULES: &[RuleMetadata] = &[
     metadata!("SYU-GENERATED-001"),
     metadata!("SYU-GENERATED-002"),
     metadata!("SYU-OPERATION-001"),
-    metadata!("SYU-CHANGE-001"),
-    metadata!("SYU-CHANGE-002"),
-    metadata!("SYU-CHANGE-003"),
-    metadata!("SYU-CHANGE-004"),
-    metadata!("SYU-CHANGE-005"),
+    strict_metadata!("SYU-CHANGE-001"),
+    strict_metadata!("SYU-CHANGE-002"),
+    strict_metadata!("SYU-CHANGE-003"),
+    strict_metadata!("SYU-CHANGE-004"),
+    strict_metadata!("SYU-CHANGE-005"),
     metadata!("SYU-WORK-001"),
     metadata!("SYU-WORK-002"),
     metadata!("SYU-WORK-003"),
@@ -130,6 +144,7 @@ pub trait ValidationRule {
 
 pub fn validate(ctx: &ValidationContext<'_>) -> ValidationResult {
     let mut diagnostics = Vec::new();
+    validate_rule_overrides(ctx, &mut diagnostics);
     validate_document_shapes(ctx, &mut diagnostics);
     validate_graph(ctx, &mut diagnostics);
     validate_targets(ctx, &mut diagnostics);
@@ -153,6 +168,13 @@ pub fn validate(ctx: &ValidationContext<'_>) -> ValidationResult {
             Some(RuleOverride::Warning) => diagnostic.severity = Severity::Warning,
             Some(RuleOverride::Info) => diagnostic.severity = Severity::Info,
             Some(RuleOverride::Error) => diagnostic.severity = Severity::Error,
+            None if !integrity
+                && rule_metadata(&diagnostic.rule_id)
+                    .is_some_and(|metadata| !metadata.presets.contains(&ctx.preset)) =>
+            {
+                return false;
+            }
+            None => {}
             _ => {}
         }
         if ctx.config.validation.deny_warnings && diagnostic.severity == Severity::Warning {
@@ -164,6 +186,24 @@ pub fn validate(ctx: &ValidationContext<'_>) -> ValidationResult {
         (&a.rule_id, &a.primary.path, &a.message).cmp(&(&b.rule_id, &b.primary.path, &b.message))
     });
     ValidationResult { diagnostics }
+}
+
+fn validate_rule_overrides(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
+    for rule_id in ctx.config.validation.rules.keys() {
+        if rule_metadata(rule_id).is_none() {
+            push(
+                out,
+                "SYU-SCHEMA-002",
+                format!("unknown validation rule override: {rule_id}"),
+                "syu.yaml",
+                None,
+            );
+        }
+    }
+}
+
+fn rule_metadata(rule_id: &str) -> Option<&'static RuleMetadata> {
+    RULES.iter().find(|metadata| metadata.id == rule_id)
 }
 fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
     let Some(files) = ctx.changed_files else {

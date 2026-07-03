@@ -823,6 +823,193 @@ fn normal_validate_does_not_require_git_repository() {
 }
 
 #[test]
+fn strict_preset_enables_changed_ownership_rules() {
+    let temp = tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("spec")).unwrap();
+    fs::create_dir_all(temp.path().join("src")).unwrap();
+    fs::write(
+        temp.path().join("spec/foundation.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: philosophies\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "philosophies:\n",
+            "  - id: PHIL-SAMPLE-010\n",
+            "    title: Sample\n",
+            "    summary: Sample philosophy.\n",
+            "    principles:\n",
+            "      - { id: governed, statement: Keep ownership explicit., applies_to: [product] }\n",
+            "    bindings: []\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/policy.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: policies\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "policies:\n",
+            "  - id: POL-SAMPLE-010\n",
+            "    title: Sample\n",
+            "    summary: Sample policy.\n",
+            "    description: Sample policy.\n",
+            "    rules:\n",
+            "      - id: governed\n",
+            "        level: should\n",
+            "        statement: Keep ownership explicit.\n",
+            "        governed_by: [PHIL-SAMPLE-010#principle.governed]\n",
+            "    bindings: []\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/requirement.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: requirements\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "requirements:\n",
+            "  - id: REQ-SAMPLE-010\n",
+            "    title: Sample\n",
+            "    description: Sample requirement.\n",
+            "    priority: medium\n",
+            "    status: planned\n",
+            "    criteria:\n",
+            "      - id: check\n",
+            "        kind: behavior\n",
+            "        statement: Sample criterion.\n",
+            "        governed_by: [POL-SAMPLE-010#rule.governed]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(temp.path().join("src/orphan.rs"), "fn orphan() {}\n").unwrap();
+    fs::write(
+        temp.path().join("syu.yaml"),
+        concat!(
+            "schema: syu/config/v1\n",
+            "workspace:\n",
+            "  spec_roots: [spec]\n",
+            "  artifact_roots: [src]\n",
+            "  excludes: []\n",
+            "profiles: { active: [], custom: {} }\n",
+            "validation:\n",
+            "  preset: standard\n",
+            "  deny_warnings: false\n",
+            "  rules: {}\n",
+            "  changed:\n",
+            "    require_owned_changes: true\n",
+            "work:\n",
+            "  slicing:\n",
+            "    max_editable_files: 1\n",
+            "    max_editable_symbols: 1\n",
+            "    max_verification_targets: 1\n",
+            "    max_readonly_targets: 1\n",
+            "    max_total_bytes: 1024\n",
+            "  context:\n",
+            "    include_parent_principles: false\n",
+            "    include_parent_rules: false\n",
+            "adapters: { enabled: [rust] }\n",
+        ),
+    )
+    .unwrap();
+    init_workspace_repo(temp.path());
+    fs::write(
+        temp.path().join("src/orphan.rs"),
+        "fn orphan() { let _x = 1; }\n",
+    )
+    .unwrap();
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["validate"])
+        .arg(temp.path())
+        .args(["--range", "HEAD"])
+        .assert()
+        .success();
+    fs::write(
+        temp.path().join("syu.yaml"),
+        fs::read_to_string(temp.path().join("syu.yaml"))
+            .unwrap()
+            .replacen("preset: standard", "preset: strict", 1),
+    )
+    .unwrap();
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["validate"])
+        .arg(temp.path())
+        .args(["--range", "HEAD"])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn validate_rejects_unknown_rule_overrides() {
+    let temp = tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("spec")).unwrap();
+    fs::create_dir_all(temp.path().join("src")).unwrap();
+    fs::write(
+        temp.path().join("syu.yaml"),
+        concat!(
+            "schema: syu/config/v1\n",
+            "workspace:\n",
+            "  spec_roots: [spec]\n",
+            "  artifact_roots: [src]\n",
+            "  excludes: []\n",
+            "profiles: { active: [], custom: {} }\n",
+            "validation:\n",
+            "  preset: standard\n",
+            "  deny_warnings: false\n",
+            "  rules:\n",
+            "    UNKNOWN-RULE-001: off\n",
+            "  changed:\n",
+            "    require_owned_changes: false\n",
+            "work:\n",
+            "  slicing:\n",
+            "    max_editable_files: 1\n",
+            "    max_editable_symbols: 1\n",
+            "    max_verification_targets: 1\n",
+            "    max_readonly_targets: 1\n",
+            "    max_total_bytes: 1024\n",
+            "  context:\n",
+            "    include_parent_principles: false\n",
+            "    include_parent_rules: false\n",
+            "adapters: { enabled: [rust] }\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/requirement.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: requirements\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "requirements:\n",
+            "  - id: REQ-SAMPLE-011\n",
+            "    title: Sample\n",
+            "    description: Sample requirement.\n",
+            "    priority: medium\n",
+            "    status: planned\n",
+            "    criteria:\n",
+            "      - id: check\n",
+            "        kind: behavior\n",
+            "        statement: Sample criterion.\n",
+            "        governed_by: []\n",
+        ),
+    )
+    .unwrap();
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["validate"])
+        .arg(temp.path())
+        .assert()
+        .failure();
+}
+
+#[test]
 fn deleted_command_is_not_an_alias() {
     Command::cargo_bin("syu")
         .unwrap()
