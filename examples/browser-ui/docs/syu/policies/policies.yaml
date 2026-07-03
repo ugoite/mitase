@@ -1,0 +1,13 @@
+category: Policies
+version: 1
+language: en
+
+policies:
+  - id: POL-UI-001
+    title: Browser UI components must be traced and tested
+    summary: Demonstrate a frontend-first React workflow with traced components.
+    description: Require traced UI components to include JSDoc comments with stable IDs and corresponding tests.
+    linked_philosophies:
+      - PHIL-UI-001
+    linked_requirements:
+      - REQ-UI-001

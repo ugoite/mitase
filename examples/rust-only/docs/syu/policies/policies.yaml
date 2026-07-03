@@ -1,0 +1,13 @@
+category: Policies
+version: 1
+language: en
+
+policies:
+  - id: POL-RUST-001
+    title: Rust requirement and feature traces must be documented
+    summary: Demonstrate a single-language Rust workflow.
+    description: Require the traced Rust functions to carry both the stable ID and a short explanatory line.
+    linked_philosophies:
+      - PHIL-RUST-001
+    linked_requirements:
+      - REQ-RUST-001

@@ -1,0 +1,422 @@
+---
+title: "Policies / Policies"
+description: "Generated reference for docs/syu/policies/policies.yaml"
+---
+
+> Generated from `docs/syu/policies/policies.yaml`.
+
+## Parsed content
+
+### Category
+
+- Policies
+
+### Version
+
+- 1
+
+### Language
+
+- en
+
+### Policies
+
+- **id**: POL-001
+  - **title**: Keep every layer adjacent, connected, and explainable
+  - **summary**: Philosophy, policy, requirement, and feature should form a deliberate chain rather than isolated islands.
+  - **description**:
+    - |
+      Specification-driven development becomes decorative when layers drift
+      apart. `syu` should reject broken adjacency, reciprocal-link mismatches,
+      and isolated definitions so teams can maintain a continuous story from
+      philosophy to implementation.
+  - **linked_philosophies**:
+    - PHIL-001
+    - PHIL-003
+  - **linked_requirements**:
+    - REQ-CORE-001
+    - REQ-CORE-009
+    - REQ-CORE-015
+    - REQ-CORE-018
+    - REQ-CORE-019
+    - REQ-CORE-020
+    - REQ-CORE-021
+    - REQ-CORE-023
+    - REQ-CORE-025
+    - REQ-CORE-028
+    - REQ-CORE-029
+    - REQ-CORE-030
+    - REQ-CORE-031
+    - REQ-CORE-032
+    - REQ-CORE-033
+    - REQ-CORE-034
+- **id**: POL-002
+  - **title**: Validation should explain the current state instead of only failing
+  - **summary**: Errors, reports, and browsing should make the layered model legible even when the workspace is broken.
+  - **description**:
+    - |
+      A specification tool should not answer every problem with a wall of opaque
+      failures. Validation should surface rule codes, summaries, and reasons;
+      reports should preserve that explanation; Git-aware history lookup should
+      explain how traced paths changed over time; and the interactive browser
+      should still show the user what exists today.
+  - **linked_philosophies**:
+    - PHIL-001
+    - PHIL-003
+  - **linked_requirements**:
+    - REQ-CORE-001
+    - REQ-CORE-004
+    - REQ-CORE-010
+    - REQ-CORE-015
+    - REQ-CORE-018
+    - REQ-CORE-019
+    - REQ-CORE-022
+    - REQ-CORE-021
+    - REQ-CORE-023
+    - REQ-CORE-024
+    - REQ-CORE-025
+    - REQ-CORE-026
+    - REQ-CORE-028
+    - REQ-CORE-029
+    - REQ-CORE-030
+    - REQ-CORE-031
+- **id**: POL-003
+  - **title**: Traceability should prove ownership from specification to code and tests
+  - **summary**: Declared traces should map to real files, real symbols, optional full-file ownership, and derivable repository history.
+  - **description**:
+    - |
+      Declared traces are only credible when `syu` can verify the referenced
+      file, symbol, and optional documentation snippets from the repository.
+      The checked-in specification should stay sufficient to audit ownership
+      without forcing bookkeeping IDs into implementation files by default.
+      When a project opts in, public APIs and tests should also be required to
+      belong to some feature or requirement so maintenance work does not
+      quietly outrun the specification.
+      When that trace data is checked in, it should also be possible to project
+      it onto Git history so maintenance work and code review can see which
+      commits changed the traced surface.
+  - **linked_philosophies**:
+    - PHIL-001
+    - PHIL-002
+  - **linked_requirements**:
+    - REQ-CORE-002
+    - REQ-CORE-003
+    - REQ-CORE-022
+    - REQ-CORE-021
+    - REQ-CORE-024
+    - REQ-CORE-027
+- **id**: POL-004
+  - **title**: Starting, browsing, and configuring syu should stay low ceremony
+  - **summary**: Setup and exploration should be quick enough that teams do not resent the tool.
+  - **description**:
+    - |
+      A specification-driven workflow should not begin with directory trivia or
+      require users to memorize the model before they can look around. `syu
+      init`, the root config, interactive browse mode, and approachable help
+      text should make adoption feel incremental rather than invasive.
+  - **linked_philosophies**:
+    - PHIL-003
+  - **linked_requirements**:
+    - REQ-CORE-009
+    - REQ-CORE-011
+    - REQ-CORE-012
+    - REQ-CORE-015
+    - REQ-CORE-018
+    - REQ-CORE-019
+    - REQ-CORE-020
+    - REQ-CORE-022
+    - REQ-CORE-021
+    - REQ-CORE-023
+    - REQ-CORE-024
+    - REQ-CORE-025
+    - REQ-CORE-026
+    - REQ-CORE-027
+    - REQ-CORE-028
+    - REQ-CORE-029
+    - REQ-CORE-030
+    - REQ-CORE-031
+    - REQ-CORE-032
+    - REQ-CORE-033
+- **id**: POL-005
+  - **title**: Documentation and examples must lower adoption friction
+  - **summary**: Guides, reports, sites, and examples are part of the product surface.
+  - **description**:
+    - |
+      Users should not need tribal knowledge to understand philosophy, policy,
+      requirements, features, config, or commands. English guides, a rendered
+      docs site, examples, and checked-in generated artifacts should explain not
+      just how `syu` works, but why the workflow exists.
+  - **linked_philosophies**:
+    - PHIL-002
+    - PHIL-003
+  - **linked_requirements**:
+    - REQ-CORE-004
+    - REQ-CORE-010
+    - REQ-CORE-012
+    - REQ-CORE-016
+    - REQ-CORE-022
+    - REQ-CORE-025
+    - REQ-WORKBENCH-001
+    - REQ-WORKBENCH-002
+    - REQ-WORKBENCH-003
+    - REQ-WORKBENCH-004
+    - REQ-WORKBENCH-005
+    - REQ-WORKBENCH-006
+    - REQ-WORKBENCH-007
+- **id**: POL-006
+  - **title**: The self-hosted repository should demonstrate polyglot, contributor-friendly use
+  - **summary**: `syu` should prove that its model works in the kind of mixed repositories it claims to support.
+  - **description**:
+    - |
+      `syu` should use its own ideas to support contributors. The repository
+      should provide examples, tests for those examples, a devcontainer, and a
+      low-friction pre-commit setup that make the documented workflow real.
+  - **linked_philosophies**:
+    - PHIL-002
+    - PHIL-003
+  - **linked_requirements**:
+    - REQ-CORE-002
+    - REQ-CORE-011
+    - REQ-CORE-012
+    - REQ-CORE-013
+    - REQ-CORE-014
+    - REQ-CORE-016
+    - REQ-CORE-026
+- **id**: POL-007
+  - **title**: Delivery automation must remain trustworthy, secure, and reviewable
+  - **summary**: Quality gates, release flow, packaging, and installation are part of the product contract.
+  - **description**:
+    - |
+      Shipping the tool is part of the tool. Quality gates, coverage,
+      release-please automation, track-specific release notes, release
+      artifacts, package publication, and installation should be explicit,
+      reviewable, and continuously validated.
+  - **linked_philosophies**:
+    - PHIL-001
+    - PHIL-003
+  - **linked_requirements**:
+    - REQ-CORE-005
+    - REQ-CORE-006
+    - REQ-CORE-007
+    - REQ-CORE-008
+    - REQ-CORE-014
+- **id**: POL-008
+  - **title**: Traceability should preserve source purity by default
+  - **summary**: Checked-in trace mappings should stay audit-friendly without forcing inline spec-ID bookkeeping into code.
+  - **description**:
+    - |
+      `syu` should let teams prove requirement and feature ownership from the
+      repository itself: checked-in YAML, real files, real symbols, and optional
+      documentation assertions. Inline breadcrumbs inside source are still a
+      valid strategy when a team wants them, but the default model should keep
+      implementation files readable and low ceremony.
+  - **linked_philosophies**:
+    - PHIL-001
+    - PHIL-003
+  - **linked_requirements**:
+    - REQ-CORE-002
+    - REQ-CORE-003
+
+## Source YAML
+
+```yaml
+category: Policies
+version: 1
+language: en
+
+policies:
+  - id: POL-001
+    title: Keep every layer adjacent, connected, and explainable
+    summary: "Philosophy, policy, requirement, and feature should form a deliberate chain rather than isolated islands."
+    description: |
+      Specification-driven development becomes decorative when layers drift
+      apart. `syu` should reject broken adjacency, reciprocal-link mismatches,
+      and isolated definitions so teams can maintain a continuous story from
+      philosophy to implementation.
+    linked_philosophies:
+      - PHIL-001
+      - PHIL-003
+    linked_requirements:
+      - REQ-CORE-001
+      - REQ-CORE-009
+      - REQ-CORE-015
+      - REQ-CORE-018
+      - REQ-CORE-019
+      - REQ-CORE-020
+      - REQ-CORE-021
+      - REQ-CORE-023
+      - REQ-CORE-025
+      - REQ-CORE-028
+      - REQ-CORE-029
+      - REQ-CORE-030
+      - REQ-CORE-031
+      - REQ-CORE-032
+      - REQ-CORE-033
+      - REQ-CORE-034
+
+  - id: POL-002
+    title: Validation should explain the current state instead of only failing
+    summary: "Errors, reports, and browsing should make the layered model legible even when the workspace is broken."
+    description: |
+      A specification tool should not answer every problem with a wall of opaque
+      failures. Validation should surface rule codes, summaries, and reasons;
+      reports should preserve that explanation; Git-aware history lookup should
+      explain how traced paths changed over time; and the interactive browser
+      should still show the user what exists today.
+    linked_philosophies:
+      - PHIL-001
+      - PHIL-003
+    linked_requirements:
+      - REQ-CORE-001
+      - REQ-CORE-004
+      - REQ-CORE-010
+      - REQ-CORE-015
+      - REQ-CORE-018
+      - REQ-CORE-019
+      - REQ-CORE-022
+      - REQ-CORE-021
+      - REQ-CORE-023
+      - REQ-CORE-024
+      - REQ-CORE-025
+      - REQ-CORE-026
+      - REQ-CORE-028
+      - REQ-CORE-029
+      - REQ-CORE-030
+      - REQ-CORE-031
+
+  - id: POL-003
+    title: Traceability should prove ownership from specification to code and tests
+    summary: "Declared traces should map to real files, real symbols, optional full-file ownership, and derivable repository history."
+    description: |
+      Declared traces are only credible when `syu` can verify the referenced
+      file, symbol, and optional documentation snippets from the repository.
+      The checked-in specification should stay sufficient to audit ownership
+      without forcing bookkeeping IDs into implementation files by default.
+      When a project opts in, public APIs and tests should also be required to
+      belong to some feature or requirement so maintenance work does not
+      quietly outrun the specification.
+      When that trace data is checked in, it should also be possible to project
+      it onto Git history so maintenance work and code review can see which
+      commits changed the traced surface.
+    linked_philosophies:
+      - PHIL-001
+      - PHIL-002
+    linked_requirements:
+      - REQ-CORE-002
+      - REQ-CORE-003
+      - REQ-CORE-022
+      - REQ-CORE-021
+      - REQ-CORE-024
+      - REQ-CORE-027
+
+  - id: POL-004
+    title: Starting, browsing, and configuring syu should stay low ceremony
+    summary: "Setup and exploration should be quick enough that teams do not resent the tool."
+    description: |
+      A specification-driven workflow should not begin with directory trivia or
+      require users to memorize the model before they can look around. `syu
+      init`, the root config, interactive browse mode, and approachable help
+      text should make adoption feel incremental rather than invasive.
+    linked_philosophies:
+      - PHIL-003
+    linked_requirements:
+      - REQ-CORE-009
+      - REQ-CORE-011
+      - REQ-CORE-012
+      - REQ-CORE-015
+      - REQ-CORE-018
+      - REQ-CORE-019
+      - REQ-CORE-020
+      - REQ-CORE-022
+      - REQ-CORE-021
+      - REQ-CORE-023
+      - REQ-CORE-024
+      - REQ-CORE-025
+      - REQ-CORE-026
+      - REQ-CORE-027
+      - REQ-CORE-028
+      - REQ-CORE-029
+      - REQ-CORE-030
+      - REQ-CORE-031
+      - REQ-CORE-032
+      - REQ-CORE-033
+
+  - id: POL-005
+    title: Documentation and examples must lower adoption friction
+    summary: "Guides, reports, sites, and examples are part of the product surface."
+    description: |
+      Users should not need tribal knowledge to understand philosophy, policy,
+      requirements, features, config, or commands. English guides, a rendered
+      docs site, examples, and checked-in generated artifacts should explain not
+      just how `syu` works, but why the workflow exists.
+    linked_philosophies:
+      - PHIL-002
+      - PHIL-003
+    linked_requirements:
+      - REQ-CORE-004
+      - REQ-CORE-010
+      - REQ-CORE-012
+      - REQ-CORE-016
+      - REQ-CORE-022
+      - REQ-CORE-025
+      - REQ-WORKBENCH-001
+      - REQ-WORKBENCH-002
+      - REQ-WORKBENCH-003
+      - REQ-WORKBENCH-004
+      - REQ-WORKBENCH-005
+      - REQ-WORKBENCH-006
+      - REQ-WORKBENCH-007
+
+  - id: POL-006
+    title: The self-hosted repository should demonstrate polyglot, contributor-friendly use
+    summary: "`syu` should prove that its model works in the kind of mixed repositories it claims to support."
+    description: |
+      `syu` should use its own ideas to support contributors. The repository
+      should provide examples, tests for those examples, a devcontainer, and a
+      low-friction pre-commit setup that make the documented workflow real.
+    linked_philosophies:
+      - PHIL-002
+      - PHIL-003
+    linked_requirements:
+      - REQ-CORE-002
+      - REQ-CORE-011
+      - REQ-CORE-012
+      - REQ-CORE-013
+      - REQ-CORE-014
+      - REQ-CORE-016
+      - REQ-CORE-026
+
+  - id: POL-007
+    title: Delivery automation must remain trustworthy, secure, and reviewable
+    summary: "Quality gates, release flow, packaging, and installation are part of the product contract."
+    description: |
+      Shipping the tool is part of the tool. Quality gates, coverage,
+      release-please automation, track-specific release notes, release
+      artifacts, package publication, and installation should be explicit,
+      reviewable, and continuously validated.
+    linked_philosophies:
+      - PHIL-001
+      - PHIL-003
+    linked_requirements:
+      - REQ-CORE-005
+      - REQ-CORE-006
+      - REQ-CORE-007
+      - REQ-CORE-008
+      - REQ-CORE-014
+
+  - id: POL-008
+    title: Traceability should preserve source purity by default
+    summary: "Checked-in trace mappings should stay audit-friendly without forcing inline spec-ID bookkeeping into code."
+    description: |
+      `syu` should let teams prove requirement and feature ownership from the
+      repository itself: checked-in YAML, real files, real symbols, and optional
+      documentation assertions. Inline breadcrumbs inside source are still a
+      valid strategy when a team wants them, but the default model should keep
+      implementation files readable and low ceremony.
+    linked_philosophies:
+      - PHIL-001
+      - PHIL-003
+    linked_requirements:
+      - REQ-CORE-002
+      - REQ-CORE-003
+```

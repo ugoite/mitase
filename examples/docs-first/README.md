@@ -1,0 +1,71 @@
+# docs-first example
+
+This example demonstrates a small workspace for repositories where the most
+important traced artifacts are documentation, shell automation, and checked-in
+configuration rather than richly inspected application code.
+
+It keeps the example intentionally small while showing two useful pattern-based
+adapter shapes:
+
+- an explicit shell symbol trace for a single script function
+- wildcard YAML ownership for a file that intentionally belongs to one feature
+
+This workspace now matches the built-in `syu init --template docs-first`
+starter, so you can either inspect the checked-in example first or generate the
+same shape directly in your own repository.
+
+## Files
+
+| Path | What it defines |
+|------|-----------------|
+| `docs/syu/philosophy/foundation.yaml` | `PHIL-DOCS-001` — docs-first repositories should still keep traceable intent |
+| `docs/syu/policies/policies.yaml` | `POL-DOCS-001` linked to both requirements |
+| `docs/syu/requirements/core/docs.yaml` | `REQ-DOCS-001` and `REQ-DOCS-002` |
+| `docs/syu/features/documentation/docs.yaml` | `FEAT-DOCS-001` and `FEAT-DOCS-002` |
+| `scripts/publish-docs.sh` | shell implementation containing `publish_release_notes` |
+| `config/navigation.yaml` | a whole-file YAML artifact intentionally owned by one feature |
+| `README.md` | markdown-backed acceptance anchors for both requirements |
+
+## Try it
+
+```bash
+cd examples/docs-first
+syu validate .
+syu list feature
+syu show REQ-DOCS-001
+syu show FEAT-DOCS-002
+syu browse .
+syu browse .
+```
+
+A successful `syu validate .` produces output similar to:
+
+```text
+syu validate passed
+workspace: examples/docs-first
+definitions: philosophies=1 policies=1 requirements=2 features=2
+traceability: requirements=2/2 traces validated; features=2/2 traces validated
+```
+
+## DocsFirstAcceptanceChecklist
+
+- `REQ-DOCS-001` expects the release-note publishing flow to stay explicit.
+- `FEAT-DOCS-001` traces directly to the shell symbol `publish_release_notes`.
+- This mapping is valid without `doc_contains` because shell only supports
+  pattern-based symbol existence today.
+
+## DocsFirstNavigationChecklist
+
+- `REQ-DOCS-002` expects one checked-in navigation file to stay easy to inspect.
+- `FEAT-DOCS-002` owns `config/navigation.yaml` with `symbols: ["*"]`.
+- Use wildcard ownership carefully: it works best when one file intentionally
+  belongs to one feature instead of collecting unrelated concerns.
+
+## What to look for in the interactive flows
+
+- `syu browse .` keeps the docs-first example readable from the terminal: start
+  with `feature`, open `FEAT-DOCS-001`, and verify that the shell trace and the
+  wildcard-owned YAML file stay easy to inspect without a larger codebase.
+- `syu browse .` shows the same two features in the terminal, including the
+  trace panels for `scripts/publish-docs.sh` and `config/navigation.yaml`, so
+  the newcomer path is not limited to raw YAML inspection.

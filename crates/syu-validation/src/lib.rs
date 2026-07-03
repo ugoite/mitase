@@ -1,12 +1,12 @@
 #![forbid(unsafe_code)]
 use std::{collections::BTreeSet, path::PathBuf};
-use syu_diagnostics::{Diagnostic, ValidationResult};
-use syu_project_model::{ProjectConfig, ValidationPreset};
+use syu_diagnostics::{Diagnostic, Severity, ValidationResult};
+use syu_project_model::{ProjectConfig, RuleOverride, ValidationPreset};
 use syu_spec_model::{
     BindingRole, ItemStatus, LocalAnchorKind, RuleLevel, Selector, SpecAnchor, SpecDocument,
 };
 use syu_work_model::{ExecutionSlice, PlanConfidence, WORK_PLAN_SCHEMA, WorkPlan};
-use syu_workspace::{AnchorValue, SpecIndex, SpecWorkspace, resolve_target};
+use syu_workspace::{AnchorValue, SpecIndex, SpecWorkspace, resolve_target_with_adapters};
 
 #[derive(Debug, Clone, Copy)]
 pub struct RuleMetadata {
@@ -106,13 +106,78 @@ pub fn validate(ctx: &ValidationContext<'_>) -> ValidationResult {
     validate_graph(ctx, &mut diagnostics);
     validate_targets(ctx, &mut diagnostics);
     validate_contracts(ctx, &mut diagnostics);
+    validate_changes(ctx, &mut diagnostics);
     if let Some(plan) = ctx.work_plan {
         validate_plan(ctx, plan, &mut diagnostics);
     }
+    diagnostics.retain_mut(|diagnostic| {
+        let integrity = diagnostic.rule_id.starts_with("SYU-SCHEMA")
+            || diagnostic.rule_id.starts_with("SYU-ANCHOR")
+            || diagnostic.rule_id.starts_with("SYU-ID");
+        match ctx
+            .config
+            .validation
+            .rules
+            .get(&diagnostic.rule_id)
+            .copied()
+        {
+            Some(RuleOverride::Off) if !integrity => return false,
+            Some(RuleOverride::Warning) => diagnostic.severity = Severity::Warning,
+            Some(RuleOverride::Info) => diagnostic.severity = Severity::Info,
+            Some(RuleOverride::Error) => diagnostic.severity = Severity::Error,
+            _ => {}
+        }
+        if ctx.config.validation.deny_warnings && diagnostic.severity == Severity::Warning {
+            diagnostic.severity = Severity::Error;
+        }
+        true
+    });
     diagnostics.sort_by(|a, b| {
         (&a.rule_id, &a.primary.path, &a.message).cmp(&(&b.rule_id, &b.primary.path, &b.message))
     });
     ValidationResult { diagnostics }
+}
+fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
+    let Some(paths) = ctx.changed_paths else {
+        return;
+    };
+    for path in paths {
+        let rendered = path.to_string_lossy();
+        let is_spec = ctx
+            .config
+            .workspace
+            .spec_roots
+            .iter()
+            .any(|root| rendered == root.as_str() || rendered.starts_with(&format!("{root}/")));
+        if is_spec || rendered == "syu.yaml" {
+            continue;
+        }
+        let owners = ctx.index.path_to_targets.get(rendered.as_ref());
+        if ctx.config.validation.changed.require_owned_changes && owners.is_none() {
+            push(
+                out,
+                "SYU-CHANGE-001",
+                format!("changed path has no Binding target owner: {rendered}"),
+                rendered.to_string(),
+                None,
+            );
+            continue;
+        }
+        for owner in owners.into_iter().flatten() {
+            if let Some(binding) = ctx.index.bindings.get(&owner.binding)
+                && binding.role == BindingRole::Implementation
+                && binding.satisfies.is_empty()
+            {
+                push(
+                    out,
+                    "SYU-CHANGE-002",
+                    "changed implementation has no Criterion",
+                    rendered.to_string(),
+                    Some(owner.binding.clone()),
+                );
+            }
+        }
+    }
 }
 fn validate_document_shapes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
     for loaded in &ctx.workspace.documents {
@@ -265,7 +330,10 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 for target in &criterion.governed_by {
                     check_kind(ctx, out, target, LocalAnchorKind::Rule, &path);
                 }
-                if !ctx.index.criteria_to_implementations.contains_key(anchor) {
+                let status = ctx.index.criterion_status.get(anchor).copied();
+                if status == Some(ItemStatus::Implemented)
+                    && !ctx.index.criteria_to_implementations.contains_key(anchor)
+                {
                     push(
                         out,
                         "SYU-COVERAGE-001",
@@ -274,11 +342,24 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         Some(anchor.clone()),
                     );
                 }
-                if !ctx.index.criteria_to_verifications.contains_key(anchor) {
+                if status == Some(ItemStatus::Implemented)
+                    && !ctx.index.criteria_to_verifications.contains_key(anchor)
+                {
                     push(
                         out,
                         "SYU-COVERAGE-002",
                         "criterion has no verification binding",
+                        &path,
+                        Some(anchor.clone()),
+                    );
+                }
+                if status == Some(ItemStatus::Deprecated)
+                    && ctx.index.criteria_to_implementations.contains_key(anchor)
+                {
+                    push(
+                        out,
+                        "SYU-COVERAGE-003",
+                        "deprecated requirement retains active implementation bindings",
                         &path,
                         Some(anchor.clone()),
                     );
@@ -498,7 +579,10 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
             let expected = match &target.selector {
                 Selector::File => true,
                 Selector::Symbol { .. } => {
-                    matches!(target.adapter.as_str(), "rust" | "typescript" | "shell")
+                    matches!(
+                        target.adapter.as_str(),
+                        "rust" | "typescript" | "shell" | "python" | "go"
+                    )
                 }
                 Selector::Operation { .. } => target.adapter == "openapi",
                 Selector::Heading { .. } => target.adapter == "markdown",
@@ -554,7 +638,11 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                     );
                 }
             }
-            if let Err(e) = resolve_target(&ctx.workspace.root, target) {
+            if let Err(e) = resolve_target_with_adapters(
+                &ctx.workspace.root,
+                target,
+                &ctx.config.adapters.enabled,
+            ) {
                 push(
                     out,
                     "SYU-TARGET-002",
@@ -688,6 +776,49 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
             );
         }
         let limits = &ctx.config.work.slicing;
+        let all_targets = slice
+            .editable_targets
+            .iter()
+            .chain(&slice.verification_targets)
+            .chain(&slice.readonly_context);
+        let actual_bytes: usize = all_targets
+            .clone()
+            .filter_map(|target| ctx.index.target(&target.reference))
+            .filter_map(|declared| {
+                resolve_target_with_adapters(
+                    &ctx.workspace.root,
+                    declared,
+                    &ctx.config.adapters.enabled,
+                )
+                .ok()
+            })
+            .map(|resolved| resolved.excerpt.len())
+            .sum();
+        let actual_files = slice
+            .editable_targets
+            .iter()
+            .map(|target| &target.resolved_path)
+            .collect::<BTreeSet<_>>()
+            .len();
+        let actual_symbols: usize = slice
+            .editable_targets
+            .iter()
+            .map(|target| target.resolved_selector.symbols.len())
+            .sum();
+        if slice.budget.editable_files != actual_files
+            || slice.budget.editable_symbols != actual_symbols
+            || slice.budget.verification_targets != slice.verification_targets.len()
+            || slice.budget.readonly_targets != slice.readonly_context.len()
+            || slice.budget.total_bytes != actual_bytes
+        {
+            push(
+                out,
+                "SYU-WORK-009",
+                "plan budget snapshot is tampered",
+                "work-plan",
+                None,
+            );
+        }
         if slice.budget.editable_files > limits.max_editable_files
             || slice.budget.editable_symbols > limits.max_editable_symbols
             || slice.budget.verification_targets > limits.max_verification_targets
@@ -713,12 +844,36 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
             .chain(&slice.verification_targets)
             .chain(&slice.readonly_context)
         {
-            match ctx
-                .index
-                .target(&target.reference)
-                .and_then(|declared| resolve_target(&ctx.workspace.root, declared).ok())
-            {
-                Some(resolved) if resolved.content_hash == target.content_hash => {}
+            match ctx.index.target(&target.reference).and_then(|declared| {
+                resolve_target_with_adapters(
+                    &ctx.workspace.root,
+                    declared,
+                    &ctx.config.adapters.enabled,
+                )
+                .ok()
+            }) {
+                Some(resolved)
+                    if resolved.content_hash == target.content_hash
+                        && resolved.excerpt_hash == target.excerpt_hash
+                        && resolved.path.to_string_lossy() == target.resolved_path
+                        && resolved.description == target.resolved_selector.description
+                        && resolved.symbols == target.resolved_selector.symbols
+                        && resolved.byte_start == target.byte_start
+                        && resolved.byte_end == target.byte_end
+                        && resolved.line_start == target.line_start
+                        && resolved.line_end == target.line_end
+                        && ctx
+                            .index
+                            .bindings
+                            .get(&target.reference.binding)
+                            .is_some_and(|binding| {
+                                binding.facet == target.facet
+                                    && binding.role == target.role
+                                    && ctx
+                                        .index
+                                        .target(&target.reference)
+                                        .is_some_and(|declared| declared.adapter == target.adapter)
+                            }) => {}
                 _ => push(
                     out,
                     "SYU-WORK-009",

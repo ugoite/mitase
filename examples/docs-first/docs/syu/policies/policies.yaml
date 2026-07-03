@@ -1,0 +1,14 @@
+category: Policies
+version: 1
+language: en
+
+policies:
+  - id: POL-DOCS-001
+    title: Pattern-based adapters should stay explicit about what they can and cannot promise
+    summary: Use shell, YAML, and markdown traces for explicit ownership without pretending they support doc inspection.
+    description: Require docs-first examples to demonstrate named symbols where available and wildcard ownership only for files that clearly belong to one feature.
+    linked_philosophies:
+      - PHIL-DOCS-001
+    linked_requirements:
+      - REQ-DOCS-001
+      - REQ-DOCS-002

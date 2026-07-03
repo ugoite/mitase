@@ -1,0 +1,20 @@
+category: Python Example Requirements
+prefix: REQ-PY
+
+requirements:
+  - id: REQ-PY-001
+    title: Demonstrate a Python requirement trace
+    description: The Python example should link a requirement to a documented Python test symbol.
+    priority: high
+    status: implemented
+    linked_policies:
+      - POL-PY-001
+    linked_features:
+      - FEAT-PY-001
+    tests:
+      python:
+        - file: python/test_traceability.py
+          symbols:
+            - test_python_requirement
+          doc_contains:
+            - requirement doc line

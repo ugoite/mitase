@@ -1,0 +1,12 @@
+category: Philosophy
+version: 1
+language: en
+
+philosophies:
+  - id: PHIL-TEAM-001
+    title: Traceability should survive contributor growth
+    product_design_principle: Keep team-scale repository changes explainable from policy to code.
+    coding_guideline: Split documents by area as the repo grows, but keep reciprocal links and traces explicit.
+    linked_policies:
+      - POL-TEAM-001
+      - POL-TEAM-002

@@ -1,0 +1,15 @@
+category: Philosophy
+version: 1
+language: en
+
+philosophies:
+  - id: PHIL-JAVA-001
+    title: The Java example should keep real source and test traces explicit from the first commit
+    product_design_principle: |
+      A Java-first repository should be able to start with one requirement and
+      one feature that already point at real `.java` files.
+    coding_guideline: |
+      Prefer stable IDs and small starter files whose traced symbols stay easy
+      to inspect in review.
+    linked_policies:
+      - POL-JAVA-001

@@ -1,0 +1,13 @@
+category: Policies
+version: 1
+language: en
+
+policies:
+  - id: POL-PY-001
+    title: Python traces must use docstrings
+    summary: Demonstrate runtime-assisted inspection for Python.
+    description: Python requirement and feature traces should point to functions whose docstrings carry both the stable ID and a short explanatory line.
+    linked_philosophies:
+      - PHIL-PY-001
+    linked_requirements:
+      - REQ-PY-001

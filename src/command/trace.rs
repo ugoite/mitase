@@ -1,0 +1,2372 @@
+// FEAT-TRACE-001
+// REQ-CORE-021
+
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::Write as _,
+    path::{Path, PathBuf},
+};
+
+use anyhow::{Context, Result, bail};
+use serde::Serialize;
+
+use crate::{
+    cli::{LookupKind, OutputFormat, TraceArgs},
+    coverage::normalize_relative_path,
+    model::{Feature, Requirement, TraceReference},
+    workspace::{Workspace, load_workspace},
+};
+use syu_code_intel::resolve_git_range_changed_files;
+
+use super::lookup::{EntitySummary, WorkspaceLookup};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TraceLookupStatus {
+    Owned,
+    Partial,
+    Unowned,
+}
+
+impl TraceLookupStatus {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Owned => "owned",
+            Self::Partial => "partial",
+            Self::Unowned => "unowned",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MatchMode {
+    File,
+    Symbol,
+    Wildcard,
+}
+
+impl MatchMode {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::File => "file",
+            Self::Symbol => "symbol",
+            Self::Wildcard => "wildcard",
+        }
+    }
+
+    fn from_label(label: &str) -> Self {
+        match label {
+            "symbol" => Self::Symbol,
+            "wildcard" => Self::Wildcard,
+            _ => Self::File,
+        }
+    }
+
+    fn matched_label(self, symbol: Option<&str>) -> String {
+        match self {
+            Self::File => "file".to_string(),
+            Self::Symbol => format!("symbol `{}`", symbol.expect("symbol match should exist")),
+            Self::Wildcard => "wildcard `*`".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TraceOwnerMatch {
+    pub kind: &'static str,
+    pub id: String,
+    pub title: String,
+    pub trace_role: String,
+    pub language: String,
+    pub file: String,
+    pub declared_symbols: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub method: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub matched_symbol: Option<String>,
+    pub match_mode: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TraceLookupOutput {
+    pub file: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub symbol: Option<String>,
+    pub status: TraceLookupStatus,
+    pub matched_owners: Vec<TraceOwnerMatch>,
+    pub file_only_owners: Vec<TraceOwnerMatch>,
+    pub requirements: Vec<EntitySummary>,
+    pub features: Vec<EntitySummary>,
+    pub policies: Vec<EntitySummary>,
+    pub philosophies: Vec<EntitySummary>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TraceRangeOutput {
+    pub range: String,
+    pub files: Vec<TraceLookupOutput>,
+    pub skipped_files: Vec<TraceSkippedFile>,
+    pub summary: TraceRangeSummary,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope_guard: Option<TraceRangeScopeGuard>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub strict_review: Option<TraceRangeReviewOutput>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TraceRangeEntityGroup {
+    pub requirements: Vec<EntitySummary>,
+    pub features: Vec<EntitySummary>,
+    pub policies: Vec<EntitySummary>,
+    pub philosophies: Vec<EntitySummary>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TraceRangeIdSummary {
+    pub direct: TraceRangeEntityGroup,
+    pub indirect: TraceRangeEntityGroup,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TraceRangeSummary {
+    pub changed_files_total: usize,
+    pub inspected_files: usize,
+    pub skipped_files: usize,
+    pub owned_files: usize,
+    pub partial_files: usize,
+    pub unowned_files: usize,
+    pub total_requirements: usize,
+    pub total_features: usize,
+    pub total_policies: usize,
+    pub total_philosophies: usize,
+    pub ids: TraceRangeIdSummary,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TraceRangeScopeGuard {
+    pub allowed_ids: Vec<TraceScopeGuardItem>,
+    pub out_of_scope_items: Vec<TraceScopeGuardViolation>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TraceRangeReviewOutput {
+    pub enabled: bool,
+    pub failed: bool,
+    pub findings: Vec<TraceRangeReviewFinding>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TraceRangeReviewFinding {
+    pub kind: TraceRangeReviewFindingKind,
+    pub file: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub owners: Vec<TraceScopeGuardOwner>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TraceRangeReviewFindingKind {
+    Unowned,
+    AmbiguousOwnership,
+    OutOfScope,
+    TraceDrift,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TraceScopeGuardItem {
+    pub kind: String,
+    pub id: String,
+    pub title: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TraceScopeGuardOwner {
+    pub kind: String,
+    pub id: String,
+    pub title: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TraceScopeGuardViolation {
+    pub file: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub owners: Vec<TraceScopeGuardOwner>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TraceSkippedFile {
+    pub file: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct TraceOwnerMetadata<'a> {
+    kind: LookupKind,
+    id: &'a str,
+    title: &'a str,
+    trace_role: &'a str,
+}
+
+pub fn run_trace_command(args: &TraceArgs) -> Result<i32> {
+    if let Some(range) = &args.range {
+        let workspace = load_workspace(&args.workspace)?;
+        if args.symbol.is_some() {
+            bail!("--symbol cannot be used with --range");
+        }
+        let report = trace_range(&workspace, range, args.strict, &args.allowed_id)?;
+        return render_trace_range_output(range, report, args.format);
+    }
+
+    let Some(file) = &args.file else {
+        bail!("either FILE or --range must be provided");
+    };
+
+    let symbol = match args.symbol.as_deref() {
+        Some(symbol) if symbol.trim().is_empty() => {
+            bail!("trace symbol must not be empty or whitespace");
+        }
+        Some(symbol) => Some(symbol.trim()),
+        None => None,
+    };
+
+    let workspace = load_workspace(&args.workspace)?;
+    let normalized_file = normalize_lookup_file(&workspace, file)?;
+    let output = trace_selector(&workspace, &normalized_file, symbol)?;
+
+    match args.format {
+        OutputFormat::Text => print!("{}", render_text_output(&output)),
+        OutputFormat::Json => println!(
+            "{}",
+            serde_json::to_string_pretty(&output)
+                .expect("serializing trace lookup output to JSON should succeed")
+        ),
+    }
+
+    Ok(0)
+}
+
+fn render_trace_range_output(
+    range: &str,
+    report: TraceRangeOutput,
+    format: OutputFormat,
+) -> Result<i32> {
+    let guard_failed = report
+        .scope_guard
+        .as_ref()
+        .is_some_and(|guard| !guard.out_of_scope_items.is_empty());
+    let strict_failed = report
+        .strict_review
+        .as_ref()
+        .is_some_and(|review| review.failed);
+
+    match format {
+        OutputFormat::Text => {
+            print!(
+                "{}",
+                render_range_text(
+                    range,
+                    &report.files,
+                    &report.skipped_files,
+                    &report.summary,
+                    report.scope_guard.as_ref(),
+                    report.strict_review.as_ref(),
+                )
+            );
+        }
+        OutputFormat::Json => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&report)
+                    .expect("serializing trace range output to JSON should succeed")
+            );
+        }
+    }
+
+    Ok(if guard_failed || strict_failed { 1 } else { 0 })
+}
+
+pub fn trace_range(
+    workspace: &Workspace,
+    range: &str,
+    strict: bool,
+    allowed_ids: &[String],
+) -> Result<TraceRangeOutput> {
+    let changed_files = resolve_git_range_changed_files(&workspace.root, range)?;
+
+    if changed_files.is_empty() {
+        let scope_guard = collect_trace_scope_guard(workspace, &[], &[], allowed_ids)?;
+        let strict_review = collect_trace_review_output(&[], &[], scope_guard.as_ref(), strict);
+        return Ok(TraceRangeOutput {
+            range: range.to_string(),
+            files: Vec::new(),
+            skipped_files: Vec::new(),
+            summary: TraceRangeSummary {
+                changed_files_total: 0,
+                inspected_files: 0,
+                skipped_files: 0,
+                owned_files: 0,
+                partial_files: 0,
+                unowned_files: 0,
+                total_requirements: 0,
+                total_features: 0,
+                total_policies: 0,
+                total_philosophies: 0,
+                ids: TraceRangeIdSummary {
+                    direct: TraceRangeEntityGroup {
+                        requirements: Vec::new(),
+                        features: Vec::new(),
+                        policies: Vec::new(),
+                        philosophies: Vec::new(),
+                    },
+                    indirect: TraceRangeEntityGroup {
+                        requirements: Vec::new(),
+                        features: Vec::new(),
+                        policies: Vec::new(),
+                        philosophies: Vec::new(),
+                    },
+                },
+            },
+            scope_guard,
+            strict_review,
+        });
+    }
+
+    let (results, skipped) = collect_trace_range_outputs(workspace, &changed_files);
+
+    let summary = compute_range_summary(changed_files.len(), &results, &skipped);
+    let scope_guard = collect_trace_scope_guard(workspace, &results, &skipped, allowed_ids)?;
+    let strict_review =
+        collect_trace_review_output(&results, &skipped, scope_guard.as_ref(), strict);
+    Ok(TraceRangeOutput {
+        range: range.to_string(),
+        files: results,
+        skipped_files: skipped,
+        summary,
+        scope_guard,
+        strict_review,
+    })
+}
+
+fn compute_range_summary(
+    changed_files_total: usize,
+    results: &[TraceLookupOutput],
+    skipped: &[TraceSkippedFile],
+) -> TraceRangeSummary {
+    let ids = collect_range_id_summary(results);
+
+    let mut owned = 0;
+    let mut partial = 0;
+    let mut unowned = 0;
+
+    for result in results {
+        match result.status {
+            TraceLookupStatus::Owned => owned += 1,
+            TraceLookupStatus::Partial => partial += 1,
+            TraceLookupStatus::Unowned => unowned += 1,
+        }
+    }
+
+    TraceRangeSummary {
+        changed_files_total,
+        inspected_files: results.len(),
+        skipped_files: skipped.len(),
+        owned_files: owned,
+        partial_files: partial,
+        unowned_files: unowned,
+        total_requirements: ids.indirect.requirements.len() + ids.direct.requirements.len(),
+        total_features: ids.indirect.features.len() + ids.direct.features.len(),
+        total_policies: ids.indirect.policies.len() + ids.direct.policies.len(),
+        total_philosophies: ids.indirect.philosophies.len() + ids.direct.philosophies.len(),
+        ids,
+    }
+}
+
+fn collect_range_id_summary(results: &[TraceLookupOutput]) -> TraceRangeIdSummary {
+    let mut direct_requirements = BTreeMap::<String, EntitySummary>::new();
+    let mut direct_features = BTreeMap::<String, EntitySummary>::new();
+    let mut indirect_requirements = BTreeMap::<String, EntitySummary>::new();
+    let mut indirect_features = BTreeMap::<String, EntitySummary>::new();
+    let mut indirect_policies = BTreeMap::<String, EntitySummary>::new();
+    let mut indirect_philosophies = BTreeMap::<String, EntitySummary>::new();
+
+    for result in results {
+        for owner in result
+            .matched_owners
+            .iter()
+            .chain(result.file_only_owners.iter())
+        {
+            match owner.kind {
+                "requirement" => {
+                    direct_requirements
+                        .entry(owner.id.clone())
+                        .or_insert_with(|| EntitySummary {
+                            id: owner.id.clone(),
+                            title: owner.title.clone(),
+                            document_path: None,
+                        });
+                }
+                "feature" => {
+                    direct_features
+                        .entry(owner.id.clone())
+                        .or_insert_with(|| EntitySummary {
+                            id: owner.id.clone(),
+                            title: owner.title.clone(),
+                            document_path: None,
+                        });
+                }
+                _ => {}
+            }
+        }
+
+        collect_entities_into_map(&result.requirements, &mut indirect_requirements);
+        collect_entities_into_map(&result.features, &mut indirect_features);
+        collect_entities_into_map(&result.policies, &mut indirect_policies);
+        collect_entities_into_map(&result.philosophies, &mut indirect_philosophies);
+    }
+
+    for id in direct_requirements.keys() {
+        indirect_requirements.remove(id);
+    }
+    for id in direct_features.keys() {
+        indirect_features.remove(id);
+    }
+
+    TraceRangeIdSummary {
+        direct: TraceRangeEntityGroup {
+            requirements: direct_requirements.into_values().collect(),
+            features: direct_features.into_values().collect(),
+            policies: Vec::new(),
+            philosophies: Vec::new(),
+        },
+        indirect: TraceRangeEntityGroup {
+            requirements: indirect_requirements.into_values().collect(),
+            features: indirect_features.into_values().collect(),
+            policies: indirect_policies.into_values().collect(),
+            philosophies: indirect_philosophies.into_values().collect(),
+        },
+    }
+}
+
+fn collect_entities_into_map(items: &[EntitySummary], map: &mut BTreeMap<String, EntitySummary>) {
+    for item in items {
+        map.entry(item.id.clone()).or_insert_with(|| item.clone());
+    }
+}
+
+fn collect_trace_range_outputs(
+    workspace: &Workspace,
+    changed_files: &[PathBuf],
+) -> (Vec<TraceLookupOutput>, Vec<TraceSkippedFile>) {
+    let mut results = Vec::new();
+    let mut skipped = Vec::new();
+    for file in changed_files {
+        match normalize_lookup_file(workspace, file) {
+            Ok(normalized) => {
+                let output = lookup_trace(workspace, &normalized, None);
+                results.push(output);
+            }
+            Err(error) => {
+                skipped.push(TraceSkippedFile {
+                    file: file.display().to_string(),
+                    reason: error.to_string(),
+                });
+            }
+        }
+    }
+    (results, skipped)
+}
+
+fn render_range_text(
+    range: &str,
+    results: &[TraceLookupOutput],
+    skipped: &[TraceSkippedFile],
+    summary: &TraceRangeSummary,
+    scope_guard: Option<&TraceRangeScopeGuard>,
+    strict_review: Option<&TraceRangeReviewOutput>,
+) -> String {
+    let mut output = String::new();
+    writeln!(output, "Git range: {range}").unwrap();
+    writeln!(output, "Changed files: {}", summary.changed_files_total).unwrap();
+    writeln!(output, "Inspected files: {}", summary.inspected_files).unwrap();
+    writeln!(output, "Skipped files: {}", summary.skipped_files).unwrap();
+    writeln!(
+        output,
+        "Coverage: {} owned, {} partial, {} unowned\n",
+        summary.owned_files, summary.partial_files, summary.unowned_files
+    )
+    .unwrap();
+
+    if let Some(strict_review) = strict_review {
+        render_strict_review_text(&mut output, strict_review);
+    }
+
+    if summary.changed_files_total == 0 && results.is_empty() && skipped.is_empty() {
+        writeln!(output, "No files changed in range").unwrap();
+        if let Some(scope_guard) = scope_guard {
+            render_scope_guard_text(&mut output, scope_guard);
+        }
+        return output;
+    }
+
+    if let Some(scope_guard) = scope_guard {
+        render_scope_guard_text(&mut output, scope_guard);
+    }
+
+    writeln!(output, "Affected IDs:").unwrap();
+    render_range_id_group(&mut output, "Direct matches", &summary.ids.direct);
+    render_range_id_group(
+        &mut output,
+        "Indirect upstream/downstream context",
+        &summary.ids.indirect,
+    );
+    writeln!(output).unwrap();
+
+    let mut by_owner = BTreeMap::<(String, String), Vec<&TraceLookupOutput>>::new();
+    for result in results {
+        if result.matched_owners.is_empty() && result.file_only_owners.is_empty() {
+            by_owner
+                .entry(("UNOWNED".to_string(), String::new()))
+                .or_default()
+                .push(result);
+        } else {
+            let owners = if !result.matched_owners.is_empty() {
+                &result.matched_owners
+            } else {
+                &result.file_only_owners
+            };
+            for owner in owners {
+                by_owner
+                    .entry((owner.kind.to_string(), owner.id.clone()))
+                    .or_default()
+                    .push(result);
+            }
+        }
+    }
+
+    for ((kind, id), files) in &by_owner {
+        if kind == "UNOWNED" {
+            writeln!(output, "UNOWNED:").unwrap();
+        } else {
+            writeln!(output, "{kind} {id}:").unwrap();
+        }
+        for file in files {
+            writeln!(output, "  - {}", file.file).unwrap();
+            if let Some(owner_match) = find_owner_match(file, kind, id) {
+                push_range_owner_match(&mut output, owner_match);
+            }
+        }
+        writeln!(output).unwrap();
+    }
+
+    if !skipped.is_empty() {
+        writeln!(output, "Skipped file details:").unwrap();
+        for skipped_file in skipped {
+            writeln!(
+                output,
+                "  - {} — {}",
+                skipped_file.file, skipped_file.reason
+            )
+            .unwrap();
+        }
+        writeln!(output).unwrap();
+    }
+
+    writeln!(output, "Summary:").unwrap();
+    if summary.total_requirements > 0 {
+        writeln!(output, "  Requirements: {}", summary.total_requirements).unwrap();
+    }
+    if summary.total_features > 0 {
+        writeln!(output, "  Features: {}", summary.total_features).unwrap();
+    }
+    if summary.total_policies > 0 {
+        writeln!(output, "  Policies: {}", summary.total_policies).unwrap();
+    }
+    if summary.total_philosophies > 0 {
+        writeln!(output, "  Philosophies: {}", summary.total_philosophies).unwrap();
+    }
+
+    output
+}
+
+fn render_strict_review_text(rendered: &mut String, strict_review: &TraceRangeReviewOutput) {
+    writeln!(
+        rendered,
+        "Strict review: {}",
+        if strict_review.failed {
+            "failed"
+        } else {
+            "passed"
+        }
+    )
+    .unwrap();
+    writeln!(rendered, "  Findings:").unwrap();
+    if strict_review.findings.is_empty() {
+        writeln!(rendered, "    - none").unwrap();
+        writeln!(rendered).unwrap();
+        return;
+    }
+
+    for finding in &strict_review.findings {
+        writeln!(rendered, "    - {}: {}", finding.kind.label(), finding.file).unwrap();
+        if let Some(reason) = finding.reason.as_deref() {
+            writeln!(rendered, "      reason: {reason}").unwrap();
+        }
+        if !finding.owners.is_empty() {
+            writeln!(rendered, "      owners:").unwrap();
+            for owner in &finding.owners {
+                writeln!(
+                    rendered,
+                    "        - {} {}\t{}",
+                    owner.kind, owner.id, owner.title
+                )
+                .unwrap();
+            }
+        }
+    }
+    writeln!(rendered).unwrap();
+}
+
+impl TraceRangeReviewFindingKind {
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Unowned => "unowned",
+            Self::AmbiguousOwnership => "ambiguous ownership",
+            Self::OutOfScope => "out of scope",
+            Self::TraceDrift => "trace drift",
+        }
+    }
+}
+
+fn render_scope_guard_text(rendered: &mut String, scope_guard: &TraceRangeScopeGuard) {
+    writeln!(rendered, "Scope guard:").expect("writing to String must succeed");
+    writeln!(rendered, "  Allowed IDs:").expect("writing to String must succeed");
+    if scope_guard.allowed_ids.is_empty() {
+        writeln!(rendered, "    - none").expect("writing to String must succeed");
+    } else {
+        for item in &scope_guard.allowed_ids {
+            writeln!(rendered, "    - {} {}\t{}", item.kind, item.id, item.title)
+                .expect("writing to String must succeed");
+        }
+    }
+
+    writeln!(rendered, "  Out-of-scope items:").expect("writing to String must succeed");
+    if scope_guard.out_of_scope_items.is_empty() {
+        writeln!(rendered, "    - none").expect("writing to String must succeed");
+        writeln!(rendered).expect("writing to String must succeed");
+        return;
+    }
+
+    for item in &scope_guard.out_of_scope_items {
+        writeln!(rendered, "    - {}", item.file).expect("writing to String must succeed");
+        if let Some(reason) = item.reason.as_deref() {
+            writeln!(rendered, "      reason: {}", reason).expect("writing to String must succeed");
+        }
+        for owner in &item.owners {
+            writeln!(
+                rendered,
+                "      - {} {}\t{}",
+                owner.kind, owner.id, owner.title
+            )
+            .expect("writing to String must succeed");
+        }
+    }
+    writeln!(rendered).expect("writing to String must succeed");
+}
+
+fn collect_trace_scope_guard(
+    workspace: &Workspace,
+    results: &[TraceLookupOutput],
+    skipped_files: &[TraceSkippedFile],
+    allowed_ids: &[String],
+) -> Result<Option<TraceRangeScopeGuard>> {
+    if allowed_ids.is_empty() {
+        return Ok(None);
+    }
+
+    let lookup = WorkspaceLookup::new(workspace);
+    let mut allowed_ids_by_id = BTreeMap::<String, TraceScopeGuardItem>::new();
+    for id in allowed_ids {
+        let item = resolve_scope_guard_item(&lookup, id)?;
+        allowed_ids_by_id.entry(item.id.clone()).or_insert(item);
+    }
+
+    let allowed_set = allowed_ids_by_id.keys().cloned().collect::<BTreeSet<_>>();
+    let mut out_of_scope_items = Vec::new();
+
+    for result in results {
+        let offending_owners = result
+            .matched_owners
+            .iter()
+            .filter(|owner| !allowed_set.contains(&owner.id))
+            .map(|owner| TraceScopeGuardOwner {
+                kind: owner.kind.to_string(),
+                id: owner.id.clone(),
+                title: owner.title.clone(),
+            })
+            .collect::<Vec<_>>();
+
+        if result.matched_owners.is_empty() {
+            out_of_scope_items.push(TraceScopeGuardViolation {
+                file: result.file.clone(),
+                owners: Vec::new(),
+                reason: Some("unowned".to_string()),
+            });
+        } else if !offending_owners.is_empty() {
+            out_of_scope_items.push(TraceScopeGuardViolation {
+                file: result.file.clone(),
+                owners: offending_owners,
+                reason: Some("outside allowed IDs".to_string()),
+            });
+        }
+    }
+
+    for skipped_file in skipped_files {
+        out_of_scope_items.push(TraceScopeGuardViolation {
+            file: skipped_file.file.clone(),
+            owners: Vec::new(),
+            reason: Some(skipped_file.reason.clone()),
+        });
+    }
+
+    Ok(Some(TraceRangeScopeGuard {
+        allowed_ids: allowed_ids_by_id.into_values().collect(),
+        out_of_scope_items,
+    }))
+}
+
+fn collect_trace_review_output(
+    results: &[TraceLookupOutput],
+    skipped_files: &[TraceSkippedFile],
+    scope_guard: Option<&TraceRangeScopeGuard>,
+    strict: bool,
+) -> Option<TraceRangeReviewOutput> {
+    if !strict {
+        return None;
+    }
+
+    let mut findings =
+        BTreeMap::<(TraceRangeReviewFindingKind, String), TraceRangeReviewFinding>::new();
+
+    for result in results {
+        if result.matched_owners.is_empty() && result.file_only_owners.is_empty() {
+            push_review_finding(
+                &mut findings,
+                TraceRangeReviewFindingKind::Unowned,
+                result.file.clone(),
+                Vec::new(),
+                Some("no requirement or feature trace owns this file".to_string()),
+            );
+            continue;
+        }
+
+        let owners = result
+            .matched_owners
+            .iter()
+            .chain(result.file_only_owners.iter())
+            .map(|owner| TraceScopeGuardOwner {
+                kind: owner.kind.to_string(),
+                id: owner.id.clone(),
+                title: owner.title.clone(),
+            })
+            .collect::<Vec<_>>();
+
+        if owners.len() > 1 {
+            push_review_finding(
+                &mut findings,
+                TraceRangeReviewFindingKind::AmbiguousOwnership,
+                result.file.clone(),
+                owners,
+                Some("multiple requirement or feature owners match this file".to_string()),
+            );
+        } else if result.status == TraceLookupStatus::Partial {
+            push_review_finding(
+                &mut findings,
+                TraceRangeReviewFindingKind::TraceDrift,
+                result.file.clone(),
+                owners,
+                Some("the file is owned, but the requested symbol did not match".to_string()),
+            );
+        }
+    }
+
+    if let Some(scope_guard) = scope_guard {
+        for violation in &scope_guard.out_of_scope_items {
+            let kind = match violation.reason.as_deref() {
+                Some("unowned") => TraceRangeReviewFindingKind::Unowned,
+                Some("outside allowed IDs") => TraceRangeReviewFindingKind::OutOfScope,
+                Some(_) => TraceRangeReviewFindingKind::TraceDrift,
+                None => TraceRangeReviewFindingKind::TraceDrift,
+            };
+
+            if kind == TraceRangeReviewFindingKind::Unowned {
+                continue;
+            }
+
+            push_review_finding(
+                &mut findings,
+                kind,
+                violation.file.clone(),
+                violation.owners.clone(),
+                violation.reason.clone(),
+            );
+        }
+    } else {
+        for skipped in skipped_files {
+            push_review_finding(
+                &mut findings,
+                TraceRangeReviewFindingKind::TraceDrift,
+                skipped.file.clone(),
+                Vec::new(),
+                Some(skipped.reason.clone()),
+            );
+        }
+    }
+
+    let findings = findings.into_values().collect::<Vec<_>>();
+    Some(TraceRangeReviewOutput {
+        enabled: true,
+        failed: !findings.is_empty(),
+        findings,
+    })
+}
+
+fn push_review_finding(
+    findings: &mut BTreeMap<(TraceRangeReviewFindingKind, String), TraceRangeReviewFinding>,
+    kind: TraceRangeReviewFindingKind,
+    file: String,
+    owners: Vec<TraceScopeGuardOwner>,
+    reason: Option<String>,
+) {
+    findings
+        .entry((kind, file.clone()))
+        .or_insert_with(|| TraceRangeReviewFinding {
+            kind,
+            file,
+            owners,
+            reason,
+        });
+}
+
+fn resolve_scope_guard_item(lookup: &WorkspaceLookup<'_>, id: &str) -> Result<TraceScopeGuardItem> {
+    if let Some(philosophy) = lookup.philosophy(id) {
+        return Ok(TraceScopeGuardItem {
+            kind: "philosophy".to_string(),
+            id: philosophy.id.clone(),
+            title: philosophy.title.clone(),
+        });
+    }
+
+    if let Some(policy) = lookup.policy(id) {
+        return Ok(TraceScopeGuardItem {
+            kind: "policy".to_string(),
+            id: policy.id.clone(),
+            title: policy.title.clone(),
+        });
+    }
+
+    if let Some(requirement) = lookup.requirement(id) {
+        return Ok(TraceScopeGuardItem {
+            kind: "requirement".to_string(),
+            id: requirement.id.clone(),
+            title: requirement.title.clone(),
+        });
+    }
+
+    if let Some(feature) = lookup.feature(id) {
+        return Ok(TraceScopeGuardItem {
+            kind: "feature".to_string(),
+            id: feature.id.clone(),
+            title: feature.title.clone(),
+        });
+    }
+
+    bail!("scope guard id `{id}` does not match a philosophy, policy, requirement, or feature");
+}
+
+fn render_range_id_group(rendered: &mut String, heading: &str, group: &TraceRangeEntityGroup) {
+    writeln!(rendered, "  {heading}:").expect("writing to String must succeed");
+    let mut wrote_any = false;
+    wrote_any |= render_range_id_items(rendered, "requirements", &group.requirements);
+    wrote_any |= render_range_id_items(rendered, "features", &group.features);
+    wrote_any |= render_range_id_items(rendered, "policies", &group.policies);
+    wrote_any |= render_range_id_items(rendered, "philosophies", &group.philosophies);
+    if !wrote_any {
+        writeln!(rendered, "    - none").expect("writing to String must succeed");
+    }
+}
+
+fn render_range_id_items(rendered: &mut String, label: &str, items: &[EntitySummary]) -> bool {
+    if items.is_empty() {
+        return false;
+    }
+
+    writeln!(rendered, "    {label}:").expect("writing to String must succeed");
+    for item in items {
+        writeln!(rendered, "      - {}\t{}", item.id, item.title)
+            .expect("writing to String must succeed");
+    }
+    true
+}
+
+fn normalize_lookup_file(workspace: &Workspace, file: &Path) -> Result<PathBuf> {
+    let relative = if file.is_absolute() {
+        file.strip_prefix(&workspace.root)
+            .with_context(|| {
+                format!(
+                    "trace file `{}` must stay under workspace `{}`",
+                    file.display(),
+                    workspace.root.display()
+                )
+            })?
+            .to_path_buf()
+    } else {
+        file.to_path_buf()
+    };
+    let normalized = normalize_relative_path(&relative);
+    if normalized.as_os_str().is_empty() {
+        bail!("trace file must not be empty");
+    }
+    if normalized
+        .components()
+        .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        bail!(
+            "trace file `{}` must stay under workspace `{}`",
+            file.display(),
+            workspace.root.display()
+        );
+    }
+    Ok(normalized)
+}
+
+pub fn trace_selector(
+    workspace: &Workspace,
+    file: &Path,
+    symbol: Option<&str>,
+) -> Result<TraceLookupOutput> {
+    Ok(lookup_trace(workspace, file, symbol))
+}
+
+fn lookup_trace(workspace: &Workspace, file: &Path, symbol: Option<&str>) -> TraceLookupOutput {
+    let lookup = WorkspaceLookup::new(workspace);
+    let file_label = file.display().to_string();
+    let mut matched_owners = Vec::new();
+    let mut file_only_owners = Vec::new();
+
+    collect_requirement_matches(
+        &workspace.requirements,
+        &file_label,
+        file,
+        symbol,
+        &mut matched_owners,
+        &mut file_only_owners,
+    );
+    collect_feature_matches(
+        &workspace.features,
+        &file_label,
+        file,
+        symbol,
+        &mut matched_owners,
+        &mut file_only_owners,
+    );
+
+    matched_owners.sort();
+    matched_owners.dedup();
+    file_only_owners.sort();
+    file_only_owners.dedup();
+
+    let context_matches = if matched_owners.is_empty() {
+        &file_only_owners
+    } else {
+        &matched_owners
+    };
+    let related = collect_related_entities(lookup, context_matches);
+
+    TraceLookupOutput {
+        file: file_label,
+        symbol: symbol.map(ToString::to_string),
+        status: lookup_status(&matched_owners, &file_only_owners),
+        matched_owners,
+        file_only_owners,
+        requirements: related.requirements,
+        features: related.features,
+        policies: related.policies,
+        philosophies: related.philosophies,
+    }
+}
+
+fn collect_requirement_matches(
+    requirements: &[Requirement],
+    file_label: &str,
+    file: &Path,
+    symbol: Option<&str>,
+    matched_owners: &mut Vec<TraceOwnerMatch>,
+    file_only_owners: &mut Vec<TraceOwnerMatch>,
+) {
+    for requirement in requirements {
+        collect_trace_matches(
+            TraceOwnerMetadata {
+                kind: LookupKind::Requirement,
+                id: &requirement.id,
+                title: &requirement.title,
+                trace_role: "test",
+            },
+            &requirement.tests,
+            file_label,
+            file,
+            symbol,
+            matched_owners,
+            file_only_owners,
+        );
+    }
+}
+
+fn collect_feature_matches(
+    features: &[Feature],
+    file_label: &str,
+    file: &Path,
+    symbol: Option<&str>,
+    matched_owners: &mut Vec<TraceOwnerMatch>,
+    file_only_owners: &mut Vec<TraceOwnerMatch>,
+) {
+    for feature in features {
+        collect_trace_matches(
+            TraceOwnerMetadata {
+                kind: LookupKind::Feature,
+                id: &feature.id,
+                title: &feature.title,
+                trace_role: "implementation",
+            },
+            &feature.implementations,
+            file_label,
+            file,
+            symbol,
+            matched_owners,
+            file_only_owners,
+        );
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn collect_trace_matches(
+    owner: TraceOwnerMetadata<'_>,
+    references: &BTreeMap<String, Vec<TraceReference>>,
+    file_label: &str,
+    file: &Path,
+    symbol: Option<&str>,
+    matched_owners: &mut Vec<TraceOwnerMatch>,
+    file_only_owners: &mut Vec<TraceOwnerMatch>,
+) {
+    for (language, items) in references {
+        for reference in items {
+            if normalize_relative_path(&reference.file) != file {
+                continue;
+            }
+
+            if let Some(mode) = match_mode(reference, symbol) {
+                matched_owners.push(trace_owner_match(
+                    owner, language, file_label, reference, mode, symbol,
+                ));
+            } else if symbol.is_some() {
+                file_only_owners.push(trace_owner_match(
+                    owner,
+                    language,
+                    file_label,
+                    reference,
+                    MatchMode::File,
+                    None,
+                ));
+            }
+        }
+    }
+}
+
+fn trace_owner_match(
+    owner: TraceOwnerMetadata<'_>,
+    language: &str,
+    file_label: &str,
+    reference: &TraceReference,
+    match_mode: MatchMode,
+    symbol: Option<&str>,
+) -> TraceOwnerMatch {
+    let matched_symbol = match match_mode {
+        MatchMode::Symbol => symbol.map(ToString::to_string),
+        MatchMode::Wildcard => Some("*".to_string()),
+        MatchMode::File => None,
+    };
+
+    TraceOwnerMatch {
+        kind: owner.kind.label(),
+        id: owner.id.to_string(),
+        title: owner.title.to_string(),
+        trace_role: owner.trace_role.to_string(),
+        language: language.to_string(),
+        file: file_label.to_string(),
+        declared_symbols: reference.symbols.clone(),
+        method: reference.method.clone(),
+        path: reference.path.clone(),
+        matched_symbol,
+        match_mode: match_mode.label(),
+    }
+}
+
+fn match_mode(reference: &TraceReference, symbol: Option<&str>) -> Option<MatchMode> {
+    let Some(symbol) = symbol else {
+        return Some(MatchMode::File);
+    };
+
+    if reference.symbols.iter().any(|candidate| candidate == "*") {
+        return Some(MatchMode::Wildcard);
+    }
+
+    if reference
+        .symbols
+        .iter()
+        .any(|candidate| candidate == symbol)
+    {
+        return Some(MatchMode::Symbol);
+    }
+
+    None
+}
+
+fn lookup_status(
+    matched_owners: &[TraceOwnerMatch],
+    file_only_owners: &[TraceOwnerMatch],
+) -> TraceLookupStatus {
+    if !matched_owners.is_empty() {
+        TraceLookupStatus::Owned
+    } else if !file_only_owners.is_empty() {
+        TraceLookupStatus::Partial
+    } else {
+        TraceLookupStatus::Unowned
+    }
+}
+
+struct RelatedEntities {
+    requirements: Vec<EntitySummary>,
+    features: Vec<EntitySummary>,
+    policies: Vec<EntitySummary>,
+    philosophies: Vec<EntitySummary>,
+}
+
+fn collect_related_entities(
+    lookup: WorkspaceLookup<'_>,
+    matches: &[TraceOwnerMatch],
+) -> RelatedEntities {
+    let mut requirements = BTreeMap::new();
+    let mut features = BTreeMap::new();
+    let mut policies = BTreeMap::new();
+    let mut philosophies = BTreeMap::new();
+
+    for owner in matches {
+        match owner.kind {
+            "requirement" => {
+                insert_summary(
+                    &mut requirements,
+                    lookup,
+                    LookupKind::Requirement,
+                    &owner.id,
+                );
+                if let Some(requirement) = lookup.requirement(&owner.id) {
+                    for feature_id in &requirement.linked_features {
+                        insert_summary(&mut features, lookup, LookupKind::Feature, feature_id);
+                    }
+                    collect_requirement_context(
+                        lookup,
+                        requirement,
+                        &mut policies,
+                        &mut philosophies,
+                    );
+                }
+            }
+            "feature" => {
+                insert_summary(&mut features, lookup, LookupKind::Feature, &owner.id);
+                if let Some(feature) = lookup.feature(&owner.id) {
+                    for requirement_id in &feature.linked_requirements {
+                        insert_summary(
+                            &mut requirements,
+                            lookup,
+                            LookupKind::Requirement,
+                            requirement_id,
+                        );
+                        if let Some(requirement) = lookup.requirement(requirement_id) {
+                            collect_requirement_context(
+                                lookup,
+                                requirement,
+                                &mut policies,
+                                &mut philosophies,
+                            );
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    RelatedEntities {
+        requirements: requirements.into_values().collect(),
+        features: features.into_values().collect(),
+        policies: policies.into_values().collect(),
+        philosophies: philosophies.into_values().collect(),
+    }
+}
+
+fn collect_requirement_context(
+    lookup: WorkspaceLookup<'_>,
+    requirement: &Requirement,
+    policies: &mut BTreeMap<String, EntitySummary>,
+    philosophies: &mut BTreeMap<String, EntitySummary>,
+) {
+    for policy_id in &requirement.linked_policies {
+        insert_summary(policies, lookup, LookupKind::Policy, policy_id);
+        if let Some(policy) = lookup.policy(policy_id) {
+            for philosophy_id in &policy.linked_philosophies {
+                insert_summary(philosophies, lookup, LookupKind::Philosophy, philosophy_id);
+            }
+        }
+    }
+}
+
+fn insert_summary(
+    map: &mut BTreeMap<String, EntitySummary>,
+    lookup: WorkspaceLookup<'_>,
+    kind: LookupKind,
+    id: &str,
+) {
+    let Some(title) = lookup.title_for(kind, id) else {
+        return;
+    };
+    map.entry(id.to_string()).or_insert_with(|| EntitySummary {
+        id: id.to_string(),
+        title: title.to_string(),
+        document_path: None,
+    });
+}
+
+fn render_text_output(output: &TraceLookupOutput) -> String {
+    let mut rendered = String::new();
+
+    writeln!(&mut rendered, "File: {}", output.file).expect("writing to a string should succeed");
+    if let Some(symbol) = &output.symbol {
+        writeln!(&mut rendered, "Symbol: {symbol}").expect("writing to a string should succeed");
+    }
+    writeln!(&mut rendered, "Status: {}", output.status.label())
+        .expect("writing to a string should succeed");
+
+    match output.status {
+        TraceLookupStatus::Owned => {
+            writeln!(&mut rendered, "Matched trace owners:")
+                .expect("writing to a string should succeed");
+            for owner in &output.matched_owners {
+                push_owner_match(&mut rendered, owner);
+            }
+        }
+        TraceLookupStatus::Partial => {
+            let symbol = output
+                .symbol
+                .as_deref()
+                .expect("partial trace lookups should include a symbol");
+            writeln!(&mut rendered, "No trace owners matched symbol `{symbol}`.")
+                .expect("writing to a string should succeed");
+            writeln!(&mut rendered, "File owners without a matching symbol:")
+                .expect("writing to a string should succeed");
+            for owner in &output.file_only_owners {
+                push_owner_match(&mut rendered, owner);
+            }
+            writeln!(
+                &mut rendered,
+                "Hint: Trace the symbol explicitly in the matching requirement or feature, or use `*` when the whole file belongs to one owner."
+            )
+            .expect("writing to a string should succeed");
+        }
+        TraceLookupStatus::Unowned => {
+            writeln!(
+                &mut rendered,
+                "No requirement or feature traces reference `{}`.",
+                query_label(output)
+            )
+            .expect("writing to a string should succeed");
+            writeln!(
+                &mut rendered,
+                "Hint: Add the file to a requirement test trace or feature implementation trace, then rerun `syu validate . --genre trace`."
+            )
+            .expect("writing to a string should succeed");
+            return rendered;
+        }
+    }
+
+    push_entity_section(&mut rendered, "Requirements", &output.requirements);
+    push_entity_section(&mut rendered, "Features", &output.features);
+    push_entity_section(&mut rendered, "Policies", &output.policies);
+    push_entity_section(&mut rendered, "Philosophies", &output.philosophies);
+    rendered
+}
+
+fn push_owner_match(rendered: &mut String, owner: &TraceOwnerMatch) {
+    let matched_by =
+        MatchMode::from_label(owner.match_mode).matched_label(owner.matched_symbol.as_deref());
+    writeln!(
+        rendered,
+        "- {} {}\t{} ({}, {}, matched by {})",
+        owner.kind, owner.id, owner.title, owner.language, owner.trace_role, matched_by
+    )
+    .expect("writing to a string should succeed");
+    if !owner.declared_symbols.is_empty() {
+        writeln!(
+            rendered,
+            "  declared symbols: {}",
+            owner.declared_symbols.join(", ")
+        )
+        .expect("writing to a string should succeed");
+    }
+    push_trace_operation(rendered, owner, "  ");
+}
+
+fn push_range_owner_match(rendered: &mut String, owner: &TraceOwnerMatch) {
+    push_trace_operation(rendered, owner, "    ");
+}
+
+fn push_trace_operation(rendered: &mut String, owner: &TraceOwnerMatch, indent: &str) {
+    if owner.method.is_none() && owner.path.is_none() {
+        return;
+    }
+
+    let mut parts = Vec::new();
+    if let Some(method) = owner.method.as_deref() {
+        parts.push(format!("method `{method}`"));
+    }
+    if let Some(path) = owner.path.as_deref() {
+        parts.push(format!("path `{path}`"));
+    }
+
+    writeln!(rendered, "{indent}operation: {}", parts.join(" "))
+        .expect("writing to a string should succeed");
+}
+
+fn find_owner_match<'a>(
+    result: &'a TraceLookupOutput,
+    kind: &str,
+    id: &str,
+) -> Option<&'a TraceOwnerMatch> {
+    result
+        .matched_owners
+        .iter()
+        .chain(result.file_only_owners.iter())
+        .find(|owner| owner.kind == kind && owner.id == id)
+}
+
+fn push_entity_section(rendered: &mut String, heading: &str, items: &[EntitySummary]) {
+    writeln!(rendered, "{heading}:").expect("writing to a string should succeed");
+    if items.is_empty() {
+        writeln!(rendered, "- none").expect("writing to a string should succeed");
+        return;
+    }
+
+    for item in items {
+        writeln!(rendered, "- {}\t{}", item.id, item.title)
+            .expect("writing to a string should succeed");
+    }
+}
+
+fn query_label(output: &TraceLookupOutput) -> String {
+    match &output.symbol {
+        Some(symbol) => format!("{}::{symbol}", output.file),
+        None => output.file.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        collections::BTreeMap,
+        path::{Path, PathBuf},
+    };
+
+    use tempfile::tempdir;
+
+    use crate::{
+        cli::{OutputFormat, TraceArgs},
+        command::lookup::EntitySummary,
+        config::SyuConfig,
+        model::TraceReference,
+        workspace::Workspace,
+    };
+
+    use super::{
+        MatchMode, TraceLookupOutput, TraceLookupStatus, TraceOwnerMatch, TraceOwnerMetadata,
+        collect_range_id_summary, collect_related_entities, collect_requirement_context,
+        insert_summary, match_mode, normalize_lookup_file, query_label, render_text_output,
+        trace_owner_match,
+    };
+
+    #[test]
+    fn normalize_lookup_file_accepts_workspace_relative_paths() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("docs/syu"),
+            config: SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+
+        let normalized = normalize_lookup_file(&workspace, Path::new("./src/../src/lib.rs"))
+            .expect("relative file should normalize");
+        assert_eq!(normalized, PathBuf::from("src/lib.rs"));
+    }
+
+    #[test]
+    fn normalize_lookup_file_rejects_absolute_paths_outside_the_workspace() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("docs/syu"),
+            config: SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+
+        let error = normalize_lookup_file(&workspace, Path::new("/tmp/outside.rs"))
+            .expect_err("outside paths should fail");
+        assert!(error.to_string().contains("must stay under workspace"));
+    }
+
+    #[test]
+    fn normalize_lookup_file_accepts_absolute_paths_within_the_workspace() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("docs/syu"),
+            config: SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+
+        let absolute = tempdir.path().join("src/lib.rs");
+        let normalized =
+            normalize_lookup_file(&workspace, &absolute).expect("workspace-relative path");
+        assert_eq!(normalized, PathBuf::from("src/lib.rs"));
+    }
+
+    #[test]
+    fn normalize_lookup_file_rejects_empty_paths() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("docs/syu"),
+            config: SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+
+        let error =
+            normalize_lookup_file(&workspace, Path::new("")).expect_err("empty file should fail");
+        assert!(error.to_string().contains("must not be empty"));
+    }
+
+    #[test]
+    fn normalize_lookup_file_rejects_relative_paths_that_escape_the_workspace() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("docs/syu"),
+            config: SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+
+        let error = normalize_lookup_file(&workspace, Path::new("../outside.rs"))
+            .expect_err("escaping relative paths should fail");
+        assert!(error.to_string().contains("must stay under workspace"));
+    }
+
+    #[test]
+    fn query_label_includes_symbols_when_present() {
+        let label = query_label(&TraceLookupOutput {
+            file: "src/lib.rs".to_string(),
+            symbol: Some("run".to_string()),
+            status: TraceLookupStatus::Unowned,
+            matched_owners: Vec::new(),
+            file_only_owners: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+            policies: Vec::new(),
+            philosophies: Vec::new(),
+        });
+        assert_eq!(label, "src/lib.rs::run");
+    }
+
+    #[test]
+    fn match_mode_helpers_cover_all_labels() {
+        assert_eq!(MatchMode::from_label("file"), MatchMode::File);
+        assert_eq!(MatchMode::from_label("symbol"), MatchMode::Symbol);
+        assert_eq!(MatchMode::from_label("wildcard"), MatchMode::Wildcard);
+        assert_eq!(MatchMode::Wildcard.label(), "wildcard");
+        assert_eq!(
+            MatchMode::Symbol.matched_label(Some("run_trace_command")),
+            "symbol `run_trace_command`"
+        );
+        assert_eq!(MatchMode::Wildcard.matched_label(None), "wildcard `*`");
+    }
+
+    #[test]
+    fn run_trace_command_rejects_blank_symbols_before_loading_the_workspace() {
+        let error = super::run_trace_command(&TraceArgs {
+            file: Some(PathBuf::from("src/lib.rs")),
+            workspace: PathBuf::from("."),
+            symbol: Some("   ".to_string()),
+            range: None,
+            allowed_id: Vec::new(),
+            strict: false,
+            format: OutputFormat::Text,
+        })
+        .expect_err("blank symbols should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("must not be empty or whitespace")
+        );
+    }
+
+    #[test]
+    fn wildcard_trace_owner_matches_record_the_wildcard_symbol() {
+        let owner = trace_owner_match(
+            TraceOwnerMetadata {
+                kind: crate::cli::LookupKind::Feature,
+                id: "FEAT-TRACE-001",
+                title: "Trace",
+                trace_role: "implementation",
+            },
+            "rust",
+            "src/lib.rs",
+            &TraceReference {
+                file: PathBuf::from("src/lib.rs"),
+                symbols: vec!["*".to_string()],
+                doc_contains: Vec::new(),
+                method: None,
+                path: None,
+            },
+            MatchMode::Wildcard,
+            None,
+        );
+
+        assert_eq!(owner.match_mode, "wildcard");
+        assert_eq!(owner.matched_symbol.as_deref(), Some("*"));
+    }
+
+    #[test]
+    fn match_mode_detects_wildcard_ownership() {
+        let mode = match_mode(
+            &TraceReference {
+                file: PathBuf::from("src/lib.rs"),
+                symbols: vec!["*".to_string()],
+                doc_contains: Vec::new(),
+                method: None,
+                path: None,
+            },
+            Some("run"),
+        );
+        assert_eq!(mode, Some(MatchMode::Wildcard));
+    }
+
+    #[test]
+    fn collect_related_entities_skips_unknown_owners_without_panicking() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("docs/syu"),
+            config: SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+
+        let related = collect_related_entities(
+            crate::command::lookup::WorkspaceLookup::new(&workspace),
+            &[TraceOwnerMatch {
+                kind: "unknown",
+                id: "MISSING".to_string(),
+                title: "Missing".to_string(),
+                trace_role: "implementation".to_string(),
+                language: "rust".to_string(),
+                file: "src/lib.rs".to_string(),
+                declared_symbols: Vec::new(),
+                method: None,
+                path: None,
+                matched_symbol: None,
+                match_mode: "file",
+            }],
+        );
+
+        assert!(related.requirements.is_empty());
+        assert!(related.features.is_empty());
+        assert!(related.policies.is_empty());
+        assert!(related.philosophies.is_empty());
+    }
+
+    #[test]
+    fn related_entity_collection_handles_missing_links_gracefully() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("docs/syu"),
+            config: SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+
+        let related = collect_related_entities(
+            crate::command::lookup::WorkspaceLookup::new(&workspace),
+            &[
+                TraceOwnerMatch {
+                    kind: "requirement",
+                    id: "REQ-MISSING-001".to_string(),
+                    title: "Missing requirement".to_string(),
+                    trace_role: "test".to_string(),
+                    language: "rust".to_string(),
+                    file: "src/lib.rs".to_string(),
+                    declared_symbols: Vec::new(),
+                    method: None,
+                    path: None,
+                    matched_symbol: None,
+                    match_mode: "file",
+                },
+                TraceOwnerMatch {
+                    kind: "feature",
+                    id: "FEAT-MISSING-001".to_string(),
+                    title: "Missing feature".to_string(),
+                    trace_role: "implementation".to_string(),
+                    language: "rust".to_string(),
+                    file: "src/lib.rs".to_string(),
+                    declared_symbols: Vec::new(),
+                    method: None,
+                    path: None,
+                    matched_symbol: None,
+                    match_mode: "file",
+                },
+            ],
+        );
+
+        assert!(related.requirements.is_empty());
+        assert!(related.features.is_empty());
+    }
+
+    #[test]
+    fn missing_policy_links_are_ignored_when_collecting_context() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("docs/syu"),
+            config: SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: vec![crate::model::Requirement {
+                id: "REQ-TRACE-001".to_string(),
+                title: "Trace".to_string(),
+                description: "desc".to_string(),
+                priority: "medium".to_string(),
+                status: "implemented".to_string(),
+                linked_policies: vec!["POL-MISSING-001".to_string()],
+                linked_features: Vec::new(),
+                tests: BTreeMap::new(),
+            }],
+            features: Vec::new(),
+        };
+        let requirement = &workspace.requirements[0];
+        let mut policies = BTreeMap::new();
+        let mut philosophies = BTreeMap::new();
+
+        collect_requirement_context(
+            crate::command::lookup::WorkspaceLookup::new(&workspace),
+            requirement,
+            &mut policies,
+            &mut philosophies,
+        );
+
+        assert!(policies.is_empty());
+        assert!(philosophies.is_empty());
+    }
+
+    #[test]
+    fn insert_summary_ignores_unknown_ids() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("docs/syu"),
+            config: SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+        let mut summaries = BTreeMap::new();
+
+        insert_summary(
+            &mut summaries,
+            crate::command::lookup::WorkspaceLookup::new(&workspace),
+            crate::cli::LookupKind::Requirement,
+            "REQ-MISSING-001",
+        );
+
+        assert!(summaries.is_empty());
+    }
+
+    #[test]
+    fn render_text_output_reports_empty_related_sections() {
+        let rendered = render_text_output(&TraceLookupOutput {
+            file: "src/lib.rs".to_string(),
+            symbol: Some("run_trace_command".to_string()),
+            status: TraceLookupStatus::Owned,
+            matched_owners: vec![
+                TraceOwnerMatch {
+                    kind: "feature",
+                    id: "FEAT-TRACE-001".to_string(),
+                    title: "Trace".to_string(),
+                    trace_role: "implementation".to_string(),
+                    language: "rust".to_string(),
+                    file: "src/lib.rs".to_string(),
+                    declared_symbols: vec!["run_trace_command".to_string()],
+                    method: None,
+                    path: None,
+                    matched_symbol: Some("run_trace_command".to_string()),
+                    match_mode: "symbol",
+                },
+                TraceOwnerMatch {
+                    kind: "feature",
+                    id: "FEAT-TRACE-002".to_string(),
+                    title: "Wildcard".to_string(),
+                    trace_role: "implementation".to_string(),
+                    language: "rust".to_string(),
+                    file: "src/lib.rs".to_string(),
+                    declared_symbols: vec!["*".to_string()],
+                    method: None,
+                    path: None,
+                    matched_symbol: Some("*".to_string()),
+                    match_mode: "wildcard",
+                },
+            ],
+            file_only_owners: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+            policies: Vec::new(),
+            philosophies: Vec::new(),
+        });
+
+        assert!(rendered.contains("matched by symbol `run_trace_command`"));
+        assert!(rendered.contains("matched by wildcard `*`"));
+        assert!(rendered.contains("Requirements:\n- none"));
+    }
+
+    #[test]
+    fn render_text_output_shows_openapi_operation_details() {
+        let rendered = render_text_output(&TraceLookupOutput {
+            file: "api/openapi.yaml".to_string(),
+            symbol: None,
+            status: TraceLookupStatus::Owned,
+            matched_owners: vec![TraceOwnerMatch {
+                kind: "feature",
+                id: "FEAT-TRACE-001".to_string(),
+                title: "OpenAPI trace".to_string(),
+                trace_role: "implementation".to_string(),
+                language: "openapi".to_string(),
+                file: "api/openapi.yaml".to_string(),
+                declared_symbols: Vec::new(),
+                method: Some("get".to_string()),
+                path: Some("/pets/{petId}".to_string()),
+                matched_symbol: None,
+                match_mode: "file",
+            }],
+            file_only_owners: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+            policies: Vec::new(),
+            philosophies: Vec::new(),
+        });
+
+        assert!(rendered.contains("operation: method `get` path `/pets/{petId}`"));
+    }
+
+    #[test]
+    fn render_range_text_includes_empty_scope_guard_details() {
+        let summary = super::TraceRangeSummary {
+            changed_files_total: 0,
+            inspected_files: 0,
+            skipped_files: 0,
+            owned_files: 0,
+            partial_files: 0,
+            unowned_files: 0,
+            total_requirements: 0,
+            total_features: 0,
+            total_policies: 0,
+            total_philosophies: 0,
+            ids: super::TraceRangeIdSummary {
+                direct: super::TraceRangeEntityGroup {
+                    requirements: Vec::new(),
+                    features: Vec::new(),
+                    policies: Vec::new(),
+                    philosophies: Vec::new(),
+                },
+                indirect: super::TraceRangeEntityGroup {
+                    requirements: Vec::new(),
+                    features: Vec::new(),
+                    policies: Vec::new(),
+                    philosophies: Vec::new(),
+                },
+            },
+        };
+        let scope_guard = super::TraceRangeScopeGuard {
+            allowed_ids: Vec::new(),
+            out_of_scope_items: Vec::new(),
+        };
+
+        let rendered =
+            super::render_range_text("HEAD..HEAD", &[], &[], &summary, Some(&scope_guard), None);
+
+        assert!(rendered.contains("Git range: HEAD..HEAD"));
+        assert!(rendered.contains("No files changed in range"));
+        assert!(rendered.contains("Allowed IDs:\n    - none"));
+        assert!(rendered.contains("Out-of-scope items:\n    - none"));
+    }
+
+    #[test]
+    fn collect_trace_scope_guard_marks_unowned_items() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("docs/syu"),
+            config: SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: vec![crate::model::Requirement {
+                id: "REQ-TRACE-001".to_string(),
+                title: "Trace requirement".to_string(),
+                description: "desc".to_string(),
+                priority: "medium".to_string(),
+                status: "implemented".to_string(),
+                linked_policies: Vec::new(),
+                linked_features: Vec::new(),
+                tests: BTreeMap::new(),
+            }],
+            features: vec![crate::model::Feature {
+                id: "FEAT-TRACE-001".to_string(),
+                title: "Trace feature".to_string(),
+                summary: "desc".to_string(),
+                status: "implemented".to_string(),
+                linked_requirements: Vec::new(),
+                implementations: BTreeMap::new(),
+            }],
+        };
+
+        let scope_guard = super::collect_trace_scope_guard(
+            &workspace,
+            &[TraceLookupOutput {
+                file: "src/unowned.rs".to_string(),
+                symbol: None,
+                status: TraceLookupStatus::Unowned,
+                matched_owners: Vec::new(),
+                file_only_owners: Vec::new(),
+                requirements: Vec::new(),
+                features: Vec::new(),
+                policies: Vec::new(),
+                philosophies: Vec::new(),
+            }],
+            &[],
+            &["REQ-TRACE-001".to_string()],
+        )
+        .expect("scope guard collection should succeed")
+        .expect("scope guard should be present");
+
+        assert_eq!(scope_guard.allowed_ids.len(), 1);
+        assert_eq!(scope_guard.out_of_scope_items.len(), 1);
+        assert_eq!(scope_guard.out_of_scope_items[0].file, "src/unowned.rs");
+        assert_eq!(
+            scope_guard.out_of_scope_items[0].reason.as_deref(),
+            Some("unowned")
+        );
+        assert!(scope_guard.out_of_scope_items[0].owners.is_empty());
+    }
+
+    #[test]
+    fn run_trace_command_requires_a_file_or_range() {
+        let error = super::run_trace_command(&TraceArgs {
+            file: None,
+            workspace: PathBuf::from("."),
+            symbol: None,
+            range: None,
+            allowed_id: Vec::new(),
+            strict: false,
+            format: OutputFormat::Text,
+        })
+        .expect_err("missing file and range should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("either FILE or --range must be provided")
+        );
+    }
+
+    #[test]
+    fn compute_range_summary_counts_partial_results() {
+        let summary = super::compute_range_summary(
+            4,
+            &[
+                TraceLookupOutput {
+                    file: "owned.rs".to_string(),
+                    symbol: None,
+                    status: TraceLookupStatus::Owned,
+                    matched_owners: vec![TraceOwnerMatch {
+                        kind: "feature",
+                        id: "FEAT-1".to_string(),
+                        title: "Feat".to_string(),
+                        trace_role: "implementation".to_string(),
+                        language: "rust".to_string(),
+                        file: "owned.rs".to_string(),
+                        declared_symbols: Vec::new(),
+                        method: None,
+                        path: None,
+                        matched_symbol: None,
+                        match_mode: "symbol",
+                    }],
+                    file_only_owners: Vec::new(),
+                    requirements: vec![EntitySummary {
+                        id: "REQ-1".to_string(),
+                        title: "Req".to_string(),
+                        document_path: None,
+                    }],
+                    features: Vec::new(),
+                    policies: Vec::new(),
+                    philosophies: Vec::new(),
+                },
+                TraceLookupOutput {
+                    file: "partial.rs".to_string(),
+                    symbol: None,
+                    status: TraceLookupStatus::Partial,
+                    matched_owners: Vec::new(),
+                    file_only_owners: Vec::new(),
+                    requirements: Vec::new(),
+                    features: vec![EntitySummary {
+                        id: "FEAT-1".to_string(),
+                        title: "Feat".to_string(),
+                        document_path: None,
+                    }],
+                    policies: Vec::new(),
+                    philosophies: Vec::new(),
+                },
+                TraceLookupOutput {
+                    file: "unowned.rs".to_string(),
+                    symbol: None,
+                    status: TraceLookupStatus::Unowned,
+                    matched_owners: Vec::new(),
+                    file_only_owners: Vec::new(),
+                    requirements: Vec::new(),
+                    features: Vec::new(),
+                    policies: vec![EntitySummary {
+                        id: "POL-1".to_string(),
+                        title: "Pol".to_string(),
+                        document_path: None,
+                    }],
+                    philosophies: vec![EntitySummary {
+                        id: "PHIL-1".to_string(),
+                        title: "Phil".to_string(),
+                        document_path: None,
+                    }],
+                },
+            ],
+            &[super::TraceSkippedFile {
+                file: "../outside.rs".to_string(),
+                reason: "must stay under workspace".to_string(),
+            }],
+        );
+
+        assert_eq!(summary.changed_files_total, 4);
+        assert_eq!(summary.inspected_files, 3);
+        assert_eq!(summary.skipped_files, 1);
+        assert_eq!(summary.owned_files, 1);
+        assert_eq!(summary.partial_files, 1);
+        assert_eq!(summary.unowned_files, 1);
+        assert_eq!(summary.total_requirements, 1);
+        assert_eq!(summary.total_features, 1);
+        assert_eq!(summary.total_policies, 1);
+        assert_eq!(summary.total_philosophies, 1);
+        assert_eq!(summary.ids.direct.requirements.len(), 0);
+        assert_eq!(summary.ids.direct.features.len(), 1);
+        assert_eq!(summary.ids.indirect.features.len(), 0);
+        assert_eq!(summary.ids.indirect.policies.len(), 1);
+        assert_eq!(summary.ids.indirect.philosophies.len(), 1);
+    }
+
+    #[test]
+    fn collect_range_id_summary_separates_direct_and_indirect_ids() {
+        let summary = collect_range_id_summary(&[
+            TraceLookupOutput {
+                file: "feature.rs".to_string(),
+                symbol: None,
+                status: TraceLookupStatus::Owned,
+                matched_owners: vec![TraceOwnerMatch {
+                    kind: "feature",
+                    id: "FEAT-1".to_string(),
+                    title: "Feature".to_string(),
+                    trace_role: "implementation".to_string(),
+                    language: "rust".to_string(),
+                    file: "feature.rs".to_string(),
+                    declared_symbols: Vec::new(),
+                    method: None,
+                    path: None,
+                    matched_symbol: None,
+                    match_mode: "file",
+                }],
+                file_only_owners: Vec::new(),
+                requirements: vec![EntitySummary {
+                    id: "REQ-1".to_string(),
+                    title: "Requirement".to_string(),
+                    document_path: None,
+                }],
+                features: vec![EntitySummary {
+                    id: "FEAT-1".to_string(),
+                    title: "Feature".to_string(),
+                    document_path: None,
+                }],
+                policies: vec![EntitySummary {
+                    id: "POL-1".to_string(),
+                    title: "Policy".to_string(),
+                    document_path: None,
+                }],
+                philosophies: vec![EntitySummary {
+                    id: "PHIL-1".to_string(),
+                    title: "Philosophy".to_string(),
+                    document_path: None,
+                }],
+            },
+            TraceLookupOutput {
+                file: "requirement.rs".to_string(),
+                symbol: None,
+                status: TraceLookupStatus::Owned,
+                matched_owners: vec![TraceOwnerMatch {
+                    kind: "requirement",
+                    id: "REQ-2".to_string(),
+                    title: "Requirement 2".to_string(),
+                    trace_role: "test".to_string(),
+                    language: "rust".to_string(),
+                    file: "requirement.rs".to_string(),
+                    declared_symbols: Vec::new(),
+                    method: None,
+                    path: None,
+                    matched_symbol: None,
+                    match_mode: "file",
+                }],
+                file_only_owners: Vec::new(),
+                requirements: vec![EntitySummary {
+                    id: "REQ-2".to_string(),
+                    title: "Requirement 2".to_string(),
+                    document_path: None,
+                }],
+                features: vec![EntitySummary {
+                    id: "FEAT-2".to_string(),
+                    title: "Feature 2".to_string(),
+                    document_path: None,
+                }],
+                policies: vec![EntitySummary {
+                    id: "POL-2".to_string(),
+                    title: "Policy 2".to_string(),
+                    document_path: None,
+                }],
+                philosophies: vec![EntitySummary {
+                    id: "PHIL-2".to_string(),
+                    title: "Philosophy 2".to_string(),
+                    document_path: None,
+                }],
+            },
+            TraceLookupOutput {
+                file: "policy.rs".to_string(),
+                symbol: None,
+                status: TraceLookupStatus::Owned,
+                matched_owners: vec![TraceOwnerMatch {
+                    kind: "policy",
+                    id: "POL-IGNORED".to_string(),
+                    title: "Ignored policy".to_string(),
+                    trace_role: "documentation".to_string(),
+                    language: "rust".to_string(),
+                    file: "policy.rs".to_string(),
+                    declared_symbols: Vec::new(),
+                    method: None,
+                    path: None,
+                    matched_symbol: None,
+                    match_mode: "file",
+                }],
+                file_only_owners: Vec::new(),
+                requirements: Vec::new(),
+                features: Vec::new(),
+                policies: Vec::new(),
+                philosophies: Vec::new(),
+            },
+        ]);
+
+        assert_eq!(summary.direct.features.len(), 1);
+        assert_eq!(summary.direct.requirements.len(), 1);
+        assert_eq!(summary.indirect.features.len(), 1);
+        assert_eq!(summary.indirect.requirements.len(), 1);
+        assert_eq!(summary.indirect.policies.len(), 2);
+        assert_eq!(summary.indirect.philosophies.len(), 2);
+        assert_eq!(summary.indirect.features[0].id, "FEAT-2");
+        assert_eq!(summary.indirect.requirements[0].id, "REQ-1");
+    }
+
+    #[test]
+    fn render_range_text_groups_file_only_and_unowned_results() {
+        let rendered = super::render_range_text(
+            "HEAD~1..HEAD",
+            &[
+                TraceLookupOutput {
+                    file: "file-only.rs".to_string(),
+                    symbol: None,
+                    status: TraceLookupStatus::Owned,
+                    matched_owners: Vec::new(),
+                    file_only_owners: vec![TraceOwnerMatch {
+                        kind: "feature",
+                        id: "FEAT-1".to_string(),
+                        title: "Feature".to_string(),
+                        trace_role: "implementation".to_string(),
+                        language: "rust".to_string(),
+                        file: "file-only.rs".to_string(),
+                        declared_symbols: Vec::new(),
+                        method: None,
+                        path: None,
+                        matched_symbol: None,
+                        match_mode: "file",
+                    }],
+                    requirements: Vec::new(),
+                    features: Vec::new(),
+                    policies: Vec::new(),
+                    philosophies: Vec::new(),
+                },
+                TraceLookupOutput {
+                    file: "unowned.rs".to_string(),
+                    symbol: None,
+                    status: TraceLookupStatus::Unowned,
+                    matched_owners: Vec::new(),
+                    file_only_owners: Vec::new(),
+                    requirements: Vec::new(),
+                    features: Vec::new(),
+                    policies: Vec::new(),
+                    philosophies: Vec::new(),
+                },
+            ],
+            &[],
+            &super::TraceRangeSummary {
+                changed_files_total: 2,
+                inspected_files: 2,
+                skipped_files: 0,
+                owned_files: 1,
+                partial_files: 0,
+                unowned_files: 1,
+                total_requirements: 0,
+                total_features: 1,
+                total_policies: 0,
+                total_philosophies: 0,
+                ids: super::TraceRangeIdSummary {
+                    direct: super::TraceRangeEntityGroup {
+                        requirements: Vec::new(),
+                        features: vec![EntitySummary {
+                            id: "FEAT-1".to_string(),
+                            title: "Feature".to_string(),
+                            document_path: None,
+                        }],
+                        policies: Vec::new(),
+                        philosophies: Vec::new(),
+                    },
+                    indirect: super::TraceRangeEntityGroup {
+                        requirements: Vec::new(),
+                        features: Vec::new(),
+                        policies: Vec::new(),
+                        philosophies: Vec::new(),
+                    },
+                },
+            },
+            None,
+            None,
+        );
+
+        assert!(rendered.contains("Affected IDs:"));
+        assert!(rendered.contains("Direct matches:"));
+        assert!(rendered.contains("features:"));
+        assert!(rendered.contains("feature FEAT-1:"));
+        assert!(rendered.contains("UNOWNED:"));
+        assert!(rendered.contains("Inspected files: 2"));
+        assert!(rendered.contains("Skipped files: 0"));
+        assert!(rendered.contains("Features: 1"));
+    }
+
+    #[test]
+    fn render_range_text_shows_openapi_operation_details() {
+        let rendered = super::render_range_text(
+            "HEAD~1..HEAD",
+            &[TraceLookupOutput {
+                file: "api/openapi.yaml".to_string(),
+                symbol: None,
+                status: TraceLookupStatus::Owned,
+                matched_owners: vec![TraceOwnerMatch {
+                    kind: "feature",
+                    id: "FEAT-TRACE-001".to_string(),
+                    title: "OpenAPI trace".to_string(),
+                    trace_role: "implementation".to_string(),
+                    language: "openapi".to_string(),
+                    file: "api/openapi.yaml".to_string(),
+                    declared_symbols: Vec::new(),
+                    method: Some("get".to_string()),
+                    path: Some("/pets/{petId}".to_string()),
+                    matched_symbol: None,
+                    match_mode: "file",
+                }],
+                file_only_owners: Vec::new(),
+                requirements: vec![EntitySummary {
+                    id: "REQ-TRACE-001".to_string(),
+                    title: "Trace".to_string(),
+                    document_path: None,
+                }],
+                features: vec![EntitySummary {
+                    id: "FEAT-TRACE-001".to_string(),
+                    title: "OpenAPI trace".to_string(),
+                    document_path: None,
+                }],
+                policies: Vec::new(),
+                philosophies: Vec::new(),
+            }],
+            &[],
+            &super::TraceRangeSummary {
+                changed_files_total: 1,
+                inspected_files: 1,
+                skipped_files: 0,
+                owned_files: 1,
+                partial_files: 0,
+                unowned_files: 0,
+                total_requirements: 1,
+                total_features: 1,
+                total_policies: 0,
+                total_philosophies: 0,
+                ids: super::TraceRangeIdSummary {
+                    direct: super::TraceRangeEntityGroup {
+                        requirements: Vec::new(),
+                        features: vec![EntitySummary {
+                            id: "FEAT-TRACE-001".to_string(),
+                            title: "OpenAPI trace".to_string(),
+                            document_path: None,
+                        }],
+                        policies: Vec::new(),
+                        philosophies: Vec::new(),
+                    },
+                    indirect: super::TraceRangeEntityGroup {
+                        requirements: vec![EntitySummary {
+                            id: "REQ-TRACE-001".to_string(),
+                            title: "Trace".to_string(),
+                            document_path: None,
+                        }],
+                        features: Vec::new(),
+                        policies: Vec::new(),
+                        philosophies: Vec::new(),
+                    },
+                },
+            },
+            None,
+            None,
+        );
+
+        assert!(rendered.contains("feature FEAT-TRACE-001:"));
+        assert!(rendered.contains("  - api/openapi.yaml"));
+        assert!(rendered.contains("operation: method `get` path `/pets/{petId}`"));
+    }
+
+    #[test]
+    fn render_range_text_reports_skipped_file_details() {
+        let rendered = super::render_range_text(
+            "HEAD~1..HEAD",
+            &[],
+            &[super::TraceSkippedFile {
+                file: "../outside.rs".to_string(),
+                reason: "must stay under workspace".to_string(),
+            }],
+            &super::TraceRangeSummary {
+                changed_files_total: 1,
+                inspected_files: 0,
+                skipped_files: 1,
+                owned_files: 0,
+                partial_files: 0,
+                unowned_files: 0,
+                total_requirements: 0,
+                total_features: 0,
+                total_policies: 0,
+                total_philosophies: 0,
+                ids: super::TraceRangeIdSummary {
+                    direct: super::TraceRangeEntityGroup {
+                        requirements: Vec::new(),
+                        features: Vec::new(),
+                        policies: Vec::new(),
+                        philosophies: Vec::new(),
+                    },
+                    indirect: super::TraceRangeEntityGroup {
+                        requirements: Vec::new(),
+                        features: Vec::new(),
+                        policies: Vec::new(),
+                        philosophies: Vec::new(),
+                    },
+                },
+            },
+            None,
+            None,
+        );
+
+        assert!(rendered.contains("Skipped files: 1"));
+        assert!(rendered.contains("Skipped file details:"));
+        assert!(rendered.contains("../outside.rs"));
+        assert!(rendered.contains("must stay under workspace"));
+    }
+
+    #[test]
+    fn collect_trace_range_outputs_reports_skipped_paths() {
+        let tempdir = tempdir().expect("tempdir should exist");
+        let workspace = Workspace {
+            root: tempdir.path().to_path_buf(),
+            spec_root: tempdir.path().join("docs/syu"),
+            config: SyuConfig::default(),
+            philosophies: Vec::new(),
+            policies: Vec::new(),
+            requirements: Vec::new(),
+            features: Vec::new(),
+        };
+        let (results, skipped) = super::collect_trace_range_outputs(
+            &workspace,
+            &[
+                PathBuf::from("../outside.rs"),
+                PathBuf::from("src/rust_feature.rs"),
+            ],
+        );
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].file, "src/rust_feature.rs");
+        assert_eq!(skipped.len(), 1);
+        assert_eq!(skipped[0].file, "../outside.rs");
+        assert!(skipped[0].reason.contains("must stay under workspace"));
+    }
+}

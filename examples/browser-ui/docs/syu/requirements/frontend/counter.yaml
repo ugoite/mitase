@@ -1,0 +1,20 @@
+category: Frontend Requirements
+prefix: REQ-UI
+
+requirements:
+  - id: REQ-UI-001
+    title: Counter component should manage increment state
+    description: The counter component must handle user interactions to increment a counter value and display the current count.
+    priority: high
+    status: implemented
+    linked_policies:
+      - POL-UI-001
+    linked_features:
+      - FEAT-UI-001
+    tests:
+      typescript:
+        - file: src/components/Counter.test.tsx
+          symbols:
+            - test_counter_increments
+          doc_contains:
+            - REQ-UI-001

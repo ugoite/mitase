@@ -1,7 +1,6 @@
 #![forbid(unsafe_code)]
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use syu_diagnostics::Severity;
 
 pub const CONFIG_SCHEMA: &str = "syu/config/v1";
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -69,8 +68,16 @@ pub struct ValidationConfig {
     #[serde(default)]
     pub deny_warnings: bool,
     #[serde(default)]
-    pub rules: BTreeMap<String, Severity>,
+    pub rules: BTreeMap<String, RuleOverride>,
     pub changed: ChangedConfig,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RuleOverride {
+    Error,
+    Warning,
+    Info,
+    Off,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

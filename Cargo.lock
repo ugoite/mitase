@@ -516,6 +516,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "syu-code-intel",
  "syu-diagnostics",
  "syu-planner",
  "syu-project-model",
@@ -535,11 +536,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "syu-code-intel"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "sha2",
+ "syn",
+]
+
+[[package]]
 name = "syu-diagnostics"
 version = "0.1.0"
 dependencies = [
  "serde",
  "syu-spec-model",
+]
+
+[[package]]
+name = "syu-domain"
+version = "0.0.1-alpha.8"
+dependencies = [
+ "serde",
+ "serde_json",
+ "serde_yaml",
 ]
 
 [[package]]
@@ -561,7 +580,6 @@ name = "syu-project-model"
 version = "0.1.0"
 dependencies = [
  "serde",
- "syu-diagnostics",
 ]
 
 [[package]]
@@ -614,6 +632,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sha2",
+ "syu-code-intel",
  "syu-project-model",
  "syu-spec-model",
  "tempfile",

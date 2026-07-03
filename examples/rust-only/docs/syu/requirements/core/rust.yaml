@@ -1,0 +1,20 @@
+category: Rust Example Requirements
+prefix: REQ-RUST
+
+requirements:
+  - id: REQ-RUST-001
+    title: Demonstrate a Rust requirement trace
+    description: The Rust example should link a requirement to a documented Rust test symbol.
+    priority: high
+    status: implemented
+    linked_policies:
+      - POL-RUST-001
+    linked_features:
+      - FEAT-RUST-001
+    tests:
+      rust:
+        - file: src/trace.rs
+          symbols:
+            - rust_requirement_test
+          doc_contains:
+            - requirement doc line

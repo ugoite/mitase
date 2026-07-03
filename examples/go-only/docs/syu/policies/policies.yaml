@@ -1,0 +1,13 @@
+category: Policies
+version: 1
+language: en
+
+policies:
+  - id: POL-GO-001
+    title: Go-first adoption should validate real Go source and test symbols directly
+    summary: Demonstrate the built-in Go adapter with real Go implementation and test traces.
+    description: Require the example to ship real Go source and test files and validate them through the native Go adapter instead of a workaround mapping.
+    linked_philosophies:
+      - PHIL-GO-001
+    linked_requirements:
+      - REQ-GO-001

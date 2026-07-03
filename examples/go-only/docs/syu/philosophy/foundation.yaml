@@ -1,0 +1,11 @@
+category: Philosophy
+version: 1
+language: en
+
+philosophies:
+  - id: PHIL-GO-001
+    title: Go-first repositories should be able to adopt syu with native Go tracing from the first commit
+    product_design_principle: Keep the Go example small, runnable, and explicit about the built-in adapter guarantees available today.
+    coding_guideline: Trace real Go symbols directly and reserve lighter-weight workaround patterns for languages that still lack native support.
+    linked_policies:
+      - POL-GO-001

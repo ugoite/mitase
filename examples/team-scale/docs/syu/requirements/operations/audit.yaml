@@ -1,0 +1,21 @@
+category: Team-scale Operations Requirements
+prefix: REQ-TEAM
+
+requirements:
+  - id: REQ-TEAM-AUDIT-001
+    title: Login work must stay visible in the audit trail
+    description: As multiple contributors touch auth flows, audit evidence should remain easy to inspect from the repository alone.
+    priority: high
+    status: implemented
+    linked_policies:
+      - POL-TEAM-001
+    linked_features:
+      - FEAT-TEAM-AUTH-LOGIN-001
+      - FEAT-TEAM-AUDIT-001
+    tests:
+      rust:
+        - file: tests/audit_visibility.rs
+          symbols:
+            - audit_visibility_test
+          doc_contains:
+            - audit visibility test

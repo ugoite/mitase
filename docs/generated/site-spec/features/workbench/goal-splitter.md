@@ -1,0 +1,162 @@
+---
+title: "Workbench / Goal Splitter"
+description: "Generated reference for docs/syu/features/workbench/goal-splitter.yaml"
+---
+
+> Generated from `docs/syu/features/workbench/goal-splitter.yaml`.
+
+## Parsed content
+
+### Category
+
+- Workbench
+
+### Version
+
+- 1
+
+### Features
+
+- **id**: FEAT-WORKBENCH-003
+  - **title**: Goal splitter for large requests
+  - **summary**: Split large requests into smaller scoped goals and temporary Goal Plans while preserving the parent request and the reviewable delivery path.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-WORKBENCH-003
+    - REQ-WORKBENCH-002
+  - **implementations**:
+    - **markdown**:
+      - **file**: docs/guide/workbench.md
+        - **symbols**:
+          - scaffold preview
+          - Goal Plan
+          - assignment
+- **id**: FEAT-WORKBENCH-REQUEST-INTAKE-001
+  - **title**: Request Intake canvas
+  - **summary**: Turn a plain-text change request into a classified, scoped, evidence-ready Workbench planning artifact without creating a raw YAML editor or a separate frontend surface.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-WORKBENCH-003
+  - **implementations**:
+    - **rust**:
+      - **file**: crates/syu-app-ui/src/components/shell.rs
+        - **symbols**:
+          - RequestIntakeCanvas
+          - RequestContextEditor
+          - RequestClassificationPanel
+          - RequestScopePanel
+          - ScaffoldPreviewPanel
+      - **file**: crates/syu-app-ui/src/model.rs
+        - **symbols**:
+          - build_demo_state
+      - **file**: tests/workbench_smoke.rs
+        - **symbols**:
+          - request_intake_flow_renders_generated_goal_plan
+          - request_flow_actions_are_exposed_in_the_command_palette
+    - **markdown**:
+      - **file**: docs/guide/workbench.md
+        - **symbols**:
+          - Request Intake
+          - temporary Workbench planning artifact
+          - request.classify
+- **id**: FEAT-WORKBENCH-GOAL-SPLITTER-001
+  - **title**: Goal Splitter canvas
+  - **summary**: Render generated temporary Goal Plans as reusable Workbench Goal cards with linked specs, non-goals, scope include/exclude, implementation steps, tests, evidence, completion commands, and exportable YAML.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-WORKBENCH-003
+  - **implementations**:
+    - **rust**:
+      - **file**: crates/syu-app-ui/src/components/shell.rs
+        - **symbols**:
+          - GoalPlanCanvas
+          - GoalDependencyView
+          - GoalScopePanel
+          - GoalTestPlanPanel
+          - GoalPlanExportPanel
+      - **file**: tests/workbench_smoke.rs
+        - **symbols**:
+          - request_intake_flow_renders_generated_goal_plan
+          - goal_plan_export_panel_marks_yaml_as_temporary_artifact
+    - **markdown**:
+      - **file**: docs/guide/workbench.md
+        - **symbols**:
+          - Goal Splitter
+          - Goal Plan YAML
+          - syu task check
+
+## Source YAML
+
+```yaml
+category: Workbench
+version: 1
+
+features:
+  - id: FEAT-WORKBENCH-003
+    title: Goal splitter for large requests
+    summary: Split large requests into smaller scoped goals and temporary Goal Plans while preserving the parent request and the reviewable delivery path.
+    status: implemented
+    linked_requirements:
+      - REQ-WORKBENCH-003
+      - REQ-WORKBENCH-002
+    implementations:
+      markdown:
+        - file: docs/guide/workbench.md
+          symbols:
+            - scaffold preview
+            - Goal Plan
+            - assignment
+  - id: FEAT-WORKBENCH-REQUEST-INTAKE-001
+    title: Request Intake canvas
+    summary: Turn a plain-text change request into a classified, scoped, evidence-ready Workbench planning artifact without creating a raw YAML editor or a separate frontend surface.
+    status: implemented
+    linked_requirements:
+      - REQ-WORKBENCH-003
+    implementations:
+      rust:
+        - file: crates/syu-app-ui/src/components/shell.rs
+          symbols:
+            - RequestIntakeCanvas
+            - RequestContextEditor
+            - RequestClassificationPanel
+            - RequestScopePanel
+            - ScaffoldPreviewPanel
+        - file: crates/syu-app-ui/src/model.rs
+          symbols:
+            - build_demo_state
+        - file: tests/workbench_smoke.rs
+          symbols:
+            - request_intake_flow_renders_generated_goal_plan
+            - request_flow_actions_are_exposed_in_the_command_palette
+      markdown:
+        - file: docs/guide/workbench.md
+          symbols:
+            - Request Intake
+            - temporary Workbench planning artifact
+            - request.classify
+  - id: FEAT-WORKBENCH-GOAL-SPLITTER-001
+    title: Goal Splitter canvas
+    summary: Render generated temporary Goal Plans as reusable Workbench Goal cards with linked specs, non-goals, scope include/exclude, implementation steps, tests, evidence, completion commands, and exportable YAML.
+    status: implemented
+    linked_requirements:
+      - REQ-WORKBENCH-003
+    implementations:
+      rust:
+        - file: crates/syu-app-ui/src/components/shell.rs
+          symbols:
+            - GoalPlanCanvas
+            - GoalDependencyView
+            - GoalScopePanel
+            - GoalTestPlanPanel
+            - GoalPlanExportPanel
+        - file: tests/workbench_smoke.rs
+          symbols:
+            - request_intake_flow_renders_generated_goal_plan
+            - goal_plan_export_panel_marks_yaml_as_temporary_artifact
+      markdown:
+        - file: docs/guide/workbench.md
+          symbols:
+            - Goal Splitter
+            - Goal Plan YAML
+            - syu task check
+```

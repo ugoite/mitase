@@ -1,0 +1,11 @@
+category: Philosophy
+version: 1
+language: en
+
+philosophies:
+  - id: PHIL-RUST-001
+    title: Rust traces should stay explicit
+    product_design_principle: Keep the Rust example small and traceable.
+    coding_guideline: Use stable IDs and doc comments on traced functions.
+    linked_policies:
+      - POL-RUST-001

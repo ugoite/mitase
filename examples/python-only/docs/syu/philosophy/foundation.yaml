@@ -1,0 +1,11 @@
+category: Philosophy
+version: 1
+language: en
+
+philosophies:
+  - id: PHIL-PY-001
+    title: Python traces should stay explicit
+    product_design_principle: Keep the Python example focused on documented symbols.
+    coding_guideline: Put the stable ID and explanatory text in docstrings.
+    linked_policies:
+      - POL-PY-001

@@ -202,14 +202,16 @@ fn revision(root: &Path) -> Result<String> {
 }
 fn changed_paths(root: &Path, range: &str) -> Result<Vec<PathBuf>> {
     let output = Command::new("git")
-        .args(["diff", "--name-only", range])
-        .current_dir(root)
+        .args(["-C"])
+        .arg(root)
+        .args(["diff", "--name-status", "-M", "--relative", range])
         .output()?;
     if !output.status.success() {
         bail!("git diff --name-only {range} failed");
     }
     Ok(String::from_utf8(output.stdout)?
         .lines()
+        .filter_map(|line| line.split('\t').next_back())
         .map(PathBuf::from)
         .collect())
 }

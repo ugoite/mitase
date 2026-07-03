@@ -1,0 +1,32 @@
+category: Polyglot Example Requirements
+prefix: REQ-MIX
+
+requirements:
+  - id: REQ-MIX-001
+    title: Demonstrate multi-language requirement traces
+    description: The polyglot example should validate Rust, Python, and TypeScript requirement traces together.
+    priority: high
+    status: implemented
+    linked_policies:
+      - POL-MIX-001
+    linked_features:
+      - FEAT-MIX-001
+    tests:
+      rust:
+        - file: src/trace.rs
+          symbols:
+            - mixed_rust_requirement
+          doc_contains:
+            - rust requirement doc
+      python:
+        - file: python/test_traceability.py
+          symbols:
+            - test_python_requirement
+          doc_contains:
+            - python requirement doc
+      typescript:
+        - file: frontend/traceability.test.ts
+          symbols:
+            - typescriptRequirementTest
+          doc_contains:
+            - typescript requirement doc

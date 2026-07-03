@@ -1,0 +1,276 @@
+---
+title: "Init Command / Init"
+description: "Generated reference for docs/syu/features/cli/init.yaml"
+---
+
+> Generated from `docs/syu/features/cli/init.yaml`.
+
+## Parsed content
+
+### Category
+
+- Init Command
+
+### Version
+
+- 1
+
+### Features
+
+- **id**: FEAT-INIT-001
+  - **title**: Workspace bootstrap
+  - **summary**: Scaffold version-matched syu.yaml and a valid starter spec tree with planned entries.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-009
+  - **implementations**:
+    - **rust**:
+      - **file**: src/command/init.rs
+        - **symbols**:
+          - run_init_command
+          - scaffold_files
+      - **file**: src/config.rs
+        - **symbols**:
+          - render_config
+          - current_cli_version
+- **id**: FEAT-INIT-002
+  - **title**: Post-init next-step guidance
+  - **summary**: After successful init, print created file list and actionable next steps, including a short `syu templates` follow-up when users want to compare starters before scaffolding another workspace; support --format json to emit created_files for CI integrations.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-009
+  - **implementations**:
+    - **rust**:
+      - **file**: src/command/init.rs
+        - **symbols**:
+          - run_init_command
+      - **file**: src/cli.rs
+        - **symbols**:
+          - InitArgs
+- **id**: FEAT-INIT-003
+  - **title**: Custom spec.root bootstrap
+  - **summary**: Allow `syu init --spec-root` to scaffold the starter workspace into another repository-relative specification tree and emit the matching `spec.root` in `syu.yaml`.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-009
+  - **implementations**:
+    - **rust**:
+      - **file**: src/command/init.rs
+        - **symbols**:
+          - run_init_command
+          - resolve_init_spec_root
+          - scaffold_files
+      - **file**: src/cli.rs
+        - **symbols**:
+          - InitArgs
+- **id**: FEAT-INIT-004
+  - **title**: Language-oriented starter templates
+  - **summary**: Allow `syu init --template` to scaffold small rust-only, python-only, ruby-only, go-only, java-only, and polyglot starter layouts that better match the repository style from the first commit.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-009
+  - **implementations**:
+    - **rust**:
+      - **file**: src/command/init.rs
+        - **symbols**:
+          - run_init_command
+          - scaffold_files
+          - requirement_document_path
+          - feature_document_path
+          - feature_registry_template
+      - **file**: src/cli.rs
+        - **symbols**:
+          - InitArgs
+          - StarterTemplate
+- **id**: FEAT-INIT-005
+  - **title**: Project-specific starter ID prefixes
+  - **summary**: Allow `syu init --id-prefix` to seed stable starter IDs across all four layers and support per-layer prefix overrides when one shared stem is not enough.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-009
+  - **implementations**:
+    - **rust**:
+      - **file**: src/command/init.rs
+        - **symbols**:
+          - run_init_command
+          - resolve_init_id_prefixes
+          - scaffold_files
+      - **file**: src/cli.rs
+        - **symbols**:
+          - InitArgs
+- **id**: FEAT-INIT-006
+  - **title**: Starter template discovery command
+  - **summary**: Allow `syu templates` to list starter template names, short descriptions, and any matching checked-in example paths before users scaffold a workspace, and surface that discovery path from newcomer-oriented root and init help.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-009
+  - **implementations**:
+    - **rust**:
+      - **file**: src/command/templates.rs
+        - **symbols**:
+          - run_templates_command
+          - starter_template_catalog
+      - **file**: src/cli.rs
+        - **symbols**:
+          - TemplatesArgs
+          - Commands
+- **id**: FEAT-INIT-007
+  - **title**: Interactive first-run init
+  - **summary**: Allow `syu init --interactive` to guide starter template, spec root, shared ID stem, and stricter validation defaults in a terminal while still writing plain checked-in files.
+  - **status**: implemented
+  - **linked_requirements**:
+    - REQ-CORE-009
+  - **implementations**:
+    - **rust**:
+      - **file**: src/command/init.rs
+        - **symbols**:
+          - run_init_command
+          - run_init_command_with_prompt_io
+          - resolve_init_options_with_prompt_io
+          - prompt_for_starter_template
+          - prompt_for_spec_root
+          - render_default_config
+      - **file**: src/command/prompt.rs
+        - **symbols**:
+          - PromptIo
+          - ensure_prompt_terminal
+          - prompt_bool
+          - prompt_optional_with_default
+          - prompt_with_default
+      - **file**: src/cli.rs
+        - **symbols**:
+          - InitArgs
+          - StarterTemplate
+
+## Source YAML
+
+```yaml
+category: Init Command
+version: 1
+
+features:
+  - id: FEAT-INIT-001
+    title: Workspace bootstrap
+    summary: Scaffold version-matched syu.yaml and a valid starter spec tree with planned entries.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-009
+    implementations:
+      rust:
+        - file: src/command/init.rs
+          symbols:
+            - run_init_command
+            - scaffold_files
+        - file: src/config.rs
+          symbols:
+            - render_config
+            - current_cli_version
+  - id: FEAT-INIT-002
+    title: Post-init next-step guidance
+    summary: After successful init, print created file list and actionable next steps, including a short `syu templates` follow-up when users want to compare starters before scaffolding another workspace; support --format json to emit created_files for CI integrations.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-009
+    implementations:
+      rust:
+        - file: src/command/init.rs
+          symbols:
+            - run_init_command
+        - file: src/cli.rs
+          symbols:
+            - InitArgs
+  - id: FEAT-INIT-003
+    title: Custom spec.root bootstrap
+    summary: Allow `syu init --spec-root` to scaffold the starter workspace into another repository-relative specification tree and emit the matching `spec.root` in `syu.yaml`.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-009
+    implementations:
+      rust:
+        - file: src/command/init.rs
+          symbols:
+            - run_init_command
+            - resolve_init_spec_root
+            - scaffold_files
+        - file: src/cli.rs
+          symbols:
+            - InitArgs
+  - id: FEAT-INIT-004
+    title: Language-oriented starter templates
+    summary: Allow `syu init --template` to scaffold small rust-only, python-only, ruby-only, go-only, java-only, and polyglot starter layouts that better match the repository style from the first commit.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-009
+    implementations:
+      rust:
+        - file: src/command/init.rs
+          symbols:
+            - run_init_command
+            - scaffold_files
+            - requirement_document_path
+            - feature_document_path
+            - feature_registry_template
+        - file: src/cli.rs
+          symbols:
+            - InitArgs
+            - StarterTemplate
+  - id: FEAT-INIT-005
+    title: Project-specific starter ID prefixes
+    summary: Allow `syu init --id-prefix` to seed stable starter IDs across all four layers and support per-layer prefix overrides when one shared stem is not enough.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-009
+    implementations:
+      rust:
+        - file: src/command/init.rs
+          symbols:
+            - run_init_command
+            - resolve_init_id_prefixes
+            - scaffold_files
+        - file: src/cli.rs
+          symbols:
+            - InitArgs
+  - id: FEAT-INIT-006
+    title: Starter template discovery command
+    summary: Allow `syu templates` to list starter template names, short descriptions, and any matching checked-in example paths before users scaffold a workspace, and surface that discovery path from newcomer-oriented root and init help.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-009
+    implementations:
+      rust:
+        - file: src/command/templates.rs
+          symbols:
+            - run_templates_command
+            - starter_template_catalog
+        - file: src/cli.rs
+          symbols:
+            - TemplatesArgs
+            - Commands
+  - id: FEAT-INIT-007
+    title: Interactive first-run init
+    summary: Allow `syu init --interactive` to guide starter template, spec root, shared ID stem, and stricter validation defaults in a terminal while still writing plain checked-in files.
+    status: implemented
+    linked_requirements:
+      - REQ-CORE-009
+    implementations:
+      rust:
+        - file: src/command/init.rs
+          symbols:
+            - run_init_command
+            - run_init_command_with_prompt_io
+            - resolve_init_options_with_prompt_io
+            - prompt_for_starter_template
+            - prompt_for_spec_root
+            - render_default_config
+        - file: src/command/prompt.rs
+          symbols:
+            - PromptIo
+            - ensure_prompt_terminal
+            - prompt_bool
+            - prompt_optional_with_default
+            - prompt_with_default
+        - file: src/cli.rs
+          symbols:
+            - InitArgs
+            - StarterTemplate
+```

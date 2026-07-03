@@ -1,13 +1,17 @@
 #![forbid(unsafe_code)]
 
 use serde::{Deserialize, Serialize};
-use std::{fmt, path::PathBuf, str::FromStr};
+use std::{
+    fmt,
+    path::{Component, Path, PathBuf},
+    str::FromStr,
+};
 
 pub const SPEC_SCHEMA: &str = "syu/spec/v1";
 
 macro_rules! string_id {
-    ($name:ident) => {
-        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+    ($name:ident, $validator:ident) => {
+        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
         #[serde(transparent)]
         pub struct $name(pub String);
         impl fmt::Display for $name {
@@ -20,10 +24,86 @@ macro_rules! string_id {
                 Self(value.into())
             }
         }
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                let value = String::deserialize(deserializer)?;
+                if !$validator(&value) {
+                    return Err(serde::de::Error::custom(concat!(
+                        "invalid ",
+                        stringify!($name)
+                    )));
+                }
+                Ok(Self(value))
+            }
+        }
     };
 }
-string_id!(SpecId);
-string_id!(LocalId);
+string_id!(SpecId, is_spec_id);
+string_id!(LocalId, is_local_id);
+
+fn is_spec_id(value: &str) -> bool {
+    (1..=128).contains(&value.len())
+        && value
+            .as_bytes()
+            .first()
+            .is_some_and(u8::is_ascii_alphabetic)
+        && value
+            .as_bytes()
+            .last()
+            .is_some_and(u8::is_ascii_alphanumeric)
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'-')
+        && !value.contains("--")
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RepoPath(PathBuf);
+impl RepoPath {
+    pub fn new(value: impl Into<PathBuf>) -> Result<Self, String> {
+        let value = value.into();
+        if value.as_os_str().is_empty() || value.is_absolute() {
+            return Err("repository path must be non-empty and relative".into());
+        }
+        if value
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
+        {
+            return Err(
+                "repository path must not contain root, prefix, dot, or parent components".into(),
+            );
+        }
+        let text = value.to_string_lossy();
+        if text.contains('\\') {
+            return Err("repository path must use forward-slash separators".into());
+        }
+        Ok(Self(value))
+    }
+    pub fn as_path(&self) -> &Path {
+        &self.0
+    }
+    pub fn display(&self) -> std::path::Display<'_> {
+        self.0.display()
+    }
+    pub fn to_string_lossy(&self) -> std::borrow::Cow<'_, str> {
+        self.0.to_string_lossy()
+    }
+}
+impl AsRef<Path> for RepoPath {
+    fn as_ref(&self) -> &Path {
+        self.as_path()
+    }
+}
+impl Serialize for RepoPath {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_string_lossy())
+    }
+}
+impl<'de> Deserialize<'de> for RepoPath {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::new(String::deserialize(deserializer)?).map_err(serde::de::Error::custom)
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -66,7 +146,7 @@ impl FromStr for SpecAnchor {
         let (kind, id) = local
             .split_once('.')
             .ok_or("anchor must contain kind.local-id")?;
-        if item.is_empty() || id.is_empty() || !is_local_id(id) {
+        if !is_spec_id(item) || !is_local_id(id) {
             return Err("anchor contains an invalid id".into());
         }
         let kind = match kind {
@@ -141,12 +221,16 @@ impl<'de> Deserialize<'de> for BoundTargetRef {
 }
 
 fn is_local_id(value: &str) -> bool {
-    !value.is_empty()
+    (1..=128).contains(&value.len())
+        && value.as_bytes().first().is_some_and(u8::is_ascii_lowercase)
+        && value
+            .as_bytes()
+            .last()
+            .is_some_and(u8::is_ascii_alphanumeric)
         && value
             .bytes()
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
-        && !value.starts_with('-')
-        && !value.ends_with('-')
+        && !value.contains("--")
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -165,7 +249,7 @@ pub enum Selector {
 pub struct ArtifactTarget {
     pub id: LocalId,
     pub adapter: String,
-    pub path: PathBuf,
+    pub path: RepoPath,
     pub selector: Selector,
 }
 
@@ -423,5 +507,12 @@ mod tests {
     #[test]
     fn old_shape_is_rejected() {
         assert!(serde_yaml::from_str::<SpecDocument>("schema: syu/spec/v1\nkind: requirements\nnamespace: x\ncategory: X\nrequirements:\n- id: REQ-1\n  title: x\n  description: x\n  priority: high\n  status: implemented\n  tests: {}\n").is_err());
+    }
+    #[test]
+    fn invalid_ids_and_repository_paths_are_rejected() {
+        assert!(serde_yaml::from_str::<SpecId>("bad-id").is_err());
+        assert!(serde_yaml::from_str::<LocalId>("Bad_ID").is_err());
+        assert!(serde_yaml::from_str::<RepoPath>("../outside").is_err());
+        assert!(serde_yaml::from_str::<RepoPath>("/absolute").is_err());
     }
 }

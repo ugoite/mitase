@@ -1,0 +1,26 @@
+category: Docs-first Example Features
+version: 1
+
+features:
+  - id: FEAT-DOCS-001
+    title: Trace the release-note publishing script with an explicit shell symbol
+    summary: Demonstrate a named shell function trace for docs-first repositories.
+    status: implemented
+    linked_requirements:
+      - REQ-DOCS-001
+    implementations:
+      shell:
+        - file: scripts/publish-docs.sh
+          symbols:
+            - publish_release_notes
+  - id: FEAT-DOCS-002
+    title: Trace one dedicated navigation file with wildcard YAML ownership
+    summary: Demonstrate that wildcard ownership is acceptable when one YAML file intentionally belongs to one feature.
+    status: implemented
+    linked_requirements:
+      - REQ-DOCS-002
+    implementations:
+      yaml:
+        - file: config/navigation.yaml
+          symbols:
+            - "*"

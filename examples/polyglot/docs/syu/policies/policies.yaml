@@ -1,0 +1,13 @@
+category: Policies
+version: 1
+language: en
+
+policies:
+  - id: POL-MIX-001
+    title: Polyglot traces must stay verifiable
+    summary: Demonstrate Rust, Python, and TypeScript in one workspace.
+    description: The mixed example should prove that a single requirement and feature can trace into multiple languages with documented symbols.
+    linked_philosophies:
+      - PHIL-MIX-001
+    linked_requirements:
+      - REQ-MIX-001

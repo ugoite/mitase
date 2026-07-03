@@ -1,0 +1,11 @@
+category: Philosophy
+version: 1
+language: en
+
+philosophies:
+  - id: PHIL-MIX-001
+    title: Polyglot traces should remain coherent
+    product_design_principle: Demonstrate that one requirement and feature can span multiple languages.
+    coding_guideline: Keep every traced symbol documented with its stable ID and a short explanation.
+    linked_policies:
+      - POL-MIX-001

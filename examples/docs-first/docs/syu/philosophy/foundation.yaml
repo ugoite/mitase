@@ -1,0 +1,11 @@
+category: Philosophy
+version: 1
+language: en
+
+philosophies:
+  - id: PHIL-DOCS-001
+    title: Docs-first repositories should still keep traceable intent close to the files people read first
+    product_design_principle: Keep documentation, scripts, and config traceable even when rich code inspection is unnecessary.
+    coding_guideline: Prefer explicit file or symbol ownership over unsupported-language placeholders.
+    linked_policies:
+      - POL-DOCS-001

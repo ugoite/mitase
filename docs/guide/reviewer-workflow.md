@@ -1,0 +1,322 @@
+# Reviewer workflow: trace, relate, and log together
+
+<!-- FEAT-DOCS-001 -->
+
+Use this guide when a pull request already exists and you want one concrete
+review loop that connects specification intent, traced code, recent Git
+history, and the reviewer-facing `audit` / `report` commands.
+
+`syu`'s reviewer flow works best when you keep three questions in order:
+
+1. **What is this change supposed to satisfy?**
+2. **Which files and symbols currently claim that work?**
+3. **What changed recently in those traced paths?**
+
+The commands below answer those questions with `show`/`relate`, `review`
+(`trace --range`), `trace`, `audit`, `report`, `explain`, and `log`.
+
+If the work starts as a request note instead of a concrete diff, use
+[request artifact format](./request-artifact-format.md) first so the intake
+stays small and predictable.
+
+If you review from the terminal often, generate shell completions once so spec
+IDs and subcommands stay close at hand:
+
+```bash
+syu completion bash > ~/.local/share/bash-completion/completions/syu
+```
+
+## Example review target
+
+This repository already ships a good self-hosted example in the validation
+command feature:
+
+- feature: `FEAT-CHECK-001`
+- implementation file: `src/command/check.rs`
+- implementation symbol: `run_check_command`
+
+You can follow the same flow in any repository by swapping in your own spec ID,
+file path, and symbol name.
+
+If you only need the short-form command reminder while you review, keep the
+[command card](./command-card.md) open alongside this guide. That page keeps
+`audit` and `report` beside the other review commands so the handoff stays in
+one place.
+
+## 1. Start from the spec item under review
+
+Open the feature or requirement that the PR says it changed:
+
+```bash
+syu show FEAT-CHECK-001
+```
+
+Use `syu show` first when the PR description already names the exact ID. This
+gives you the title, summary, linked requirements, and declared traces before
+you jump into code.
+
+If the PR only gives you a keyword, search first:
+
+```bash
+syu search validation --kind feature
+```
+
+## 2. Expand the surrounding context
+
+Once you know the ID, inspect the nearby graph:
+
+```bash
+syu relate FEAT-CHECK-001
+```
+
+`syu relate` is the quickest reviewer command for answering questions like:
+
+- which requirement does this feature satisfy?
+- which policy or philosophy is above it?
+- which files and symbols are traced today?
+- are there obvious graph gaps such as missing reciprocal links?
+
+Use this output to decide whether the PR still matches the connected policy and
+requirement context, or whether it is changing the behavior in a way that
+should have updated adjacent YAML too.
+
+When you already have a PR range and want one command that reads like a review
+summary, use the reviewer alias:
+
+```bash
+syu review --range origin/main...HEAD
+```
+
+`syu review` is a friendly entry point for the same range tracing logic. It
+starts with the affected philosophy, policy, requirement, and feature IDs,
+separates directly matched items from indirect upstream/downstream context,
+surfaces unowned or skipped paths inline, and keeps the follow-up `show`,
+`relate`, `log`, and `validate --id` commands close at hand.
+
+When CI or a merge queue needs the review step to fail on ownership drift
+instead of only summarizing it, add `--strict`:
+
+```bash
+syu review --range origin/main...HEAD --strict --allowed-id FEAT-CHECK-001 --format json
+```
+
+Strict range review turns unowned files, ambiguous ownership, and skipped or
+out-of-scope paths into a failing result while still returning structured
+findings for terminal use or JSON consumers. Use it when the range itself is
+the review contract. Keep using `syu audit` for heuristic notes and
+`syu validate` when you need the full validation pass across the repository.
+
+When you want the range to stay inside a named requirement or feature, add
+`--allowed-id` or its `--expected-id` alias:
+
+```bash
+syu review --range origin/main...HEAD --allowed-id FEAT-CHECK-001
+```
+
+If the range changes files or spec items outside that set, `syu` exits
+non-zero and lists the allowed IDs together with the out-of-scope files and
+owners so you can review the mismatch quickly.
+
+When a changed file is a contract file with traced operations, the range
+summary keeps the owning requirements and features visible and also prints the
+OpenAPI method/path selector under the changed file instead of reducing it to a
+bare path. That makes contract edits easier to review alongside the rest of
+the spec graph.
+
+When you want the same selector flexibility but a more opinionated summary, run
+`syu explain TARGET`. It keeps the ID/path/symbol entry points from `syu
+relate`, then turns the result into a focused assessment with the connected
+chain, traces in scope, and obvious gaps that still need review.
+
+For bigger spec edits or cleanup PRs, add a quick heuristic audit pass before
+you decide whether the PR really belongs in `validate`:
+
+```bash
+syu audit .
+```
+
+`syu audit` is the fast reviewer lens: it highlights likely overlap, policy
+drift, and spec text that no longer turns into concrete requirements. When the
+audit points at something you need to share with the author, turn it into a
+report:
+
+```bash
+syu report .
+```
+
+`syu report` gives you a shareable snapshot of the current validation state.
+Use it to hand off findings, then return to `syu validate .` once the fixes are
+in place.
+
+## 3. Jump from code back to the owning spec
+
+When review starts in a file diff instead of a spec ID, reverse the direction:
+
+```bash
+syu trace src/command/check.rs --symbol run_check_command
+```
+
+Use `syu trace` when you are already staring at code and need to answer:
+
+- which feature owns this symbol?
+- which requirement owns the related tests?
+- does this file participate in multiple traced spec items?
+
+That makes it easier to spot a common review smell: code changed in a traced
+symbol, but the linked requirement or feature in the PR body is incomplete.
+
+## 4. Pull the recent history for the same spec surface
+
+After you know the owning ID and traced files, inspect their recent Git history:
+
+```bash
+syu log FEAT-CHECK-001 --kind implementation --path src/command
+syu log REQ-CORE-018 --include-related --merge-base-ref origin/main
+```
+
+Use `syu log` when review needs historical context:
+
+- has this area changed repeatedly in the same way?
+- did a recent commit rename the traced file or symbol?
+- is the PR fixing a regression in a path that already has relevant history?
+- do I need the linked requirement/feature surface, not just one selected ID?
+- what changed on this review branch since it diverged from main?
+
+When the current workspace no longer contains the ID, `syu log` falls back to
+the git-backed historical ID index. That view is different from the normal
+current-trace surface:
+
+- the command can still resolve the deleted ID
+- the output highlights lifecycle events such as creation, moves, removal, and
+  later redefinition attempts
+- the history is about the prior definition document, not the current traced
+  implementation or test surface
+
+Treat `syu log` as history for the **currently traced** surface, not proof that
+the whole PR diff is covered. A newly added implementation or test file can be
+missing from this history slice if the trace mapping was never updated, so pair
+an empty or too-small log result with the PR diff and `syu trace`/`syu relate`
+before concluding that review coverage is complete.
+
+For requirement-oriented review, swap to definition or test history instead:
+
+```bash
+syu log REQ-CORE-018 --kind definition
+syu log REQ-CORE-018 --kind test
+```
+
+## 5. Close the loop with a focused validation pass
+
+If the PR changes spec files, traced paths, or link structure, use the normal
+validation commands as a focused review view over the full repository result:
+
+```bash
+syu validate . --genre trace
+syu validate . --id FEAT-CHECK-001
+```
+
+Use `--genre trace` when you want trace-specific failures first. Use `--id`
+when the review is anchored on one concrete requirement or feature and you want
+the output filtered down to that item after the full workspace validation run.
+It is a review-focused view over the collected result, not a smaller or faster
+validation scope.
+
+When review only needs the YAML-side graph and document consistency, use
+`syu validate . --spec-only` to skip traced source enforcement until you are
+ready to bring code and test evidence back into scope.
+
+## Fast reviewer playbook
+
+Use this sequence as the default review loop:
+
+```bash
+syu show FEAT-CHECK-001
+syu relate FEAT-CHECK-001
+syu trace src/command/check.rs --symbol run_check_command
+syu log FEAT-CHECK-001 --kind implementation --path src/command
+syu validate . --id FEAT-CHECK-001
+```
+
+That sequence keeps the review grounded in checked-in YAML, then confirms the
+claimed code evidence, then pulls the recent history that helps you judge
+whether the current change still fits the surrounding intent.
+
+## Git integration story: what syu supports today
+
+`syu` does not try to replace your Git host, branch policy, or merge queue. The
+current contract is narrower and more deliberate: it projects the checked-in
+spec graph onto the Git history that already exists so review can stay anchored
+on the same requirement/feature ownership the repository validates.
+
+Today that means:
+
+- `syu trace` and `syu relate` answer **what owns this code right now**.
+- `syu log` answers **how the currently traced surface changed in Git**.
+- `syu validate . --id ...` answers **whether the checked-in graph still agrees
+  with the repository after this review target changed**.
+
+That separation matters for merge-queue review too. When a branch waits in the
+queue, you still need to reason about the current traced surface rather than
+assuming the PR description stayed complete after rebases or queue updates.
+`syu log --merge-base-ref origin/main` is the quickest way to ask for the
+history slice that matters since the review branch diverged from main.
+
+Use scoped Goal Plan tests and coverage to keep the PR reviewable, but treat
+the merge queue and main branch as the full integration gate. A PR can be
+small enough for focused validation and still require the repository-wide
+checks before it is considered landed.
+
+## Merge-queue and long-lived branch review
+
+Use this variant when the branch has been rebased repeatedly, queued for merge,
+or grown beyond one tidy diff:
+
+```bash
+syu relate FEAT-CHECK-001
+syu trace src/command/check.rs --symbol run_check_command
+syu log FEAT-CHECK-001 --kind implementation --merge-base-ref origin/main
+syu validate . --id FEAT-CHECK-001
+```
+
+That flow keeps one reviewer question per command:
+
+1. **What is the intended scope today?** → `syu relate`
+2. **Which traced files/symbols are actually in play?** → `syu trace`
+3. **What changed on this branch since it split from main?** → `syu log --merge-base-ref`
+4. **Did the checked-in spec graph keep up?** → `syu validate . --id ...`
+
+## Where the workflow is still intentionally manual
+
+Some Git-aware review work is still outside the current CLI contract:
+
+- choosing which PR or merge-queue entry to review first
+- comparing two competing topic branches against each other
+- deciding whether a broad PR should have been split into multiple spec-scoped changes
+- reviewing newly added files that were never traced in the checked-in graph
+
+When you hit those limits, use the normal PR diff together with `syu trace` and
+`syu validate`. `syu` is intentionally strongest when the repository already has
+usable trace coverage, not when review must infer intent from Git alone.
+
+## Where reviewer tooling can grow next
+
+The current model leaves room for richer Git-aware reviewer help without
+changing the core philosophy:
+
+- summarize spec ownership for a Git range instead of one ID at a time
+- flag changed files in a branch that still lack requirement/feature ownership
+- offer stronger merge-queue views for review branches that were rebased or re-enqueued many times
+
+Those are natural follow-ons because they keep the same principle: Git history
+becomes more useful when `syu` can project the checked-in spec graph onto it,
+not when the tool invents a second workflow beside Git.
+
+## When to choose a different entry point
+
+- Start with [getting started](./getting-started.md) when you are still learning
+  the command names themselves.
+- Start with `syu browse .` when review is easier in a visual graph than in
+  terminal output.
+- Start with [troubleshooting](./troubleshooting.md) when validation is already
+  failing and you need rule-by-rule repair guidance more than review workflow
+  advice.

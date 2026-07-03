@@ -1,0 +1,150 @@
+---
+title: "Features"
+description: "Generated reference for docs/syu/features/features.yaml"
+---
+
+> Generated from `docs/syu/features/features.yaml`.
+
+## Parsed content
+
+### Version
+
+- 0.0.1-alpha.8
+
+### Updated
+
+- 2026-04
+
+### Files
+
+- **kind**: browse
+  - **file**: cli/browse.yaml
+- **kind**: show-list
+  - **file**: cli/show-list.yaml
+- **kind**: relate
+  - **file**: cli/relate.yaml
+- **kind**: explain
+  - **file**: cli/explain.yaml
+- **kind**: search
+  - **file**: cli/search.yaml
+- **kind**: audit
+  - **file**: cli/audit.yaml
+- **kind**: log
+  - **file**: cli/log.yaml
+- **kind**: trace
+  - **file**: cli/trace.yaml
+- **kind**: check
+  - **file**: cli/check.yaml
+- **kind**: init
+  - **file**: cli/init.yaml
+- **kind**: add
+  - **file**: cli/add.yaml
+- **kind**: task
+  - **file**: cli/task.yaml
+- **kind**: doctor
+  - **file**: cli/doctor.yaml
+- **kind**: report
+  - **file**: cli/report.yaml
+- **kind**: vscode
+  - **file**: editor/vscode.yaml
+- **kind**: workbench
+  - **file**: workbench/shell.yaml
+- **kind**: workbench
+  - **file**: workbench/design-tokens.yaml
+- **kind**: workbench
+  - **file**: workbench/actions.yaml
+- **kind**: workbench
+  - **file**: workbench/goal-splitter.yaml
+- **kind**: workbench
+  - **file**: workbench/branch-scope.yaml
+- **kind**: workbench
+  - **file**: workbench/evidence.yaml
+- **kind**: workbench
+  - **file**: workbench/assignment.yaml
+- **kind**: workbench
+  - **file**: workbench/desktop.yaml
+- **kind**: workbench
+  - **file**: workbench/server.yaml
+- **kind**: docs
+  - **file**: documentation/docs.yaml
+- **kind**: skills
+  - **file**: documentation/skills.yaml
+- **kind**: contributor
+  - **file**: repository/contributor.yaml
+- **kind**: quality
+  - **file**: repository/quality.yaml
+- **kind**: release
+  - **file**: repository/release.yaml
+- **kind**: install
+  - **file**: repository/install.yaml
+
+## Source YAML
+
+```yaml
+# x-release-please-start-version
+version: "0.0.1-alpha.8"
+# x-release-please-end
+updated: "2026-04"
+
+files:
+  - kind: browse
+    file: cli/browse.yaml
+  - kind: show-list
+    file: cli/show-list.yaml
+  - kind: relate
+    file: cli/relate.yaml
+  - kind: explain
+    file: cli/explain.yaml
+  - kind: search
+    file: cli/search.yaml
+  - kind: audit
+    file: cli/audit.yaml
+  - kind: log
+    file: cli/log.yaml
+  - kind: trace
+    file: cli/trace.yaml
+  - kind: check
+    file: cli/check.yaml
+  - kind: init
+    file: cli/init.yaml
+  - kind: add
+    file: cli/add.yaml
+  - kind: task
+    file: cli/task.yaml
+  - kind: doctor
+    file: cli/doctor.yaml
+  - kind: report
+    file: cli/report.yaml
+  - kind: vscode
+    file: editor/vscode.yaml
+  - kind: workbench
+    file: workbench/shell.yaml
+  - kind: workbench
+    file: workbench/design-tokens.yaml
+  - kind: workbench
+    file: workbench/actions.yaml
+  - kind: workbench
+    file: workbench/goal-splitter.yaml
+  - kind: workbench
+    file: workbench/branch-scope.yaml
+  - kind: workbench
+    file: workbench/evidence.yaml
+  - kind: workbench
+    file: workbench/assignment.yaml
+  - kind: workbench
+    file: workbench/desktop.yaml
+  - kind: workbench
+    file: workbench/server.yaml
+  - kind: docs
+    file: documentation/docs.yaml
+  - kind: skills
+    file: documentation/skills.yaml
+  - kind: contributor
+    file: repository/contributor.yaml
+  - kind: quality
+    file: repository/quality.yaml
+  - kind: release
+    file: repository/release.yaml
+  - kind: install
+    file: repository/install.yaml
+```

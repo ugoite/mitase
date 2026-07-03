@@ -1,0 +1,29 @@
+category: Polyglot Example Features
+version: 1
+
+features:
+  - id: FEAT-MIX-001
+    title: Demonstrate multi-language feature traces
+    summary: The polyglot example should keep implementation symbols documented in every language.
+    status: implemented
+    linked_requirements:
+      - REQ-MIX-001
+    implementations:
+      rust:
+        - file: src/trace.rs
+          symbols:
+            - mixed_rust_feature
+          doc_contains:
+            - rust feature doc
+      python:
+        - file: python/app.py
+          symbols:
+            - python_feature_impl
+          doc_contains:
+            - python feature doc
+      typescript:
+        - file: frontend/feature.ts
+          symbols:
+            - typescriptFeature
+          doc_contains:
+            - typescript feature doc

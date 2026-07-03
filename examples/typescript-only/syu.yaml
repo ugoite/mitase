@@ -1,0 +1,9 @@
+version: 0.0.1-alpha.8
+spec:
+  root: docs/syu
+validate:
+  default_fix: false
+  allow_planned: true
+runtimes:
+  node:
+    command: auto

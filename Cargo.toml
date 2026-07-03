@@ -10,6 +10,8 @@ members = [
   "crates/syu-planner",
   "crates/syu-workbench-server",
   "crates/syu-app-ui",
+  "crates/syu-code-intel",
+  "crates/syu-domain",
 ]
 resolver = "3"
 
@@ -45,6 +47,7 @@ serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
 syu-diagnostics = { path = "crates/syu-diagnostics" }
+syu-code-intel = { path = "crates/syu-code-intel" }
 syu-planner = { path = "crates/syu-planner" }
 syu-project-model = { path = "crates/syu-project-model" }
 syu-validation = { path = "crates/syu-validation" }

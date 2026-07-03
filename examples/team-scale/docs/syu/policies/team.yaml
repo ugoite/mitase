@@ -1,0 +1,24 @@
+category: Policies
+version: 1
+language: en
+
+policies:
+  - id: POL-TEAM-001
+    title: Growth must preserve traceability
+    summary: Larger teams should still be able to follow why each change exists.
+    description: Requirement tests and feature implementations must stay linked even as more contributors touch the same repository area.
+    linked_philosophies:
+      - PHIL-TEAM-001
+    linked_requirements:
+      - REQ-TEAM-ADOPT-001
+      - REQ-TEAM-AUDIT-001
+      - REQ-TEAM-REPORT-001
+  - id: POL-TEAM-002
+    title: Larger specs must stay navigable
+    summary: Teams can split documents by folder without losing the graph.
+    description: Reorganized requirement and feature files must still make it obvious how a contributor finds the right document and repairs drift.
+    linked_philosophies:
+      - PHIL-TEAM-001
+    linked_requirements:
+      - REQ-TEAM-ADOPT-001
+      - REQ-TEAM-REPORT-001

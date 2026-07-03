@@ -70,6 +70,45 @@ fn rejects_stale_target_snapshots() {
 }
 
 #[test]
+fn rejects_tampered_path_selector_and_budget_snapshots() {
+    let temp = tempdir().unwrap();
+    let plan = temp.path().join("plan.yaml");
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args([
+            "work",
+            "plan",
+            "--request",
+            "fixtures/v1/valid-web-app/work.yaml",
+            "--out",
+        ])
+        .arg(&plan)
+        .args(["--workspace", "fixtures/v1/valid-web-app"])
+        .assert()
+        .success();
+    let text = fs::read_to_string(&plan).unwrap();
+    let tampered = text
+        .replacen(
+            "resolved_path: api/login.rs",
+            "resolved_path: web/login.ts",
+            1,
+        )
+        .replacen(
+            "description: symbols login",
+            "description: symbols forged",
+            1,
+        )
+        .replacen("editable_files: 1", "editable_files: 99", 1);
+    fs::write(&plan, tampered).unwrap();
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["validate", "fixtures/v1/valid-web-app", "--plan"])
+        .arg(plan)
+        .assert()
+        .failure();
+}
+
+#[test]
 fn deleted_command_is_not_an_alias() {
     Command::cargo_bin("syu")
         .unwrap()

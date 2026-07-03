@@ -1,0 +1,17 @@
+category: Rust Example Features
+version: 1
+
+features:
+  - id: FEAT-RUST-001
+    title: Demonstrate a Rust feature trace
+    summary: Keep a Rust implementation symbol tied to the feature ID.
+    status: implemented
+    linked_requirements:
+      - REQ-RUST-001
+    implementations:
+      rust:
+        - file: src/trace.rs
+          symbols:
+            - rust_feature_impl
+          doc_contains:
+            - feature doc line

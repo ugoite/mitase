@@ -6,6 +6,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
+use syu_code_intel::resolve_symbol;
 use syu_project_model::{CONFIG_SCHEMA, ProjectConfig};
 use syu_spec_model::*;
 
@@ -33,6 +34,8 @@ pub struct SpecIndex {
     pub binding_to_contracts: BTreeMap<SpecAnchor, Vec<SpecAnchor>>,
     pub item_anchors: BTreeMap<SpecId, Vec<SpecAnchor>>,
     pub item_paths: BTreeMap<SpecId, PathBuf>,
+    pub path_to_targets: BTreeMap<String, Vec<BoundTargetRef>>,
+    pub criterion_status: BTreeMap<SpecAnchor, ItemStatus>,
 }
 #[derive(Debug, Clone)]
 pub enum AnchorValue {
@@ -141,6 +144,7 @@ impl SpecIndex {
                                 criterion.id.clone(),
                                 AnchorValue::Criterion(criterion.clone()),
                             )?;
+                            out.criterion_status.insert(anchor.clone(), item.status);
                             out.criteria_to_rules
                                 .insert(anchor, criterion.governed_by.clone());
                         }
@@ -176,6 +180,15 @@ impl SpecIndex {
             }
         }
         for (anchor, binding) in &out.bindings {
+            for target in &binding.targets {
+                out.path_to_targets
+                    .entry(target.path.to_string_lossy().into_owned())
+                    .or_default()
+                    .push(BoundTargetRef {
+                        binding: anchor.clone(),
+                        target_id: target.id.clone(),
+                    });
+            }
             for criterion in &binding.satisfies {
                 out.criteria_to_implementations
                     .entry(criterion.clone())
@@ -195,6 +208,10 @@ impl SpecIndex {
             .chain(out.criteria_to_verifications.values_mut())
             .chain(out.binding_to_contracts.values_mut())
         {
+            values.sort();
+            values.dedup();
+        }
+        for values in out.path_to_targets.values_mut() {
             values.sort();
             values.dedup();
         }
@@ -292,71 +309,176 @@ pub struct ResolvedTarget {
     pub symbols: Vec<String>,
     pub content_hash: String,
     pub bytes: usize,
+    pub byte_start: usize,
+    pub byte_end: usize,
+    pub line_start: usize,
+    pub line_end: usize,
+    pub excerpt: String,
+    pub excerpt_hash: String,
 }
 pub fn resolve_target(root: &Path, target: &ArtifactTarget) -> Result<ResolvedTarget> {
-    let path = root.join(&target.path);
-    let content = fs::read(&path)
+    resolve_target_with_adapters(root, target, std::slice::from_ref(&target.adapter))
+}
+pub fn resolve_target_with_adapters(
+    root: &Path,
+    target: &ArtifactTarget,
+    enabled: &[String],
+) -> Result<ResolvedTarget> {
+    const KNOWN: &[&str] = &[
+        "rust",
+        "typescript",
+        "shell",
+        "python",
+        "go",
+        "markdown",
+        "openapi",
+        "yaml",
+        "json",
+    ];
+    if !KNOWN.contains(&target.adapter.as_str()) {
+        bail!("unknown adapter {}", target.adapter);
+    }
+    if !enabled.contains(&target.adapter) {
+        bail!("adapter {} is disabled", target.adapter);
+    }
+    let canonical_root = root.canonicalize()?;
+    let path = root.join(target.path.as_path());
+    let canonical_path = path
+        .canonicalize()
         .with_context(|| format!("target path does not exist: {}", target.path.display()))?;
+    if !canonical_path.starts_with(&canonical_root) {
+        bail!("target path escapes workspace through a symlink");
+    }
+    let content = fs::read(&canonical_path)?;
     let text = String::from_utf8_lossy(&content);
-    let (description, symbols) = match &target.selector {
-        Selector::File => ("file".into(), vec![]),
-        Selector::Symbol { names } => {
-            for name in names {
-                if !text.contains(name) {
-                    bail!("symbol {name} not found in {}", target.path.display());
-                }
-            }
-            (format!("symbols {}", names.join(", ")), names.clone())
-        }
-        Selector::Operation { method, path } => {
-            let yaml: serde_yaml::Value = serde_yaml::from_slice(&content)?;
-            let exists = yaml
-                .get("paths")
-                .and_then(|v| v.get(path))
-                .and_then(|v| v.get(method.to_ascii_lowercase()))
-                .is_some();
-            if !exists {
-                bail!("operation {method} {path} not found");
-            }
-            (
-                format!("operation {} {path}", method.to_ascii_uppercase()),
+    let (description, symbols, byte_start, byte_end, line_start, line_end, excerpt, excerpt_hash) =
+        match &target.selector {
+            Selector::File => (
+                "file".into(),
                 vec![],
-            )
-        }
-        Selector::Heading { value } => {
-            if !text
-                .lines()
-                .any(|l| l.trim_start_matches('#').trim() == value)
-            {
-                bail!("heading {value} not found");
+                0,
+                content.len(),
+                1,
+                text.lines().count(),
+                text.to_string(),
+                hash_bytes(&content),
+            ),
+            Selector::Symbol { names } => {
+                let resolved = names
+                    .iter()
+                    .map(|name| resolve_symbol(&target.adapter, &text, name))
+                    .collect::<Result<Vec<_>>>()?;
+                let start = resolved.iter().map(|r| r.byte_start).min().unwrap_or(0);
+                let end = resolved.iter().map(|r| r.byte_end).max().unwrap_or(0);
+                let excerpt = text[start..end].to_string();
+                (
+                    format!("symbols {}", names.join(", ")),
+                    names.clone(),
+                    start,
+                    end,
+                    resolved.iter().map(|r| r.line_start).min().unwrap_or(1),
+                    resolved.iter().map(|r| r.line_end).max().unwrap_or(1),
+                    excerpt.clone(),
+                    hash_bytes(excerpt.as_bytes()),
+                )
             }
-            (format!("heading {value}"), vec![])
-        }
-        Selector::JsonPointer { value } => {
-            let json: serde_json::Value = if target.adapter == "json" {
-                serde_json::from_slice(&content)?
-            } else {
-                serde_json::to_value(serde_yaml::from_slice::<serde_yaml::Value>(&content)?)?
-            };
-            if json.pointer(value).is_none() {
-                bail!("pointer {value} not found");
+            Selector::Operation { method, path } => {
+                let yaml: serde_yaml::Value = serde_yaml::from_slice(&content)?;
+                let exists = yaml
+                    .get("paths")
+                    .and_then(|v| v.get(path))
+                    .and_then(|v| v.get(method.to_ascii_lowercase()))
+                    .is_some();
+                if !exists {
+                    bail!("operation {method} {path} not found");
+                }
+                let excerpt = text.to_string();
+                (
+                    format!("operation {} {path}", method.to_ascii_uppercase()),
+                    vec![],
+                    0,
+                    content.len(),
+                    1,
+                    text.lines().count(),
+                    excerpt.clone(),
+                    hash_bytes(excerpt.as_bytes()),
+                )
             }
-            (format!("json pointer {value}"), vec![])
-        }
-        Selector::Marker { value } => {
-            if !text.contains(value) {
-                bail!("marker {value} not found");
+            Selector::Heading { value } => {
+                if !text
+                    .lines()
+                    .any(|l| l.trim_start_matches('#').trim() == value)
+                {
+                    bail!("heading {value} not found");
+                }
+                let excerpt = text.to_string();
+                (
+                    format!("heading {value}"),
+                    vec![],
+                    0,
+                    content.len(),
+                    1,
+                    text.lines().count(),
+                    excerpt.clone(),
+                    hash_bytes(excerpt.as_bytes()),
+                )
             }
-            (format!("marker {value}"), vec![])
-        }
-    };
+            Selector::JsonPointer { value } => {
+                let json: serde_json::Value = if target.adapter == "json" {
+                    serde_json::from_slice(&content)?
+                } else {
+                    serde_json::to_value(serde_yaml::from_slice::<serde_yaml::Value>(&content)?)?
+                };
+                if json.pointer(value).is_none() {
+                    bail!("pointer {value} not found");
+                }
+                let excerpt = text.to_string();
+                (
+                    format!("json pointer {value}"),
+                    vec![],
+                    0,
+                    content.len(),
+                    1,
+                    text.lines().count(),
+                    excerpt.clone(),
+                    hash_bytes(excerpt.as_bytes()),
+                )
+            }
+            Selector::Marker { value } => {
+                if !text.contains(value) {
+                    bail!("marker {value} not found");
+                }
+                let excerpt = text.to_string();
+                (
+                    format!("marker {value}"),
+                    vec![],
+                    0,
+                    content.len(),
+                    1,
+                    text.lines().count(),
+                    excerpt.clone(),
+                    hash_bytes(excerpt.as_bytes()),
+                )
+            }
+        };
     let mut hash = Sha256::new();
     hash.update(&content);
     Ok(ResolvedTarget {
-        path: target.path.clone(),
+        path: target.path.as_path().to_path_buf(),
         description,
         symbols,
         content_hash: format!("sha256:{:x}", hash.finalize()),
         bytes: content.len(),
+        byte_start,
+        byte_end,
+        line_start,
+        line_end,
+        excerpt,
+        excerpt_hash,
     })
+}
+fn hash_bytes(value: &[u8]) -> String {
+    let mut hash = Sha256::new();
+    hash.update(value);
+    format!("sha256:{:x}", hash.finalize())
 }

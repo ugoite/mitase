@@ -1,0 +1,17 @@
+category: Team-scale Auth Features
+version: 1
+
+features:
+  - id: FEAT-TEAM-AUTH-SESSION-001
+    title: Split session rollout from login maintenance
+    summary: Teams can phase follow-up auth work into a separate feature file without losing the adoption story.
+    status: implemented
+    linked_requirements:
+      - REQ-TEAM-ADOPT-001
+    implementations:
+      rust:
+        - file: src/auth/session.rs
+          symbols:
+            - session_rollout_guard
+          doc_contains:
+            - session rollout guard

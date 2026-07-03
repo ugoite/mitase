@@ -1,10 +1,10 @@
 #![forbid(unsafe_code)]
 use anyhow::{Result, bail};
-use std::{collections::BTreeSet, fs};
+use std::collections::BTreeSet;
 use syu_diagnostics::Diagnostic;
 use syu_spec_model::{ArtifactBinding, BoundTargetRef, LocalAnchorKind, SpecAnchor};
 use syu_work_model::*;
-use syu_workspace::{AnchorValue, SpecIndex, SpecWorkspace, resolve_target};
+use syu_workspace::{AnchorValue, SpecIndex, SpecWorkspace, resolve_target_with_adapters};
 
 pub fn plan(
     request: &WorkRequest,
@@ -114,6 +114,15 @@ pub fn plan(
             diagnostics: vec![d],
         });
     }
+    if slices.is_empty() {
+        return Ok(blocked_plan(
+            request,
+            workspace,
+            revision,
+            "SYU-WORK-002",
+            "request produced no execution slices",
+        ));
+    }
     let status = if slices.iter().any(|s| !s.blockers.is_empty()) {
         PlanStatus::Blocked
     } else {
@@ -168,6 +177,9 @@ fn build_slice(
         "Primary implementation satisfying the selected criterion.",
         &mut blockers,
     );
+    if !request.requested_targets.is_empty() {
+        editable.retain(|target| request.requested_targets.contains(&target.reference));
+    }
     let mut verification = vec![];
     for anchor in index
         .criteria_to_verifications
@@ -195,10 +207,13 @@ fn build_slice(
     {
         contracts.push(contract_anchor.clone());
         if let Some(contract) = index.contracts.get(contract_anchor) {
-            if let Some(target) = index.target(&contract.source) {
+            if let Some(target) = index.target(&contract.source)
+                && let Some(source_binding) = index.bindings.get(&contract.source.binding)
+            {
                 readonly.extend(one_target(
                     workspace,
                     &contract.source,
+                    source_binding,
                     target,
                     "Contract source constraining this implementation.",
                     &mut blockers,
@@ -222,6 +237,19 @@ fn build_slice(
     dedup(&mut editable);
     dedup(&mut verification);
     dedup(&mut readonly);
+    for values in [&mut editable, &mut verification, &mut readonly] {
+        values.retain(|target| {
+            !request
+                .constraints
+                .exclude_paths
+                .iter()
+                .any(|pattern| path_matches(pattern, &target.resolved_path))
+        });
+    }
+    if request.operation == WorkOperation::Investigate {
+        readonly.append(&mut editable);
+        dedup(&mut readonly);
+    }
     let criterion_value = match index.anchor(criterion) {
         Some(AnchorValue::Criterion(c)) => c,
         _ => unreachable!(),
@@ -258,7 +286,7 @@ fn build_slice(
         .iter()
         .chain(&verification)
         .chain(&readonly)
-        .map(|t| target_bytes(workspace, &t.resolved_path))
+        .map(|t| t.byte_end.saturating_sub(t.byte_start))
         .sum();
     let budget = SliceBudgetUsage {
         editable_files,
@@ -307,19 +335,36 @@ fn completion_checks(verification: &[PlannedTarget]) -> Vec<CompletionCheck> {
     let mut checks = verification
         .iter()
         .filter_map(|target| {
-            target
-                .resolved_selector
-                .symbols
-                .first()
-                .map(|symbol| CompletionCheck::Command {
-                    command: format!("cargo test {symbol}"),
-                })
+            target.resolved_selector.symbols.first().and_then(|symbol| {
+                if !symbol
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+                {
+                    return None;
+                }
+                let command = match target.adapter.as_str() {
+                    "rust" => format!("cargo test {symbol}"),
+                    "typescript" => format!("npm test -- {symbol}"),
+                    "python" => format!("pytest -k {symbol}"),
+                    "go" => format!("go test ./... -run {symbol}"),
+                    "shell" => format!("bash -n {}", target.resolved_path),
+                    _ => return None,
+                };
+                Some(CompletionCheck::Command { command })
+            })
         })
         .collect::<Vec<_>>();
     checks.push(CompletionCheck::Validate {
         preset: "agent-ready".into(),
     });
     checks
+}
+fn path_matches(pattern: &str, path: &str) -> bool {
+    pattern
+        .strip_suffix("/**")
+        .map_or(pattern == path, |prefix| {
+            path == prefix || path.starts_with(&format!("{prefix}/"))
+        })
 }
 fn targets(
     workspace: &SpecWorkspace,
@@ -338,6 +383,7 @@ fn targets(
                     binding: anchor.clone(),
                     target_id: t.id.clone(),
                 },
+                binding,
                 t,
                 reason,
                 blockers,
@@ -348,11 +394,13 @@ fn targets(
 fn one_target(
     workspace: &SpecWorkspace,
     reference: &BoundTargetRef,
+    binding: &ArtifactBinding,
     target: &syu_spec_model::ArtifactTarget,
     reason: &str,
     blockers: &mut Vec<Diagnostic>,
 ) -> Vec<PlannedTarget> {
-    match resolve_target(&workspace.root, target) {
+    match resolve_target_with_adapters(&workspace.root, target, &workspace.config.adapters.enabled)
+    {
         Ok(r) => vec![PlannedTarget {
             reference: reference.clone(),
             resolved_path: r.path.to_string_lossy().into_owned(),
@@ -361,6 +409,14 @@ fn one_target(
                 symbols: r.symbols,
             },
             content_hash: r.content_hash,
+            excerpt_hash: r.excerpt_hash,
+            adapter: target.adapter.clone(),
+            facet: binding.facet.clone(),
+            role: binding.role,
+            byte_start: r.byte_start,
+            byte_end: r.byte_end,
+            line_start: r.line_start,
+            line_end: r.line_end,
             reason: reason.into(),
         }],
         Err(e) => {
@@ -378,11 +434,6 @@ fn one_target(
 fn dedup(values: &mut Vec<PlannedTarget>) {
     values.sort_by(|a, b| a.reference.cmp(&b.reference));
     values.dedup_by(|a, b| a.reference == b.reference);
-}
-fn target_bytes(workspace: &SpecWorkspace, path: &str) -> usize {
-    fs::metadata(workspace.root.join(path))
-        .map(|m| m.len() as usize)
-        .unwrap_or(0)
 }
 fn basis(workspace: &SpecWorkspace, revision: &str) -> PlanBasis {
     PlanBasis {
@@ -444,17 +495,32 @@ pub fn export_context(
         });
     }
     let mut artifact_context = Vec::new();
+    let mut included = BTreeSet::new();
     for (mode, targets) in [
         (ContextMode::Editable, &slice.editable_targets),
         (ContextMode::Verification, &slice.verification_targets),
         (ContextMode::Readonly, &slice.readonly_context),
     ] {
         for target in targets {
+            if !included.insert(target.reference.clone()) {
+                continue;
+            }
+            let excerpt = index
+                .target(&target.reference)
+                .and_then(|declared| {
+                    resolve_target_with_adapters(
+                        &workspace.root,
+                        declared,
+                        &workspace.config.adapters.enabled,
+                    )
+                    .ok()
+                })
+                .map(|resolved| resolved.excerpt)
+                .unwrap_or_default();
             artifact_context.push(ArtifactExcerpt {
                 reference: target.reference.clone(),
                 mode,
-                excerpt: fs::read_to_string(workspace.root.join(&target.resolved_path))
-                    .unwrap_or_default(),
+                excerpt,
             });
         }
     }

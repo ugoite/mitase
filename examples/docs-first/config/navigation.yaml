@@ -1,0 +1,7 @@
+sections:
+  - id: intro
+    title: Introduction
+  - id: release-notes
+    title: Release notes
+  - id: troubleshooting
+    title: Troubleshooting

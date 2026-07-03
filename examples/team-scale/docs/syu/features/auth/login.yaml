@@ -1,0 +1,18 @@
+category: Team-scale Auth Features
+version: 1
+
+features:
+  - id: FEAT-TEAM-AUTH-LOGIN-001
+    title: Trace the legacy login entry point
+    summary: Keep the first adopted auth file explicit while multiple contributors continue shipping changes.
+    status: implemented
+    linked_requirements:
+      - REQ-TEAM-ADOPT-001
+      - REQ-TEAM-AUDIT-001
+    implementations:
+      rust:
+        - file: src/auth/login.rs
+          symbols:
+            - legacy_login_flow
+          doc_contains:
+            - legacy login flow

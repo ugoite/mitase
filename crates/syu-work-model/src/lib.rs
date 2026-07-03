@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 use serde::{Deserialize, Serialize};
 use syu_diagnostics::Diagnostic;
-use syu_spec_model::{BoundTargetRef, SpecAnchor, SpecItemRef};
+use syu_spec_model::{BindingRole, BoundTargetRef, SpecAnchor, SpecItemRef};
 
 pub const WORK_REQUEST_SCHEMA: &str = "syu/work-request/v1";
 pub const WORK_PLAN_SCHEMA: &str = "syu/work-plan/v1";
@@ -90,6 +90,14 @@ pub struct PlannedTarget {
     pub resolved_path: String,
     pub resolved_selector: ResolvedSelector,
     pub content_hash: String,
+    pub excerpt_hash: String,
+    pub adapter: String,
+    pub facet: String,
+    pub role: BindingRole,
+    pub byte_start: usize,
+    pub byte_end: usize,
+    pub line_start: usize,
+    pub line_end: usize,
     pub reason: String,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
