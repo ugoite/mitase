@@ -7,13 +7,10 @@ use std::{
 
 fn main() {
     let manifest_dir = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").expect("manifest dir"));
-    let shared_core_dir = manifest_dir.join("crates").join("syu-core");
 
     println!("cargo:rerun-if-changed=build.rs");
     emit_git_watchers(&manifest_dir);
     emit_watch(&manifest_dir.join("Cargo.lock"));
-    emit_watch(&shared_core_dir.join("Cargo.toml"));
-    emit_watch_recursive(&shared_core_dir.join("src"));
     emit_build_version();
 }
 

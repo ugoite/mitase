@@ -254,7 +254,7 @@ fn exact_requested_targets_are_exact_and_verification_can_be_editable() {
         .args(["--workspace", "fixtures/v1/valid-web-app"])
         .assert()
         .success();
-    let text = fs::read_to_string(plan).unwrap();
+    let text = fs::read_to_string(&plan).unwrap();
     assert!(text.contains("id: invalid-credentials-verify-case"));
     assert!(text.contains("resolved_path: tests/login.rs"));
     assert!(text.contains("access: editable"));
@@ -268,6 +268,44 @@ fn oversized_slice_is_split_deterministically() {
     fs::create_dir_all(temp.path().join("spec")).unwrap();
     fs::create_dir_all(temp.path().join("src")).unwrap();
     fs::create_dir_all(temp.path().join("tests")).unwrap();
+    fs::write(
+        temp.path().join("spec/foundation.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: philosophies\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "philosophies:\n",
+            "  - id: PHIL-SAMPLE-001\n",
+            "    title: Sample\n",
+            "    summary: Sample philosophy.\n",
+            "    principles:\n",
+            "      - { id: governed, statement: Keep behavior aligned., applies_to: [product] }\n",
+            "    bindings: []\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/policy.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: policies\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "policies:\n",
+            "  - id: POL-SAMPLE-001\n",
+            "    title: Sample\n",
+            "    summary: Sample policy.\n",
+            "    description: Sample policy.\n",
+            "    rules:\n",
+            "      - id: governed\n",
+            "        level: should\n",
+            "        statement: Keep behavior aligned.\n",
+            "        governed_by: [PHIL-SAMPLE-001#principle.governed]\n",
+            "    bindings: []\n",
+        ),
+    )
+    .unwrap();
     fs::write(
         temp.path().join("syu.yaml"),
         concat!(
@@ -314,7 +352,7 @@ fn oversized_slice_is_split_deterministically() {
             "      - id: multi\n",
             "        kind: behavior\n",
             "        statement: Keep behavior aligned across files.\n",
-            "        governed_by: []\n",
+            "        governed_by: [POL-SAMPLE-001#rule.governed]\n",
             "    bindings:\n",
             "      - id: tests\n",
             "        role: verification\n",
@@ -382,12 +420,170 @@ fn oversized_slice_is_split_deterministically() {
         .arg(temp.path())
         .assert()
         .success();
-    let text = fs::read_to_string(plan).unwrap();
+    let text = fs::read_to_string(&plan).unwrap();
     assert!(text.contains("status: ready"));
     assert!(text.contains("part01"));
     assert!(text.contains("part02"));
     assert!(text.contains("resolved_path: src/a.rs"));
     assert!(text.contains("resolved_path: src/b.rs"));
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["validate"])
+        .arg(temp.path())
+        .args(["--plan"])
+        .arg(&plan)
+        .assert()
+        .success();
+    let slice_ids = text
+        .lines()
+        .filter_map(|line| line.strip_prefix("- id: "))
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    for slice_id in slice_ids {
+        Command::cargo_bin("syu")
+            .unwrap()
+            .args(["work", "export-context", "--plan"])
+            .arg(&plan)
+            .args(["--slice", &slice_id, "--workspace"])
+            .arg(temp.path())
+            .assert()
+            .success();
+    }
+}
+
+#[test]
+fn verification_budget_overflow_blocks_instead_of_splitting_closure() {
+    let temp = tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("spec")).unwrap();
+    fs::create_dir_all(temp.path().join("src")).unwrap();
+    fs::create_dir_all(temp.path().join("tests")).unwrap();
+    fs::write(
+        temp.path().join("syu.yaml"),
+        concat!(
+            "schema: syu/config/v1\n",
+            "workspace:\n",
+            "  spec_roots: [spec]\n",
+            "  artifact_roots: [src, tests]\n",
+            "  excludes: []\n",
+            "profiles: { active: [], custom: {} }\n",
+            "validation:\n",
+            "  preset: standard\n",
+            "  deny_warnings: false\n",
+            "  rules: {}\n",
+            "  changed:\n",
+            "    require_owned_changes: false\n",
+            "work:\n",
+            "  slicing:\n",
+            "    max_editable_files: 1\n",
+            "    max_editable_symbols: 4\n",
+            "    max_verification_targets: 1\n",
+            "    max_readonly_targets: 4\n",
+            "    max_total_bytes: 4096\n",
+            "  context:\n",
+            "    include_parent_principles: false\n",
+            "    include_parent_rules: false\n",
+            "adapters: { enabled: [rust] }\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/requirement.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: requirements\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "requirements:\n",
+            "  - id: REQ-SAMPLE-020\n",
+            "    title: Sample\n",
+            "    description: Sample requirement.\n",
+            "    priority: medium\n",
+            "    status: planned\n",
+            "    criteria:\n",
+            "      - id: dual\n",
+            "        kind: behavior\n",
+            "        statement: Keep both checks green.\n",
+            "        governed_by: []\n",
+            "    bindings:\n",
+            "      - id: check-one\n",
+            "        role: verification\n",
+            "        facet: verification\n",
+            "        responsibility: First verification.\n",
+            "        targets:\n",
+            "          - { id: one, adapter: rust, path: tests/check_one.rs, selector: { kind: symbol, names: [check_one] } }\n",
+            "        verifies: [REQ-SAMPLE-020#criterion.dual]\n",
+            "      - id: check-two\n",
+            "        role: verification\n",
+            "        facet: verification\n",
+            "        responsibility: Second verification.\n",
+            "        targets:\n",
+            "          - { id: two, adapter: rust, path: tests/check_two.rs, selector: { kind: symbol, names: [check_two] } }\n",
+            "        verifies: [REQ-SAMPLE-020#criterion.dual]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/feature.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: features\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "features:\n",
+            "  - id: FEAT-SAMPLE-020\n",
+            "    title: Sample\n",
+            "    summary: One implementation.\n",
+            "    status: implemented\n",
+            "    bindings:\n",
+            "      - id: app\n",
+            "        role: implementation\n",
+            "        facet: backend\n",
+            "        responsibility: Update one handler.\n",
+            "        targets:\n",
+            "          - { id: handler, adapter: rust, path: src/lib.rs, selector: { kind: symbol, names: [handler] } }\n",
+            "        satisfies: [REQ-SAMPLE-020#criterion.dual]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(temp.path().join("src/lib.rs"), "fn handler() {}\n").unwrap();
+    fs::write(
+        temp.path().join("tests/check_one.rs"),
+        "fn check_one() {}\n",
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("tests/check_two.rs"),
+        "fn check_two() {}\n",
+    )
+    .unwrap();
+    let request = temp.path().join("work.yaml");
+    fs::write(
+        &request,
+        concat!(
+            "schema: syu/work-request/v1\n",
+            "id: WORK-SPLIT-VERIFY\n",
+            "summary: Keep verification closure intact.\n",
+            "operation: modify\n",
+            "seeds: [REQ-SAMPLE-020#criterion.dual]\n",
+            "constraints: { include_facets: [], exclude_paths: [], max_slices: 4 }\n",
+        ),
+    )
+    .unwrap();
+    init_workspace_repo(temp.path());
+    let plan = temp.path().join("plan.yaml");
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["work", "plan", "--request"])
+        .arg(&request)
+        .args(["--out"])
+        .arg(&plan)
+        .args(["--workspace"])
+        .arg(temp.path())
+        .assert()
+        .failure();
+    let text = fs::read_to_string(plan).unwrap();
+    assert!(text.contains("status: blocked"));
+    assert!(!text.contains("part01"));
 }
 
 #[test]
@@ -999,6 +1195,116 @@ fn validate_rejects_unknown_rule_overrides() {
             "        statement: Sample criterion.\n",
             "        governed_by: []\n",
         ),
+    )
+    .unwrap();
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["validate"])
+        .arg(temp.path())
+        .assert()
+        .failure();
+}
+
+#[test]
+fn strict_preset_requires_changed_spec_impact_updates() {
+    let temp = tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("spec")).unwrap();
+    fs::create_dir_all(temp.path().join("src")).unwrap();
+    fs::create_dir_all(temp.path().join("tests")).unwrap();
+    fs::write(
+        temp.path().join("syu.yaml"),
+        concat!(
+            "schema: syu/config/v1\n",
+            "workspace:\n",
+            "  spec_roots: [spec]\n",
+            "  artifact_roots: [src, tests]\n",
+            "  excludes: []\n",
+            "profiles: { active: [], custom: {} }\n",
+            "validation:\n",
+            "  preset: strict\n",
+            "  deny_warnings: false\n",
+            "  rules: {}\n",
+            "  changed:\n",
+            "    baseline: { strategy: parent }\n",
+            "    require_owned_changes: false\n",
+            "work:\n",
+            "  slicing:\n",
+            "    max_editable_files: 1\n",
+            "    max_editable_symbols: 1\n",
+            "    max_verification_targets: 2\n",
+            "    max_readonly_targets: 2\n",
+            "    max_total_bytes: 2048\n",
+            "  context:\n",
+            "    include_parent_principles: false\n",
+            "    include_parent_rules: false\n",
+            "adapters: { enabled: [rust] }\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/requirement.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: requirements\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "requirements:\n",
+            "  - id: REQ-SAMPLE-030\n",
+            "    title: Sample\n",
+            "    description: Sample requirement.\n",
+            "    priority: high\n",
+            "    status: implemented\n",
+            "    criteria:\n",
+            "      - id: check\n",
+            "        kind: behavior\n",
+            "        statement: Original criterion.\n",
+            "        governed_by: []\n",
+            "    bindings:\n",
+            "      - id: verify\n",
+            "        role: verification\n",
+            "        facet: verification\n",
+            "        responsibility: Verify behavior.\n",
+            "        targets:\n",
+            "          - { id: case, adapter: rust, path: tests/check.rs, selector: { kind: symbol, names: [check_behavior] } }\n",
+            "        verifies: [REQ-SAMPLE-030#criterion.check]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/feature.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: features\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "features:\n",
+            "  - id: FEAT-SAMPLE-030\n",
+            "    title: Sample\n",
+            "    summary: Sample feature.\n",
+            "    status: implemented\n",
+            "    bindings:\n",
+            "      - id: app\n",
+            "        role: implementation\n",
+            "        facet: backend\n",
+            "        responsibility: Provide behavior.\n",
+            "        targets:\n",
+            "          - { id: code, adapter: rust, path: src/lib.rs, selector: { kind: symbol, names: [run] } }\n",
+            "        satisfies: [REQ-SAMPLE-030#criterion.check]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(temp.path().join("src/lib.rs"), "fn run() {}\n").unwrap();
+    fs::write(
+        temp.path().join("tests/check.rs"),
+        "fn check_behavior() {}\n",
+    )
+    .unwrap();
+    init_workspace_repo(temp.path());
+    fs::write(
+        temp.path().join("spec/requirement.yaml"),
+        fs::read_to_string(temp.path().join("spec/requirement.yaml"))
+            .unwrap()
+            .replace("Original criterion.", "Updated criterion."),
     )
     .unwrap();
     Command::cargo_bin("syu")

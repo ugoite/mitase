@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use syu_diagnostics::{Diagnostic, Severity, ValidationResult};
 use syu_planner::plan as canonical_plan;
 use syu_project_model::{ProjectConfig, RuleOverride, ValidationPreset};
@@ -209,13 +209,21 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
     let Some(files) = ctx.changed_files else {
         return;
     };
+    let changed_paths = changed_paths(files);
+    let changed_spec_documents = files
+        .iter()
+        .filter_map(|file| file.new_path.as_ref().or(file.old_path.as_ref()))
+        .filter(|path| ctx.workspace.path_is_spec(path.as_path()))
+        .map(|path| ctx.workspace.root.join(path.as_path()))
+        .collect::<BTreeSet<_>>();
     for file in files {
         let Some(path) = file.new_path.as_ref().or(file.old_path.as_ref()) else {
             continue;
         };
-        if ctx.workspace.path_is_spec(path.as_path())
-            || path.as_path() == std::path::Path::new("syu.yaml")
-        {
+        if path.as_path() == std::path::Path::new("syu.yaml") {
+            continue;
+        }
+        if ctx.workspace.path_is_spec(path.as_path()) {
             continue;
         }
         if !ctx.workspace.path_is_artifact(path.as_path())
@@ -250,6 +258,110 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
             }
         }
     }
+    validate_changed_spec_impact(ctx, &changed_spec_documents, &changed_paths, out);
+}
+
+fn changed_paths(files: &[ChangedFile]) -> BTreeSet<String> {
+    files
+        .iter()
+        .flat_map(|file| file.old_path.iter().chain(file.new_path.iter()))
+        .map(|path| path.to_string_lossy().into_owned())
+        .collect()
+}
+
+fn validate_changed_spec_impact(
+    ctx: &ValidationContext<'_>,
+    changed_spec_documents: &BTreeSet<std::path::PathBuf>,
+    changed_paths: &BTreeSet<String>,
+    out: &mut Vec<Diagnostic>,
+) {
+    if changed_spec_documents.is_empty() {
+        return;
+    }
+    let items_in_document =
+        ctx.index
+            .item_paths
+            .iter()
+            .fold(BTreeMap::<_, Vec<_>>::new(), |mut map, (item, path)| {
+                map.entry(path.clone()).or_default().push(item.clone());
+                map
+            });
+
+    for document in changed_spec_documents {
+        for item_id in items_in_document.get(document).into_iter().flatten() {
+            for anchor in ctx.index.item_anchors.get(item_id).into_iter().flatten() {
+                match ctx.index.anchor(anchor) {
+                    Some(AnchorValue::Criterion(_)) => {
+                        let implementation_changed = ctx
+                            .index
+                            .criteria_to_implementations
+                            .get(anchor)
+                            .into_iter()
+                            .flatten()
+                            .any(|binding| binding_targets_changed(ctx, binding, changed_paths));
+                        let verification_changed = ctx
+                            .index
+                            .criteria_to_verifications
+                            .get(anchor)
+                            .into_iter()
+                            .flatten()
+                            .any(|binding| binding_targets_changed(ctx, binding, changed_paths));
+                        if !(implementation_changed || verification_changed) {
+                            push(
+                                out,
+                                "SYU-CHANGE-003",
+                                format!(
+                                    "changed criterion has no impacted implementation or verification update: {anchor}"
+                                ),
+                                document.display().to_string(),
+                                Some(anchor.clone()),
+                            );
+                        }
+                    }
+                    Some(AnchorValue::Contract(contract)) => {
+                        if !contract.participants.iter().any(|participant| {
+                            binding_targets_changed(ctx, &participant.binding, changed_paths)
+                        }) {
+                            push(
+                                out,
+                                "SYU-CHANGE-004",
+                                format!(
+                                    "changed contract has no participant artifact update: {anchor}"
+                                ),
+                                document.display().to_string(),
+                                Some(anchor.clone()),
+                            );
+                        }
+                    }
+                    Some(AnchorValue::Binding(_))
+                        if !binding_targets_changed(ctx, anchor, changed_paths) =>
+                    {
+                        push(
+                            out,
+                            "SYU-CHANGE-005",
+                            format!("changed binding has no impacted target update: {anchor}"),
+                            document.display().to_string(),
+                            Some(anchor.clone()),
+                        );
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
+fn binding_targets_changed(
+    ctx: &ValidationContext<'_>,
+    binding: &SpecAnchor,
+    changed_paths: &BTreeSet<String>,
+) -> bool {
+    ctx.index.bindings.get(binding).is_some_and(|artifact| {
+        artifact
+            .targets
+            .iter()
+            .any(|target| changed_paths.contains(&target.path.to_string_lossy().into_owned()))
+    })
 }
 fn validate_document_shapes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
     for loaded in &ctx.workspace.documents {

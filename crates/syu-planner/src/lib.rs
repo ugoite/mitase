@@ -911,7 +911,7 @@ fn split_slice_if_needed(
         .first()
         .map(|acceptance| acceptance.anchor.clone())
         .context("slice is missing acceptance criterion")?;
-    let Some(groups) = split_groups(slice) else {
+    let Some(groups) = split_groups(slice, &workspace.config.work.slicing) else {
         return Ok(vec![slice.clone()]);
     };
     let mut out = Vec::new();
@@ -926,21 +926,45 @@ fn split_slice_if_needed(
 
 enum SliceGroup {
     Editable(Vec<PlannedTarget>),
-    Verification(Vec<PlannedTarget>),
-    Readonly(Vec<PlannedTarget>),
 }
 
-fn split_groups(slice: &ExecutionSlice) -> Option<Vec<SliceGroup>> {
+fn split_groups(
+    slice: &ExecutionSlice,
+    limits: &syu_project_model::SliceLimits,
+) -> Option<Vec<SliceGroup>> {
+    if !slice_budget_can_shrink_with_editable_split(slice, limits) {
+        return None;
+    }
     if let Some(groups) = target_groups(&slice.editable_targets) {
         return Some(groups.into_iter().map(SliceGroup::Editable).collect());
     }
-    if let Some(groups) = target_groups(&slice.verification_targets) {
-        return Some(groups.into_iter().map(SliceGroup::Verification).collect());
-    }
-    if let Some(groups) = target_groups(&slice.readonly_context) {
-        return Some(groups.into_iter().map(SliceGroup::Readonly).collect());
-    }
     None
+}
+
+fn slice_budget_can_shrink_with_editable_split(
+    slice: &ExecutionSlice,
+    limits: &syu_project_model::SliceLimits,
+) -> bool {
+    if slice.editable_targets.len() < 2 {
+        return false;
+    }
+    if slice.budget.editable_files > limits.max_editable_files
+        || slice.budget.editable_symbols > limits.max_editable_symbols
+    {
+        return true;
+    }
+    if slice.budget.verification_targets > limits.max_verification_targets
+        || slice.budget.readonly_targets > limits.max_readonly_targets
+    {
+        return false;
+    }
+    if slice.budget.total_bytes <= limits.max_total_bytes {
+        return false;
+    }
+    slice
+        .editable_targets
+        .iter()
+        .any(|target| target.byte_end.saturating_sub(target.byte_start) > 0)
 }
 
 fn target_groups(targets: &[PlannedTarget]) -> Option<Vec<Vec<PlannedTarget>>> {
@@ -984,16 +1008,6 @@ fn rebuild_split_slice(
             editable,
             original.verification_targets.clone(),
             original.readonly_context.clone(),
-        ),
-        SliceGroup::Verification(verification) => (
-            original.editable_targets.clone(),
-            verification,
-            original.readonly_context.clone(),
-        ),
-        SliceGroup::Readonly(readonly) => (
-            original.editable_targets.clone(),
-            original.verification_targets.clone(),
-            readonly,
         ),
     };
     let contracts = original.contracts.clone();

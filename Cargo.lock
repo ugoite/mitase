@@ -756,6 +756,7 @@ name = "syu-code-intel"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "proc-macro2",
  "sha2",
  "syn",
 ]

@@ -326,10 +326,18 @@ fn changed_files(root: &Path, range: &str) -> Result<Vec<ChangedFile>> {
     let status_output = Command::new("git")
         .args(["-C"])
         .arg(root)
-        .args(["diff", "--name-status", "-M", "--relative", range])
+        .args(["diff", "--name-status", "-z", "-M", "--relative", range])
         .output()?;
     if !status_output.status.success() {
         bail!("git diff --name-status {range} failed");
+    }
+    let untracked_output = Command::new("git")
+        .args(["-C"])
+        .arg(root)
+        .args(["ls-files", "--others", "--exclude-standard", "-z"])
+        .output()?;
+    if !untracked_output.status.success() {
+        bail!("git ls-files --others failed");
     }
     let patch_output = Command::new("git")
         .args(["-C"])
@@ -347,38 +355,96 @@ fn changed_files(root: &Path, range: &str) -> Result<Vec<ChangedFile>> {
         bail!("git diff --unified=0 {range} failed");
     }
     parse_changed_files(
-        &String::from_utf8(status_output.stdout)?,
+        &status_output.stdout,
+        &untracked_output.stdout,
         &String::from_utf8(patch_output.stdout)?,
     )
 }
 
-fn parse_changed_files(status: &str, patch: &str) -> Result<Vec<ChangedFile>> {
+fn parse_changed_files(status: &[u8], untracked: &[u8], patch: &str) -> Result<Vec<ChangedFile>> {
     let mut files = Vec::new();
-    for line in status.lines().filter(|line| !line.trim().is_empty()) {
-        let parts = line.split('\t').collect::<Vec<_>>();
-        let kind = parts.first().copied().unwrap_or_default();
+    let mut entries = status
+        .split(|byte| *byte == 0)
+        .filter(|entry| !entry.is_empty());
+    while let Some(kind) = entries.next() {
+        let kind = String::from_utf8(kind.to_vec())?;
+        let status_code = kind.chars().next().unwrap_or('M');
         let (status, old_path, new_path) = match kind.chars().next().unwrap_or('M') {
-            'A' => (ChangeStatus::Added, None, Some(parts[1])),
-            'M' => (ChangeStatus::Modified, None, Some(parts[1])),
-            'D' => (ChangeStatus::Deleted, Some(parts[1]), None),
-            'R' => (ChangeStatus::Renamed, Some(parts[1]), Some(parts[2])),
-            _ => (ChangeStatus::Modified, None, parts.get(1).copied()),
+            'A' => (
+                ChangeStatus::Added,
+                None,
+                Some(String::from_utf8(
+                    entries.next().context("missing added path")?.to_vec(),
+                )?),
+            ),
+            'M' => (
+                ChangeStatus::Modified,
+                None,
+                Some(String::from_utf8(
+                    entries.next().context("missing modified path")?.to_vec(),
+                )?),
+            ),
+            'D' => (
+                ChangeStatus::Deleted,
+                Some(String::from_utf8(
+                    entries.next().context("missing deleted path")?.to_vec(),
+                )?),
+                None,
+            ),
+            'R' => (
+                ChangeStatus::Renamed,
+                Some(String::from_utf8(
+                    entries.next().context("missing rename source")?.to_vec(),
+                )?),
+                Some(String::from_utf8(
+                    entries.next().context("missing rename target")?.to_vec(),
+                )?),
+            ),
+            _ => (
+                if status_code == 'T' {
+                    ChangeStatus::Binary
+                } else {
+                    ChangeStatus::Modified
+                },
+                None,
+                entries
+                    .next()
+                    .map(|value| String::from_utf8(value.to_vec()))
+                    .transpose()?,
+            ),
         };
         files.push(ChangedFile {
             status,
             old_path: old_path
-                .map(|value| RepoPath::new(value.to_string()))
+                .map(RepoPath::new)
                 .transpose()
                 .map_err(anyhow::Error::msg)?,
             new_path: new_path
-                .map(|value| RepoPath::new(value.to_string()))
+                .map(RepoPath::new)
                 .transpose()
                 .map_err(anyhow::Error::msg)?,
             hunks: Vec::new(),
         });
     }
+    for path in untracked
+        .split(|byte| *byte == 0)
+        .filter(|entry| !entry.is_empty())
+    {
+        files.push(ChangedFile {
+            status: ChangeStatus::Untracked,
+            old_path: None,
+            new_path: Some(
+                RepoPath::new(String::from_utf8(path.to_vec())?).map_err(anyhow::Error::msg)?,
+            ),
+            hunks: Vec::new(),
+        });
+    }
     let mut current: Option<usize> = None;
     for line in patch.lines() {
+        if line.starts_with("diff --git ") {
+            current = None;
+            continue;
+        }
         if let Some(path) = line.strip_prefix("+++ b/") {
             current = files.iter().position(|file| {
                 file.new_path
@@ -387,14 +453,15 @@ fn parse_changed_files(status: &str, patch: &str) -> Result<Vec<ChangedFile>> {
             });
             continue;
         }
+        if line == "+++ /dev/null" {
+            continue;
+        }
         if let Some(path) = line.strip_prefix("--- a/") {
-            if current.is_none() {
-                current = files.iter().position(|file| {
-                    file.old_path
-                        .as_ref()
-                        .is_some_and(|value| value.to_string_lossy() == path)
-                });
-            }
+            current = files.iter().position(|file| {
+                file.old_path
+                    .as_ref()
+                    .is_some_and(|value| value.to_string_lossy() == path)
+            });
             continue;
         }
         if let Some(hunk) = line.strip_prefix("@@ ")
@@ -432,4 +499,41 @@ fn parse_diff_span(span: &str) -> Result<(usize, usize)> {
     let len = len.parse::<usize>()?;
     let end = if len == 0 { start } else { start + len - 1 };
     Ok((start, end))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_changed_files_keeps_deleted_file_hunks_on_the_deleted_path() {
+        let files = parse_changed_files(
+            b"M\0src/a.rs\0D\0src/b.rs\0",
+            b"",
+            "\
+diff --git a/src/a.rs b/src/a.rs\n\
+--- a/src/a.rs\n\
++++ b/src/a.rs\n\
+@@ -1 +1 @@\n\
+diff --git a/src/b.rs b/src/b.rs\n\
+--- a/src/b.rs\n\
++++ /dev/null\n\
+@@ -2,2 +0,0 @@\n",
+        )
+        .unwrap();
+        assert_eq!(files[1].status, ChangeStatus::Deleted);
+        assert_eq!(files[1].hunks.len(), 1);
+        assert!(files[0].hunks.len() <= 1);
+    }
+
+    #[test]
+    fn parse_changed_files_collects_untracked_paths() {
+        let files = parse_changed_files(b"", b"src/new.rs\0", "").unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].status, ChangeStatus::Untracked);
+        assert_eq!(
+            files[0].new_path.as_ref().unwrap().to_string_lossy(),
+            "src/new.rs"
+        );
+    }
 }

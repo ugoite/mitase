@@ -107,16 +107,6 @@
         },
         {
           "type": "generic",
-          "file": "crates/syu-core/Cargo.toml",
-          "replacers": [
-            {
-              "search": "name = \"syu-core\"\nversion = \"(?<version>.*)\"",
-              "replace": "name = \"syu-core\"\nversion = \"{{version}}\""
-            }
-          ]
-        },
-        {
-          "type": "generic",
           "file": "examples/rust-only/syu.yaml",
           "replacers": [
             {
