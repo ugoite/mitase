@@ -20,6 +20,12 @@ const SOURCE_LOCATION_LANGUAGES = new Set([
   'gitignore'
 ])
 const SPEC_KINDS = ['philosophy', 'policy', 'requirement', 'feature']
+const DOC_KIND_TO_ITEM_KIND = {
+  philosophies: 'philosophy',
+  policies: 'policy',
+  requirements: 'requirement',
+  features: 'feature'
+}
 
 function toPosixPath(value) {
   return String(value).replace(/\\/g, '/')
@@ -52,13 +58,12 @@ async function pathExists(filePath) {
 }
 
 async function looksLikeSpecRoot(root) {
-  return (
-    (await pathExists(path.join(root, 'philosophy'))) &&
-    (await pathExists(path.join(root, 'policies'))) &&
-    (await pathExists(path.join(root, 'requirements'))) &&
-    (await pathExists(path.join(root, 'features'))) &&
-    (await pathExists(path.join(root, 'features', 'features.yaml')))
-  )
+  if (!(await pathExists(root))) {
+    return false
+  }
+
+  const yamlFiles = await walkYamlFiles(root)
+  return yamlFiles.length > 0
 }
 
 async function readWorkspaceConfig(workspaceRoot) {
@@ -69,10 +74,14 @@ async function readWorkspaceConfig(workspaceRoot) {
 
   try {
     const parsed = YAML.parse(await fs.readFile(configPath, 'utf8')) || {}
+    const v1Roots = Array.isArray(parsed?.workspace?.spec_roots)
+      ? parsed.workspace.spec_roots.filter((value) => typeof value === 'string' && value.trim())
+      : []
     const configuredRoot =
-      typeof parsed?.spec?.root === 'string' && parsed.spec.root.trim()
+      v1Roots[0] ||
+      (typeof parsed?.spec?.root === 'string' && parsed.spec.root.trim()
         ? parsed.spec.root.trim()
-        : DEFAULT_SPEC_ROOT
+        : DEFAULT_SPEC_ROOT)
     return { specRoot: configuredRoot }
   } catch {
     return { specRoot: DEFAULT_SPEC_ROOT }
@@ -139,50 +148,73 @@ async function walkYamlFiles(root) {
   return files
 }
 
-function stringList(value) {
-  return Array.isArray(value)
-    ? value.filter((entry) => typeof entry === 'string')
-    : []
-}
-
-function objectMap(value) {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value : {}
-}
-
-function normalizeTraceReferences(value) {
-  const normalized = {}
-
-  for (const [language, references] of Object.entries(objectMap(value))) {
-    if (!Array.isArray(references)) {
-      continue
-    }
-
-    normalized[language] = references.map((reference) => ({
-      file: normalizeRelativePath(reference?.file),
-      symbols: stringList(reference?.symbols),
-      docContains: stringList(reference?.doc_contains)
-    }))
+function anchorItemId(value) {
+  if (typeof value !== 'string') {
+    return null
   }
 
-  return normalized
+  const [itemId] = value.split('#')
+  return /\b[A-Z][A-Z0-9-]*\b/u.test(itemId || '') ? itemId : null
 }
 
-function createIndexEntry(kind, item, documentPath) {
+function selectorSymbols(selector) {
+  if (!selector || typeof selector !== 'object' || Array.isArray(selector)) {
+    return []
+  }
+
+  if (selector.kind === 'symbol' && Array.isArray(selector.names)) {
+    return selector.names.filter((value) => typeof value === 'string' && value.trim())
+  }
+
+  return []
+}
+
+function targetTraceReference(target) {
+  if (!target || typeof target !== 'object' || Array.isArray(target)) {
+    return null
+  }
+
+  if (typeof target.path !== 'string' || !target.path.trim()) {
+    return null
+  }
+
+  return {
+    file: normalizeRelativePath(target.path),
+    symbols: selectorSymbols(target.selector),
+    docContains: []
+  }
+}
+
+function appendGroupedReference(groups, language, reference) {
+  if (!reference) {
+    return
+  }
+
+  const key = typeof language === 'string' && language.trim() ? language.trim() : 'unknown'
+  if (!groups[key]) {
+    groups[key] = []
+  }
+  groups[key].push(reference)
+}
+
+function createV1IndexEntry(kind, item, documentPath) {
   return {
     kind,
     id: item.id,
     title: item.title,
     documentPath,
-    linkedPhilosophies: stringList(item.linked_philosophies),
-    linkedPolicies: stringList(item.linked_policies),
-    linkedRequirements: stringList(item.linked_requirements),
-    linkedFeatures: stringList(item.linked_features),
-    tests: kind === 'requirement' ? normalizeTraceReferences(item.tests) : {},
-    implementations: kind === 'feature' ? normalizeTraceReferences(item.implementations) : {}
+    linkedPhilosophies: [],
+    linkedPolicies: [],
+    linkedRequirements: [],
+    linkedFeatures: [],
+    verificationTargets: {},
+    implementationTargets: {},
+    _policyIds: new Set(),
+    _requirementIds: new Set()
   }
 }
 
-function collectDocumentEntries(kind, items, documentPath, byId, byKind) {
+function collectV1DocumentEntries(kind, items, documentPath, byId, byKind) {
   if (!Array.isArray(items)) {
     return
   }
@@ -192,9 +224,87 @@ function collectDocumentEntries(kind, items, documentPath, byId, byKind) {
       continue
     }
 
-    const entry = createIndexEntry(kind, item, documentPath)
+    const entry = createV1IndexEntry(kind, item, documentPath)
+
+    if (kind === 'policy') {
+      for (const rule of Array.isArray(item.rules) ? item.rules : []) {
+        for (const reference of Array.isArray(rule?.governed_by) ? rule.governed_by : []) {
+          const philosophyId = anchorItemId(reference)
+          if (philosophyId) {
+            entry.linkedPhilosophies.push(philosophyId)
+          }
+        }
+      }
+    }
+
+    if (kind === 'requirement') {
+      for (const criterion of Array.isArray(item.criteria) ? item.criteria : []) {
+        for (const reference of Array.isArray(criterion?.governed_by) ? criterion.governed_by : []) {
+          const policyId = anchorItemId(reference)
+          if (policyId) {
+            entry._policyIds.add(policyId)
+          }
+        }
+      }
+
+      for (const binding of Array.isArray(item.bindings) ? item.bindings : []) {
+        if (binding?.role !== 'verification') {
+          continue
+        }
+
+        for (const target of Array.isArray(binding.targets) ? binding.targets : []) {
+          appendGroupedReference(
+            entry.verificationTargets,
+            target?.adapter,
+            targetTraceReference(target)
+          )
+        }
+      }
+    }
+
+    if (kind === 'feature') {
+      for (const binding of Array.isArray(item.bindings) ? item.bindings : []) {
+        if (binding?.role === 'implementation') {
+          for (const reference of Array.isArray(binding?.satisfies) ? binding.satisfies : []) {
+            const requirementId = anchorItemId(reference)
+            if (requirementId) {
+              entry._requirementIds.add(requirementId)
+            }
+          }
+
+          for (const target of Array.isArray(binding.targets) ? binding.targets : []) {
+            appendGroupedReference(
+              entry.implementationTargets,
+              target?.adapter,
+              targetTraceReference(target)
+            )
+          }
+        }
+      }
+    }
+
+    entry.linkedPhilosophies = [...new Set(entry.linkedPhilosophies)].sort()
     byId.set(entry.id, entry)
     byKind.get(kind).push(entry)
+  }
+}
+
+function finalizeV1Relationships(byKind) {
+  const requirementsById = new Map(byKind.get('requirement').map((entry) => [entry.id, entry]))
+
+  for (const feature of byKind.get('feature')) {
+    feature.linkedRequirements = [...feature._requirementIds].sort()
+    for (const requirementId of feature.linkedRequirements) {
+      const requirement = requirementsById.get(requirementId)
+      if (requirement) {
+        requirement.linkedFeatures.push(feature.id)
+      }
+    }
+  }
+
+  for (const requirement of byKind.get('requirement')) {
+    requirement.linkedPolicies = [...requirement._policyIds].sort()
+    requirement.linkedFeatures = [...new Set(requirement.linkedFeatures)].sort()
   }
 }
 
@@ -221,11 +331,20 @@ async function loadSpecModel(workspaceRoot) {
     }
 
     const documentPath = normalizeRelativePath(path.relative(resolvedWorkspaceRoot, filePath))
-    collectDocumentEntries('philosophy', parsed?.philosophies, documentPath, byId, byKind)
-    collectDocumentEntries('policy', parsed?.policies, documentPath, byId, byKind)
-    collectDocumentEntries('requirement', parsed?.requirements, documentPath, byId, byKind)
-    collectDocumentEntries('feature', parsed?.features, documentPath, byId, byKind)
+    if (!DOC_KIND_TO_ITEM_KIND[parsed?.kind]) {
+      continue
+    }
+
+    collectV1DocumentEntries(
+      DOC_KIND_TO_ITEM_KIND[parsed.kind],
+      parsed?.[parsed.kind],
+      documentPath,
+      byId,
+      byKind
+    )
   }
+
+  finalizeV1Relationships(byKind)
 
   return {
     workspaceRoot: resolvedWorkspaceRoot,
@@ -382,11 +501,11 @@ function lookupTrace(model, filePath, symbol) {
   const fileOnlyOwners = []
 
   for (const requirement of model.byKind.get('requirement')) {
-    collectTraceMatches(requirement, 'test', requirement.tests)
+    collectTraceMatches(requirement, 'test', requirement.verificationTargets)
   }
 
   for (const feature of model.byKind.get('feature')) {
-    collectTraceMatches(feature, 'implementation', feature.implementations)
+    collectTraceMatches(feature, 'implementation', feature.implementationTargets)
   }
 
   function collectTraceMatches(owner, traceRole, groups) {
@@ -458,7 +577,7 @@ function collectInlineNavigationTargets(documentText) {
       })
     }
 
-    const fileMatch = /^(\s*)(?:-\s+)?file:\s*["']?([^"'#]+?)["']?\s*$/u.exec(text)
+    const fileMatch = /^(\s*)(?:-\s+)?(?:file|path):\s*["']?([^"'#]+?)["']?\s*$/u.exec(text)
     if (fileMatch) {
       const file = normalizeRelativePath(fileMatch[2])
       activeTraceFile = file || null
@@ -494,7 +613,7 @@ function collectInlineNavigationTargets(documentText) {
       continue
     }
 
-    if (/^\s*symbols:\s*$/u.test(text) && indent > traceFileIndent) {
+    if (/^\s*(?:symbols|names):\s*$/u.test(text) && indent > traceFileIndent) {
       inSymbols = true
       symbolsIndent = indent
       continue
@@ -815,9 +934,9 @@ function openTargetsForSpecId(model, id) {
 
   const referenceGroups =
     item.kind === 'requirement'
-      ? item.tests
+      ? item.verificationTargets
       : item.kind === 'feature'
-        ? item.implementations
+        ? item.implementationTargets
         : {}
 
   for (const [language, references] of Object.entries(referenceGroups)) {
