@@ -2,7 +2,7 @@
 use anyhow::{Context, Result, bail};
 use std::collections::{BTreeMap, BTreeSet};
 use syu_diagnostics::Diagnostic;
-use syu_spec_model::{ArtifactBinding, BoundTargetRef, LocalAnchorKind, SpecAnchor};
+use syu_spec_model::{ArtifactBinding, BoundTargetRef, LocalAnchorKind, Selector, SpecAnchor};
 use syu_work_model::*;
 use syu_workspace::{AnchorValue, SpecIndex, SpecWorkspace, resolve_target_with_adapters};
 
@@ -258,6 +258,7 @@ fn build_implementation_slice(
     exact_target: Option<&BoundTargetRef>,
 ) -> Result<ExecutionSlice> {
     let binding = index.bindings.get(implementation).expect("indexed binding");
+    let editable_lifecycle = request_target_lifecycle(request);
     let mut blockers = vec![];
     let mut editable = if let Some(target) = exact_target {
         exact_target_plan(
@@ -265,6 +266,7 @@ fn build_implementation_slice(
             index,
             target,
             TargetAccessMode::Editable,
+            editable_lifecycle,
             "Requested implementation target.",
             &mut blockers,
         )
@@ -274,6 +276,7 @@ fn build_implementation_slice(
             implementation,
             binding,
             TargetAccessMode::Editable,
+            editable_lifecycle,
             "Primary implementation satisfying the selected criterion.",
             &mut blockers,
         )
@@ -321,6 +324,7 @@ fn build_documentation_slice(
     exact_target: Option<&BoundTargetRef>,
 ) -> Result<ExecutionSlice> {
     let binding = index.bindings.get(documentation).expect("indexed binding");
+    let editable_lifecycle = request_target_lifecycle(request);
     let mut blockers = vec![];
     let mut editable = if let Some(target) = exact_target {
         exact_target_plan(
@@ -328,6 +332,7 @@ fn build_documentation_slice(
             index,
             target,
             TargetAccessMode::Editable,
+            editable_lifecycle,
             "Requested documentation target.",
             &mut blockers,
         )
@@ -337,6 +342,7 @@ fn build_documentation_slice(
             documentation,
             binding,
             TargetAccessMode::Editable,
+            editable_lifecycle,
             "Primary documentation target for the selected criterion.",
             &mut blockers,
         )
@@ -356,6 +362,7 @@ fn build_documentation_slice(
                 &implementation,
                 other,
                 TargetAccessMode::Readonly,
+                None,
                 "Implementation context referenced by the selected documentation target.",
                 &mut blockers,
             ));
@@ -420,6 +427,7 @@ fn build_verification_slice(
                 &implementation,
                 other,
                 TargetAccessMode::Readonly,
+                None,
                 "Implementation context for the selected verification target.",
                 &mut blockers,
             ));
@@ -491,6 +499,11 @@ fn completion_checks(
             checks.push(CompletionCheck::DiffWithinScope);
         }
         WorkOperation::Remove => {
+            for target in editable {
+                checks.push(CompletionCheck::TargetAbsent {
+                    target: target.reference.clone(),
+                });
+            }
             checks.push(CompletionCheck::DiffWithinScope);
         }
         WorkOperation::Refactor => {
@@ -710,8 +723,11 @@ fn criterion_verification_targets(
                     &reference,
                     binding,
                     target,
-                    access,
-                    "Direct verification of the selected criterion.",
+                    TargetPlanOptions {
+                        access,
+                        lifecycle: None,
+                        reason: "Direct verification of the selected criterion.",
+                    },
                     blockers,
                 ));
             }
@@ -725,6 +741,7 @@ fn exact_target_plan(
     index: &SpecIndex,
     requested: &BoundTargetRef,
     access: TargetAccessMode,
+    lifecycle: Option<TargetLifecycle>,
     reason: &str,
     blockers: &mut Vec<Diagnostic>,
 ) -> Vec<PlannedTarget> {
@@ -735,7 +752,16 @@ fn exact_target_plan(
         return vec![];
     };
     one_target(
-        workspace, requested, binding, target, access, reason, blockers,
+        workspace,
+        requested,
+        binding,
+        target,
+        TargetPlanOptions {
+            access,
+            lifecycle,
+            reason,
+        },
+        blockers,
     )
 }
 
@@ -763,8 +789,11 @@ fn contract_readonly_context(
                     &contract.source,
                     source_binding,
                     target,
-                    TargetAccessMode::Readonly,
-                    "Contract source constraining this implementation.",
+                    TargetPlanOptions {
+                        access: TargetAccessMode::Readonly,
+                        lifecycle: None,
+                        reason: "Contract source constraining this implementation.",
+                    },
                     blockers,
                 ));
             }
@@ -777,6 +806,7 @@ fn contract_readonly_context(
                         &participant.binding,
                         other,
                         TargetAccessMode::Readonly,
+                        None,
                         "Contract counterpart; readonly in this slice.",
                         blockers,
                     ));
@@ -798,9 +828,15 @@ fn targets(
     anchor: &SpecAnchor,
     binding: &ArtifactBinding,
     access: TargetAccessMode,
+    lifecycle: Option<TargetLifecycle>,
     reason: &str,
     blockers: &mut Vec<Diagnostic>,
 ) -> Vec<PlannedTarget> {
+    let options = TargetPlanOptions {
+        access,
+        lifecycle,
+        reason,
+    };
     binding
         .targets
         .iter()
@@ -813,27 +849,44 @@ fn targets(
                 },
                 binding,
                 t,
-                access,
-                reason,
+                options,
                 blockers,
             )
         })
         .collect()
 }
+
+#[derive(Clone, Copy)]
+struct TargetPlanOptions<'a> {
+    access: TargetAccessMode,
+    lifecycle: Option<TargetLifecycle>,
+    reason: &'a str,
+}
+
 fn one_target(
     workspace: &SpecWorkspace,
     reference: &BoundTargetRef,
     binding: &ArtifactBinding,
     target: &syu_spec_model::ArtifactTarget,
-    access: TargetAccessMode,
-    reason: &str,
+    options: TargetPlanOptions<'_>,
     blockers: &mut Vec<Diagnostic>,
 ) -> Vec<PlannedTarget> {
+    if let Some(lifecycle) = options.lifecycle {
+        return vec![declared_target_plan(
+            reference,
+            binding,
+            target,
+            options.access,
+            lifecycle,
+            options.reason,
+        )];
+    }
     match resolve_target_with_adapters(&workspace.root, target, &workspace.config.adapters.enabled)
     {
         Ok(r) => vec![PlannedTarget {
             reference: reference.clone(),
-            access,
+            lifecycle: TargetLifecycle::Stable,
+            access: options.access,
             resolved_path: r.path.to_string_lossy().into_owned(),
             resolved_selector: ResolvedSelector {
                 description: r.description,
@@ -848,7 +901,7 @@ fn one_target(
             byte_end: r.byte_end,
             line_start: r.line_start,
             line_end: r.line_end,
-            reason: reason.into(),
+            reason: options.reason.into(),
         }],
         Err(e) => {
             let mut d = Diagnostic::error(
@@ -860,6 +913,59 @@ fn one_target(
             blockers.push(d);
             vec![]
         }
+    }
+}
+
+fn declared_target_plan(
+    reference: &BoundTargetRef,
+    binding: &ArtifactBinding,
+    target: &syu_spec_model::ArtifactTarget,
+    access: TargetAccessMode,
+    lifecycle: TargetLifecycle,
+    reason: &str,
+) -> PlannedTarget {
+    let (description, symbols) = declared_selector(&target.selector);
+    PlannedTarget {
+        reference: reference.clone(),
+        lifecycle,
+        access,
+        resolved_path: target.path.to_string_lossy().into_owned(),
+        resolved_selector: ResolvedSelector {
+            description,
+            symbols,
+        },
+        content_hash: "declared".into(),
+        excerpt_hash: "declared".into(),
+        adapter: target.adapter.clone(),
+        facet: binding.facet.clone(),
+        role: binding.role,
+        byte_start: 0,
+        byte_end: 0,
+        line_start: 1,
+        line_end: usize::MAX,
+        reason: reason.into(),
+    }
+}
+
+fn request_target_lifecycle(request: &WorkRequest) -> Option<TargetLifecycle> {
+    match request.operation {
+        WorkOperation::Add => Some(TargetLifecycle::EnsurePresent),
+        WorkOperation::Remove => Some(TargetLifecycle::EnsureAbsent),
+        _ => None,
+    }
+}
+
+fn declared_selector(selector: &Selector) -> (String, Vec<String>) {
+    match selector {
+        Selector::File => ("file".into(), Vec::new()),
+        Selector::Symbol { names } => (format!("symbols {}", names.join(", ")), names.clone()),
+        Selector::Operation { method, path } => (
+            format!("operation {} {path}", method.to_ascii_uppercase()),
+            Vec::new(),
+        ),
+        Selector::Heading { value } => (format!("heading {value}"), Vec::new()),
+        Selector::JsonPointer { value } => (format!("json-pointer {value}"), Vec::new()),
+        Selector::Marker { value } => (format!("marker {value}"), Vec::new()),
     }
 }
 fn dedup(values: &mut Vec<PlannedTarget>) {
@@ -1196,7 +1302,7 @@ pub fn export_context(
             if !included.insert(target.reference.clone()) {
                 continue;
             }
-            let resolved = index
+            let excerpt = index
                 .target(&target.reference)
                 .and_then(|declared| {
                     resolve_target_with_adapters(
@@ -1206,10 +1312,20 @@ pub fn export_context(
                     )
                     .ok()
                 })
+                .map(|resolved| resolved.excerpt)
+                .filter(|excerpt| !excerpt.is_empty())
+                .or_else(|| match target.lifecycle {
+                    TargetLifecycle::EnsurePresent => Some(format!(
+                        "Target will be created: {} ({})",
+                        target.resolved_path, target.resolved_selector.description
+                    )),
+                    TargetLifecycle::EnsureAbsent => Some(format!(
+                        "Target will be removed: {} ({})",
+                        target.resolved_path, target.resolved_selector.description
+                    )),
+                    TargetLifecycle::Stable => None,
+                })
                 .context("target resolution failed while exporting context")?;
-            if resolved.excerpt.is_empty() {
-                bail!("target excerpt is empty for {}", target.reference);
-            }
             artifact_context.push(ArtifactExcerpt {
                 reference: target.reference.clone(),
                 mode,
@@ -1226,7 +1342,7 @@ pub fn export_context(
                 content_hash: target.content_hash.clone(),
                 excerpt_hash: target.excerpt_hash.clone(),
                 reason: target.reason.clone(),
-                excerpt: resolved.excerpt,
+                excerpt,
             });
         }
     }

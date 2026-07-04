@@ -82,6 +82,8 @@ pub struct ResolvedSelector {
 pub struct PlannedTarget {
     #[serde(rename = "ref")]
     pub reference: BoundTargetRef,
+    #[serde(default)]
+    pub lifecycle: TargetLifecycle,
     pub access: TargetAccessMode,
     pub resolved_path: String,
     pub resolved_selector: ResolvedSelector,
@@ -95,6 +97,14 @@ pub struct PlannedTarget {
     pub line_start: usize,
     pub line_end: usize,
     pub reason: String,
+}
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TargetLifecycle {
+    #[default]
+    Stable,
+    EnsurePresent,
+    EnsureAbsent,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -132,6 +142,9 @@ pub enum CompletionCheck {
         rules: Vec<String>,
     },
     TargetExists {
+        target: BoundTargetRef,
+    },
+    TargetAbsent {
         target: BoundTargetRef,
     },
     DiffWithinScope,

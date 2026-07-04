@@ -4,11 +4,11 @@ use syu_diagnostics::{Diagnostic, Severity, ValidationResult};
 use syu_planner::plan as canonical_plan;
 use syu_project_model::{ProjectConfig, RuleOverride, ValidationPreset};
 use syu_spec_model::{
-    BindingRole, ItemStatus, LocalAnchorKind, RepoPath, RuleLevel, Selector, SpecAnchor,
-    SpecDocument,
+    BindingRole, BoundTargetRef, ItemStatus, LocalAnchorKind, RepoPath, RuleLevel, Selector,
+    SpecAnchor, SpecDocument,
 };
 use syu_work_model::{
-    ExecutionSlice, PlanConfidence, WORK_PLAN_SCHEMA, WorkPlan, work_plan_digest,
+    ExecutionSlice, PlanConfidence, TargetLifecycle, WORK_PLAN_SCHEMA, WorkPlan, work_plan_digest,
 };
 use syu_workspace::{AnchorValue, SpecIndex, SpecWorkspace, resolve_target_with_adapters};
 
@@ -714,6 +714,20 @@ fn check_kind(
 }
 
 fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
+    let allowed_absent_targets = ctx
+        .work_plan
+        .into_iter()
+        .flat_map(|plan| plan.slices.iter())
+        .flat_map(|slice| {
+            slice
+                .editable_targets
+                .iter()
+                .chain(&slice.verification_targets)
+                .chain(&slice.readonly_context)
+        })
+        .filter(|target| target.lifecycle == TargetLifecycle::EnsureAbsent)
+        .map(|target| target.reference.clone())
+        .collect::<BTreeSet<_>>();
     let known_facets = ctx
         .config
         .profiles
@@ -822,11 +836,16 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                     );
                 }
             }
+            let target_ref = BoundTargetRef {
+                binding: anchor.clone(),
+                target_id: target.id.clone(),
+            };
             if let Err(e) = resolve_target_with_adapters(
                 &ctx.workspace.root,
                 target,
                 &ctx.config.adapters.enabled,
-            ) {
+            ) && !allowed_absent_targets.contains(&target_ref)
+            {
                 push(
                     out,
                     "SYU-TARGET-002",
@@ -1017,16 +1036,23 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
             .chain(&slice.readonly_context);
         let actual_bytes: usize = all_targets
             .clone()
-            .filter_map(|target| ctx.index.target(&target.reference))
-            .filter_map(|declared| {
-                resolve_target_with_adapters(
-                    &ctx.workspace.root,
-                    declared,
-                    &ctx.config.adapters.enabled,
-                )
-                .ok()
+            .map(|target| match target.lifecycle {
+                TargetLifecycle::Stable => ctx
+                    .index
+                    .target(&target.reference)
+                    .and_then(|declared| {
+                        resolve_target_with_adapters(
+                            &ctx.workspace.root,
+                            declared,
+                            &ctx.config.adapters.enabled,
+                        )
+                        .ok()
+                    })
+                    .map_or(0, |resolved| resolved.excerpt.len()),
+                TargetLifecycle::EnsurePresent | TargetLifecycle::EnsureAbsent => {
+                    target.byte_end.saturating_sub(target.byte_start)
+                }
             })
-            .map(|resolved| resolved.excerpt.len())
             .sum();
         let actual_files = slice
             .editable_targets
@@ -1086,6 +1112,24 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                 .ok()
             }) {
                 Some(resolved)
+                    if target.lifecycle == TargetLifecycle::EnsurePresent
+                        && resolved.path.to_string_lossy() == target.resolved_path
+                        && resolved.description == target.resolved_selector.description
+                        && resolved.symbols == target.resolved_selector.symbols
+                        && ctx
+                            .index
+                            .bindings
+                            .get(&target.reference.binding)
+                            .is_some_and(|binding| {
+                                binding.facet == target.facet
+                                    && binding.role == target.role
+                                    && ctx
+                                        .index
+                                        .target(&target.reference)
+                                        .is_some_and(|declared| declared.adapter == target.adapter)
+                            }) => {}
+                None if target.lifecycle == TargetLifecycle::EnsureAbsent => {}
+                Some(resolved)
                     if resolved.content_hash == target.content_hash
                         && resolved.excerpt_hash == target.excerpt_hash
                         && resolved.path.to_string_lossy() == target.resolved_path
@@ -1114,6 +1158,56 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                     &target.resolved_path,
                     Some(target.reference.binding.clone()),
                 ),
+            }
+        }
+        for completion in &slice.completion {
+            match completion {
+                syu_work_model::CompletionCheck::TargetExists { target } => {
+                    if ctx
+                        .index
+                        .target(target)
+                        .and_then(|declared| {
+                            resolve_target_with_adapters(
+                                &ctx.workspace.root,
+                                declared,
+                                &ctx.config.adapters.enabled,
+                            )
+                            .ok()
+                        })
+                        .is_none()
+                    {
+                        push(
+                            out,
+                            "SYU-WORK-011",
+                            format!("expected target is still missing: {target}"),
+                            "work-plan",
+                            Some(target.binding.clone()),
+                        );
+                    }
+                }
+                syu_work_model::CompletionCheck::TargetAbsent { target }
+                    if ctx
+                        .index
+                        .target(target)
+                        .and_then(|declared| {
+                            resolve_target_with_adapters(
+                                &ctx.workspace.root,
+                                declared,
+                                &ctx.config.adapters.enabled,
+                            )
+                            .ok()
+                        })
+                        .is_some() =>
+                {
+                    push(
+                        out,
+                        "SYU-WORK-011",
+                        format!("expected removed target still exists: {target}"),
+                        "work-plan",
+                        Some(target.binding.clone()),
+                    );
+                }
+                _ => {}
             }
         }
         for required in slice
