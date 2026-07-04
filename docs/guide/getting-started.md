@@ -548,12 +548,6 @@ at new links or larger structural changes. If you want to preview the same fix
 set without writing files, use `syu validate . --fix --dry-run` and review the
 printed plan instead.
 
-## 6. Generate a report
-
-```bash
-syu report . --output reports/syu.md
-```
-
 ## 7. Study the examples
 
 The repository includes complete examples:
@@ -606,10 +600,5 @@ example-backed, or both, see the
 - Use the [reviewer workflow guide](./reviewer-workflow.md) when a PR already exists and you want one trace/relate/log loop to inspect it
 - Check the [trace adapter capability matrix](./trace-adapter-support.md) before depending on `doc_contains` or strict ownership coverage in a mixed-language codebase
 - Check the [troubleshooting guide](./troubleshooting.md) when `syu validate` returns an unfamiliar error code
-- If you run `syu report`, your own project can generate a local Markdown report.
-  The checked-in `docs/generated/` links below exist in the `syu` repository itself,
-  so a freshly initialized project will not have them yet.
 - Browse the live [Specification Reference](https://ugoite.github.io/syu/docs/generated/site-spec)
   to see how `syu` self-hosts its own contract
-- Open the live [validation report](https://ugoite.github.io/syu/docs/generated/syu-report)
-  to inspect the checked-in repository status

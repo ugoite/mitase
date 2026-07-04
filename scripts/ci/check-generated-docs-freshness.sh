@@ -44,7 +44,6 @@ check_generated_docs_freshness() {
   cd "$repo_root"
   snapshot_generated_docs >"$before_snapshot"
   python3 scripts/generate-site-docs.py
-  cargo run --quiet -- report . --output docs/generated/syu-report.md >/dev/null
   snapshot_generated_docs >"$after_snapshot"
 
   if ! cmp -s "$before_snapshot" "$after_snapshot"; then

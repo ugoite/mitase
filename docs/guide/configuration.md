@@ -236,21 +236,6 @@ Use one repository-native port so browser and desktop clients can point to the
 same typed API surface. The command-line `--port` flag still overrides the
 config value for ad hoc runs.
 
-### `report.output`
-
-Sets the default Markdown destination for `syu report`.
-
-Use a repository-relative path such as:
-
-```yaml
-report:
-  output: docs/generated/syu-report.md
-```
-
-When set in `syu.yaml`, the path is resolved from the workspace root. `--output`
-still overrides the config, and relative config paths must stay inside the
-workspace root so checked-in report destinations cannot escape the repository.
-
 ### `runtimes.python.command`
 
 Controls which Python executable `syu` uses for Python inspection.
@@ -289,12 +274,6 @@ invocation:
 Passing the flag with no value means `true`. Use `=false` when you want a
 temporary relaxed run without changing the checked-in config.
 
-For report output paths, CLI flags override config:
-
-1. `--output`
-2. `report.output`
-3. stdout
-
 ## Wildcard file ownership
 
 Traces may use `symbols: ['*']` when one requirement or feature intentionally
@@ -323,9 +302,5 @@ want strict ownership checks without enumerating every public symbol by hand.
   backlinks after stabilizing the forward graph
 - turn on `validate.require_symbol_trace_coverage: true` once the repository
   wants public APIs and tests to remain fully owned by the spec
-- set `report.output` when your repository checks in one stable report artifact
-  path
-- set `report.output` when your repository checks in one stable report artifact
-  path
 - treat runtime overrides as environment-specific, not project-specific, unless
   your team truly needs a pinned executable name

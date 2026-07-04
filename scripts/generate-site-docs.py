@@ -101,6 +101,17 @@ def resolve_spec_root() -> Path:
     if not isinstance(document, dict):
         return default_root
 
+    workspace_config = document.get("workspace")
+    if isinstance(workspace_config, dict):
+        spec_roots = workspace_config.get("spec_roots")
+        if isinstance(spec_roots, list):
+            for raw_root in spec_roots:
+                if isinstance(raw_root, str) and raw_root.strip():
+                    candidate = Path(raw_root.strip())
+                    if candidate.is_absolute():
+                        return candidate
+                    return REPO_ROOT / candidate
+
     spec_config = document.get("spec")
     if not isinstance(spec_config, dict):
         return default_root
