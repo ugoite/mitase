@@ -797,6 +797,290 @@ fn add_plan_supports_missing_declared_target_and_validates_after_creation() {
 }
 
 #[test]
+fn add_plan_existing_file_uses_real_container_snapshot_and_nonzero_budget() {
+    let temp = tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("spec")).unwrap();
+    fs::create_dir_all(temp.path().join("src")).unwrap();
+    fs::create_dir_all(temp.path().join("tests")).unwrap();
+    fs::write(
+        temp.path().join("syu.yaml"),
+        concat!(
+            "schema: syu/config/v1\n",
+            "workspace:\n",
+            "  spec_roots: [spec]\n",
+            "  artifact_roots: [src, tests]\n",
+            "  excludes: []\n",
+            "profiles: { active: [], custom: {} }\n",
+            "validation:\n",
+            "  preset: standard\n",
+            "  deny_warnings: false\n",
+            "  rules: {}\n",
+            "  changed:\n",
+            "    require_owned_changes: false\n",
+            "work:\n",
+            "  slicing:\n",
+            "    max_editable_files: 2\n",
+            "    max_editable_symbols: 2\n",
+            "    max_verification_targets: 1\n",
+            "    max_readonly_targets: 1\n",
+            "    max_total_bytes: 4096\n",
+            "  context:\n",
+            "    include_parent_principles: false\n",
+            "    include_parent_rules: false\n",
+            "adapters: { enabled: [rust] }\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/requirement.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: requirements\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "requirements:\n",
+            "  - id: REQ-SAMPLE-ADD-EXISTING\n",
+            "    title: Sample\n",
+            "    description: Sample requirement.\n",
+            "    priority: medium\n",
+            "    status: implemented\n",
+            "    criteria:\n",
+            "      - id: create\n",
+            "        kind: behavior\n",
+            "        statement: Add a new sibling function.\n",
+            "        governed_by: []\n",
+            "    bindings:\n",
+            "      - id: verify\n",
+            "        role: verification\n",
+            "        facet: verification\n",
+            "        responsibility: Verify new behavior.\n",
+            "        targets:\n",
+            "          - { id: case, adapter: rust, path: tests/check.rs, selector: { kind: symbol, names: [check_new_behavior] } }\n",
+            "        verifies: [REQ-SAMPLE-ADD-EXISTING#criterion.create]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/feature.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: features\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "features:\n",
+            "  - id: FEAT-SAMPLE-ADD-EXISTING\n",
+            "    title: Sample\n",
+            "    summary: Add a new function to an existing file.\n",
+            "    status: implemented\n",
+            "    bindings:\n",
+            "      - id: app\n",
+            "        role: implementation\n",
+            "        facet: backend\n",
+            "        responsibility: Add the new function.\n",
+            "        targets:\n",
+            "          - { id: new, adapter: rust, path: src/lib.rs, selector: { kind: symbol, names: [new_behavior] } }\n",
+            "        satisfies: [REQ-SAMPLE-ADD-EXISTING#criterion.create]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("src/lib.rs"),
+        "fn existing_behavior() {}\n",
+    )
+    .unwrap();
+    init_workspace_repo(temp.path());
+    let request = temp.path().join("work.yaml");
+    let plan = temp.path().join("plan.yaml");
+    fs::write(
+        &request,
+        concat!(
+            "schema: syu/work-request/v1\n",
+            "id: WORK-ADD-EXISTING-001\n",
+            "summary: Add the new target.\n",
+            "operation: add\n",
+            "seeds: [REQ-SAMPLE-ADD-EXISTING#criterion.create]\n",
+            "constraints: { include_facets: [], exclude_paths: [], max_slices: 2 }\n",
+        ),
+    )
+    .unwrap();
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["work", "plan", "--request"])
+        .arg(&request)
+        .args(["--out"])
+        .arg(&plan)
+        .args(["--workspace"])
+        .arg(temp.path())
+        .assert()
+        .success();
+    let text = fs::read_to_string(&plan).unwrap();
+    assert!(text.contains("lifecycle: ensure-present"));
+    assert!(!text.contains("content_hash: declared"));
+    assert!(!text.contains("excerpt_hash: declared"));
+    assert!(!text.contains("line_end: 18446744073709551615"));
+    assert!(!text.contains("budget_bytes: 0"));
+}
+
+#[test]
+fn add_plan_rejects_noop_existing_target() {
+    let temp = tempdir().unwrap();
+    let plan = temp.path().join("plan.yaml");
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args([
+            "work",
+            "plan",
+            "--request",
+            "fixtures/v1/valid-web-app/work.yaml",
+            "--out",
+        ])
+        .arg(&plan)
+        .args(["--workspace", "fixtures/v1/valid-web-app"])
+        .assert()
+        .success();
+    let request = temp.path().join("request.yaml");
+    fs::write(
+        &request,
+        concat!(
+            "schema: syu/work-request/v1\n",
+            "id: WORK-ADD-NOOP-001\n",
+            "summary: Attempt to add an existing target.\n",
+            "operation: add\n",
+            "seeds: [REQ-AUTH-001#criterion.invalid-credentials]\n",
+            "constraints: { include_facets: [], exclude_paths: [], max_slices: 2 }\n",
+        ),
+    )
+    .unwrap();
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["work", "plan", "--request"])
+        .arg(&request)
+        .args(["--out"])
+        .arg(&plan)
+        .args(["--workspace", "fixtures/v1/valid-web-app"])
+        .assert()
+        .failure();
+    let text = fs::read_to_string(&plan).unwrap();
+    assert!(text.contains("add target already exists"));
+}
+
+#[test]
+fn remove_plan_rejects_missing_target() {
+    let temp = tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("spec")).unwrap();
+    fs::create_dir_all(temp.path().join("src")).unwrap();
+    fs::create_dir_all(temp.path().join("tests")).unwrap();
+    fs::write(
+        temp.path().join("syu.yaml"),
+        concat!(
+            "schema: syu/config/v1\n",
+            "workspace:\n",
+            "  spec_roots: [spec]\n",
+            "  artifact_roots: [src, tests]\n",
+            "  excludes: []\n",
+            "profiles: { active: [], custom: {} }\n",
+            "validation:\n",
+            "  preset: standard\n",
+            "  deny_warnings: false\n",
+            "  rules: {}\n",
+            "  changed:\n",
+            "    require_owned_changes: false\n",
+            "work:\n",
+            "  slicing:\n",
+            "    max_editable_files: 2\n",
+            "    max_editable_symbols: 2\n",
+            "    max_verification_targets: 1\n",
+            "    max_readonly_targets: 1\n",
+            "    max_total_bytes: 4096\n",
+            "  context:\n",
+            "    include_parent_principles: false\n",
+            "    include_parent_rules: false\n",
+            "adapters: { enabled: [rust] }\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/requirement.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: requirements\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "requirements:\n",
+            "  - id: REQ-SAMPLE-REMOVE-MISSING\n",
+            "    title: Sample\n",
+            "    description: Sample requirement.\n",
+            "    priority: medium\n",
+            "    status: implemented\n",
+            "    criteria:\n",
+            "      - id: drop\n",
+            "        kind: behavior\n",
+            "        statement: Remove the obsolete behavior.\n",
+            "        governed_by: []\n",
+            "    bindings:\n",
+            "      - id: verify\n",
+            "        role: verification\n",
+            "        facet: verification\n",
+            "        responsibility: Verify removal behavior.\n",
+            "        targets:\n",
+            "          - { id: case, adapter: rust, path: tests/check.rs, selector: { kind: symbol, names: [check_removed_behavior] } }\n",
+            "        verifies: [REQ-SAMPLE-REMOVE-MISSING#criterion.drop]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/feature.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: features\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "features:\n",
+            "  - id: FEAT-SAMPLE-REMOVE-MISSING\n",
+            "    title: Sample\n",
+            "    summary: Remove a function.\n",
+            "    status: implemented\n",
+            "    bindings:\n",
+            "      - id: app\n",
+            "        role: implementation\n",
+            "        facet: backend\n",
+            "        responsibility: Remove the function.\n",
+            "        targets:\n",
+            "          - { id: old, adapter: rust, path: src/old.rs, selector: { kind: symbol, names: [old_behavior] } }\n",
+            "        satisfies: [REQ-SAMPLE-REMOVE-MISSING#criterion.drop]\n",
+        ),
+    )
+    .unwrap();
+    init_workspace_repo(temp.path());
+    let request = temp.path().join("request.yaml");
+    let plan = temp.path().join("plan.yaml");
+    fs::write(
+        &request,
+        concat!(
+            "schema: syu/work-request/v1\n",
+            "id: WORK-REMOVE-NOOP-001\n",
+            "summary: Attempt to remove a missing target.\n",
+            "operation: remove\n",
+            "seeds: [REQ-SAMPLE-REMOVE-MISSING#criterion.drop]\n",
+            "constraints: { include_facets: [], exclude_paths: [], max_slices: 2 }\n",
+        ),
+    )
+    .unwrap();
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["work", "plan", "--request"])
+        .arg(&request)
+        .args(["--out"])
+        .arg(&plan)
+        .args(["--workspace"])
+        .arg(temp.path())
+        .assert()
+        .failure();
+    let text = fs::read_to_string(&plan).unwrap();
+    assert!(text.contains("remove target does not exist"));
+}
+
+#[test]
 fn remove_plan_validates_after_target_is_deleted() {
     let temp = tempdir().unwrap();
     fs::create_dir_all(temp.path().join("spec")).unwrap();

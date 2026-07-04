@@ -96,6 +96,8 @@ pub struct PlannedTarget {
     pub byte_end: usize,
     pub line_start: usize,
     pub line_end: usize,
+    #[serde(default)]
+    pub budget_bytes: usize,
     pub reason: String,
 }
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]

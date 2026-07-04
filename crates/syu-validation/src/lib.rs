@@ -1359,10 +1359,7 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
             .iter()
             .chain(&slice.verification_targets)
             .chain(&slice.readonly_context);
-        let actual_bytes: usize = all_targets
-            .clone()
-            .map(|target| target.byte_end.saturating_sub(target.byte_start))
-            .sum();
+        let actual_bytes: usize = all_targets.clone().map(target_budget_bytes).sum();
         let actual_files = slice
             .editable_targets
             .iter()
@@ -1672,6 +1669,13 @@ fn relaxed_target_match(
         && canonical.byte_end == planned.byte_end
         && canonical.line_start == planned.line_start
         && canonical.line_end == planned.line_end
+        && canonical.budget_bytes == planned.budget_bytes
+}
+
+fn target_budget_bytes(target: &syu_work_model::PlannedTarget) -> usize {
+    target
+        .budget_bytes
+        .max(target.byte_end.saturating_sub(target.byte_start))
 }
 
 fn validate_slice_scope(

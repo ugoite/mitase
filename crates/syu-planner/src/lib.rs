@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 use anyhow::{Context, Result, bail};
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use syu_diagnostics::Diagnostic;
 use syu_spec_model::{ArtifactBinding, BoundTargetRef, LocalAnchorKind, Selector, SpecAnchor};
@@ -626,7 +627,7 @@ fn finalize_slice(
         .iter()
         .chain(&verification)
         .chain(&readonly)
-        .map(|t| t.byte_end.saturating_sub(t.byte_start))
+        .map(target_budget_bytes)
         .sum();
     let budget = SliceBudgetUsage {
         editable_files,
@@ -901,6 +902,7 @@ fn one_target(
                 vec![]
             }
             (TargetLifecycle::EnsurePresent, Err(_)) => vec![declared_target_plan(
+                workspace,
                 reference,
                 binding,
                 target,
@@ -926,6 +928,7 @@ fn one_target(
                 byte_end: r.byte_end,
                 line_start: r.line_start,
                 line_end: r.line_end,
+                budget_bytes: r.byte_end.saturating_sub(r.byte_start),
                 reason: options.reason.into(),
             }],
             (TargetLifecycle::EnsureAbsent, Err(_)) => {
@@ -960,6 +963,7 @@ fn one_target(
             byte_end: r.byte_end,
             line_start: r.line_start,
             line_end: r.line_end,
+            budget_bytes: r.byte_end.saturating_sub(r.byte_start),
             reason: options.reason.into(),
         }],
         Err(e) => {
@@ -976,6 +980,7 @@ fn one_target(
 }
 
 fn declared_target_plan(
+    workspace: &SpecWorkspace,
     reference: &BoundTargetRef,
     binding: &ArtifactBinding,
     target: &syu_spec_model::ArtifactTarget,
@@ -984,6 +989,7 @@ fn declared_target_plan(
     reason: &str,
 ) -> PlannedTarget {
     let (description, symbols) = declared_selector(&target.selector);
+    let fallback = fallback_present_target_snapshot(workspace, target);
     PlannedTarget {
         reference: reference.clone(),
         lifecycle,
@@ -993,15 +999,16 @@ fn declared_target_plan(
             description,
             symbols,
         },
-        content_hash: "declared".into(),
-        excerpt_hash: "declared".into(),
+        content_hash: fallback.content_hash,
+        excerpt_hash: fallback.excerpt_hash,
         adapter: target.adapter.clone(),
         facet: binding.facet.clone(),
         role: binding.role,
-        byte_start: 0,
-        byte_end: 0,
-        line_start: 1,
-        line_end: usize::MAX,
+        byte_start: fallback.byte_start,
+        byte_end: fallback.byte_end,
+        line_start: fallback.line_start,
+        line_end: fallback.line_end,
+        budget_bytes: fallback.budget_bytes,
         reason: reason.into(),
     }
 }
@@ -1026,6 +1033,78 @@ fn declared_selector(selector: &Selector) -> (String, Vec<String>) {
         Selector::JsonPointer { value } => (format!("json-pointer {value}"), Vec::new()),
         Selector::Marker { value } => (format!("marker {value}"), Vec::new()),
     }
+}
+
+struct FallbackPresentTargetSnapshot {
+    content_hash: String,
+    excerpt_hash: String,
+    byte_start: usize,
+    byte_end: usize,
+    line_start: usize,
+    line_end: usize,
+    budget_bytes: usize,
+}
+
+fn fallback_present_target_snapshot(
+    workspace: &SpecWorkspace,
+    target: &syu_spec_model::ArtifactTarget,
+) -> FallbackPresentTargetSnapshot {
+    if let Ok(container) = resolve_target_with_adapters(
+        &workspace.root,
+        &syu_spec_model::ArtifactTarget {
+            id: target.id.clone(),
+            adapter: target.adapter.clone(),
+            path: target.path.clone(),
+            selector: Selector::File,
+        },
+        &workspace.config.adapters.enabled,
+    ) {
+        return FallbackPresentTargetSnapshot {
+            content_hash: container.content_hash,
+            excerpt_hash: container.excerpt_hash,
+            byte_start: container.byte_start,
+            byte_end: container.byte_end,
+            line_start: container.line_start,
+            line_end: container.line_end.max(1),
+            budget_bytes: container
+                .byte_end
+                .saturating_sub(container.byte_start)
+                .max(1),
+        };
+    }
+    let empty_hash = hash_bytes(&[]);
+    FallbackPresentTargetSnapshot {
+        content_hash: empty_hash.clone(),
+        excerpt_hash: empty_hash,
+        byte_start: 0,
+        byte_end: 0,
+        line_start: 1,
+        line_end: 1,
+        budget_bytes: estimated_add_budget_bytes(&target.selector),
+    }
+}
+
+fn estimated_add_budget_bytes(selector: &Selector) -> usize {
+    match selector {
+        Selector::File => 256,
+        Selector::Symbol { .. } => 128,
+        Selector::Operation { .. } => 192,
+        Selector::Heading { .. } => 96,
+        Selector::JsonPointer { .. } => 96,
+        Selector::Marker { .. } => 96,
+    }
+}
+
+fn hash_bytes(bytes: &[u8]) -> String {
+    let mut hash = Sha256::new();
+    hash.update(bytes);
+    format!("sha256:{:x}", hash.finalize())
+}
+
+fn target_budget_bytes(target: &PlannedTarget) -> usize {
+    target
+        .budget_bytes
+        .max(target.byte_end.saturating_sub(target.byte_start))
 }
 fn dedup(values: &mut Vec<PlannedTarget>) {
     values.sort_by(|a, b| a.reference.cmp(&b.reference));
@@ -1129,7 +1208,7 @@ fn slice_budget_can_shrink_with_editable_split(
     slice
         .editable_targets
         .iter()
-        .any(|target| target.byte_end.saturating_sub(target.byte_start) > 0)
+        .any(|target| target_budget_bytes(target) > 0)
 }
 
 fn target_groups(targets: &[PlannedTarget]) -> Option<Vec<Vec<PlannedTarget>>> {
@@ -1246,7 +1325,7 @@ fn slice_budget(
             .iter()
             .chain(verification_targets)
             .chain(readonly_context)
-            .map(|target| target.byte_end.saturating_sub(target.byte_start))
+            .map(target_budget_bytes)
             .sum(),
     }
 }
