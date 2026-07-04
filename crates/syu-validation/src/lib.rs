@@ -286,7 +286,9 @@ fn validate_changed_spec_impact(
         .iter()
         .map(|document| normalize_workspace_path(document))
         .collect::<BTreeSet<_>>();
-    let baseline = load_baseline_spec_state(ctx);
+    let baseline = ctx
+        .revision
+        .and_then(|revision| load_workspace_at_revision(&ctx.workspace.root, revision));
 
     for anchor in changed_anchors_for_documents(
         &changed_documents,
@@ -448,9 +450,7 @@ fn binding_targets_changed_across_indexes(
         .any(|path| changed_paths.contains(&path))
 }
 
-fn load_baseline_spec_state(ctx: &ValidationContext<'_>) -> Option<(SpecWorkspace, SpecIndex)> {
-    let revision = ctx.revision?;
-    let root = &ctx.workspace.root;
+fn load_workspace_at_revision(root: &Path, revision: &str) -> Option<(SpecWorkspace, SpecIndex)> {
     let syu_config = git_show(root, revision, Path::new("syu.yaml")).ok()?;
     let config: ProjectConfig = serde_yaml::from_str(&syu_config).ok()?;
     let workspace_dir = std::env::temp_dir().join(format!(
@@ -464,28 +464,30 @@ fn load_baseline_spec_state(ctx: &ValidationContext<'_>) -> Option<(SpecWorkspac
     fs::create_dir_all(&workspace_dir).ok()?;
     fs::write(workspace_dir.join("syu.yaml"), syu_config).ok()?;
     let files = git_ls_tree(root, revision).ok()?;
-    for spec_root in &config.workspace.spec_roots {
-        let spec_root_path: &Path = spec_root.as_path();
-        for relative in &files {
-            if !relative.starts_with(spec_root_path) {
-                continue;
-            }
-            if !matches!(
-                relative.extension().and_then(|value| value.to_str()),
-                Some("yaml" | "yml")
-            ) {
-                continue;
-            }
-            let contents = match git_show(root, revision, relative) {
-                Ok(contents) => contents,
-                Err(_) => continue,
-            };
-            let destination = workspace_dir.join(relative);
-            if let Some(parent) = destination.parent() {
-                fs::create_dir_all(parent).ok()?;
-            }
-            fs::write(destination, contents).ok()?;
+    for relative in &files {
+        let include = relative == Path::new("syu.yaml")
+            || config
+                .workspace
+                .spec_roots
+                .iter()
+                .any(|root| relative.starts_with(root.as_path()))
+            || config
+                .workspace
+                .artifact_roots
+                .iter()
+                .any(|root| relative.starts_with(root.as_path()));
+        if !include {
+            continue;
         }
+        let contents = match git_show(root, revision, relative) {
+            Ok(contents) => contents,
+            Err(_) => continue,
+        };
+        let destination = workspace_dir.join(relative);
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent).ok()?;
+        }
+        fs::write(destination, contents).ok()?;
     }
     let workspace = SpecWorkspace::load(&workspace_dir).ok()?;
     let index = workspace.index().ok()?;
@@ -493,10 +495,16 @@ fn load_baseline_spec_state(ctx: &ValidationContext<'_>) -> Option<(SpecWorkspac
 }
 
 fn git_show(root: &Path, revision: &str, relative: &Path) -> Result<String, String> {
-    let spec = format!("{revision}:{}", relative.to_string_lossy());
+    let (repo_root, prefix) = git_workspace_context(root)?;
+    let repo_relative = if prefix.as_os_str().is_empty() {
+        relative.to_path_buf()
+    } else {
+        prefix.join(relative)
+    };
+    let spec = format!("{revision}:{}", repo_relative.to_string_lossy());
     let output = Command::new("git")
         .arg("-C")
-        .arg(root)
+        .arg(&repo_root)
         .args(["show", &spec])
         .output()
         .map_err(|error| error.to_string())?;
@@ -507,9 +515,10 @@ fn git_show(root: &Path, revision: &str, relative: &Path) -> Result<String, Stri
 }
 
 fn git_ls_tree(root: &Path, revision: &str) -> Result<Vec<PathBuf>, String> {
+    let (repo_root, prefix) = git_workspace_context(root)?;
     let output = Command::new("git")
         .arg("-C")
-        .arg(root)
+        .arg(&repo_root)
         .args(["ls-tree", "-r", "--name-only", revision])
         .output()
         .map_err(|error| error.to_string())?;
@@ -518,8 +527,36 @@ fn git_ls_tree(root: &Path, revision: &str) -> Result<Vec<PathBuf>, String> {
     }
     Ok(String::from_utf8_lossy(&output.stdout)
         .lines()
-        .map(PathBuf::from)
+        .filter_map(|line| {
+            let path = PathBuf::from(line);
+            if prefix.as_os_str().is_empty() {
+                return Some(path);
+            }
+            path.strip_prefix(&prefix).ok().map(PathBuf::from)
+        })
         .collect())
+}
+
+fn git_workspace_context(root: &Path) -> Result<(PathBuf, PathBuf), String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["rev-parse", "--show-toplevel"])
+        .output()
+        .map_err(|error| error.to_string())?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+    let repo_root = PathBuf::from(String::from_utf8_lossy(&output.stdout).trim());
+    let canonical_repo_root = repo_root
+        .canonicalize()
+        .map_err(|error| error.to_string())?;
+    let canonical_root = root.canonicalize().map_err(|error| error.to_string())?;
+    let prefix = canonical_root
+        .strip_prefix(&canonical_repo_root)
+        .map(PathBuf::from)
+        .map_err(|error| error.to_string())?;
+    Ok((canonical_repo_root, prefix))
 }
 
 fn changed_anchors_for_documents(
@@ -1258,16 +1295,25 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
         );
     }
     let allow_post_state = ctx.changed_files.is_some();
-    if (!allow_post_state
+    if !allow_post_state
         && ctx
             .revision
-            .is_some_and(|revision| plan.basis.revision != revision))
-        || plan.basis.workspace_fingerprint != ctx.workspace.fingerprint()
+            .is_some_and(|revision| plan.basis.revision != revision)
     {
         push(
             out,
             "SYU-WORK-009",
-            "plan basis revision or workspace fingerprint is stale",
+            "plan basis revision is stale",
+            "work-plan",
+            None,
+        );
+    }
+    let basis_workspace = load_workspace_at_revision(&ctx.workspace.root, &plan.basis.revision);
+    if basis_workspace.is_none() {
+        push(
+            out,
+            "SYU-WORK-009",
+            "plan basis revision cannot be reconstructed",
             "work-plan",
             None,
         );
@@ -1281,27 +1327,15 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
             None,
         );
     }
-    let skip_current_replan = allow_post_state
-        && matches!(
-            plan.request.operation,
-            syu_work_model::WorkOperation::Add | syu_work_model::WorkOperation::Remove
-        );
-    if !skip_current_replan {
-        match canonical_plan(
-            &plan.request,
-            ctx.workspace,
-            ctx.index,
-            &plan.basis.revision,
-        ) {
-            Ok(canonical) => {
-                let structures_match = if allow_post_state {
-                    relaxed_plan_matches(&canonical, plan)
-                } else {
-                    canonical.status == plan.status
-                        && canonical.slices == plan.slices
-                        && canonical.diagnostics == plan.diagnostics
-                        && canonical.canonical_digest == plan.canonical_digest
-                };
+    if let Some((workspace, index)) = basis_workspace.as_ref() {
+        match canonical_plan(&plan.request, workspace, index, &plan.basis.revision) {
+            Ok(mut canonical) => {
+                canonical.basis = plan.basis.clone();
+                canonical.canonical_digest = work_plan_digest(&canonical);
+                let structures_match = canonical.status == plan.status
+                    && canonical.slices == plan.slices
+                    && canonical.diagnostics == plan.diagnostics
+                    && canonical.canonical_digest == plan.canonical_digest;
                 if !structures_match {
                     push(
                         out,
@@ -1592,84 +1626,6 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
             }
         }
     }
-}
-
-fn relaxed_plan_matches(canonical: &WorkPlan, planned: &WorkPlan) -> bool {
-    canonical.status == planned.status
-        && canonical.diagnostics == planned.diagnostics
-        && canonical.slices.len() == planned.slices.len()
-        && canonical
-            .slices
-            .iter()
-            .zip(&planned.slices)
-            .all(|(left, right)| relaxed_slice_matches(left, right))
-}
-
-fn relaxed_slice_matches(canonical: &ExecutionSlice, planned: &ExecutionSlice) -> bool {
-    canonical.id == planned.id
-        && canonical.goal == planned.goal
-        && canonical.anchors == planned.anchors
-        && canonical.acceptance == planned.acceptance
-        && canonical.contracts == planned.contracts
-        && canonical.non_goals == planned.non_goals
-        && canonical.completion == planned.completion
-        && canonical.confidence == planned.confidence
-        && canonical.blockers == planned.blockers
-        && relaxed_targets_match(&canonical.editable_targets, &planned.editable_targets, true)
-        && relaxed_targets_match(
-            &canonical.verification_targets,
-            &planned.verification_targets,
-            true,
-        )
-        && relaxed_targets_match(
-            &canonical.readonly_context,
-            &planned.readonly_context,
-            false,
-        )
-}
-
-fn relaxed_targets_match(
-    canonical: &[syu_work_model::PlannedTarget],
-    planned: &[syu_work_model::PlannedTarget],
-    allow_editable_changes: bool,
-) -> bool {
-    canonical.len() == planned.len()
-        && canonical
-            .iter()
-            .zip(planned)
-            .all(|(left, right)| relaxed_target_match(left, right, allow_editable_changes))
-}
-
-fn relaxed_target_match(
-    canonical: &syu_work_model::PlannedTarget,
-    planned: &syu_work_model::PlannedTarget,
-    allow_editable_changes: bool,
-) -> bool {
-    let same_identity = canonical.reference == planned.reference
-        && canonical.lifecycle == planned.lifecycle
-        && canonical.access == planned.access
-        && canonical.resolved_path == planned.resolved_path
-        && canonical.resolved_selector == planned.resolved_selector
-        && canonical.adapter == planned.adapter
-        && canonical.facet == planned.facet
-        && canonical.role == planned.role
-        && canonical.reason == planned.reason;
-    if !same_identity {
-        return false;
-    }
-    if allow_editable_changes
-        && planned.lifecycle == TargetLifecycle::Stable
-        && planned.access == syu_work_model::TargetAccessMode::Editable
-    {
-        return true;
-    }
-    canonical.content_hash == planned.content_hash
-        && canonical.excerpt_hash == planned.excerpt_hash
-        && canonical.byte_start == planned.byte_start
-        && canonical.byte_end == planned.byte_end
-        && canonical.line_start == planned.line_start
-        && canonical.line_end == planned.line_end
-        && canonical.budget_bytes == planned.budget_bytes
 }
 
 fn target_budget_bytes(target: &syu_work_model::PlannedTarget) -> usize {

@@ -2,6 +2,7 @@ use assert_cmd::Command;
 use std::fs;
 use std::path::Path;
 use std::process::Command as ProcessCommand;
+use syu_work_model::{WorkPlan, work_plan_digest};
 use tempfile::tempdir;
 
 fn git(dir: &Path, args: &[&str]) {
@@ -128,6 +129,42 @@ fn rejects_tampered_path_selector_and_budget_snapshots() {
         .arg(plan)
         .assert()
         .failure();
+}
+
+#[test]
+fn rejects_rehashed_editable_target_tampering_against_basis_revision() {
+    let temp = tempdir().unwrap();
+    let plan = temp.path().join("plan.yaml");
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args([
+            "work",
+            "plan",
+            "--request",
+            "fixtures/v1/valid-web-app/work.yaml",
+            "--out",
+        ])
+        .arg(&plan)
+        .args(["--workspace", "fixtures/v1/valid-web-app"])
+        .assert()
+        .success();
+    let mut work_plan: WorkPlan =
+        serde_yaml::from_str(&fs::read_to_string(&plan).unwrap()).unwrap();
+    let target = &mut work_plan.slices[0].editable_targets[0];
+    target.content_hash = "sha256:forged".into();
+    target.excerpt_hash = "sha256:forged".into();
+    work_plan.canonical_digest = work_plan_digest(&work_plan);
+    fs::write(&plan, serde_yaml::to_string(&work_plan).unwrap()).unwrap();
+    let output = Command::cargo_bin("syu")
+        .unwrap()
+        .args(["validate", "fixtures/v1/valid-web-app", "--plan"])
+        .arg(&plan)
+        .args(["--range", "HEAD..HEAD"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("plan structure does not match the canonical planner output"));
 }
 
 #[test]
