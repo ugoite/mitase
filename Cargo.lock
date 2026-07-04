@@ -812,6 +812,7 @@ dependencies = [
 name = "syu-validation"
 version = "0.1.0"
 dependencies = [
+ "serde_yaml",
  "syu-diagnostics",
  "syu-planner",
  "syu-project-model",

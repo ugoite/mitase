@@ -1,5 +1,9 @@
 #![forbid(unsafe_code)]
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
 use syu_diagnostics::{Diagnostic, Severity, ValidationResult};
 use syu_planner::plan as canonical_plan;
 use syu_project_model::{ProjectConfig, RuleOverride, ValidationPreset};
@@ -278,89 +282,397 @@ fn validate_changed_spec_impact(
     if changed_spec_documents.is_empty() {
         return;
     }
-    let items_in_document =
-        ctx.index
-            .item_paths
-            .iter()
-            .fold(BTreeMap::<_, Vec<_>>::new(), |mut map, (item, path)| {
-                map.entry(path.clone()).or_default().push(item.clone());
-                map
-            });
+    let changed_documents = changed_spec_documents
+        .iter()
+        .map(|document| normalize_workspace_path(document))
+        .collect::<BTreeSet<_>>();
+    let baseline = load_baseline_spec_state(ctx);
 
-    for document in changed_spec_documents {
-        for item_id in items_in_document.get(document).into_iter().flatten() {
-            for anchor in ctx.index.item_anchors.get(item_id).into_iter().flatten() {
-                match ctx.index.anchor(anchor) {
-                    Some(AnchorValue::Criterion(_)) => {
-                        let implementation_changed = ctx
-                            .index
-                            .criteria_to_implementations
-                            .get(anchor)
-                            .into_iter()
-                            .flatten()
-                            .any(|binding| binding_targets_changed(ctx, binding, changed_paths));
-                        let verification_changed = ctx
-                            .index
-                            .criteria_to_verifications
-                            .get(anchor)
-                            .into_iter()
-                            .flatten()
-                            .any(|binding| binding_targets_changed(ctx, binding, changed_paths));
-                        if !(implementation_changed || verification_changed) {
-                            push(
-                                out,
-                                "SYU-CHANGE-003",
-                                format!(
-                                    "changed criterion has no impacted implementation or verification update: {anchor}"
-                                ),
-                                document.display().to_string(),
-                                Some(anchor.clone()),
-                            );
-                        }
-                    }
-                    Some(AnchorValue::Contract(contract)) => {
-                        if !contract.participants.iter().any(|participant| {
-                            binding_targets_changed(ctx, &participant.binding, changed_paths)
-                        }) {
-                            push(
-                                out,
-                                "SYU-CHANGE-004",
-                                format!(
-                                    "changed contract has no participant artifact update: {anchor}"
-                                ),
-                                document.display().to_string(),
-                                Some(anchor.clone()),
-                            );
-                        }
-                    }
-                    Some(AnchorValue::Binding(_))
-                        if !binding_targets_changed(ctx, anchor, changed_paths) =>
-                    {
-                        push(
-                            out,
-                            "SYU-CHANGE-005",
-                            format!("changed binding has no impacted target update: {anchor}"),
-                            document.display().to_string(),
-                            Some(anchor.clone()),
-                        );
-                    }
-                    _ => {}
-                }
+    for anchor in changed_anchors_for_documents(
+        &changed_documents,
+        ctx.workspace,
+        ctx.index,
+        baseline.as_ref().map(|(workspace, _)| workspace),
+        baseline.as_ref().map(|(_, index)| index),
+        LocalAnchorKind::Criterion,
+    ) {
+        if !anchor_changed(
+            &anchor,
+            baseline.as_ref().map(|(_, index)| index),
+            ctx.index,
+        ) {
+            continue;
+        }
+        let implementation_changed = binding_set_for_criterion(
+            baseline.as_ref().map(|(_, index)| index),
+            ctx.index,
+            &anchor,
+            true,
+        )
+        .iter()
+        .any(|binding| {
+            binding_targets_changed_across_indexes(
+                baseline.as_ref().map(|(_, index)| index),
+                ctx.index,
+                binding,
+                changed_paths,
+            )
+        });
+        let verification_changed = binding_set_for_criterion(
+            baseline.as_ref().map(|(_, index)| index),
+            ctx.index,
+            &anchor,
+            false,
+        )
+        .iter()
+        .any(|binding| {
+            binding_targets_changed_across_indexes(
+                baseline.as_ref().map(|(_, index)| index),
+                ctx.index,
+                binding,
+                changed_paths,
+            )
+        });
+        if !(implementation_changed || verification_changed) {
+            push(
+                out,
+                "SYU-CHANGE-003",
+                format!(
+                    "changed criterion has no impacted implementation or verification update: {anchor}"
+                ),
+                changed_anchor_path(
+                    &anchor,
+                    baseline.as_ref().map(|(workspace, _)| workspace),
+                    baseline.as_ref().map(|(_, index)| index),
+                    ctx.workspace,
+                    ctx.index,
+                ),
+                Some(anchor.clone()),
+            );
+        }
+    }
+
+    for anchor in changed_anchors_for_documents(
+        &changed_documents,
+        ctx.workspace,
+        ctx.index,
+        baseline.as_ref().map(|(workspace, _)| workspace),
+        baseline.as_ref().map(|(_, index)| index),
+        LocalAnchorKind::Contract,
+    ) {
+        if !anchor_changed(
+            &anchor,
+            baseline.as_ref().map(|(_, index)| index),
+            ctx.index,
+        ) {
+            continue;
+        }
+        let participants = participant_bindings_for_contract(
+            baseline.as_ref().map(|(_, index)| index),
+            ctx.index,
+            &anchor,
+        );
+        if participants.is_empty()
+            || participants.iter().any(|binding| {
+                !binding_targets_changed_across_indexes(
+                    baseline.as_ref().map(|(_, index)| index),
+                    ctx.index,
+                    binding,
+                    changed_paths,
+                )
+            })
+        {
+            push(
+                out,
+                "SYU-CHANGE-004",
+                format!("changed contract has no full participant artifact update: {anchor}"),
+                changed_anchor_path(
+                    &anchor,
+                    baseline.as_ref().map(|(workspace, _)| workspace),
+                    baseline.as_ref().map(|(_, index)| index),
+                    ctx.workspace,
+                    ctx.index,
+                ),
+                Some(anchor.clone()),
+            );
+        }
+    }
+
+    for anchor in changed_anchors_for_documents(
+        &changed_documents,
+        ctx.workspace,
+        ctx.index,
+        baseline.as_ref().map(|(workspace, _)| workspace),
+        baseline.as_ref().map(|(_, index)| index),
+        LocalAnchorKind::Binding,
+    ) {
+        if !anchor_changed(
+            &anchor,
+            baseline.as_ref().map(|(_, index)| index),
+            ctx.index,
+        ) {
+            continue;
+        }
+        if !binding_targets_changed_across_indexes(
+            baseline.as_ref().map(|(_, index)| index),
+            ctx.index,
+            &anchor,
+            changed_paths,
+        ) {
+            push(
+                out,
+                "SYU-CHANGE-005",
+                format!("changed binding has no impacted target update: {anchor}"),
+                changed_anchor_path(
+                    &anchor,
+                    baseline.as_ref().map(|(workspace, _)| workspace),
+                    baseline.as_ref().map(|(_, index)| index),
+                    ctx.workspace,
+                    ctx.index,
+                ),
+                Some(anchor.clone()),
+            );
+        }
+    }
+}
+
+fn binding_targets_changed_across_indexes(
+    baseline: Option<&SpecIndex>,
+    current: &SpecIndex,
+    binding: &SpecAnchor,
+    changed_paths: &BTreeSet<String>,
+) -> bool {
+    binding_targets_for_index(baseline, binding)
+        .into_iter()
+        .chain(binding_targets_for_index(Some(current), binding))
+        .any(|path| changed_paths.contains(&path))
+}
+
+fn load_baseline_spec_state(ctx: &ValidationContext<'_>) -> Option<(SpecWorkspace, SpecIndex)> {
+    let revision = ctx.revision?;
+    let root = &ctx.workspace.root;
+    let syu_config = git_show(root, revision, Path::new("syu.yaml")).ok()?;
+    let config: ProjectConfig = serde_yaml::from_str(&syu_config).ok()?;
+    let workspace_dir = std::env::temp_dir().join(format!(
+        "syu-baseline-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .ok()?
+            .as_nanos()
+    ));
+    fs::create_dir_all(&workspace_dir).ok()?;
+    fs::write(workspace_dir.join("syu.yaml"), syu_config).ok()?;
+    let files = git_ls_tree(root, revision).ok()?;
+    for spec_root in &config.workspace.spec_roots {
+        let spec_root_path: &Path = spec_root.as_path();
+        for relative in &files {
+            if !relative.starts_with(spec_root_path) {
+                continue;
+            }
+            if !matches!(
+                relative.extension().and_then(|value| value.to_str()),
+                Some("yaml" | "yml")
+            ) {
+                continue;
+            }
+            let contents = match git_show(root, revision, relative) {
+                Ok(contents) => contents,
+                Err(_) => continue,
+            };
+            let destination = workspace_dir.join(relative);
+            if let Some(parent) = destination.parent() {
+                fs::create_dir_all(parent).ok()?;
+            }
+            fs::write(destination, contents).ok()?;
+        }
+    }
+    let workspace = SpecWorkspace::load(&workspace_dir).ok()?;
+    let index = workspace.index().ok()?;
+    Some((workspace, index))
+}
+
+fn git_show(root: &Path, revision: &str, relative: &Path) -> Result<String, String> {
+    let spec = format!("{revision}:{}", relative.to_string_lossy());
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["show", &spec])
+        .output()
+        .map_err(|error| error.to_string())?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+    String::from_utf8(output.stdout).map_err(|error| error.to_string())
+}
+
+fn git_ls_tree(root: &Path, revision: &str) -> Result<Vec<PathBuf>, String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["ls-tree", "-r", "--name-only", revision])
+        .output()
+        .map_err(|error| error.to_string())?;
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(PathBuf::from)
+        .collect())
+}
+
+fn changed_anchors_for_documents(
+    changed_documents: &BTreeSet<PathBuf>,
+    current_workspace: &SpecWorkspace,
+    current_index: &SpecIndex,
+    baseline_workspace: Option<&SpecWorkspace>,
+    baseline_index: Option<&SpecIndex>,
+    kind: LocalAnchorKind,
+) -> BTreeSet<SpecAnchor> {
+    let mut anchors = BTreeSet::new();
+    collect_changed_anchors(&mut anchors, changed_documents, current_index, kind);
+    let _ = current_workspace;
+    if let (Some(workspace), Some(index)) = (baseline_workspace, baseline_index) {
+        let _ = workspace;
+        collect_changed_anchors(&mut anchors, changed_documents, index, kind);
+    }
+    anchors
+}
+
+fn collect_changed_anchors(
+    out: &mut BTreeSet<SpecAnchor>,
+    changed_documents: &BTreeSet<PathBuf>,
+    index: &SpecIndex,
+    kind: LocalAnchorKind,
+) {
+    for (item, path) in &index.item_paths {
+        if !changed_documents.contains(&normalize_workspace_path(path)) {
+            continue;
+        }
+        for anchor in index.item_anchors.get(item).into_iter().flatten() {
+            if anchor.kind == kind {
+                out.insert(anchor.clone());
             }
         }
     }
 }
 
-fn binding_targets_changed(
-    ctx: &ValidationContext<'_>,
-    binding: &SpecAnchor,
-    changed_paths: &BTreeSet<String>,
-) -> bool {
-    ctx.index.bindings.get(binding).is_some_and(|artifact| {
-        artifact
-            .targets
-            .iter()
-            .any(|target| changed_paths.contains(&target.path.to_string_lossy().into_owned()))
+fn anchor_changed(anchor: &SpecAnchor, baseline: Option<&SpecIndex>, current: &SpecIndex) -> bool {
+    match (
+        baseline.and_then(|index| index.anchor(anchor)),
+        current.anchor(anchor),
+    ) {
+        (Some(AnchorValue::Criterion(left)), Some(AnchorValue::Criterion(right))) => left != right,
+        (Some(AnchorValue::Contract(left)), Some(AnchorValue::Contract(right))) => left != right,
+        (Some(AnchorValue::Binding(left)), Some(AnchorValue::Binding(right))) => left != right,
+        (None, None) => false,
+        _ => true,
+    }
+}
+
+fn binding_set_for_criterion(
+    baseline: Option<&SpecIndex>,
+    current: &SpecIndex,
+    criterion: &SpecAnchor,
+    implementation: bool,
+) -> BTreeSet<SpecAnchor> {
+    let mut bindings = BTreeSet::new();
+    if let Some(index) = baseline {
+        let source = if implementation {
+            &index.criteria_to_implementations
+        } else {
+            &index.criteria_to_verifications
+        };
+        bindings.extend(source.get(criterion).into_iter().flatten().cloned());
+    }
+    let source = if implementation {
+        &current.criteria_to_implementations
+    } else {
+        &current.criteria_to_verifications
+    };
+    bindings.extend(source.get(criterion).into_iter().flatten().cloned());
+    bindings
+}
+
+fn participant_bindings_for_contract(
+    baseline: Option<&SpecIndex>,
+    current: &SpecIndex,
+    contract: &SpecAnchor,
+) -> BTreeSet<SpecAnchor> {
+    let mut bindings = BTreeSet::new();
+    if let Some(index) = baseline
+        && let Some(old_contract) = index.contracts.get(contract)
+    {
+        bindings.extend(
+            old_contract
+                .participants
+                .iter()
+                .map(|participant| participant.binding.clone()),
+        );
+    }
+    if let Some(new_contract) = current.contracts.get(contract) {
+        bindings.extend(
+            new_contract
+                .participants
+                .iter()
+                .map(|participant| participant.binding.clone()),
+        );
+    }
+    bindings
+}
+
+fn binding_targets_for_index(index: Option<&SpecIndex>, binding: &SpecAnchor) -> BTreeSet<String> {
+    index
+        .and_then(|index| index.bindings.get(binding))
+        .map(|artifact| {
+            artifact
+                .targets
+                .iter()
+                .map(|target| target.path.to_string_lossy().into_owned())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn changed_anchor_path(
+    anchor: &SpecAnchor,
+    baseline_workspace: Option<&SpecWorkspace>,
+    baseline_index: Option<&SpecIndex>,
+    current_workspace: &SpecWorkspace,
+    current_index: &SpecIndex,
+) -> String {
+    current_index
+        .item_paths
+        .get(&anchor.item)
+        .and_then(|path| workspace_relative_display(path, &current_workspace.root))
+        .map(|path| path.to_string_lossy().into_owned())
+        .or_else(|| {
+            baseline_index.and_then(|index| {
+                baseline_workspace.and_then(|workspace| {
+                    index
+                        .item_paths
+                        .get(&anchor.item)
+                        .and_then(|path| workspace_relative_display(path, &workspace.root))
+                        .map(|path| path.to_string_lossy().into_owned())
+                })
+            })
+        })
+        .unwrap_or_else(|| "syu-spec".into())
+}
+
+fn normalize_workspace_path(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+}
+
+fn workspace_relative_display(path: &Path, root: &Path) -> Option<PathBuf> {
+    path.strip_prefix(root).ok().map(PathBuf::from).or_else(|| {
+        let normalized_path = normalize_workspace_path(path);
+        let normalized_root = normalize_workspace_path(root);
+        normalized_path
+            .strip_prefix(&normalized_root)
+            .ok()
+            .map(PathBuf::from)
     })
 }
 fn validate_document_shapes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {

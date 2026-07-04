@@ -2021,6 +2021,355 @@ fn strict_preset_requires_changed_spec_impact_updates() {
 }
 
 #[test]
+fn strict_preset_only_flags_the_changed_criterion_in_a_shared_document() {
+    let temp = tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("spec")).unwrap();
+    fs::create_dir_all(temp.path().join("src")).unwrap();
+    fs::create_dir_all(temp.path().join("tests")).unwrap();
+    fs::write(
+        temp.path().join("syu.yaml"),
+        concat!(
+            "schema: syu/config/v1\n",
+            "workspace:\n",
+            "  spec_roots: [spec]\n",
+            "  artifact_roots: [src, tests]\n",
+            "  excludes: []\n",
+            "profiles: { active: [], custom: {} }\n",
+            "validation:\n",
+            "  preset: strict\n",
+            "  deny_warnings: false\n",
+            "  rules: {}\n",
+            "  changed:\n",
+            "    baseline: { strategy: parent }\n",
+            "    require_owned_changes: false\n",
+            "work:\n",
+            "  slicing:\n",
+            "    max_editable_files: 2\n",
+            "    max_editable_symbols: 2\n",
+            "    max_verification_targets: 2\n",
+            "    max_readonly_targets: 2\n",
+            "    max_total_bytes: 4096\n",
+            "  context:\n",
+            "    include_parent_principles: false\n",
+            "    include_parent_rules: false\n",
+            "adapters: { enabled: [rust] }\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/foundation.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: philosophies\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "philosophies:\n",
+            "  - id: PHIL-SAMPLE-040\n",
+            "    title: Sample\n",
+            "    summary: Sample philosophy.\n",
+            "    principles:\n",
+            "      - { id: governed, statement: Keep changes governed., applies_to: [product] }\n",
+            "    bindings: []\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/policy.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: policies\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "policies:\n",
+            "  - id: POL-SAMPLE-040\n",
+            "    title: Sample\n",
+            "    summary: Sample policy.\n",
+            "    description: Sample policy.\n",
+            "    rules:\n",
+            "      - id: governed\n",
+            "        level: should\n",
+            "        statement: Keep changes governed.\n",
+            "        governed_by: [PHIL-SAMPLE-040#principle.governed]\n",
+            "    bindings: []\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/requirement.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: requirements\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "requirements:\n",
+            "  - id: REQ-SAMPLE-040\n",
+            "    title: Sample\n",
+            "    description: Sample requirement.\n",
+            "    priority: high\n",
+            "    status: implemented\n",
+            "    criteria:\n",
+            "      - id: first\n",
+            "        kind: behavior\n",
+            "        statement: First criterion.\n",
+            "        governed_by: [POL-SAMPLE-040#rule.governed]\n",
+            "      - id: second\n",
+            "        kind: behavior\n",
+            "        statement: Second criterion.\n",
+            "        governed_by: [POL-SAMPLE-040#rule.governed]\n",
+            "    bindings:\n",
+            "      - id: verify-first\n",
+            "        role: verification\n",
+            "        facet: verification\n",
+            "        responsibility: Verify first behavior.\n",
+            "        targets:\n",
+            "          - { id: case, adapter: rust, path: tests/first.rs, selector: { kind: symbol, names: [check_first] } }\n",
+            "        verifies: [REQ-SAMPLE-040#criterion.first]\n",
+            "      - id: verify-second\n",
+            "        role: verification\n",
+            "        facet: verification\n",
+            "        responsibility: Verify second behavior.\n",
+            "        targets:\n",
+            "          - { id: case, adapter: rust, path: tests/second.rs, selector: { kind: symbol, names: [check_second] } }\n",
+            "        verifies: [REQ-SAMPLE-040#criterion.second]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/feature.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: features\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "features:\n",
+            "  - id: FEAT-SAMPLE-040\n",
+            "    title: Sample\n",
+            "    summary: Sample feature.\n",
+            "    status: implemented\n",
+            "    bindings:\n",
+            "      - id: first\n",
+            "        role: implementation\n",
+            "        facet: backend\n",
+            "        responsibility: Provide first behavior.\n",
+            "        targets:\n",
+            "          - { id: code, adapter: rust, path: src/first.rs, selector: { kind: symbol, names: [first] } }\n",
+            "        satisfies: [REQ-SAMPLE-040#criterion.first]\n",
+            "      - id: second\n",
+            "        role: implementation\n",
+            "        facet: backend\n",
+            "        responsibility: Provide second behavior.\n",
+            "        targets:\n",
+            "          - { id: code, adapter: rust, path: src/second.rs, selector: { kind: symbol, names: [second] } }\n",
+            "        satisfies: [REQ-SAMPLE-040#criterion.second]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(temp.path().join("src/first.rs"), "fn first() {}\n").unwrap();
+    fs::write(temp.path().join("src/second.rs"), "fn second() {}\n").unwrap();
+    fs::write(temp.path().join("tests/first.rs"), "fn check_first() {}\n").unwrap();
+    fs::write(
+        temp.path().join("tests/second.rs"),
+        "fn check_second() {}\n",
+    )
+    .unwrap();
+    init_workspace_repo(temp.path());
+    fs::write(
+        temp.path().join("spec/requirement.yaml"),
+        fs::read_to_string(temp.path().join("spec/requirement.yaml"))
+            .unwrap()
+            .replace("First criterion.", "Updated first criterion."),
+    )
+    .unwrap();
+    let output = Command::cargo_bin("syu")
+        .unwrap()
+        .args(["validate"])
+        .arg(temp.path())
+        .args(["--range", "HEAD"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(stdout.matches("SYU-CHANGE-003").count(), 1);
+    assert!(stdout.contains("REQ-SAMPLE-040#criterion.first"));
+    assert!(!stdout.contains("REQ-SAMPLE-040#criterion.second"));
+}
+
+#[test]
+fn strict_preset_requires_all_contract_participants_to_change() {
+    let temp = tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("spec")).unwrap();
+    fs::create_dir_all(temp.path().join("src")).unwrap();
+    fs::write(
+        temp.path().join("syu.yaml"),
+        concat!(
+            "schema: syu/config/v1\n",
+            "workspace:\n",
+            "  spec_roots: [spec]\n",
+            "  artifact_roots: [src]\n",
+            "  excludes: []\n",
+            "profiles: { active: [], custom: {} }\n",
+            "validation:\n",
+            "  preset: strict\n",
+            "  deny_warnings: false\n",
+            "  rules: {}\n",
+            "  changed:\n",
+            "    baseline: { strategy: parent }\n",
+            "    require_owned_changes: false\n",
+            "work:\n",
+            "  slicing:\n",
+            "    max_editable_files: 2\n",
+            "    max_editable_symbols: 2\n",
+            "    max_verification_targets: 1\n",
+            "    max_readonly_targets: 2\n",
+            "    max_total_bytes: 4096\n",
+            "  context:\n",
+            "    include_parent_principles: false\n",
+            "    include_parent_rules: false\n",
+            "adapters: { enabled: [rust] }\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/foundation.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: philosophies\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "philosophies:\n",
+            "  - id: PHIL-SAMPLE-050\n",
+            "    title: Sample\n",
+            "    summary: Sample philosophy.\n",
+            "    principles:\n",
+            "      - { id: governed, statement: Keep contract changes governed., applies_to: [product] }\n",
+            "    bindings: []\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/policy.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: policies\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "policies:\n",
+            "  - id: POL-SAMPLE-050\n",
+            "    title: Sample\n",
+            "    summary: Sample policy.\n",
+            "    description: Sample policy.\n",
+            "    rules:\n",
+            "      - id: governed\n",
+            "        level: should\n",
+            "        statement: Keep contract changes governed.\n",
+            "        governed_by: [PHIL-SAMPLE-050#principle.governed]\n",
+            "    bindings: []\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/requirement.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: requirements\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "requirements:\n",
+            "  - id: REQ-SAMPLE-050\n",
+            "    title: Sample\n",
+            "    description: Sample requirement.\n",
+            "    priority: high\n",
+            "    status: implemented\n",
+            "    criteria:\n",
+            "      - id: bridge\n",
+            "        kind: behavior\n",
+            "        statement: Keep both sides aligned.\n",
+            "        governed_by: [POL-SAMPLE-050#rule.governed]\n",
+            "    bindings:\n",
+            "      - id: verify\n",
+            "        role: verification\n",
+            "        facet: verification\n",
+            "        responsibility: Verify both sides stay aligned.\n",
+            "        targets:\n",
+            "          - { id: case, adapter: rust, path: src/check.rs, selector: { kind: symbol, names: [check_bridge] } }\n",
+            "        verifies: [REQ-SAMPLE-050#criterion.bridge]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/feature.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: features\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "features:\n",
+            "  - id: FEAT-SAMPLE-050\n",
+            "    title: Sample\n",
+            "    summary: Sample feature.\n",
+            "    status: implemented\n",
+            "    bindings:\n",
+            "      - id: ui\n",
+            "        role: implementation\n",
+            "        facet: ui\n",
+            "        responsibility: UI side.\n",
+            "        targets:\n",
+            "          - { id: code, adapter: rust, path: src/ui.rs, selector: { kind: symbol, names: [ui_side] } }\n",
+            "        satisfies: [REQ-SAMPLE-050#criterion.bridge]\n",
+            "      - id: backend\n",
+            "        role: implementation\n",
+            "        facet: backend\n",
+            "        responsibility: Backend side.\n",
+            "        targets:\n",
+            "          - { id: code, adapter: rust, path: src/backend.rs, selector: { kind: symbol, names: [backend_side] } }\n",
+            "        satisfies: [REQ-SAMPLE-050#criterion.bridge]\n",
+            "      - id: schema\n",
+            "        role: contract-source\n",
+            "        facet: api\n",
+            "        responsibility: Contract source.\n",
+            "        targets:\n",
+            "          - { id: code, adapter: rust, path: src/schema.rs, selector: { kind: symbol, names: [schema_side] } }\n",
+            "    contracts:\n",
+            "      - id: bridge-http\n",
+            "        kind: http\n",
+            "        source: FEAT-SAMPLE-050#binding.schema/target.code\n",
+            "        participants:\n",
+            "          - { binding: FEAT-SAMPLE-050#binding.backend, role: provider }\n",
+            "          - { binding: FEAT-SAMPLE-050#binding.ui, role: consumer }\n",
+        ),
+    )
+    .unwrap();
+    fs::write(temp.path().join("src/ui.rs"), "fn ui_side() {}\n").unwrap();
+    fs::write(temp.path().join("src/backend.rs"), "fn backend_side() {}\n").unwrap();
+    fs::write(temp.path().join("src/schema.rs"), "fn schema_side() {}\n").unwrap();
+    fs::write(temp.path().join("src/check.rs"), "fn check_bridge() {}\n").unwrap();
+    init_workspace_repo(temp.path());
+    fs::write(
+        temp.path().join("spec/feature.yaml"),
+        fs::read_to_string(temp.path().join("spec/feature.yaml"))
+            .unwrap()
+            .replace("role: consumer", "role: client"),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("src/backend.rs"),
+        "fn backend_side() { let changed = 1; assert_eq!(changed, 1); }\n",
+    )
+    .unwrap();
+    let output = Command::cargo_bin("syu")
+        .unwrap()
+        .args(["validate"])
+        .arg(temp.path())
+        .args(["--range", "HEAD"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("SYU-CHANGE-004"));
+    assert!(stdout.contains("FEAT-SAMPLE-050#contract.bridge-http"));
+}
+
+#[test]
 fn deleted_command_is_not_an_alias() {
     Command::cargo_bin("syu")
         .unwrap()
