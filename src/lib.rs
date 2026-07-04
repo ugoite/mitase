@@ -368,7 +368,6 @@ fn parse_changed_files(status: &[u8], untracked: &[u8], patch: &str) -> Result<V
         .filter(|entry| !entry.is_empty());
     while let Some(kind) = entries.next() {
         let kind = String::from_utf8(kind.to_vec())?;
-        let status_code = kind.chars().next().unwrap_or('M');
         let (status, old_path, new_path) = match kind.chars().next().unwrap_or('M') {
             'A' => (
                 ChangeStatus::Added,
@@ -401,11 +400,7 @@ fn parse_changed_files(status: &[u8], untracked: &[u8], patch: &str) -> Result<V
                 )?),
             ),
             _ => (
-                if status_code == 'T' {
-                    ChangeStatus::Binary
-                } else {
-                    ChangeStatus::Modified
-                },
+                ChangeStatus::Modified,
                 None,
                 entries
                     .next()
@@ -464,6 +459,21 @@ fn parse_changed_files(status: &[u8], untracked: &[u8], patch: &str) -> Result<V
             });
             continue;
         }
+        if let Some((old_path, new_path)) = parse_binary_patch_paths(line) {
+            if let Some(index) = files.iter().position(|file| {
+                file.old_path
+                    .as_ref()
+                    .is_some_and(|value| value.to_string_lossy() == old_path)
+                    || file
+                        .new_path
+                        .as_ref()
+                        .is_some_and(|value| value.to_string_lossy() == new_path)
+            }) {
+                files[index].status = ChangeStatus::Binary;
+            }
+            current = None;
+            continue;
+        }
         if let Some(hunk) = line.strip_prefix("@@ ")
             && let Some(index) = current
         {
@@ -471,6 +481,15 @@ fn parse_changed_files(status: &[u8], untracked: &[u8], patch: &str) -> Result<V
         }
     }
     Ok(files)
+}
+
+fn parse_binary_patch_paths(line: &str) -> Option<(&str, &str)> {
+    let paths = line.strip_prefix("Binary files ")?;
+    let (old_path, remainder) = paths.split_once(" and ")?;
+    let new_path = remainder.strip_suffix(" differ")?;
+    let old_path = old_path.strip_prefix("a/").unwrap_or(old_path);
+    let new_path = new_path.strip_prefix("b/").unwrap_or(new_path);
+    Some((old_path, new_path))
 }
 
 fn parse_hunk_header(header: &str) -> Result<ChangedRange> {
@@ -534,6 +553,31 @@ diff --git a/src/b.rs b/src/b.rs\n\
         assert_eq!(
             files[0].new_path.as_ref().unwrap().to_string_lossy(),
             "src/new.rs"
+        );
+    }
+
+    #[test]
+    fn parse_changed_files_marks_binary_patches_from_patch_output() {
+        let files = parse_changed_files(
+            b"M\0assets/logo.png\0",
+            b"",
+            "\
+diff --git a/assets/logo.png b/assets/logo.png\n\
+Binary files a/assets/logo.png and b/assets/logo.png differ\n",
+        )
+        .unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].status, ChangeStatus::Binary);
+    }
+
+    #[test]
+    fn parse_changed_files_does_not_treat_type_changes_as_binary() {
+        let files = parse_changed_files(b"T\0src/app.rs\0", b"", "").unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].status, ChangeStatus::Modified);
+        assert_eq!(
+            files[0].new_path.as_ref().unwrap().to_string_lossy(),
+            "src/app.rs"
         );
     }
 }
