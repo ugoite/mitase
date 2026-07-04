@@ -945,9 +945,11 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
             None,
         );
     }
-    if ctx
-        .revision
-        .is_some_and(|revision| plan.basis.revision != revision)
+    let allow_post_state = ctx.changed_files.is_some();
+    if (!allow_post_state
+        && ctx
+            .revision
+            .is_some_and(|revision| plan.basis.revision != revision))
         || plan.basis.workspace_fingerprint != ctx.workspace.fingerprint()
     {
         push(
@@ -967,34 +969,45 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
             None,
         );
     }
-    match canonical_plan(
-        &plan.request,
-        ctx.workspace,
-        ctx.index,
-        &plan.basis.revision,
-    ) {
-        Ok(canonical) => {
-            if canonical.status != plan.status
-                || canonical.slices != plan.slices
-                || canonical.diagnostics != plan.diagnostics
-                || canonical.canonical_digest != plan.canonical_digest
-            {
-                push(
-                    out,
-                    "SYU-WORK-009",
-                    "plan structure does not match the canonical planner output",
-                    "work-plan",
-                    None,
-                );
+    let skip_current_replan = allow_post_state
+        && matches!(
+            plan.request.operation,
+            syu_work_model::WorkOperation::Add | syu_work_model::WorkOperation::Remove
+        );
+    if !skip_current_replan {
+        match canonical_plan(
+            &plan.request,
+            ctx.workspace,
+            ctx.index,
+            &plan.basis.revision,
+        ) {
+            Ok(canonical) => {
+                let structures_match = if allow_post_state {
+                    relaxed_plan_matches(&canonical, plan)
+                } else {
+                    canonical.status == plan.status
+                        && canonical.slices == plan.slices
+                        && canonical.diagnostics == plan.diagnostics
+                        && canonical.canonical_digest == plan.canonical_digest
+                };
+                if !structures_match {
+                    push(
+                        out,
+                        "SYU-WORK-009",
+                        "plan structure does not match the canonical planner output",
+                        "work-plan",
+                        None,
+                    );
+                }
             }
+            Err(error) => push(
+                out,
+                "SYU-WORK-009",
+                format!("plan request no longer replans cleanly: {error:#}"),
+                "work-plan",
+                None,
+            ),
         }
-        Err(error) => push(
-            out,
-            "SYU-WORK-009",
-            format!("plan request no longer replans cleanly: {error:#}"),
-            "work-plan",
-            None,
-        ),
     }
     let mut slice_ids = BTreeSet::new();
     let slices: Vec<&ExecutionSlice> = ctx
@@ -1036,23 +1049,7 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
             .chain(&slice.readonly_context);
         let actual_bytes: usize = all_targets
             .clone()
-            .map(|target| match target.lifecycle {
-                TargetLifecycle::Stable => ctx
-                    .index
-                    .target(&target.reference)
-                    .and_then(|declared| {
-                        resolve_target_with_adapters(
-                            &ctx.workspace.root,
-                            declared,
-                            &ctx.config.adapters.enabled,
-                        )
-                        .ok()
-                    })
-                    .map_or(0, |resolved| resolved.excerpt.len()),
-                TargetLifecycle::EnsurePresent | TargetLifecycle::EnsureAbsent => {
-                    target.byte_end.saturating_sub(target.byte_start)
-                }
-            })
+            .map(|target| target.byte_end.saturating_sub(target.byte_start))
             .sum();
         let actual_files = slice
             .editable_targets
@@ -1129,6 +1126,25 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                                         .is_some_and(|declared| declared.adapter == target.adapter)
                             }) => {}
                 None if target.lifecycle == TargetLifecycle::EnsureAbsent => {}
+                Some(resolved)
+                    if allow_post_state
+                        && target.lifecycle == TargetLifecycle::Stable
+                        && target.access == syu_work_model::TargetAccessMode::Editable
+                        && resolved.path.to_string_lossy() == target.resolved_path
+                        && resolved.description == target.resolved_selector.description
+                        && resolved.symbols == target.resolved_selector.symbols
+                        && ctx
+                            .index
+                            .bindings
+                            .get(&target.reference.binding)
+                            .is_some_and(|binding| {
+                                binding.facet == target.facet
+                                    && binding.role == target.role
+                                    && ctx
+                                        .index
+                                        .target(&target.reference)
+                                        .is_some_and(|declared| declared.adapter == target.adapter)
+                            }) => {}
                 Some(resolved)
                     if resolved.content_hash == target.content_hash
                         && resolved.excerpt_hash == target.excerpt_hash
@@ -1251,7 +1267,7 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
             }
         }
         if let Some(files) = ctx.changed_files {
-            validate_slice_scope(files, slice, out);
+            validate_slice_scope(ctx, files, slice, out);
         }
         for acceptance in &slice.acceptance {
             if let Some(AnchorValue::Criterion(c)) = ctx.index.anchor(&acceptance.anchor)
@@ -1269,7 +1285,89 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
     }
 }
 
-fn validate_slice_scope(files: &[ChangedFile], slice: &ExecutionSlice, out: &mut Vec<Diagnostic>) {
+fn relaxed_plan_matches(canonical: &WorkPlan, planned: &WorkPlan) -> bool {
+    canonical.status == planned.status
+        && canonical.diagnostics == planned.diagnostics
+        && canonical.slices.len() == planned.slices.len()
+        && canonical
+            .slices
+            .iter()
+            .zip(&planned.slices)
+            .all(|(left, right)| relaxed_slice_matches(left, right))
+}
+
+fn relaxed_slice_matches(canonical: &ExecutionSlice, planned: &ExecutionSlice) -> bool {
+    canonical.id == planned.id
+        && canonical.goal == planned.goal
+        && canonical.anchors == planned.anchors
+        && canonical.acceptance == planned.acceptance
+        && canonical.contracts == planned.contracts
+        && canonical.non_goals == planned.non_goals
+        && canonical.completion == planned.completion
+        && canonical.confidence == planned.confidence
+        && canonical.blockers == planned.blockers
+        && relaxed_targets_match(&canonical.editable_targets, &planned.editable_targets, true)
+        && relaxed_targets_match(
+            &canonical.verification_targets,
+            &planned.verification_targets,
+            true,
+        )
+        && relaxed_targets_match(
+            &canonical.readonly_context,
+            &planned.readonly_context,
+            false,
+        )
+}
+
+fn relaxed_targets_match(
+    canonical: &[syu_work_model::PlannedTarget],
+    planned: &[syu_work_model::PlannedTarget],
+    allow_editable_changes: bool,
+) -> bool {
+    canonical.len() == planned.len()
+        && canonical
+            .iter()
+            .zip(planned)
+            .all(|(left, right)| relaxed_target_match(left, right, allow_editable_changes))
+}
+
+fn relaxed_target_match(
+    canonical: &syu_work_model::PlannedTarget,
+    planned: &syu_work_model::PlannedTarget,
+    allow_editable_changes: bool,
+) -> bool {
+    let same_identity = canonical.reference == planned.reference
+        && canonical.lifecycle == planned.lifecycle
+        && canonical.access == planned.access
+        && canonical.resolved_path == planned.resolved_path
+        && canonical.resolved_selector == planned.resolved_selector
+        && canonical.adapter == planned.adapter
+        && canonical.facet == planned.facet
+        && canonical.role == planned.role
+        && canonical.reason == planned.reason;
+    if !same_identity {
+        return false;
+    }
+    if allow_editable_changes
+        && planned.lifecycle == TargetLifecycle::Stable
+        && planned.access == syu_work_model::TargetAccessMode::Editable
+    {
+        return true;
+    }
+    canonical.content_hash == planned.content_hash
+        && canonical.excerpt_hash == planned.excerpt_hash
+        && canonical.byte_start == planned.byte_start
+        && canonical.byte_end == planned.byte_end
+        && canonical.line_start == planned.line_start
+        && canonical.line_end == planned.line_end
+}
+
+fn validate_slice_scope(
+    ctx: &ValidationContext<'_>,
+    files: &[ChangedFile],
+    slice: &ExecutionSlice,
+    out: &mut Vec<Diagnostic>,
+) {
     let editable_targets = slice
         .editable_targets
         .iter()
@@ -1286,6 +1384,11 @@ fn validate_slice_scope(files: &[ChangedFile], slice: &ExecutionSlice, out: &mut
         let Some(path) = file.new_path.as_ref().or(file.old_path.as_ref()) else {
             continue;
         };
+        if !ctx.workspace.path_is_artifact(path.as_path())
+            || ctx.workspace.path_is_excluded(path.as_path())
+        {
+            continue;
+        }
         let hunks = if file.hunks.is_empty() {
             vec![ChangedRange {
                 old_start: 1,
@@ -1299,10 +1402,10 @@ fn validate_slice_scope(files: &[ChangedFile], slice: &ExecutionSlice, out: &mut
         for hunk in hunks {
             let readonly_hit = guarded_targets
                 .iter()
-                .any(|target| target_hits_hunk(target, path, &hunk));
+                .any(|target| target_hits_hunk(ctx, target, path, &hunk));
             let editable_hit = editable_targets
                 .iter()
-                .any(|target| target_hits_hunk(target, path, &hunk));
+                .any(|target| target_hits_hunk(ctx, target, path, &hunk));
             if readonly_hit && !editable_hit {
                 push(
                     out,
@@ -1325,14 +1428,37 @@ fn validate_slice_scope(files: &[ChangedFile], slice: &ExecutionSlice, out: &mut
 }
 
 fn target_hits_hunk(
+    ctx: &ValidationContext<'_>,
     target: &syu_work_model::PlannedTarget,
     changed_path: &RepoPath,
     hunk: &ChangedRange,
 ) -> bool {
-    if target.resolved_path != changed_path.to_string_lossy() {
+    let current = if target.lifecycle == TargetLifecycle::Stable
+        && target.access == syu_work_model::TargetAccessMode::Editable
+    {
+        ctx.index.target(&target.reference).and_then(|declared| {
+            resolve_target_with_adapters(
+                &ctx.workspace.root,
+                declared,
+                &ctx.config.adapters.enabled,
+            )
+            .ok()
+        })
+    } else {
+        None
+    };
+    let resolved_path = current
+        .as_ref()
+        .map(|resolved| resolved.path.to_string_lossy().into_owned())
+        .unwrap_or_else(|| target.resolved_path.clone());
+    if resolved_path != changed_path.to_string_lossy() {
         return false;
     }
-    if target.resolved_selector.description == "file" {
+    let description = current
+        .as_ref()
+        .map(|resolved| resolved.description.as_str())
+        .unwrap_or(target.resolved_selector.description.as_str());
+    if description == "file" {
         return true;
     }
     let start = if hunk.new_start == 0 {
@@ -1345,7 +1471,15 @@ fn target_hits_hunk(
     } else {
         hunk.new_end
     };
-    line_ranges_overlap(start, end, target.line_start, target.line_end)
+    let line_start = current
+        .as_ref()
+        .map(|resolved| resolved.line_start)
+        .unwrap_or(target.line_start);
+    let line_end = current
+        .as_ref()
+        .map(|resolved| resolved.line_end)
+        .unwrap_or(target.line_end);
+    line_ranges_overlap(start, end, line_start, line_end)
 }
 
 fn line_ranges_overlap(a_start: usize, a_end: usize, b_start: usize, b_end: usize) -> bool {

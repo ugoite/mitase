@@ -698,6 +698,7 @@ fn criterion_verification_targets(
     blockers: &mut Vec<Diagnostic>,
 ) -> Vec<PlannedTarget> {
     let mut verification = vec![];
+    let lifecycle = request_target_lifecycle(request);
     for anchor in index
         .criteria_to_verifications
         .get(criterion)
@@ -725,7 +726,7 @@ fn criterion_verification_targets(
                     target,
                     TargetPlanOptions {
                         access,
-                        lifecycle: None,
+                        lifecycle,
                         reason: "Direct verification of the selected criterion.",
                     },
                     blockers,
@@ -871,18 +872,62 @@ fn one_target(
     options: TargetPlanOptions<'_>,
     blockers: &mut Vec<Diagnostic>,
 ) -> Vec<PlannedTarget> {
+    let resolved =
+        resolve_target_with_adapters(&workspace.root, target, &workspace.config.adapters.enabled);
     if let Some(lifecycle) = options.lifecycle {
-        return vec![declared_target_plan(
-            reference,
-            binding,
-            target,
-            options.access,
-            lifecycle,
-            options.reason,
-        )];
+        return match (lifecycle, resolved) {
+            (TargetLifecycle::EnsurePresent, Ok(_)) => {
+                let mut d = Diagnostic::error(
+                    "SYU-WORK-001",
+                    format!("add target already exists: {reference}"),
+                    target.path.to_string_lossy(),
+                );
+                d.target = Some(reference.clone());
+                blockers.push(d);
+                vec![]
+            }
+            (TargetLifecycle::EnsurePresent, Err(_)) => vec![declared_target_plan(
+                reference,
+                binding,
+                target,
+                options.access,
+                lifecycle,
+                options.reason,
+            )],
+            (TargetLifecycle::EnsureAbsent, Ok(r)) => vec![PlannedTarget {
+                reference: reference.clone(),
+                lifecycle,
+                access: options.access,
+                resolved_path: r.path.to_string_lossy().into_owned(),
+                resolved_selector: ResolvedSelector {
+                    description: r.description,
+                    symbols: r.symbols,
+                },
+                content_hash: r.content_hash,
+                excerpt_hash: r.excerpt_hash,
+                adapter: target.adapter.clone(),
+                facet: binding.facet.clone(),
+                role: binding.role,
+                byte_start: r.byte_start,
+                byte_end: r.byte_end,
+                line_start: r.line_start,
+                line_end: r.line_end,
+                reason: options.reason.into(),
+            }],
+            (TargetLifecycle::EnsureAbsent, Err(_)) => {
+                let mut d = Diagnostic::error(
+                    "SYU-WORK-001",
+                    format!("remove target does not exist: {reference}"),
+                    target.path.to_string_lossy(),
+                );
+                d.target = Some(reference.clone());
+                blockers.push(d);
+                vec![]
+            }
+            (TargetLifecycle::Stable, _) => unreachable!(),
+        };
     }
-    match resolve_target_with_adapters(&workspace.root, target, &workspace.config.adapters.enabled)
-    {
+    match resolved {
         Ok(r) => vec![PlannedTarget {
             reference: reference.clone(),
             lifecycle: TargetLifecycle::Stable,

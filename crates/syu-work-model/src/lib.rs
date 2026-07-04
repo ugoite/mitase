@@ -202,7 +202,7 @@ pub enum ContextMode {
     Readonly,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(tag = "entry_kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum SpecContextEntry {
     Statement {
         anchor: SpecAnchor,

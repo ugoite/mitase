@@ -6,7 +6,6 @@ const { execFile } = require('node:child_process');
 
 const YAML = require('yaml');
 
-const DEFAULT_SPEC_ROOT = 'docs/syu'
 const MAX_BUFFER_BYTES = 10 * 1024 * 1024
 const SOURCE_LOCATION_LANGUAGES = new Set([
   'rust',
@@ -69,7 +68,7 @@ async function looksLikeSpecRoot(root) {
 async function readWorkspaceConfig(workspaceRoot) {
   const configPath = path.join(workspaceRoot, 'syu.yaml')
   if (!(await pathExists(configPath))) {
-    return { specRoot: DEFAULT_SPEC_ROOT }
+    return null
   }
 
   try {
@@ -77,14 +76,12 @@ async function readWorkspaceConfig(workspaceRoot) {
     const v1Roots = Array.isArray(parsed?.workspace?.spec_roots)
       ? parsed.workspace.spec_roots.filter((value) => typeof value === 'string' && value.trim())
       : []
-    const configuredRoot =
-      v1Roots[0] ||
-      (typeof parsed?.spec?.root === 'string' && parsed.spec.root.trim()
-        ? parsed.spec.root.trim()
-        : DEFAULT_SPEC_ROOT)
-    return { specRoot: configuredRoot }
+    if (!v1Roots[0]) {
+      return null
+    }
+    return { specRoot: v1Roots[0] }
   } catch {
-    return { specRoot: DEFAULT_SPEC_ROOT }
+    return null
   }
 }
 
@@ -96,7 +93,16 @@ async function resolveWorkspaceContext(startPath) {
   while (true) {
     const configPath = path.join(current, 'syu.yaml')
     if (await pathExists(configPath)) {
-      const { specRoot } = await readWorkspaceConfig(current)
+      const workspaceConfig = await readWorkspaceConfig(current)
+      if (!workspaceConfig) {
+        const parent = path.dirname(current)
+        if (parent === current) {
+          break
+        }
+        current = parent
+        continue
+      }
+      const { specRoot } = workspaceConfig
       const absoluteSpecRoot = path.resolve(current, specRoot)
       if (
         (searchRoot === current || isWithinPath(searchRoot, absoluteSpecRoot)) &&
@@ -311,12 +317,10 @@ function finalizeV1Relationships(byKind) {
 async function loadSpecModel(workspaceRoot) {
   const context = await resolveWorkspaceContext(workspaceRoot)
   const resolvedWorkspaceRoot = context?.workspaceRoot || workspaceRoot
-  const absoluteSpecRoot =
-    context?.specRoot ||
-    path.resolve(
-      resolvedWorkspaceRoot,
-      (await readWorkspaceConfig(resolvedWorkspaceRoot)).specRoot
-    )
+  if (!context) {
+    throw new Error('The selected folder is not inside a syu v1 workspace.')
+  }
+  const absoluteSpecRoot = context.specRoot
   const yamlFiles = await walkYamlFiles(absoluteSpecRoot)
   const byId = new Map()
   const byKind = new Map(SPEC_KINDS.map((kind) => [kind, []]))

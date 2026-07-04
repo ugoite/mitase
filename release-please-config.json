@@ -12,7 +12,7 @@
           "file": "scripts/install-syu.sh",
           "replacers": [
             {
-              "search": "DEFAULT_VERSION_SELECTOR=\"v(?<version>.*)\"",
+              "search": "DEFAULT_VERSION_SELECTOR=\"__SYU_RELEASE_TAG__\"",
               "replace": "DEFAULT_VERSION_SELECTOR=\"v{{version}}\""
             }
           ]
