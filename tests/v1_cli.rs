@@ -823,7 +823,7 @@ fn remove_plan_validates_after_target_is_deleted() {
             "    max_editable_symbols: 2\n",
             "    max_verification_targets: 1\n",
             "    max_readonly_targets: 1\n",
-            "    max_total_bytes: 2048\n",
+            "    max_total_bytes: 4096\n",
             "  context:\n",
             "    include_parent_principles: false\n",
             "    include_parent_rules: false\n",
@@ -1526,6 +1526,130 @@ fn exact_documentation_target_builds_document_slice() {
     assert!(text.contains("resolved_path: docs/guide.md"));
     assert!(text.contains("kind: diff-within-scope"));
     assert!(text.contains("no-code-drift"));
+}
+
+#[test]
+fn plan_blocks_when_context_pack_serialized_budget_would_overflow() {
+    let temp = tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("spec")).unwrap();
+    fs::create_dir_all(temp.path().join("src")).unwrap();
+    fs::create_dir_all(temp.path().join("docs")).unwrap();
+    fs::write(
+        temp.path().join("syu.yaml"),
+        concat!(
+            "schema: syu/config/v1\n",
+            "workspace:\n",
+            "  spec_roots: [spec]\n",
+            "  artifact_roots: [src, docs]\n",
+            "  excludes: []\n",
+            "profiles: { active: [], custom: {} }\n",
+            "validation:\n",
+            "  preset: standard\n",
+            "  deny_warnings: false\n",
+            "  rules: {}\n",
+            "  changed:\n",
+            "    require_owned_changes: false\n",
+            "work:\n",
+            "  slicing:\n",
+            "    max_editable_files: 2\n",
+            "    max_editable_symbols: 2\n",
+            "    max_verification_targets: 1\n",
+            "    max_readonly_targets: 2\n",
+            "    max_total_bytes: 256\n",
+            "  context:\n",
+            "    include_parent_principles: false\n",
+            "    include_parent_rules: false\n",
+            "adapters: { enabled: [rust, markdown] }\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/requirement.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: requirements\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "requirements:\n",
+            "  - id: REQ-DOC-BUDGET-001\n",
+            "    title: Docs\n",
+            "    description: Documentation is first-class.\n",
+            "    priority: medium\n",
+            "    status: planned\n",
+            "    criteria:\n",
+            "      - id: explain\n",
+            "        kind: behavior\n",
+            "        statement: Users can read the architecture note.\n",
+            "        governed_by: []\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/feature.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: features\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "features:\n",
+            "  - id: FEAT-DOC-BUDGET-001\n",
+            "    title: Docs\n",
+            "    summary: Documentation is first-class.\n",
+            "    status: implemented\n",
+            "    bindings:\n",
+            "      - id: impl\n",
+            "        role: implementation\n",
+            "        facet: backend\n",
+            "        responsibility: Provide runtime behavior.\n",
+            "        targets:\n",
+            "          - { id: code, adapter: rust, path: src/lib.rs, selector: { kind: symbol, names: [alpha] } }\n",
+            "        satisfies: [REQ-DOC-BUDGET-001#criterion.explain]\n",
+            "      - id: guide\n",
+            "        role: documentation\n",
+            "        facet: docs\n",
+            "        responsibility: Describe the architecture in detail for humans.\n",
+            "        targets:\n",
+            "          - { id: architecture, adapter: markdown, path: docs/guide.md, selector: { kind: heading, value: Architecture } }\n",
+            "        documents: [REQ-DOC-BUDGET-001#criterion.explain]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(temp.path().join("src/lib.rs"), "fn alpha() {}\n").unwrap();
+    fs::write(
+        temp.path().join("docs/guide.md"),
+        "# Architecture\n\nTiny.\n",
+    )
+    .unwrap();
+    let request = temp.path().join("work.yaml");
+    let plan = temp.path().join("plan.yaml");
+    fs::write(
+        &request,
+        concat!(
+            "schema: syu/work-request/v1\n",
+            "id: WORK-DOC-BUDGET-001\n",
+            "summary: Update the documentation.\n",
+            "operation: document\n",
+            "seeds: []\n",
+            "requested_targets:\n",
+            "  - FEAT-DOC-BUDGET-001#binding.guide/target.architecture\n",
+            "constraints: { include_facets: [], exclude_paths: [], max_slices: 2 }\n",
+        ),
+    )
+    .unwrap();
+    init_workspace_repo(temp.path());
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["work", "plan", "--request"])
+        .arg(&request)
+        .args(["--out"])
+        .arg(&plan)
+        .args(["--workspace"])
+        .arg(temp.path())
+        .assert()
+        .failure();
+    let text = fs::read_to_string(plan).unwrap();
+    assert!(text.contains("status: blocked"));
+    assert!(text.contains("context pack exceeds configured budget"));
 }
 
 #[test]

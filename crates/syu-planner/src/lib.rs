@@ -174,6 +174,20 @@ pub fn plan(
             diagnostics: vec![d],
         }));
     }
+    let plan_id = plan_id(request, revision);
+    let plan_basis = basis(workspace, revision);
+    for slice in &mut slices {
+        if slice.blockers.is_empty()
+            && let Err(error) =
+                validate_context_pack_budget(&plan_id, &plan_basis, slice, workspace, index)
+        {
+            slice.blockers.push(Diagnostic::error(
+                "SYU-WORK-003",
+                format!("context pack exceeds configured budget: {error:#}"),
+                "work-plan",
+            ));
+        }
+    }
     if slices.is_empty() {
         return Ok(blocked_plan(
             request,
@@ -190,8 +204,8 @@ pub fn plan(
     };
     Ok(finalize_plan(WorkPlan {
         schema: WORK_PLAN_SCHEMA.into(),
-        id: plan_id(request, revision),
-        basis: basis(workspace, revision),
+        id: plan_id,
+        basis: plan_basis,
         request: request.clone(),
         canonical_digest: String::new(),
         status,
@@ -1336,12 +1350,94 @@ pub fn export_context(
             None => continue,
         };
     }
+    let pack = build_context_pack(
+        &canonical.id,
+        &canonical.basis,
+        selected,
+        workspace,
+        index,
+        spec_context,
+    )?;
+    validate_serialized_context_pack_budget(&pack, workspace)?;
+    Ok(pack)
+}
+
+fn validate_context_pack_budget(
+    plan_id: &str,
+    basis: &PlanBasis,
+    slice: &ExecutionSlice,
+    workspace: &SpecWorkspace,
+    index: &SpecIndex,
+) -> Result<()> {
+    let spec_context = slice_spec_context(slice, index);
+    let pack = build_context_pack(plan_id, basis, slice, workspace, index, spec_context)?;
+    validate_serialized_context_pack_budget(&pack, workspace)
+}
+
+fn slice_spec_context(slice: &ExecutionSlice, index: &SpecIndex) -> Vec<SpecContextEntry> {
+    let mut spec_context = Vec::new();
+    for anchor in &slice.anchors {
+        match index.anchor(anchor) {
+            Some(AnchorValue::Principle(v)) => {
+                spec_context.push(SpecContextEntry::Statement {
+                    anchor: anchor.clone(),
+                    text: v.statement.clone(),
+                });
+            }
+            Some(AnchorValue::Rule(v)) => {
+                spec_context.push(SpecContextEntry::Statement {
+                    anchor: anchor.clone(),
+                    text: v.statement.clone(),
+                });
+            }
+            Some(AnchorValue::Criterion(v)) => {
+                spec_context.push(SpecContextEntry::Statement {
+                    anchor: anchor.clone(),
+                    text: v.statement.clone(),
+                });
+            }
+            Some(AnchorValue::Binding(v)) => {
+                spec_context.push(SpecContextEntry::Statement {
+                    anchor: anchor.clone(),
+                    text: v.responsibility.clone(),
+                });
+            }
+            Some(AnchorValue::Contract(v)) => {
+                spec_context.push(SpecContextEntry::Contract {
+                    anchor: anchor.clone(),
+                    kind: v.kind,
+                    source: v.source.clone(),
+                    guarantees: v.guarantees.clone(),
+                    participants: v
+                        .participants
+                        .iter()
+                        .map(|participant| ContractParticipantContext {
+                            binding: participant.binding.clone(),
+                            role: participant.role.clone(),
+                        })
+                        .collect(),
+                });
+            }
+            None => {}
+        }
+    }
+    spec_context
+}
+
+fn build_context_pack(
+    plan_id: &str,
+    basis: &PlanBasis,
+    slice: &ExecutionSlice,
+    workspace: &SpecWorkspace,
+    index: &SpecIndex,
+    spec_context: Vec<SpecContextEntry>,
+) -> Result<ContextPack> {
     let mut artifact_context = Vec::new();
     let mut included = BTreeSet::new();
     for (mode, targets) in [
-        (ContextMode::Editable, &selected.editable_targets),
-        (ContextMode::Verification, &selected.verification_targets),
-        (ContextMode::Readonly, &selected.readonly_context),
+        (ContextMode::Editable, &slice.editable_targets),
+        (ContextMode::Verification, &slice.verification_targets),
+        (ContextMode::Readonly, &slice.readonly_context),
     ] {
         for target in targets {
             if !included.insert(target.reference.clone()) {
@@ -1391,24 +1487,30 @@ pub fn export_context(
             });
         }
     }
-    let pack = ContextPack {
+    Ok(ContextPack {
         schema: CONTEXT_PACK_SCHEMA.into(),
-        plan: canonical.id.clone(),
-        slice: selected.id.clone(),
-        basis: canonical.basis.clone(),
+        plan: plan_id.into(),
+        slice: slice.id.clone(),
+        basis: basis.clone(),
         instructions: ContextInstructions {
-            goal: selected.goal.clone(),
-            non_goals: selected.non_goals.clone(),
+            goal: slice.goal.clone(),
+            non_goals: slice.non_goals.clone(),
         },
         spec_context,
         artifact_context,
-        completion: selected.completion.clone(),
-    };
-    let serialized = serde_yaml::to_string(&pack)?;
+        completion: slice.completion.clone(),
+    })
+}
+
+fn validate_serialized_context_pack_budget(
+    pack: &ContextPack,
+    workspace: &SpecWorkspace,
+) -> Result<()> {
+    let serialized = serde_yaml::to_string(pack)?;
     if serialized.len() > workspace.config.work.slicing.max_total_bytes {
         bail!("context pack exceeds serialized budget");
     }
-    Ok(pack)
+    Ok(())
 }
 
 fn finalize_plan(mut plan: WorkPlan) -> WorkPlan {
