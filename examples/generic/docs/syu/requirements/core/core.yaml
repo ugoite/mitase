@@ -1,20 +1,31 @@
-category: Core Requirements
-prefix: REQ
-
+schema: syu/spec/v1
+kind: requirements
+namespace: generic
+category: Generic example
 requirements:
-  - id: REQ-001
-    title: Bootstrap generic with a four-layer specification
-    description: |
-      The project should keep philosophy, policy, requirements, and features in
-      YAML so contributors can evolve behavior deliberately.
-    priority: high
-    status: implemented
-    linked_policies:
-      - POL-001
-    linked_features:
-      - FEAT-001
-    tests:
-      markdown:
-        - file: README.md
-          symbols:
-            - GenericAcceptanceChecklist
+- id: REQ-GENERIC-001
+  title: Generic bootstrap flow
+  description: Bootstrap guidance stays connected to one implementation script and
+    one review artifact.
+  priority: high
+  status: implemented
+  criteria:
+  - id: owned-delivery
+    kind: behavior
+    statement: Bootstrap guidance stays connected to one implementation script and
+      one review artifact.
+    governed_by:
+    - POL-GENERIC-001#rule.traceable-delivery
+  bindings:
+  - id: verification
+    role: verification
+    facet: verification
+    responsibility: Verify the owned example behavior through checked-in evidence.
+    targets:
+    - id: target-1
+      adapter: shell
+      path: scripts/bootstrap-generic.sh
+      selector:
+        kind: file
+    verifies:
+    - REQ-GENERIC-001#criterion.owned-delivery

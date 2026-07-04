@@ -1,147 +1,24 @@
-# syu concepts
+# Concepts
 
-<!-- FEAT-DOCS-001 -->
+The active v1 model is built from four persistent spec layers and two temporary work artifacts.
 
-`syu` uses four specification layers on purpose. They answer different
-questions, and mixing them together makes both design and validation weaker.
+Persistent layers:
 
-The model is guided by three product ideas:
+- philosophies
+- policies
+- requirements
+- features
 
-- stay involved through implementation and maintenance, not only early design
-- fit repositories regardless of their primary programming language
-- stay simple enough to adopt without resenting the tool
+Temporary work artifacts:
 
-## Philosophy
+- work requests (`syu/work-request/v1`)
+- work plans (`syu/work-plan/v1`)
+- exported context packs (`syu/context-pack/v1`)
 
-Philosophy describes the ideal state a project is trying to protect.
+Core ideas:
 
-It is intentionally high-level. A philosophy entry should explain:
-
-- what kind of system you want to build
-- what values must survive implementation details
-- what trade-offs the project prefers
-
-Good philosophy is stable. It should change less often than code, features, or
-individual requirements, and it should remain relevant after the project moves
-from initial design into maintenance.
-
-## Policy
-
-Policy turns philosophy into rules.
-
-If philosophy says *what kind of project this should be*, policy says *what
-contributors must do to make that true*. Policies are more concrete than
-philosophy, but they still speak in repository-wide rules rather than single
-features.
-
-Examples:
-
-- every requirement must link to at least one feature
-- every traced symbol must carry a stable ID in its documentation
-- deleted IDs should stay retired unless a migration explicitly disables the historical ID check
-- every isolated philosophy / policy / requirement / feature should be treated as drift
-- generated reports must be readable by both humans and automation
-
-## Requirements
-
-Requirements are the concrete obligations that satisfy policy.
-
-Each requirement should be specific enough that you can:
-
-- tell whether it is implemented
-- trace it to tests
-- explain which policy it satisfies
-
-Requirements also carry delivery intent:
-
-- `status: planned` means the requirement is accepted but its test traces should
-  not exist yet
-- `status: implemented` means the requirement must already declare valid tests
-
-Requirements are where verification begins to become operational.
-They are also where you decide how much discipline the repository wants: some
-checks can stay optional until the project is ready for them.
-
-## Features
-
-Features are the implemented capabilities that satisfy requirements.
-
-Features should describe *what the system now does*, not just *what file was
-edited*. A feature should link directly back to the requirements it satisfies
-and forward to the concrete implementation symbols that prove it exists.
-
-When the implementation evidence is an API contract rather than source code,
-use the OpenAPI selector shape instead of a generic YAML trace. That keeps the
-feature tied to one document, HTTP method, and path template without pretending
-the API spec is a function or class.
-
-Like requirements, features also carry delivery intent:
-
-- `status: planned` means implementation traces are intentionally absent
-- `status: implemented` means implementation traces must be present and valid
-
-## Why define all four?
-
-Without philosophy, the project loses its values.
-
-Without policy, philosophy becomes decorative.
-
-Without requirements, policy cannot be verified concretely.
-
-Without features, requirements never connect to running software.
-
-`syu` keeps all four layers explicit because traceability is strongest when the
-repository can explain itself from ideals down to code and tests without being
-tied to a single implementation language.
-
-## Goal Plans
-
-Goal Plans are temporary delivery artifacts that sit outside the four
-persistent layers. They capture the request, scope, test selection, coverage
-expectation, and completion checks for one bounded piece of work.
-
-They may live in a task file, a PR body, an issue body, or a CI artifact, but
-they should not be stored under `spec.root` as if they were a fifth durable
-spec layer.
-
-Prefer request-driven planning when the request is still being shaped:
-classify it, scope it, scaffold the planned updates, and then turn it into a
-Goal Plan. Use diff-inferred planning only as a fallback when the code already
-changed and the plan has to be reconstructed from the diff.
-
-For pull requests, Goal Plans describe the smallest justified test and coverage
-scope. They do not replace the repository's full integration gates, which stay
-with merge queue and main-branch validation.
-
-## Authoring guidelines
-
-### Write philosophy for stability
-
-Philosophy should survive multiple releases. Avoid implementation details and
-tooling trivia there.
-
-### Write policy as enforceable rules
-
-A policy should imply at least one checkable requirement. If nobody could tell
-whether the policy is being followed, it is still too vague.
-
-### Write requirements for verification
-
-A requirement should be concrete enough that you can point to tests and say,
-\"these prove it.\"
-
-### Write features for implementation traceability
-
-A feature should map to symbols, commands, or files that clearly implement the
-behavior. If the link is too fuzzy to validate, tighten it.
-
-When your spec still validates but the boundaries feel unstable or repetitive,
-use the [spec anti-patterns guide](./spec-antipatterns.md) to decide whether an
-idea belongs in another layer or should be split.
-
-## Continue with these pages
-
-- [Getting started](./getting-started.md) to scaffold a workspace and run the CLI
-- [Spec anti-patterns](./spec-antipatterns.md) to refactor bad-but-valid layer boundaries
-- [Configuration](./configuration.md) to tune validation and runtime behavior
-- [Specification Reference](../generated/site-spec/index.md) to inspect the self-hosted repository contract
+- bindings connect spec anchors to exact artifact targets
+- requirements express criteria
+- features satisfy criteria through implementation bindings
+- verification bindings provide execution evidence
+- work planning derives bounded execution slices from the graph

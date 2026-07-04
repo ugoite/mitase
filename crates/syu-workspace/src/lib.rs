@@ -417,9 +417,13 @@ pub fn resolve_target_with_adapters(
     const KNOWN: &[&str] = &[
         "rust",
         "typescript",
+        "javascript",
         "shell",
         "python",
         "go",
+        "java",
+        "ruby",
+        "csharp",
         "markdown",
         "openapi",
         "yaml",

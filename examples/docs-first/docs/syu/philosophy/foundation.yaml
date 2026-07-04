@@ -1,11 +1,17 @@
-category: Philosophy
-version: 1
-language: en
-
+schema: syu/spec/v1
+kind: philosophies
+namespace: docs-first
+category: Docs-first example
 philosophies:
-  - id: PHIL-DOCS-001
-    title: Docs-first repositories should still keep traceable intent close to the files people read first
-    product_design_principle: Keep documentation, scripts, and config traceable even when rich code inspection is unnecessary.
-    coding_guideline: Prefer explicit file or symbol ownership over unsupported-language placeholders.
-    linked_policies:
-      - POL-DOCS-001
+- id: PHIL-DOCSFIRST-001
+  title: Docs-first example
+  summary: Keep documentation-led delivery traceable with markdown, shell, and YAML
+    artifacts.
+  principles:
+  - id: exact-ownership
+    statement: Documentation-first work still needs exact file ownership and verification
+      evidence.
+    applies_to:
+    - code
+    - work
+  bindings: []

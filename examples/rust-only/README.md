@@ -1,49 +1,18 @@
-# rust-only example
+# Rust example
 
-This example demonstrates a minimal single-language Rust workspace.
-It contains one philosophy, one policy, one requirement, and one feature —
-all mutually linked and traced to a Rust source file.
+This example is maintained against the active `syu` v1 model.
 
-It is the checked-in reference workspace that matches
-`syu init . --template rust-only` exactly.
+It demonstrates one requirement and one feature connected through explicit bindings.
 
-## Files
+Current commands:
 
-| Path | What it defines |
-|------|-----------------|
-| `docs/syu/philosophy/foundation.yaml` | `PHIL-RUST-001` — the guiding principle |
-| `docs/syu/policies/policies.yaml` | `POL-RUST-001` linked to `PHIL-RUST-001` |
-| `docs/syu/requirements/core/rust.yaml` | `REQ-RUST-001` with a test trace to `src/trace.rs` |
-| `docs/syu/features/languages/rust.yaml` | `FEAT-RUST-001` with an implementation trace to `src/trace.rs` |
-| `src/trace.rs` | Rust source containing the traced symbols |
+- `cargo run --quiet -- validate examples/rust-only`
+- `cargo run --quiet -- workbench project --workspace examples/rust-only`
 
-## Try it
+Primary implementation targets:
+- `src/trace.rs` (rust)
 
-```bash
-cd examples/rust-only
-syu validate .
-syu list requirement
-syu show REQ-RUST-001
-syu browse .
-```
+Primary verification targets:
+- `README.md` (markdown)
 
-A successful `syu validate .` produces output similar to:
-
-```
-syu validate passed
-workspace: examples/rust-only
-definitions: philosophies=1 policies=1 requirements=1 features=1
-traceability: requirements=2/2 features=2/2
-```
-
-## Key things to notice
-
-- **Reciprocal links** — `REQ-RUST-001` lists `FEAT-RUST-001` in its
-  `linked_features`, and `FEAT-RUST-001` lists `REQ-RUST-001` back in its
-  `linked_requirements`. Both directions are required.
-- **`doc_contains`** — the trace entries require certain strings to appear in
-  the doc comments of the traced symbols inside `src/trace.rs`. Open that file
-  to see how `/// requirement doc line` and `/// feature doc line` satisfy the
-  constraint.
-- **`symbols`** — each trace names the exact function (`rust_requirement_test`,
-  `rust_feature_impl`) that must exist in the file.
+The example is written for the active v1 CLI and spec model.

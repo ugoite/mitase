@@ -1,15 +1,22 @@
-category: Core Features
-version: 1
-
+schema: syu/spec/v1
+kind: features
+namespace: generic
+category: Generic example
 features:
-  - id: FEAT-001
-    title: Bootstrap the generic spec workspace
-    summary: Provide a starter structure that contributors can extend.
-    status: implemented
-    linked_requirements:
-      - REQ-001
-    implementations:
-      shell:
-        - file: scripts/bootstrap-generic.sh
-          symbols:
-            - bootstrap_generic_workspace
+- id: FEAT-GENERIC-001
+  title: Generic bootstrap flow
+  summary: Keep the smallest starter workspace compatible with the v1 graph.
+  status: implemented
+  bindings:
+  - id: implementation
+    role: implementation
+    facet: delivery
+    responsibility: Implement the owned behavior for this example workspace.
+    targets:
+    - id: target-1
+      adapter: shell
+      path: scripts/bootstrap-generic.sh
+      selector:
+        kind: file
+    satisfies:
+    - REQ-GENERIC-001#criterion.owned-delivery

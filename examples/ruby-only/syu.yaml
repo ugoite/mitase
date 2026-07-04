@@ -20,4 +20,4 @@ work:
   context:
     include_parent_principles: false
     include_parent_rules: false
-adapters: { enabled: [markdown, yaml, json] }
+adapters: { enabled: [ruby, markdown, yaml, json] }

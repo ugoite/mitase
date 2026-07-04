@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-import json
-import subprocess
 import sys
 from pathlib import Path
 
@@ -34,15 +32,6 @@ def load_lcov(path: Path) -> dict[str, tuple[int, int]]:
     return coverage
 
 
-def run_syu_json(repo_root: Path, *args: str) -> dict:
-    output = subprocess.check_output(
-        ["cargo", "run", "--quiet", "--", *args],
-        cwd=repo_root,
-        text=True,
-    )
-    return json.loads(output)
-
-
 def percent_string(covered: int, total: int) -> str:
     if total == 0:
         return "0.0% (0/0)"
@@ -54,31 +43,20 @@ def resolve_workspace_path(repo_root: Path, raw_path: str) -> Path:
     return path if path.is_absolute() else repo_root / path
 
 
+def anchor_item_id(value: str) -> str:
+    return value.split("#", 1)[0]
+
+
 def load_spec_items(
-    repo_root: Path, summaries: list[dict], document_key: str, items_key: str
+    repo_root: Path, spec_root: Path, kind: str, items_key: str
 ) -> dict[str, dict]:
     items_by_id: dict[str, dict] = {}
-    for document_path in sorted(
-        {
-            summary[document_key]
-            for summary in summaries
-            if summary.get(document_key)
-        }
-    ):
-        document = yaml.safe_load(
-            resolve_workspace_path(repo_root, document_path).read_text(encoding="utf-8")
-        )
+    for document_path in sorted(spec_root.rglob("*.yaml")):
+        document = yaml.safe_load(document_path.read_text(encoding="utf-8"))
+        if document.get("kind") != kind:
+            continue
         for item in document.get(items_key, []):
             items_by_id[item["id"]] = item
-
-    missing_ids = sorted(
-        summary["id"] for summary in summaries if summary["id"] not in items_by_id
-    )
-    if missing_ids:
-        raise RuntimeError(
-            f"missing {items_key} definitions for listed IDs: {', '.join(missing_ids)}"
-        )
-
     return items_by_id
 
 
@@ -124,20 +102,37 @@ def main() -> int:
     lcov_path = Path(sys.argv[1]).resolve()
     output_path = Path(sys.argv[2]).resolve()
     repo_root = Path(__file__).resolve().parents[2]
+    spec_root = repo_root / "docs" / "syu"
     lcov = load_lcov(lcov_path)
 
-    items = run_syu_json(repo_root, "list", "--with-path", "--format", "json")
-    requirements = load_spec_items(repo_root, items["requirement"], "document_path", "requirements")
-    features = load_spec_items(repo_root, items["feature"], "document_path", "features")
+    requirements = load_spec_items(repo_root, spec_root, "requirements", "requirements")
+    features = load_spec_items(repo_root, spec_root, "features", "features")
 
     feature_details: dict[str, dict] = {}
     for feature_id, item in sorted(features.items()):
-        implementation_refs = sum(len(references) for references in item.get("implementations", {}).values())
-        rust_refs = item.get("implementations", {}).get("rust", [])
-        rust_files = [reference["file"] for reference in rust_refs]
+        implementation_targets = [
+            target
+            for binding in item.get("bindings", [])
+            if binding.get("role") == "implementation"
+            for target in binding.get("targets", [])
+        ]
+        implementation_refs = len(implementation_targets)
+        rust_files = [
+            target["path"]
+            for target in implementation_targets
+            if target.get("adapter") == "rust"
+        ]
+        linked_requirements = sorted(
+            {
+                anchor_item_id(reference)
+                for binding in item.get("bindings", [])
+                if binding.get("role") == "implementation"
+                for reference in binding.get("satisfies", [])
+            }
+        )
         covered, total, instrumented_paths = summarize_paths(repo_root, lcov, rust_files)
         feature_details[feature_id] = {
-            "linked_requirements": item.get("linked_requirements", []),
+            "linked_requirements": linked_requirements,
             "implementation_refs": implementation_refs,
             "rust_files": len(sorted(set(rust_files))),
             "rust_coverage": coverage_label(
@@ -153,14 +148,27 @@ def main() -> int:
 
     requirement_rows: list[str] = []
     for requirement_id, item in sorted(requirements.items()):
-        test_refs = sum(len(references) for references in item.get("tests", {}).values())
-        rust_test_refs = item.get("tests", {}).get("rust", [])
-        rust_test_files = [reference["file"] for reference in rust_test_refs]
+        verification_targets = [
+            target
+            for binding in item.get("bindings", [])
+            if binding.get("role") == "verification"
+            for target in binding.get("targets", [])
+        ]
+        test_refs = len(verification_targets)
+        rust_test_files = [
+            target["path"]
+            for target in verification_targets
+            if target.get("adapter") == "rust"
+        ]
         test_covered, test_total, test_instrumented_paths = summarize_paths(
             repo_root, lcov, rust_test_files
         )
 
-        linked_feature_ids = item.get("linked_features", [])
+        linked_feature_ids = sorted(
+            feature_id
+            for feature_id, detail in feature_details.items()
+            if requirement_id in detail["linked_requirements"]
+        )
         linked_feature_paths: list[str] = []
         for feature_id in linked_feature_ids:
             linked_feature_paths.extend(feature_details.get(feature_id, {}).get("rust_paths", []))

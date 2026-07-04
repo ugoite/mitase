@@ -1,0 +1,22 @@
+schema: syu/spec/v1
+kind: features
+namespace: browser-ui
+category: Browser UI example
+features:
+- id: FEAT-BROWSERUI-001
+  title: Counter component delivery
+  summary: Keep a small TypeScript UI example traceable through v1 bindings.
+  status: implemented
+  bindings:
+  - id: implementation
+    role: implementation
+    facet: delivery
+    responsibility: Implement the owned behavior for this example workspace.
+    targets:
+    - id: target-1
+      adapter: typescript
+      path: src/components/Counter.tsx
+      selector:
+        kind: file
+    satisfies:
+    - REQ-BROWSERUI-001#criterion.owned-delivery

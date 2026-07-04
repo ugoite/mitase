@@ -1,15 +1,35 @@
-category: Policies
-version: 1
-language: en
-
+schema: syu/spec/v1
+kind: policies
+namespace: generic
+category: Generic example
 policies:
-  - id: POL-001
-    title: Every change in generic should remain traceable
-    summary: Define rules that turn philosophy into a verifiable workflow.
-    description: |
-      A specification entry is only useful when contributors can trace it to
-      concrete requirements, features, code, and tests inside the repository.
-    linked_philosophies:
-      - PHIL-001
-    linked_requirements:
-      - REQ-001
+- id: POL-GENERIC-001
+  title: Generic example governance
+  summary: Even the smallest example uses explicit implementation and verification
+    bindings.
+  description: Keep the smallest starter workspace compatible with the v1 graph.
+  rules:
+  - id: traceable-delivery
+    level: must
+    statement: Even the smallest example uses explicit implementation and verification
+      bindings.
+    governed_by:
+    - PHIL-GENERIC-001#principle.exact-ownership
+    applies_to:
+      roles:
+      - implementation
+      - verification
+      - documentation
+  bindings:
+  - id: enforcement
+    role: enforcement
+    facet: delivery
+    responsibility: Keep the example rule connected to an active owned artifact.
+    targets:
+    - id: policy-target
+      adapter: shell
+      path: scripts/bootstrap-generic.sh
+      selector:
+        kind: file
+    enforces:
+    - POL-GENERIC-001#rule.traceable-delivery

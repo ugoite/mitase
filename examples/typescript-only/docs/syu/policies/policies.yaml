@@ -1,15 +1,35 @@
-category: Policies
-version: 1
-language: en
-
+schema: syu/spec/v1
+kind: policies
+namespace: typescript-only
+category: TypeScript example
 policies:
-  - id: POL-TS-001
-    title: TypeScript requirement and feature traces must stay explicit
-    summary: Start with a TypeScript-first workflow that keeps the first traced symbols easy to inspect.
-    description: |
-      The starter workspace should include real TypeScript source and test files
-      plus a minimal npm-driven project so the first requirement and feature stay easy to review.
-    linked_philosophies:
-      - PHIL-TS-001
-    linked_requirements:
-      - REQ-TS-001
+- id: POL-TYPESCRIPTONLY-001
+  title: TypeScript example governance
+  summary: TypeScript delivery stays traceable through exact implementation and verification
+    bindings.
+  description: Keep a TypeScript-first example aligned with the v1 graph.
+  rules:
+  - id: traceable-delivery
+    level: must
+    statement: TypeScript delivery stays traceable through exact implementation and
+      verification bindings.
+    governed_by:
+    - PHIL-TYPESCRIPTONLY-001#principle.exact-ownership
+    applies_to:
+      roles:
+      - implementation
+      - verification
+      - documentation
+  bindings:
+  - id: enforcement
+    role: enforcement
+    facet: delivery
+    responsibility: Keep the example rule connected to an active owned artifact.
+    targets:
+    - id: policy-target
+      adapter: typescript
+      path: src/app.ts
+      selector:
+        kind: file
+    enforces:
+    - POL-TYPESCRIPTONLY-001#rule.traceable-delivery

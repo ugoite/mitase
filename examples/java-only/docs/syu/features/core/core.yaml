@@ -1,0 +1,22 @@
+schema: syu/spec/v1
+kind: features
+namespace: java-only
+category: Java example
+features:
+- id: FEAT-JAVAONLY-001
+  title: Java starter behavior
+  summary: Keep a Java-first example represented in the v1 graph with file-level ownership.
+  status: implemented
+  bindings:
+  - id: implementation
+    role: implementation
+    facet: delivery
+    responsibility: Implement the owned behavior for this example workspace.
+    targets:
+    - id: target-1
+      adapter: java
+      path: src/main/java/example/app/OrderSummary.java
+      selector:
+        kind: file
+    satisfies:
+    - REQ-JAVAONLY-001#criterion.owned-delivery
