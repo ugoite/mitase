@@ -18,26 +18,40 @@ Want a different entry point?
 ## 1. Pick a spec home without reorganising the repository
 
 `syu` does not require a brand-new repository. Add a `syu.yaml` at the workspace
-root and point `spec.root` at the directory that fits your current layout.
+root and point `workspace.spec_roots` at the directory that fits your current layout.
 Treat the example below as schematic: keep the fields, but let `syu init` or a
 freshly generated `syu.yaml` supply the concrete `version` string for the CLI
 release you are actually running:
 
 ```yaml
-version: <current syu CLI version>
-spec:
-  root: docs/syu
-validate:
-  default_fix: false
-  allow_planned: true
-  require_non_orphaned_items: false
-  require_reciprocal_links: false
-  require_symbol_trace_coverage: false
+schema: syu/config/v1
+workspace:
+  spec_roots: [docs/syu]
+  artifact_roots: [src, tests]
+  excludes: []
+profiles: { active: [], custom: {} }
+validation:
+  preset: standard
+  deny_warnings: false
+  rules: {}
+  changed:
+    require_owned_changes: false
+work:
+  slicing:
+    max_editable_files: 4
+    max_editable_symbols: 8
+    max_verification_targets: 4
+    max_readonly_targets: 8
+    max_total_bytes: 16384
+  context:
+    include_parent_principles: false
+    include_parent_rules: false
+adapters: { enabled: [rust, markdown, yaml, json] }
 ```
 
 Use `docs/syu` if you do not already have a better convention. If the repository
 already keeps design material under `docs/spec`, `spec/contracts`, or another
-stable path, keep that layout and set `spec.root` explicitly instead of moving
+stable path, keep that layout and set `workspace.spec_roots` explicitly instead of moving
 files just to match the default.
 
 For the first slice, create only the directories you need:
@@ -51,7 +65,7 @@ docs/syu/
 ```
 
 Features also need the explicit registry file at
-`<spec.root>/features/features.yaml`. Requirements are discovered by walking the
+`<spec-root>/features/features.yaml`. Requirements are discovered by walking the
 tree, but feature documents stay deliberate and reviewable through that short
 registry.
 

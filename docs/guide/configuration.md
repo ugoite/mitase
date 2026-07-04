@@ -22,59 +22,56 @@ change also needs narrative explanation or new examples.
 Before reading the field reference below, it helps to know what the validation
 flags are actually controlling:
 
-**Orphaned item**
-A spec item (philosophy, policy, requirement, or feature) that has no links to
-any adjacent layer. For example, a philosophy with no linked policies, or a
-feature with no linked requirements. Orphans usually mean the specification has
-drifted — you defined something but never connected it to the rest of the graph.
-`require_non_orphaned_items` enforces that every item is reachable.
+**Criterion closure**
+A requirement criterion is complete only when governance, implementation, and
+verification all connect. In v1 that means the criterion names governing policy
+rules, at least one implementation binding satisfies it, and at least one
+verification binding verifies it.
 
-**Reciprocal link**
-syu's spec graph is bidirectional: if a requirement links to a feature, the
-feature must also list that requirement in its `linked_requirements`. A
-reciprocal link is this two-way confirmation. `require_reciprocal_links`
-enforces both directions so the graph stays consistent even when files are
-edited independently.
+**Binding target**
+A binding target is the concrete file or selector a v1 binding owns. Examples
+include a Rust symbol, an OpenAPI operation, a Markdown heading, or a whole
+file selector. The planner and validator use those targets to prove that the
+declared implementation or verification surface exists.
 
-**Symbol trace**
-A *symbol* is a named function, method, or class in your source code.
-A symbol trace is a declaration in a requirement or feature YAML that names the
-specific symbols (and optionally a required doc-comment string) that implement
-or test that spec item. Symbol traces let `syu` verify that the code actually
-exists at the claimed location.
+**Contract counterpart**
+Contracts connect multiple bindings around one shared interface or interaction.
+For example, an HTTP contract can name one provider binding and one consumer
+binding. v1 validation checks that all required counterparts remain present and
+consistent when work plans touch a contracted area.
 
-**Symbol trace coverage**
-When `require_symbol_trace_coverage: true`, syu additionally checks that every
-*public* symbol in the relevant source files is claimed by at least one spec
-item, and that every test function is claimed by at least one requirement. 100%
-coverage means no public API or test is left undeclared. This is an optional
-stricter mode for mature repositories. Use
-[`trace-adapter-support.md`](./trace-adapter-support.md) when you need the
-current per-language matrix for symbol discovery, `doc_contains`, and strict
-coverage behavior.
+**Changed impact**
+When changed-file validation is enabled, syu compares the changed artifacts and
+spec anchors against the current v1 graph. That lets it detect missing
+implementation, verification, or contract follow-through instead of only
+checking for legacy reciprocal links.
 
 ## Minimal configuration
 
 ```yaml
-# x-release-please-start-version
-version: "<cli-version>"
-# x-release-please-end
-spec:
-  root: docs/syu
-validate:
-  default_fix: false
-  allow_planned: true
-  require_non_orphaned_items: true
-  require_reciprocal_links: true
-  require_symbol_trace_coverage: false
-workbench:
-  bind: 127.0.0.1
-  port: 3000
-runtimes:
-  python:
-    command: auto
-  node:
-    command: auto
+schema: syu/config/v1
+workspace:
+  spec_roots: [docs/syu]
+  artifact_roots: [src, tests]
+  excludes: []
+profiles: { active: [], custom: {} }
+validation:
+  preset: standard
+  deny_warnings: false
+  rules: {}
+  changed:
+    require_owned_changes: false
+work:
+  slicing:
+    max_editable_files: 4
+    max_editable_symbols: 8
+    max_verification_targets: 4
+    max_readonly_targets: 8
+    max_total_bytes: 16384
+  context:
+    include_parent_principles: false
+    include_parent_rules: false
+adapters: { enabled: [rust, markdown, yaml, json] }
 ```
 
 ## Fields
@@ -85,23 +82,25 @@ The `syu` CLI version that generated the config. `syu init` keeps this aligned
 with the running binary. For backwards compatibility, legacy numeric values are
 still accepted when reading existing configs.
 
-### `spec.root`
+### `workspace.spec_roots`
 
-Controls where `syu` reads philosophy, policy, requirements, and features.
+Controls where `syu` reads v1 spec documents.
 
 Use a relative path for normal workspaces:
 
 ```yaml
-spec:
-  root: docs/syu
+workspace:
+  spec_roots: [docs/syu]
+  artifact_roots: [src, tests]
+  excludes: []
 ```
 
 New workspaces default to `docs/syu`. Existing repositories can keep another
-layout, including `docs/spec`, by setting `spec.root` explicitly.
+layout, including `docs/spec`, by setting `workspace.spec_roots` explicitly.
 
 When you are starting a brand-new workspace, `syu init --spec-root docs/spec`
 scaffolds the starter files into that repository-relative path immediately and
-writes the matching `spec.root` value for you.
+writes the matching `workspace.spec_roots` entry for you.
 
 ### `validate.default_fix`
 

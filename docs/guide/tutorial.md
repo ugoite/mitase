@@ -83,11 +83,13 @@ The relevant part of `syu.yaml` points the validator at that tree:
 
 ```yaml
 # syu.yaml
-spec:
-  root: docs/syu
+workspace:
+  spec_roots: [docs/syu]
+  artifact_roots: [src, tests]
+  excludes: []
 ```
 
-`--spec-root` changes both the generated directory and this `spec.root` value,
+`--spec-root` changes both the generated directory and this `workspace.spec_roots` value,
 so you do not need to move the scaffold by hand after bootstrap. `--template`
 keeps the same four layers but may swap the starter IDs and the initial
 requirement/feature file names to better match the repository style.
