@@ -770,15 +770,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "syu-domain"
-version = "0.0.1-alpha.8"
-dependencies = [
- "serde",
- "serde_json",
- "serde_yaml",
-]
-
-[[package]]
 name = "syu-planner"
 version = "0.1.0"
 dependencies = [

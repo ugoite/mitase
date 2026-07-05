@@ -274,7 +274,8 @@ fn exact_requested_targets_are_exact_and_verification_can_be_editable() {
             "operation: modify\n",
             "seeds: []\n",
             "requested_targets:\n",
-            "  - REQ-AUTH-001#binding.login-test/target.case\n",
+            "  - ref: REQ-AUTH-001#binding.login-test/target.case\n",
+            "    transition: modify\n",
             "constraints:\n",
             "  include_facets: [verification]\n",
             "  exclude_paths: []\n",
@@ -292,7 +293,7 @@ fn exact_requested_targets_are_exact_and_verification_can_be_editable() {
         .assert()
         .success();
     let text = fs::read_to_string(&plan).unwrap();
-    assert!(text.contains("id: invalid-credentials-verify-case"));
+    assert!(text.contains("criterion-REQ-AUTH-001#binding.login-test/target.case"));
     assert!(text.contains("resolved_path: tests/login.rs"));
     assert!(text.contains("access: editable"));
     assert!(!text.contains("id: invalid-credentials-ui"));
@@ -313,7 +314,8 @@ fn work_plan_rejects_mixed_seeds_and_requested_targets() {
             "operation: modify\n",
             "seeds: [REQ-AUTH-001#criterion.invalid-credentials]\n",
             "requested_targets:\n",
-            "  - REQ-AUTH-001#binding.login-test/target.case\n",
+            "  - ref: REQ-AUTH-001#binding.login-test/target.case\n",
+            "    transition: modify\n",
             "constraints:\n",
             "  include_facets: []\n",
             "  exclude_paths: []\n",
@@ -2673,7 +2675,8 @@ fn exact_documentation_target_builds_document_slice() {
             "operation: document\n",
             "seeds: []\n",
             "requested_targets:\n",
-            "  - FEAT-DOC-001#binding.guide/target.architecture\n",
+            "  - ref: FEAT-DOC-001#binding.guide/target.architecture\n",
+            "    transition: readonly\n",
             "constraints: { include_facets: [], exclude_paths: [], max_slices: 2 }\n",
         ),
     )
@@ -2800,7 +2803,8 @@ fn plan_blocks_when_context_pack_serialized_budget_would_overflow() {
             "operation: document\n",
             "seeds: []\n",
             "requested_targets:\n",
-            "  - FEAT-DOC-BUDGET-001#binding.guide/target.architecture\n",
+            "  - ref: FEAT-DOC-BUDGET-001#binding.guide/target.architecture\n",
+            "    transition: readonly\n",
             "constraints: { include_facets: [], exclude_paths: [], max_slices: 2 }\n",
         ),
     )

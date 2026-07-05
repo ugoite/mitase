@@ -161,6 +161,7 @@ pub trait ValidationRule {
 pub fn validate(ctx: &ValidationContext<'_>) -> ValidationResult {
     let mut diagnostics = Vec::new();
     validate_rule_overrides(ctx, &mut diagnostics);
+    validate_config(ctx, &mut diagnostics);
     validate_document_shapes(ctx, &mut diagnostics);
     validate_graph(ctx, &mut diagnostics);
     validate_targets(ctx, &mut diagnostics);
@@ -170,9 +171,7 @@ pub fn validate(ctx: &ValidationContext<'_>) -> ValidationResult {
         validate_plan(ctx, plan, &mut diagnostics);
     }
     diagnostics.retain_mut(|diagnostic| {
-        let integrity = diagnostic.rule_id.starts_with("SYU-SCHEMA")
-            || diagnostic.rule_id.starts_with("SYU-ANCHOR")
-            || diagnostic.rule_id.starts_with("SYU-ID");
+        let integrity = is_fixed_error_rule(&diagnostic.rule_id);
         match ctx
             .config
             .validation
@@ -214,12 +213,64 @@ fn validate_rule_overrides(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic
                 "syu.yaml",
                 None,
             );
+        } else if matches!(
+            ctx.config.validation.rules.get(rule_id),
+            Some(RuleOverride::Off | RuleOverride::Warning | RuleOverride::Info)
+        ) && is_fixed_error_rule(rule_id)
+        {
+            push(
+                out,
+                "SYU-SCHEMA-002",
+                format!("validation rule {rule_id} cannot be downgraded or suppressed"),
+                "syu.yaml",
+                None,
+            );
         }
+    }
+}
+
+fn validate_config(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
+    let active_profiles = ctx
+        .config
+        .profiles
+        .active
+        .iter()
+        .filter(|name| !ctx.config.profiles.custom.contains_key(*name))
+        .collect::<Vec<_>>();
+    for profile in active_profiles {
+        push(
+            out,
+            "SYU-SCHEMA-002",
+            format!("active profile {profile} is not defined"),
+            "syu.yaml",
+            None,
+        );
     }
 }
 
 fn rule_metadata(rule_id: &str) -> Option<&'static RuleMetadata> {
     RULES.iter().find(|metadata| metadata.id == rule_id)
+}
+
+fn is_fixed_error_rule(rule_id: &str) -> bool {
+    matches!(
+        rule_id,
+        "SYU-SCHEMA-001"
+            | "SYU-SCHEMA-002"
+            | "SYU-ID-001"
+            | "SYU-ID-002"
+            | "SYU-ANCHOR-001"
+            | "SYU-ANCHOR-002"
+            | "SYU-ANCHOR-003"
+            | "SYU-TARGET-001"
+            | "SYU-TARGET-002"
+            | "SYU-TARGET-003"
+            | "SYU-TARGET-004"
+            | "SYU-TARGET-005"
+            | "SYU-WORK-005"
+            | "SYU-WORK-006"
+            | "SYU-WORK-009"
+    )
 }
 fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
     let Some(files) = ctx.changed_files else {
@@ -1265,6 +1316,70 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                     Some(anchor.clone()),
                 );
             }
+            match &target.selector {
+                Selector::Symbol { names } => {
+                    if names.is_empty() {
+                        push(
+                            out,
+                            "SYU-TARGET-001",
+                            "symbol selector must contain at least one name",
+                            target.path.to_string_lossy(),
+                            Some(anchor.clone()),
+                        );
+                    }
+                    let mut unique = names.clone();
+                    unique.sort();
+                    unique.dedup();
+                    if unique.len() != names.len() {
+                        push(
+                            out,
+                            "SYU-TARGET-001",
+                            "symbol selector must not contain duplicate names",
+                            target.path.to_string_lossy(),
+                            Some(anchor.clone()),
+                        );
+                    }
+                }
+                Selector::Heading { value } if value.trim().is_empty() => {
+                    push(
+                        out,
+                        "SYU-TARGET-001",
+                        "heading selector must not be empty",
+                        target.path.to_string_lossy(),
+                        Some(anchor.clone()),
+                    );
+                }
+                Selector::Marker { value } if value.trim().is_empty() => {
+                    push(
+                        out,
+                        "SYU-TARGET-001",
+                        "marker selector must not be empty",
+                        target.path.to_string_lossy(),
+                        Some(anchor.clone()),
+                    );
+                }
+                Selector::Operation { method, path }
+                    if method.trim().is_empty() || path.trim().is_empty() =>
+                {
+                    push(
+                        out,
+                        "SYU-TARGET-001",
+                        "operation selector must not be empty",
+                        target.path.to_string_lossy(),
+                        Some(anchor.clone()),
+                    );
+                }
+                Selector::JsonPointer { value } if value.trim().is_empty() => {
+                    push(
+                        out,
+                        "SYU-TARGET-001",
+                        "json pointer selector must not be empty",
+                        target.path.to_string_lossy(),
+                        Some(anchor.clone()),
+                    );
+                }
+                _ => {}
+            }
             let expected = match &target.selector {
                 Selector::File => true,
                 Selector::Symbol { .. } => {
@@ -1285,6 +1400,18 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                     out,
                     "SYU-TARGET-005",
                     "adapter and selector kind are incompatible",
+                    target.path.to_string_lossy(),
+                    Some(anchor.clone()),
+                );
+            }
+            if binding.role == BindingRole::Implementation
+                && !matches!(target.selector, Selector::Symbol { .. } | Selector::File)
+                && ctx.preset == ValidationPreset::AgentReady
+            {
+                push(
+                    out,
+                    "SYU-TARGET-004",
+                    "implementation target must use an exact editable selector",
                     target.path.to_string_lossy(),
                     Some(anchor.clone()),
                 );
@@ -1365,11 +1492,20 @@ fn validate_contracts(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
             .unwrap_or_default();
         for profile in profiles.clone() {
             for rule in &profile.contract_rules {
-                let kind = format!("{:?}", contract.kind).to_ascii_lowercase();
-                if rule.kind != kind {
+                if rule.kind != contract.kind {
                     continue;
                 }
                 for required in &rule.require_participants {
+                    if required.role.trim().is_empty() {
+                        push(
+                            out,
+                            "SYU-CONTRACT-004",
+                            "contract requirement role must not be empty",
+                            &path,
+                            Some(anchor.clone()),
+                        );
+                        continue;
+                    }
                     let count = contract
                         .participants
                         .iter()

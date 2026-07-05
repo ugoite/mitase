@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use syu_spec_model::RepoPath;
+use syu_spec_model::{ContractKind, RepoPath};
 
 pub const CONFIG_SCHEMA: &str = "syu/config/v1";
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -45,7 +45,7 @@ pub struct FacetRule {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ContractRule {
-    pub kind: String,
+    pub kind: ContractKind,
     pub require_participants: Vec<ParticipantRequirement>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

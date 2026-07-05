@@ -458,6 +458,15 @@ pub fn resolve_target_with_adapters(
                 hash_bytes(&content),
             ),
             Selector::Symbol { names } => {
+                if names.is_empty() {
+                    bail!("symbol selector must contain at least one symbol");
+                }
+                let mut unique = names.clone();
+                unique.sort();
+                unique.dedup();
+                if unique.len() != names.len() {
+                    bail!("symbol selector must not contain duplicate symbol names");
+                }
                 let resolved = names
                     .iter()
                     .map(|name| resolve_symbol(&target.adapter, &text, name))
@@ -477,6 +486,9 @@ pub fn resolve_target_with_adapters(
                 )
             }
             Selector::Operation { method, path } => {
+                if method.trim().is_empty() || path.trim().is_empty() {
+                    bail!("operation selector must not be empty");
+                }
                 let yaml: serde_yaml::Value = serde_yaml::from_slice(&content)?;
                 let exists = yaml
                     .get("paths")
@@ -486,38 +498,58 @@ pub fn resolve_target_with_adapters(
                 if !exists {
                     bail!("operation {method} {path} not found");
                 }
-                let excerpt = text.to_string();
+                let (byte_start, byte_end, line_start, line_end, excerpt) =
+                    extract_yaml_block(&text, |line| {
+                        line.trim_start().starts_with(path.as_str())
+                            || line
+                                .trim_start()
+                                .starts_with(&format!("{}:", method.to_ascii_lowercase()))
+                    })
+                    .unwrap_or_else(|| {
+                        let excerpt = text.to_string();
+                        (0, content.len(), 1, text.lines().count(), excerpt)
+                    });
                 (
                     format!("operation {} {path}", method.to_ascii_uppercase()),
                     vec![],
-                    0,
-                    content.len(),
-                    1,
-                    text.lines().count(),
+                    byte_start,
+                    byte_end,
+                    line_start,
+                    line_end,
                     excerpt.clone(),
                     hash_bytes(excerpt.as_bytes()),
                 )
             }
             Selector::Heading { value } => {
+                if value.trim().is_empty() {
+                    bail!("heading selector must not be empty");
+                }
                 if !text
                     .lines()
                     .any(|l| l.trim_start_matches('#').trim() == value)
                 {
                     bail!("heading {value} not found");
                 }
-                let excerpt = text.to_string();
+                let (byte_start, byte_end, line_start, line_end, excerpt) =
+                    extract_heading_block(&text, value).unwrap_or_else(|| {
+                        let excerpt = text.to_string();
+                        (0, content.len(), 1, text.lines().count(), excerpt)
+                    });
                 (
                     format!("heading {value}"),
                     vec![],
-                    0,
-                    content.len(),
-                    1,
-                    text.lines().count(),
+                    byte_start,
+                    byte_end,
+                    line_start,
+                    line_end,
                     excerpt.clone(),
                     hash_bytes(excerpt.as_bytes()),
                 )
             }
             Selector::JsonPointer { value } => {
+                if value.trim().is_empty() {
+                    bail!("json pointer selector must not be empty");
+                }
                 let json: serde_json::Value = if target.adapter == "json" {
                     serde_json::from_slice(&content)?
                 } else {
@@ -539,17 +571,24 @@ pub fn resolve_target_with_adapters(
                 )
             }
             Selector::Marker { value } => {
+                if value.trim().is_empty() {
+                    bail!("marker selector must not be empty");
+                }
                 if !text.contains(value) {
                     bail!("marker {value} not found");
                 }
-                let excerpt = text.to_string();
+                let (byte_start, byte_end, line_start, line_end, excerpt) =
+                    extract_marker_block(&text, value).unwrap_or_else(|| {
+                        let excerpt = text.to_string();
+                        (0, content.len(), 1, text.lines().count(), excerpt)
+                    });
                 (
                     format!("marker {value}"),
                     vec![],
-                    0,
-                    content.len(),
-                    1,
-                    text.lines().count(),
+                    byte_start,
+                    byte_end,
+                    line_start,
+                    line_end,
                     excerpt.clone(),
                     hash_bytes(excerpt.as_bytes()),
                 )
@@ -575,4 +614,96 @@ fn hash_bytes(value: &[u8]) -> String {
     let mut hash = Sha256::new();
     hash.update(value);
     format!("sha256:{:x}", hash.finalize())
+}
+
+fn extract_yaml_block(
+    text: &str,
+    predicate: impl Fn(&str) -> bool,
+) -> Option<(usize, usize, usize, usize, String)> {
+    let mut start = None;
+    let mut end = None;
+    let mut byte = 0usize;
+    for (index, line) in text.lines().enumerate() {
+        let line_no = index + 1;
+        if start.is_none() && predicate(line) {
+            start = Some((byte, line_no));
+        } else if start.is_some() {
+            let trimmed = line.trim_start();
+            if !trimmed.is_empty() && !line.starts_with(' ') && !line.starts_with('\t') {
+                end = Some((byte, line_no.saturating_sub(1)));
+                break;
+            }
+        }
+        byte += line.len() + 1;
+    }
+    let (start_byte, start_line) = start?;
+    let (end_byte, end_line) = end.unwrap_or((text.len(), text.lines().count()));
+    Some((
+        start_byte,
+        end_byte.max(start_byte),
+        start_line,
+        end_line.max(start_line),
+        text[start_byte..end_byte.max(start_byte)].to_string(),
+    ))
+}
+
+fn extract_heading_block(
+    text: &str,
+    heading: &str,
+) -> Option<(usize, usize, usize, usize, String)> {
+    let mut start = None;
+    let mut end = None;
+    let mut byte = 0usize;
+    let mut level = 0usize;
+    for (index, line) in text.lines().enumerate() {
+        let line_no = index + 1;
+        let trimmed = line.trim_start();
+        if start.is_none()
+            && trimmed.starts_with('#')
+            && trimmed.trim_start_matches('#').trim() == heading
+        {
+            level = trimmed.chars().take_while(|c| *c == '#').count();
+            start = Some((byte, line_no));
+        } else if start.is_some() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with('#') {
+                let next_level = trimmed.chars().take_while(|c| *c == '#').count();
+                if next_level <= level {
+                    end = Some((byte, line_no.saturating_sub(1)));
+                    break;
+                }
+            }
+        }
+        byte += line.len() + 1;
+    }
+    let (start_byte, start_line) = start?;
+    let (end_byte, end_line) = end.unwrap_or((text.len(), text.lines().count()));
+    Some((
+        start_byte,
+        end_byte.max(start_byte),
+        start_line,
+        end_line.max(start_line),
+        text[start_byte..end_byte.max(start_byte)].to_string(),
+    ))
+}
+
+fn extract_marker_block(text: &str, marker: &str) -> Option<(usize, usize, usize, usize, String)> {
+    let start_byte = text.find(marker)?;
+    let mut byte = 0usize;
+    for (index, line) in text.lines().enumerate() {
+        let line_start = index + 1;
+        let next = byte + line.len() + 1;
+        if next > start_byte {
+            let line_end = byte + line.len();
+            return Some((
+                byte,
+                line_end,
+                line_start,
+                line_start,
+                text[byte..line_end].to_string(),
+            ));
+        }
+        byte = next;
+    }
+    None
 }

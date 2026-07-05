@@ -55,34 +55,21 @@ pub struct WorkRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum RequestedTarget {
-    Ref(BoundTargetRef),
-    Change(RequestedTargetChange),
+#[serde(deny_unknown_fields)]
+pub struct RequestedTarget {
+    #[serde(rename = "ref")]
+    pub reference: BoundTargetRef,
+    pub transition: TargetTransition,
 }
 
 impl RequestedTarget {
     pub fn reference(&self) -> &BoundTargetRef {
-        match self {
-            Self::Ref(reference) => reference,
-            Self::Change(change) => &change.reference,
-        }
+        &self.reference
     }
 
-    pub fn transition(&self, default: TargetTransition) -> TargetTransition {
-        match self {
-            Self::Ref(_) => default,
-            Self::Change(change) => change.transition,
-        }
+    pub fn transition(&self, _default: TargetTransition) -> TargetTransition {
+        self.transition
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct RequestedTargetChange {
-    #[serde(rename = "ref")]
-    pub reference: BoundTargetRef,
-    pub transition: TargetTransition,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
