@@ -4,7 +4,9 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use syu_diagnostics::Diagnostic;
-use syu_spec_model::{ArtifactBinding, BoundTargetRef, LocalAnchorKind, Selector, SpecAnchor};
+use syu_spec_model::{
+    ArtifactBinding, BoundTargetRef, LocalAnchorKind, RepoPath, Selector, SpecAnchor,
+};
 use syu_work_model::*;
 use syu_workspace::{AnchorValue, SpecIndex, SpecWorkspace, resolve_target_with_adapters};
 
@@ -295,7 +297,6 @@ fn build_implementation_slice(
     exclude_matcher: Option<&GlobSet>,
 ) -> Result<ExecutionSlice> {
     let binding = index.bindings.get(implementation).expect("indexed binding");
-    let editable_lifecycle = request_target_lifecycle(request);
     let add_budget_bytes = request.constraints.max_added_bytes_per_target;
     let add_budget_lines = request.constraints.max_added_lines_per_target;
     let mut blockers = vec![];
@@ -305,8 +306,9 @@ fn build_implementation_slice(
             index,
             target,
             TargetAccessMode::Editable,
-            editable_lifecycle,
             "Requested implementation target.",
+            request.operation,
+            true,
             add_budget_bytes,
             add_budget_lines,
             exclude_matcher,
@@ -318,8 +320,9 @@ fn build_implementation_slice(
             implementation,
             binding,
             TargetAccessMode::Editable,
-            editable_lifecycle,
             "Primary implementation satisfying the selected criterion.",
+            request.operation,
+            false,
             add_budget_bytes,
             add_budget_lines,
             exclude_matcher,
@@ -373,7 +376,6 @@ fn build_documentation_slice(
     exclude_matcher: Option<&GlobSet>,
 ) -> Result<ExecutionSlice> {
     let binding = index.bindings.get(documentation).expect("indexed binding");
-    let editable_lifecycle = request_target_lifecycle(request);
     let add_budget_bytes = request.constraints.max_added_bytes_per_target;
     let add_budget_lines = request.constraints.max_added_lines_per_target;
     let mut blockers = vec![];
@@ -383,8 +385,9 @@ fn build_documentation_slice(
             index,
             target,
             TargetAccessMode::Editable,
-            editable_lifecycle,
             "Requested documentation target.",
+            request.operation,
+            true,
             add_budget_bytes,
             add_budget_lines,
             exclude_matcher,
@@ -396,8 +399,9 @@ fn build_documentation_slice(
             documentation,
             binding,
             TargetAccessMode::Editable,
-            editable_lifecycle,
             "Primary documentation target for the selected criterion.",
+            request.operation,
+            false,
             add_budget_bytes,
             add_budget_lines,
             exclude_matcher,
@@ -419,8 +423,9 @@ fn build_documentation_slice(
                 &implementation,
                 other,
                 TargetAccessMode::Readonly,
-                None,
                 "Implementation context referenced by the selected documentation target.",
+                request.operation,
+                false,
                 None,
                 None,
                 exclude_matcher,
@@ -494,8 +499,9 @@ fn build_verification_slice(
                 &implementation,
                 other,
                 TargetAccessMode::Readonly,
-                None,
                 "Implementation context for the selected verification target.",
+                request.operation,
+                false,
                 None,
                 None,
                 exclude_matcher,
@@ -665,6 +671,17 @@ fn finalize_slice(
             "work-plan",
         ));
     }
+    if request.operation == WorkOperation::Add
+        && !editable_scope
+            .iter()
+            .any(|target| target.lifecycle == TargetLifecycle::EnsurePresent)
+    {
+        blockers.push(Diagnostic::error(
+            "SYU-WORK-001",
+            "add request does not introduce any new target",
+            "work-plan",
+        ));
+    }
     let editable_files = editable_scope
         .iter()
         .map(|t| t.resolved_path.as_str())
@@ -765,7 +782,6 @@ fn criterion_verification_targets(
     blockers: &mut Vec<Diagnostic>,
 ) -> Vec<PlannedTarget> {
     let mut verification = vec![];
-    let lifecycle = request_target_lifecycle(request);
     let add_budget_bytes = request.constraints.max_added_bytes_per_target;
     let add_budget_lines = request.constraints.max_added_lines_per_target;
     for anchor in index
@@ -783,10 +799,7 @@ fn criterion_verification_targets(
                 let access = if requested == Some(&reference) {
                     TargetAccessMode::Editable
                 } else {
-                    match request.operation {
-                        WorkOperation::Add | WorkOperation::Remove => TargetAccessMode::Editable,
-                        _ => TargetAccessMode::RunOnly,
-                    }
+                    TargetAccessMode::RunOnly
                 };
                 verification.extend(one_target(
                     workspace,
@@ -795,8 +808,9 @@ fn criterion_verification_targets(
                     target,
                     TargetPlanOptions {
                         access,
-                        lifecycle,
                         reason: "Direct verification of the selected criterion.",
+                        operation: request.operation,
+                        exact_target: requested == Some(&reference),
                         add_budget_bytes,
                         add_budget_lines,
                     },
@@ -815,8 +829,9 @@ fn exact_target_plan(
     index: &SpecIndex,
     requested: &BoundTargetRef,
     access: TargetAccessMode,
-    lifecycle: Option<TargetLifecycle>,
     reason: &str,
+    operation: WorkOperation,
+    exact_target: bool,
     add_budget_bytes: Option<usize>,
     add_budget_lines: Option<usize>,
     exclude_matcher: Option<&GlobSet>,
@@ -835,8 +850,9 @@ fn exact_target_plan(
         target,
         TargetPlanOptions {
             access,
-            lifecycle,
             reason,
+            operation,
+            exact_target,
             add_budget_bytes,
             add_budget_lines,
         },
@@ -873,8 +889,9 @@ fn contract_readonly_context(
                     target,
                     TargetPlanOptions {
                         access: TargetAccessMode::Readonly,
-                        lifecycle: None,
                         reason: "Contract source constraining this implementation.",
+                        operation: WorkOperation::Modify,
+                        exact_target: false,
                         add_budget_bytes: None,
                         add_budget_lines: None,
                     },
@@ -891,8 +908,9 @@ fn contract_readonly_context(
                         &participant.binding,
                         other,
                         TargetAccessMode::Readonly,
-                        None,
                         "Contract counterpart; readonly in this slice.",
+                        WorkOperation::Modify,
+                        false,
                         None,
                         None,
                         exclude_matcher,
@@ -910,8 +928,9 @@ fn targets(
     anchor: &SpecAnchor,
     binding: &ArtifactBinding,
     access: TargetAccessMode,
-    lifecycle: Option<TargetLifecycle>,
     reason: &str,
+    operation: WorkOperation,
+    exact_target: bool,
     add_budget_bytes: Option<usize>,
     add_budget_lines: Option<usize>,
     exclude_matcher: Option<&GlobSet>,
@@ -919,8 +938,9 @@ fn targets(
 ) -> Vec<PlannedTarget> {
     let options = TargetPlanOptions {
         access,
-        lifecycle,
         reason,
+        operation,
+        exact_target,
         add_budget_bytes,
         add_budget_lines,
     };
@@ -947,8 +967,9 @@ fn targets(
 #[derive(Clone, Copy)]
 struct TargetPlanOptions<'a> {
     access: TargetAccessMode,
-    lifecycle: Option<TargetLifecycle>,
     reason: &'a str,
+    operation: WorkOperation,
+    exact_target: bool,
     add_budget_bytes: Option<usize>,
     add_budget_lines: Option<usize>,
 }
@@ -967,90 +988,68 @@ fn one_target(
     }
     let resolved =
         resolve_target_with_adapters(&workspace.root, target, &workspace.config.adapters.enabled);
-    if let Some(lifecycle) = options.lifecycle {
-        return match (lifecycle, resolved) {
-            (TargetLifecycle::EnsurePresent, Ok(_)) => {
+    match (
+        options.operation,
+        options.access,
+        options.exact_target,
+        resolved,
+    ) {
+        (WorkOperation::Add, TargetAccessMode::Editable, true, Ok(_)) => {
+            let mut d = Diagnostic::error(
+                "SYU-WORK-001",
+                format!("add target already exists: {reference}"),
+                target.path.to_string_lossy(),
+            );
+            d.target = Some(reference.clone());
+            blockers.push(d);
+            vec![]
+        }
+        (WorkOperation::Add, TargetAccessMode::Editable, _, Err(_)) => {
+            let Some(add_budget_bytes) = options.add_budget_bytes else {
                 let mut d = Diagnostic::error(
                     "SYU-WORK-001",
-                    format!("add target already exists: {reference}"),
+                    format!("add target {reference} requires explicit byte budget"),
                     target.path.to_string_lossy(),
                 );
                 d.target = Some(reference.clone());
                 blockers.push(d);
-                vec![]
-            }
-            (TargetLifecycle::EnsurePresent, Err(_)) => {
-                let Some(add_budget_bytes) = options.add_budget_bytes else {
-                    let mut d = Diagnostic::error(
-                        "SYU-WORK-001",
-                        format!("add target {reference} requires explicit byte budget"),
-                        target.path.to_string_lossy(),
-                    );
-                    d.target = Some(reference.clone());
-                    blockers.push(d);
-                    return vec![];
-                };
-                let Some(add_budget_lines) = options.add_budget_lines else {
-                    let mut d = Diagnostic::error(
-                        "SYU-WORK-001",
-                        format!("add target {reference} requires explicit line budget"),
-                        target.path.to_string_lossy(),
-                    );
-                    d.target = Some(reference.clone());
-                    blockers.push(d);
-                    return vec![];
-                };
-                vec![declared_target_plan(
-                    workspace,
-                    reference,
-                    binding,
-                    target,
-                    options.access,
-                    lifecycle,
-                    options.reason,
-                    add_budget_bytes,
-                    add_budget_lines,
-                )]
-            }
-            (TargetLifecycle::EnsureAbsent, Ok(r)) => vec![PlannedTarget {
-                reference: reference.clone(),
-                lifecycle,
-                access: options.access,
-                resolved_path: r.path.to_string_lossy().into_owned(),
-                resolved_selector: ResolvedSelector {
-                    description: r.description,
-                    symbols: r.symbols,
-                },
-                content_hash: r.content_hash,
-                excerpt_hash: r.excerpt_hash,
-                adapter: target.adapter.clone(),
-                facet: binding.facet.clone(),
-                role: binding.role,
-                byte_start: r.byte_start,
-                byte_end: r.byte_end,
-                line_start: r.line_start,
-                line_end: r.line_end,
-                budget_bytes: r.byte_end.saturating_sub(r.byte_start),
-                budget_lines: None,
-                reason: options.reason.into(),
-            }],
-            (TargetLifecycle::EnsureAbsent, Err(_)) => {
+                return vec![];
+            };
+            let Some(add_budget_lines) = options.add_budget_lines else {
                 let mut d = Diagnostic::error(
                     "SYU-WORK-001",
-                    format!("remove target does not exist: {reference}"),
+                    format!("add target {reference} requires explicit line budget"),
                     target.path.to_string_lossy(),
                 );
                 d.target = Some(reference.clone());
                 blockers.push(d);
-                vec![]
-            }
-            (TargetLifecycle::Stable, _) => unreachable!(),
-        };
-    }
-    match resolved {
-        Ok(r) => vec![PlannedTarget {
+                return vec![];
+            };
+            vec![declared_target_plan(
+                workspace,
+                reference,
+                binding,
+                target,
+                options.access,
+                options.reason,
+                add_budget_bytes,
+                add_budget_lines,
+            )]
+        }
+        (WorkOperation::Add, _, _, Ok(r))
+        | (WorkOperation::Modify, _, _, Ok(r))
+        | (WorkOperation::Remove, _, _, Ok(r))
+        | (WorkOperation::Document, _, _, Ok(r))
+        | (WorkOperation::Investigate, _, _, Ok(r))
+        | (WorkOperation::Refactor, _, _, Ok(r)) => vec![PlannedTarget {
             reference: reference.clone(),
-            lifecycle: TargetLifecycle::Stable,
+            lifecycle: if matches!(options.operation, WorkOperation::Remove)
+                && options.access == TargetAccessMode::Editable
+            {
+                TargetLifecycle::EnsureAbsent
+            } else {
+                TargetLifecycle::Stable
+            },
             access: options.access,
             resolved_path: r.path.to_string_lossy().into_owned(),
             resolved_selector: ResolvedSelector {
@@ -1070,10 +1069,25 @@ fn one_target(
             budget_lines: None,
             reason: options.reason.into(),
         }],
-        Err(e) => {
+        (WorkOperation::Remove, TargetAccessMode::Editable, _, Err(_)) => {
+            let mut d = Diagnostic::error(
+                "SYU-WORK-001",
+                format!("remove target does not exist: {reference}"),
+                target.path.to_string_lossy(),
+            );
+            d.target = Some(reference.clone());
+            blockers.push(d);
+            vec![]
+        }
+        (WorkOperation::Add, _, _, Err(_))
+        | (WorkOperation::Modify, _, _, Err(_))
+        | (WorkOperation::Remove, _, _, Err(_))
+        | (WorkOperation::Document, _, _, Err(_))
+        | (WorkOperation::Investigate, _, _, Err(_))
+        | (WorkOperation::Refactor, _, _, Err(_)) => {
             let mut d = Diagnostic::error(
                 "SYU-TARGET-002",
-                e.to_string(),
+                format!("target does not resolve: {}", target.path.to_string_lossy()),
                 target.path.to_string_lossy(),
             );
             d.target = Some(reference.clone());
@@ -1090,7 +1104,6 @@ fn declared_target_plan(
     binding: &ArtifactBinding,
     target: &syu_spec_model::ArtifactTarget,
     access: TargetAccessMode,
-    lifecycle: TargetLifecycle,
     reason: &str,
     add_budget_bytes: usize,
     add_budget_lines: usize,
@@ -1099,7 +1112,7 @@ fn declared_target_plan(
     let fallback = fallback_present_target_snapshot(workspace, target);
     PlannedTarget {
         reference: reference.clone(),
-        lifecycle,
+        lifecycle: TargetLifecycle::EnsurePresent,
         access,
         resolved_path: target.path.to_string_lossy().into_owned(),
         resolved_selector: ResolvedSelector {
@@ -1114,18 +1127,10 @@ fn declared_target_plan(
         byte_start: fallback.byte_start,
         byte_end: fallback.byte_end,
         line_start: fallback.line_start,
-        line_end: add_budget_lines,
+        line_end: fallback.line_end,
         budget_bytes: add_budget_bytes,
         budget_lines: Some(add_budget_lines),
         reason: reason.into(),
-    }
-}
-
-fn request_target_lifecycle(request: &WorkRequest) -> Option<TargetLifecycle> {
-    match request.operation {
-        WorkOperation::Add => Some(TargetLifecycle::EnsurePresent),
-        WorkOperation::Remove => Some(TargetLifecycle::EnsureAbsent),
-        _ => None,
     }
 }
 
@@ -1149,6 +1154,7 @@ struct FallbackPresentTargetSnapshot {
     byte_start: usize,
     byte_end: usize,
     line_start: usize,
+    line_end: usize,
 }
 
 fn fallback_present_target_snapshot(
@@ -1171,6 +1177,7 @@ fn fallback_present_target_snapshot(
             byte_start: container.byte_start,
             byte_end: container.byte_end,
             line_start: container.line_start,
+            line_end: container.line_end.max(1),
         };
     }
     let empty_hash = hash_bytes(&[]);
@@ -1180,6 +1187,7 @@ fn fallback_present_target_snapshot(
         byte_start: 0,
         byte_end: 0,
         line_start: 1,
+        line_end: 1,
     }
 }
 
@@ -1613,27 +1621,31 @@ fn build_context_pack(
     spec_context: Vec<SpecContextEntry>,
 ) -> Result<ContextPack> {
     let mut artifact_context = Vec::new();
-    let mut included = BTreeSet::new();
+    let mut included: Vec<(BoundTargetRef, ContextMode)> = Vec::new();
     for (mode, targets) in [
         (ContextMode::Editable, &slice.editable_targets),
         (ContextMode::Verification, &slice.verification_targets),
         (ContextMode::Readonly, &slice.readonly_context),
     ] {
         for target in targets {
-            if !included.insert(target.reference.clone()) {
+            if included
+                .iter()
+                .any(|(reference, seen_mode)| reference == &target.reference && *seen_mode == mode)
+            {
                 continue;
             }
-            let excerpt = index
-                .target(&target.reference)
-                .and_then(|declared| {
-                    resolve_target_with_adapters(
-                        &workspace.root,
-                        declared,
-                        &workspace.config.adapters.enabled,
-                    )
-                    .ok()
-                })
-                .map(|resolved| resolved.excerpt)
+            included.push((target.reference.clone(), mode));
+            let resolved = index.target(&target.reference).and_then(|declared| {
+                resolve_target_with_adapters(
+                    &workspace.root,
+                    declared,
+                    &workspace.config.adapters.enabled,
+                )
+                .ok()
+            });
+            let excerpt = resolved
+                .as_ref()
+                .map(|resolved| resolved.excerpt.clone())
                 .filter(|excerpt| !excerpt.is_empty())
                 .or_else(|| match target.lifecycle {
                     TargetLifecycle::EnsurePresent => Some(format!(
@@ -1665,6 +1677,48 @@ fn build_context_pack(
                 reason: target.reason.clone(),
                 excerpt,
             });
+            if matches!(target.lifecycle, TargetLifecycle::EnsurePresent)
+                && resolved.is_none()
+                && let Some(container) = resolve_target_with_adapters(
+                    &workspace.root,
+                    &syu_spec_model::ArtifactTarget {
+                        id: target.reference.target_id.clone(),
+                        adapter: target.adapter.clone(),
+                        path: RepoPath::new(target.resolved_path.clone())
+                            .expect("resolved path is a valid repo path"),
+                        selector: syu_spec_model::Selector::File,
+                    },
+                    &workspace.config.adapters.enabled,
+                )
+                .ok()
+            {
+                if !included.iter().any(|(reference, seen_mode)| {
+                    reference == &target.reference && *seen_mode == ContextMode::Readonly
+                }) {
+                    included.push((target.reference.clone(), ContextMode::Readonly));
+                    artifact_context.push(ArtifactExcerpt {
+                        reference: target.reference.clone(),
+                        mode: ContextMode::Readonly,
+                        access: TargetAccessMode::Readonly,
+                        path: container.path.to_string_lossy().into_owned(),
+                        selector: ResolvedSelector {
+                            description: container.description,
+                            symbols: container.symbols,
+                        },
+                        line_start: container.line_start,
+                        line_end: container.line_end,
+                        byte_start: container.byte_start,
+                        byte_end: container.byte_end,
+                        adapter: target.adapter.clone(),
+                        facet: target.facet.clone(),
+                        role: target.role,
+                        content_hash: container.content_hash,
+                        excerpt_hash: container.excerpt_hash,
+                        reason: "Container context for new target.".into(),
+                        excerpt: container.excerpt,
+                    });
+                }
+            }
         }
     }
     Ok(ContextPack {

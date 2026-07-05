@@ -362,7 +362,7 @@ fn exclude_paths_skip_unresolvable_targets_before_resolution() {
             "    max_editable_symbols: 2\n",
             "    max_verification_targets: 1\n",
             "    max_readonly_targets: 1\n",
-            "    max_total_bytes: 4096\n",
+            "    max_total_bytes: 8192\n",
             "  context:\n",
             "    include_parent_principles: false\n",
             "    include_parent_rules: false\n",
@@ -532,7 +532,7 @@ fn modify_plan_validates_after_editable_body_change() {
             "    max_editable_symbols: 2\n",
             "    max_verification_targets: 1\n",
             "    max_readonly_targets: 1\n",
-            "    max_total_bytes: 4096\n",
+            "    max_total_bytes: 8192\n",
             "  context:\n",
             "    include_parent_principles: false\n",
             "    include_parent_rules: false\n",
@@ -708,7 +708,7 @@ fn modify_plan_rejects_same_file_sibling_change_outside_scope() {
             "    max_editable_symbols: 2\n",
             "    max_verification_targets: 1\n",
             "    max_readonly_targets: 1\n",
-            "    max_total_bytes: 4096\n",
+            "    max_total_bytes: 8192\n",
             "  context:\n",
             "    include_parent_principles: false\n",
             "    include_parent_rules: false\n",
@@ -884,7 +884,7 @@ fn modify_plan_does_not_allow_head_head_to_hide_scope_violations() {
             "    max_editable_symbols: 2\n",
             "    max_verification_targets: 1\n",
             "    max_readonly_targets: 1\n",
-            "    max_total_bytes: 4096\n",
+            "    max_total_bytes: 8192\n",
             "  context:\n",
             "    include_parent_principles: false\n",
             "    include_parent_rules: false\n",
@@ -1063,7 +1063,7 @@ fn add_plan_supports_missing_declared_target_and_validates_after_creation() {
             "    max_editable_symbols: 2\n",
             "    max_verification_targets: 1\n",
             "    max_readonly_targets: 1\n",
-            "    max_total_bytes: 4096\n",
+            "    max_total_bytes: 8192\n",
             "  context:\n",
             "    include_parent_principles: false\n",
             "    include_parent_rules: false\n",
@@ -1159,6 +1159,11 @@ fn add_plan_supports_missing_declared_target_and_validates_after_creation() {
             "          - { id: new, adapter: rust, path: src/new.rs, selector: { kind: symbol, names: [new_behavior] } }\n",
             "        satisfies: [REQ-SAMPLE-ADD#criterion.create]\n",
         ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("tests/check.rs"),
+        "fn check_new_behavior() {}\n",
     )
     .unwrap();
     init_workspace_repo(temp.path());
@@ -1310,6 +1315,11 @@ fn add_plan_existing_file_uses_real_container_snapshot_and_nonzero_budget() {
         "fn existing_behavior() {}\n",
     )
     .unwrap();
+    fs::write(
+        temp.path().join("tests/check.rs"),
+        "fn check_new_behavior() {}\n",
+    )
+    .unwrap();
     init_workspace_repo(temp.path());
     let request = temp.path().join("work.yaml");
     let plan = temp.path().join("plan.yaml");
@@ -1341,6 +1351,158 @@ fn add_plan_existing_file_uses_real_container_snapshot_and_nonzero_budget() {
     assert!(!text.contains("excerpt_hash: declared"));
     assert!(!text.contains("line_end: 18446744073709551615"));
     assert!(!text.contains("budget_bytes: 0"));
+    let slice = text
+        .lines()
+        .find_map(|line| line.strip_prefix("- id: "))
+        .unwrap()
+        .to_string();
+    let pack = temp.path().join("context.yaml");
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["work", "export-context", "--plan"])
+        .arg(&plan)
+        .args(["--slice", &slice, "--workspace"])
+        .arg(temp.path())
+        .args(["--out"])
+        .arg(&pack)
+        .assert()
+        .success();
+    let context = fs::read_to_string(&pack).unwrap();
+    assert!(context.contains("Container context for new target."));
+    assert!(context.contains("mode: readonly"));
+}
+
+#[test]
+fn add_plan_enforces_line_budget_for_file_targets() {
+    let temp = tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("spec")).unwrap();
+    fs::create_dir_all(temp.path().join("src")).unwrap();
+    fs::create_dir_all(temp.path().join("tests")).unwrap();
+    fs::write(
+        temp.path().join("syu.yaml"),
+        concat!(
+            "schema: syu/config/v1\n",
+            "workspace:\n",
+            "  spec_roots: [spec]\n",
+            "  artifact_roots: [src, tests]\n",
+            "  excludes: []\n",
+            "profiles: { active: [], custom: {} }\n",
+            "validation:\n",
+            "  preset: standard\n",
+            "  deny_warnings: false\n",
+            "  rules: {}\n",
+            "  changed:\n",
+            "    require_owned_changes: false\n",
+            "work:\n",
+            "  slicing:\n",
+            "    max_editable_files: 2\n",
+            "    max_editable_symbols: 2\n",
+            "    max_verification_targets: 1\n",
+            "    max_readonly_targets: 1\n",
+            "    max_total_bytes: 8192\n",
+            "  context:\n",
+            "    include_parent_principles: false\n",
+            "    include_parent_rules: false\n",
+            "adapters: { enabled: [rust] }\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/requirement.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: requirements\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "requirements:\n",
+            "  - id: REQ-SAMPLE-FILE-ADD\n",
+            "    title: Sample\n",
+            "    description: Sample requirement.\n",
+            "    priority: medium\n",
+            "    status: implemented\n",
+            "    criteria:\n",
+            "      - id: create\n",
+            "        kind: behavior\n",
+            "        statement: Create the new file.\n",
+            "        governed_by: []\n",
+            "    bindings:\n",
+            "      - id: verify\n",
+            "        role: verification\n",
+            "        facet: verification\n",
+            "        responsibility: Verify the new file.\n",
+            "        targets:\n",
+            "          - { id: case, adapter: rust, path: tests/check.rs, selector: { kind: symbol, names: [check_new_file] } }\n",
+            "        verifies: [REQ-SAMPLE-FILE-ADD#criterion.create]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/feature.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: features\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "features:\n",
+            "  - id: FEAT-SAMPLE-FILE-ADD\n",
+            "    title: Sample\n",
+            "    summary: Add a new file.\n",
+            "    status: implemented\n",
+            "    bindings:\n",
+            "      - id: app\n",
+            "        role: implementation\n",
+            "        facet: backend\n",
+            "        responsibility: Add the new file.\n",
+            "        targets:\n",
+            "          - { id: new, adapter: rust, path: src/new.rs, selector: { kind: file } }\n",
+            "        satisfies: [REQ-SAMPLE-FILE-ADD#criterion.create]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("tests/check.rs"),
+        "fn check_new_file() {}\n",
+    )
+    .unwrap();
+    init_workspace_repo(temp.path());
+    let request = temp.path().join("work.yaml");
+    let plan = temp.path().join("plan.yaml");
+    fs::write(
+        &request,
+        concat!(
+            "schema: syu/work-request/v1\n",
+            "id: WORK-ADD-FILE-001\n",
+            "summary: Add the new file.\n",
+            "operation: add\n",
+            "seeds: [REQ-SAMPLE-FILE-ADD#criterion.create]\n",
+            "constraints: { include_facets: [], exclude_paths: [], max_slices: 2, max_added_bytes_per_target: 4096, max_added_lines_per_target: 1 }\n",
+        ),
+    )
+    .unwrap();
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["work", "plan", "--request"])
+        .arg(&request)
+        .args(["--out"])
+        .arg(&plan)
+        .args(["--workspace"])
+        .arg(temp.path())
+        .assert()
+        .success();
+    fs::write(
+        temp.path().join("src/new.rs"),
+        "fn a() {}\nfn b() {}\nfn c() {}\n",
+    )
+    .unwrap();
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["validate"])
+        .arg(temp.path())
+        .args(["--plan"])
+        .arg(&plan)
+        .args(["--range", "HEAD"])
+        .assert()
+        .failure();
 }
 
 #[test]
@@ -1369,7 +1531,7 @@ fn add_plan_rejects_noop_existing_target() {
             "summary: Attempt to add an existing target.\n",
             "operation: add\n",
             "seeds: [REQ-AUTH-001#criterion.invalid-credentials]\n",
-            "constraints: { include_facets: [], exclude_paths: [], max_slices: 2 }\n",
+            "constraints: { include_facets: [], exclude_paths: [], max_slices: 2, max_added_bytes_per_target: 256, max_added_lines_per_target: 32 }\n",
         ),
     )
     .unwrap();
@@ -1383,7 +1545,7 @@ fn add_plan_rejects_noop_existing_target() {
         .assert()
         .failure();
     let text = fs::read_to_string(&plan).unwrap();
-    assert!(text.contains("add target already exists"));
+    assert!(text.contains("add request does not introduce any new target"));
 }
 
 #[test]
@@ -1471,6 +1633,11 @@ fn remove_plan_rejects_missing_target() {
             "          - { id: old, adapter: rust, path: src/old.rs, selector: { kind: symbol, names: [old_behavior] } }\n",
             "        satisfies: [REQ-SAMPLE-REMOVE-MISSING#criterion.drop]\n",
         ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("tests/check.rs"),
+        "fn check_removed_behavior() {}\n",
     )
     .unwrap();
     init_workspace_repo(temp.path());
@@ -1661,7 +1828,6 @@ fn remove_plan_validates_after_target_is_deleted() {
     let text = fs::read_to_string(&plan).unwrap();
     assert!(text.contains("lifecycle: ensure-absent"));
     fs::remove_file(temp.path().join("src/old.rs")).unwrap();
-    fs::remove_file(temp.path().join("tests/check.rs")).unwrap();
     Command::cargo_bin("syu")
         .unwrap()
         .args(["validate"])

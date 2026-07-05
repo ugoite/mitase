@@ -10,6 +10,13 @@ Required fields:
 - `operation`
 - `seeds` or `requested_targets`
 
+Add requests also require explicit per-target budgets:
+
+- `constraints.max_added_bytes_per_target`
+- `constraints.max_added_lines_per_target`
+
+These budgets are enforced per target during planning and validation.
+
 Typical flow:
 
 ```bash

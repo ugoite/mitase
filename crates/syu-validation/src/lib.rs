@@ -721,39 +721,56 @@ fn target_changed_by_files(
     reference: &BoundTargetRef,
     changed_files: &[ChangedFile],
 ) -> bool {
-    let mut candidates = Vec::new();
-    if let Some(index) = baseline_index
-        && let Some(workspace) = baseline_workspace
-        && let Some(target) = index.target(reference)
-    {
-        candidates.push((workspace, target));
-    }
-    if let Some(target) = current_index.target(reference) {
-        candidates.push((current_workspace, target));
-    }
-    candidates.into_iter().any(|(workspace, target)| {
-        let resolved = resolve_target_with_adapters(
-            &workspace.root,
-            target,
-            &workspace.config.adapters.enabled,
-        )
-        .ok();
-        let target_path = resolved
-            .as_ref()
-            .map(|resolved| resolved.path.to_string_lossy().into_owned())
-            .unwrap_or_else(|| target.path.to_string_lossy().into_owned());
-        let target_is_file = resolved
-            .as_ref()
-            .map(|resolved| resolved.description == "file")
-            .unwrap_or(matches!(target.selector, Selector::File));
-        changed_files.iter().any(|file| {
-            changed_file_impacts_target(target_is_file, &target_path, resolved.as_ref(), file)
+    let baseline_hit = baseline_index
+        .and_then(|index| index.target(reference))
+        .and_then(|target| baseline_workspace.map(|workspace| (workspace, target)))
+        .and_then(|(workspace, target)| {
+            resolve_target_with_adapters(
+                &workspace.root,
+                target,
+                &workspace.config.adapters.enabled,
+            )
+            .ok()
+            .map(|resolved| {
+                changed_files.iter().any(|file| {
+                    changed_file_impacts_target(
+                        TargetRangeSide::Old,
+                        &resolved.path.to_string_lossy(),
+                        Some(&resolved),
+                        file,
+                    )
+                })
+            })
         })
-    })
+        .unwrap_or(false);
+    if baseline_hit {
+        return true;
+    }
+    current_index
+        .target(reference)
+        .and_then(|target| {
+            resolve_target_with_adapters(
+                &current_workspace.root,
+                target,
+                &current_workspace.config.adapters.enabled,
+            )
+            .ok()
+            .map(|resolved| {
+                changed_files.iter().any(|file| {
+                    changed_file_impacts_target(
+                        TargetRangeSide::New,
+                        &resolved.path.to_string_lossy(),
+                        Some(&resolved),
+                        file,
+                    )
+                })
+            })
+        })
+        .unwrap_or(false)
 }
 
 fn changed_file_impacts_target(
-    target_is_file: bool,
+    side: TargetRangeSide,
     target_path: &str,
     resolved: Option<&ResolvedTarget>,
     file: &ChangedFile,
@@ -761,10 +778,6 @@ fn changed_file_impacts_target(
     let target_range = resolved.map(|resolved| (resolved.line_start, resolved.line_end));
     let target_matches_side =
         |path: Option<&RepoPath>| path.is_some_and(|path| path.to_string_lossy() == target_path);
-    if target_is_file {
-        return target_matches_side(file.old_path.as_ref())
-            || target_matches_side(file.new_path.as_ref());
-    }
     let structural_change = file.old_path != file.new_path
         || matches!(
             file.status,
@@ -773,20 +786,28 @@ fn changed_file_impacts_target(
                 | ChangeStatus::Renamed
                 | ChangeStatus::Binary
         );
-    if structural_change
-        && (target_matches_side(file.old_path.as_ref())
-            || target_matches_side(file.new_path.as_ref()))
-    {
+    let side_path_matches = match side {
+        TargetRangeSide::Old => target_matches_side(file.old_path.as_ref()),
+        TargetRangeSide::New => target_matches_side(file.new_path.as_ref()),
+    };
+    if resolved.is_none() {
+        return side_path_matches;
+    }
+    if structural_change && side_path_matches {
         return true;
     }
     if target_range.is_none() {
         return false;
     }
-    file.hunks.iter().any(|hunk| {
-        (target_matches_side(file.old_path.as_ref())
-            && changed_side_overlaps(hunk.old_start, hunk.old_end, target_range.unwrap()))
-            || (target_matches_side(file.new_path.as_ref())
-                && changed_side_overlaps(hunk.new_start, hunk.new_end, target_range.unwrap()))
+    file.hunks.iter().any(|hunk| match side {
+        TargetRangeSide::Old => {
+            side_path_matches
+                && changed_side_overlaps(hunk.old_start, hunk.old_end, target_range.unwrap())
+        }
+        TargetRangeSide::New => {
+            side_path_matches
+                && changed_side_overlaps(hunk.new_start, hunk.new_end, target_range.unwrap())
+        }
     })
 }
 
@@ -2057,13 +2078,12 @@ fn ensure_present_target_exceeds_budget(
     if actual_bytes > target.budget_bytes {
         return true;
     }
-    if target_selector_is_file(target) {
-        return false;
-    }
-    let planned_lines = target
-        .line_end
-        .saturating_sub(target.line_start)
-        .saturating_add(1);
+    let planned_lines = target.budget_lines.unwrap_or_else(|| {
+        target
+            .line_end
+            .saturating_sub(target.line_start)
+            .saturating_add(1)
+    });
     let actual_lines = resolved
         .line_end
         .saturating_sub(resolved.line_start)
@@ -2416,7 +2436,7 @@ requirements:
             }],
         };
         assert!(!changed_file_impacts_target(
-            false,
+            TargetRangeSide::Old,
             "web/login.ts",
             Some(&resolved),
             &unrelated_change,
@@ -2432,7 +2452,7 @@ requirements:
             hunks: vec![],
         };
         assert!(changed_file_impacts_target(
-            true,
+            TargetRangeSide::Old,
             "web/login.ts",
             None,
             &changed,
