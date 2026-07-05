@@ -127,6 +127,7 @@ pub struct ResolvedSelector {
 pub struct PlannedTarget {
     #[serde(rename = "ref")]
     pub reference: BoundTargetRef,
+    pub transition: TargetTransition,
     #[serde(default)]
     pub lifecycle: TargetLifecycle,
     pub access: TargetAccessMode,
@@ -281,14 +282,62 @@ pub struct ContractParticipantContext {
     pub role: String,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "entry_kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum ArtifactContextEntry {
+    Target(TargetContext),
+    IntendedTarget(IntendedTargetContext),
+    Support(SupportContext),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ArtifactExcerpt {
-    #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
-    pub reference: Option<BoundTargetRef>,
+pub struct TargetContext {
+    #[serde(rename = "ref")]
+    pub reference: BoundTargetRef,
+    pub transition: TargetTransition,
+    #[serde(default)]
+    pub lifecycle: TargetLifecycle,
+    pub mode: ContextMode,
+    pub access: TargetAccessMode,
+    pub path: String,
+    pub selector: ResolvedSelector,
+    pub line_start: usize,
+    pub line_end: usize,
+    pub byte_start: usize,
+    pub byte_end: usize,
+    pub adapter: String,
+    pub facet: String,
+    pub role: BindingRole,
+    pub content_hash: String,
+    pub excerpt_hash: String,
+    pub reason: String,
+    pub excerpt: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct IntendedTargetContext {
+    #[serde(rename = "ref")]
+    pub reference: BoundTargetRef,
+    pub transition: TargetTransition,
+    #[serde(default)]
+    pub lifecycle: TargetLifecycle,
+    pub mode: ContextMode,
+    pub access: TargetAccessMode,
+    pub path: String,
+    pub selector: ResolvedSelector,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub support_id: Option<String>,
+    pub budget_bytes: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub supports: Option<BoundTargetRef>,
+    pub budget_lines: Option<usize>,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SupportContext {
+    pub support_id: String,
+    pub supports: BoundTargetRef,
     pub mode: ContextMode,
     pub access: TargetAccessMode,
     pub path: String,
@@ -320,7 +369,7 @@ pub struct ContextPack {
     pub basis: PlanBasis,
     pub instructions: ContextInstructions,
     pub spec_context: Vec<SpecContextEntry>,
-    pub artifact_context: Vec<ArtifactExcerpt>,
+    pub artifact_context: Vec<ArtifactContextEntry>,
     pub completion: Vec<CompletionCheck>,
 }
 

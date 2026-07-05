@@ -2159,6 +2159,7 @@ mod tests {
     use super::*;
     use std::fs;
     use std::process::Command;
+    use syu_work_model::TargetTransition;
     use tempfile::tempdir;
 
     fn fixture_root() -> PathBuf {
@@ -2220,6 +2221,7 @@ mod tests {
     ) -> syu_work_model::PlannedTarget {
         syu_work_model::PlannedTarget {
             reference: "FEAT-AUTH-001#binding.ui/target.requested".parse().unwrap(),
+            transition: TargetTransition::Add,
             lifecycle: TargetLifecycle::EnsurePresent,
             access: syu_work_model::TargetAccessMode::Editable,
             resolved_path: path.to_string(),

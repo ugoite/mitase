@@ -1,7 +1,6 @@
 #![forbid(unsafe_code)]
 use anyhow::{Context, Result, bail};
 use globset::{Glob, GlobSet, GlobSetBuilder};
-use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use syu_diagnostics::Diagnostic;
 use syu_spec_model::{
@@ -52,14 +51,8 @@ pub fn plan(
     let mut criteria = BTreeSet::new();
     for requested in &request.requested_targets {
         let reference = requested.reference();
-        let transition = requested.transition(if request.operation == WorkOperation::Add {
-            TargetTransition::Add
-        } else {
-            TargetTransition::Modify
-        });
-        if index.target(reference).is_none()
-            && !(request.operation == WorkOperation::Add && transition == TargetTransition::Add)
-        {
+        let transition = requested.transition(default_transition(request.operation));
+        if index.target(reference).is_none() && transition != TargetTransition::Add {
             return Ok(blocked_plan(
                 request,
                 workspace,
@@ -121,7 +114,7 @@ pub fn plan(
                     &criterion,
                     &implementation,
                     None,
-                    default_transition(request.operation),
+                    target_policy(default_transition(request.operation)),
                     exclude_matcher.as_ref(),
                 )?);
             }
@@ -148,7 +141,9 @@ pub fn plan(
                             criterion,
                             &reference.binding,
                             Some(reference),
-                            requested.transition(default_transition(request.operation)),
+                            target_policy(
+                                requested.transition(default_transition(request.operation)),
+                            ),
                             exclude_matcher.as_ref(),
                         )?);
                     }
@@ -174,7 +169,9 @@ pub fn plan(
                             criterion,
                             &reference.binding,
                             Some(reference),
-                            requested.transition(default_transition(request.operation)),
+                            target_policy(
+                                requested.transition(default_transition(request.operation)),
+                            ),
                             exclude_matcher.as_ref(),
                         )?);
                     }
@@ -310,12 +307,40 @@ fn primary_bindings(
     bindings
 }
 
-#[allow(clippy::too_many_arguments)]
 fn default_transition(operation: WorkOperation) -> TargetTransition {
     match operation {
         WorkOperation::Add => TargetTransition::Add,
         WorkOperation::Remove => TargetTransition::Remove,
         _ => TargetTransition::Modify,
+    }
+}
+
+#[derive(Clone, Copy)]
+struct TargetPolicy {
+    transition: TargetTransition,
+    access: TargetAccessMode,
+    lifecycle: TargetLifecycle,
+}
+
+fn target_policy(transition: TargetTransition) -> TargetPolicy {
+    let access = match transition {
+        TargetTransition::Add | TargetTransition::Modify | TargetTransition::Remove => {
+            TargetAccessMode::Editable
+        }
+        TargetTransition::RunOnly => TargetAccessMode::RunOnly,
+        TargetTransition::Readonly => TargetAccessMode::Readonly,
+    };
+    let lifecycle = match transition {
+        TargetTransition::Add => TargetLifecycle::EnsurePresent,
+        TargetTransition::Remove => TargetLifecycle::EnsureAbsent,
+        TargetTransition::Modify | TargetTransition::RunOnly | TargetTransition::Readonly => {
+            TargetLifecycle::Stable
+        }
+    };
+    TargetPolicy {
+        transition,
+        access,
+        lifecycle,
     }
 }
 
@@ -327,7 +352,7 @@ fn build_implementation_slice(
     criterion: &SpecAnchor,
     implementation: &SpecAnchor,
     exact_target: Option<&BoundTargetRef>,
-    target_transition: TargetTransition,
+    policy: TargetPolicy,
     exclude_matcher: Option<&GlobSet>,
 ) -> Result<ExecutionSlice> {
     let binding = index.bindings.get(implementation).expect("indexed binding");
@@ -339,11 +364,9 @@ fn build_implementation_slice(
             workspace,
             index,
             target,
-            TargetAccessMode::Editable,
+            policy,
             "Requested implementation target.",
             request.operation,
-            target_transition,
-            true,
             add_budget_bytes,
             add_budget_lines,
             exclude_matcher,
@@ -354,11 +377,9 @@ fn build_implementation_slice(
             workspace,
             implementation,
             binding,
-            TargetAccessMode::Editable,
+            policy,
             "Primary implementation satisfying the selected criterion.",
             request.operation,
-            target_transition,
-            false,
             add_budget_bytes,
             add_budget_lines,
             exclude_matcher,
@@ -371,6 +392,7 @@ fn build_implementation_slice(
         index,
         criterion,
         None,
+        target_policy(TargetTransition::RunOnly),
         exclude_matcher,
         &mut blockers,
     );
@@ -410,7 +432,7 @@ fn build_documentation_slice(
     criterion: &SpecAnchor,
     documentation: &SpecAnchor,
     exact_target: Option<&BoundTargetRef>,
-    target_transition: TargetTransition,
+    policy: TargetPolicy,
     exclude_matcher: Option<&GlobSet>,
 ) -> Result<ExecutionSlice> {
     let binding = index.bindings.get(documentation).expect("indexed binding");
@@ -422,11 +444,9 @@ fn build_documentation_slice(
             workspace,
             index,
             target,
-            TargetAccessMode::Editable,
+            policy,
             "Requested documentation target.",
             request.operation,
-            target_transition,
-            true,
             add_budget_bytes,
             add_budget_lines,
             exclude_matcher,
@@ -437,11 +457,9 @@ fn build_documentation_slice(
             workspace,
             documentation,
             binding,
-            TargetAccessMode::Editable,
+            policy,
             "Primary documentation target for the selected criterion.",
             request.operation,
-            target_transition,
-            false,
             add_budget_bytes,
             add_budget_lines,
             exclude_matcher,
@@ -462,11 +480,9 @@ fn build_documentation_slice(
                 workspace,
                 &implementation,
                 other,
-                TargetAccessMode::Readonly,
+                target_policy(TargetTransition::Readonly),
                 "Implementation context referenced by the selected documentation target.",
-                request.operation,
-                TargetTransition::Readonly,
-                false,
+                WorkOperation::Modify,
                 None,
                 None,
                 exclude_matcher,
@@ -522,6 +538,7 @@ fn build_verification_slice(
         index,
         criterion,
         Some(requested),
+        target_policy(requested.transition(default_transition(request.operation))),
         exclude_matcher,
         &mut blockers,
     );
@@ -540,11 +557,9 @@ fn build_verification_slice(
                 workspace,
                 &implementation,
                 other,
-                TargetAccessMode::Readonly,
+                target_policy(TargetTransition::Readonly),
                 "Implementation context for the selected verification target.",
-                request.operation,
-                TargetTransition::Readonly,
-                false,
+                WorkOperation::Modify,
                 None,
                 None,
                 exclude_matcher,
@@ -707,13 +722,6 @@ fn finalize_slice(
         .chain(verification.iter())
         .filter(|target| target.access == TargetAccessMode::Editable)
         .collect::<Vec<_>>();
-    if editable_scope.is_empty() && request.operation != WorkOperation::Investigate {
-        blockers.push(Diagnostic::error(
-            "SYU-WORK-004",
-            "slice has no editable target after exact target selection",
-            "work-plan",
-        ));
-    }
     if request.operation == WorkOperation::Add
         && !editable_scope
             .iter()
@@ -821,6 +829,7 @@ fn criterion_verification_targets(
     index: &SpecIndex,
     criterion: &SpecAnchor,
     requested: Option<&RequestedTarget>,
+    requested_policy: TargetPolicy,
     exclude_matcher: Option<&GlobSet>,
     blockers: &mut Vec<Diagnostic>,
 ) -> Vec<PlannedTarget> {
@@ -841,29 +850,20 @@ fn criterion_verification_targets(
                 };
                 let requested_ref = requested.map(|value| value.reference());
                 let exact_target = requested_ref == Some(&reference);
-                let access = if exact_target {
-                    TargetAccessMode::Editable
+                let policy = if exact_target {
+                    requested_policy
                 } else {
-                    TargetAccessMode::RunOnly
+                    target_policy(TargetTransition::RunOnly)
                 };
-                let transition = requested
-                    .map(|value| value.transition(TargetTransition::RunOnly))
-                    .unwrap_or(TargetTransition::RunOnly);
                 verification.extend(one_target(
                     workspace,
                     &reference,
                     binding,
                     target,
                     TargetPlanOptions {
-                        access,
+                        policy,
                         reason: "Direct verification of the selected criterion.",
                         operation: request.operation,
-                        transition: if exact_target {
-                            transition
-                        } else {
-                            TargetTransition::RunOnly
-                        },
-                        exact_target,
                         add_budget_bytes,
                         add_budget_lines,
                     },
@@ -881,11 +881,9 @@ fn exact_target_plan(
     workspace: &SpecWorkspace,
     index: &SpecIndex,
     requested: &BoundTargetRef,
-    access: TargetAccessMode,
+    policy: TargetPolicy,
     reason: &str,
     operation: WorkOperation,
-    transition: TargetTransition,
-    exact_target: bool,
     add_budget_bytes: Option<usize>,
     add_budget_lines: Option<usize>,
     exclude_matcher: Option<&GlobSet>,
@@ -894,7 +892,11 @@ fn exact_target_plan(
     let Some(binding) = index.bindings.get(&requested.binding) else {
         return vec![];
     };
-    let Some(target) = index.target(requested) else {
+    let Some(target) = binding
+        .targets
+        .iter()
+        .find(|candidate| candidate.id == requested.target_id)
+    else {
         return vec![];
     };
     one_target(
@@ -903,11 +905,9 @@ fn exact_target_plan(
         binding,
         target,
         TargetPlanOptions {
-            access,
+            policy,
             reason,
             operation,
-            transition,
-            exact_target,
             add_budget_bytes,
             add_budget_lines,
         },
@@ -943,11 +943,9 @@ fn contract_readonly_context(
                     source_binding,
                     target,
                     TargetPlanOptions {
-                        access: TargetAccessMode::Readonly,
+                        policy: target_policy(TargetTransition::Readonly),
                         reason: "Contract source constraining this implementation.",
                         operation: WorkOperation::Modify,
-                        transition: TargetTransition::Readonly,
-                        exact_target: false,
                         add_budget_bytes: None,
                         add_budget_lines: None,
                     },
@@ -963,11 +961,9 @@ fn contract_readonly_context(
                         workspace,
                         &participant.binding,
                         other,
-                        TargetAccessMode::Readonly,
+                        target_policy(TargetTransition::Readonly),
                         "Contract counterpart; readonly in this slice.",
                         WorkOperation::Modify,
-                        TargetTransition::Readonly,
-                        false,
                         None,
                         None,
                         exclude_matcher,
@@ -984,22 +980,18 @@ fn targets(
     workspace: &SpecWorkspace,
     anchor: &SpecAnchor,
     binding: &ArtifactBinding,
-    access: TargetAccessMode,
+    policy: TargetPolicy,
     reason: &str,
     operation: WorkOperation,
-    transition: TargetTransition,
-    exact_target: bool,
     add_budget_bytes: Option<usize>,
     add_budget_lines: Option<usize>,
     exclude_matcher: Option<&GlobSet>,
     blockers: &mut Vec<Diagnostic>,
 ) -> Vec<PlannedTarget> {
     let options = TargetPlanOptions {
-        access,
+        policy,
         reason,
         operation,
-        transition,
-        exact_target,
         add_budget_bytes,
         add_budget_lines,
     };
@@ -1025,11 +1017,10 @@ fn targets(
 
 #[derive(Clone, Copy)]
 struct TargetPlanOptions<'a> {
-    access: TargetAccessMode,
+    policy: TargetPolicy,
     reason: &'a str,
+    #[allow(dead_code)]
     operation: WorkOperation,
-    transition: TargetTransition,
-    exact_target: bool,
     add_budget_bytes: Option<usize>,
     add_budget_lines: Option<usize>,
 }
@@ -1048,28 +1039,23 @@ fn one_target(
     }
     let resolved =
         resolve_target_with_adapters(&workspace.root, target, &workspace.config.adapters.enabled);
-    match (
-        options.operation,
-        options.transition,
-        options.access,
-        options.exact_target,
-        resolved,
-    ) {
-        (WorkOperation::Add, TargetTransition::Add, TargetAccessMode::Editable, true, Ok(_)) => {
-            let mut d = Diagnostic::error(
-                "SYU-WORK-001",
-                format!("add target already exists: {reference}"),
-                target.path.to_string_lossy(),
-            );
-            d.target = Some(reference.clone());
-            blockers.push(d);
-            vec![]
-        }
-        (WorkOperation::Add, TargetTransition::Add, TargetAccessMode::Editable, false, Ok(r)) => {
+    match resolved {
+        Ok(r) => {
+            if matches!(options.policy.transition, TargetTransition::Add) {
+                let mut d = Diagnostic::error(
+                    "SYU-WORK-001",
+                    format!("add target already exists: {reference}"),
+                    target.path.to_string_lossy(),
+                );
+                d.target = Some(reference.clone());
+                blockers.push(d);
+                return vec![];
+            }
             vec![PlannedTarget {
                 reference: reference.clone(),
-                lifecycle: TargetLifecycle::Stable,
-                access: options.access,
+                transition: options.policy.transition,
+                lifecycle: options.policy.lifecycle,
+                access: options.policy.access,
                 resolved_path: r.path.to_string_lossy().into_owned(),
                 resolved_selector: ResolvedSelector {
                     description: r.description,
@@ -1089,141 +1075,90 @@ fn one_target(
                 reason: options.reason.into(),
             }]
         }
-        (WorkOperation::Add, TargetTransition::Add, TargetAccessMode::Editable, _, Err(_)) => {
-            let Some(add_budget_bytes) = options.add_budget_bytes else {
+        Err(_) => match options.policy.transition {
+            TargetTransition::Add => {
+                let Some(add_budget_bytes) = options.add_budget_bytes else {
+                    let mut d = Diagnostic::error(
+                        "SYU-WORK-001",
+                        format!("add target {reference} requires explicit byte budget"),
+                        target.path.to_string_lossy(),
+                    );
+                    d.target = Some(reference.clone());
+                    blockers.push(d);
+                    return vec![];
+                };
+                let Some(add_budget_lines) = options.add_budget_lines else {
+                    let mut d = Diagnostic::error(
+                        "SYU-WORK-001",
+                        format!("add target {reference} requires explicit line budget"),
+                        target.path.to_string_lossy(),
+                    );
+                    d.target = Some(reference.clone());
+                    blockers.push(d);
+                    return vec![];
+                };
+                vec![declared_target_plan(
+                    reference,
+                    binding,
+                    target,
+                    options.policy,
+                    options.reason,
+                    add_budget_bytes,
+                    add_budget_lines,
+                )]
+            }
+            TargetTransition::Remove => {
                 let mut d = Diagnostic::error(
                     "SYU-WORK-001",
-                    format!("add target {reference} requires explicit byte budget"),
+                    format!("remove target does not exist: {reference}"),
                     target.path.to_string_lossy(),
                 );
                 d.target = Some(reference.clone());
                 blockers.push(d);
-                return vec![];
-            };
-            let Some(add_budget_lines) = options.add_budget_lines else {
+                vec![]
+            }
+            TargetTransition::Modify | TargetTransition::RunOnly | TargetTransition::Readonly => {
                 let mut d = Diagnostic::error(
-                    "SYU-WORK-001",
-                    format!("add target {reference} requires explicit line budget"),
+                    "SYU-TARGET-002",
+                    format!("target does not resolve: {}", target.path.to_string_lossy()),
                     target.path.to_string_lossy(),
                 );
                 d.target = Some(reference.clone());
                 blockers.push(d);
-                return vec![];
-            };
-            vec![declared_target_plan(
-                workspace,
-                reference,
-                binding,
-                target,
-                options.access,
-                options.reason,
-                add_budget_bytes,
-                add_budget_lines,
-            )]
-        }
-        (WorkOperation::Add, _, _, _, Ok(r))
-        | (WorkOperation::Modify, _, _, _, Ok(r))
-        | (WorkOperation::Remove, _, _, _, Ok(r))
-        | (WorkOperation::Document, _, _, _, Ok(r))
-        | (WorkOperation::Investigate, _, _, _, Ok(r))
-        | (WorkOperation::Refactor, _, _, _, Ok(r)) => vec![PlannedTarget {
-            reference: reference.clone(),
-            lifecycle: match options.transition {
-                TargetTransition::Add => TargetLifecycle::EnsurePresent,
-                TargetTransition::Remove => TargetLifecycle::EnsureAbsent,
-                TargetTransition::Modify => TargetLifecycle::Stable,
-                TargetTransition::RunOnly => TargetLifecycle::Stable,
-                TargetTransition::Readonly => TargetLifecycle::Stable,
-            },
-            access: options.access,
-            resolved_path: r.path.to_string_lossy().into_owned(),
-            resolved_selector: ResolvedSelector {
-                description: r.description,
-                symbols: r.symbols,
-            },
-            content_hash: r.content_hash,
-            excerpt_hash: r.excerpt_hash,
-            adapter: target.adapter.clone(),
-            facet: binding.facet.clone(),
-            role: binding.role,
-            byte_start: r.byte_start,
-            byte_end: r.byte_end,
-            line_start: r.line_start,
-            line_end: r.line_end,
-            budget_bytes: r.byte_end.saturating_sub(r.byte_start),
-            budget_lines: None,
-            reason: options.reason.into(),
-        }],
-        (
-            WorkOperation::Remove,
-            TargetTransition::Remove,
-            TargetAccessMode::Editable,
-            _,
-            Err(_),
-        ) => {
-            let mut d = Diagnostic::error(
-                "SYU-WORK-001",
-                format!("remove target does not exist: {reference}"),
-                target.path.to_string_lossy(),
-            );
-            d.target = Some(reference.clone());
-            blockers.push(d);
-            vec![]
-        }
-        (WorkOperation::Add, _, _, _, Err(_))
-        | (WorkOperation::Modify, _, _, _, Err(_))
-        | (WorkOperation::Remove, _, _, _, Err(_))
-        | (WorkOperation::Document, _, _, _, Err(_))
-        | (WorkOperation::Investigate, _, _, _, Err(_))
-        | (WorkOperation::Refactor, _, _, _, Err(_)) => {
-            let mut d = Diagnostic::error(
-                "SYU-TARGET-002",
-                format!("target does not resolve: {}", target.path.to_string_lossy()),
-                target.path.to_string_lossy(),
-            );
-            d.target = Some(reference.clone());
-            blockers.push(d);
-            vec![]
-        }
+                vec![]
+            }
+        },
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn declared_target_plan(
-    _workspace: &SpecWorkspace,
     reference: &BoundTargetRef,
     binding: &ArtifactBinding,
     target: &syu_spec_model::ArtifactTarget,
-    access: TargetAccessMode,
+    policy: TargetPolicy,
     reason: &str,
     add_budget_bytes: usize,
     add_budget_lines: usize,
 ) -> PlannedTarget {
-    let (description, symbols) = declared_selector(&target.selector);
-    let placeholder_excerpt = format!(
-        "Target will be created: {} ({})",
-        target.path.to_string_lossy(),
-        declared_selector(&target.selector).0
-    );
-    let excerpt_hash = hash_bytes(placeholder_excerpt.as_bytes());
     PlannedTarget {
         reference: reference.clone(),
-        lifecycle: TargetLifecycle::EnsurePresent,
-        access,
+        transition: policy.transition,
+        lifecycle: policy.lifecycle,
+        access: policy.access,
         resolved_path: target.path.to_string_lossy().into_owned(),
         resolved_selector: ResolvedSelector {
-            description,
-            symbols,
+            description: declared_selector(&target.selector).0,
+            symbols: declared_selector(&target.selector).1,
         },
-        content_hash: excerpt_hash.clone(),
-        excerpt_hash,
+        content_hash: String::new(),
+        excerpt_hash: String::new(),
         adapter: target.adapter.clone(),
         facet: binding.facet.clone(),
         role: binding.role,
         byte_start: 0,
         byte_end: 0,
-        line_start: 1,
-        line_end: 1,
+        line_start: 0,
+        line_end: 0,
         budget_bytes: add_budget_bytes,
         budget_lines: Some(add_budget_lines),
         reason: reason.into(),
@@ -1242,12 +1177,6 @@ fn declared_selector(selector: &Selector) -> (String, Vec<String>) {
         Selector::JsonPointer { value } => (format!("json-pointer {value}"), Vec::new()),
         Selector::Marker { value } => (format!("marker {value}"), Vec::new()),
     }
-}
-
-fn hash_bytes(bytes: &[u8]) -> String {
-    let mut hash = Sha256::new();
-    hash.update(bytes);
-    format!("sha256:{:x}", hash.finalize())
 }
 
 fn compile_exclude_matcher(patterns: &[String]) -> Result<Option<GlobSet>> {
@@ -1675,6 +1604,7 @@ fn build_context_pack(
 ) -> Result<ContextPack> {
     let mut artifact_context = Vec::new();
     let mut included: Vec<(BoundTargetRef, ContextMode)> = Vec::new();
+    let mut included_supports: BTreeSet<String> = BTreeSet::new();
     for (mode, targets) in [
         (ContextMode::Editable, &slice.editable_targets),
         (ContextMode::Verification, &slice.verification_targets),
@@ -1696,84 +1626,96 @@ fn build_context_pack(
                 )
                 .ok()
             });
-            let excerpt = resolved
-                .as_ref()
-                .map(|resolved| resolved.excerpt.clone())
-                .filter(|excerpt| !excerpt.is_empty())
-                .or_else(|| match target.lifecycle {
-                    TargetLifecycle::EnsurePresent => Some(format!(
-                        "Target will be created: {} ({})",
-                        target.resolved_path, target.resolved_selector.description
-                    )),
-                    TargetLifecycle::EnsureAbsent => Some(format!(
-                        "Target will be removed: {} ({})",
-                        target.resolved_path, target.resolved_selector.description
-                    )),
-                    TargetLifecycle::Stable => None,
-                })
-                .context("target resolution failed while exporting context")?;
-            artifact_context.push(ArtifactExcerpt {
-                reference: Some(target.reference.clone()),
-                support_id: None,
-                supports: None,
-                mode,
-                access: target.access,
-                path: target.resolved_path.clone(),
-                selector: target.resolved_selector.clone(),
-                line_start: target.line_start,
-                line_end: target.line_end,
-                byte_start: target.byte_start,
-                byte_end: target.byte_end,
-                adapter: target.adapter.clone(),
-                facet: target.facet.clone(),
-                role: target.role,
-                content_hash: target.content_hash.clone(),
-                excerpt_hash: target.excerpt_hash.clone(),
-                reason: target.reason.clone(),
-                excerpt,
-            });
-            if matches!(target.lifecycle, TargetLifecycle::EnsurePresent)
-                && resolved.is_none()
-                && let Some(container) = resolve_target_with_adapters(
-                    &workspace.root,
-                    &syu_spec_model::ArtifactTarget {
-                        id: target.reference.target_id.clone(),
+            match resolved {
+                Some(resolved) => {
+                    let excerpt = resolved.excerpt.clone();
+                    if excerpt.is_empty() {
+                        bail!("target resolution failed while exporting context");
+                    }
+                    artifact_context.push(ArtifactContextEntry::Target(TargetContext {
+                        reference: target.reference.clone(),
+                        transition: target.transition,
+                        lifecycle: target.lifecycle,
+                        mode,
+                        access: target.access,
+                        path: target.resolved_path.clone(),
+                        selector: target.resolved_selector.clone(),
+                        line_start: target.line_start,
+                        line_end: target.line_end,
+                        byte_start: target.byte_start,
+                        byte_end: target.byte_end,
                         adapter: target.adapter.clone(),
-                        path: RepoPath::new(target.resolved_path.clone())
-                            .expect("resolved path is a valid repo path"),
-                        selector: syu_spec_model::Selector::File,
-                    },
-                    &workspace.config.adapters.enabled,
-                )
-                .ok()
-                && !included.iter().any(|(reference, seen_mode)| {
-                    reference == &target.reference && *seen_mode == ContextMode::Readonly
-                })
-            {
-                included.push((target.reference.clone(), ContextMode::Readonly));
-                artifact_context.push(ArtifactExcerpt {
-                    reference: None,
-                    support_id: Some(format!("support:{}", target.reference)),
-                    supports: Some(target.reference.clone()),
-                    mode: ContextMode::Readonly,
-                    access: TargetAccessMode::Readonly,
-                    path: container.path.to_string_lossy().into_owned(),
-                    selector: ResolvedSelector {
-                        description: container.description,
-                        symbols: container.symbols,
-                    },
-                    line_start: container.line_start,
-                    line_end: container.line_end,
-                    byte_start: container.byte_start,
-                    byte_end: container.byte_end,
-                    adapter: target.adapter.clone(),
-                    facet: target.facet.clone(),
-                    role: target.role,
-                    content_hash: container.content_hash,
-                    excerpt_hash: container.excerpt_hash,
-                    reason: "Container context for new target.".into(),
-                    excerpt: container.excerpt,
-                });
+                        facet: target.facet.clone(),
+                        role: target.role,
+                        content_hash: target.content_hash.clone(),
+                        excerpt_hash: target.excerpt_hash.clone(),
+                        reason: target.reason.clone(),
+                        excerpt,
+                    }));
+                }
+                None => {
+                    match target.transition {
+                        TargetTransition::Add => {
+                            artifact_context.push(ArtifactContextEntry::IntendedTarget(
+                                IntendedTargetContext {
+                                    reference: target.reference.clone(),
+                                    transition: target.transition,
+                                    lifecycle: target.lifecycle,
+                                    mode,
+                                    access: target.access,
+                                    path: target.resolved_path.clone(),
+                                    selector: target.resolved_selector.clone(),
+                                    budget_bytes: Some(target.budget_bytes),
+                                    budget_lines: target.budget_lines,
+                                    reason: target.reason.clone(),
+                                },
+                            ));
+                        }
+                        _ => {
+                            bail!("target resolution failed while exporting context");
+                        }
+                    }
+                    if matches!(target.lifecycle, TargetLifecycle::EnsurePresent)
+                        && let Some(container) = resolve_target_with_adapters(
+                            &workspace.root,
+                            &syu_spec_model::ArtifactTarget {
+                                id: target.reference.target_id.clone(),
+                                adapter: target.adapter.clone(),
+                                path: RepoPath::new(target.resolved_path.clone())
+                                    .expect("resolved path is a valid repo path"),
+                                selector: syu_spec_model::Selector::File,
+                            },
+                            &workspace.config.adapters.enabled,
+                        )
+                        .ok()
+                    {
+                        let support_id = format!("support:{}", target.reference);
+                        if included_supports.insert(support_id.clone()) {
+                            artifact_context.push(ArtifactContextEntry::Support(SupportContext {
+                                support_id,
+                                supports: target.reference.clone(),
+                                mode: ContextMode::Readonly,
+                                access: TargetAccessMode::Readonly,
+                                path: container.path.to_string_lossy().into_owned(),
+                                selector: ResolvedSelector {
+                                    description: container.description,
+                                    symbols: container.symbols,
+                                },
+                                line_start: container.line_start,
+                                line_end: container.line_end,
+                                byte_start: container.byte_start,
+                                byte_end: container.byte_end,
+                                adapter: target.adapter.clone(),
+                                facet: target.facet.clone(),
+                                role: target.role,
+                                content_hash: container.content_hash,
+                                excerpt_hash: container.excerpt_hash,
+                                reason: "Container context for new target.".into(),
+                                excerpt: container.excerpt,
+                            }));
+                        }
+                    }
+                }
             }
         }
     }
@@ -1864,7 +1806,8 @@ mod tests {
                 "        facet: backend\n",
                 "        responsibility: Implement the target.\n",
                 "        targets:\n",
-                "          - { id: handler, adapter: rust, path: src/handler.rs, selector: { kind: symbol, names: [handler] } }\n",
+                "          - { id: handler-present, adapter: rust, path: src/handler.rs, selector: { kind: symbol, names: [handler] } }\n",
+                "          - { id: handler-missing, adapter: rust, path: src/handler.rs, selector: { kind: symbol, names: [handler_missing] } }\n",
                 "        satisfies: [REQ-TEST-001#criterion.test]\n",
             ),
         )
@@ -1910,7 +1853,9 @@ mod tests {
                 ..Default::default()
             },
             requested_targets: vec![RequestedTarget::Change(RequestedTargetChange {
-                reference: "FEAT-TEST-001#binding.impl/target.handler".parse().unwrap(),
+                reference: "FEAT-TEST-001#binding.impl/target.handler-missing"
+                    .parse()
+                    .unwrap(),
                 transition: TargetTransition::Add,
             })],
         };
@@ -1927,6 +1872,11 @@ mod tests {
     fn explicit_add_transition_plans_missing_target_as_ensure_present() {
         let tempdir = tempdir().expect("tempdir");
         write_minimal_workspace(tempdir.path());
+        fs::write(
+            tempdir.path().join("src/handler.rs"),
+            "pub fn handler() {}\n",
+        )
+        .expect("handler file");
         let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
         let index = workspace.index().expect("index");
         let request = WorkRequest {
@@ -1941,7 +1891,9 @@ mod tests {
                 ..Default::default()
             },
             requested_targets: vec![RequestedTarget::Change(RequestedTargetChange {
-                reference: "FEAT-TEST-001#binding.impl/target.handler".parse().unwrap(),
+                reference: "FEAT-TEST-001#binding.impl/target.handler-missing"
+                    .parse()
+                    .unwrap(),
                 transition: TargetTransition::Add,
             })],
         };
@@ -1949,16 +1901,94 @@ mod tests {
         assert_eq!(plan.status, PlanStatus::Ready);
         assert!(plan.slices.iter().any(|slice| {
             slice.editable_targets.iter().any(|target| {
-                target.lifecycle == TargetLifecycle::EnsurePresent
-                    && target.reference.target_id.to_string() == "handler"
+                target.transition == TargetTransition::Add
+                    && target.lifecycle == TargetLifecycle::EnsurePresent
+                    && target.reference.target_id.to_string() == "handler-missing"
             })
         }));
+    }
+
+    #[test]
+    fn explicit_run_only_transition_preserves_access_mode() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        fs::write(
+            tempdir.path().join("src/handler.rs"),
+            "pub fn handler() {}\n",
+        )
+        .expect("handler file");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-TEST-004".into(),
+            summary: "Check explicit access modes".into(),
+            operation: WorkOperation::Modify,
+            seeds: vec![],
+            constraints: WorkConstraints::default(),
+            requested_targets: vec![RequestedTarget::Change(RequestedTargetChange {
+                reference: "FEAT-TEST-001#binding.impl/target.handler-present"
+                    .parse()
+                    .unwrap(),
+                transition: TargetTransition::RunOnly,
+            })],
+        };
+        let plan = plan(&request, &workspace, &index, "rev-4").expect("plan");
+        assert_eq!(plan.status, PlanStatus::Ready);
+        let accesses = plan
+            .slices
+            .iter()
+            .flat_map(|slice| slice.editable_targets.iter())
+            .map(|target| target.access)
+            .collect::<Vec<_>>();
+        assert!(accesses.contains(&TargetAccessMode::RunOnly));
+    }
+
+    #[test]
+    fn explicit_readonly_transition_preserves_access_mode() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        fs::write(
+            tempdir.path().join("src/handler.rs"),
+            "pub fn handler() {}\n",
+        )
+        .expect("handler file");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-TEST-005".into(),
+            summary: "Check explicit access modes".into(),
+            operation: WorkOperation::Modify,
+            seeds: vec![],
+            constraints: WorkConstraints::default(),
+            requested_targets: vec![RequestedTarget::Change(RequestedTargetChange {
+                reference: "FEAT-TEST-001#binding.impl/target.handler-present"
+                    .parse()
+                    .unwrap(),
+                transition: TargetTransition::Readonly,
+            })],
+        };
+        let plan = plan(&request, &workspace, &index, "rev-5").expect("plan");
+        assert_eq!(plan.status, PlanStatus::Ready);
+        let accesses = plan
+            .slices
+            .iter()
+            .flat_map(|slice| slice.editable_targets.iter())
+            .map(|target| target.access)
+            .collect::<Vec<_>>();
+        assert!(accesses.contains(&TargetAccessMode::Readonly));
     }
 
     #[test]
     fn context_pack_distinguishes_target_and_support_entries_for_missing_targets() {
         let tempdir = tempdir().expect("tempdir");
         write_minimal_workspace(tempdir.path());
+        fs::write(
+            tempdir.path().join("src/handler.rs"),
+            "pub fn handler() {}\n",
+        )
+        .expect("handler file");
         let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
         let index = workspace.index().expect("index");
         let request = WorkRequest {
@@ -1973,24 +2003,36 @@ mod tests {
                 ..Default::default()
             },
             requested_targets: vec![RequestedTarget::Change(RequestedTargetChange {
-                reference: "FEAT-TEST-001#binding.impl/target.handler".parse().unwrap(),
+                reference: "FEAT-TEST-001#binding.impl/target.handler-missing"
+                    .parse()
+                    .unwrap(),
                 transition: TargetTransition::Add,
             })],
         };
         let plan = plan(&request, &workspace, &index, "rev-2").expect("plan");
         let slice = plan.slices.first().expect("slice");
         let pack = export_context(&plan, &slice.id, &workspace, &index, "rev-2").expect("pack");
-        let target_entries = pack
+        let intended_entries = pack
             .artifact_context
             .iter()
-            .filter(|entry| entry.reference.is_some())
+            .filter(|entry| matches!(entry, ArtifactContextEntry::IntendedTarget(_)))
             .count();
         let support_entries = pack
             .artifact_context
             .iter()
-            .filter(|entry| entry.support_id.is_some())
+            .filter(|entry| matches!(entry, ArtifactContextEntry::Support(_)))
             .count();
-        assert_eq!(target_entries, 1);
-        assert_eq!(support_entries, 0);
+        assert_eq!(intended_entries, 1);
+        assert_eq!(support_entries, 1);
+        let support = pack
+            .artifact_context
+            .iter()
+            .find_map(|entry| match entry {
+                ArtifactContextEntry::Support(value) => Some(value),
+                _ => None,
+            })
+            .expect("support entry");
+        assert_eq!(support.supports.target_id.to_string(), "handler-missing");
+        assert!(support.support_id.starts_with("support:"));
     }
 }
