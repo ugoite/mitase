@@ -225,7 +225,6 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
     let Some(files) = ctx.changed_files else {
         return;
     };
-    let changed_paths = changed_paths(files);
     let changed_spec_documents = files
         .iter()
         .flat_map(|file| file.old_path.iter().chain(file.new_path.iter()))
@@ -274,21 +273,13 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
             }
         }
     }
-    validate_changed_spec_impact(ctx, &changed_spec_documents, &changed_paths, out);
-}
-
-fn changed_paths(files: &[ChangedFile]) -> BTreeSet<String> {
-    files
-        .iter()
-        .flat_map(|file| file.old_path.iter().chain(file.new_path.iter()))
-        .map(|path| path.to_string_lossy().into_owned())
-        .collect()
+    validate_changed_spec_impact(ctx, &changed_spec_documents, files, out);
 }
 
 fn validate_changed_spec_impact(
     ctx: &ValidationContext<'_>,
     changed_spec_documents: &BTreeSet<RepoPath>,
-    changed_paths: &BTreeSet<String>,
+    changed_files: &[ChangedFile],
     out: &mut Vec<Diagnostic>,
 ) {
     if changed_spec_documents.is_empty() {
@@ -324,9 +315,11 @@ fn validate_changed_spec_impact(
         .any(|binding| {
             binding_targets_changed_across_indexes(
                 baseline.as_ref().map(|baseline| &baseline.index),
+                baseline.as_ref().map(|baseline| &baseline.workspace),
                 ctx.index,
+                ctx.workspace,
                 binding,
-                changed_paths,
+                changed_files,
             )
         });
         let verification_changed = binding_set_for_criterion(
@@ -339,9 +332,11 @@ fn validate_changed_spec_impact(
         .any(|binding| {
             binding_targets_changed_across_indexes(
                 baseline.as_ref().map(|baseline| &baseline.index),
+                baseline.as_ref().map(|baseline| &baseline.workspace),
                 ctx.index,
+                ctx.workspace,
                 binding,
-                changed_paths,
+                changed_files,
             )
         });
         if !(implementation_changed || verification_changed) {
@@ -387,9 +382,11 @@ fn validate_changed_spec_impact(
             || participants.iter().any(|binding| {
                 !binding_targets_changed_across_indexes(
                     baseline.as_ref().map(|baseline| &baseline.index),
+                    baseline.as_ref().map(|baseline| &baseline.workspace),
                     ctx.index,
+                    ctx.workspace,
                     binding,
-                    changed_paths,
+                    changed_files,
                 )
             })
         {
@@ -426,9 +423,11 @@ fn validate_changed_spec_impact(
         }
         if !binding_targets_changed_across_indexes(
             baseline.as_ref().map(|baseline| &baseline.index),
+            baseline.as_ref().map(|baseline| &baseline.workspace),
             ctx.index,
+            ctx.workspace,
             &anchor,
-            changed_paths,
+            changed_files,
         ) {
             push(
                 out,
@@ -449,14 +448,25 @@ fn validate_changed_spec_impact(
 
 fn binding_targets_changed_across_indexes(
     baseline: Option<&SpecIndex>,
+    baseline_workspace: Option<&SpecWorkspace>,
     current: &SpecIndex,
+    current_workspace: &SpecWorkspace,
     binding: &SpecAnchor,
-    changed_paths: &BTreeSet<String>,
+    changed_files: &[ChangedFile],
 ) -> bool {
     binding_targets_for_index(baseline, binding)
         .into_iter()
         .chain(binding_targets_for_index(Some(current), binding))
-        .any(|path| changed_paths.contains(&path))
+        .any(|reference| {
+            target_changed_by_files(
+                baseline_workspace,
+                baseline,
+                current_workspace,
+                current,
+                &reference,
+                changed_files,
+            )
+        })
 }
 
 struct BaselineWorkspace {
@@ -684,17 +694,100 @@ fn participant_bindings_for_contract(
     bindings
 }
 
-fn binding_targets_for_index(index: Option<&SpecIndex>, binding: &SpecAnchor) -> BTreeSet<String> {
+fn binding_targets_for_index(
+    index: Option<&SpecIndex>,
+    binding: &SpecAnchor,
+) -> BTreeSet<BoundTargetRef> {
     index
         .and_then(|index| index.bindings.get(binding))
         .map(|artifact| {
             artifact
                 .targets
                 .iter()
-                .map(|target| target.path.to_string_lossy().into_owned())
+                .map(|target| BoundTargetRef {
+                    binding: binding.clone(),
+                    target_id: target.id.clone(),
+                })
                 .collect()
         })
         .unwrap_or_default()
+}
+
+fn target_changed_by_files(
+    baseline_workspace: Option<&SpecWorkspace>,
+    baseline_index: Option<&SpecIndex>,
+    current_workspace: &SpecWorkspace,
+    current_index: &SpecIndex,
+    reference: &BoundTargetRef,
+    changed_files: &[ChangedFile],
+) -> bool {
+    let mut candidates = Vec::new();
+    if let Some(index) = baseline_index
+        && let Some(workspace) = baseline_workspace
+        && let Some(target) = index.target(reference)
+    {
+        candidates.push((workspace, target));
+    }
+    if let Some(target) = current_index.target(reference) {
+        candidates.push((current_workspace, target));
+    }
+    candidates.into_iter().any(|(workspace, target)| {
+        let resolved = resolve_target_with_adapters(
+            &workspace.root,
+            target,
+            &workspace.config.adapters.enabled,
+        )
+        .ok();
+        let target_path = resolved
+            .as_ref()
+            .map(|resolved| resolved.path.to_string_lossy().into_owned())
+            .unwrap_or_else(|| target.path.to_string_lossy().into_owned());
+        let target_is_file = resolved
+            .as_ref()
+            .map(|resolved| resolved.description == "file")
+            .unwrap_or(matches!(target.selector, Selector::File));
+        changed_files.iter().any(|file| {
+            changed_file_impacts_target(target_is_file, &target_path, resolved.as_ref(), file)
+        })
+    })
+}
+
+fn changed_file_impacts_target(
+    target_is_file: bool,
+    target_path: &str,
+    resolved: Option<&ResolvedTarget>,
+    file: &ChangedFile,
+) -> bool {
+    let target_range = resolved.map(|resolved| (resolved.line_start, resolved.line_end));
+    let target_matches_side =
+        |path: Option<&RepoPath>| path.is_some_and(|path| path.to_string_lossy() == target_path);
+    if target_is_file {
+        return target_matches_side(file.old_path.as_ref())
+            || target_matches_side(file.new_path.as_ref());
+    }
+    let structural_change = file.old_path != file.new_path
+        || matches!(
+            file.status,
+            ChangeStatus::Added
+                | ChangeStatus::Deleted
+                | ChangeStatus::Renamed
+                | ChangeStatus::Binary
+        );
+    if structural_change
+        && (target_matches_side(file.old_path.as_ref())
+            || target_matches_side(file.new_path.as_ref()))
+    {
+        return true;
+    }
+    if target_range.is_none() {
+        return false;
+    }
+    file.hunks.iter().any(|hunk| {
+        (target_matches_side(file.old_path.as_ref())
+            && changed_side_overlaps(hunk.old_start, hunk.old_end, target_range.unwrap()))
+            || (target_matches_side(file.new_path.as_ref())
+                && changed_side_overlaps(hunk.new_start, hunk.new_end, target_range.unwrap()))
+    })
 }
 
 fn changed_anchor_path(
@@ -2129,6 +2222,7 @@ mod tests {
             line_start: lines.0,
             line_end: lines.1,
             budget_bytes: 32,
+            budget_lines: None,
             reason: "test".to_string(),
         }
     }
@@ -2293,5 +2387,55 @@ requirements:
             excerpt_hash: "sha256:1".to_string(),
         };
         assert!(ensure_present_target_exceeds_budget(&target, &resolved));
+    }
+
+    #[test]
+    fn non_file_targets_ignore_same_file_sibling_changes() {
+        let resolved = ResolvedTarget {
+            path: PathBuf::from("web/login.ts"),
+            description: "symbols submitLogin".to_string(),
+            symbols: vec!["submitLogin".to_string()],
+            content_hash: "sha256:1".to_string(),
+            bytes: 64,
+            byte_start: 0,
+            byte_end: 64,
+            line_start: 1,
+            line_end: 1,
+            excerpt: "export function submitLogin() {}\n".to_string(),
+            excerpt_hash: "sha256:1".to_string(),
+        };
+        let unrelated_change = ChangedFile {
+            status: ChangeStatus::Modified,
+            old_path: Some(RepoPath::new("web/login.ts").unwrap()),
+            new_path: Some(RepoPath::new("web/login.ts").unwrap()),
+            hunks: vec![ChangedRange {
+                old_start: 4,
+                old_end: 4,
+                new_start: 4,
+                new_end: 4,
+            }],
+        };
+        assert!(!changed_file_impacts_target(
+            false,
+            "web/login.ts",
+            Some(&resolved),
+            &unrelated_change,
+        ));
+    }
+
+    #[test]
+    fn file_targets_remain_path_based() {
+        let changed = ChangedFile {
+            status: ChangeStatus::Modified,
+            old_path: Some(RepoPath::new("web/login.ts").unwrap()),
+            new_path: Some(RepoPath::new("web/login.ts").unwrap()),
+            hunks: vec![],
+        };
+        assert!(changed_file_impacts_target(
+            true,
+            "web/login.ts",
+            None,
+            &changed,
+        ));
     }
 }

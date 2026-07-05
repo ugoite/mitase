@@ -35,6 +35,10 @@ pub struct WorkConstraints {
     pub exclude_paths: Vec<String>,
     #[serde(default)]
     pub max_slices: Option<usize>,
+    #[serde(default)]
+    pub max_added_bytes_per_target: Option<usize>,
+    #[serde(default)]
+    pub max_added_lines_per_target: Option<usize>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -98,6 +102,8 @@ pub struct PlannedTarget {
     pub line_end: usize,
     #[serde(default)]
     pub budget_bytes: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget_lines: Option<usize>,
     pub reason: String,
 }
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]

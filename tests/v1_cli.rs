@@ -651,7 +651,7 @@ fn modify_plan_validates_after_editable_body_change() {
             "summary: Modify the governed target.\n",
             "operation: modify\n",
             "seeds: [REQ-SAMPLE-MODIFY#criterion.change]\n",
-            "constraints: { include_facets: [], exclude_paths: [], max_slices: 2 }\n",
+            "constraints: { include_facets: [], exclude_paths: [], max_slices: 2, max_added_bytes_per_target: 256, max_added_lines_per_target: 32 }\n",
         ),
     )
     .unwrap();
@@ -827,7 +827,7 @@ fn modify_plan_rejects_same_file_sibling_change_outside_scope() {
             "summary: Modify the governed target.\n",
             "operation: modify\n",
             "seeds: [REQ-SAMPLE-SIBLING#criterion.change]\n",
-            "constraints: { include_facets: [], exclude_paths: [], max_slices: 2 }\n",
+            "constraints: { include_facets: [], exclude_paths: [], max_slices: 2, max_added_bytes_per_target: 256, max_added_lines_per_target: 32 }\n",
         ),
     )
     .unwrap();
@@ -1003,7 +1003,7 @@ fn modify_plan_does_not_allow_head_head_to_hide_scope_violations() {
             "summary: Modify the governed target.\n",
             "operation: modify\n",
             "seeds: [REQ-SAMPLE-BYPASS#criterion.change]\n",
-            "constraints: { include_facets: [], exclude_paths: [], max_slices: 2 }\n",
+            "constraints: { include_facets: [], exclude_paths: [], max_slices: 2, max_added_bytes_per_target: 256, max_added_lines_per_target: 32 }\n",
         ),
     )
     .unwrap();
@@ -1172,7 +1172,7 @@ fn add_plan_supports_missing_declared_target_and_validates_after_creation() {
             "summary: Add the new target.\n",
             "operation: add\n",
             "seeds: [REQ-SAMPLE-ADD#criterion.create]\n",
-            "constraints: { include_facets: [], exclude_paths: [], max_slices: 2 }\n",
+            "constraints: { include_facets: [], exclude_paths: [], max_slices: 2, max_added_bytes_per_target: 256, max_added_lines_per_target: 32 }\n",
         ),
     )
     .unwrap();
@@ -1321,7 +1321,7 @@ fn add_plan_existing_file_uses_real_container_snapshot_and_nonzero_budget() {
             "summary: Add the new target.\n",
             "operation: add\n",
             "seeds: [REQ-SAMPLE-ADD-EXISTING#criterion.create]\n",
-            "constraints: { include_facets: [], exclude_paths: [], max_slices: 2 }\n",
+            "constraints: { include_facets: [], exclude_paths: [], max_slices: 2, max_added_bytes_per_target: 256, max_added_lines_per_target: 32 }\n",
         ),
     )
     .unwrap();

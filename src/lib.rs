@@ -725,7 +725,10 @@ fn parse_diff_span(span: &str) -> Result<(usize, usize)> {
         .map_or((span, "1"), |(start, len)| (start, len));
     let start = start.parse::<usize>()?;
     let len = len.parse::<usize>()?;
-    let end = if len == 0 { start } else { start + len - 1 };
+    if len == 0 {
+        return Ok((0, 0));
+    }
+    let end = start + len - 1;
     Ok((start, end))
 }
 
@@ -764,6 +767,20 @@ diff --git a/src/b.rs b/src/b.rs\n\
         assert_eq!(
             files[0].new_path.as_ref().unwrap().to_string_lossy(),
             "src/new.rs"
+        );
+    }
+
+    #[test]
+    fn parse_hunk_header_preserves_zero_length_sides_as_empty() {
+        let hunk = parse_hunk_header("-4,0 +5,3 @@").unwrap();
+        assert_eq!(
+            hunk,
+            ChangedRange {
+                old_start: 0,
+                old_end: 0,
+                new_start: 5,
+                new_end: 7,
+            }
         );
     }
 

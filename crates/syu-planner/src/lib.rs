@@ -296,6 +296,8 @@ fn build_implementation_slice(
 ) -> Result<ExecutionSlice> {
     let binding = index.bindings.get(implementation).expect("indexed binding");
     let editable_lifecycle = request_target_lifecycle(request);
+    let add_budget_bytes = request.constraints.max_added_bytes_per_target;
+    let add_budget_lines = request.constraints.max_added_lines_per_target;
     let mut blockers = vec![];
     let mut editable = if let Some(target) = exact_target {
         exact_target_plan(
@@ -305,6 +307,8 @@ fn build_implementation_slice(
             TargetAccessMode::Editable,
             editable_lifecycle,
             "Requested implementation target.",
+            add_budget_bytes,
+            add_budget_lines,
             exclude_matcher,
             &mut blockers,
         )
@@ -316,6 +320,8 @@ fn build_implementation_slice(
             TargetAccessMode::Editable,
             editable_lifecycle,
             "Primary implementation satisfying the selected criterion.",
+            add_budget_bytes,
+            add_budget_lines,
             exclude_matcher,
             &mut blockers,
         )
@@ -368,6 +374,8 @@ fn build_documentation_slice(
 ) -> Result<ExecutionSlice> {
     let binding = index.bindings.get(documentation).expect("indexed binding");
     let editable_lifecycle = request_target_lifecycle(request);
+    let add_budget_bytes = request.constraints.max_added_bytes_per_target;
+    let add_budget_lines = request.constraints.max_added_lines_per_target;
     let mut blockers = vec![];
     let mut editable = if let Some(target) = exact_target {
         exact_target_plan(
@@ -377,6 +385,8 @@ fn build_documentation_slice(
             TargetAccessMode::Editable,
             editable_lifecycle,
             "Requested documentation target.",
+            add_budget_bytes,
+            add_budget_lines,
             exclude_matcher,
             &mut blockers,
         )
@@ -388,6 +398,8 @@ fn build_documentation_slice(
             TargetAccessMode::Editable,
             editable_lifecycle,
             "Primary documentation target for the selected criterion.",
+            add_budget_bytes,
+            add_budget_lines,
             exclude_matcher,
             &mut blockers,
         )
@@ -409,6 +421,8 @@ fn build_documentation_slice(
                 TargetAccessMode::Readonly,
                 None,
                 "Implementation context referenced by the selected documentation target.",
+                None,
+                None,
                 exclude_matcher,
                 &mut blockers,
             ));
@@ -482,6 +496,8 @@ fn build_verification_slice(
                 TargetAccessMode::Readonly,
                 None,
                 "Implementation context for the selected verification target.",
+                None,
+                None,
                 exclude_matcher,
                 &mut blockers,
             ));
@@ -750,6 +766,8 @@ fn criterion_verification_targets(
 ) -> Vec<PlannedTarget> {
     let mut verification = vec![];
     let lifecycle = request_target_lifecycle(request);
+    let add_budget_bytes = request.constraints.max_added_bytes_per_target;
+    let add_budget_lines = request.constraints.max_added_lines_per_target;
     for anchor in index
         .criteria_to_verifications
         .get(criterion)
@@ -779,6 +797,8 @@ fn criterion_verification_targets(
                         access,
                         lifecycle,
                         reason: "Direct verification of the selected criterion.",
+                        add_budget_bytes,
+                        add_budget_lines,
                     },
                     exclude_matcher,
                     blockers,
@@ -797,6 +817,8 @@ fn exact_target_plan(
     access: TargetAccessMode,
     lifecycle: Option<TargetLifecycle>,
     reason: &str,
+    add_budget_bytes: Option<usize>,
+    add_budget_lines: Option<usize>,
     exclude_matcher: Option<&GlobSet>,
     blockers: &mut Vec<Diagnostic>,
 ) -> Vec<PlannedTarget> {
@@ -815,6 +837,8 @@ fn exact_target_plan(
             access,
             lifecycle,
             reason,
+            add_budget_bytes,
+            add_budget_lines,
         },
         exclude_matcher,
         blockers,
@@ -851,6 +875,8 @@ fn contract_readonly_context(
                         access: TargetAccessMode::Readonly,
                         lifecycle: None,
                         reason: "Contract source constraining this implementation.",
+                        add_budget_bytes: None,
+                        add_budget_lines: None,
                     },
                     exclude_matcher,
                     blockers,
@@ -867,6 +893,8 @@ fn contract_readonly_context(
                         TargetAccessMode::Readonly,
                         None,
                         "Contract counterpart; readonly in this slice.",
+                        None,
+                        None,
                         exclude_matcher,
                         blockers,
                     ));
@@ -884,6 +912,8 @@ fn targets(
     access: TargetAccessMode,
     lifecycle: Option<TargetLifecycle>,
     reason: &str,
+    add_budget_bytes: Option<usize>,
+    add_budget_lines: Option<usize>,
     exclude_matcher: Option<&GlobSet>,
     blockers: &mut Vec<Diagnostic>,
 ) -> Vec<PlannedTarget> {
@@ -891,6 +921,8 @@ fn targets(
         access,
         lifecycle,
         reason,
+        add_budget_bytes,
+        add_budget_lines,
     };
     binding
         .targets
@@ -917,6 +949,8 @@ struct TargetPlanOptions<'a> {
     access: TargetAccessMode,
     lifecycle: Option<TargetLifecycle>,
     reason: &'a str,
+    add_budget_bytes: Option<usize>,
+    add_budget_lines: Option<usize>,
 }
 
 fn one_target(
@@ -945,15 +979,39 @@ fn one_target(
                 blockers.push(d);
                 vec![]
             }
-            (TargetLifecycle::EnsurePresent, Err(_)) => vec![declared_target_plan(
-                workspace,
-                reference,
-                binding,
-                target,
-                options.access,
-                lifecycle,
-                options.reason,
-            )],
+            (TargetLifecycle::EnsurePresent, Err(_)) => {
+                let Some(add_budget_bytes) = options.add_budget_bytes else {
+                    let mut d = Diagnostic::error(
+                        "SYU-WORK-001",
+                        format!("add target {reference} requires explicit byte budget"),
+                        target.path.to_string_lossy(),
+                    );
+                    d.target = Some(reference.clone());
+                    blockers.push(d);
+                    return vec![];
+                };
+                let Some(add_budget_lines) = options.add_budget_lines else {
+                    let mut d = Diagnostic::error(
+                        "SYU-WORK-001",
+                        format!("add target {reference} requires explicit line budget"),
+                        target.path.to_string_lossy(),
+                    );
+                    d.target = Some(reference.clone());
+                    blockers.push(d);
+                    return vec![];
+                };
+                vec![declared_target_plan(
+                    workspace,
+                    reference,
+                    binding,
+                    target,
+                    options.access,
+                    lifecycle,
+                    options.reason,
+                    add_budget_bytes,
+                    add_budget_lines,
+                )]
+            }
             (TargetLifecycle::EnsureAbsent, Ok(r)) => vec![PlannedTarget {
                 reference: reference.clone(),
                 lifecycle,
@@ -973,6 +1031,7 @@ fn one_target(
                 line_start: r.line_start,
                 line_end: r.line_end,
                 budget_bytes: r.byte_end.saturating_sub(r.byte_start),
+                budget_lines: None,
                 reason: options.reason.into(),
             }],
             (TargetLifecycle::EnsureAbsent, Err(_)) => {
@@ -1008,6 +1067,7 @@ fn one_target(
             line_start: r.line_start,
             line_end: r.line_end,
             budget_bytes: r.byte_end.saturating_sub(r.byte_start),
+            budget_lines: None,
             reason: options.reason.into(),
         }],
         Err(e) => {
@@ -1031,6 +1091,8 @@ fn declared_target_plan(
     access: TargetAccessMode,
     lifecycle: TargetLifecycle,
     reason: &str,
+    add_budget_bytes: usize,
+    add_budget_lines: usize,
 ) -> PlannedTarget {
     let (description, symbols) = declared_selector(&target.selector);
     let fallback = fallback_present_target_snapshot(workspace, target);
@@ -1051,8 +1113,9 @@ fn declared_target_plan(
         byte_start: fallback.byte_start,
         byte_end: fallback.byte_end,
         line_start: fallback.line_start,
-        line_end: fallback.line_end,
-        budget_bytes: fallback.budget_bytes,
+        line_end: add_budget_lines,
+        budget_bytes: add_budget_bytes,
+        budget_lines: Some(add_budget_lines),
         reason: reason.into(),
     }
 }
@@ -1085,8 +1148,6 @@ struct FallbackPresentTargetSnapshot {
     byte_start: usize,
     byte_end: usize,
     line_start: usize,
-    line_end: usize,
-    budget_bytes: usize,
 }
 
 fn fallback_present_target_snapshot(
@@ -1109,11 +1170,6 @@ fn fallback_present_target_snapshot(
             byte_start: container.byte_start,
             byte_end: container.byte_end,
             line_start: container.line_start,
-            line_end: container.line_end.max(1),
-            budget_bytes: container
-                .byte_end
-                .saturating_sub(container.byte_start)
-                .max(1),
         };
     }
     let empty_hash = hash_bytes(&[]);
@@ -1123,19 +1179,6 @@ fn fallback_present_target_snapshot(
         byte_start: 0,
         byte_end: 0,
         line_start: 1,
-        line_end: 1,
-        budget_bytes: estimated_add_budget_bytes(&target.selector),
-    }
-}
-
-fn estimated_add_budget_bytes(selector: &Selector) -> usize {
-    match selector {
-        Selector::File => 256,
-        Selector::Symbol { .. } => 128,
-        Selector::Operation { .. } => 192,
-        Selector::Heading { .. } => 96,
-        Selector::JsonPointer { .. } => 96,
-        Selector::Marker { .. } => 96,
     }
 }
 
