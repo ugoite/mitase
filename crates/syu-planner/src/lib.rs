@@ -121,7 +121,7 @@ pub fn plan(
                     &criterion,
                     &implementation,
                     None,
-                    TargetTransition::Modify,
+                    default_transition(request.operation),
                     exclude_matcher.as_ref(),
                 )?);
             }
@@ -148,7 +148,7 @@ pub fn plan(
                             criterion,
                             &reference.binding,
                             Some(reference),
-                            requested.transition(TargetTransition::Modify),
+                            requested.transition(default_transition(request.operation)),
                             exclude_matcher.as_ref(),
                         )?);
                     }
@@ -174,7 +174,7 @@ pub fn plan(
                             criterion,
                             &reference.binding,
                             Some(reference),
-                            requested.transition(TargetTransition::Modify),
+                            requested.transition(default_transition(request.operation)),
                             exclude_matcher.as_ref(),
                         )?);
                     }
@@ -308,6 +308,15 @@ fn primary_bindings(
     bindings.sort();
     bindings.dedup();
     bindings
+}
+
+#[allow(clippy::too_many_arguments)]
+fn default_transition(operation: WorkOperation) -> TargetTransition {
+    match operation {
+        WorkOperation::Add => TargetTransition::Add,
+        WorkOperation::Remove => TargetTransition::Remove,
+        _ => TargetTransition::Modify,
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1055,6 +1064,30 @@ fn one_target(
             d.target = Some(reference.clone());
             blockers.push(d);
             vec![]
+        }
+        (WorkOperation::Add, TargetTransition::Add, TargetAccessMode::Editable, false, Ok(r)) => {
+            vec![PlannedTarget {
+                reference: reference.clone(),
+                lifecycle: TargetLifecycle::Stable,
+                access: options.access,
+                resolved_path: r.path.to_string_lossy().into_owned(),
+                resolved_selector: ResolvedSelector {
+                    description: r.description,
+                    symbols: r.symbols,
+                },
+                content_hash: r.content_hash,
+                excerpt_hash: r.excerpt_hash,
+                adapter: target.adapter.clone(),
+                facet: binding.facet.clone(),
+                role: binding.role,
+                byte_start: r.byte_start,
+                byte_end: r.byte_end,
+                line_start: r.line_start,
+                line_end: r.line_end,
+                budget_bytes: r.byte_end.saturating_sub(r.byte_start),
+                budget_lines: None,
+                reason: options.reason.into(),
+            }]
         }
         (WorkOperation::Add, TargetTransition::Add, TargetAccessMode::Editable, _, Err(_)) => {
             let Some(add_budget_bytes) = options.add_budget_bytes else {
