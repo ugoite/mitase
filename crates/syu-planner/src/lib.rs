@@ -1691,33 +1691,32 @@ fn build_context_pack(
                     &workspace.config.adapters.enabled,
                 )
                 .ok()
-            {
-                if !included.iter().any(|(reference, seen_mode)| {
+                && !included.iter().any(|(reference, seen_mode)| {
                     reference == &target.reference && *seen_mode == ContextMode::Readonly
-                }) {
-                    included.push((target.reference.clone(), ContextMode::Readonly));
-                    artifact_context.push(ArtifactExcerpt {
-                        reference: target.reference.clone(),
-                        mode: ContextMode::Readonly,
-                        access: TargetAccessMode::Readonly,
-                        path: container.path.to_string_lossy().into_owned(),
-                        selector: ResolvedSelector {
-                            description: container.description,
-                            symbols: container.symbols,
-                        },
-                        line_start: container.line_start,
-                        line_end: container.line_end,
-                        byte_start: container.byte_start,
-                        byte_end: container.byte_end,
-                        adapter: target.adapter.clone(),
-                        facet: target.facet.clone(),
-                        role: target.role,
-                        content_hash: container.content_hash,
-                        excerpt_hash: container.excerpt_hash,
-                        reason: "Container context for new target.".into(),
-                        excerpt: container.excerpt,
-                    });
-                }
+                })
+            {
+                included.push((target.reference.clone(), ContextMode::Readonly));
+                artifact_context.push(ArtifactExcerpt {
+                    reference: target.reference.clone(),
+                    mode: ContextMode::Readonly,
+                    access: TargetAccessMode::Readonly,
+                    path: container.path.to_string_lossy().into_owned(),
+                    selector: ResolvedSelector {
+                        description: container.description,
+                        symbols: container.symbols,
+                    },
+                    line_start: container.line_start,
+                    line_end: container.line_end,
+                    byte_start: container.byte_start,
+                    byte_end: container.byte_end,
+                    adapter: target.adapter.clone(),
+                    facet: target.facet.clone(),
+                    role: target.role,
+                    content_hash: container.content_hash,
+                    excerpt_hash: container.excerpt_hash,
+                    reason: "Container context for new target.".into(),
+                    excerpt: container.excerpt,
+                });
             }
         }
     }
