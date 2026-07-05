@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 use anyhow::{Context, Result, bail};
+use globset::{Glob, GlobSet, GlobSetBuilder};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use syu_diagnostics::Diagnostic;
@@ -16,6 +17,15 @@ pub fn plan(
     if request.schema != WORK_REQUEST_SCHEMA {
         bail!("request schema must be {WORK_REQUEST_SCHEMA}");
     }
+    if !request.seeds.is_empty() && !request.requested_targets.is_empty() {
+        return Ok(blocked_plan(
+            request,
+            workspace,
+            revision,
+            "SYU-WORK-001",
+            "request cannot combine seeds and requested targets",
+        ));
+    }
     if request.seeds.is_empty() && request.requested_targets.is_empty() {
         return Ok(blocked_plan(
             request,
@@ -25,6 +35,7 @@ pub fn plan(
             "an exact seed is required",
         ));
     }
+    let exclude_matcher = compile_exclude_matcher(&request.constraints.exclude_paths)?;
     let mut criteria = BTreeSet::new();
     for requested in &request.requested_targets {
         if index.target(requested).is_none() {
@@ -89,6 +100,7 @@ pub fn plan(
                     &criterion,
                     &implementation,
                     None,
+                    exclude_matcher.as_ref(),
                 )?);
             }
         }
@@ -113,13 +125,19 @@ pub fn plan(
                             criterion,
                             &requested.binding,
                             Some(requested),
+                            exclude_matcher.as_ref(),
                         )?);
                     }
                 }
                 syu_spec_model::BindingRole::Verification => {
                     for criterion in &binding.verifies {
                         slices.push(build_verification_slice(
-                            request, workspace, index, criterion, requested,
+                            request,
+                            workspace,
+                            index,
+                            criterion,
+                            requested,
+                            exclude_matcher.as_ref(),
                         )?);
                     }
                 }
@@ -132,6 +150,7 @@ pub fn plan(
                             criterion,
                             &requested.binding,
                             Some(requested),
+                            exclude_matcher.as_ref(),
                         )?);
                     }
                 }
@@ -271,6 +290,7 @@ fn build_implementation_slice(
     criterion: &SpecAnchor,
     implementation: &SpecAnchor,
     exact_target: Option<&BoundTargetRef>,
+    exclude_matcher: Option<&GlobSet>,
 ) -> Result<ExecutionSlice> {
     let binding = index.bindings.get(implementation).expect("indexed binding");
     let editable_lifecycle = request_target_lifecycle(request);
@@ -283,6 +303,7 @@ fn build_implementation_slice(
             TargetAccessMode::Editable,
             editable_lifecycle,
             "Requested implementation target.",
+            exclude_matcher,
             &mut blockers,
         )
     } else {
@@ -293,25 +314,29 @@ fn build_implementation_slice(
             TargetAccessMode::Editable,
             editable_lifecycle,
             "Primary implementation satisfying the selected criterion.",
+            exclude_matcher,
             &mut blockers,
         )
     };
-    let mut verification =
-        criterion_verification_targets(request, workspace, index, criterion, None, &mut blockers);
-    let (mut readonly, contracts) =
-        contract_readonly_context(workspace, index, implementation, &mut blockers);
+    let mut verification = criterion_verification_targets(
+        request,
+        workspace,
+        index,
+        criterion,
+        None,
+        exclude_matcher,
+        &mut blockers,
+    );
+    let (mut readonly, contracts) = contract_readonly_context(
+        workspace,
+        index,
+        implementation,
+        exclude_matcher,
+        &mut blockers,
+    );
     dedup(&mut editable);
     dedup(&mut verification);
     dedup(&mut readonly);
-    for values in [&mut editable, &mut verification, &mut readonly] {
-        values.retain(|target| {
-            !request
-                .constraints
-                .exclude_paths
-                .iter()
-                .any(|pattern| path_matches(pattern, &target.resolved_path))
-        });
-    }
     let mut anchors = vec![criterion.clone(), implementation.clone()];
     anchors.extend(contracts.clone());
     finalize_slice(
@@ -337,6 +362,7 @@ fn build_documentation_slice(
     criterion: &SpecAnchor,
     documentation: &SpecAnchor,
     exact_target: Option<&BoundTargetRef>,
+    exclude_matcher: Option<&GlobSet>,
 ) -> Result<ExecutionSlice> {
     let binding = index.bindings.get(documentation).expect("indexed binding");
     let editable_lifecycle = request_target_lifecycle(request);
@@ -349,6 +375,7 @@ fn build_documentation_slice(
             TargetAccessMode::Editable,
             editable_lifecycle,
             "Requested documentation target.",
+            exclude_matcher,
             &mut blockers,
         )
     } else {
@@ -359,6 +386,7 @@ fn build_documentation_slice(
             TargetAccessMode::Editable,
             editable_lifecycle,
             "Primary documentation target for the selected criterion.",
+            exclude_matcher,
             &mut blockers,
         )
     };
@@ -379,11 +407,17 @@ fn build_documentation_slice(
                 TargetAccessMode::Readonly,
                 None,
                 "Implementation context referenced by the selected documentation target.",
+                exclude_matcher,
                 &mut blockers,
             ));
         }
-        let (more_readonly, more_contracts) =
-            contract_readonly_context(workspace, index, &implementation, &mut blockers);
+        let (more_readonly, more_contracts) = contract_readonly_context(
+            workspace,
+            index,
+            &implementation,
+            exclude_matcher,
+            &mut blockers,
+        );
         readonly.extend(more_readonly);
         contracts.extend(more_contracts);
     }
@@ -411,6 +445,7 @@ fn build_verification_slice(
     index: &SpecIndex,
     criterion: &SpecAnchor,
     requested: &BoundTargetRef,
+    exclude_matcher: Option<&GlobSet>,
 ) -> Result<ExecutionSlice> {
     let binding = index
         .bindings
@@ -424,6 +459,7 @@ fn build_verification_slice(
         index,
         criterion,
         Some(requested),
+        exclude_matcher,
         &mut blockers,
     );
     let mut readonly = Vec::new();
@@ -444,11 +480,17 @@ fn build_verification_slice(
                 TargetAccessMode::Readonly,
                 None,
                 "Implementation context for the selected verification target.",
+                exclude_matcher,
                 &mut blockers,
             ));
         }
-        let (more_readonly, more_contracts) =
-            contract_readonly_context(workspace, index, &implementation, &mut blockers);
+        let (more_readonly, more_contracts) = contract_readonly_context(
+            workspace,
+            index,
+            &implementation,
+            exclude_matcher,
+            &mut blockers,
+        );
         readonly.extend(more_readonly);
         contracts.extend(more_contracts);
     }
@@ -558,15 +600,6 @@ fn finalize_slice(
     mut contracts: Vec<SpecAnchor>,
     mut blockers: Vec<Diagnostic>,
 ) -> Result<ExecutionSlice> {
-    for values in [&mut editable, &mut verification, &mut readonly] {
-        values.retain(|target| {
-            !request
-                .constraints
-                .exclude_paths
-                .iter()
-                .any(|pattern| path_matches(pattern, &target.resolved_path))
-        });
-    }
     if request.operation == WorkOperation::Investigate {
         for target in &mut editable {
             target.access = TargetAccessMode::Readonly;
@@ -710,6 +743,7 @@ fn criterion_verification_targets(
     index: &SpecIndex,
     criterion: &SpecAnchor,
     requested: Option<&BoundTargetRef>,
+    exclude_matcher: Option<&GlobSet>,
     blockers: &mut Vec<Diagnostic>,
 ) -> Vec<PlannedTarget> {
     let mut verification = vec![];
@@ -744,6 +778,7 @@ fn criterion_verification_targets(
                         lifecycle,
                         reason: "Direct verification of the selected criterion.",
                     },
+                    exclude_matcher,
                     blockers,
                 ));
             }
@@ -752,6 +787,7 @@ fn criterion_verification_targets(
     verification
 }
 
+#[allow(clippy::too_many_arguments)]
 fn exact_target_plan(
     workspace: &SpecWorkspace,
     index: &SpecIndex,
@@ -759,6 +795,7 @@ fn exact_target_plan(
     access: TargetAccessMode,
     lifecycle: Option<TargetLifecycle>,
     reason: &str,
+    exclude_matcher: Option<&GlobSet>,
     blockers: &mut Vec<Diagnostic>,
 ) -> Vec<PlannedTarget> {
     let Some(binding) = index.bindings.get(&requested.binding) else {
@@ -777,14 +814,17 @@ fn exact_target_plan(
             lifecycle,
             reason,
         },
+        exclude_matcher,
         blockers,
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn contract_readonly_context(
     workspace: &SpecWorkspace,
     index: &SpecIndex,
     implementation: &SpecAnchor,
+    exclude_matcher: Option<&GlobSet>,
     blockers: &mut Vec<Diagnostic>,
 ) -> (Vec<PlannedTarget>, Vec<SpecAnchor>) {
     let mut readonly = vec![];
@@ -810,6 +850,7 @@ fn contract_readonly_context(
                         lifecycle: None,
                         reason: "Contract source constraining this implementation.",
                     },
+                    exclude_matcher,
                     blockers,
                 ));
             }
@@ -824,6 +865,7 @@ fn contract_readonly_context(
                         TargetAccessMode::Readonly,
                         None,
                         "Contract counterpart; readonly in this slice.",
+                        exclude_matcher,
                         blockers,
                     ));
                 }
@@ -832,13 +874,7 @@ fn contract_readonly_context(
     }
     (readonly, contracts)
 }
-fn path_matches(pattern: &str, path: &str) -> bool {
-    pattern
-        .strip_suffix("/**")
-        .map_or(pattern == path, |prefix| {
-            path == prefix || path.starts_with(&format!("{prefix}/"))
-        })
-}
+#[allow(clippy::too_many_arguments)]
 fn targets(
     workspace: &SpecWorkspace,
     anchor: &SpecAnchor,
@@ -846,6 +882,7 @@ fn targets(
     access: TargetAccessMode,
     lifecycle: Option<TargetLifecycle>,
     reason: &str,
+    exclude_matcher: Option<&GlobSet>,
     blockers: &mut Vec<Diagnostic>,
 ) -> Vec<PlannedTarget> {
     let options = TargetPlanOptions {
@@ -866,6 +903,7 @@ fn targets(
                 binding,
                 t,
                 options,
+                exclude_matcher,
                 blockers,
             )
         })
@@ -885,8 +923,12 @@ fn one_target(
     binding: &ArtifactBinding,
     target: &syu_spec_model::ArtifactTarget,
     options: TargetPlanOptions<'_>,
+    exclude_matcher: Option<&GlobSet>,
     blockers: &mut Vec<Diagnostic>,
 ) -> Vec<PlannedTarget> {
+    if exclude_matcher.is_some_and(|matcher| matcher.is_match(&target.path)) {
+        return vec![];
+    }
     let resolved =
         resolve_target_with_adapters(&workspace.root, target, &workspace.config.adapters.enabled);
     if let Some(lifecycle) = options.lifecycle {
@@ -1099,6 +1141,18 @@ fn hash_bytes(bytes: &[u8]) -> String {
     let mut hash = Sha256::new();
     hash.update(bytes);
     format!("sha256:{:x}", hash.finalize())
+}
+
+fn compile_exclude_matcher(patterns: &[String]) -> Result<Option<GlobSet>> {
+    if patterns.is_empty() {
+        return Ok(None);
+    }
+    let mut builder = GlobSetBuilder::new();
+    for pattern in patterns {
+        builder
+            .add(Glob::new(pattern).with_context(|| format!("invalid exclude path `{pattern}`"))?);
+    }
+    Ok(Some(builder.build()?))
 }
 
 fn target_budget_bytes(target: &PlannedTarget) -> usize {

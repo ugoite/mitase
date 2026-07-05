@@ -300,6 +300,212 @@ fn exact_requested_targets_are_exact_and_verification_can_be_editable() {
 }
 
 #[test]
+fn work_plan_rejects_mixed_seeds_and_requested_targets() {
+    let temp = tempdir().unwrap();
+    let request = temp.path().join("request.yaml");
+    let plan = temp.path().join("plan.yaml");
+    fs::write(
+        &request,
+        concat!(
+            "schema: syu/work-request/v1\n",
+            "id: WORK-MIXED-SELECTION\n",
+            "summary: Mixed work selection.\n",
+            "operation: modify\n",
+            "seeds: [REQ-AUTH-001#criterion.invalid-credentials]\n",
+            "requested_targets:\n",
+            "  - REQ-AUTH-001#binding.login-test/target.case\n",
+            "constraints:\n",
+            "  include_facets: []\n",
+            "  exclude_paths: []\n",
+            "  max_slices: 3\n",
+        ),
+    )
+    .unwrap();
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["work", "plan", "--request"])
+        .arg(&request)
+        .args(["--out"])
+        .arg(&plan)
+        .args(["--workspace", "fixtures/v1/valid-web-app"])
+        .assert()
+        .failure();
+    let text = fs::read_to_string(&plan).unwrap();
+    assert!(text.contains("status: blocked"));
+    assert!(text.contains("request cannot combine seeds and requested targets"));
+}
+
+#[test]
+fn exclude_paths_skip_unresolvable_targets_before_resolution() {
+    let temp = tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("spec")).unwrap();
+    fs::create_dir_all(temp.path().join("src")).unwrap();
+    fs::create_dir_all(temp.path().join("tests")).unwrap();
+    fs::write(
+        temp.path().join("syu.yaml"),
+        concat!(
+            "schema: syu/config/v1\n",
+            "workspace:\n",
+            "  spec_roots: [spec]\n",
+            "  artifact_roots: [src, tests]\n",
+            "  excludes: []\n",
+            "profiles: { active: [], custom: {} }\n",
+            "validation:\n",
+            "  preset: standard\n",
+            "  deny_warnings: false\n",
+            "  rules: {}\n",
+            "  changed:\n",
+            "    require_owned_changes: false\n",
+            "work:\n",
+            "  slicing:\n",
+            "    max_editable_files: 2\n",
+            "    max_editable_symbols: 2\n",
+            "    max_verification_targets: 1\n",
+            "    max_readonly_targets: 1\n",
+            "    max_total_bytes: 4096\n",
+            "  context:\n",
+            "    include_parent_principles: false\n",
+            "    include_parent_rules: false\n",
+            "adapters: { enabled: [rust] }\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/foundation.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: philosophies\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "philosophies:\n",
+            "  - id: PHIL-SAMPLE-EXCLUDE\n",
+            "    title: Sample\n",
+            "    summary: Sample philosophy.\n",
+            "    principles:\n",
+            "      - { id: governed, statement: Keep modifications governed., applies_to: [product] }\n",
+            "    bindings: []\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/policy.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: policies\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "policies:\n",
+            "  - id: POL-SAMPLE-EXCLUDE\n",
+            "    title: Sample\n",
+            "    summary: Sample policy.\n",
+            "    description: Sample policy.\n",
+            "    rules:\n",
+            "      - id: governed\n",
+            "        level: should\n",
+            "        statement: Keep modifications governed.\n",
+            "        governed_by: [PHIL-SAMPLE-EXCLUDE#principle.governed]\n",
+            "    bindings: []\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/requirement.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: requirements\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "requirements:\n",
+            "  - id: REQ-SAMPLE-EXCLUDE\n",
+            "    title: Sample\n",
+            "    description: Sample requirement.\n",
+            "    priority: medium\n",
+            "    status: implemented\n",
+            "    criteria:\n",
+            "      - id: change\n",
+            "        kind: behavior\n",
+            "        statement: Modify the governed behavior.\n",
+            "        governed_by: [POL-SAMPLE-EXCLUDE#rule.governed]\n",
+            "    bindings:\n",
+            "      - id: verify\n",
+            "        role: verification\n",
+            "        facet: verification\n",
+            "        responsibility: Verify the modified behavior.\n",
+            "        targets:\n",
+            "          - { id: case, adapter: rust, path: tests/check.rs, selector: { kind: symbol, names: [check_behavior] } }\n",
+            "        verifies: [REQ-SAMPLE-EXCLUDE#criterion.change]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/feature.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: features\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "features:\n",
+            "  - id: FEAT-SAMPLE-EXCLUDE\n",
+            "    title: Sample\n",
+            "    summary: Exclude a missing target.\n",
+            "    status: implemented\n",
+            "    bindings:\n",
+            "      - id: app\n",
+            "        role: implementation\n",
+            "        facet: backend\n",
+            "        responsibility: Modify the function body.\n",
+            "        targets:\n",
+            "          - { id: live, adapter: rust, path: src/app.rs, selector: { kind: symbol, names: [governed_behavior] } }\n",
+            "          - { id: app, adapter: rust, path: src/missing.rs, selector: { kind: symbol, names: [governed_behavior] } }\n",
+            "        satisfies: [REQ-SAMPLE-EXCLUDE#criterion.change]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("src/app.rs"),
+        "fn governed_behavior() {}\n",
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("tests/check.rs"),
+        "fn check_behavior() {}\n",
+    )
+    .unwrap();
+    init_workspace_repo(temp.path());
+    let request = temp.path().join("work.yaml");
+    let plan = temp.path().join("plan.yaml");
+    fs::write(
+        &request,
+        concat!(
+            "schema: syu/work-request/v1\n",
+            "id: WORK-EXCLUDE-001\n",
+            "summary: Exclude missing implementation target.\n",
+            "operation: modify\n",
+            "seeds: [REQ-SAMPLE-EXCLUDE#criterion.change]\n",
+            "constraints:\n",
+            "  include_facets: []\n",
+            "  exclude_paths: [src/missing.rs]\n",
+            "  max_slices: 2\n",
+        ),
+    )
+    .unwrap();
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["work", "plan", "--request"])
+        .arg(&request)
+        .args(["--out"])
+        .arg(&plan)
+        .args(["--workspace"])
+        .arg(temp.path())
+        .assert()
+        .success();
+    let text = fs::read_to_string(&plan).unwrap();
+    assert!(text.contains("status: ready"));
+    assert!(!text.contains("SYU-TARGET-002"));
+    assert!(!text.contains("resolved_path: src/missing.rs"));
+}
+
+#[test]
 fn modify_plan_validates_after_editable_body_change() {
     let temp = tempdir().unwrap();
     fs::create_dir_all(temp.path().join("spec")).unwrap();

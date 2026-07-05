@@ -783,6 +783,7 @@ name = "syu-planner"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "globset",
  "serde_yaml",
  "sha2",
  "syu-diagnostics",
