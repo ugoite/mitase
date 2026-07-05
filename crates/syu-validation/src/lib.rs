@@ -721,9 +721,8 @@ fn target_changed_by_files(
     reference: &BoundTargetRef,
     changed_files: &[ChangedFile],
 ) -> bool {
-    let baseline_hit = baseline_index
-        .and_then(|index| index.target(reference))
-        .and_then(|target| baseline_workspace.map(|workspace| (workspace, target)))
+    let baseline_hit = baseline_workspace
+        .zip(baseline_index.and_then(|index| index.target(reference)))
         .and_then(|(workspace, target)| {
             resolve_target_with_adapters(
                 &workspace.root,
