@@ -324,7 +324,10 @@ fn validation_inputs_for_cli(
     let change_base_revision = if let Some(range) = &args.range {
         Some(change_base_revision_for_range(workspace, range)?)
     } else if let Some(baseline) = &args.baseline {
-        Some(base_revision_from_baseline(workspace, &parse_cli_baseline(baseline)?)?)
+        Some(base_revision_from_baseline(
+            workspace,
+            &parse_cli_baseline(baseline)?,
+        )?)
     } else if let Some(baseline) = &workspace.config.validation.changed.baseline {
         Some(base_revision_from_baseline(workspace, baseline)?)
     } else {
@@ -375,7 +378,10 @@ fn range_from_baseline(root: &Path, baseline: &ChangeBaseline) -> Result<String>
     }
 }
 
-fn base_revision_from_baseline(workspace: &SpecWorkspace, baseline: &ChangeBaseline) -> Result<String> {
+fn base_revision_from_baseline(
+    workspace: &SpecWorkspace,
+    baseline: &ChangeBaseline,
+) -> Result<String> {
     match baseline {
         ChangeBaseline::MergeBase { against } => merge_base(&workspace.root, &against.0),
         ChangeBaseline::Revision { revision } => Ok(revision.0.clone()),

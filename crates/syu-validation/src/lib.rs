@@ -3,7 +3,6 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use tempfile::TempDir;
 use syu_diagnostics::{Diagnostic, Severity, ValidationResult};
 use syu_planner::plan as canonical_plan;
 use syu_project_model::{ProjectConfig, RuleOverride, ValidationPreset};
@@ -15,6 +14,7 @@ use syu_work_model::{
     ExecutionSlice, PlanConfidence, TargetLifecycle, WORK_PLAN_SCHEMA, WorkPlan, work_plan_digest,
 };
 use syu_workspace::{AnchorValue, SpecIndex, SpecWorkspace, resolve_target_with_adapters};
+use tempfile::TempDir;
 
 #[derive(Debug, Clone, Copy)]
 pub struct RuleMetadata {
@@ -1815,7 +1815,10 @@ fn changed_side_is_fully_covered(
     if ranges.is_empty() {
         return false;
     }
-    if ranges.iter().any(|range| range.0 == 0 && range.1 == usize::MAX) {
+    if ranges
+        .iter()
+        .any(|range| range.0 == 0 && range.1 == usize::MAX)
+    {
         return true;
     }
     ranges.sort_unstable_by_key(|range| range.0);
@@ -1883,7 +1886,10 @@ fn target_line_range(
         .map(|resolved| resolved.path.to_string_lossy().into_owned());
     let path_matches = match side {
         TargetRangeSide::Old => target.resolved_path == changed_path.to_string_lossy(),
-        TargetRangeSide::New => current_path.as_deref().unwrap_or(&target.resolved_path) == changed_path.to_string_lossy(),
+        TargetRangeSide::New => {
+            current_path.as_deref().unwrap_or(&target.resolved_path)
+                == changed_path.to_string_lossy()
+        }
     };
     if !path_matches {
         return None;

@@ -1990,7 +1990,11 @@ fn post_state_multi_slice_validation_requires_selected_slice() {
     .unwrap();
     fs::write(temp.path().join("src/a.rs"), "fn alpha() {}\n").unwrap();
     fs::write(temp.path().join("src/b.rs"), "fn beta() {}\n").unwrap();
-    fs::write(temp.path().join("tests/check.rs"), "fn check_behavior() {}\n").unwrap();
+    fs::write(
+        temp.path().join("tests/check.rs"),
+        "fn check_behavior() {}\n",
+    )
+    .unwrap();
     let request = temp.path().join("work.yaml");
     fs::write(
         &request,
@@ -2016,7 +2020,11 @@ fn post_state_multi_slice_validation_requires_selected_slice() {
         .arg(temp.path())
         .assert()
         .success();
-    fs::write(temp.path().join("src/a.rs"), "fn alpha() { let value = 1; }\n").unwrap();
+    fs::write(
+        temp.path().join("src/a.rs"),
+        "fn alpha() { let value = 1; }\n",
+    )
+    .unwrap();
     let output = Command::cargo_bin("syu")
         .unwrap()
         .args(["validate"])
@@ -2026,9 +2034,11 @@ fn post_state_multi_slice_validation_requires_selected_slice() {
         .output()
         .unwrap();
     assert!(!output.status.success());
-    assert!(String::from_utf8(output.stdout)
-        .unwrap()
-        .contains("post-state validation requires --slice"));
+    assert!(
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("post-state validation requires --slice")
+    );
 }
 
 #[test]
@@ -2145,8 +2155,7 @@ fn work_plan_requires_clean_governed_workspace() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stderr.contains("clean governed workspace")
-            || stdout.contains("clean governed workspace")
+        stderr.contains("clean governed workspace") || stdout.contains("clean governed workspace")
     );
 }
 
