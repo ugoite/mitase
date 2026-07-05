@@ -23,6 +23,12 @@ struct Candidate {
     span: Span,
 }
 
+#[derive(Clone, Copy)]
+enum BraceScanMode {
+    CLike,
+    Shell,
+}
+
 pub fn resolve_symbol(adapter: &str, source: &str, name: &str) -> Result<SymbolResolution> {
     match adapter {
         "rust" => resolve_rust(source, name),
@@ -237,7 +243,7 @@ fn resolve_keyword_definition(source: &str, name: &str, prefix: &str) -> Result<
     let (line_index, line) = matches.into_iter().next().expect("one match");
     let start = line_start_byte(source, line_index);
     let (end, line_end) = if line.contains('{') {
-        block_from_brace(source, start)?
+        block_from_brace(source, start, BraceScanMode::CLike)?
     } else {
         (start + line.len(), line_index + 1)
     };
@@ -282,7 +288,7 @@ fn resolve_assignment_block(
     let (line_index, line) = matches.into_iter().next().expect("one match");
     let start = line_start_byte(source, line_index);
     let (end, line_end) = if line.contains('{') {
-        block_from_brace(source, start)?
+        block_from_brace(source, start, BraceScanMode::CLike)?
     } else {
         (start + line.len(), line_index + 1)
     };
@@ -322,7 +328,7 @@ fn resolve_go(source: &str, name: &str) -> Result<SymbolResolution> {
     }
     let (line_index, _line) = matches.into_iter().next().expect("one match");
     let start = line_start_byte(source, line_index);
-    let (end, line_end) = block_from_brace(source, start)?;
+    let (end, line_end) = block_from_brace(source, start, BraceScanMode::CLike)?;
     Ok(build(
         name,
         "definition",
@@ -357,7 +363,7 @@ fn resolve_shell(source: &str, name: &str) -> Result<SymbolResolution> {
     }
     let (line_index, _line) = matches.into_iter().next().expect("one match");
     let start = line_start_byte(source, line_index);
-    let (end, line_end) = block_from_brace(source, start)?;
+    let (end, line_end) = block_from_brace(source, start, BraceScanMode::Shell)?;
     Ok(build(
         name,
         "definition",
@@ -446,32 +452,136 @@ fn line_start_byte(source: &str, line_index: usize) -> usize {
         .sum()
 }
 
-fn block_from_brace(source: &str, start: usize) -> Result<(usize, usize)> {
+fn block_from_brace(source: &str, start: usize, mode: BraceScanMode) -> Result<(usize, usize)> {
     let mut depth = 0usize;
     let mut seen_open = false;
     let mut in_single = false;
     let mut in_double = false;
+    let mut in_backtick = false;
     let mut escape = false;
+    let mut line_comment = false;
+    let mut block_comment = false;
+    let mut heredoc: Option<String> = None;
     let mut line_end = source[..start].lines().count().max(1);
-    for (offset, ch) in source[start..].char_indices() {
+    let chars = source[start..].char_indices().collect::<Vec<_>>();
+    let mut index = 0usize;
+    while index < chars.len() {
+        let (offset, ch) = chars[index];
+        let next = chars.get(index + 1).map(|(_, value)| *value);
         if ch == '\n' {
             line_end += 1;
+            line_comment = false;
+            if let Some(marker) = heredoc.as_ref() {
+                let line_start = offset + ch.len_utf8();
+                let line_end_offset = chars
+                    .get(index + 1)
+                    .map(|(next_offset, _)| *next_offset)
+                    .unwrap_or(source[start..].len());
+                let next_line = &source[start + line_start..start + line_end_offset];
+                if next_line.trim_end() == marker {
+                    heredoc = None;
+                }
+            }
+            index += 1;
+            continue;
+        }
+        if heredoc.is_some() {
+            index += 1;
+            continue;
         }
         if escape {
             escape = false;
+            index += 1;
+            continue;
+        }
+        if line_comment {
+            index += 1;
+            continue;
+        }
+        if block_comment {
+            if ch == '*' && next == Some('/') {
+                block_comment = false;
+                index += 2;
+                continue;
+            }
+            index += 1;
             continue;
         }
         match ch {
-            '\\' if in_single || in_double => {
+            '\\' if in_single || in_double || in_backtick => {
                 escape = true;
             }
-            '\'' if !in_double => in_single = !in_single,
-            '"' if !in_single => in_double = !in_double,
-            '{' if !in_single && !in_double => {
+            '\'' if !in_double && !in_backtick => in_single = !in_single,
+            '"' if !in_single && !in_backtick => in_double = !in_double,
+            '`' if !in_single && !in_double && matches!(mode, BraceScanMode::CLike) => {
+                in_backtick = !in_backtick;
+            }
+            '/' if !in_single
+                && !in_double
+                && !in_backtick
+                && matches!(mode, BraceScanMode::CLike) =>
+            {
+                if next == Some('/') {
+                    line_comment = true;
+                    index += 2;
+                    continue;
+                }
+                if next == Some('*') {
+                    block_comment = true;
+                    index += 2;
+                    continue;
+                }
+            }
+            '#' if !in_single
+                && !in_double
+                && !in_backtick
+                && matches!(mode, BraceScanMode::Shell) =>
+            {
+                line_comment = true;
+                index += 1;
+                continue;
+            }
+            '<' if !in_single
+                && !in_double
+                && !in_backtick
+                && matches!(mode, BraceScanMode::Shell) =>
+            {
+                if next == Some('<') {
+                    let mut marker_start = index + 2;
+                    if chars.get(marker_start).map(|(_, value)| *value) == Some('-') {
+                        marker_start += 1;
+                    }
+                    while chars
+                        .get(marker_start)
+                        .map(|(_, value)| value.is_whitespace() && *value != '\n')
+                        .unwrap_or(false)
+                    {
+                        marker_start += 1;
+                    }
+                    let mut marker_end = marker_start;
+                    while chars
+                        .get(marker_end)
+                        .map(|(_, value)| !value.is_whitespace())
+                        .unwrap_or(false)
+                    {
+                        marker_end += 1;
+                    }
+                    if marker_end > marker_start {
+                        let start_offset = chars[marker_start].0;
+                        let end_offset = chars
+                            .get(marker_end)
+                            .map(|(value, _)| *value)
+                            .unwrap_or(source[start..].len());
+                        heredoc =
+                            Some(source[start + start_offset..start + end_offset].to_string());
+                    }
+                }
+            }
+            '{' if !in_single && !in_double && !in_backtick => {
                 depth += 1;
                 seen_open = true;
             }
-            '}' if !in_single && !in_double && depth > 0 => {
+            '}' if !in_single && !in_double && !in_backtick && depth > 0 => {
                 depth -= 1;
                 if seen_open && depth == 0 {
                     return Ok((start + offset + ch.len_utf8(), line_end));
@@ -479,6 +589,7 @@ fn block_from_brace(source: &str, start: usize) -> Result<(usize, usize)> {
             }
             _ => {}
         }
+        index += 1;
     }
     if seen_open {
         return Ok((source.len(), source.lines().count().max(1)));
@@ -556,6 +667,42 @@ mod tests {
         .unwrap();
         assert!(r.excerpt.contains("return true;"));
         assert_eq!(r.line_end, 3);
+    }
+
+    #[test]
+    fn typescript_definition_ignores_comments_and_template_literals() {
+        let r = resolve_symbol(
+            "typescript",
+            "export function submitLogin() {\n  const tpl = `value } still string`;\n  // }\n  /* } */\n  return tpl;\n}\n",
+            "submitLogin",
+        )
+        .unwrap();
+        assert!(r.excerpt.contains("return tpl;"));
+        assert_eq!(r.line_end, 6);
+    }
+
+    #[test]
+    fn go_definition_ignores_raw_strings() {
+        let r = resolve_symbol(
+            "go",
+            "package sample\n\nfunc runTask() {\n    query := `value } still string`\n    println(query)\n}\n",
+            "runTask",
+        )
+        .unwrap();
+        assert!(r.excerpt.contains("println(query)"));
+        assert_eq!(r.line_end, 5);
+    }
+
+    #[test]
+    fn shell_definition_ignores_heredoc_body() {
+        let r = resolve_symbol(
+            "shell",
+            "run_task() {\n  cat <<'EOF'\n}\nEOF\n  echo done\n}\n",
+            "run_task",
+        )
+        .unwrap();
+        assert!(r.excerpt.contains("echo done"));
+        assert_eq!(r.line_end, 6);
     }
 
     #[test]
