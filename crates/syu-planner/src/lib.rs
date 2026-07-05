@@ -823,6 +823,7 @@ fn default_non_goals(request: &WorkRequest) -> Vec<NonGoal> {
     non_goals
 }
 
+#[allow(clippy::too_many_arguments)]
 fn criterion_verification_targets(
     request: &WorkRequest,
     workspace: &SpecWorkspace,
