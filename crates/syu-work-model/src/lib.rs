@@ -51,7 +51,48 @@ pub struct WorkRequest {
     #[serde(default)]
     pub constraints: WorkConstraints,
     #[serde(default)]
-    pub requested_targets: Vec<BoundTargetRef>,
+    pub requested_targets: Vec<RequestedTarget>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum RequestedTarget {
+    Ref(BoundTargetRef),
+    Change(RequestedTargetChange),
+}
+
+impl RequestedTarget {
+    pub fn reference(&self) -> &BoundTargetRef {
+        match self {
+            Self::Ref(reference) => reference,
+            Self::Change(change) => &change.reference,
+        }
+    }
+
+    pub fn transition(&self, default: TargetTransition) -> TargetTransition {
+        match self {
+            Self::Ref(_) => default,
+            Self::Change(change) => change.transition,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RequestedTargetChange {
+    #[serde(rename = "ref")]
+    pub reference: BoundTargetRef,
+    pub transition: TargetTransition,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TargetTransition {
+    Add,
+    Modify,
+    Remove,
+    RunOnly,
+    Readonly,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -242,8 +283,12 @@ pub struct ContractParticipantContext {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ArtifactExcerpt {
-    #[serde(rename = "ref")]
-    pub reference: BoundTargetRef,
+    #[serde(rename = "ref", default, skip_serializing_if = "Option::is_none")]
+    pub reference: Option<BoundTargetRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub support_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub supports: Option<BoundTargetRef>,
     pub mode: ContextMode,
     pub access: TargetAccessMode,
     pub path: String,

@@ -791,6 +791,7 @@ dependencies = [
  "syu-spec-model",
  "syu-work-model",
  "syu-workspace",
+ "tempfile",
 ]
 
 [[package]]

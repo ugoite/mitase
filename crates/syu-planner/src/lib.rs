@@ -19,6 +19,17 @@ pub fn plan(
     if request.schema != WORK_REQUEST_SCHEMA {
         bail!("request schema must be {WORK_REQUEST_SCHEMA}");
     }
+    if request.constraints.max_added_bytes_per_target == Some(0)
+        || request.constraints.max_added_lines_per_target == Some(0)
+    {
+        return Ok(blocked_plan(
+            request,
+            workspace,
+            revision,
+            "SYU-WORK-001",
+            "add budgets must be greater than zero",
+        ));
+    }
     if !request.seeds.is_empty() && !request.requested_targets.is_empty() {
         return Ok(blocked_plan(
             request,
@@ -40,13 +51,21 @@ pub fn plan(
     let exclude_matcher = compile_exclude_matcher(&request.constraints.exclude_paths)?;
     let mut criteria = BTreeSet::new();
     for requested in &request.requested_targets {
-        if index.target(requested).is_none() {
+        let reference = requested.reference();
+        let transition = requested.transition(if request.operation == WorkOperation::Add {
+            TargetTransition::Add
+        } else {
+            TargetTransition::Modify
+        });
+        if index.target(reference).is_none()
+            && !(request.operation == WorkOperation::Add && transition == TargetTransition::Add)
+        {
             return Ok(blocked_plan(
                 request,
                 workspace,
                 revision,
                 "SYU-WORK-001",
-                format!("requested target {requested} does not resolve"),
+                format!("requested target {reference} does not resolve"),
             ));
         }
     }
@@ -102,15 +121,17 @@ pub fn plan(
                     &criterion,
                     &implementation,
                     None,
+                    TargetTransition::Modify,
                     exclude_matcher.as_ref(),
                 )?);
             }
         }
     } else {
         for requested in &request.requested_targets {
+            let reference = requested.reference();
             let binding = index
                 .bindings
-                .get(&requested.binding)
+                .get(&reference.binding)
                 .expect("indexed binding");
             if !request.constraints.include_facets.is_empty()
                 && !request.constraints.include_facets.contains(&binding.facet)
@@ -125,8 +146,9 @@ pub fn plan(
                             workspace,
                             index,
                             criterion,
-                            &requested.binding,
-                            Some(requested),
+                            &reference.binding,
+                            Some(reference),
+                            requested.transition(TargetTransition::Modify),
                             exclude_matcher.as_ref(),
                         )?);
                     }
@@ -150,8 +172,9 @@ pub fn plan(
                             workspace,
                             index,
                             criterion,
-                            &requested.binding,
-                            Some(requested),
+                            &reference.binding,
+                            Some(reference),
+                            requested.transition(TargetTransition::Modify),
                             exclude_matcher.as_ref(),
                         )?);
                     }
@@ -163,7 +186,7 @@ pub fn plan(
                         revision,
                         "SYU-WORK-001",
                         format!(
-                            "requested target {requested} uses unsupported binding role {}",
+                            "requested target {reference} uses unsupported binding role {}",
                             format!("{:?}", binding.role).to_ascii_lowercase()
                         ),
                     ));
@@ -287,6 +310,7 @@ fn primary_bindings(
     bindings
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_implementation_slice(
     request: &WorkRequest,
     workspace: &SpecWorkspace,
@@ -294,6 +318,7 @@ fn build_implementation_slice(
     criterion: &SpecAnchor,
     implementation: &SpecAnchor,
     exact_target: Option<&BoundTargetRef>,
+    target_transition: TargetTransition,
     exclude_matcher: Option<&GlobSet>,
 ) -> Result<ExecutionSlice> {
     let binding = index.bindings.get(implementation).expect("indexed binding");
@@ -308,6 +333,7 @@ fn build_implementation_slice(
             TargetAccessMode::Editable,
             "Requested implementation target.",
             request.operation,
+            target_transition,
             true,
             add_budget_bytes,
             add_budget_lines,
@@ -322,6 +348,7 @@ fn build_implementation_slice(
             TargetAccessMode::Editable,
             "Primary implementation satisfying the selected criterion.",
             request.operation,
+            target_transition,
             false,
             add_budget_bytes,
             add_budget_lines,
@@ -366,6 +393,7 @@ fn build_implementation_slice(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_documentation_slice(
     request: &WorkRequest,
     workspace: &SpecWorkspace,
@@ -373,6 +401,7 @@ fn build_documentation_slice(
     criterion: &SpecAnchor,
     documentation: &SpecAnchor,
     exact_target: Option<&BoundTargetRef>,
+    target_transition: TargetTransition,
     exclude_matcher: Option<&GlobSet>,
 ) -> Result<ExecutionSlice> {
     let binding = index.bindings.get(documentation).expect("indexed binding");
@@ -387,6 +416,7 @@ fn build_documentation_slice(
             TargetAccessMode::Editable,
             "Requested documentation target.",
             request.operation,
+            target_transition,
             true,
             add_budget_bytes,
             add_budget_lines,
@@ -401,6 +431,7 @@ fn build_documentation_slice(
             TargetAccessMode::Editable,
             "Primary documentation target for the selected criterion.",
             request.operation,
+            target_transition,
             false,
             add_budget_bytes,
             add_budget_lines,
@@ -425,6 +456,7 @@ fn build_documentation_slice(
                 TargetAccessMode::Readonly,
                 "Implementation context referenced by the selected documentation target.",
                 request.operation,
+                TargetTransition::Readonly,
                 false,
                 None,
                 None,
@@ -465,12 +497,13 @@ fn build_verification_slice(
     workspace: &SpecWorkspace,
     index: &SpecIndex,
     criterion: &SpecAnchor,
-    requested: &BoundTargetRef,
+    requested: &RequestedTarget,
     exclude_matcher: Option<&GlobSet>,
 ) -> Result<ExecutionSlice> {
+    let requested_ref = requested.reference();
     let binding = index
         .bindings
-        .get(&requested.binding)
+        .get(&requested_ref.binding)
         .expect("indexed binding");
     let mut blockers = vec![];
     let editable = Vec::new();
@@ -484,7 +517,7 @@ fn build_verification_slice(
         &mut blockers,
     );
     let mut readonly = Vec::new();
-    let mut anchors = vec![criterion.clone(), requested.binding.clone()];
+    let mut anchors = vec![criterion.clone(), requested_ref.binding.clone()];
     let implementations = index
         .criteria_to_implementations
         .get(criterion)
@@ -501,6 +534,7 @@ fn build_verification_slice(
                 TargetAccessMode::Readonly,
                 "Implementation context for the selected verification target.",
                 request.operation,
+                TargetTransition::Readonly,
                 false,
                 None,
                 None,
@@ -525,7 +559,7 @@ fn build_verification_slice(
         workspace,
         index,
         criterion,
-        &format!("{}-verify-{}", criterion.local_id, requested.target_id),
+        &format!("{}-verify-{}", criterion.local_id, requested_ref.target_id),
         format!("{}: {}", request.summary, binding.responsibility),
         anchors,
         editable,
@@ -777,7 +811,7 @@ fn criterion_verification_targets(
     workspace: &SpecWorkspace,
     index: &SpecIndex,
     criterion: &SpecAnchor,
-    requested: Option<&BoundTargetRef>,
+    requested: Option<&RequestedTarget>,
     exclude_matcher: Option<&GlobSet>,
     blockers: &mut Vec<Diagnostic>,
 ) -> Vec<PlannedTarget> {
@@ -796,11 +830,16 @@ fn criterion_verification_targets(
                     binding: anchor.clone(),
                     target_id: target.id.clone(),
                 };
-                let access = if requested == Some(&reference) {
+                let requested_ref = requested.map(|value| value.reference());
+                let exact_target = requested_ref == Some(&reference);
+                let access = if exact_target {
                     TargetAccessMode::Editable
                 } else {
                     TargetAccessMode::RunOnly
                 };
+                let transition = requested
+                    .map(|value| value.transition(TargetTransition::RunOnly))
+                    .unwrap_or(TargetTransition::RunOnly);
                 verification.extend(one_target(
                     workspace,
                     &reference,
@@ -810,7 +849,12 @@ fn criterion_verification_targets(
                         access,
                         reason: "Direct verification of the selected criterion.",
                         operation: request.operation,
-                        exact_target: requested == Some(&reference),
+                        transition: if exact_target {
+                            transition
+                        } else {
+                            TargetTransition::RunOnly
+                        },
+                        exact_target,
                         add_budget_bytes,
                         add_budget_lines,
                     },
@@ -831,6 +875,7 @@ fn exact_target_plan(
     access: TargetAccessMode,
     reason: &str,
     operation: WorkOperation,
+    transition: TargetTransition,
     exact_target: bool,
     add_budget_bytes: Option<usize>,
     add_budget_lines: Option<usize>,
@@ -852,6 +897,7 @@ fn exact_target_plan(
             access,
             reason,
             operation,
+            transition,
             exact_target,
             add_budget_bytes,
             add_budget_lines,
@@ -891,6 +937,7 @@ fn contract_readonly_context(
                         access: TargetAccessMode::Readonly,
                         reason: "Contract source constraining this implementation.",
                         operation: WorkOperation::Modify,
+                        transition: TargetTransition::Readonly,
                         exact_target: false,
                         add_budget_bytes: None,
                         add_budget_lines: None,
@@ -910,6 +957,7 @@ fn contract_readonly_context(
                         TargetAccessMode::Readonly,
                         "Contract counterpart; readonly in this slice.",
                         WorkOperation::Modify,
+                        TargetTransition::Readonly,
                         false,
                         None,
                         None,
@@ -930,6 +978,7 @@ fn targets(
     access: TargetAccessMode,
     reason: &str,
     operation: WorkOperation,
+    transition: TargetTransition,
     exact_target: bool,
     add_budget_bytes: Option<usize>,
     add_budget_lines: Option<usize>,
@@ -940,6 +989,7 @@ fn targets(
         access,
         reason,
         operation,
+        transition,
         exact_target,
         add_budget_bytes,
         add_budget_lines,
@@ -969,6 +1019,7 @@ struct TargetPlanOptions<'a> {
     access: TargetAccessMode,
     reason: &'a str,
     operation: WorkOperation,
+    transition: TargetTransition,
     exact_target: bool,
     add_budget_bytes: Option<usize>,
     add_budget_lines: Option<usize>,
@@ -990,11 +1041,12 @@ fn one_target(
         resolve_target_with_adapters(&workspace.root, target, &workspace.config.adapters.enabled);
     match (
         options.operation,
+        options.transition,
         options.access,
         options.exact_target,
         resolved,
     ) {
-        (WorkOperation::Add, TargetAccessMode::Editable, true, Ok(_)) => {
+        (WorkOperation::Add, TargetTransition::Add, TargetAccessMode::Editable, true, Ok(_)) => {
             let mut d = Diagnostic::error(
                 "SYU-WORK-001",
                 format!("add target already exists: {reference}"),
@@ -1004,7 +1056,7 @@ fn one_target(
             blockers.push(d);
             vec![]
         }
-        (WorkOperation::Add, TargetAccessMode::Editable, _, Err(_)) => {
+        (WorkOperation::Add, TargetTransition::Add, TargetAccessMode::Editable, _, Err(_)) => {
             let Some(add_budget_bytes) = options.add_budget_bytes else {
                 let mut d = Diagnostic::error(
                     "SYU-WORK-001",
@@ -1036,19 +1088,19 @@ fn one_target(
                 add_budget_lines,
             )]
         }
-        (WorkOperation::Add, _, _, Ok(r))
-        | (WorkOperation::Modify, _, _, Ok(r))
-        | (WorkOperation::Remove, _, _, Ok(r))
-        | (WorkOperation::Document, _, _, Ok(r))
-        | (WorkOperation::Investigate, _, _, Ok(r))
-        | (WorkOperation::Refactor, _, _, Ok(r)) => vec![PlannedTarget {
+        (WorkOperation::Add, _, _, _, Ok(r))
+        | (WorkOperation::Modify, _, _, _, Ok(r))
+        | (WorkOperation::Remove, _, _, _, Ok(r))
+        | (WorkOperation::Document, _, _, _, Ok(r))
+        | (WorkOperation::Investigate, _, _, _, Ok(r))
+        | (WorkOperation::Refactor, _, _, _, Ok(r)) => vec![PlannedTarget {
             reference: reference.clone(),
-            lifecycle: if matches!(options.operation, WorkOperation::Remove)
-                && options.access == TargetAccessMode::Editable
-            {
-                TargetLifecycle::EnsureAbsent
-            } else {
-                TargetLifecycle::Stable
+            lifecycle: match options.transition {
+                TargetTransition::Add => TargetLifecycle::EnsurePresent,
+                TargetTransition::Remove => TargetLifecycle::EnsureAbsent,
+                TargetTransition::Modify => TargetLifecycle::Stable,
+                TargetTransition::RunOnly => TargetLifecycle::Stable,
+                TargetTransition::Readonly => TargetLifecycle::Stable,
             },
             access: options.access,
             resolved_path: r.path.to_string_lossy().into_owned(),
@@ -1069,7 +1121,13 @@ fn one_target(
             budget_lines: None,
             reason: options.reason.into(),
         }],
-        (WorkOperation::Remove, TargetAccessMode::Editable, _, Err(_)) => {
+        (
+            WorkOperation::Remove,
+            TargetTransition::Remove,
+            TargetAccessMode::Editable,
+            _,
+            Err(_),
+        ) => {
             let mut d = Diagnostic::error(
                 "SYU-WORK-001",
                 format!("remove target does not exist: {reference}"),
@@ -1079,12 +1137,12 @@ fn one_target(
             blockers.push(d);
             vec![]
         }
-        (WorkOperation::Add, _, _, Err(_))
-        | (WorkOperation::Modify, _, _, Err(_))
-        | (WorkOperation::Remove, _, _, Err(_))
-        | (WorkOperation::Document, _, _, Err(_))
-        | (WorkOperation::Investigate, _, _, Err(_))
-        | (WorkOperation::Refactor, _, _, Err(_)) => {
+        (WorkOperation::Add, _, _, _, Err(_))
+        | (WorkOperation::Modify, _, _, _, Err(_))
+        | (WorkOperation::Remove, _, _, _, Err(_))
+        | (WorkOperation::Document, _, _, _, Err(_))
+        | (WorkOperation::Investigate, _, _, _, Err(_))
+        | (WorkOperation::Refactor, _, _, _, Err(_)) => {
             let mut d = Diagnostic::error(
                 "SYU-TARGET-002",
                 format!("target does not resolve: {}", target.path.to_string_lossy()),
@@ -1099,7 +1157,7 @@ fn one_target(
 
 #[allow(clippy::too_many_arguments)]
 fn declared_target_plan(
-    workspace: &SpecWorkspace,
+    _workspace: &SpecWorkspace,
     reference: &BoundTargetRef,
     binding: &ArtifactBinding,
     target: &syu_spec_model::ArtifactTarget,
@@ -1109,7 +1167,12 @@ fn declared_target_plan(
     add_budget_lines: usize,
 ) -> PlannedTarget {
     let (description, symbols) = declared_selector(&target.selector);
-    let fallback = fallback_present_target_snapshot(workspace, target);
+    let placeholder_excerpt = format!(
+        "Target will be created: {} ({})",
+        target.path.to_string_lossy(),
+        declared_selector(&target.selector).0
+    );
+    let excerpt_hash = hash_bytes(placeholder_excerpt.as_bytes());
     PlannedTarget {
         reference: reference.clone(),
         lifecycle: TargetLifecycle::EnsurePresent,
@@ -1119,15 +1182,15 @@ fn declared_target_plan(
             description,
             symbols,
         },
-        content_hash: fallback.content_hash,
-        excerpt_hash: fallback.excerpt_hash,
+        content_hash: excerpt_hash.clone(),
+        excerpt_hash,
         adapter: target.adapter.clone(),
         facet: binding.facet.clone(),
         role: binding.role,
-        byte_start: fallback.byte_start,
-        byte_end: fallback.byte_end,
-        line_start: fallback.line_start,
-        line_end: fallback.line_end,
+        byte_start: 0,
+        byte_end: 0,
+        line_start: 1,
+        line_end: 1,
         budget_bytes: add_budget_bytes,
         budget_lines: Some(add_budget_lines),
         reason: reason.into(),
@@ -1145,49 +1208,6 @@ fn declared_selector(selector: &Selector) -> (String, Vec<String>) {
         Selector::Heading { value } => (format!("heading {value}"), Vec::new()),
         Selector::JsonPointer { value } => (format!("json-pointer {value}"), Vec::new()),
         Selector::Marker { value } => (format!("marker {value}"), Vec::new()),
-    }
-}
-
-struct FallbackPresentTargetSnapshot {
-    content_hash: String,
-    excerpt_hash: String,
-    byte_start: usize,
-    byte_end: usize,
-    line_start: usize,
-    line_end: usize,
-}
-
-fn fallback_present_target_snapshot(
-    workspace: &SpecWorkspace,
-    target: &syu_spec_model::ArtifactTarget,
-) -> FallbackPresentTargetSnapshot {
-    if let Ok(container) = resolve_target_with_adapters(
-        &workspace.root,
-        &syu_spec_model::ArtifactTarget {
-            id: target.id.clone(),
-            adapter: target.adapter.clone(),
-            path: target.path.clone(),
-            selector: Selector::File,
-        },
-        &workspace.config.adapters.enabled,
-    ) {
-        return FallbackPresentTargetSnapshot {
-            content_hash: container.content_hash,
-            excerpt_hash: container.excerpt_hash,
-            byte_start: container.byte_start,
-            byte_end: container.byte_end,
-            line_start: container.line_start,
-            line_end: container.line_end.max(1),
-        };
-    }
-    let empty_hash = hash_bytes(&[]);
-    FallbackPresentTargetSnapshot {
-        content_hash: empty_hash.clone(),
-        excerpt_hash: empty_hash,
-        byte_start: 0,
-        byte_end: 0,
-        line_start: 1,
-        line_end: 1,
     }
 }
 
@@ -1660,7 +1680,9 @@ fn build_context_pack(
                 })
                 .context("target resolution failed while exporting context")?;
             artifact_context.push(ArtifactExcerpt {
-                reference: target.reference.clone(),
+                reference: Some(target.reference.clone()),
+                support_id: None,
+                supports: None,
                 mode,
                 access: target.access,
                 path: target.resolved_path.clone(),
@@ -1697,7 +1719,9 @@ fn build_context_pack(
             {
                 included.push((target.reference.clone(), ContextMode::Readonly));
                 artifact_context.push(ArtifactExcerpt {
-                    reference: target.reference.clone(),
+                    reference: None,
+                    support_id: Some(format!("support:{}", target.reference)),
+                    supports: Some(target.reference.clone()),
                     mode: ContextMode::Readonly,
                     access: TargetAccessMode::Readonly,
                     path: container.path.to_string_lossy().into_owned(),
@@ -1749,4 +1773,191 @@ fn validate_serialized_context_pack_budget(
 fn finalize_plan(mut plan: WorkPlan) -> WorkPlan {
     plan.canonical_digest = work_plan_digest(&plan);
     plan
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{fs, path::Path};
+    use tempfile::tempdir;
+
+    fn write_minimal_workspace(root: &Path) {
+        fs::create_dir_all(root.join("spec")).expect("spec dir");
+        fs::create_dir_all(root.join("src")).expect("src dir");
+        fs::write(
+            root.join("syu.yaml"),
+            concat!(
+                "schema: syu/config/v1\n",
+                "workspace:\n",
+                "  spec_roots: [spec]\n",
+                "  artifact_roots: [src]\n",
+                "  excludes: []\n",
+                "profiles: { active: [], custom: {} }\n",
+                "validation:\n",
+                "  preset: standard\n",
+                "  deny_warnings: false\n",
+                "  rules: {}\n",
+                "  changed:\n",
+                "    require_owned_changes: false\n",
+                "work:\n",
+                "  slicing:\n",
+                "    max_editable_files: 2\n",
+                "    max_editable_symbols: 4\n",
+                "    max_verification_targets: 2\n",
+                "    max_readonly_targets: 2\n",
+                "    max_total_bytes: 4096\n",
+                "  context:\n",
+                "    include_parent_principles: false\n",
+                "    include_parent_rules: false\n",
+                "adapters: { enabled: [rust] }\n",
+            ),
+        )
+        .expect("config");
+        fs::write(
+            root.join("spec/feature.yaml"),
+            concat!(
+                "schema: syu/spec/v1\n",
+                "kind: features\n",
+                "namespace: sample\n",
+                "category: Sample\n",
+                "features:\n",
+                "  - id: FEAT-TEST-001\n",
+                "    title: Test\n",
+                "    summary: Test feature.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: impl\n",
+                "        role: implementation\n",
+                "        facet: backend\n",
+                "        responsibility: Implement the target.\n",
+                "        targets:\n",
+                "          - { id: handler, adapter: rust, path: src/handler.rs, selector: { kind: symbol, names: [handler] } }\n",
+                "        satisfies: [REQ-TEST-001#criterion.test]\n",
+            ),
+        )
+        .expect("feature spec");
+        fs::write(
+            root.join("spec/requirement.yaml"),
+            concat!(
+                "schema: syu/spec/v1\n",
+                "kind: requirements\n",
+                "namespace: sample\n",
+                "category: Sample\n",
+                "requirements:\n",
+                "  - id: REQ-TEST-001\n",
+                "    title: Test requirement\n",
+                "    description: Test requirement.\n",
+                "    priority: high\n",
+                "    status: implemented\n",
+                "    criteria:\n",
+                "      - id: test\n",
+                "        kind: behavior\n",
+                "        statement: Test criterion.\n",
+                "        governed_by: []\n",
+            ),
+        )
+        .expect("requirement spec");
+    }
+
+    #[test]
+    fn zero_add_budgets_are_rejected() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-TEST-003".into(),
+            summary: "Reject empty budgets".into(),
+            operation: WorkOperation::Add,
+            seeds: vec![],
+            constraints: WorkConstraints {
+                max_added_bytes_per_target: Some(0),
+                max_added_lines_per_target: Some(0),
+                ..Default::default()
+            },
+            requested_targets: vec![RequestedTarget::Change(RequestedTargetChange {
+                reference: "FEAT-TEST-001#binding.impl/target.handler".parse().unwrap(),
+                transition: TargetTransition::Add,
+            })],
+        };
+        let plan = plan(&request, &workspace, &index, "rev-3").expect("plan");
+        assert_eq!(plan.status, PlanStatus::Blocked);
+        assert!(
+            plan.diagnostics
+                .iter()
+                .any(|d| d.message.contains("greater than zero"))
+        );
+    }
+
+    #[test]
+    fn explicit_add_transition_plans_missing_target_as_ensure_present() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-TEST-001".into(),
+            summary: "Add a new target".into(),
+            operation: WorkOperation::Add,
+            seeds: vec![],
+            constraints: WorkConstraints {
+                max_added_bytes_per_target: Some(256),
+                max_added_lines_per_target: Some(8),
+                ..Default::default()
+            },
+            requested_targets: vec![RequestedTarget::Change(RequestedTargetChange {
+                reference: "FEAT-TEST-001#binding.impl/target.handler".parse().unwrap(),
+                transition: TargetTransition::Add,
+            })],
+        };
+        let plan = plan(&request, &workspace, &index, "rev-1").expect("plan");
+        assert_eq!(plan.status, PlanStatus::Ready);
+        assert!(plan.slices.iter().any(|slice| {
+            slice.editable_targets.iter().any(|target| {
+                target.lifecycle == TargetLifecycle::EnsurePresent
+                    && target.reference.target_id.to_string() == "handler"
+            })
+        }));
+    }
+
+    #[test]
+    fn context_pack_distinguishes_target_and_support_entries_for_missing_targets() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-TEST-002".into(),
+            summary: "Add a new target".into(),
+            operation: WorkOperation::Add,
+            seeds: vec![],
+            constraints: WorkConstraints {
+                max_added_bytes_per_target: Some(256),
+                max_added_lines_per_target: Some(8),
+                ..Default::default()
+            },
+            requested_targets: vec![RequestedTarget::Change(RequestedTargetChange {
+                reference: "FEAT-TEST-001#binding.impl/target.handler".parse().unwrap(),
+                transition: TargetTransition::Add,
+            })],
+        };
+        let plan = plan(&request, &workspace, &index, "rev-2").expect("plan");
+        let slice = plan.slices.first().expect("slice");
+        let pack = export_context(&plan, &slice.id, &workspace, &index, "rev-2").expect("pack");
+        let target_entries = pack
+            .artifact_context
+            .iter()
+            .filter(|entry| entry.reference.is_some())
+            .count();
+        let support_entries = pack
+            .artifact_context
+            .iter()
+            .filter(|entry| entry.support_id.is_some())
+            .count();
+        assert_eq!(target_entries, 1);
+        assert_eq!(support_entries, 0);
+    }
 }
