@@ -5,6 +5,7 @@ The active planner output is `syu/work-plan/v1`.
 A work plan contains:
 
 - plan basis and workspace fingerprint
+- execution mode (`isolated-slices` in v1)
 - ready or blocked status
 - execution slices
 - slice budgets

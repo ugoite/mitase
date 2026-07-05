@@ -11,9 +11,12 @@ use syu_spec_model::{
     SpecAnchor, SpecDocument,
 };
 use syu_work_model::{
-    ExecutionSlice, PlanConfidence, TargetLifecycle, WORK_PLAN_SCHEMA, WorkPlan, work_plan_digest,
+    ExecutionSlice, PlanConfidence, PlanExecution, TargetLifecycle, WORK_PLAN_SCHEMA, WorkPlan,
+    work_plan_digest,
 };
-use syu_workspace::{AnchorValue, SpecIndex, SpecWorkspace, resolve_target_with_adapters};
+use syu_workspace::{
+    AnchorValue, ResolvedTarget, SpecIndex, SpecWorkspace, resolve_target_with_adapters,
+};
 use tempfile::TempDir;
 
 #[derive(Debug, Clone, Copy)]
@@ -225,9 +228,9 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
     let changed_paths = changed_paths(files);
     let changed_spec_documents = files
         .iter()
-        .filter_map(|file| file.new_path.as_ref().or(file.old_path.as_ref()))
+        .flat_map(|file| file.old_path.iter().chain(file.new_path.iter()))
         .filter(|path| ctx.workspace.path_is_spec(path.as_path()))
-        .map(|path| ctx.workspace.root.join(path.as_path()))
+        .cloned()
         .collect::<BTreeSet<_>>();
     for file in files {
         let Some(path) = file.new_path.as_ref().or(file.old_path.as_ref()) else {
@@ -284,24 +287,20 @@ fn changed_paths(files: &[ChangedFile]) -> BTreeSet<String> {
 
 fn validate_changed_spec_impact(
     ctx: &ValidationContext<'_>,
-    changed_spec_documents: &BTreeSet<std::path::PathBuf>,
+    changed_spec_documents: &BTreeSet<RepoPath>,
     changed_paths: &BTreeSet<String>,
     out: &mut Vec<Diagnostic>,
 ) {
     if changed_spec_documents.is_empty() {
         return;
     }
-    let changed_documents = changed_spec_documents
-        .iter()
-        .map(|document| normalize_workspace_path(document))
-        .collect::<BTreeSet<_>>();
     let baseline = ctx
         .change_base_revision
         .or(ctx.revision)
         .and_then(|revision| load_workspace_at_revision(&ctx.workspace.root, revision));
 
     for anchor in changed_anchors_for_documents(
-        &changed_documents,
+        changed_spec_documents,
         ctx.workspace,
         ctx.index,
         baseline.as_ref().map(|baseline| &baseline.workspace),
@@ -365,7 +364,7 @@ fn validate_changed_spec_impact(
     }
 
     for anchor in changed_anchors_for_documents(
-        &changed_documents,
+        changed_spec_documents,
         ctx.workspace,
         ctx.index,
         baseline.as_ref().map(|baseline| &baseline.workspace),
@@ -411,7 +410,7 @@ fn validate_changed_spec_impact(
     }
 
     for anchor in changed_anchors_for_documents(
-        &changed_documents,
+        changed_spec_documents,
         ctx.workspace,
         ctx.index,
         baseline.as_ref().map(|baseline| &baseline.workspace),
@@ -578,7 +577,7 @@ fn git_workspace_context(root: &Path) -> Result<(PathBuf, PathBuf), String> {
 }
 
 fn changed_anchors_for_documents(
-    changed_documents: &BTreeSet<PathBuf>,
+    changed_documents: &BTreeSet<RepoPath>,
     current_workspace: &SpecWorkspace,
     current_index: &SpecIndex,
     baseline_workspace: Option<&SpecWorkspace>,
@@ -586,23 +585,31 @@ fn changed_anchors_for_documents(
     kind: LocalAnchorKind,
 ) -> BTreeSet<SpecAnchor> {
     let mut anchors = BTreeSet::new();
-    collect_changed_anchors(&mut anchors, changed_documents, current_index, kind);
-    let _ = current_workspace;
+    collect_changed_anchors(
+        &mut anchors,
+        changed_documents,
+        current_workspace,
+        current_index,
+        kind,
+    );
     if let (Some(workspace), Some(index)) = (baseline_workspace, baseline_index) {
-        let _ = workspace;
-        collect_changed_anchors(&mut anchors, changed_documents, index, kind);
+        collect_changed_anchors(&mut anchors, changed_documents, workspace, index, kind);
     }
     anchors
 }
 
 fn collect_changed_anchors(
     out: &mut BTreeSet<SpecAnchor>,
-    changed_documents: &BTreeSet<PathBuf>,
+    changed_documents: &BTreeSet<RepoPath>,
+    workspace: &SpecWorkspace,
     index: &SpecIndex,
     kind: LocalAnchorKind,
 ) {
     for (item, path) in &index.item_paths {
-        if !changed_documents.contains(&normalize_workspace_path(path)) {
+        let Some(relative_path) = workspace_relative_repo_path(path, &workspace.root) else {
+            continue;
+        };
+        if !changed_documents.contains(&relative_path) {
             continue;
         }
         for anchor in index.item_anchors.get(item).into_iter().flatten() {
@@ -718,6 +725,10 @@ fn changed_anchor_path(
 
 fn normalize_workspace_path(path: &Path) -> PathBuf {
     path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+}
+
+fn workspace_relative_repo_path(path: &Path, root: &Path) -> Option<RepoPath> {
+    workspace_relative_display(path, root).and_then(|relative| RepoPath::new(relative).ok())
 }
 
 fn workspace_relative_display(path: &Path, root: &Path) -> Option<PathBuf> {
@@ -1378,6 +1389,15 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
             ),
         }
     }
+    if plan.execution != PlanExecution::IsolatedSlices {
+        push(
+            out,
+            "SYU-WORK-009",
+            "work plan execution mode must be isolated-slices",
+            "work-plan",
+            None,
+        );
+    }
     if allow_post_state && plan.slices.len() > 1 && ctx.selected_slice.is_none() {
         push(
             out,
@@ -1511,7 +1531,21 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                                         .index
                                         .target(&target.reference)
                                         .is_some_and(|declared| declared.adapter == target.adapter)
-                            }) => {}
+                            }) =>
+                {
+                    if ensure_present_target_exceeds_budget(target, &resolved) {
+                        push(
+                            out,
+                            "SYU-WORK-003",
+                            format!(
+                                "ensure-present target exceeds planned post-state budget: {}",
+                                target.reference
+                            ),
+                            &target.resolved_path,
+                            Some(target.reference.binding.clone()),
+                        );
+                    }
+                }
                 None if target.lifecycle == TargetLifecycle::EnsureAbsent => {}
                 Some(resolved)
                     if allow_post_state
@@ -1711,7 +1745,7 @@ fn validate_slice_scope(
                 .any(|target| target_matches_changed_file_path(ctx, target, file));
             let editable_hit = editable_targets
                 .iter()
-                .any(|target| target_matches_changed_file_path(ctx, target, file));
+                .any(|target| editable_target_matches_hunkless_change(ctx, target, file));
             if readonly_hit {
                 push(
                     out,
@@ -1772,6 +1806,14 @@ fn target_matches_changed_file_path(
             .as_ref()
             .and_then(|path| target_line_range(ctx, target, TargetRangeSide::New, path))
             .is_some()
+}
+
+fn editable_target_matches_hunkless_change(
+    ctx: &ValidationContext<'_>,
+    target: &syu_work_model::PlannedTarget,
+    file: &ChangedFile,
+) -> bool {
+    target_selector_is_file(target) && target_matches_changed_file_path(ctx, target, file)
 }
 
 fn change_is_within_editable_scope(
@@ -1910,6 +1952,32 @@ fn target_line_range(
     })
 }
 
+fn target_selector_is_file(target: &syu_work_model::PlannedTarget) -> bool {
+    target.resolved_selector.description == "file"
+}
+
+fn ensure_present_target_exceeds_budget(
+    target: &syu_work_model::PlannedTarget,
+    resolved: &ResolvedTarget,
+) -> bool {
+    let actual_bytes = resolved.byte_end.saturating_sub(resolved.byte_start);
+    if actual_bytes > target.budget_bytes {
+        return true;
+    }
+    if target_selector_is_file(target) {
+        return false;
+    }
+    let planned_lines = target
+        .line_end
+        .saturating_sub(target.line_start)
+        .saturating_add(1);
+    let actual_lines = resolved
+        .line_end
+        .saturating_sub(resolved.line_start)
+        .saturating_add(1);
+    actual_lines > planned_lines
+}
+
 fn changed_side_overlaps(changed_start: usize, changed_end: usize, target: (usize, usize)) -> bool {
     if changed_start == 0 && changed_end == 0 {
         return false;
@@ -1972,4 +2040,258 @@ fn changed_side_covers(
     let actual_end = normalize_end(actual_start, actual_end);
     let reported_end = normalize_end(reported_start, reported_end);
     reported_start <= actual_start && reported_end >= actual_end
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::process::Command;
+    use tempfile::tempdir;
+
+    fn fixture_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/v1/valid-web-app")
+            .canonicalize()
+            .expect("fixture root")
+    }
+
+    fn copy_dir(from: &Path, to: &Path) {
+        fs::create_dir_all(to).expect("create dir");
+        for entry in fs::read_dir(from).expect("read dir") {
+            let entry = entry.expect("entry");
+            let path = entry.path();
+            let destination = to.join(entry.file_name());
+            if entry.file_type().expect("file type").is_dir() {
+                copy_dir(&path, &destination);
+            } else {
+                fs::copy(&path, &destination).expect("copy file");
+            }
+        }
+    }
+
+    fn load_fixture_workspace() -> (tempfile::TempDir, SpecWorkspace, SpecIndex) {
+        let tempdir = tempdir().expect("tempdir");
+        copy_dir(&fixture_root(), tempdir.path());
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        (tempdir, workspace, index)
+    }
+
+    fn init_git_repo(root: &Path) -> String {
+        let run = |args: &[&str]| {
+            let status = Command::new("git")
+                .args(args)
+                .current_dir(root)
+                .status()
+                .unwrap();
+            assert!(status.success(), "git {:?} failed", args);
+        };
+        run(&["init"]);
+        run(&["config", "user.name", "Codex"]);
+        run(&["config", "user.email", "codex@example.com"]);
+        run(&["add", "."]);
+        run(&["commit", "-m", "baseline"]);
+        let output = Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(root)
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        String::from_utf8(output.stdout).unwrap().trim().to_string()
+    }
+
+    fn sample_target(
+        path: &str,
+        description: &str,
+        lines: (usize, usize),
+    ) -> syu_work_model::PlannedTarget {
+        syu_work_model::PlannedTarget {
+            reference: "FEAT-AUTH-001#binding.ui/target.requested".parse().unwrap(),
+            lifecycle: TargetLifecycle::EnsurePresent,
+            access: syu_work_model::TargetAccessMode::Editable,
+            resolved_path: path.to_string(),
+            resolved_selector: syu_work_model::ResolvedSelector {
+                description: description.to_string(),
+                symbols: if description == "file" {
+                    Vec::new()
+                } else {
+                    vec!["requested_function".to_string()]
+                },
+            },
+            content_hash: "sha256:0".to_string(),
+            excerpt_hash: "sha256:0".to_string(),
+            adapter: "rust".to_string(),
+            facet: "ui".to_string(),
+            role: BindingRole::Implementation,
+            byte_start: 0,
+            byte_end: 32,
+            line_start: lines.0,
+            line_end: lines.1,
+            budget_bytes: 32,
+            reason: "test".to_string(),
+        }
+    }
+
+    #[test]
+    fn changed_anchors_include_deleted_baseline_anchor_by_repo_path() {
+        let baseline_dir = tempdir().expect("baseline dir");
+        copy_dir(&fixture_root(), baseline_dir.path());
+        let current_dir = tempdir().expect("current dir");
+        copy_dir(&fixture_root(), current_dir.path());
+        fs::write(
+            current_dir.path().join("spec/requirement.yaml"),
+            r#"schema: syu/spec/v1
+kind: requirements
+namespace: auth
+category: Authentication
+requirements:
+  - id: REQ-AUTH-001
+    title: Reject invalid credentials
+    description: Invalid credentials do not create a session.
+    priority: high
+    status: implemented
+    criteria: []
+    bindings:
+      - id: login-test
+        role: verification
+        facet: verification
+        responsibility: Prove invalid credentials create no session.
+        targets:
+          - { id: case, adapter: rust, path: tests/login.rs, selector: { kind: symbol, names: [invalid_credentials] } }
+        verifies: [REQ-AUTH-001#criterion.invalid-credentials]
+"#,
+        )
+        .unwrap();
+        let current_workspace = SpecWorkspace::load(current_dir.path()).unwrap();
+        let current_index = current_workspace.index().unwrap();
+        let baseline_workspace = SpecWorkspace::load(baseline_dir.path()).unwrap();
+        let baseline_index = baseline_workspace.index().unwrap();
+        let changed = BTreeSet::from([RepoPath::new("spec/requirement.yaml").unwrap()]);
+        let anchors = changed_anchors_for_documents(
+            &changed,
+            &current_workspace,
+            &current_index,
+            Some(&baseline_workspace),
+            Some(&baseline_index),
+            LocalAnchorKind::Criterion,
+        );
+        assert!(
+            anchors.contains(
+                &"REQ-AUTH-001#criterion.invalid-credentials"
+                    .parse()
+                    .unwrap()
+            )
+        );
+    }
+
+    #[test]
+    fn validate_reports_deleted_criterion_without_artifact_update() {
+        let (tempdir, _, _) = load_fixture_workspace();
+        let baseline = init_git_repo(tempdir.path());
+        fs::write(
+            tempdir.path().join("spec/requirement.yaml"),
+            r#"schema: syu/spec/v1
+kind: requirements
+namespace: auth
+category: Authentication
+requirements:
+  - id: REQ-AUTH-001
+    title: Reject invalid credentials
+    description: Invalid credentials do not create a session.
+    priority: high
+    status: implemented
+    criteria: []
+    bindings:
+      - id: login-test
+        role: verification
+        facet: verification
+        responsibility: Prove invalid credentials create no session.
+        targets:
+          - { id: case, adapter: rust, path: tests/login.rs, selector: { kind: symbol, names: [invalid_credentials] } }
+        verifies: [REQ-AUTH-001#criterion.invalid-credentials]
+"#,
+        )
+        .unwrap();
+        let workspace = SpecWorkspace::load(tempdir.path()).unwrap();
+        let index = workspace.index().unwrap();
+        let changed_files = vec![ChangedFile {
+            status: ChangeStatus::Modified,
+            old_path: Some(RepoPath::new("spec/requirement.yaml").unwrap()),
+            new_path: Some(RepoPath::new("spec/requirement.yaml").unwrap()),
+            hunks: vec![],
+        }];
+        let result = validate(&ValidationContext {
+            config: &workspace.config,
+            workspace: &workspace,
+            index: &index,
+            changed_files: Some(&changed_files),
+            reported_changed_files: None,
+            work_plan: None,
+            selected_slice: None,
+            plan_mode: PlanValidationMode::PreState,
+            preset: workspace.config.validation.preset,
+            revision: None,
+            change_base_revision: Some(&baseline),
+        });
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.rule_id == "SYU-CHANGE-003")
+        );
+    }
+
+    #[test]
+    fn hunkless_changes_require_file_scope_for_editable_targets() {
+        let (_tempdir, workspace, index) = load_fixture_workspace();
+        let changed = ChangedFile {
+            status: ChangeStatus::Untracked,
+            old_path: None,
+            new_path: Some(RepoPath::new("web/new.ts").unwrap()),
+            hunks: vec![],
+        };
+        let ctx = ValidationContext {
+            config: &workspace.config,
+            workspace: &workspace,
+            index: &index,
+            changed_files: None,
+            reported_changed_files: None,
+            work_plan: None,
+            selected_slice: None,
+            plan_mode: PlanValidationMode::PreState,
+            preset: workspace.config.validation.preset,
+            revision: None,
+            change_base_revision: None,
+        };
+        assert!(!editable_target_matches_hunkless_change(
+            &ctx,
+            &sample_target("web/new.ts", "symbols requested_function", (1, 1)),
+            &changed,
+        ));
+        assert!(editable_target_matches_hunkless_change(
+            &ctx,
+            &sample_target("web/new.ts", "file", (1, 1)),
+            &changed,
+        ));
+    }
+
+    #[test]
+    fn ensure_present_targets_use_actual_post_state_budget() {
+        let target = sample_target("web/new.ts", "symbols requested_function", (1, 1));
+        let resolved = ResolvedTarget {
+            path: PathBuf::from("web/new.ts"),
+            description: "symbols requested_function".to_string(),
+            symbols: vec!["requested_function".to_string()],
+            content_hash: "sha256:1".to_string(),
+            bytes: 80,
+            byte_start: 0,
+            byte_end: 80,
+            line_start: 1,
+            line_end: 4,
+            excerpt: "fn requested_function() {}\nfn extra() {}\n".to_string(),
+            excerpt_hash: "sha256:1".to_string(),
+        };
+        assert!(ensure_present_target_exceeds_budget(&target, &resolved));
+    }
 }

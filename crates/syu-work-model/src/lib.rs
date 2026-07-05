@@ -188,12 +188,21 @@ pub struct WorkPlan {
     pub schema: String,
     pub id: String,
     pub basis: PlanBasis,
+    #[serde(default)]
+    pub execution: PlanExecution,
     pub request: WorkRequest,
     pub canonical_digest: String,
     pub status: PlanStatus,
     pub slices: Vec<ExecutionSlice>,
     #[serde(default)]
     pub diagnostics: Vec<Diagnostic>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PlanExecution {
+    #[default]
+    IsolatedSlices,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

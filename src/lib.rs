@@ -460,11 +460,13 @@ fn changed_files_against_revision(root: &Path, revision: &str) -> Result<Vec<Cha
     if !patch_output.status.success() {
         bail!("git diff --unified=0 {revision} failed");
     }
-    parse_changed_files(
+    let mut files = parse_changed_files(
         &status_output.stdout,
         &untracked_output.stdout,
         &String::from_utf8(patch_output.stdout)?,
-    )
+    )?;
+    synthesize_untracked_ranges(root, &mut files)?;
+    Ok(files)
 }
 
 fn changed_files(root: &Path, range: &str) -> Result<Vec<ChangedFile>> {
@@ -499,11 +501,13 @@ fn changed_files(root: &Path, range: &str) -> Result<Vec<ChangedFile>> {
     if !patch_output.status.success() {
         bail!("git diff --unified=0 {range} failed");
     }
-    parse_changed_files(
+    let mut files = parse_changed_files(
         &status_output.stdout,
         &untracked_output.stdout,
         &String::from_utf8(patch_output.stdout)?,
-    )
+    )?;
+    synthesize_untracked_ranges(root, &mut files)?;
+    Ok(files)
 }
 
 fn ensure_clean_plan_workspace(workspace: &SpecWorkspace) -> Result<()> {
@@ -557,13 +561,11 @@ fn parse_changed_files(status: &[u8], untracked: &[u8], patch: &str) -> Result<V
                     entries.next().context("missing added path")?.to_vec(),
                 )?),
             ),
-            'M' => (
-                ChangeStatus::Modified,
-                None,
-                Some(String::from_utf8(
-                    entries.next().context("missing modified path")?.to_vec(),
-                )?),
-            ),
+            'M' => {
+                let path =
+                    String::from_utf8(entries.next().context("missing modified path")?.to_vec())?;
+                (ChangeStatus::Modified, Some(path.clone()), Some(path))
+            }
             'D' => (
                 ChangeStatus::Deleted,
                 Some(String::from_utf8(
@@ -580,14 +582,13 @@ fn parse_changed_files(status: &[u8], untracked: &[u8], patch: &str) -> Result<V
                     entries.next().context("missing rename target")?.to_vec(),
                 )?),
             ),
-            _ => (
-                ChangeStatus::Modified,
-                None,
-                entries
+            _ => {
+                let path = entries
                     .next()
                     .map(|value| String::from_utf8(value.to_vec()))
-                    .transpose()?,
-            ),
+                    .transpose()?;
+                (ChangeStatus::Modified, path.clone(), path)
+            }
         };
         files.push(ChangedFile {
             status,
@@ -664,6 +665,33 @@ fn parse_changed_files(status: &[u8], untracked: &[u8], patch: &str) -> Result<V
     Ok(files)
 }
 
+fn synthesize_untracked_ranges(root: &Path, files: &mut [ChangedFile]) -> Result<()> {
+    for file in files {
+        if file.status != ChangeStatus::Untracked || !file.hunks.is_empty() {
+            continue;
+        }
+        let Some(path) = file.new_path.as_ref() else {
+            continue;
+        };
+        let contents = match fs::read(root.join(path.as_path())) {
+            Ok(contents) => contents,
+            Err(_) => continue,
+        };
+        if std::str::from_utf8(&contents).is_err() {
+            continue;
+        }
+        let line_count = contents.iter().filter(|byte| **byte == b'\n').count()
+            + usize::from(!contents.is_empty() && *contents.last().unwrap_or(&b'\n') != b'\n');
+        file.hunks.push(ChangedRange {
+            old_start: 0,
+            old_end: 0,
+            new_start: 1,
+            new_end: line_count.max(1),
+        });
+    }
+    Ok(())
+}
+
 fn parse_binary_patch_paths(line: &str) -> Option<(&str, &str)> {
     let paths = line.strip_prefix("Binary files ")?;
     let (old_path, remainder) = paths.split_once(" and ")?;
@@ -704,6 +732,8 @@ fn parse_diff_span(span: &str) -> Result<(usize, usize)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use tempfile::tempdir;
 
     #[test]
     fn parse_changed_files_keeps_deleted_file_hunks_on_the_deleted_path() {
@@ -734,6 +764,40 @@ diff --git a/src/b.rs b/src/b.rs\n\
         assert_eq!(
             files[0].new_path.as_ref().unwrap().to_string_lossy(),
             "src/new.rs"
+        );
+    }
+
+    #[test]
+    fn parse_changed_files_keeps_modified_path_on_both_sides() {
+        let files = parse_changed_files(b"M\0src/app.rs\0", b"", "").unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].status, ChangeStatus::Modified);
+        assert_eq!(
+            files[0].old_path.as_ref().unwrap().to_string_lossy(),
+            "src/app.rs"
+        );
+        assert_eq!(
+            files[0].new_path.as_ref().unwrap().to_string_lossy(),
+            "src/app.rs"
+        );
+    }
+
+    #[test]
+    fn synthesize_untracked_ranges_covers_full_text_file() {
+        let tempdir = tempdir().unwrap();
+        fs::create_dir_all(tempdir.path().join("src")).unwrap();
+        fs::write(tempdir.path().join("src/new.rs"), "fn a() {}\nfn b() {}\n").unwrap();
+        let mut files = parse_changed_files(b"", b"src/new.rs\0", "").unwrap();
+        synthesize_untracked_ranges(tempdir.path(), &mut files).unwrap();
+        assert_eq!(files[0].hunks.len(), 1);
+        assert_eq!(
+            files[0].hunks[0],
+            ChangedRange {
+                old_start: 0,
+                old_end: 0,
+                new_start: 1,
+                new_end: 2,
+            }
         );
     }
 
