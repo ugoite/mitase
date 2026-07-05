@@ -1083,6 +1083,7 @@ fn one_target(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn declared_target_plan(
     workspace: &SpecWorkspace,
     reference: &BoundTargetRef,
