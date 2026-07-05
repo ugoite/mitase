@@ -12,3 +12,4 @@ syu-spec-model = { path = "../syu-spec-model" }
 syu-work-model = { path = "../syu-work-model" }
 syu-workspace = { path = "../syu-workspace" }
 serde_yaml = "0.9"
+tempfile.workspace = true

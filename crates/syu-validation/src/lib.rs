@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
+use tempfile::TempDir;
 use syu_diagnostics::{Diagnostic, Severity, ValidationResult};
 use syu_planner::plan as canonical_plan;
 use syu_project_model::{ProjectConfig, RuleOverride, ValidationPreset};
@@ -131,15 +131,24 @@ pub struct ChangedFile {
     pub hunks: Vec<ChangedRange>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlanValidationMode {
+    PreState,
+    PostState,
+}
+
 pub struct ValidationContext<'a> {
     pub config: &'a ProjectConfig,
     pub workspace: &'a SpecWorkspace,
     pub index: &'a SpecIndex,
     pub changed_files: Option<&'a [ChangedFile]>,
+    pub reported_changed_files: Option<&'a [ChangedFile]>,
     pub work_plan: Option<&'a WorkPlan>,
     pub selected_slice: Option<&'a ExecutionSlice>,
+    pub plan_mode: PlanValidationMode,
     pub preset: ValidationPreset,
     pub revision: Option<&'a str>,
+    pub change_base_revision: Option<&'a str>,
 }
 pub trait ValidationRule {
     fn metadata(&self) -> &'static RuleMetadata;
@@ -287,26 +296,27 @@ fn validate_changed_spec_impact(
         .map(|document| normalize_workspace_path(document))
         .collect::<BTreeSet<_>>();
     let baseline = ctx
-        .revision
+        .change_base_revision
+        .or(ctx.revision)
         .and_then(|revision| load_workspace_at_revision(&ctx.workspace.root, revision));
 
     for anchor in changed_anchors_for_documents(
         &changed_documents,
         ctx.workspace,
         ctx.index,
-        baseline.as_ref().map(|(workspace, _)| workspace),
-        baseline.as_ref().map(|(_, index)| index),
+        baseline.as_ref().map(|baseline| &baseline.workspace),
+        baseline.as_ref().map(|baseline| &baseline.index),
         LocalAnchorKind::Criterion,
     ) {
         if !anchor_changed(
             &anchor,
-            baseline.as_ref().map(|(_, index)| index),
+            baseline.as_ref().map(|baseline| &baseline.index),
             ctx.index,
         ) {
             continue;
         }
         let implementation_changed = binding_set_for_criterion(
-            baseline.as_ref().map(|(_, index)| index),
+            baseline.as_ref().map(|baseline| &baseline.index),
             ctx.index,
             &anchor,
             true,
@@ -314,14 +324,14 @@ fn validate_changed_spec_impact(
         .iter()
         .any(|binding| {
             binding_targets_changed_across_indexes(
-                baseline.as_ref().map(|(_, index)| index),
+                baseline.as_ref().map(|baseline| &baseline.index),
                 ctx.index,
                 binding,
                 changed_paths,
             )
         });
         let verification_changed = binding_set_for_criterion(
-            baseline.as_ref().map(|(_, index)| index),
+            baseline.as_ref().map(|baseline| &baseline.index),
             ctx.index,
             &anchor,
             false,
@@ -329,7 +339,7 @@ fn validate_changed_spec_impact(
         .iter()
         .any(|binding| {
             binding_targets_changed_across_indexes(
-                baseline.as_ref().map(|(_, index)| index),
+                baseline.as_ref().map(|baseline| &baseline.index),
                 ctx.index,
                 binding,
                 changed_paths,
@@ -344,8 +354,8 @@ fn validate_changed_spec_impact(
                 ),
                 changed_anchor_path(
                     &anchor,
-                    baseline.as_ref().map(|(workspace, _)| workspace),
-                    baseline.as_ref().map(|(_, index)| index),
+                    baseline.as_ref().map(|baseline| &baseline.workspace),
+                    baseline.as_ref().map(|baseline| &baseline.index),
                     ctx.workspace,
                     ctx.index,
                 ),
@@ -358,26 +368,26 @@ fn validate_changed_spec_impact(
         &changed_documents,
         ctx.workspace,
         ctx.index,
-        baseline.as_ref().map(|(workspace, _)| workspace),
-        baseline.as_ref().map(|(_, index)| index),
+        baseline.as_ref().map(|baseline| &baseline.workspace),
+        baseline.as_ref().map(|baseline| &baseline.index),
         LocalAnchorKind::Contract,
     ) {
         if !anchor_changed(
             &anchor,
-            baseline.as_ref().map(|(_, index)| index),
+            baseline.as_ref().map(|baseline| &baseline.index),
             ctx.index,
         ) {
             continue;
         }
         let participants = participant_bindings_for_contract(
-            baseline.as_ref().map(|(_, index)| index),
+            baseline.as_ref().map(|baseline| &baseline.index),
             ctx.index,
             &anchor,
         );
         if participants.is_empty()
             || participants.iter().any(|binding| {
                 !binding_targets_changed_across_indexes(
-                    baseline.as_ref().map(|(_, index)| index),
+                    baseline.as_ref().map(|baseline| &baseline.index),
                     ctx.index,
                     binding,
                     changed_paths,
@@ -390,8 +400,8 @@ fn validate_changed_spec_impact(
                 format!("changed contract has no full participant artifact update: {anchor}"),
                 changed_anchor_path(
                     &anchor,
-                    baseline.as_ref().map(|(workspace, _)| workspace),
-                    baseline.as_ref().map(|(_, index)| index),
+                    baseline.as_ref().map(|baseline| &baseline.workspace),
+                    baseline.as_ref().map(|baseline| &baseline.index),
                     ctx.workspace,
                     ctx.index,
                 ),
@@ -404,19 +414,19 @@ fn validate_changed_spec_impact(
         &changed_documents,
         ctx.workspace,
         ctx.index,
-        baseline.as_ref().map(|(workspace, _)| workspace),
-        baseline.as_ref().map(|(_, index)| index),
+        baseline.as_ref().map(|baseline| &baseline.workspace),
+        baseline.as_ref().map(|baseline| &baseline.index),
         LocalAnchorKind::Binding,
     ) {
         if !anchor_changed(
             &anchor,
-            baseline.as_ref().map(|(_, index)| index),
+            baseline.as_ref().map(|baseline| &baseline.index),
             ctx.index,
         ) {
             continue;
         }
         if !binding_targets_changed_across_indexes(
-            baseline.as_ref().map(|(_, index)| index),
+            baseline.as_ref().map(|baseline| &baseline.index),
             ctx.index,
             &anchor,
             changed_paths,
@@ -427,8 +437,8 @@ fn validate_changed_spec_impact(
                 format!("changed binding has no impacted target update: {anchor}"),
                 changed_anchor_path(
                     &anchor,
-                    baseline.as_ref().map(|(workspace, _)| workspace),
-                    baseline.as_ref().map(|(_, index)| index),
+                    baseline.as_ref().map(|baseline| &baseline.workspace),
+                    baseline.as_ref().map(|baseline| &baseline.index),
                     ctx.workspace,
                     ctx.index,
                 ),
@@ -450,18 +460,20 @@ fn binding_targets_changed_across_indexes(
         .any(|path| changed_paths.contains(&path))
 }
 
-fn load_workspace_at_revision(root: &Path, revision: &str) -> Option<(SpecWorkspace, SpecIndex)> {
+struct BaselineWorkspace {
+    _tempdir: TempDir,
+    workspace: SpecWorkspace,
+    index: SpecIndex,
+}
+
+fn load_workspace_at_revision(root: &Path, revision: &str) -> Option<BaselineWorkspace> {
     let syu_config = git_show(root, revision, Path::new("syu.yaml")).ok()?;
     let config: ProjectConfig = serde_yaml::from_str(&syu_config).ok()?;
-    let workspace_dir = std::env::temp_dir().join(format!(
-        "syu-baseline-{}-{}",
-        std::process::id(),
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .ok()?
-            .as_nanos()
-    ));
-    fs::create_dir_all(&workspace_dir).ok()?;
+    let tempdir = tempfile::Builder::new()
+        .prefix("syu-baseline-")
+        .tempdir()
+        .ok()?;
+    let workspace_dir = tempdir.path();
     fs::write(workspace_dir.join("syu.yaml"), syu_config).ok()?;
     let files = git_ls_tree(root, revision).ok()?;
     for relative in &files {
@@ -489,9 +501,13 @@ fn load_workspace_at_revision(root: &Path, revision: &str) -> Option<(SpecWorksp
         }
         fs::write(destination, contents).ok()?;
     }
-    let workspace = SpecWorkspace::load(&workspace_dir).ok()?;
+    let workspace = SpecWorkspace::load(workspace_dir).ok()?;
     let index = workspace.index().ok()?;
-    Some((workspace, index))
+    Some(BaselineWorkspace {
+        _tempdir: tempdir,
+        workspace,
+        index,
+    })
 }
 
 fn git_show(root: &Path, revision: &str, relative: &Path) -> Result<String, String> {
@@ -519,16 +535,18 @@ fn git_ls_tree(root: &Path, revision: &str) -> Result<Vec<PathBuf>, String> {
     let output = Command::new("git")
         .arg("-C")
         .arg(&repo_root)
-        .args(["ls-tree", "-r", "--name-only", revision])
+        .args(["ls-tree", "-r", "-z", "--name-only", revision])
         .output()
         .map_err(|error| error.to_string())?;
     if !output.status.success() {
         return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
-    Ok(String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .filter_map(|line| {
-            let path = PathBuf::from(line);
+    Ok(output
+        .stdout
+        .split(|byte| *byte == 0)
+        .filter(|entry| !entry.is_empty())
+        .filter_map(|entry| {
+            let path = PathBuf::from(String::from_utf8_lossy(entry).to_string());
             if prefix.as_os_str().is_empty() {
                 return Some(path);
             }
@@ -1294,7 +1312,7 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
             None,
         );
     }
-    let allow_post_state = ctx.changed_files.is_some();
+    let allow_post_state = ctx.plan_mode == PlanValidationMode::PostState;
     if !allow_post_state
         && ctx
             .revision
@@ -1327,8 +1345,13 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
             None,
         );
     }
-    if let Some((workspace, index)) = basis_workspace.as_ref() {
-        match canonical_plan(&plan.request, workspace, index, &plan.basis.revision) {
+    if let Some(basis) = basis_workspace.as_ref() {
+        match canonical_plan(
+            &plan.request,
+            &basis.workspace,
+            &basis.index,
+            &plan.basis.revision,
+        ) {
             Ok(mut canonical) => {
                 canonical.basis = plan.basis.clone();
                 canonical.canonical_digest = work_plan_digest(&canonical);
@@ -1354,6 +1377,27 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                 None,
             ),
         }
+    }
+    if allow_post_state && plan.slices.len() > 1 && ctx.selected_slice.is_none() {
+        push(
+            out,
+            "SYU-WORK-009",
+            "post-state validation requires --slice when a plan has multiple slices",
+            "work-plan",
+            None,
+        );
+    }
+    if allow_post_state
+        && let (Some(actual), Some(reported)) = (ctx.changed_files, ctx.reported_changed_files)
+        && !reported_change_set_covers(actual, reported)
+    {
+        push(
+            out,
+            "SYU-WORK-009",
+            "reported range does not cover all actual post-state changes from the plan basis",
+            "work-plan",
+            None,
+        );
     }
     let mut slice_ids = BTreeSet::new();
     let slices: Vec<&ExecutionSlice> = ctx
@@ -1661,24 +1705,39 @@ fn validate_slice_scope(
         {
             continue;
         }
-        let hunks = if file.hunks.is_empty() {
-            vec![ChangedRange {
-                old_start: 1,
-                old_end: usize::MAX,
-                new_start: 1,
-                new_end: usize::MAX,
-            }]
-        } else {
-            file.hunks.clone()
-        };
+        if file.hunks.is_empty() {
+            let readonly_hit = guarded_targets
+                .iter()
+                .any(|target| target_matches_changed_file_path(ctx, target, file));
+            let editable_hit = editable_targets
+                .iter()
+                .any(|target| target_matches_changed_file_path(ctx, target, file));
+            if readonly_hit {
+                push(
+                    out,
+                    "SYU-WORK-005",
+                    format!("readonly or run-only target changed: {}", path.display()),
+                    path.to_string_lossy(),
+                    None,
+                );
+            } else if !editable_hit {
+                push(
+                    out,
+                    "SYU-WORK-006",
+                    format!("change is outside editable scope: {}", path.display()),
+                    path.to_string_lossy(),
+                    None,
+                );
+            }
+            continue;
+        }
+        let hunks = file.hunks.clone();
         for hunk in hunks {
             let readonly_hit = guarded_targets
                 .iter()
-                .any(|target| target_hits_hunk(ctx, target, path, &hunk));
-            let editable_hit = editable_targets
-                .iter()
-                .any(|target| target_hits_hunk(ctx, target, path, &hunk));
-            if readonly_hit && !editable_hit {
+                .any(|target| target_overlaps_change(ctx, target, file, &hunk));
+            let editable_hit = change_is_within_editable_scope(ctx, &editable_targets, file, &hunk);
+            if readonly_hit {
                 push(
                     out,
                     "SYU-WORK-005",
@@ -1699,15 +1758,115 @@ fn validate_slice_scope(
     }
 }
 
-fn target_hits_hunk(
+fn target_matches_changed_file_path(
     ctx: &ValidationContext<'_>,
     target: &syu_work_model::PlannedTarget,
-    changed_path: &RepoPath,
+    file: &ChangedFile,
+) -> bool {
+    file.old_path
+        .as_ref()
+        .and_then(|path| target_line_range(ctx, target, TargetRangeSide::Old, path))
+        .is_some()
+        || file
+            .new_path
+            .as_ref()
+            .and_then(|path| target_line_range(ctx, target, TargetRangeSide::New, path))
+            .is_some()
+}
+
+fn change_is_within_editable_scope(
+    ctx: &ValidationContext<'_>,
+    editable_targets: &[&syu_work_model::PlannedTarget],
+    file: &ChangedFile,
     hunk: &ChangedRange,
 ) -> bool {
-    let current = if target.lifecycle == TargetLifecycle::Stable
-        && target.access == syu_work_model::TargetAccessMode::Editable
-    {
+    let old_ok = match file.old_path.as_ref() {
+        Some(path) => changed_side_is_fully_covered(
+            hunk.old_start,
+            hunk.old_end,
+            editable_targets
+                .iter()
+                .filter_map(|target| target_line_range(ctx, target, TargetRangeSide::Old, path)),
+        ),
+        None => true,
+    };
+    let new_ok = match file.new_path.as_ref() {
+        Some(path) => changed_side_is_fully_covered(
+            hunk.new_start,
+            hunk.new_end,
+            editable_targets
+                .iter()
+                .filter_map(|target| target_line_range(ctx, target, TargetRangeSide::New, path)),
+        ),
+        None => true,
+    };
+    old_ok && new_ok
+}
+
+fn changed_side_is_fully_covered(
+    changed_start: usize,
+    changed_end: usize,
+    ranges: impl Iterator<Item = (usize, usize)>,
+) -> bool {
+    if changed_start == 0 && changed_end == 0 {
+        return true;
+    }
+    let mut ranges = ranges.collect::<Vec<_>>();
+    if ranges.is_empty() {
+        return false;
+    }
+    if ranges.iter().any(|range| range.0 == 0 && range.1 == usize::MAX) {
+        return true;
+    }
+    ranges.sort_unstable_by_key(|range| range.0);
+    let changed_end = normalize_end(changed_start, changed_end);
+    let mut covered_until = changed_start.saturating_sub(1);
+    for (start, end) in ranges {
+        let end = normalize_end(start, end);
+        if start > covered_until.saturating_add(1) {
+            continue;
+        }
+        covered_until = covered_until.max(end);
+        if covered_until >= changed_end {
+            return true;
+        }
+    }
+    false
+}
+
+fn target_overlaps_change(
+    ctx: &ValidationContext<'_>,
+    target: &syu_work_model::PlannedTarget,
+    file: &ChangedFile,
+    hunk: &ChangedRange,
+) -> bool {
+    file.old_path
+        .as_ref()
+        .and_then(|path| target_line_range(ctx, target, TargetRangeSide::Old, path))
+        .is_some_and(|range| changed_side_overlaps(hunk.old_start, hunk.old_end, range))
+        || file
+            .new_path
+            .as_ref()
+            .and_then(|path| target_line_range(ctx, target, TargetRangeSide::New, path))
+            .is_some_and(|range| changed_side_overlaps(hunk.new_start, hunk.new_end, range))
+}
+
+#[derive(Debug, Clone, Copy)]
+enum TargetRangeSide {
+    Old,
+    New,
+}
+
+fn target_line_range(
+    ctx: &ValidationContext<'_>,
+    target: &syu_work_model::PlannedTarget,
+    side: TargetRangeSide,
+    changed_path: &RepoPath,
+) -> Option<(usize, usize)> {
+    let current = if matches!(
+        target.lifecycle,
+        TargetLifecycle::Stable | TargetLifecycle::EnsurePresent
+    ) {
         ctx.index.target(&target.reference).and_then(|declared| {
             resolve_target_with_adapters(
                 &ctx.workspace.root,
@@ -1719,43 +1878,92 @@ fn target_hits_hunk(
     } else {
         None
     };
-    let resolved_path = current
+    let current_path = current
         .as_ref()
-        .map(|resolved| resolved.path.to_string_lossy().into_owned())
-        .unwrap_or_else(|| target.resolved_path.clone());
-    if resolved_path != changed_path.to_string_lossy() {
-        return false;
+        .map(|resolved| resolved.path.to_string_lossy().into_owned());
+    let path_matches = match side {
+        TargetRangeSide::Old => target.resolved_path == changed_path.to_string_lossy(),
+        TargetRangeSide::New => current_path.as_deref().unwrap_or(&target.resolved_path) == changed_path.to_string_lossy(),
+    };
+    if !path_matches {
+        return None;
     }
     let description = current
         .as_ref()
         .map(|resolved| resolved.description.as_str())
         .unwrap_or(target.resolved_selector.description.as_str());
     if description == "file" {
-        return true;
+        return Some((0, usize::MAX));
     }
-    let start = if hunk.new_start == 0 {
-        hunk.old_start
-    } else {
-        hunk.new_start
-    };
-    let end = if hunk.new_end == 0 {
-        hunk.old_end
-    } else {
-        hunk.new_end
-    };
-    let line_start = current
-        .as_ref()
-        .map(|resolved| resolved.line_start)
-        .unwrap_or(target.line_start);
-    let line_end = current
-        .as_ref()
-        .map(|resolved| resolved.line_end)
-        .unwrap_or(target.line_end);
-    line_ranges_overlap(start, end, line_start, line_end)
+    Some(match side {
+        TargetRangeSide::Old => (target.line_start, target.line_end),
+        TargetRangeSide::New => current
+            .as_ref()
+            .map(|resolved| (resolved.line_start, resolved.line_end))
+            .unwrap_or((target.line_start, target.line_end)),
+    })
 }
 
-fn line_ranges_overlap(a_start: usize, a_end: usize, b_start: usize, b_end: usize) -> bool {
-    let a_end = if a_end == 0 { a_start } else { a_end };
-    let b_end = if b_end == 0 { b_start } else { b_end };
-    a_start <= b_end && b_start <= a_end
+fn changed_side_overlaps(changed_start: usize, changed_end: usize, target: (usize, usize)) -> bool {
+    if changed_start == 0 && changed_end == 0 {
+        return false;
+    }
+    let changed_end = normalize_end(changed_start, changed_end);
+    let target_end = normalize_end(target.0, target.1);
+    changed_start <= target_end && target.0 <= changed_end
+}
+
+fn normalize_end(start: usize, end: usize) -> usize {
+    if end == 0 { start } else { end }
+}
+
+fn reported_change_set_covers(actual: &[ChangedFile], reported: &[ChangedFile]) -> bool {
+    actual.iter().all(|actual_file| {
+        reported.iter().any(|reported_file| {
+            same_changed_file_identity(actual_file, reported_file)
+                && (actual_file.hunks.is_empty()
+                    || reported_file.hunks.is_empty()
+                    || actual_file.hunks.iter().all(|actual_hunk| {
+                        reported_file
+                            .hunks
+                            .iter()
+                            .any(|reported_hunk| changed_range_covers(actual_hunk, reported_hunk))
+                    }))
+        })
+    })
+}
+
+fn same_changed_file_identity(left: &ChangedFile, right: &ChangedFile) -> bool {
+    left.old_path == right.old_path && left.new_path == right.new_path
+}
+
+fn changed_range_covers(actual: &ChangedRange, reported: &ChangedRange) -> bool {
+    changed_side_covers(
+        actual.old_start,
+        actual.old_end,
+        reported.old_start,
+        reported.old_end,
+    ) && changed_side_covers(
+        actual.new_start,
+        actual.new_end,
+        reported.new_start,
+        reported.new_end,
+    )
+}
+
+fn changed_side_covers(
+    actual_start: usize,
+    actual_end: usize,
+    reported_start: usize,
+    reported_end: usize,
+) -> bool {
+    if actual_start == 0 && actual_end == 0 {
+        return true;
+    }
+    if reported_start == 0 && reported_end == 0 {
+        return false;
+    }
+    let actual_end = normalize_end(actual_start, actual_end);
+    let reported_end = normalize_end(reported_start, reported_end);
+    reported_start <= actual_start && reported_end >= actual_end
 }

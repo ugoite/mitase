@@ -10,10 +10,19 @@ use std::{
 use syu_planner::{export_context, plan};
 use syu_project_model::{ChangeBaseline, GitRef};
 use syu_spec_model::RepoPath;
-use syu_validation::{ChangeStatus, ChangedFile, ChangedRange, ValidationContext, validate};
+use syu_validation::{
+    ChangeStatus, ChangedFile, ChangedRange, PlanValidationMode, ValidationContext, validate,
+};
 use syu_work_model::{WorkPlan, WorkRequest};
 use syu_workbench_server::project as project_workbench;
 use syu_workspace::SpecWorkspace;
+
+struct ValidationInputs {
+    changed_files: Option<Vec<ChangedFile>>,
+    reported_changed_files: Option<Vec<ChangedFile>>,
+    change_base_revision: Option<String>,
+    plan_mode: PlanValidationMode,
+}
 
 #[derive(Debug, Parser)]
 #[command(name="syu", version=env!("SYU_GIT_VERSION"), about="Exact specification work planning and validation")]
@@ -114,17 +123,17 @@ pub fn run() -> Result<i32> {
 fn run_validate(args: ValidateArgs) -> Result<i32> {
     let workspace = SpecWorkspace::load(&args.workspace)?;
     let index = workspace.index()?;
-    let needs_revision = args.range.is_some()
-        || args.baseline.is_some()
-        || workspace.config.validation.changed.baseline.is_some()
-        || args.plan.is_some();
-    let revision = needs_revision
-        .then(|| revision(&workspace.root))
-        .transpose()?;
     let plan = args
         .plan
         .as_ref()
         .map(|path| read_yaml::<WorkPlan>(path))
+        .transpose()?;
+    let needs_revision = args.range.is_some()
+        || args.baseline.is_some()
+        || workspace.config.validation.changed.baseline.is_some()
+        || plan.is_some();
+    let revision = needs_revision
+        .then(|| revision(&workspace.root))
         .transpose()?;
     let selected = match (&plan, &args.slice) {
         (Some(p), Some(id)) => Some(
@@ -136,16 +145,19 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
         (None, Some(_)) => bail!("--slice requires --plan"),
         _ => None,
     };
-    let changed = changed_files_for_validation(&workspace, &args)?;
+    let validation_inputs = validation_inputs_for_cli(&workspace, &args, plan.as_ref())?;
     let result = validate(&ValidationContext {
         config: &workspace.config,
         workspace: &workspace,
         index: &index,
-        changed_files: changed.as_deref(),
+        changed_files: validation_inputs.changed_files.as_deref(),
+        reported_changed_files: validation_inputs.reported_changed_files.as_deref(),
         work_plan: plan.as_ref(),
         selected_slice: selected,
+        plan_mode: validation_inputs.plan_mode,
         preset: workspace.config.validation.preset,
         revision: revision.as_deref(),
+        change_base_revision: validation_inputs.change_base_revision.as_deref(),
     });
     match args.format {
         Format::Json => println!("{}", serde_json::to_string_pretty(&result)?),
@@ -171,6 +183,7 @@ fn run_work(args: WorkArgs) -> Result<i32> {
             let workspace = SpecWorkspace::load(workspace)?;
             let index = workspace.index()?;
             let request: WorkRequest = read_yaml(&request)?;
+            ensure_clean_plan_workspace(&workspace)?;
             let plan = plan(&request, &workspace, &index, &revision(&workspace.root)?)?;
             write_yaml(&out, &plan)?;
             println!("wrote {} ({:?})", out.display(), plan.status);
@@ -285,6 +298,58 @@ fn changed_files_for_validation(
     Ok(None)
 }
 
+fn validation_inputs_for_cli(
+    workspace: &SpecWorkspace,
+    args: &ValidateArgs,
+    plan: Option<&WorkPlan>,
+) -> Result<ValidationInputs> {
+    let reported_changed_files = changed_files_for_validation(workspace, args)?;
+    if let Some(plan) = plan {
+        let actual_changes = changed_files_against_revision(&workspace.root, &plan.basis.revision)?
+            .into_iter()
+            .filter(|file| governed_change(workspace, file))
+            .collect::<Vec<_>>();
+        let plan_mode = if actual_changes.is_empty() {
+            PlanValidationMode::PreState
+        } else {
+            PlanValidationMode::PostState
+        };
+        return Ok(ValidationInputs {
+            changed_files: (!actual_changes.is_empty()).then_some(actual_changes),
+            reported_changed_files,
+            change_base_revision: Some(plan.basis.revision.clone()),
+            plan_mode,
+        });
+    }
+    let change_base_revision = if let Some(range) = &args.range {
+        Some(change_base_revision_for_range(workspace, range)?)
+    } else if let Some(baseline) = &args.baseline {
+        Some(base_revision_from_baseline(workspace, &parse_cli_baseline(baseline)?)?)
+    } else if let Some(baseline) = &workspace.config.validation.changed.baseline {
+        Some(base_revision_from_baseline(workspace, baseline)?)
+    } else {
+        None
+    };
+    Ok(ValidationInputs {
+        changed_files: reported_changed_files,
+        reported_changed_files: None,
+        change_base_revision,
+        plan_mode: PlanValidationMode::PreState,
+    })
+}
+
+fn governed_change(workspace: &SpecWorkspace, file: &ChangedFile) -> bool {
+    file.old_path
+        .iter()
+        .chain(file.new_path.iter())
+        .any(|path| {
+            path.as_path() == Path::new("syu.yaml")
+                || workspace.path_is_spec(path.as_path())
+                || (workspace.path_is_artifact(path.as_path())
+                    && !workspace.path_is_excluded(path.as_path()))
+        })
+}
+
 fn parse_cli_baseline(value: &str) -> Result<ChangeBaseline> {
     if value == "parent" {
         return Ok(ChangeBaseline::Parent);
@@ -310,16 +375,90 @@ fn range_from_baseline(root: &Path, baseline: &ChangeBaseline) -> Result<String>
     }
 }
 
+fn base_revision_from_baseline(workspace: &SpecWorkspace, baseline: &ChangeBaseline) -> Result<String> {
+    match baseline {
+        ChangeBaseline::MergeBase { against } => merge_base(&workspace.root, &against.0),
+        ChangeBaseline::Revision { revision } => Ok(revision.0.clone()),
+        ChangeBaseline::Parent => revision_parent(&workspace.root),
+    }
+}
+
+fn change_base_revision_for_range(workspace: &SpecWorkspace, range: &str) -> Result<String> {
+    if let Some((left, right)) = range.split_once("...") {
+        let right = if right.is_empty() { "HEAD" } else { right };
+        return merge_base_pair(&workspace.root, left, right);
+    }
+    if let Some((left, _)) = range.split_once("..") {
+        return Ok(left.to_string());
+    }
+    Ok(range.to_string())
+}
+
 fn merge_base(root: &Path, against: &str) -> Result<String> {
+    merge_base_pair(root, "HEAD", against)
+}
+
+fn merge_base_pair(root: &Path, left: &str, right: &str) -> Result<String> {
     let output = Command::new("git")
         .args(["-C"])
         .arg(root)
-        .args(["merge-base", "HEAD", against])
+        .args(["merge-base", left, right])
         .output()?;
     if !output.status.success() {
-        bail!("git merge-base HEAD {against} failed");
+        bail!("git merge-base {left} {right} failed");
     }
     Ok(String::from_utf8(output.stdout)?.trim().into())
+}
+
+fn revision_parent(root: &Path) -> Result<String> {
+    let output = Command::new("git")
+        .args(["-C"])
+        .arg(root)
+        .args(["rev-parse", "HEAD^"])
+        .output()?;
+    if !output.status.success() {
+        bail!("git rev-parse HEAD^ failed");
+    }
+    Ok(String::from_utf8(output.stdout)?.trim().into())
+}
+
+fn changed_files_against_revision(root: &Path, revision: &str) -> Result<Vec<ChangedFile>> {
+    let status_output = Command::new("git")
+        .args(["-C"])
+        .arg(root)
+        .args(["diff", "--name-status", "-z", "-M", "--relative", revision])
+        .output()?;
+    if !status_output.status.success() {
+        bail!("git diff --name-status {revision} failed");
+    }
+    let untracked_output = Command::new("git")
+        .args(["-C"])
+        .arg(root)
+        .args(["ls-files", "--others", "--exclude-standard", "-z"])
+        .output()?;
+    if !untracked_output.status.success() {
+        bail!("git ls-files --others failed");
+    }
+    let patch_output = Command::new("git")
+        .args(["-C"])
+        .arg(root)
+        .args([
+            "diff",
+            "-M",
+            "--relative",
+            "--unified=0",
+            "--no-color",
+            revision,
+        ])
+        .output()?;
+    if !patch_output.status.success() {
+        bail!("git diff --unified=0 {revision} failed");
+    }
+    parse_changed_files(
+        &status_output.stdout,
+        &untracked_output.stdout,
+        &String::from_utf8(patch_output.stdout)?,
+    )
 }
 
 fn changed_files(root: &Path, range: &str) -> Result<Vec<ChangedFile>> {
@@ -359,6 +498,42 @@ fn changed_files(root: &Path, range: &str) -> Result<Vec<ChangedFile>> {
         &untracked_output.stdout,
         &String::from_utf8(patch_output.stdout)?,
     )
+}
+
+fn ensure_clean_plan_workspace(workspace: &SpecWorkspace) -> Result<()> {
+    let mut args = vec![
+        "-C".to_string(),
+        workspace.root.to_string_lossy().into_owned(),
+        "status".to_string(),
+        "--porcelain".to_string(),
+        "-z".to_string(),
+        "--untracked-files=all".to_string(),
+        "--".to_string(),
+        "syu.yaml".to_string(),
+    ];
+    for root in &workspace.config.workspace.spec_roots {
+        args.push(root.to_string_lossy().into_owned());
+    }
+    for root in &workspace.config.workspace.artifact_roots {
+        args.push(root.to_string_lossy().into_owned());
+    }
+    let output = Command::new("git").args(&args).output()?;
+    if !output.status.success() {
+        bail!("git status for governed workspace roots failed");
+    }
+    if output.stdout.is_empty() {
+        return Ok(());
+    }
+    let first_dirty = output
+        .stdout
+        .split(|byte| *byte == 0)
+        .filter(|entry| !entry.is_empty())
+        .nth(1)
+        .map(|entry| String::from_utf8_lossy(entry).into_owned())
+        .unwrap_or_else(|| "governed workspace".to_string());
+    bail!(
+        "work plan requires a clean governed workspace rooted at HEAD; dirty path: {first_dirty}"
+    );
 }
 
 fn parse_changed_files(status: &[u8], untracked: &[u8], patch: &str) -> Result<Vec<ChangedFile>> {

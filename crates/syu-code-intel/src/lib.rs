@@ -461,7 +461,7 @@ fn block_from_brace(source: &str, start: usize, mode: BraceScanMode) -> Result<(
     let mut escape = false;
     let mut line_comment = false;
     let mut block_comment = false;
-    let mut heredoc: Option<String> = None;
+    let mut heredoc: Option<(String, bool)> = None;
     let mut line_end = source[..start].lines().count().max(1);
     let chars = source[start..].char_indices().collect::<Vec<_>>();
     let mut index = 0usize;
@@ -471,14 +471,20 @@ fn block_from_brace(source: &str, start: usize, mode: BraceScanMode) -> Result<(
         if ch == '\n' {
             line_end += 1;
             line_comment = false;
-            if let Some(marker) = heredoc.as_ref() {
+            if let Some((marker, strip_tabs)) = heredoc.as_ref() {
                 let line_start = offset + ch.len_utf8();
-                let line_end_offset = chars
-                    .get(index + 1)
-                    .map(|(next_offset, _)| *next_offset)
+                let remainder = &source[start + line_start..];
+                let line_end_offset = remainder
+                    .find('\n')
+                    .map(|next_newline| line_start + next_newline)
                     .unwrap_or(source[start..].len());
                 let next_line = &source[start + line_start..start + line_end_offset];
-                if next_line.trim_end() == marker {
+                let candidate = if *strip_tabs {
+                    next_line.trim_end().trim_start_matches('\t')
+                } else {
+                    next_line.trim_end()
+                };
+                if candidate == marker {
                     heredoc = None;
                 }
             }
@@ -548,7 +554,9 @@ fn block_from_brace(source: &str, start: usize, mode: BraceScanMode) -> Result<(
             {
                 if next == Some('<') {
                     let mut marker_start = index + 2;
+                    let mut strip_tabs = false;
                     if chars.get(marker_start).map(|(_, value)| *value) == Some('-') {
+                        strip_tabs = true;
                         marker_start += 1;
                     }
                     while chars
@@ -572,8 +580,14 @@ fn block_from_brace(source: &str, start: usize, mode: BraceScanMode) -> Result<(
                             .get(marker_end)
                             .map(|(value, _)| *value)
                             .unwrap_or(source[start..].len());
-                        heredoc =
-                            Some(source[start + start_offset..start + end_offset].to_string());
+                        let mut marker =
+                            source[start + start_offset..start + end_offset].to_string();
+                        if (marker.starts_with('\'') && marker.ends_with('\''))
+                            || (marker.starts_with('"') && marker.ends_with('"'))
+                        {
+                            marker = marker[1..marker.len() - 1].to_string();
+                        }
+                        heredoc = Some((marker, strip_tabs));
                     }
                 }
             }
@@ -698,6 +712,30 @@ mod tests {
         let r = resolve_symbol(
             "shell",
             "run_task() {\n  cat <<'EOF'\n}\nEOF\n  echo done\n}\n",
+            "run_task",
+        )
+        .unwrap();
+        assert!(r.excerpt.contains("echo done"));
+        assert_eq!(r.line_end, 6);
+    }
+
+    #[test]
+    fn shell_definition_handles_quoted_heredoc_and_following_function() {
+        let r = resolve_symbol(
+            "shell",
+            "run_task() {\n  cat <<'EOF'\n}\nEOF\n}\n\nanother_function() {\n  echo later\n}\n",
+            "run_task",
+        )
+        .unwrap();
+        assert!(!r.excerpt.contains("another_function"));
+        assert_eq!(r.line_end, 5);
+    }
+
+    #[test]
+    fn shell_definition_handles_tab_stripped_heredoc_markers() {
+        let r = resolve_symbol(
+            "shell",
+            "run_task() {\n  cat <<-EOF\n\t}\n\tEOF\n  echo done\n}\n",
             "run_task",
         )
         .unwrap();

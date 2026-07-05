@@ -3,7 +3,7 @@ use anyhow::Result;
 use serde::Serialize;
 use syu_diagnostics::ValidationResult;
 use syu_planner::plan;
-use syu_validation::{ValidationContext, validate};
+use syu_validation::{PlanValidationMode, ValidationContext, validate};
 use syu_work_model::{WorkPlan, WorkRequest};
 use syu_workspace::SpecWorkspace;
 
@@ -27,10 +27,13 @@ pub fn project(
         workspace,
         index: &index,
         changed_files: None,
+        reported_changed_files: None,
         work_plan: plan.as_ref(),
         selected_slice: None,
+        plan_mode: PlanValidationMode::PreState,
         preset: workspace.config.validation.preset,
         revision: Some(revision),
+        change_base_revision: None,
     });
     Ok(WorkspaceProjection { plan, validation })
 }

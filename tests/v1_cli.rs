@@ -858,6 +858,185 @@ fn modify_plan_rejects_same_file_sibling_change_outside_scope() {
 }
 
 #[test]
+fn modify_plan_does_not_allow_head_head_to_hide_scope_violations() {
+    let temp = tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("spec")).unwrap();
+    fs::create_dir_all(temp.path().join("src")).unwrap();
+    fs::create_dir_all(temp.path().join("tests")).unwrap();
+    fs::write(
+        temp.path().join("syu.yaml"),
+        concat!(
+            "schema: syu/config/v1\n",
+            "workspace:\n",
+            "  spec_roots: [spec]\n",
+            "  artifact_roots: [src, tests]\n",
+            "  excludes: []\n",
+            "profiles: { active: [], custom: {} }\n",
+            "validation:\n",
+            "  preset: standard\n",
+            "  deny_warnings: false\n",
+            "  rules: {}\n",
+            "  changed:\n",
+            "    require_owned_changes: false\n",
+            "work:\n",
+            "  slicing:\n",
+            "    max_editable_files: 2\n",
+            "    max_editable_symbols: 2\n",
+            "    max_verification_targets: 1\n",
+            "    max_readonly_targets: 1\n",
+            "    max_total_bytes: 4096\n",
+            "  context:\n",
+            "    include_parent_principles: false\n",
+            "    include_parent_rules: false\n",
+            "adapters: { enabled: [rust] }\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/foundation.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: philosophies\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "philosophies:\n",
+            "  - id: PHIL-SAMPLE-BYPASS\n",
+            "    title: Sample\n",
+            "    summary: Sample philosophy.\n",
+            "    principles:\n",
+            "      - { id: governed, statement: Keep modifications governed., applies_to: [product] }\n",
+            "    bindings: []\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/policy.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: policies\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "policies:\n",
+            "  - id: POL-SAMPLE-BYPASS\n",
+            "    title: Sample\n",
+            "    summary: Sample policy.\n",
+            "    description: Sample policy.\n",
+            "    rules:\n",
+            "      - id: governed\n",
+            "        level: should\n",
+            "        statement: Keep modifications governed.\n",
+            "        governed_by: [PHIL-SAMPLE-BYPASS#principle.governed]\n",
+            "    bindings: []\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/requirement.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: requirements\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "requirements:\n",
+            "  - id: REQ-SAMPLE-BYPASS\n",
+            "    title: Sample\n",
+            "    description: Sample requirement.\n",
+            "    priority: medium\n",
+            "    status: implemented\n",
+            "    criteria:\n",
+            "      - id: change\n",
+            "        kind: behavior\n",
+            "        statement: Modify the governed behavior.\n",
+            "        governed_by: [POL-SAMPLE-BYPASS#rule.governed]\n",
+            "    bindings:\n",
+            "      - id: verify\n",
+            "        role: verification\n",
+            "        facet: verification\n",
+            "        responsibility: Verify the modified behavior.\n",
+            "        targets:\n",
+            "          - { id: case, adapter: rust, path: tests/check.rs, selector: { kind: symbol, names: [check_behavior] } }\n",
+            "        verifies: [REQ-SAMPLE-BYPASS#criterion.change]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/feature.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: features\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "features:\n",
+            "  - id: FEAT-SAMPLE-BYPASS\n",
+            "    title: Sample\n",
+            "    summary: Modify a function body.\n",
+            "    status: implemented\n",
+            "    bindings:\n",
+            "      - id: app\n",
+            "        role: implementation\n",
+            "        facet: backend\n",
+            "        responsibility: Modify the function body.\n",
+            "        targets:\n",
+            "          - { id: app, adapter: rust, path: src/app.rs, selector: { kind: symbol, names: [governed_behavior] } }\n",
+            "        satisfies: [REQ-SAMPLE-BYPASS#criterion.change]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("src/app.rs"),
+        "fn governed_behavior() {\n    let value = 1;\n    assert_eq!(value, 1);\n}\n\nfn sibling_behavior() {\n    assert_eq!(2, 2);\n}\n",
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("tests/check.rs"),
+        "fn check_behavior() {}\n",
+    )
+    .unwrap();
+    init_workspace_repo(temp.path());
+    let request = temp.path().join("work.yaml");
+    let plan = temp.path().join("plan.yaml");
+    fs::write(
+        &request,
+        concat!(
+            "schema: syu/work-request/v1\n",
+            "id: WORK-BYPASS-001\n",
+            "summary: Modify the governed target.\n",
+            "operation: modify\n",
+            "seeds: [REQ-SAMPLE-BYPASS#criterion.change]\n",
+            "constraints: { include_facets: [], exclude_paths: [], max_slices: 2 }\n",
+        ),
+    )
+    .unwrap();
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["work", "plan", "--request"])
+        .arg(&request)
+        .args(["--out"])
+        .arg(&plan)
+        .args(["--workspace"])
+        .arg(temp.path())
+        .assert()
+        .success();
+    fs::write(
+        temp.path().join("src/app.rs"),
+        "fn governed_behavior() {\n    let value = 1;\n    assert_eq!(value, 1);\n}\n\nfn sibling_behavior() {\n    let sibling = 3;\n    assert_eq!(sibling, 3);\n}\n",
+    )
+    .unwrap();
+    let output = Command::cargo_bin("syu")
+        .unwrap()
+        .args(["validate"])
+        .arg(temp.path())
+        .args(["--plan"])
+        .arg(&plan)
+        .args(["--range", "HEAD..HEAD"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("reported range does not cover all actual post-state changes"));
+}
+
+#[test]
 fn add_plan_supports_missing_declared_target_and_validates_after_creation() {
     let temp = tempdir().unwrap();
     fs::create_dir_all(temp.path().join("spec")).unwrap();
@@ -1681,6 +1860,294 @@ fn oversized_slice_is_split_deterministically() {
             .assert()
             .success();
     }
+}
+
+#[test]
+fn post_state_multi_slice_validation_requires_selected_slice() {
+    let temp = tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("spec")).unwrap();
+    fs::create_dir_all(temp.path().join("src")).unwrap();
+    fs::create_dir_all(temp.path().join("tests")).unwrap();
+    fs::write(
+        temp.path().join("syu.yaml"),
+        concat!(
+            "schema: syu/config/v1\n",
+            "workspace:\n",
+            "  spec_roots: [spec]\n",
+            "  artifact_roots: [src, tests]\n",
+            "  excludes: []\n",
+            "profiles: { active: [], custom: {} }\n",
+            "validation:\n",
+            "  preset: standard\n",
+            "  deny_warnings: false\n",
+            "  rules: {}\n",
+            "  changed:\n",
+            "    require_owned_changes: false\n",
+            "work:\n",
+            "  slicing:\n",
+            "    max_editable_files: 1\n",
+            "    max_editable_symbols: 1\n",
+            "    max_verification_targets: 1\n",
+            "    max_readonly_targets: 1\n",
+            "    max_total_bytes: 4096\n",
+            "  context:\n",
+            "    include_parent_principles: false\n",
+            "    include_parent_rules: false\n",
+            "adapters: { enabled: [rust] }\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/foundation.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: philosophies\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "philosophies:\n",
+            "  - id: PHIL-SAMPLE-MULTI\n",
+            "    title: Sample\n",
+            "    summary: Sample philosophy.\n",
+            "    principles:\n",
+            "      - { id: governed, statement: Keep changes governed., applies_to: [product] }\n",
+            "    bindings: []\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/policy.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: policies\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "policies:\n",
+            "  - id: POL-SAMPLE-MULTI\n",
+            "    title: Sample\n",
+            "    summary: Sample policy.\n",
+            "    description: Sample policy.\n",
+            "    rules:\n",
+            "      - id: governed\n",
+            "        level: should\n",
+            "        statement: Keep changes governed.\n",
+            "        governed_by: [PHIL-SAMPLE-MULTI#principle.governed]\n",
+            "    bindings: []\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/requirement.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: requirements\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "requirements:\n",
+            "  - id: REQ-SAMPLE-MULTI\n",
+            "    title: Sample\n",
+            "    description: Sample requirement.\n",
+            "    priority: medium\n",
+            "    status: planned\n",
+            "    criteria:\n",
+            "      - id: multi\n",
+            "        kind: behavior\n",
+            "        statement: Keep behavior aligned across files.\n",
+            "        governed_by: [POL-SAMPLE-MULTI#rule.governed]\n",
+            "    bindings:\n",
+            "      - id: tests\n",
+            "        role: verification\n",
+            "        facet: verification\n",
+            "        responsibility: Verify the split behavior.\n",
+            "        targets:\n",
+            "          - { id: case, adapter: rust, path: tests/check.rs, selector: { kind: symbol, names: [check_behavior] } }\n",
+            "        verifies: [REQ-SAMPLE-MULTI#criterion.multi]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/feature.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: features\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "features:\n",
+            "  - id: FEAT-SAMPLE-MULTI\n",
+            "    title: Sample\n",
+            "    summary: Multi-file implementation.\n",
+            "    status: implemented\n",
+            "    bindings:\n",
+            "      - id: app\n",
+            "        role: implementation\n",
+            "        facet: backend\n",
+            "        responsibility: Update both files.\n",
+            "        targets:\n",
+            "          - { id: alpha, adapter: rust, path: src/a.rs, selector: { kind: symbol, names: [alpha] } }\n",
+            "          - { id: beta, adapter: rust, path: src/b.rs, selector: { kind: symbol, names: [beta] } }\n",
+            "        satisfies: [REQ-SAMPLE-MULTI#criterion.multi]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(temp.path().join("src/a.rs"), "fn alpha() {}\n").unwrap();
+    fs::write(temp.path().join("src/b.rs"), "fn beta() {}\n").unwrap();
+    fs::write(temp.path().join("tests/check.rs"), "fn check_behavior() {}\n").unwrap();
+    let request = temp.path().join("work.yaml");
+    fs::write(
+        &request,
+        concat!(
+            "schema: syu/work-request/v1\n",
+            "id: WORK-MULTI-001\n",
+            "summary: Split a multi-file change.\n",
+            "operation: modify\n",
+            "seeds: [REQ-SAMPLE-MULTI#criterion.multi]\n",
+            "constraints: { include_facets: [], exclude_paths: [], max_slices: 4 }\n",
+        ),
+    )
+    .unwrap();
+    init_workspace_repo(temp.path());
+    let plan = temp.path().join("plan.yaml");
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["work", "plan", "--request"])
+        .arg(&request)
+        .args(["--out"])
+        .arg(&plan)
+        .args(["--workspace"])
+        .arg(temp.path())
+        .assert()
+        .success();
+    fs::write(temp.path().join("src/a.rs"), "fn alpha() { let value = 1; }\n").unwrap();
+    let output = Command::cargo_bin("syu")
+        .unwrap()
+        .args(["validate"])
+        .arg(temp.path())
+        .args(["--plan"])
+        .arg(&plan)
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8(output.stdout)
+        .unwrap()
+        .contains("post-state validation requires --slice"));
+}
+
+#[test]
+fn work_plan_requires_clean_governed_workspace() {
+    let temp = tempdir().unwrap();
+    fs::create_dir_all(temp.path().join("spec")).unwrap();
+    fs::create_dir_all(temp.path().join("src")).unwrap();
+    fs::write(
+        temp.path().join("syu.yaml"),
+        concat!(
+            "schema: syu/config/v1\n",
+            "workspace:\n",
+            "  spec_roots: [spec]\n",
+            "  artifact_roots: [src]\n",
+            "  excludes: []\n",
+            "profiles: { active: [], custom: {} }\n",
+            "validation:\n",
+            "  preset: standard\n",
+            "  deny_warnings: false\n",
+            "  rules: {}\n",
+            "  changed:\n",
+            "    require_owned_changes: false\n",
+            "work:\n",
+            "  slicing:\n",
+            "    max_editable_files: 1\n",
+            "    max_editable_symbols: 1\n",
+            "    max_verification_targets: 1\n",
+            "    max_readonly_targets: 1\n",
+            "    max_total_bytes: 4096\n",
+            "  context:\n",
+            "    include_parent_principles: false\n",
+            "    include_parent_rules: false\n",
+            "adapters: { enabled: [rust] }\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/requirement.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: requirements\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "requirements:\n",
+            "  - id: REQ-SAMPLE-CLEAN\n",
+            "    title: Sample\n",
+            "    description: Sample requirement.\n",
+            "    priority: medium\n",
+            "    status: implemented\n",
+            "    criteria:\n",
+            "      - id: change\n",
+            "        kind: behavior\n",
+            "        statement: Keep behavior aligned.\n",
+            "        governed_by: []\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        temp.path().join("spec/feature.yaml"),
+        concat!(
+            "schema: syu/spec/v1\n",
+            "kind: features\n",
+            "namespace: sample\n",
+            "category: Sample\n",
+            "features:\n",
+            "  - id: FEAT-SAMPLE-CLEAN\n",
+            "    title: Sample\n",
+            "    summary: Sample feature.\n",
+            "    status: implemented\n",
+            "    bindings:\n",
+            "      - id: app\n",
+            "        role: implementation\n",
+            "        facet: backend\n",
+            "        responsibility: Update the function body.\n",
+            "        targets:\n",
+            "          - { id: app, adapter: rust, path: src/app.rs, selector: { kind: symbol, names: [app] } }\n",
+            "        satisfies: [REQ-SAMPLE-CLEAN#criterion.change]\n",
+        ),
+    )
+    .unwrap();
+    fs::write(temp.path().join("src/app.rs"), "fn app() {}\n").unwrap();
+    let request = temp.path().join("work.yaml");
+    fs::write(
+        &request,
+        concat!(
+            "schema: syu/work-request/v1\n",
+            "id: WORK-CLEAN-001\n",
+            "summary: Plan from a clean workspace.\n",
+            "operation: modify\n",
+            "seeds: [REQ-SAMPLE-CLEAN#criterion.change]\n",
+            "constraints: { include_facets: [], exclude_paths: [], max_slices: 1 }\n",
+        ),
+    )
+    .unwrap();
+    init_workspace_repo(temp.path());
+    fs::write(
+        temp.path().join("spec/requirement.yaml"),
+        fs::read_to_string(temp.path().join("spec/requirement.yaml"))
+            .unwrap()
+            .replace("Keep behavior aligned.", "Changed before planning."),
+    )
+    .unwrap();
+    let output = Command::cargo_bin("syu")
+        .unwrap()
+        .args(["work", "plan", "--request"])
+        .arg(&request)
+        .args(["--out"])
+        .arg(temp.path().join("plan.yaml"))
+        .args(["--workspace"])
+        .arg(temp.path())
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stderr.contains("clean governed workspace")
+            || stdout.contains("clean governed workspace")
+    );
 }
 
 #[test]
