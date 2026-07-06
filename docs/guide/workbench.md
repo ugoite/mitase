@@ -10,7 +10,7 @@ Start it with a request:
 syu workbench serve --workspace . --request request.yaml
 ```
 
-The default address is `http://127.0.0.1:7737`. Use `--host` and `--port` to
+The default address is `http://127.0.0.1:7737`. Use `--bind` and `--port` to
 change the listener. `syu workbench project` remains available for JSON/YAML
 projection debugging.
 

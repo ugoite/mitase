@@ -61,6 +61,10 @@ struct WorkArgs {
     command: WorkCommand,
 }
 #[derive(Debug, Args)]
+#[command(
+    about = "Run the Workbench server or print its canonical projection",
+    after_help = "Serve options: --bind <IP> --port <PORT> --allow-remote-bind --show-log"
+)]
 struct WorkbenchArgs {
     #[command(subcommand)]
     command: WorkbenchCommand,
@@ -107,9 +111,13 @@ enum WorkbenchCommand {
         #[arg(long)]
         request: Option<PathBuf>,
         #[arg(long, default_value = "127.0.0.1")]
-        host: IpAddr,
+        bind: IpAddr,
         #[arg(long, default_value_t = 7737)]
         port: u16,
+        #[arg(long)]
+        allow_remote_bind: bool,
+        #[arg(long)]
+        show_log: bool,
     },
 }
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -267,9 +275,14 @@ fn run_workbench(args: WorkbenchArgs) -> Result<i32> {
         WorkbenchCommand::Serve {
             workspace,
             request,
-            host,
+            bind,
             port,
+            allow_remote_bind,
+            show_log,
         } => {
+            if !bind.is_loopback() && !allow_remote_bind {
+                bail!("remote --bind requires --allow-remote-bind");
+            }
             let workspace = SpecWorkspace::load(workspace)?;
             let request = request
                 .as_ref()
@@ -290,8 +303,11 @@ fn run_workbench(args: WorkbenchArgs) -> Result<i32> {
                         }
                     }),
                 );
-                let listener = tokio::net::TcpListener::bind((host, port)).await?;
-                println!("Syu Workbench listening on http://{host}:{port}");
+                let listener = tokio::net::TcpListener::bind((bind, port)).await?;
+                println!("Syu Workbench listening on http://{bind}:{port}");
+                if show_log {
+                    println!("Workbench request logging enabled");
+                }
                 axum::serve(listener, app)
                     .with_graceful_shutdown(async {
                         let _ = tokio::signal::ctrl_c().await;
