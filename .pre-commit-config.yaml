@@ -37,19 +37,3 @@ repos:
         stages:
           - pre-push
           - manual
-      - id: syu-goal-tests
-        name: syu-goal-tests
-        entry: scripts/ci/run-goal-tests.sh
-        language: system
-        pass_filenames: false
-        files: ^(syu\.yaml|docs/syu/|docs/generated/|crates/|src/|tests/|app/|website/)
-        stages:
-          - pre-push
-          - manual
-      - id: syu-coverage-summary
-        name: syu-coverage-summary
-        entry: scripts/ci/coverage.sh summary
-        language: system
-        pass_filenames: false
-        stages:
-          - manual

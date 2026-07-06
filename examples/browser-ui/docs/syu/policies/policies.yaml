@@ -1,13 +1,35 @@
-category: Policies
-version: 1
-language: en
-
+schema: syu/spec/v1
+kind: policies
+namespace: browser-ui
+category: Browser UI example
 policies:
-  - id: POL-UI-001
-    title: Browser UI components must be traced and tested
-    summary: Demonstrate a frontend-first React workflow with traced components.
-    description: Require traced UI components to include JSDoc comments with stable IDs and corresponding tests.
-    linked_philosophies:
-      - PHIL-UI-001
-    linked_requirements:
-      - REQ-UI-001
+- id: POL-BROWSERUI-001
+  title: Browser UI example governance
+  summary: UI changes must stay connected to explicit implementation and verification
+    targets.
+  description: Keep a small TypeScript UI example traceable through v1 bindings.
+  rules:
+  - id: traceable-delivery
+    level: must
+    statement: UI changes must stay connected to explicit implementation and verification
+      targets.
+    governed_by:
+    - PHIL-BROWSERUI-001#principle.exact-ownership
+    applies_to:
+      roles:
+      - implementation
+      - verification
+      - documentation
+  bindings:
+  - id: enforcement
+    role: enforcement
+    facet: delivery
+    responsibility: Keep the example rule connected to an active owned artifact.
+    targets:
+    - id: policy-target
+      adapter: typescript
+      path: src/components/Counter.tsx
+      selector:
+        kind: file
+    enforces:
+    - POL-BROWSERUI-001#rule.traceable-delivery

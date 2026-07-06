@@ -1,0 +1,11 @@
+schema: syu/spec/v1
+kind: philosophies
+namespace: auth
+category: Authentication
+philosophies:
+  - id: PHIL-AUTH-001
+    title: Safe authentication
+    summary: Authentication failures reveal no credential details.
+    principles:
+      - { id: generic-failure, statement: Authentication failures must remain generic., applies_to: [product] }
+    bindings: []

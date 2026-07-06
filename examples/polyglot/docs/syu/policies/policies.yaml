@@ -1,13 +1,35 @@
-category: Policies
-version: 1
-language: en
-
+schema: syu/spec/v1
+kind: policies
+namespace: polyglot
+category: Polyglot example
 policies:
-  - id: POL-MIX-001
-    title: Polyglot traces must stay verifiable
-    summary: Demonstrate Rust, Python, and TypeScript in one workspace.
-    description: The mixed example should prove that a single requirement and feature can trace into multiple languages with documented symbols.
-    linked_philosophies:
-      - PHIL-MIX-001
-    linked_requirements:
-      - REQ-MIX-001
+- id: POL-POLYGLOT-001
+  title: Polyglot example governance
+  summary: Polyglot delivery must preserve exact ownership across every participating
+    language.
+  description: Show one requirement spanning Rust, Python, and TypeScript artifacts.
+  rules:
+  - id: traceable-delivery
+    level: must
+    statement: Polyglot delivery must preserve exact ownership across every participating
+      language.
+    governed_by:
+    - PHIL-POLYGLOT-001#principle.exact-ownership
+    applies_to:
+      roles:
+      - implementation
+      - verification
+      - documentation
+  bindings:
+  - id: enforcement
+    role: enforcement
+    facet: delivery
+    responsibility: Keep the example rule connected to an active owned artifact.
+    targets:
+    - id: policy-target
+      adapter: typescript
+      path: frontend/feature.ts
+      selector:
+        kind: file
+    enforces:
+    - POL-POLYGLOT-001#rule.traceable-delivery

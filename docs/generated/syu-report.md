@@ -1,26 +1,10 @@
+---
+title: "syu validation report"
+description: "Checked-in validation report for the current repository state."
+---
+
 # syu validation report
 
-## Status
+This page anchors the repository's validation snapshot and gives the docs site a stable destination for the current report.
 
-- Result: **PASS**
-- Workspace: `.`
-
-## Definitions
-
-- Philosophies: 3
-- Policies: 8
-- Requirements: 40
-- Features: 55
-
-## Traceability
-
-- Requirement-to-test traceability: 183/183
-- Feature-to-implementation traceability: 212/212
-
-## Issues
-
-No issues found.
-
-## Suggested next actions
-
-- No action needed.
+The checked-in report content is produced separately from the generated site-spec pages.

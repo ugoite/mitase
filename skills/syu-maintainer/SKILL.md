@@ -1,6 +1,6 @@
 ---
 name: syu-maintainer
-description: Maintain a syu-driven repository by updating the layered spec, preserving adjacent links, running validate/report, and refreshing generated artifacts when the spec changes.
+description: Maintain a syu-driven repository by updating the layered spec, preserving adjacent links, running active validation/workbench checks, and refreshing generated artifacts when the spec changes.
 ---
 
 # syu maintainer
@@ -22,8 +22,8 @@ Use this skill when you need to make or review changes in a repository that uses
 ## Workflow
 
 1. Inspect the current layered model before editing.
-   - Run `syu` or `syu browse .` to see counts, linked definitions, and current
-     validation errors.
+   - Run `syu validate .` or `syu workbench project --workspace . --format json`
+     to see current validation state and active projection output.
    - Read the relevant files under `docs/syu/`.
 2. When changing intent, update adjacent layers together.
    - Philosophy should link to policy.
@@ -37,18 +37,18 @@ Use this skill when you need to make or review changes in a repository that uses
    - If rule-backed errors appear, read the rule code, title, summary, and
      description before changing files.
 4. Refresh generated artifacts when relevant.
-   - Run `syu report . --output docs/generated/syu-report.md` after spec or
-     validation changes.
    - Regenerate docs derived from `docs/syu/` when spec files change.
+   - Re-run the checked-in docs freshness script when generated docs are in
+     scope.
 5. Finish by running the repository quality checks and summarizing what changed.
 
 ## Commands
 
 ```bash
 syu
-syu browse .
 syu validate .
-syu report . --output docs/generated/syu-report.md
+syu workbench project --workspace . --format json
+scripts/ci/check-generated-docs-freshness.sh
 scripts/ci/quality-gates.sh
 ```
 

@@ -247,7 +247,7 @@ def load_goal_plan() -> dict | None:
     try:
         import yaml
     except ImportError as error:
-        raise RuntimeError("PyYAML is required to read a Goal Plan artifact") from error
+        raise RuntimeError("PyYAML is required to read a work-plan artifact") from error
 
     goal_plan = yaml.safe_load(Path(goal_plan_path).read_text(encoding="utf-8"))
     if not isinstance(goal_plan, dict):
@@ -308,7 +308,7 @@ def render_text_report(
     if uncovered or outside_scope:
         lines.append("")
         lines.append(
-            "Suggested action: narrow the Goal Plan scope, update the plan, or add tests that execute the missing lines."
+            "Suggested action: narrow the work-plan scope, update the plan, or add tests that execute the missing lines."
         )
     return "\n".join(lines)
 

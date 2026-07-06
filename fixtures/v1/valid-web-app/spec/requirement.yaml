@@ -1,0 +1,23 @@
+schema: syu/spec/v1
+kind: requirements
+namespace: auth
+category: Authentication
+requirements:
+  - id: REQ-AUTH-001
+    title: Reject invalid credentials
+    description: Invalid credentials do not create a session.
+    priority: high
+    status: implemented
+    criteria:
+      - id: invalid-credentials
+        kind: security
+        statement: Invalid credentials return a generic error and create no session.
+        governed_by: [POL-AUTH-001#rule.generic-failure]
+    bindings:
+      - id: login-test
+        role: verification
+        facet: verification
+        responsibility: Prove invalid credentials create no session.
+        targets:
+          - { id: case, adapter: rust, path: tests/login.rs, selector: { kind: symbol, names: [invalid_credentials] } }
+        verifies: [REQ-AUTH-001#criterion.invalid-credentials]

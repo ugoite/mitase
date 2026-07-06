@@ -14,15 +14,20 @@ cleanup() {
 
 resolve_repo_release_tag() {
   python3 - "$repo_root/Cargo.toml" <<'PY'
-import re
 import sys
 from pathlib import Path
+import tomllib
 
-contents = Path(sys.argv[1]).read_text(encoding="utf-8")
-match = re.search(r'^version\s*=\s*"([^"]+)"\s*$', contents, re.MULTILINE)
-if not match:
+with Path(sys.argv[1]).open("rb") as handle:
+    data = tomllib.load(handle)
+package = data["package"]
+if "version" in package and isinstance(package["version"], str):
+    version = package["version"]
+elif package.get("version", {}).get("workspace") is True:
+    version = data["workspace"]["package"]["version"]
+else:
     raise SystemExit("failed to resolve version from Cargo.toml")
-print(f"v{match.group(1)}")
+print(f"v{version}")
 PY
 }
 

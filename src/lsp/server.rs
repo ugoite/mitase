@@ -179,7 +179,7 @@ mod tests {
 
     fn fixture_path(name: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/workspaces")
+            .join("fixtures/v1")
             .join(name)
     }
 
@@ -332,7 +332,7 @@ mod tests {
     fn handle_request_serializes_hover_results() {
         let tempdir = tempdir().expect("tempdir");
         let hover_file = tempdir.path().join("hover.txt");
-        fs::write(&hover_file, "REQ-TRACE-001\n").expect("hover file");
+        fs::write(&hover_file, "REQ-AUTH-001\n").expect("hover file");
 
         let mut server = LspServer::new();
         server
@@ -341,7 +341,7 @@ mod tests {
                 id: super::super::protocol::RequestId::Number(1),
                 method: "initialize".to_string(),
                 params: Some(json!({
-                    "rootUri": format!("file://{}", fixture_path("passing").display())
+                    "rootUri": format!("file://{}", fixture_path("valid-web-app").display())
                 })),
             })
             .expect("initialize response");
