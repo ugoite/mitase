@@ -59,6 +59,8 @@ pub struct WorkRequest {
 pub struct RequestedTarget {
     #[serde(rename = "ref")]
     pub reference: BoundTargetRef,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub criterion: Option<SpecAnchor>,
     pub transition: TargetTransition,
 }
 
@@ -69,6 +71,10 @@ impl RequestedTarget {
 
     pub fn transition(&self, _default: TargetTransition) -> TargetTransition {
         self.transition
+    }
+
+    pub fn criterion(&self) -> Option<&SpecAnchor> {
+        self.criterion.as_ref()
     }
 }
 

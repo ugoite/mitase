@@ -7,7 +7,9 @@ use syu_spec_model::{
     ArtifactBinding, BoundTargetRef, LocalAnchorKind, RepoPath, Selector, SpecAnchor,
 };
 use syu_work_model::*;
-use syu_workspace::{AnchorValue, SpecIndex, SpecWorkspace, resolve_target_with_adapters};
+use syu_workspace::{
+    AnchorValue, SpecIndex, SpecWorkspace, resolve_target_with_adapters, selector_supports_editable,
+};
 
 pub fn plan(
     request: &WorkRequest,
@@ -52,13 +54,27 @@ pub fn plan(
     for requested in &request.requested_targets {
         let reference = requested.reference();
         let transition = requested.transition(default_transition(request.operation));
-        if index.target(reference).is_none() && transition != TargetTransition::Add {
+        if index.target(reference).is_none() {
             return Ok(blocked_plan(
                 request,
                 workspace,
                 revision,
                 "SYU-WORK-001",
                 format!("requested target {reference} does not resolve"),
+            ));
+        }
+        if request.operation == WorkOperation::Investigate
+            && matches!(
+                transition,
+                TargetTransition::Add | TargetTransition::Modify | TargetTransition::Remove
+            )
+        {
+            return Ok(blocked_plan(
+                request,
+                workspace,
+                revision,
+                "SYU-WORK-001",
+                "investigate requests only permit run-only or readonly requested targets",
             ));
         }
     }
@@ -120,7 +136,18 @@ pub fn plan(
             }
         }
     } else {
-        let grouped = group_requested_targets(request, index)?;
+        let grouped = match group_requested_targets(request, index) {
+            Ok(grouped) => grouped,
+            Err(error) => {
+                return Ok(blocked_plan(
+                    request,
+                    workspace,
+                    revision,
+                    "SYU-WORK-001",
+                    error.to_string(),
+                ));
+            }
+        };
         for group in grouped {
             if !request.constraints.include_facets.is_empty()
                 && group.requested.iter().all(|requested| {
@@ -258,15 +285,41 @@ fn group_requested_targets(
 ) -> Result<Vec<RequestedGroup>> {
     let mut by_criterion = BTreeMap::<SpecAnchor, Vec<RequestedTarget>>::new();
     let mut standalone = Vec::new();
+    let mut normalized = Vec::new();
+    let mut seen = BTreeMap::<BoundTargetRef, RequestedTarget>::new();
     for requested in &request.requested_targets {
+        if let Some(previous) = seen.get(requested.reference()) {
+            if previous.transition == requested.transition
+                && previous.criterion == requested.criterion
+            {
+                continue;
+            }
+            bail!(
+                "conflicting requested target transitions for {}",
+                requested.reference()
+            );
+        }
+        seen.insert(requested.reference.clone(), requested.clone());
+        normalized.push(requested.clone());
+    }
+    for requested in &normalized {
         let binding = index
             .bindings
             .get(&requested.reference().binding)
             .ok_or_else(|| anyhow::anyhow!("indexed binding missing for requested target"))?;
-        let mut criteria = requested_target_criteria(binding);
-        criteria.sort();
-        criteria.dedup();
-        if let Some(criterion) = criteria.into_iter().next() {
+        let criterion = match requested.criterion() {
+            Some(criterion) => {
+                if !matches!(
+                    index.anchor(criterion),
+                    Some(syu_workspace::AnchorValue::Criterion(_))
+                ) {
+                    bail!("requested target criterion {criterion} does not resolve to a criterion");
+                }
+                Some(criterion.clone())
+            }
+            None => requested_target_criterion(binding)?,
+        };
+        if let Some(criterion) = criterion {
             by_criterion
                 .entry(criterion)
                 .or_default()
@@ -289,7 +342,7 @@ fn group_requested_targets(
     Ok(groups)
 }
 
-fn requested_target_criteria(binding: &ArtifactBinding) -> Vec<SpecAnchor> {
+fn requested_target_criterion(binding: &ArtifactBinding) -> Result<Option<SpecAnchor>> {
     let mut criteria = binding
         .satisfies
         .iter()
@@ -301,7 +354,11 @@ fn requested_target_criteria(binding: &ArtifactBinding) -> Vec<SpecAnchor> {
         .collect::<Vec<_>>();
     criteria.sort();
     criteria.dedup();
-    criteria
+    match criteria.len() {
+        0 => Ok(None),
+        1 => Ok(criteria.into_iter().next()),
+        _ => bail!("requested target relates to multiple criteria; specify a criterion"),
+    }
 }
 
 fn primary_bindings(
@@ -376,6 +433,17 @@ fn target_policy(transition: TargetTransition) -> TargetPolicy {
     }
 }
 
+fn transition_map(
+    requested_targets: &[RequestedTarget],
+) -> BTreeMap<BoundTargetRef, TargetTransition> {
+    let mut map = BTreeMap::new();
+    for requested in requested_targets {
+        map.entry(requested.reference.clone())
+            .or_insert(requested.transition);
+    }
+    map
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_implementation_slice(
     request: &WorkRequest,
@@ -423,6 +491,7 @@ fn build_implementation_slice(
         workspace,
         index,
         criterion,
+        None,
         None,
         target_policy(TargetTransition::RunOnly),
         exclude_matcher,
@@ -589,7 +658,17 @@ fn build_requested_target_slice(
     }
     let mut contracts = Vec::new();
     let mut anchors = vec![reference.binding.clone()];
-    if let Some(criterion) = requested_target_criteria(binding).into_iter().next() {
+    if let Some(criterion) = match requested_target_criterion(binding) {
+        Ok(criterion) => criterion,
+        Err(error) => {
+            blockers.push(Diagnostic::error(
+                "SYU-WORK-001",
+                error.to_string(),
+                "work-plan",
+            ));
+            None
+        }
+    } {
         anchors.push(criterion.clone());
         verification.extend(criterion_verification_targets(
             request,
@@ -597,6 +676,7 @@ fn build_requested_target_slice(
             index,
             &criterion,
             Some(requested),
+            None,
             policy,
             exclude_matcher,
             &mut blockers,
@@ -643,6 +723,7 @@ fn build_requested_criterion_slice(
     let mut blockers = vec![];
     let mut anchors = vec![criterion.clone()];
     let mut goal = request.summary.clone();
+    let requested_transitions = transition_map(requested_targets);
     for requested in requested_targets {
         let reference = requested.reference();
         let binding = index
@@ -652,6 +733,20 @@ fn build_requested_criterion_slice(
         goal = format!("{}: {}", request.summary, binding.responsibility);
         anchors.push(reference.binding.clone());
         let policy = target_policy(requested.transition(default_transition(request.operation)));
+        let planned_criterion = match requested.criterion().cloned() {
+            Some(criterion) => Some(criterion),
+            None => match requested_target_criterion(binding) {
+                Ok(criterion) => criterion,
+                Err(error) => {
+                    blockers.push(Diagnostic::error(
+                        "SYU-WORK-001",
+                        error.to_string(),
+                        "work-plan",
+                    ));
+                    None
+                }
+            },
+        };
         let planned = exact_target_plan(
             workspace,
             index,
@@ -680,6 +775,9 @@ fn build_requested_criterion_slice(
         );
         readonly.extend(more_readonly);
         contracts.extend(more_contracts);
+        if let Some(criterion_for_target) = planned_criterion {
+            anchors.push(criterion_for_target);
+        }
     }
     verification.extend(criterion_verification_targets(
         request,
@@ -687,6 +785,7 @@ fn build_requested_criterion_slice(
         index,
         criterion,
         None,
+        Some(&requested_transitions),
         target_policy(TargetTransition::RunOnly),
         exclude_matcher,
         &mut blockers,
@@ -772,6 +871,12 @@ fn finalize_requested_slice(
     mut blockers: Vec<Diagnostic>,
     criterion: Option<SpecAnchor>,
 ) -> Result<ExecutionSlice> {
+    validate_target_access_uniqueness(
+        &mut blockers,
+        editable.as_slice(),
+        verification.as_slice(),
+        readonly.as_slice(),
+    );
     dedup(&mut editable);
     dedup(&mut verification);
     dedup(&mut readonly);
@@ -848,6 +953,7 @@ fn build_verification_slice(
         index,
         criterion,
         Some(requested),
+        None,
         target_policy(requested.transition(default_transition(request.operation))),
         exclude_matcher,
         &mut blockers,
@@ -994,6 +1100,12 @@ fn finalize_slice(
     mut contracts: Vec<SpecAnchor>,
     mut blockers: Vec<Diagnostic>,
 ) -> Result<ExecutionSlice> {
+    validate_target_access_uniqueness(
+        &mut blockers,
+        editable.as_slice(),
+        verification.as_slice(),
+        readonly.as_slice(),
+    );
     if request.operation == WorkOperation::Investigate {
         for target in &mut editable {
             target.access = TargetAccessMode::Readonly;
@@ -1142,6 +1254,7 @@ fn criterion_verification_targets(
     index: &SpecIndex,
     criterion: &SpecAnchor,
     requested: Option<&RequestedTarget>,
+    requested_transitions: Option<&BTreeMap<BoundTargetRef, TargetTransition>>,
     requested_policy: TargetPolicy,
     exclude_matcher: Option<&GlobSet>,
     blockers: &mut Vec<Diagnostic>,
@@ -1161,6 +1274,12 @@ fn criterion_verification_targets(
                     binding: anchor.clone(),
                     target_id: target.id.clone(),
                 };
+                if requested_transitions
+                    .and_then(|map| map.get(&reference))
+                    .is_some()
+                {
+                    continue;
+                }
                 let requested_ref = requested.map(|value| value.reference());
                 let exact_target = requested_ref == Some(&reference);
                 let policy = if exact_target {
@@ -1364,6 +1483,21 @@ fn one_target(
                 blockers.push(d);
                 return vec![];
             }
+            if matches!(options.policy.access, TargetAccessMode::Editable)
+                && !selector_supports_editable(&target.selector)
+            {
+                let mut d = Diagnostic::error(
+                    "SYU-TARGET-004",
+                    format!(
+                        "editable target requires an exact selector: {}",
+                        target.path.display()
+                    ),
+                    target.path.to_string_lossy(),
+                );
+                d.target = Some(reference.clone());
+                blockers.push(d);
+                return vec![];
+            }
             vec![PlannedTarget {
                 reference: reference.clone(),
                 transition: options.policy.transition,
@@ -1512,6 +1646,31 @@ fn target_budget_bytes(target: &PlannedTarget) -> usize {
 fn dedup(values: &mut Vec<PlannedTarget>) {
     values.sort_by(|a, b| a.reference.cmp(&b.reference));
     values.dedup_by(|a, b| a.reference == b.reference);
+}
+
+fn validate_target_access_uniqueness(
+    blockers: &mut Vec<Diagnostic>,
+    editable: &[PlannedTarget],
+    verification: &[PlannedTarget],
+    readonly: &[PlannedTarget],
+) {
+    let mut seen = BTreeMap::<BoundTargetRef, TargetAccessMode>::new();
+    for target in editable.iter().chain(verification).chain(readonly) {
+        if let Some(access) = seen.insert(target.reference.clone(), target.access)
+            && access != target.access
+        {
+            let mut d = Diagnostic::error(
+                "SYU-WORK-001",
+                format!(
+                    "requested target appears with multiple access modes: {}",
+                    target.reference
+                ),
+                "work-plan",
+            );
+            d.target = Some(target.reference.clone());
+            blockers.push(d);
+        }
+    }
 }
 fn basis(workspace: &SpecWorkspace, revision: &str) -> PlanBasis {
     PlanBasis {
@@ -2169,6 +2328,7 @@ mod tests {
                 reference: "FEAT-TEST-001#binding.impl/target.handler-missing"
                     .parse()
                     .unwrap(),
+                criterion: None,
                 transition: TargetTransition::Add,
             }],
         };
@@ -2207,6 +2367,7 @@ mod tests {
                 reference: "FEAT-TEST-001#binding.impl/target.handler-missing"
                     .parse()
                     .unwrap(),
+                criterion: None,
                 transition: TargetTransition::Add,
             }],
         };
@@ -2243,6 +2404,7 @@ mod tests {
                 reference: "FEAT-TEST-001#binding.impl/target.handler-present"
                     .parse()
                     .unwrap(),
+                criterion: None,
                 transition: TargetTransition::RunOnly,
             }],
         };
@@ -2279,6 +2441,7 @@ mod tests {
                 reference: "FEAT-TEST-001#binding.impl/target.handler-present"
                     .parse()
                     .unwrap(),
+                criterion: None,
                 transition: TargetTransition::Readonly,
             }],
         };
@@ -2319,6 +2482,7 @@ mod tests {
                 reference: "FEAT-TEST-001#binding.impl/target.handler-missing"
                     .parse()
                     .unwrap(),
+                criterion: None,
                 transition: TargetTransition::Add,
             }],
         };

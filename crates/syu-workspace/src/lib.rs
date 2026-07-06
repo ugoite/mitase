@@ -610,6 +610,16 @@ pub fn resolve_target_with_adapters(
         excerpt_hash,
     })
 }
+
+pub fn selector_supports_editable(selector: &Selector) -> bool {
+    matches!(
+        selector,
+        Selector::File
+            | Selector::Symbol { .. }
+            | Selector::Heading { .. }
+            | Selector::Marker { .. }
+    )
+}
 fn hash_bytes(value: &[u8]) -> String {
     let mut hash = Sha256::new();
     hash.update(value);

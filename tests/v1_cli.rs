@@ -1792,11 +1792,13 @@ fn remove_plan_validates_after_target_is_deleted() {
             "        responsibility: Remove the function.\n",
             "        targets:\n",
             "          - { id: old, adapter: rust, path: src/old.rs, selector: { kind: symbol, names: [old_behavior] } }\n",
+            "          - { id: keep, adapter: rust, path: src/keep.rs, selector: { kind: symbol, names: [keep_behavior] } }\n",
             "        satisfies: [REQ-SAMPLE-REMOVE#criterion.drop]\n",
         ),
     )
     .unwrap();
     fs::write(temp.path().join("src/old.rs"), "fn old_behavior() {}\n").unwrap();
+    fs::write(temp.path().join("src/keep.rs"), "fn keep_behavior() {}\n").unwrap();
     fs::write(
         temp.path().join("tests/check.rs"),
         "fn check_removed_behavior() {}\n",
@@ -1812,7 +1814,9 @@ fn remove_plan_validates_after_target_is_deleted() {
             "id: WORK-REMOVE-001\n",
             "summary: Remove the old target.\n",
             "operation: remove\n",
-            "seeds: [REQ-SAMPLE-REMOVE#criterion.drop]\n",
+            "seeds: []\n",
+            "requested_targets:\n",
+            "  - { ref: FEAT-SAMPLE-REMOVE#binding.app/target.old, transition: remove }\n",
             "constraints: { include_facets: [], exclude_paths: [], max_slices: 2 }\n",
         ),
     )
@@ -1830,6 +1834,31 @@ fn remove_plan_validates_after_target_is_deleted() {
     let text = fs::read_to_string(&plan).unwrap();
     assert!(text.contains("lifecycle: ensure-absent"));
     fs::remove_file(temp.path().join("src/old.rs")).unwrap();
+    let output = Command::cargo_bin("syu")
+        .unwrap()
+        .args(["validate"])
+        .arg(temp.path())
+        .args(["--plan"])
+        .arg(&plan)
+        .args(["--range", "HEAD"])
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8(output.stdout)
+            .unwrap()
+            .contains("SYU-WORK-011")
+    );
+    fs::write(
+        temp.path().join("spec/feature.yaml"),
+        fs::read_to_string(temp.path().join("spec/feature.yaml"))
+            .unwrap()
+            .replace(
+                "      - { id: old, adapter: rust, path: src/old.rs, selector: { kind: symbol, names: [old_behavior] } }\n",
+                "",
+            ),
+    )
+    .unwrap();
     Command::cargo_bin("syu")
         .unwrap()
         .args(["validate"])

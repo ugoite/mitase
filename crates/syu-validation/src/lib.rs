@@ -20,10 +20,17 @@ use syu_workspace::{
 use tempfile::TempDir;
 
 #[derive(Debug, Clone, Copy)]
+pub enum OverridePolicy {
+    FixedError,
+    Suppressible,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub struct RuleMetadata {
     pub id: &'static str,
     pub title: &'static str,
     pub default_error: bool,
+    pub override_policy: OverridePolicy,
     pub presets: &'static [ValidationPreset],
 }
 macro_rules! metadata {
@@ -32,6 +39,7 @@ macro_rules! metadata {
             id: $id,
             title: $id,
             default_error: true,
+            override_policy: OverridePolicy::Suppressible,
             presets: &[
                 ValidationPreset::Standard,
                 ValidationPreset::Strict,
@@ -46,18 +54,34 @@ macro_rules! strict_metadata {
             id: $id,
             title: $id,
             default_error: true,
+            override_policy: OverridePolicy::Suppressible,
             presets: &[ValidationPreset::Strict, ValidationPreset::AgentReady],
         }
     };
 }
+macro_rules! fixed_metadata {
+    ($id:literal) => {
+        RuleMetadata {
+            id: $id,
+            title: $id,
+            default_error: true,
+            override_policy: OverridePolicy::FixedError,
+            presets: &[
+                ValidationPreset::Standard,
+                ValidationPreset::Strict,
+                ValidationPreset::AgentReady,
+            ],
+        }
+    };
+}
 pub static RULES: &[RuleMetadata] = &[
-    metadata!("SYU-SCHEMA-001"),
-    metadata!("SYU-SCHEMA-002"),
-    metadata!("SYU-ID-001"),
-    metadata!("SYU-ID-002"),
-    metadata!("SYU-ANCHOR-001"),
-    metadata!("SYU-ANCHOR-002"),
-    metadata!("SYU-ANCHOR-003"),
+    fixed_metadata!("SYU-SCHEMA-001"),
+    fixed_metadata!("SYU-SCHEMA-002"),
+    fixed_metadata!("SYU-ID-001"),
+    fixed_metadata!("SYU-ID-002"),
+    fixed_metadata!("SYU-ANCHOR-001"),
+    fixed_metadata!("SYU-ANCHOR-002"),
+    fixed_metadata!("SYU-ANCHOR-003"),
     metadata!("SYU-PHILOSOPHY-001"),
     metadata!("SYU-POLICY-001"),
     metadata!("SYU-POLICY-002"),
@@ -72,11 +96,11 @@ pub static RULES: &[RuleMetadata] = &[
     metadata!("SYU-BINDING-002"),
     metadata!("SYU-BINDING-003"),
     metadata!("SYU-BINDING-004"),
-    metadata!("SYU-TARGET-001"),
-    metadata!("SYU-TARGET-002"),
-    metadata!("SYU-TARGET-003"),
-    metadata!("SYU-TARGET-004"),
-    metadata!("SYU-TARGET-005"),
+    fixed_metadata!("SYU-TARGET-001"),
+    fixed_metadata!("SYU-TARGET-002"),
+    fixed_metadata!("SYU-TARGET-003"),
+    fixed_metadata!("SYU-TARGET-004"),
+    fixed_metadata!("SYU-TARGET-005"),
     metadata!("SYU-FACET-001"),
     metadata!("SYU-FACET-002"),
     metadata!("SYU-CONTRACT-001"),
@@ -98,16 +122,16 @@ pub static RULES: &[RuleMetadata] = &[
     strict_metadata!("SYU-CHANGE-005"),
     metadata!("SYU-WORK-001"),
     metadata!("SYU-WORK-002"),
-    metadata!("SYU-WORK-003"),
+    fixed_metadata!("SYU-WORK-003"),
     metadata!("SYU-WORK-004"),
-    metadata!("SYU-WORK-005"),
-    metadata!("SYU-WORK-006"),
-    metadata!("SYU-WORK-007"),
-    metadata!("SYU-WORK-008"),
-    metadata!("SYU-WORK-009"),
-    metadata!("SYU-WORK-010"),
-    metadata!("SYU-WORK-011"),
-    metadata!("SYU-WORK-012"),
+    fixed_metadata!("SYU-WORK-005"),
+    fixed_metadata!("SYU-WORK-006"),
+    fixed_metadata!("SYU-WORK-007"),
+    fixed_metadata!("SYU-WORK-008"),
+    fixed_metadata!("SYU-WORK-009"),
+    fixed_metadata!("SYU-WORK-010"),
+    fixed_metadata!("SYU-WORK-011"),
+    fixed_metadata!("SYU-WORK-012"),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -253,24 +277,8 @@ fn rule_metadata(rule_id: &str) -> Option<&'static RuleMetadata> {
 }
 
 fn is_fixed_error_rule(rule_id: &str) -> bool {
-    matches!(
-        rule_id,
-        "SYU-SCHEMA-001"
-            | "SYU-SCHEMA-002"
-            | "SYU-ID-001"
-            | "SYU-ID-002"
-            | "SYU-ANCHOR-001"
-            | "SYU-ANCHOR-002"
-            | "SYU-ANCHOR-003"
-            | "SYU-TARGET-001"
-            | "SYU-TARGET-002"
-            | "SYU-TARGET-003"
-            | "SYU-TARGET-004"
-            | "SYU-TARGET-005"
-            | "SYU-WORK-005"
-            | "SYU-WORK-006"
-            | "SYU-WORK-009"
-    )
+    rule_metadata(rule_id)
+        .is_some_and(|metadata| matches!(metadata.override_policy, OverridePolicy::FixedError))
 }
 fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
     let Some(files) = ctx.changed_files else {
@@ -1187,6 +1195,9 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         Some(anchor.clone()),
                     );
                 }
+                if binding.role == BindingRole::Generated && !binding.generated_from.is_empty() {
+                    validate_generated_binding(ctx, anchor, binding, out, &path);
+                }
             }
             AnchorValue::Contract(contract) => {
                 if ctx.index.target(&contract.source).is_none() {
@@ -1212,7 +1223,61 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         Some(anchor.clone()),
                     );
                 }
+                let mut seen_guarantees = BTreeSet::new();
+                for guarantee in &contract.guarantees {
+                    if !seen_guarantees.insert(guarantee) {
+                        push(
+                            out,
+                            "SYU-CONTRACT-005",
+                            format!("contract guarantee is duplicated: {guarantee}"),
+                            &path,
+                            Some(anchor.clone()),
+                        );
+                        continue;
+                    }
+                    match ctx.index.anchor(guarantee) {
+                        None => push(
+                            out,
+                            "SYU-CONTRACT-005",
+                            format!("contract guarantee target does not exist: {guarantee}"),
+                            &path,
+                            Some(anchor.clone()),
+                        ),
+                        Some(AnchorValue::Criterion(_)) | Some(AnchorValue::Rule(_)) => {}
+                        Some(_) => push(
+                            out,
+                            "SYU-CONTRACT-005",
+                            format!(
+                                "contract guarantee must reference a rule or criterion: {guarantee}"
+                            ),
+                            &path,
+                            Some(anchor.clone()),
+                        ),
+                    }
+                }
+                let mut seen_participants = BTreeSet::new();
                 for p in &contract.participants {
+                    if p.role.trim().is_empty() {
+                        push(
+                            out,
+                            "SYU-CONTRACT-007",
+                            "contract participant role must not be empty",
+                            &path,
+                            Some(anchor.clone()),
+                        );
+                    }
+                    if !seen_participants.insert((p.binding.clone(), p.role.clone())) {
+                        push(
+                            out,
+                            "SYU-CONTRACT-007",
+                            format!(
+                                "contract participant is duplicated: {} {}",
+                                p.binding, p.role
+                            ),
+                            &path,
+                            Some(anchor.clone()),
+                        );
+                    }
                     if !ctx.index.bindings.contains_key(&p.binding) {
                         push(
                             out,
@@ -1227,6 +1292,98 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
         }
     }
 }
+
+fn validate_generated_binding(
+    ctx: &ValidationContext<'_>,
+    anchor: &SpecAnchor,
+    binding: &syu_spec_model::ArtifactBinding,
+    out: &mut Vec<Diagnostic>,
+    path: &str,
+) {
+    let mut seen = BTreeSet::<BoundTargetRef>::new();
+    for generated in &binding.generated_from {
+        if generated.binding == *anchor {
+            push(
+                out,
+                "SYU-GENERATED-002",
+                format!("generated binding cannot reference itself: {generated}"),
+                path,
+                Some(anchor.clone()),
+            );
+            continue;
+        }
+        if !seen.insert(generated.clone()) {
+            push(
+                out,
+                "SYU-GENERATED-002",
+                format!("generated_from target is duplicated: {generated}"),
+                path,
+                Some(anchor.clone()),
+            );
+        }
+        if ctx.index.target(generated).is_none() {
+            push(
+                out,
+                "SYU-GENERATED-002",
+                format!("generated_from target does not exist: {generated}"),
+                path,
+                Some(anchor.clone()),
+            );
+        }
+    }
+    if generated_binding_has_cycle(ctx, anchor, &mut BTreeSet::new(), &mut BTreeSet::new()) {
+        push(
+            out,
+            "SYU-GENERATED-002",
+            "generated binding contains a generated_from cycle",
+            path,
+            Some(anchor.clone()),
+        );
+    }
+}
+
+fn generated_binding_has_cycle(
+    ctx: &ValidationContext<'_>,
+    anchor: &SpecAnchor,
+    visiting: &mut BTreeSet<SpecAnchor>,
+    visited: &mut BTreeSet<SpecAnchor>,
+) -> bool {
+    if !visiting.insert(anchor.clone()) {
+        return true;
+    }
+    if !visited.insert(anchor.clone()) {
+        visiting.remove(anchor);
+        return false;
+    }
+    let Some(binding) = ctx.index.bindings.get(anchor) else {
+        visiting.remove(anchor);
+        return false;
+    };
+    if binding.role != BindingRole::Generated {
+        visiting.remove(anchor);
+        return false;
+    }
+    let cycle = binding.generated_from.iter().any(|reference| {
+        reference.binding == *anchor
+            || ctx
+                .index
+                .bindings
+                .get(&reference.binding)
+                .is_some_and(|next| {
+                    next.role == BindingRole::Generated
+                        && (visiting.contains(&reference.binding)
+                            || generated_binding_has_cycle(
+                                ctx,
+                                &reference.binding,
+                                visiting,
+                                visited,
+                            ))
+                })
+    });
+    visiting.remove(anchor);
+    cycle
+}
+
 fn check_kind(
     ctx: &ValidationContext<'_>,
     out: &mut Vec<Diagnostic>,
@@ -1458,6 +1615,18 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 binding: anchor.clone(),
                 target_id: target.id.clone(),
             };
+            if ctx.plan_mode == PlanValidationMode::PostState
+                && allowed_absent_targets.contains(&target_ref)
+                && ctx.index.target(&target_ref).is_some()
+            {
+                push(
+                    out,
+                    "SYU-WORK-011",
+                    format!("removed target declaration still exists: {target_ref}"),
+                    target.path.to_string_lossy(),
+                    Some(anchor.clone()),
+                );
+            }
             if let Err(e) = resolve_target_with_adapters(
                 &ctx.workspace.root,
                 target,
@@ -1871,8 +2040,16 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                         );
                     }
                 }
-                syu_work_model::CompletionCheck::TargetAbsent { target }
-                    if ctx
+                syu_work_model::CompletionCheck::TargetAbsent { target } => {
+                    if allow_post_state && ctx.index.target(target).is_some() {
+                        push(
+                            out,
+                            "SYU-WORK-011",
+                            format!("removed target declaration still exists: {target}"),
+                            "work-plan",
+                            Some(target.binding.clone()),
+                        );
+                    } else if ctx
                         .index
                         .target(target)
                         .and_then(|declared| {
@@ -1883,15 +2060,16 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                             )
                             .ok()
                         })
-                        .is_some() =>
-                {
-                    push(
-                        out,
-                        "SYU-WORK-011",
-                        format!("expected removed target still exists: {target}"),
-                        "work-plan",
-                        Some(target.binding.clone()),
-                    );
+                        .is_some()
+                    {
+                        push(
+                            out,
+                            "SYU-WORK-011",
+                            format!("expected removed target still exists: {target}"),
+                            "work-plan",
+                            Some(target.binding.clone()),
+                        );
+                    }
                 }
                 _ => {}
             }
