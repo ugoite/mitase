@@ -1,11 +1,23 @@
-version: 0.0.1-alpha.8
-spec:
-  root: docs/syu
-validate:
-  default_fix: false
-  allow_planned: true
-runtimes:
-  python:
-    command: auto
-  node:
-    command: auto
+schema: syu/config/v1
+workspace:
+  spec_roots: [docs/syu]
+  artifact_roots: [python]
+  excludes: []
+profiles: { active: [], custom: {} }
+validation:
+  preset: standard
+  deny_warnings: false
+  rules: {}
+  changed:
+    require_owned_changes: false
+work:
+  slicing:
+    max_editable_files: 4
+    max_editable_symbols: 8
+    max_verification_targets: 4
+    max_readonly_targets: 8
+    max_total_bytes: 16384
+  context:
+    include_parent_principles: false
+    include_parent_rules: false
+adapters: { enabled: [python, markdown, yaml, json] }

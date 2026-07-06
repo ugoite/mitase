@@ -1,60 +1,68 @@
 [workspace]
 members = [
-    ".",
-    "crates/syu-actions",
-    "crates/syu-code-intel",
-    "crates/syu-app-ui",
-    "crates/syu-desktop",
-    "crates/syu-domain",
-    "crates/syu-workbench-server",
-    "crates/syu-workbench",
-    "crates/syu-task-model",
+  ".",
+  "crates/syu-spec-model",
+  "crates/syu-project-model",
+  "crates/syu-work-model",
+  "crates/syu-diagnostics",
+  "crates/syu-workspace",
+  "crates/syu-validation",
+  "crates/syu-planner",
+  "crates/syu-workbench-server",
+  "crates/syu-app-ui",
+  "crates/syu-code-intel",
 ]
 resolver = "3"
 
-[package]
-name = "syu"
-version = "0.0.1-alpha.8"
+[workspace.package]
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
-build = "build.rs"
-description = "Specification-driven development helper CLI"
 license = "MIT"
-readme = "README.md"
-keywords = ["cli", "specification", "yaml", "testing", "traceability"]
-categories = ["command-line-utilities", "development-tools"]
 
-[dependencies]
+[workspace.dependencies]
 anyhow = "1.0.100"
-axum = "0.8.9"
 clap = { version = "4.6.1", features = ["derive"] }
-clap_complete = "4.6.5"
 globset = "0.4.15"
-include_dir = "0.7.4"
-regex = "1.12.2"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 serde_yaml = "0.9.34"
-syu-domain = { path = "crates/syu-domain" }
-syu-code-intel = { path = "crates/syu-code-intel" }
-syu-task-model = { path = "crates/syu-task-model" }
-syu-core = { path = "crates/syu-core" }
-syu-workbench-server = { path = "crates/syu-workbench-server" }
-syn = { version = "2.0.117", features = ["full"] }
-tokio = { version = "1.52.3", features = ["macros", "net", "rt-multi-thread", "signal"] }
-tree-sitter = "0.26.9"
-tree-sitter-typescript = "0.23.2"
+sha2 = "0.10.9"
+tempfile = "3.23.0"
+
+[package]
+name = "syu"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+build = "build.rs"
+description = "Specification-driven work planning and validation"
+
+[dependencies]
+anyhow.workspace = true
+axum = "0.8.9"
+clap.workspace = true
+regex = "1.12.2"
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
 url = "2.5.7"
+syu-diagnostics = { path = "crates/syu-diagnostics" }
+syu-app-ui = { path = "crates/syu-app-ui" }
+syu-code-intel = { path = "crates/syu-code-intel" }
+syu-planner = { path = "crates/syu-planner" }
+syu-project-model = { path = "crates/syu-project-model" }
+syu-spec-model = { path = "crates/syu-spec-model" }
+syu-validation = { path = "crates/syu-validation" }
+syu-work-model = { path = "crates/syu-work-model" }
+syu-workbench-server = { path = "crates/syu-workbench-server" }
+syu-workspace = { path = "crates/syu-workspace" }
+tokio = { version = "1.52.3", features = ["net", "rt-multi-thread", "signal"] }
 
 [dev-dependencies]
 assert_cmd = "2.2.2"
-dioxus = { version = "0.7.9", features = ["asset", "html", "macro"] }
-dioxus-ssr = "0.7.9"
-libc = "0.2.186"
-tempfile = "3.23.0"
-tower = { version = "0.5.2", features = ["util"] }
-syu-app-ui = { path = "crates/syu-app-ui" }
-syu-workbench = { path = "crates/syu-workbench" }
+tempfile.workspace = true
 
 [build-dependencies]
-serde_json = "1.0.150"
+serde_json.workspace = true

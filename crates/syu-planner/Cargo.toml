@@ -1,0 +1,19 @@
+[package]
+name = "syu-planner"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+globset.workspace = true
+serde_yaml.workspace = true
+sha2.workspace = true
+syu-diagnostics = { path = "../syu-diagnostics" }
+syu-project-model = { path = "../syu-project-model" }
+syu-spec-model = { path = "../syu-spec-model" }
+syu-work-model = { path = "../syu-work-model" }
+syu-workspace = { path = "../syu-workspace" }
+
+[dev-dependencies]
+tempfile.workspace = true

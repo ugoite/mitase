@@ -1,11 +1,16 @@
-category: Philosophy
-version: 1
-language: en
-
+schema: syu/spec/v1
+kind: philosophies
+namespace: ruby-only
+category: Ruby example
 philosophies:
-  - id: PHIL-RB-001
-    title: Ruby traces should stay explicit
-    product_design_principle: Keep the Ruby example focused on named source and test symbols.
-    coding_guideline: Prefer small Ruby files whose traced classes and methods stay obvious in review.
-    linked_policies:
-      - POL-RB-001
+- id: PHIL-RUBYONLY-001
+  title: Ruby example
+  summary: Keep a Ruby-first example represented in the v1 graph with file-level ownership.
+  principles:
+  - id: exact-ownership
+    statement: Ruby example files must still have explicit implementation and verification
+      bindings.
+    applies_to:
+    - code
+    - work
+  bindings: []

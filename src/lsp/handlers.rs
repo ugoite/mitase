@@ -5,9 +5,9 @@ use regex::Regex;
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::LazyLock;
+use syu_spec_model::SpecDocument;
+use syu_workspace::SpecWorkspace;
 use url::Url;
-
-use crate::workspace::{Workspace, load_workspace};
 
 use super::protocol::{
     Hover, InitializeParams, InitializeResult, LspError, MarkupContent, ServerCapabilities,
@@ -15,7 +15,7 @@ use super::protocol::{
 };
 
 pub(crate) struct LspHandlers {
-    workspace: Option<Workspace>,
+    workspace: Option<SpecWorkspace>,
     initialized: bool,
 }
 
@@ -38,7 +38,8 @@ impl LspHandlers {
         };
 
         self.workspace = Some(
-            load_workspace(&root_path).map_err(|error| LspError::internal(error.to_string()))?,
+            SpecWorkspace::load(&root_path)
+                .map_err(|error| LspError::internal(error.to_string()))?,
         );
 
         let result = InitializeResult {
@@ -124,70 +125,63 @@ fn find_spec_id_at_position(line: &str, char_pos: usize) -> Option<String> {
     None
 }
 
-fn create_hover_for_spec_id(workspace: &Workspace, spec_id: &str) -> Option<Hover> {
-    if spec_id.starts_with("PHIL-") {
-        workspace
-            .philosophies
-            .iter()
-            .find(|p| p.id == spec_id)
-            .map(|phil| {
-                let content = format!(
-                    "# {}\n\n**{}**\n\n## Product Design Principle\n{}\n\n## Coding Guideline\n{}",
-                    phil.id, phil.title, phil.product_design_principle, phil.coding_guideline
-                );
-                Hover {
-                    contents: MarkupContent::markdown(content),
-                    range: None,
+fn create_hover_for_spec_id(workspace: &SpecWorkspace, spec_id: &str) -> Option<Hover> {
+    for loaded in &workspace.documents {
+        match &loaded.document {
+            SpecDocument::Philosophies { philosophies, .. } => {
+                if let Some(philosophy) = philosophies.iter().find(|item| item.id.0 == spec_id) {
+                    return Some(Hover {
+                        contents: MarkupContent::markdown(format!(
+                            "# {}\n\n**{}**\n\n{}\n\n**Principles:** {}",
+                            philosophy.id,
+                            philosophy.title,
+                            philosophy.summary,
+                            philosophy.principles.len()
+                        )),
+                        range: None,
+                    });
                 }
-            })
-    } else if spec_id.starts_with("POL-") {
-        workspace
-            .policies
-            .iter()
-            .find(|p| p.id == spec_id)
-            .map(|pol| {
-                let content = format!(
-                    "# {}\n\n**{}**\n\n## Summary\n{}\n\n## Description\n{}",
-                    pol.id, pol.title, pol.summary, pol.description
-                );
-                Hover {
-                    contents: MarkupContent::markdown(content),
-                    range: None,
+            }
+            SpecDocument::Policies { policies, .. } => {
+                if let Some(policy) = policies.iter().find(|item| item.id.0 == spec_id) {
+                    return Some(Hover {
+                        contents: MarkupContent::markdown(format!(
+                            "# {}\n\n**{}**\n\n## Summary\n{}\n\n## Description\n{}",
+                            policy.id, policy.title, policy.summary, policy.description
+                        )),
+                        range: None,
+                    });
                 }
-            })
-    } else if spec_id.starts_with("REQ-") {
-        workspace
-            .requirements
-            .iter()
-            .find(|r| r.id == spec_id)
-            .map(|req| {
-                let content = format!(
-                    "# {}\n\n**{}**\n\n{}\n\n**Priority:** {} | **Status:** {}",
-                    req.id, req.title, req.description, req.priority, req.status
-                );
-                Hover {
-                    contents: MarkupContent::markdown(content),
-                    range: None,
+            }
+            SpecDocument::Requirements { requirements, .. } => {
+                if let Some(requirement) = requirements.iter().find(|item| item.id.0 == spec_id) {
+                    return Some(Hover {
+                        contents: MarkupContent::markdown(format!(
+                            "# {}\n\n**{}**\n\n{}\n\n**Priority:** {:?} | **Status:** {:?}",
+                            requirement.id,
+                            requirement.title,
+                            requirement.description,
+                            requirement.priority,
+                            requirement.status
+                        )),
+                        range: None,
+                    });
                 }
-            })
-    } else if spec_id.starts_with("FEAT-") {
-        workspace
-            .features
-            .iter()
-            .find(|f| f.id == spec_id)
-            .map(|feat| {
-                let content = format!(
-                    "# {}\n\n**{}**\n\n{}\n\n**Status:** {}",
-                    feat.id, feat.title, feat.summary, feat.status
-                );
-                Hover {
-                    contents: MarkupContent::markdown(content),
-                    range: None,
+            }
+            SpecDocument::Features { features, .. } => {
+                if let Some(feature) = features.iter().find(|item| item.id.0 == spec_id) {
+                    return Some(Hover {
+                        contents: MarkupContent::markdown(format!(
+                            "# {}\n\n**{}**\n\n{}\n\n**Status:** {:?}",
+                            feature.id, feature.title, feature.summary, feature.status
+                        )),
+                        range: None,
+                    });
                 }
-            })
-    } else {
-        None
+            }
+        }
     }
+    None
 }
 
 #[cfg(test)]
@@ -199,7 +193,7 @@ mod tests {
 
     fn fixture_path(name: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests/fixtures/workspaces")
+            .join("fixtures/v1")
             .join(name)
     }
 
@@ -253,7 +247,7 @@ mod tests {
     #[test]
     fn handle_initialize_loads_workspace_from_root_uri() {
         let mut handlers = LspHandlers::new();
-        let workspace = fixture_path("passing");
+        let workspace = fixture_path("valid-web-app");
         let value = handlers
             .handle_initialize(InitializeParams {
                 process_id: None,
@@ -269,7 +263,7 @@ mod tests {
     #[test]
     fn handle_hover_returns_none_for_out_of_bounds_positions() {
         let mut handlers = LspHandlers::new();
-        let workspace = fixture_path("passing");
+        let workspace = fixture_path("valid-web-app");
         handlers
             .handle_initialize(InitializeParams {
                 process_id: None,
@@ -298,39 +292,15 @@ mod tests {
 
     #[test]
     fn handle_hover_renders_each_spec_layer() {
-        let mut handlers = LspHandlers::new();
-        let workspace = fixture_path("passing");
-        handlers
-            .handle_initialize(InitializeParams {
-                process_id: None,
-                root_uri: Some(format!("file://{}", workspace.display())),
-                capabilities: None,
-            })
-            .expect("initialize should succeed");
+        let workspace = SpecWorkspace::load(fixture_path("valid-web-app")).expect("workspace");
 
-        let tempdir = tempdir().expect("tempdir");
-        let file_path = tempdir.path().join("spec-ids.txt");
-        fs::write(
-            &file_path,
-            "PHIL-TRACE-001\nPOL-TRACE-001\nREQ-TRACE-001\nFEAT-TRACE-001\n",
-        )
-        .expect("write file");
-
-        for (line, expected) in [
-            (0, "Product Design Principle"),
-            (1, "## Summary"),
-            (2, "**Priority:**"),
-            (3, "**Status:**"),
+        for (spec_id, expected) in [
+            ("PHIL-AUTH-001", "**Safe authentication**"),
+            ("POL-AUTH-001", "## Summary"),
+            ("REQ-AUTH-001", "**Priority:**"),
+            ("FEAT-AUTH-001", "**Status:**"),
         ] {
-            let hover = handlers
-                .handle_hover(TextDocumentPositionParams {
-                    text_document: TextDocumentIdentifier {
-                        uri: format!("file://{}", file_path.display()),
-                    },
-                    position: Position { line, character: 2 },
-                })
-                .expect("hover should succeed")
-                .expect("hover should exist");
+            let hover = create_hover_for_spec_id(&workspace, spec_id).expect("hover should exist");
             assert!(hover.contents.value.contains(expected));
         }
     }
@@ -338,7 +308,7 @@ mod tests {
     #[test]
     fn handle_hover_returns_none_when_no_spec_id_matches() {
         let mut handlers = LspHandlers::new();
-        let workspace = fixture_path("passing");
+        let workspace = fixture_path("valid-web-app");
         handlers
             .handle_initialize(InitializeParams {
                 process_id: None,
@@ -376,7 +346,7 @@ mod tests {
 
     #[test]
     fn create_hover_returns_none_for_unknown_ids() {
-        let workspace = load_workspace(&fixture_path("passing")).expect("workspace");
+        let workspace = SpecWorkspace::load(fixture_path("valid-web-app")).expect("workspace");
         assert!(create_hover_for_spec_id(&workspace, "NOTE-UNKNOWN-001").is_none());
     }
 }

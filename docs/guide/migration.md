@@ -5,9 +5,9 @@ releases. This page documents breaking changes and release-specific upgrade
 steps. When `syu validate .` starts failing after an upgrade, check the section
 for the version you just installed.
 
-> **Note:** `syu` is in alpha. The config schema, YAML spec format, and CLI
-> flags may change in any alpha release. This guide is updated with every
-> release that introduces user-visible breaks.
+> **Note:** This page is historical guidance for pre-v1 alpha workspaces. The
+> current repository surface is the v1 `schema: syu/config/v1` model; older
+> fields and commands mentioned below are kept only as migration notes.
 
 ---
 
@@ -18,7 +18,6 @@ for the version you just installed.
 | Field | Default | Notes |
 |---|---|---|
 | `validate.require_reciprocal_links` | `true` | New. Adjacent-layer links must be reciprocal. See [Understanding validation output](./getting-started.md#understanding-validation-output). |
-| `report.output` | `stdout` | New. Optional. When unset, `syu report` prints to stdout as before. Set this to a file path to use a default output destination when `--output` is not provided. |
 
 ### Action required
 
@@ -125,9 +124,9 @@ workspace against a freshly generated scaffold from the version you are
 upgrading to, make the required `spec.root` and validation-config updates, then
 run `syu validate .` until the workspace is green.
 
-| syu version | `spec.root` default | `require_reciprocal_links` | `report.output` |
-|---|---|---|---|
-| alpha.1–alpha.4 | pre-`alpha.5`; migrate manually to the `alpha.5+` layout first | not yet documented | not yet documented |
-| alpha.5 | `docs/spec` | not present | not present |
-| alpha.6 | `docs/syu` | not present | not present |
-| alpha.7 | `docs/syu` | `true` | stdout when unset; otherwise configured path |
+| syu version | `spec.root` default | `require_reciprocal_links` |
+|---|---|---|
+| alpha.1–alpha.4 | pre-`alpha.5`; migrate manually to the `alpha.5+` layout first | not yet documented |
+| alpha.5 | `docs/spec` | not present |
+| alpha.6 | `docs/syu` | not present |
+| alpha.7 | `docs/syu` | `true` |

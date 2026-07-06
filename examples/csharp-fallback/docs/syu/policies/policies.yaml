@@ -1,13 +1,36 @@
-category: Policies
-version: 1
-language: en
-
+schema: syu/spec/v1
+kind: policies
+namespace: csharp-fallback
+category: C# fallback example
 policies:
-  - id: POL-CSHARP-001
-    title: Staged C# adoption should keep real code visible without pretending it is traced already
-    summary: Demonstrate a lighter C# adoption pattern by validating supported shell and markdown evidence first.
-    description: Require the example to ship real C# source and test files while validated trace evidence stays in supported file types until the repository is ready to trace more C# directly.
-    linked_philosophies:
-      - PHIL-CSHARP-001
-    linked_requirements:
-      - REQ-CSHARP-001
+- id: POL-CSHARPFALLBACK-001
+  title: C# fallback example governance
+  summary: Fallback ownership still needs explicit source, verification, and automation
+    targets.
+  description: Show file-level ownership for a language without symbol-level parsing
+    in the active v1 toolchain.
+  rules:
+  - id: traceable-delivery
+    level: must
+    statement: Fallback ownership still needs explicit source, verification, and automation
+      targets.
+    governed_by:
+    - PHIL-CSHARPFALLBACK-001#principle.exact-ownership
+    applies_to:
+      roles:
+      - implementation
+      - verification
+      - documentation
+  bindings:
+  - id: enforcement
+    role: enforcement
+    facet: delivery
+    responsibility: Keep the example rule connected to an active owned artifact.
+    targets:
+    - id: policy-target
+      adapter: csharp
+      path: src/OrderSummary.cs
+      selector:
+        kind: file
+    enforces:
+    - POL-CSHARPFALLBACK-001#rule.traceable-delivery

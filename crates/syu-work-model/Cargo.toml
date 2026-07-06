@@ -1,0 +1,12 @@
+[package]
+name = "syu-work-model"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+syu-diagnostics = { path = "../syu-diagnostics" }
+syu-spec-model = { path = "../syu-spec-model" }

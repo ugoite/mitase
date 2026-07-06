@@ -1,24 +1,32 @@
-# FEAT-CHECK-001
-# FEAT-REPORT-001
-version: 0.0.1-alpha.8
-spec:
-  root: docs/syu
-validate:
-  default_fix: false
-  allow_planned: false
-  require_non_orphaned_items: true
-  require_reciprocal_links: true
-  require_symbol_trace_coverage: true
-  historical_ids:
-    enabled: false
-report:
-  output: docs/generated/syu-report.md
-runtimes:
-  python:
-    command: auto
-  node:
-    command: auto
-workbench:
-  bind: 127.0.0.1
-  port: 3000
-  strict_review: false
+schema: syu/config/v1
+workspace:
+  spec_roots: [docs/syu]
+  artifact_roots: [src, crates, docs, fixtures]
+  excludes: [target/**, node_modules/**, docs/generated/**]
+profiles:
+  active: [agent-ready]
+  custom:
+    agent-ready:
+      facets:
+        architecture: { include: [docs/**] }
+        tooling: { include: [crates/**, src/**] }
+        verification: { include: [crates/**, tests/**] }
+      contract_rules: []
+validation:
+  preset: agent-ready
+  deny_warnings: false
+  rules: {}
+  changed:
+    require_owned_changes: true
+work:
+  slicing:
+    max_editable_files: 4
+    max_editable_symbols: 8
+    max_verification_targets: 6
+    max_readonly_targets: 12
+    max_total_bytes: 120000
+  context:
+    include_parent_principles: true
+    include_parent_rules: true
+adapters:
+  enabled: [rust, typescript, markdown, openapi, yaml, json]

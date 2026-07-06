@@ -1,0 +1,36 @@
+schema: syu/spec/v1
+kind: requirements
+namespace: polyglot
+category: Polyglot example
+requirements:
+- id: REQ-POLYGLOT-001
+  title: Cross-language starter behavior
+  description: The polyglot sample keeps coordinated implementation and verification
+    files across languages.
+  priority: high
+  status: implemented
+  criteria:
+  - id: owned-delivery
+    kind: behavior
+    statement: The polyglot sample keeps coordinated implementation and verification
+      files across languages.
+    governed_by:
+    - POL-POLYGLOT-001#rule.traceable-delivery
+  bindings:
+  - id: verification
+    role: verification
+    facet: verification
+    responsibility: Verify the owned example behavior through checked-in evidence.
+    targets:
+    - id: target-1
+      adapter: typescript
+      path: frontend/traceability.test.ts
+      selector:
+        kind: file
+    - id: target-2
+      adapter: python
+      path: python/test_traceability.py
+      selector:
+        kind: file
+    verifies:
+    - REQ-POLYGLOT-001#criterion.owned-delivery

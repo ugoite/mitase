@@ -1,0 +1,35 @@
+schema: syu/spec/v1
+kind: policies
+namespace: team-scale
+category: Team-scale example
+policies:
+- id: POL-TEAMSCALE-001
+  title: Team-scale example governance
+  summary: Larger workspaces still keep bounded implementation and verification ownership.
+  description: Show a larger example with several owned Rust implementation and verification
+    files.
+  rules:
+  - id: traceable-delivery
+    level: must
+    statement: Larger workspaces still keep bounded implementation and verification
+      ownership.
+    governed_by:
+    - PHIL-TEAMSCALE-001#principle.exact-ownership
+    applies_to:
+      roles:
+      - implementation
+      - verification
+      - documentation
+  bindings:
+  - id: enforcement
+    role: enforcement
+    facet: delivery
+    responsibility: Keep the example rule connected to an active owned artifact.
+    targets:
+    - id: policy-target
+      adapter: rust
+      path: src/auth/login.rs
+      selector:
+        kind: file
+    enforces:
+    - POL-TEAMSCALE-001#rule.traceable-delivery

@@ -1,15 +1,11 @@
 [package]
 name = "syu-code-intel"
-version = "0.0.1-alpha.8"
-edition = "2024"
-rust-version = "1.88"
-description = "Reusable repository intelligence primitives for syu"
-license = "MIT"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
-anyhow = "1.0.100"
-serde = { version = "1.0.228", features = ["derive"] }
-syu-task-model = { path = "../syu-task-model" }
-
-[dev-dependencies]
-tempfile = "3.23.0"
+anyhow.workspace = true
+proc-macro2 = { version = "1.0.103", features = ["span-locations"] }
+sha2.workspace = true
+syn = { version = "2.0.117", features = ["full", "visit"] }

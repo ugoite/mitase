@@ -1,0 +1,6 @@
+schema: syu/work-request/v1
+id: WORK-AUTH-FAILURE
+summary: Keep login failures generic.
+operation: modify
+seeds: [REQ-AUTH-001#criterion.invalid-credentials]
+constraints: { include_facets: [ui, backend, api], exclude_paths: [], max_slices: 3 }

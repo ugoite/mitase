@@ -1,0 +1,34 @@
+schema: syu/spec/v1
+kind: requirements
+namespace: docs-first
+category: Docs-first example
+requirements:
+- id: REQ-DOCSFIRST-001
+  title: Documentation publishing flow
+  description: Publishing docs keeps one implementation path and one review path.
+  priority: high
+  status: implemented
+  criteria:
+  - id: owned-delivery
+    kind: behavior
+    statement: Publishing docs keeps one implementation path and one review path.
+    governed_by:
+    - POL-DOCSFIRST-001#rule.traceable-delivery
+  bindings:
+  - id: verification
+    role: verification
+    facet: verification
+    responsibility: Verify the owned example behavior through checked-in evidence.
+    targets:
+    - id: target-1
+      adapter: shell
+      path: scripts/publish-docs.sh
+      selector:
+        kind: file
+    - id: target-2
+      adapter: yaml
+      path: config/navigation.yaml
+      selector:
+        kind: file
+    verifies:
+    - REQ-DOCSFIRST-001#criterion.owned-delivery
