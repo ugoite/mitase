@@ -1,7 +1,16 @@
 #![forbid(unsafe_code)]
 mod lsp;
 use anyhow::{Context, Result, bail};
+use axum::{
+    Json, Router,
+    extract::{Path as AxumPath, Query, State},
+    http::StatusCode,
+    response::{Html, IntoResponse, Response},
+    routing::{get, post, put},
+};
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
     fs,
     net::IpAddr,
@@ -19,6 +28,73 @@ use syu_validation::{
 use syu_work_model::{WorkPlan, WorkRequest};
 use syu_workbench_server::project as project_workbench;
 use syu_workspace::SpecWorkspace;
+use tokio::sync::RwLock;
+
+#[derive(Clone)]
+struct WorkbenchWebState {
+    workspace_root: PathBuf,
+    request: Arc<RwLock<Option<WorkRequest>>>,
+}
+
+#[derive(Debug, Serialize)]
+struct ApiErrorBody {
+    error: String,
+}
+
+struct ApiError(StatusCode, anyhow::Error);
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        (
+            self.0,
+            Json(ApiErrorBody {
+                error: format!("{:#}", self.1),
+            }),
+        )
+            .into_response()
+    }
+}
+
+impl From<anyhow::Error> for ApiError {
+    fn from(error: anyhow::Error) -> Self {
+        Self(StatusCode::BAD_REQUEST, error)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct FileQuery {
+    path: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct FileEdit {
+    path: String,
+    content: String,
+    expected_hash: String,
+}
+
+#[derive(Debug, Serialize)]
+struct FileSource {
+    path: String,
+    content: String,
+    hash: String,
+}
+
+#[derive(Debug, Serialize)]
+struct FilePreview {
+    path: String,
+    old_hash: String,
+    new_hash: String,
+    changed_lines: usize,
+    validation_errors: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BrowserValidationRequest {
+    context: String,
+    #[serde(default)]
+    slice: Option<String>,
+}
 
 struct ValidationInputs {
     changed_files: Option<Vec<ChangedFile>>,
@@ -288,21 +364,23 @@ fn run_workbench(args: WorkbenchArgs) -> Result<i32> {
                 .as_ref()
                 .map(|path| read_yaml::<WorkRequest>(path))
                 .transpose()?;
-            let projection =
-                project_workbench(&workspace, request.as_ref(), &revision(&workspace.root)?)?;
-            let html = Arc::new(WorkbenchView::new(&projection).render_html());
+            let state = WorkbenchWebState {
+                workspace_root: workspace.root,
+                request: Arc::new(RwLock::new(request)),
+            };
             let runtime = tokio::runtime::Runtime::new()?;
             runtime.block_on(async move {
-                let app = axum::Router::new().route(
-                    "/",
-                    axum::routing::get({
-                        let html = Arc::clone(&html);
-                        move || {
-                            let html = Arc::clone(&html);
-                            async move { axum::response::Html((*html).clone()) }
-                        }
-                    }),
-                );
+                let app = Router::new()
+                    .route("/", get(web_index))
+                    .route("/api/projection", get(web_projection))
+                    .route("/api/work/request", put(web_update_request))
+                    .route("/api/work/replan", post(web_replan))
+                    .route("/api/context/{slice}", post(web_export_context))
+                    .route("/api/validate", post(web_validate))
+                    .route("/api/source", get(web_source))
+                    .route("/api/file/preview", post(web_preview_file))
+                    .route("/api/file/apply", put(web_apply_file))
+                    .with_state(state);
                 let listener = tokio::net::TcpListener::bind((bind, port)).await?;
                 println!("Syu Workbench listening on http://{bind}:{port}");
                 if show_log {
@@ -318,6 +396,229 @@ fn run_workbench(args: WorkbenchArgs) -> Result<i32> {
             Ok(0)
         }
     }
+}
+
+async fn current_projection(
+    state: &WorkbenchWebState,
+) -> std::result::Result<syu_workbench_server::WorkspaceProjection, ApiError> {
+    let workspace = SpecWorkspace::load(&state.workspace_root)?;
+    let request = state.request.read().await.clone();
+    Ok(project_workbench(
+        &workspace,
+        request.as_ref(),
+        &revision(&workspace.root)?,
+    )?)
+}
+
+async fn web_index(
+    State(state): State<WorkbenchWebState>,
+) -> std::result::Result<Html<String>, ApiError> {
+    let projection = current_projection(&state).await?;
+    Ok(Html(WorkbenchView::new(&projection).render_html()))
+}
+
+async fn web_projection(
+    State(state): State<WorkbenchWebState>,
+) -> std::result::Result<Json<syu_workbench_server::WorkspaceProjection>, ApiError> {
+    Ok(Json(current_projection(&state).await?))
+}
+
+async fn web_update_request(
+    State(state): State<WorkbenchWebState>,
+    Json(request): Json<WorkRequest>,
+) -> std::result::Result<Json<WorkPlan>, ApiError> {
+    let workspace = SpecWorkspace::load(&state.workspace_root)?;
+    let index = workspace.index()?;
+    let plan = plan(&request, &workspace, &index, &revision(&workspace.root)?)?;
+    *state.request.write().await = Some(request);
+    Ok(Json(plan))
+}
+
+async fn web_replan(
+    State(state): State<WorkbenchWebState>,
+) -> std::result::Result<Json<WorkPlan>, ApiError> {
+    let projection = current_projection(&state).await?;
+    projection.plan.map(Json).ok_or_else(|| {
+        ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("no work request selected"),
+        )
+    })
+}
+
+async fn web_export_context(
+    State(state): State<WorkbenchWebState>,
+    AxumPath(slice): AxumPath<String>,
+) -> std::result::Result<String, ApiError> {
+    let workspace = SpecWorkspace::load(&state.workspace_root)?;
+    let index = workspace.index()?;
+    let projection = current_projection(&state).await?;
+    let plan = projection
+        .plan
+        .ok_or_else(|| ApiError(StatusCode::CONFLICT, anyhow::anyhow!("no work plan")))?;
+    let context = export_context(
+        &plan,
+        &slice,
+        &workspace,
+        &index,
+        &revision(&workspace.root)?,
+    )?;
+    Ok(serde_yaml::to_string(&context).map_err(anyhow::Error::from)?)
+}
+
+async fn web_validate(
+    State(state): State<WorkbenchWebState>,
+    Json(request): Json<BrowserValidationRequest>,
+) -> std::result::Result<Json<syu_diagnostics::ValidationResult>, ApiError> {
+    let workspace = SpecWorkspace::load(&state.workspace_root)?;
+    let index = workspace.index()?;
+    let current_revision = revision(&workspace.root)?;
+    let plan = current_projection(&state).await?.plan;
+    let selected_slice = request
+        .slice
+        .as_deref()
+        .and_then(|id| plan.as_ref()?.slices.iter().find(|slice| slice.id == id));
+    if request.context == "slice" && selected_slice.is_none() {
+        return Err(ApiError(
+            StatusCode::BAD_REQUEST,
+            anyhow::anyhow!("slice validation requires a valid slice id"),
+        ));
+    }
+    let changed = (request.context == "git-range")
+        .then(|| changed_files(&workspace.root, "HEAD...HEAD"))
+        .transpose()?;
+    let result = validate(&ValidationContext {
+        config: &workspace.config,
+        workspace: &workspace,
+        index: &index,
+        changed_files: changed.as_deref(),
+        reported_changed_files: None,
+        work_plan: (request.context == "work-plan" || request.context == "slice")
+            .then_some(plan.as_ref())
+            .flatten(),
+        selected_slice,
+        plan_mode: PlanValidationMode::PreState,
+        preset: workspace.config.validation.preset,
+        revision: Some(&current_revision),
+        change_base_revision: None,
+    });
+    Ok(Json(result))
+}
+
+async fn web_source(
+    State(state): State<WorkbenchWebState>,
+    Query(query): Query<FileQuery>,
+) -> std::result::Result<Json<FileSource>, ApiError> {
+    let path = safe_workspace_path(&state.workspace_root, &query.path)?;
+    let content = fs::read_to_string(&path).unwrap_or_default();
+    Ok(Json(FileSource {
+        path: query.path,
+        hash: content_hash(&content),
+        content,
+    }))
+}
+
+async fn web_preview_file(
+    State(state): State<WorkbenchWebState>,
+    Json(edit): Json<FileEdit>,
+) -> std::result::Result<Json<FilePreview>, ApiError> {
+    let path = safe_workspace_path(&state.workspace_root, &edit.path)?;
+    let old = fs::read_to_string(&path).unwrap_or_default();
+    ensure_source_hash(&old, &edit.expected_hash)?;
+    let validation_errors = validate_candidate(&edit.path, &edit.content);
+    Ok(Json(FilePreview {
+        path: edit.path,
+        old_hash: content_hash(&old),
+        new_hash: content_hash(&edit.content),
+        changed_lines: changed_line_count(&old, &edit.content),
+        validation_errors,
+    }))
+}
+
+async fn web_apply_file(
+    State(state): State<WorkbenchWebState>,
+    Json(edit): Json<FileEdit>,
+) -> std::result::Result<Json<FilePreview>, ApiError> {
+    let path = safe_workspace_path(&state.workspace_root, &edit.path)?;
+    let old = fs::read_to_string(&path).unwrap_or_default();
+    ensure_source_hash(&old, &edit.expected_hash)?;
+    let errors = validate_candidate(&edit.path, &edit.content);
+    if !errors.is_empty() {
+        return Err(ApiError(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            anyhow::anyhow!(errors.join("; ")),
+        ));
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(anyhow::Error::from)?;
+    }
+    fs::write(&path, &edit.content).map_err(anyhow::Error::from)?;
+    if let Err(error) = SpecWorkspace::load(&state.workspace_root)
+        .and_then(|workspace| workspace.index().map(|_| ()))
+    {
+        if old.is_empty() {
+            let _ = fs::remove_file(&path);
+        } else {
+            let _ = fs::write(&path, &old);
+        }
+        return Err(ApiError(StatusCode::UNPROCESSABLE_ENTITY, error));
+    }
+    Ok(Json(FilePreview {
+        path: edit.path,
+        old_hash: content_hash(&old),
+        new_hash: content_hash(&edit.content),
+        changed_lines: changed_line_count(&old, &edit.content),
+        validation_errors: Vec::new(),
+    }))
+}
+
+fn safe_workspace_path(root: &Path, relative: &str) -> std::result::Result<PathBuf, ApiError> {
+    let relative = RepoPath::new(relative)
+        .map_err(|error| ApiError(StatusCode::BAD_REQUEST, anyhow::anyhow!(error)))?;
+    Ok(root.join(relative.as_path()))
+}
+
+fn content_hash(content: &str) -> String {
+    let mut digest = Sha256::new();
+    digest.update(content.as_bytes());
+    format!("sha256:{:x}", digest.finalize())
+}
+
+fn ensure_source_hash(content: &str, expected: &str) -> std::result::Result<(), ApiError> {
+    let actual = content_hash(content);
+    if actual != expected {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("stale source: expected {expected}, found {actual}"),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_candidate(path: &str, content: &str) -> Vec<String> {
+    let result = if path == "syu.yaml" {
+        serde_yaml::from_str::<syu_project_model::ProjectConfig>(content).map(|_| ())
+    } else if path.ends_with(".yaml") || path.ends_with(".yml") {
+        serde_yaml::from_str::<syu_spec_model::SpecDocument>(content).map(|_| ())
+    } else {
+        return Vec::new();
+    };
+    result
+        .err()
+        .map(|error| vec![error.to_string()])
+        .unwrap_or_default()
+}
+
+fn changed_line_count(old: &str, new: &str) -> usize {
+    let old = old.lines().collect::<Vec<_>>();
+    let new = new.lines().collect::<Vec<_>>();
+    let common = old.len().min(new.len());
+    old[..common]
+        .iter()
+        .zip(&new[..common])
+        .filter(|(left, right)| left != right)
+        .count()
+        + old.len().abs_diff(new.len())
 }
 fn read_yaml<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T> {
     serde_yaml::from_str(
@@ -908,5 +1209,24 @@ Binary files a/assets/logo.png and b/assets/logo.png differ\n",
             files[0].new_path.as_ref().unwrap().to_string_lossy(),
             "src/app.rs"
         );
+    }
+
+    #[test]
+    fn workbench_file_edits_reject_stale_and_escaping_sources() {
+        let hash = content_hash("before\n");
+        assert!(ensure_source_hash("before\n", &hash).is_ok());
+        assert!(ensure_source_hash("after\n", &hash).is_err());
+        let root = Path::new("/tmp/workspace");
+        assert!(safe_workspace_path(root, "spec/requirement.yaml").is_ok());
+        assert!(safe_workspace_path(root, "../outside.yaml").is_err());
+        assert!(safe_workspace_path(root, "/etc/passwd").is_err());
+    }
+
+    #[test]
+    fn workbench_preview_strictly_validates_config_and_spec_yaml() {
+        assert!(validate_candidate("syu.yaml", "schema: wrong\n").len() == 1);
+        assert!(validate_candidate("spec/item.yaml", "schema: wrong\n").len() == 1);
+        assert!(validate_candidate("README.md", "anything").is_empty());
+        assert_eq!(changed_line_count("a\nb\n", "a\nc\nd\n"), 2);
     }
 }

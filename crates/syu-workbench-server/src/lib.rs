@@ -28,6 +28,7 @@ pub struct WorkspaceSummary {
 #[derive(Debug, Clone, Serialize)]
 pub struct ItemSummary {
     pub id: String,
+    pub kind: String,
     pub path: String,
     pub principles: usize,
     pub rules: usize,
@@ -49,6 +50,16 @@ pub fn project(
             let count = |kind| anchors.iter().filter(|anchor| anchor.kind == kind).count();
             ItemSummary {
                 id: id.to_string(),
+                kind: if count(LocalAnchorKind::Principle) > 0 {
+                    "philosophy"
+                } else if count(LocalAnchorKind::Rule) > 0 {
+                    "policy"
+                } else if count(LocalAnchorKind::Criterion) > 0 {
+                    "requirement"
+                } else {
+                    "feature"
+                }
+                .to_string(),
                 path: path
                     .strip_prefix(&workspace.root)
                     .unwrap_or(path)

@@ -944,6 +944,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "sha2",
  "syu-app-ui",
  "syu-code-intel",
  "syu-diagnostics",
@@ -963,6 +964,7 @@ dependencies = [
 name = "syu-app-ui"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "syu-diagnostics",
  "syu-work-model",
  "syu-workbench-server",

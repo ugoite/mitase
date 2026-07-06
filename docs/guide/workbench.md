@@ -30,6 +30,20 @@ The UI never parses YAML or infers ownership, contracts, target scope, or
 validation meaning. Those decisions belong to the workspace, planner, and
 validation crates and arrive through `syu-workbench-server`.
 
+Interactive operations are backed by local server endpoints:
+
+- WorkRequest edit/replan and Item-based Work creation run the canonical
+  planner.
+- Context export calls canonical `export_context` and refuses stale or
+  non-ready plans.
+- Workspace, Git range, Work plan, and Slice validation call the shared
+  validator synchronously.
+- Item and config writes require a preview, strict schema validation, and a
+  matching source hash. Apply rolls back when the resulting workspace cannot
+  be indexed.
+- The server rejects paths outside the workspace and remote binding unless
+  `--allow-remote-bind` is explicit.
+
 For automation or debugging, use the projection without starting the server:
 
 ```sh
