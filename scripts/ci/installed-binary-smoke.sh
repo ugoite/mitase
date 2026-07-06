@@ -63,6 +63,12 @@ main() {
   actual_version="$("${installed_binary}" --version)"
   test "${actual_version}" = "syu ${expected_version}"
   cp -R "$fixture" "$workspace"
+  git -C "$workspace" init >/dev/null
+  git -C "$workspace" config user.email "ci@example.invalid"
+  git -C "$workspace" config user.name "CI"
+  git -C "$workspace" add -A
+  git -C "$workspace" commit --quiet -m "fixture snapshot"
+  git -C "$workspace" update-ref refs/remotes/origin/main HEAD
 
   "${installed_binary}" validate "$workspace" >/dev/null
   "${installed_binary}" work plan \
