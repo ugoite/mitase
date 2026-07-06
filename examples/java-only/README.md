@@ -1,66 +1,18 @@
-# java-only example
+# Java example
 
-This example demonstrates a minimal Java-first workspace using the built-in
-Java trace adapter.
+This example is maintained against the active `syu` v1 model.
 
-It contains one philosophy, one policy, one requirement, and one feature, plus
-one `pom.xml`, one Java source file, and one Java test file. The example uses
-pattern-based symbol matching for the real `.java` files, so `syu validate .`
-proves the Java-backed links directly, and the checked-in Javadocs now also
-show how `doc_contains` can stay attached to Java traces.
+It demonstrates one requirement and one feature connected through explicit bindings.
 
-This workspace now matches the built-in `syu init --template java-only`
-starter, so you can either inspect the checked-in example first or generate the
-same shape directly in your own repository.
+Current commands:
 
-## Files
+- `cargo run --quiet -- validate examples/java-only`
+- `cargo run --quiet -- workbench project --workspace examples/java-only`
 
-| Path | What it defines |
-|------|-----------------|
-| `docs/syu/philosophy/foundation.yaml` | `PHIL-JAVA-001` — the guiding principle |
-| `docs/syu/policies/policies.yaml` | `POL-JAVA-001` linked to `PHIL-JAVA-001` |
-| `docs/syu/requirements/core/java.yaml` | `REQ-JAVA-001` with a Java test trace |
-| `docs/syu/features/languages/java.yaml` | `FEAT-JAVA-001` with a Java implementation trace |
-| `pom.xml` | Minimal Maven metadata for the checked-in Java files |
-| `src/main/java/example/app/OrderSummary.java` | Java source file containing `JavaFeatureImpl` |
-| `src/test/java/example/app/OrderSummaryTest.java` | Java test file containing `JavaRequirementTest` |
-| `README.md` | Explains what the Java adapter validates today |
+Primary implementation targets:
+- `src/main/java/example/app/OrderSummary.java` (java)
 
-## Try it
+Primary verification targets:
+- `src/test/java/example/app/OrderSummaryTest.java` (java)
 
-```bash
-cd examples/java-only
-syu validate .
-syu list requirement
-syu show REQ-JAVA-001
-syu browse .
-```
-
-A successful `syu validate .` produces output similar to:
-
-```text
-syu validate passed
-workspace: examples/java-only
-definitions: philosophies=1 policies=1 requirements=1 features=1
-traceability: requirements=1/1 traces validated; features=1/1 traces validated
-```
-
-## What the Java adapter validates today
-
-- `JavaRequirementTest` lives in
-  `src/test/java/example/app/OrderSummaryTest.java` and is the validated test
-  symbol for `REQ-JAVA-001`.
-- `JavaFeatureImpl` lives in `src/main/java/example/app/OrderSummary.java` and
-  is the validated implementation symbol for `FEAT-JAVA-001`.
-- The Java adapter supports pattern-based symbol validation, `doc_contains`
-  checks, and strict ownership coverage.
-
-## Key things to notice
-
-- **Java files are traced directly** — the requirement and feature point at the
-  real `.java` files instead of a markdown workaround.
-- **The example stays small** — one source file and one test file are enough to
-  demonstrate Java-backed requirement and feature ownership.
-- **`doc_contains` keeps the trace readable** — the Javadocs in the example show
-  how to attach comment-level evidence to a Java symbol without changing the
-  ownership shape.
+The example is written for the active v1 CLI and spec model.

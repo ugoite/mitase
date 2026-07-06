@@ -1,0 +1,37 @@
+schema: syu/spec/v1
+kind: features
+namespace: auth
+category: Authentication
+features:
+  - id: FEAT-AUTH-001
+    title: Login
+    summary: Login spans UI and backend through HTTP.
+    status: implemented
+    bindings:
+      - id: ui
+        role: implementation
+        facet: ui
+        responsibility: Submit login and show generic failure.
+        targets:
+          - { id: submit, adapter: typescript, path: web/login.ts, selector: { kind: symbol, names: [submitLogin] } }
+        satisfies: [REQ-AUTH-001#criterion.invalid-credentials]
+      - id: backend
+        role: implementation
+        facet: backend
+        responsibility: Reject invalid credentials without a session.
+        targets:
+          - { id: handler, adapter: rust, path: api/login.rs, selector: { kind: symbol, names: [login] } }
+        satisfies: [REQ-AUTH-001#criterion.invalid-credentials]
+      - id: schema
+        role: contract-source
+        facet: api
+        responsibility: Define the login operation.
+        targets:
+          - { id: operation, adapter: openapi, path: openapi.yaml, selector: { kind: operation, method: post, path: /sessions } }
+    contracts:
+      - id: login-http
+        kind: http
+        source: FEAT-AUTH-001#binding.schema/target.operation
+        participants:
+          - { binding: FEAT-AUTH-001#binding.backend, role: provider }
+          - { binding: FEAT-AUTH-001#binding.ui, role: consumer }

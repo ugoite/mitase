@@ -1,0 +1,28 @@
+schema: syu/spec/v1
+kind: features
+namespace: docs-first
+category: Docs-first example
+features:
+- id: FEAT-DOCSFIRST-001
+  title: Documentation publishing flow
+  summary: Keep documentation-led delivery traceable with markdown, shell, and YAML
+    artifacts.
+  status: implemented
+  bindings:
+  - id: implementation
+    role: implementation
+    facet: delivery
+    responsibility: Implement the owned behavior for this example workspace.
+    targets:
+    - id: target-1
+      adapter: shell
+      path: scripts/publish-docs.sh
+      selector:
+        kind: file
+    - id: target-2
+      adapter: yaml
+      path: config/navigation.yaml
+      selector:
+        kind: file
+    satisfies:
+    - REQ-DOCSFIRST-001#criterion.owned-delivery

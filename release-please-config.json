@@ -12,7 +12,7 @@
           "file": "scripts/install-syu.sh",
           "replacers": [
             {
-              "search": "DEFAULT_VERSION_SELECTOR=\"v(?<version>.*)\"",
+              "search": "DEFAULT_VERSION_SELECTOR=\"__SYU_RELEASE_TAG__\"",
               "replace": "DEFAULT_VERSION_SELECTOR=\"v{{version}}\""
             }
           ]
@@ -63,30 +63,6 @@
         },
         {
           "type": "generic",
-          "file": "docs/syu/features/features.yaml",
-          "replacers": [
-            {
-              "search": "# x-release-please-start-version\nversion: \"(?<version>.*)\"\n# x-release-please-end",
-              "replace": "# x-release-please-start-version\nversion: \"{{version}}\"\n# x-release-please-end"
-            }
-          ]
-        },
-        {
-          "type": "generic",
-          "file": "docs/generated/site-spec/features/features.md",
-          "replacers": [
-            {
-              "search": "### Version\n\n- (?<version>.*)\n\n### Updated",
-              "replace": "### Version\n\n- {{version}}\n\n### Updated"
-            },
-            {
-              "search": "version: \"(?<version>.*)\"",
-              "replace": "version: \"{{version}}\""
-            }
-          ]
-        },
-        {
-          "type": "generic",
           "file": "website/package.json",
           "replacers": [
             {
@@ -102,156 +78,6 @@
             {
               "search": "\"version\": \"(?<version>.*)\"",
               "replace": "\"version\": \"{{version}}\""
-            }
-          ]
-        },
-        {
-          "type": "generic",
-          "file": "crates/syu-core/Cargo.toml",
-          "replacers": [
-            {
-              "search": "name = \"syu-core\"\nversion = \"(?<version>.*)\"",
-              "replace": "name = \"syu-core\"\nversion = \"{{version}}\""
-            }
-          ]
-        },
-        {
-          "type": "generic",
-          "file": "examples/rust-only/syu.yaml",
-          "replacers": [
-            {
-              "search": "^version: (?<version>.*)$",
-              "replace": "version: {{version}}"
-            }
-          ]
-        },
-        {
-          "type": "generic",
-          "file": "examples/browser-ui/syu.yaml",
-          "replacers": [
-            {
-              "search": "^version: (?<version>.*)$",
-              "replace": "version: {{version}}"
-            }
-          ]
-        },
-        {
-          "type": "generic",
-          "file": "examples/csharp-fallback/syu.yaml",
-          "replacers": [
-            {
-              "search": "^version: (?<version>.*)$",
-              "replace": "version: {{version}}"
-            }
-          ]
-        },
-        {
-          "type": "generic",
-          "file": "examples/generic/syu.yaml",
-          "replacers": [
-            {
-              "search": "^version: (?<version>.*)$",
-              "replace": "version: {{version}}"
-            }
-          ]
-        },
-        {
-          "type": "generic",
-          "file": "examples/team-scale/syu.yaml",
-          "replacers": [
-            {
-              "search": "^version: (?<version>.*)$",
-              "replace": "version: {{version}}"
-            }
-          ]
-        },
-        {
-          "type": "generic",
-          "file": "examples/typescript-only/syu.yaml",
-          "replacers": [
-            {
-              "search": "^version: (?<version>.*)$",
-              "replace": "version: {{version}}"
-            }
-          ]
-        },
-        {
-          "type": "generic",
-          "file": "examples/go-only/syu.yaml",
-          "replacers": [
-            {
-              "search": "^version: (?<version>.*)$",
-              "replace": "version: {{version}}"
-            }
-          ]
-        },
-        {
-          "type": "generic",
-          "file": "examples/python-only/syu.yaml",
-          "replacers": [
-            {
-              "search": "^version: (?<version>.*)$",
-              "replace": "version: {{version}}"
-            }
-          ]
-        },
-        {
-          "type": "generic",
-          "file": "examples/java-only/syu.yaml",
-          "replacers": [
-            {
-              "search": "^version: (?<version>.*)$",
-              "replace": "version: {{version}}"
-            }
-          ]
-        },
-        {
-          "type": "generic",
-          "file": "examples/ruby-only/syu.yaml",
-          "replacers": [
-            {
-              "search": "^version: (?<version>.*)$",
-              "replace": "version: {{version}}"
-            }
-          ]
-        },
-        {
-          "type": "generic",
-          "file": "examples/docs-first/syu.yaml",
-          "replacers": [
-            {
-              "search": "^version: (?<version>.*)$",
-              "replace": "version: {{version}}"
-            }
-          ]
-        },
-        {
-          "type": "generic",
-          "file": "examples/polyglot/syu.yaml",
-          "replacers": [
-            {
-              "search": "^version: (?<version>.*)$",
-              "replace": "version: {{version}}"
-            }
-          ]
-        },
-        {
-          "type": "generic",
-          "file": "tests/fixtures/workspaces/passing/docs/syu/features/features.yaml",
-          "replacers": [
-            {
-              "search": "^version: (?<version>.*)$",
-              "replace": "version: {{version}}"
-            }
-          ]
-        },
-        {
-          "type": "generic",
-          "file": "tests/fixtures/workspaces/failing/docs/syu/features/features.yaml",
-          "replacers": [
-            {
-              "search": "^version: (?<version>.*)$",
-              "replace": "version: {{version}}"
             }
           ]
         }

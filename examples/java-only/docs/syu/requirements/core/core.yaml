@@ -1,0 +1,29 @@
+schema: syu/spec/v1
+kind: requirements
+namespace: java-only
+category: Java example
+requirements:
+- id: REQ-JAVAONLY-001
+  title: Java starter behavior
+  description: The Java sample keeps source and test ownership visible in review.
+  priority: high
+  status: implemented
+  criteria:
+  - id: owned-delivery
+    kind: behavior
+    statement: The Java sample keeps source and test ownership visible in review.
+    governed_by:
+    - POL-JAVAONLY-001#rule.traceable-delivery
+  bindings:
+  - id: verification
+    role: verification
+    facet: verification
+    responsibility: Verify the owned example behavior through checked-in evidence.
+    targets:
+    - id: target-1
+      adapter: java
+      path: src/test/java/example/app/OrderSummaryTest.java
+      selector:
+        kind: file
+    verifies:
+    - REQ-JAVAONLY-001#criterion.owned-delivery
