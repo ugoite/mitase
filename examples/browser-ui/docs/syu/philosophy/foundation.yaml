@@ -1,11 +1,16 @@
-category: Philosophy
-version: 1
-language: en
-
+schema: syu/spec/v1
+kind: philosophies
+namespace: browser-ui
+category: Browser UI example
 philosophies:
-  - id: PHIL-UI-001
-    title: Frontend traces should reflect user flows
-    product_design_principle: Keep browser UI examples practical and testable.
-    coding_guideline: Use component-level traces with clear state management and test coverage.
-    linked_policies:
-      - POL-UI-001
+- id: PHIL-BROWSERUI-001
+  title: Browser UI example
+  summary: Keep a small TypeScript UI example traceable through v1 bindings.
+  principles:
+  - id: exact-ownership
+    statement: UI changes must stay connected to explicit implementation and verification
+      targets.
+    applies_to:
+    - code
+    - work
+  bindings: []

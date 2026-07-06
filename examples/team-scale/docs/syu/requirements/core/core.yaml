@@ -1,0 +1,41 @@
+schema: syu/spec/v1
+kind: requirements
+namespace: team-scale
+category: Team-scale example
+requirements:
+- id: REQ-TEAMSCALE-001
+  title: Team-scale delivery surface
+  description: Team-scale sample files remain explicitly grouped under one delivery
+    slice.
+  priority: high
+  status: implemented
+  criteria:
+  - id: owned-delivery
+    kind: behavior
+    statement: Team-scale sample files remain explicitly grouped under one delivery
+      slice.
+    governed_by:
+    - POL-TEAMSCALE-001#rule.traceable-delivery
+  bindings:
+  - id: verification
+    role: verification
+    facet: verification
+    responsibility: Verify the owned example behavior through checked-in evidence.
+    targets:
+    - id: target-1
+      adapter: rust
+      path: tests/auth_login.rs
+      selector:
+        kind: file
+    - id: target-2
+      adapter: rust
+      path: tests/audit_visibility.rs
+      selector:
+        kind: file
+    - id: target-3
+      adapter: rust
+      path: tests/report_exports.rs
+      selector:
+        kind: file
+    verifies:
+    - REQ-TEAMSCALE-001#criterion.owned-delivery

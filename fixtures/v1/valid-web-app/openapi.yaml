@@ -1,0 +1,6 @@
+openapi: 3.1.0
+info: { title: Auth, version: 1.0.0 }
+paths:
+  /sessions:
+    post:
+      responses: { "401": { description: Invalid credentials } }
