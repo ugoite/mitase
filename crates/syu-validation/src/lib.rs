@@ -95,7 +95,7 @@ pub static RULES: &[RuleMetadata] = &[
     metadata!("SYU-BINDING-001"),
     metadata!("SYU-BINDING-002"),
     metadata!("SYU-BINDING-003"),
-    metadata!("SYU-BINDING-004"),
+    fixed_metadata!("SYU-BINDING-004"),
     fixed_metadata!("SYU-TARGET-001"),
     fixed_metadata!("SYU-TARGET-002"),
     fixed_metadata!("SYU-TARGET-003"),
@@ -103,17 +103,17 @@ pub static RULES: &[RuleMetadata] = &[
     fixed_metadata!("SYU-TARGET-005"),
     metadata!("SYU-FACET-001"),
     metadata!("SYU-FACET-002"),
-    metadata!("SYU-CONTRACT-001"),
-    metadata!("SYU-CONTRACT-002"),
-    metadata!("SYU-CONTRACT-003"),
+    fixed_metadata!("SYU-CONTRACT-001"),
+    fixed_metadata!("SYU-CONTRACT-002"),
+    fixed_metadata!("SYU-CONTRACT-003"),
     metadata!("SYU-CONTRACT-004"),
-    metadata!("SYU-CONTRACT-005"),
+    fixed_metadata!("SYU-CONTRACT-005"),
     metadata!("SYU-CONTRACT-006"),
-    metadata!("SYU-CONTRACT-007"),
+    fixed_metadata!("SYU-CONTRACT-007"),
     metadata!("SYU-DOC-001"),
     metadata!("SYU-DOC-002"),
-    metadata!("SYU-GENERATED-001"),
-    metadata!("SYU-GENERATED-002"),
+    fixed_metadata!("SYU-GENERATED-001"),
+    fixed_metadata!("SYU-GENERATED-002"),
     metadata!("SYU-OPERATION-001"),
     strict_metadata!("SYU-CHANGE-001"),
     strict_metadata!("SYU-CHANGE-002"),
@@ -2505,6 +2505,65 @@ mod tests {
         (tempdir, workspace, index)
     }
 
+    fn write_generated_binding_workspace(root: &Path) {
+        fs::create_dir_all(root.join("spec")).expect("spec dir");
+        fs::create_dir_all(root.join("src")).expect("src dir");
+        fs::write(
+            root.join("syu.yaml"),
+            concat!(
+                "schema: syu/config/v1\n",
+                "workspace:\n",
+                "  spec_roots: [spec]\n",
+                "  artifact_roots: [src]\n",
+                "  excludes: []\n",
+                "profiles: { active: [], custom: {} }\n",
+                "validation:\n",
+                "  preset: standard\n",
+                "  deny_warnings: false\n",
+                "  rules:\n",
+                "    SYU-GENERATED-001: off\n",
+                "  changed:\n",
+                "    require_owned_changes: false\n",
+                "work:\n",
+                "  slicing:\n",
+                "    max_editable_files: 2\n",
+                "    max_editable_symbols: 4\n",
+                "    max_verification_targets: 2\n",
+                "    max_readonly_targets: 2\n",
+                "    max_total_bytes: 4096\n",
+                "  context:\n",
+                "    include_parent_principles: false\n",
+                "    include_parent_rules: false\n",
+                "adapters: { enabled: [rust] }\n",
+            ),
+        )
+        .expect("config");
+        fs::write(root.join("src/generated.rs"), "pub fn generated() {}\n").expect("artifact");
+        fs::write(
+            root.join("spec/feature.yaml"),
+            concat!(
+                "schema: syu/spec/v1\n",
+                "kind: features\n",
+                "namespace: sample\n",
+                "category: Sample\n",
+                "features:\n",
+                "  - id: FEAT-TEST-001\n",
+                "    title: Test\n",
+                "    summary: Test feature.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: gen\n",
+                "        role: generated\n",
+                "        facet: backend\n",
+                "        responsibility: Generated artifact.\n",
+                "        targets:\n",
+                "          - { id: generated-file, adapter: rust, path: src/generated.rs, selector: { kind: file } }\n",
+                "        generated_from: []\n",
+            ),
+        )
+        .expect("feature spec");
+    }
+
     fn init_git_repo(root: &Path) -> String {
         let run = |args: &[&str]| {
             let status = Command::new("git")
@@ -2703,6 +2762,39 @@ requirements:
             &sample_target("web/new.ts", "file", (1, 1)),
             &changed,
         ));
+    }
+
+    #[test]
+    fn fixed_error_structural_rules_cannot_be_suppressed() {
+        let tempdir = tempdir().expect("tempdir");
+        write_generated_binding_workspace(tempdir.path());
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let result = validate(&ValidationContext {
+            config: &workspace.config,
+            workspace: &workspace,
+            index: &index,
+            changed_files: None,
+            reported_changed_files: None,
+            work_plan: None,
+            selected_slice: None,
+            plan_mode: PlanValidationMode::PreState,
+            preset: workspace.config.validation.preset,
+            revision: None,
+            change_base_revision: None,
+        });
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.rule_id == "SYU-SCHEMA-002"
+                && diagnostic
+                    .message
+                    .contains("cannot be downgraded or suppressed")
+        }));
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.rule_id == "SYU-GENERATED-001")
+        );
     }
 
     #[test]

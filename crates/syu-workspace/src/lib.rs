@@ -524,11 +524,18 @@ pub fn resolve_target_with_adapters(
                 if value.trim().is_empty() {
                     bail!("heading selector must not be empty");
                 }
-                if !text
+                let heading_matches = text
                     .lines()
-                    .any(|l| l.trim_start_matches('#').trim() == value)
-                {
+                    .filter(|line| {
+                        let trimmed = line.trim_start();
+                        trimmed.starts_with('#') && trimmed.trim_start_matches('#').trim() == value
+                    })
+                    .count();
+                if heading_matches == 0 {
                     bail!("heading {value} not found");
+                }
+                if heading_matches > 1 {
+                    bail!("heading {value} is ambiguous");
                 }
                 let (byte_start, byte_end, line_start, line_end, excerpt) =
                     extract_heading_block(&text, value).unwrap_or_else(|| {
@@ -574,8 +581,12 @@ pub fn resolve_target_with_adapters(
                 if value.trim().is_empty() {
                     bail!("marker selector must not be empty");
                 }
-                if !text.contains(value) {
+                let marker_matches = text.match_indices(value).count();
+                if marker_matches == 0 {
                     bail!("marker {value} not found");
+                }
+                if marker_matches > 1 {
+                    bail!("marker {value} is ambiguous");
                 }
                 let (byte_start, byte_end, line_start, line_end, excerpt) =
                     extract_marker_block(&text, value).unwrap_or_else(|| {
@@ -716,4 +727,74 @@ fn extract_marker_block(text: &str, marker: &str) -> Option<(usize, usize, usize
         byte = next;
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    fn write_workspace(root: &Path) {
+        fs::create_dir_all(root.join("src")).expect("src dir");
+        fs::write(
+            root.join("src/doc.md"),
+            concat!(
+                "# Shared\n",
+                "marker: ::dup::\n",
+                "## Shared\n",
+                "marker: ::dup::\n",
+            ),
+        )
+        .expect("doc");
+    }
+
+    fn target(selector: Selector) -> syu_spec_model::ArtifactTarget {
+        syu_spec_model::ArtifactTarget {
+            id: "doc".into(),
+            adapter: "rust".into(),
+            path: RepoPath::new("src/doc.md").expect("path"),
+            selector,
+        }
+    }
+
+    #[test]
+    fn heading_selectors_reject_ambiguity() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        let result = resolve_target_with_adapters(
+            tempdir.path(),
+            &target(Selector::Heading {
+                value: "Shared".into(),
+            }),
+            &["rust".into()],
+        );
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("heading Shared is ambiguous")
+        );
+    }
+
+    #[test]
+    fn marker_selectors_reject_ambiguity() {
+        let tempdir = tempdir().expect("tempdir");
+        write_workspace(tempdir.path());
+        let result = resolve_target_with_adapters(
+            tempdir.path(),
+            &target(Selector::Marker {
+                value: "::dup::".into(),
+            }),
+            &["rust".into()],
+        );
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("marker ::dup:: is ambiguous")
+        );
+    }
 }

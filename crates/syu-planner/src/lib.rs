@@ -1469,6 +1469,21 @@ fn one_target(
     if exclude_matcher.is_some_and(|matcher| matcher.is_match(&target.path)) {
         return vec![];
     }
+    if matches!(options.policy.access, TargetAccessMode::Editable)
+        && !selector_supports_editable(&target.selector)
+    {
+        let mut d = Diagnostic::error(
+            "SYU-TARGET-004",
+            format!(
+                "editable target requires an exact selector: {}",
+                target.path.display()
+            ),
+            target.path.to_string_lossy(),
+        );
+        d.target = Some(reference.clone());
+        blockers.push(d);
+        return vec![];
+    }
     let resolved =
         resolve_target_with_adapters(&workspace.root, target, &workspace.config.adapters.enabled);
     match resolved {
@@ -1477,21 +1492,6 @@ fn one_target(
                 let mut d = Diagnostic::error(
                     "SYU-WORK-001",
                     format!("add target already exists: {reference}"),
-                    target.path.to_string_lossy(),
-                );
-                d.target = Some(reference.clone());
-                blockers.push(d);
-                return vec![];
-            }
-            if matches!(options.policy.access, TargetAccessMode::Editable)
-                && !selector_supports_editable(&target.selector)
-            {
-                let mut d = Diagnostic::error(
-                    "SYU-TARGET-004",
-                    format!(
-                        "editable target requires an exact selector: {}",
-                        target.path.display()
-                    ),
                     target.path.to_string_lossy(),
                 );
                 d.target = Some(reference.clone());
@@ -1740,6 +1740,9 @@ fn split_groups(
     limits: &syu_project_model::SliceLimits,
 ) -> Option<Vec<SliceGroup>> {
     if !slice_budget_can_shrink_with_editable_split(slice, limits) {
+        return None;
+    }
+    if slice.acceptance.len() == 1 && slice.editable_targets.len() > 1 {
         return None;
     }
     if let Some(groups) = target_groups(&slice.editable_targets) {
@@ -2380,6 +2383,160 @@ mod tests {
                     && target.reference.target_id.to_string() == "handler-missing"
             })
         }));
+    }
+
+    #[test]
+    fn add_transition_blocks_missing_exact_selector_targets() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        fs::write(
+            tempdir.path().join("src/api.yaml"),
+            "paths:\n  /existing:\n    get:\n      responses: {}\n",
+        )
+        .expect("api file");
+        fs::write(
+            tempdir.path().join("spec/feature.yaml"),
+            concat!(
+                "schema: syu/spec/v1\n",
+                "kind: features\n",
+                "namespace: sample\n",
+                "category: Sample\n",
+                "features:\n",
+                "  - id: FEAT-TEST-001\n",
+                "    title: Test\n",
+                "    summary: Test feature.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: impl\n",
+                "        role: implementation\n",
+                "        facet: backend\n",
+                "        responsibility: Implement the target.\n",
+                "        targets:\n",
+                "          - { id: operation-missing, adapter: rust, path: src/api.yaml, selector: { kind: operation, method: post, path: /new } }\n",
+                "          - { id: pointer-missing, adapter: rust, path: src/api.yaml, selector: { kind: json-pointer, value: /paths/~1new } }\n",
+                "        satisfies: [REQ-TEST-001#criterion.test]\n",
+            ),
+        )
+        .expect("feature spec");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        for target_id in ["operation-missing", "pointer-missing"] {
+            let request = WorkRequest {
+                schema: WORK_REQUEST_SCHEMA.into(),
+                id: format!("WORK-TEST-{target_id}"),
+                summary: "Add a new target".into(),
+                operation: WorkOperation::Add,
+                seeds: vec![],
+                constraints: WorkConstraints {
+                    max_added_bytes_per_target: Some(256),
+                    max_added_lines_per_target: Some(8),
+                    ..Default::default()
+                },
+                requested_targets: vec![RequestedTarget {
+                    reference: format!("FEAT-TEST-001#binding.impl/target.{target_id}")
+                        .parse()
+                        .unwrap(),
+                    criterion: None,
+                    transition: TargetTransition::Add,
+                }],
+            };
+            let plan = plan(&request, &workspace, &index, "rev-add").expect("plan");
+            assert_eq!(plan.status, PlanStatus::Blocked);
+            assert!(plan.slices.iter().any(|slice| {
+                slice
+                    .blockers
+                    .iter()
+                    .any(|diagnostic| diagnostic.rule_id == "SYU-TARGET-004")
+            }));
+        }
+    }
+
+    #[test]
+    fn oversized_mixed_transition_closure_is_not_split_into_ready_slices() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        fs::write(
+            tempdir.path().join("syu.yaml"),
+            fs::read_to_string(tempdir.path().join("syu.yaml"))
+                .expect("config")
+                .replacen("max_editable_files: 2", "max_editable_files: 1", 1)
+                .replacen("max_editable_symbols: 4", "max_editable_symbols: 1", 1),
+        )
+        .expect("config");
+        fs::write(
+            tempdir.path().join("src/handler.rs"),
+            "pub fn handler() {}\n",
+        )
+        .expect("handler file");
+        fs::write(
+            tempdir.path().join("src/registry.rs"),
+            "pub fn registry() {}\n",
+        )
+        .expect("registry file");
+        fs::write(
+            tempdir.path().join("spec/feature.yaml"),
+            concat!(
+                "schema: syu/spec/v1\n",
+                "kind: features\n",
+                "namespace: sample\n",
+                "category: Sample\n",
+                "features:\n",
+                "  - id: FEAT-TEST-001\n",
+                "    title: Test\n",
+                "    summary: Test feature.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: impl\n",
+                "        role: implementation\n",
+                "        facet: backend\n",
+                "        responsibility: Implement the target.\n",
+                "        targets:\n",
+                "          - { id: handler-present, adapter: rust, path: src/handler.rs, selector: { kind: symbol, names: [handler] } }\n",
+                "          - { id: handler-missing, adapter: rust, path: src/handler.rs, selector: { kind: symbol, names: [handler_missing] } }\n",
+                "          - { id: registry-missing, adapter: rust, path: src/registry.rs, selector: { kind: symbol, names: [registry_missing] } }\n",
+                "        satisfies: [REQ-TEST-001#criterion.test]\n",
+            ),
+        )
+        .expect("feature spec");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-TEST-006".into(),
+            summary: "Mixed transition closure".into(),
+            operation: WorkOperation::Modify,
+            seeds: vec![],
+            constraints: WorkConstraints {
+                max_added_bytes_per_target: Some(256),
+                max_added_lines_per_target: Some(8),
+                ..Default::default()
+            },
+            requested_targets: vec![
+                RequestedTarget {
+                    reference: "FEAT-TEST-001#binding.impl/target.handler-present"
+                        .parse()
+                        .unwrap(),
+                    criterion: None,
+                    transition: TargetTransition::Modify,
+                },
+                RequestedTarget {
+                    reference: "FEAT-TEST-001#binding.impl/target.registry-missing"
+                        .parse()
+                        .unwrap(),
+                    criterion: None,
+                    transition: TargetTransition::Add,
+                },
+            ],
+        };
+        let plan = plan(&request, &workspace, &index, "rev-6").expect("plan");
+        assert_eq!(plan.status, PlanStatus::Blocked);
+        assert_eq!(plan.slices.len(), 1);
+        assert!(
+            plan.slices[0]
+                .blockers
+                .iter()
+                .any(|diagnostic| diagnostic.rule_id == "SYU-WORK-003")
+        );
     }
 
     #[test]

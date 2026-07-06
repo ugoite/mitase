@@ -2027,36 +2027,12 @@ fn oversized_slice_is_split_deterministically() {
         .args(["--workspace"])
         .arg(temp.path())
         .assert()
-        .success();
+        .failure();
     let text = fs::read_to_string(&plan).unwrap();
-    assert!(text.contains("status: ready"));
-    assert!(text.contains("part01"));
-    assert!(text.contains("part02"));
-    assert!(text.contains("resolved_path: src/a.rs"));
-    assert!(text.contains("resolved_path: src/b.rs"));
-    Command::cargo_bin("syu")
-        .unwrap()
-        .args(["validate"])
-        .arg(temp.path())
-        .args(["--plan"])
-        .arg(&plan)
-        .assert()
-        .success();
-    let slice_ids = text
-        .lines()
-        .filter_map(|line| line.strip_prefix("- id: "))
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-    for slice_id in slice_ids {
-        Command::cargo_bin("syu")
-            .unwrap()
-            .args(["work", "export-context", "--plan"])
-            .arg(&plan)
-            .args(["--slice", &slice_id, "--workspace"])
-            .arg(temp.path())
-            .assert()
-            .success();
-    }
+    assert!(text.contains("status: blocked"));
+    assert!(text.contains("slice exceeds configured budget"));
+    assert!(!text.contains("part01"));
+    assert!(!text.contains("part02"));
 }
 
 #[test]
@@ -2216,26 +2192,10 @@ fn post_state_multi_slice_validation_requires_selected_slice() {
         .args(["--workspace"])
         .arg(temp.path())
         .assert()
-        .success();
-    fs::write(
-        temp.path().join("src/a.rs"),
-        "fn alpha() { let value = 1; }\n",
-    )
-    .unwrap();
-    let output = Command::cargo_bin("syu")
-        .unwrap()
-        .args(["validate"])
-        .arg(temp.path())
-        .args(["--plan"])
-        .arg(&plan)
-        .output()
-        .unwrap();
-    assert!(!output.status.success());
-    assert!(
-        String::from_utf8(output.stdout)
-            .unwrap()
-            .contains("post-state validation requires --slice")
-    );
+        .failure();
+    let text = fs::read_to_string(&plan).unwrap();
+    assert!(text.contains("status: blocked"));
+    assert!(text.contains("slice exceeds configured budget"));
 }
 
 #[test]
@@ -2599,7 +2559,7 @@ fn split_respects_max_slices_constraint() {
         .failure();
     let text = fs::read_to_string(plan).unwrap();
     assert!(text.contains("status: blocked"));
-    assert!(text.contains("exceed requested maximum 1"));
+    assert!(text.contains("slice exceeds configured budget"));
 }
 
 #[test]
