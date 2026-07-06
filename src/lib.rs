@@ -41,6 +41,7 @@ struct ApiErrorBody {
     error: String,
 }
 
+#[derive(Debug)]
 struct ApiError(StatusCode, anyhow::Error);
 
 impl IntoResponse for ApiError {
@@ -94,6 +95,18 @@ struct BrowserValidationRequest {
     context: String,
     #[serde(default)]
     slice: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ConfigEdit {
+    config: syu_project_model::ProjectConfig,
+    expected_hash: String,
+}
+
+#[derive(Debug, Serialize)]
+struct ConfigSource {
+    config: syu_project_model::ProjectConfig,
+    hash: String,
 }
 
 struct ValidationInputs {
@@ -375,11 +388,17 @@ fn run_workbench(args: WorkbenchArgs) -> Result<i32> {
                     .route("/api/projection", get(web_projection))
                     .route("/api/work/request", put(web_update_request))
                     .route("/api/work/replan", post(web_replan))
-                    .route("/api/context/{slice}", post(web_export_context))
+                    .route(
+                        "/api/context/{slice}",
+                        post(web_export_context).get(web_export_context),
+                    )
                     .route("/api/validate", post(web_validate))
                     .route("/api/source", get(web_source))
                     .route("/api/file/preview", post(web_preview_file))
                     .route("/api/file/apply", put(web_apply_file))
+                    .route("/api/config", get(web_config))
+                    .route("/api/config/preview", post(web_preview_config))
+                    .route("/api/config/apply", put(web_apply_config))
                     .with_state(state);
                 let listener = tokio::net::TcpListener::bind((bind, port)).await?;
                 println!("Syu Workbench listening on http://{bind}:{port}");
@@ -570,6 +589,164 @@ async fn web_apply_file(
         changed_lines: changed_line_count(&old, &edit.content),
         validation_errors: Vec::new(),
     }))
+}
+
+async fn web_config(
+    State(state): State<WorkbenchWebState>,
+) -> std::result::Result<Json<ConfigSource>, ApiError> {
+    let path = state.workspace_root.join("syu.yaml");
+    let content = fs::read_to_string(path).map_err(anyhow::Error::from)?;
+    let config = serde_yaml::from_str(&content).map_err(anyhow::Error::from)?;
+    Ok(Json(ConfigSource {
+        config,
+        hash: content_hash(&content),
+    }))
+}
+
+async fn web_preview_config(
+    State(state): State<WorkbenchWebState>,
+    Json(edit): Json<ConfigEdit>,
+) -> std::result::Result<Json<FilePreview>, ApiError> {
+    let original =
+        fs::read_to_string(state.workspace_root.join("syu.yaml")).map_err(anyhow::Error::from)?;
+    let content = patch_config_source(&original, &edit.config)?;
+    web_preview_file(
+        State(state),
+        Json(FileEdit {
+            path: "syu.yaml".to_string(),
+            content,
+            expected_hash: edit.expected_hash,
+        }),
+    )
+    .await
+}
+
+async fn web_apply_config(
+    State(state): State<WorkbenchWebState>,
+    Json(edit): Json<ConfigEdit>,
+) -> std::result::Result<Json<FilePreview>, ApiError> {
+    let original =
+        fs::read_to_string(state.workspace_root.join("syu.yaml")).map_err(anyhow::Error::from)?;
+    let content = patch_config_source(&original, &edit.config)?;
+    web_apply_file(
+        State(state),
+        Json(FileEdit {
+            path: "syu.yaml".to_string(),
+            content,
+            expected_hash: edit.expected_hash,
+        }),
+    )
+    .await
+}
+
+fn patch_config_source(
+    source: &str,
+    config: &syu_project_model::ProjectConfig,
+) -> std::result::Result<String, ApiError> {
+    let mut output = source.to_string();
+    let list = |values: &[String]| format!("[{}]", values.join(", "));
+    let paths = |values: &[RepoPath]| {
+        format!(
+            "[{}]",
+            values
+                .iter()
+                .map(|path| path.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    };
+    output = replace_yaml_key(&output, "spec_roots", &paths(&config.workspace.spec_roots))?;
+    output = replace_yaml_key(
+        &output,
+        "artifact_roots",
+        &paths(&config.workspace.artifact_roots),
+    )?;
+    output = replace_yaml_key(&output, "active", &list(&config.profiles.active))?;
+    let preset = serde_yaml::to_string(&config.validation.preset)
+        .map_err(anyhow::Error::from)?
+        .trim()
+        .to_string();
+    output = replace_yaml_key(&output, "preset", &preset)?;
+    output = replace_yaml_key(
+        &output,
+        "deny_warnings",
+        &config.validation.deny_warnings.to_string(),
+    )?;
+    output = replace_yaml_key(
+        &output,
+        "require_owned_changes",
+        &config.validation.changed.require_owned_changes.to_string(),
+    )?;
+    for (key, value) in [
+        ("max_editable_files", config.work.slicing.max_editable_files),
+        (
+            "max_editable_symbols",
+            config.work.slicing.max_editable_symbols,
+        ),
+        (
+            "max_verification_targets",
+            config.work.slicing.max_verification_targets,
+        ),
+        (
+            "max_readonly_targets",
+            config.work.slicing.max_readonly_targets,
+        ),
+        ("max_total_bytes", config.work.slicing.max_total_bytes),
+    ] {
+        output = replace_inline_scalar(&output, key, &value.to_string())?;
+    }
+    output = replace_inline_list(&output, "enabled", &list(&config.adapters.enabled))?;
+    Ok(output)
+}
+
+fn replace_yaml_key(source: &str, key: &str, value: &str) -> std::result::Result<String, ApiError> {
+    let pattern = regex::Regex::new(&format!(r"(?m)^(\s*{}:\s*).*$", regex::escape(key)))
+        .map_err(anyhow::Error::from)?;
+    if !pattern.is_match(source) {
+        return Err(ApiError(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            anyhow::anyhow!("config source is missing {key}"),
+        ));
+    }
+    Ok(pattern
+        .replace(source, format!("${{1}}{value}"))
+        .into_owned())
+}
+
+fn replace_inline_scalar(
+    source: &str,
+    key: &str,
+    value: &str,
+) -> std::result::Result<String, ApiError> {
+    let pattern = regex::Regex::new(&format!(r"({}:\s*)\d+", regex::escape(key)))
+        .map_err(anyhow::Error::from)?;
+    if !pattern.is_match(source) {
+        return Err(ApiError(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            anyhow::anyhow!("config source is missing {key}"),
+        ));
+    }
+    Ok(pattern
+        .replace(source, format!("${{1}}{value}"))
+        .into_owned())
+}
+
+fn replace_inline_list(
+    source: &str,
+    key: &str,
+    value: &str,
+) -> std::result::Result<String, ApiError> {
+    let pattern = regex::Regex::new(&format!(r"({}:\s*)\[[^\]]*\]", regex::escape(key)))
+        .map_err(anyhow::Error::from)?;
+    if !pattern.is_match(source) {
+        return Err(ApiError(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            anyhow::anyhow!("config source is missing {key}"),
+        ));
+    }
+    Ok(pattern
+        .replace(source, format!("${{1}}{value}"))
+        .into_owned())
 }
 
 fn safe_workspace_path(root: &Path, relative: &str) -> std::result::Result<PathBuf, ApiError> {
@@ -1228,5 +1405,18 @@ Binary files a/assets/logo.png and b/assets/logo.png differ\n",
         assert!(validate_candidate("spec/item.yaml", "schema: wrong\n").len() == 1);
         assert!(validate_candidate("README.md", "anything").is_empty());
         assert_eq!(changed_line_count("a\nb\n", "a\nc\nd\n"), 2);
+    }
+
+    #[test]
+    fn structured_config_edits_preserve_unrelated_source_lines() {
+        let source = fs::read_to_string("fixtures/v1/valid-web-app/syu.yaml").unwrap();
+        let mut config: syu_project_model::ProjectConfig = serde_yaml::from_str(&source).unwrap();
+        config.validation.deny_warnings = !config.validation.deny_warnings;
+        let updated = patch_config_source(&source, &config).unwrap();
+        assert_eq!(changed_line_count(&source, &updated), 1);
+        assert!(updated.contains("contract_rules:"));
+        assert!(updated.contains("facets:"));
+        let reparsed: syu_project_model::ProjectConfig = serde_yaml::from_str(&updated).unwrap();
+        assert_eq!(reparsed, config);
     }
 }

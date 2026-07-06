@@ -1,8 +1,10 @@
 #![forbid(unsafe_code)]
 use anyhow::Result;
 use serde::Serialize;
+use std::path::Path;
 use syu_diagnostics::ValidationResult;
 use syu_planner::plan;
+use syu_project_model::ProjectConfig;
 use syu_spec_model::LocalAnchorKind;
 use syu_validation::{PlanValidationMode, ValidationContext, validate};
 use syu_work_model::{WorkPlan, WorkRequest};
@@ -12,6 +14,7 @@ use syu_workspace::SpecWorkspace;
 #[serde(deny_unknown_fields)]
 pub struct WorkspaceProjection {
     pub workspace: WorkspaceSummary,
+    pub config: ProjectConfig,
     pub items: Vec<ItemSummary>,
     pub plan: Option<WorkPlan>,
     pub validation: ValidationResult,
@@ -60,11 +63,7 @@ pub fn project(
                     "feature"
                 }
                 .to_string(),
-                path: path
-                    .strip_prefix(&workspace.root)
-                    .unwrap_or(path)
-                    .display()
-                    .to_string(),
+                path: relative_display(&workspace.root, path),
                 principles: count(LocalAnchorKind::Principle),
                 rules: count(LocalAnchorKind::Rule),
                 criteria: count(LocalAnchorKind::Criterion),
@@ -96,8 +95,24 @@ pub fn project(
             fingerprint: workspace.fingerprint(),
             config_schema: workspace.config.schema.clone(),
         },
+        config: workspace.config.clone(),
         items,
         plan,
         validation,
     })
+}
+
+fn relative_display(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .map(Path::to_path_buf)
+        .or_else(|_| {
+            let root = root.canonicalize()?;
+            let path = path.canonicalize()?;
+            path.strip_prefix(root)
+                .map(Path::to_path_buf)
+                .map_err(std::io::Error::other)
+        })
+        .unwrap_or_else(|_| path.to_path_buf())
+        .display()
+        .to_string()
 }
