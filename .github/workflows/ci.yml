@@ -31,7 +31,7 @@ jobs:
           cache-dependency-path: .pre-commit-config.yaml
 
       - name: Cache pre-commit hooks
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('.pre-commit-config.yaml') }}
