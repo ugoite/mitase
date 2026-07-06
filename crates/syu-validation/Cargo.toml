@@ -1,0 +1,15 @@
+[package]
+name = "syu-validation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+syu-diagnostics = { path = "../syu-diagnostics" }
+syu-planner = { path = "../syu-planner" }
+syu-project-model = { path = "../syu-project-model" }
+syu-spec-model = { path = "../syu-spec-model" }
+syu-work-model = { path = "../syu-work-model" }
+syu-workspace = { path = "../syu-workspace" }
+serde_yaml = "0.9"
+tempfile.workspace = true

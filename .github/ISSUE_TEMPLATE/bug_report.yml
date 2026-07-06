@@ -63,9 +63,9 @@ body:
       label: Steps to reproduce
       description: Share the exact commands, files, or repo layout needed to reproduce the issue.
       placeholder: |
-        1. Run `syu init .`
-        2. Edit `docs/syu/requirements/core/core.yaml`
-        3. Run `syu validate .`
+        1. Edit `docs/syu/requirements/core/core.yaml`
+        2. Run `syu validate .`
+        3. If relevant, run `syu validate . --range origin/main...HEAD`
     validations:
       required: true
 

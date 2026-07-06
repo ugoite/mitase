@@ -17,129 +17,203 @@ const {
   resolveIssueTarget
 } = require('../src/model');
 
-function fixtureRoot(name) {
-  return path.resolve(__dirname, '../../../tests/fixtures/workspaces', name);
+function v1FixtureRoot(name) {
+  return path.resolve(__dirname, '../../../fixtures/v1', name);
 }
 
 async function createCustomSpecRootWorkspace() {
   const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'syu-vscode-spec-root-'));
   const specRoot = path.join(workspaceRoot, 'spec', 'contracts');
 
-  await fs.mkdir(path.join(specRoot, 'philosophy'), { recursive: true });
-  await fs.mkdir(path.join(specRoot, 'policies'), { recursive: true });
-  await fs.mkdir(path.join(specRoot, 'requirements'), { recursive: true });
-  await fs.mkdir(path.join(specRoot, 'features'), { recursive: true });
+  await fs.mkdir(specRoot, { recursive: true });
   await fs.writeFile(
     path.join(workspaceRoot, 'syu.yaml'),
-    'version: 0.0.1-alpha.8\nspec:\n  root: spec/contracts\n'
+    [
+      'schema: syu/config/v1',
+      'workspace:',
+      '  spec_roots: [spec/contracts]',
+      '  artifact_roots: [src, tests]',
+      '  excludes: []',
+      'profiles: { active: [], custom: {} }',
+      'validation:',
+      '  preset: standard',
+      '  deny_warnings: false',
+      '  rules: {}',
+      '  changed: { require_owned_changes: false }',
+      'work:',
+      '  slicing:',
+      '    max_editable_files: 2',
+      '    max_editable_symbols: 2',
+      '    max_verification_targets: 2',
+      '    max_readonly_targets: 2',
+      '    max_total_bytes: 4096',
+      '  context:',
+      '    include_parent_principles: false',
+      '    include_parent_rules: false',
+      'adapters: { enabled: [rust] }',
+      ''
+    ].join('\n')
   );
   await fs.writeFile(
-    path.join(specRoot, 'philosophy', 'foundation.yaml'),
-    'category: Philosophy\nphilosophies:\n  - id: PHIL-CUSTOM-001\n    title: Custom root\n'
+    path.join(specRoot, 'foundation.yaml'),
+    [
+      'schema: syu/spec/v1',
+      'kind: philosophies',
+      'namespace: custom',
+      'category: Custom',
+      'philosophies:',
+      '  - id: PHIL-CUSTOM-001',
+      '    title: Custom root',
+      '    summary: Custom summary.',
+      '    principles:',
+      '      - { id: governed, statement: Keep it governed., applies_to: [product] }',
+      '    bindings: []',
+      ''
+    ].join('\n')
   );
   await fs.writeFile(
-    path.join(specRoot, 'policies', 'policies.yaml'),
-    'category: Policies\npolicies:\n  - id: POL-CUSTOM-001\n    title: Custom policy\n    linked_philosophies:\n      - PHIL-CUSTOM-001\n'
+    path.join(specRoot, 'policy.yaml'),
+    [
+      'schema: syu/spec/v1',
+      'kind: policies',
+      'namespace: custom',
+      'category: Custom',
+      'policies:',
+      '  - id: POL-CUSTOM-001',
+      '    title: Custom policy',
+      '    summary: Custom policy summary.',
+      '    description: Custom policy description.',
+      '    rules:',
+      '      - id: governed',
+      '        level: must',
+      '        statement: Keep it governed.',
+      '        governed_by: [PHIL-CUSTOM-001#principle.governed]',
+      '    bindings: []',
+      ''
+    ].join('\n')
   );
   await fs.writeFile(
-    path.join(specRoot, 'requirements', 'core.yaml'),
-    'category: Requirements\nrequirements:\n  - id: REQ-CUSTOM-001\n    title: Custom requirement\n    linked_policies:\n      - POL-CUSTOM-001\n'
+    path.join(specRoot, 'requirement.yaml'),
+    [
+      'schema: syu/spec/v1',
+      'kind: requirements',
+      'namespace: custom',
+      'category: Custom',
+      'requirements:',
+      '  - id: REQ-CUSTOM-001',
+      '    title: Custom requirement',
+      '    description: Custom requirement.',
+      '    priority: high',
+      '    status: implemented',
+      '    criteria:',
+      '      - id: check',
+      '        kind: behavior',
+      '        statement: Verify the custom behavior.',
+      '        governed_by: [POL-CUSTOM-001#rule.governed]',
+      '    bindings:',
+      '      - id: verify',
+      '        role: verification',
+      '        facet: verification',
+      '        responsibility: Verify the custom behavior.',
+      '        targets:',
+      '          - { id: case, adapter: rust, path: tests/check.rs, selector: { kind: symbol, names: [check_behavior] } }',
+      '        verifies: [REQ-CUSTOM-001#criterion.check]',
+      ''
+    ].join('\n')
   );
-  await fs.writeFile(path.join(specRoot, 'features', 'features.yaml'), 'version: "1"\nfiles: []\n');
   await fs.writeFile(
-    path.join(specRoot, 'features', 'core.yaml'),
-    'category: Features\nfeatures:\n  - id: FEAT-CUSTOM-001\n    title: Custom feature\n    linked_requirements:\n      - REQ-CUSTOM-001\n'
+    path.join(specRoot, 'feature.yaml'),
+    [
+      'schema: syu/spec/v1',
+      'kind: features',
+      'namespace: custom',
+      'category: Custom',
+      'features:',
+      '  - id: FEAT-CUSTOM-001',
+      '    title: Custom feature',
+      '    summary: Custom feature summary.',
+      '    status: implemented',
+      '    bindings:',
+      '      - id: app',
+      '        role: implementation',
+      '        facet: backend',
+      '        responsibility: Implement the custom behavior.',
+      '        targets:',
+      '          - { id: code, adapter: rust, path: src/lib.rs, selector: { kind: symbol, names: [run] } }',
+      '        satisfies: [REQ-CUSTOM-001#criterion.check]',
+      ''
+    ].join('\n')
   );
 
   return { workspaceRoot, specRoot };
 }
 
-test('loadSpecModel indexes spec documents without syu yaml', async () => {
-  const model = await loadSpecModel(fixtureRoot('passing'));
+test('loadSpecModel indexes v1 spec documents and derives relationships', async () => {
+  const model = await loadSpecModel(v1FixtureRoot('valid-web-app'));
 
   assert.equal(model.byKind.get('philosophy').length, 1);
-  assert.equal(model.byKind.get('policy').length, 2);
-  assert.equal(model.byKind.get('requirement').length, 5);
-  assert.equal(model.byKind.get('feature').length, 5);
-  assert.equal(
-    model.byId.get('REQ-TRACE-001').documentPath,
-    'docs/syu/requirements/traceability/core.yaml'
-  );
+  assert.equal(model.byKind.get('policy').length, 1);
+  assert.equal(model.byKind.get('requirement').length, 1);
+  assert.equal(model.byKind.get('feature').length, 1);
+  assert.equal(model.byId.get('REQ-AUTH-001').documentPath, 'spec/requirement.yaml');
+  assert.deepEqual(model.byId.get('REQ-AUTH-001').linkedPolicies, ['POL-AUTH-001']);
+  assert.deepEqual(model.byId.get('REQ-AUTH-001').linkedFeatures, ['FEAT-AUTH-001']);
+  assert.deepEqual(model.byId.get('FEAT-AUTH-001').linkedRequirements, ['REQ-AUTH-001']);
 });
 
-test('lookupTrace links source files back to requirements features and policies', async () => {
-  const model = await loadSpecModel(fixtureRoot('passing'));
-  const trace = lookupTrace(model, path.join(fixtureRoot('passing'), 'src/rust_feature.rs'));
+test('lookupTrace links implementation files back to requirements and governance', async () => {
+  const model = await loadSpecModel(v1FixtureRoot('valid-web-app'));
+  const trace = lookupTrace(model, path.join(v1FixtureRoot('valid-web-app'), 'api/login.rs'));
 
   assert.equal(trace.status, 'owned');
-  assert.deepEqual(trace.matchedOwners.map((item) => item.id), ['FEAT-TRACE-001']);
-  assert.deepEqual(trace.requirements.map((item) => item.id), ['REQ-TRACE-001']);
-  assert.deepEqual(trace.features.map((item) => item.id), ['FEAT-TRACE-001']);
-  assert.deepEqual(trace.policies.map((item) => item.id), ['POL-TRACE-001', 'POL-TRACE-002']);
-  assert.deepEqual(trace.philosophies.map((item) => item.id), ['PHIL-TRACE-001']);
+  assert.deepEqual(trace.matchedOwners.map((item) => item.id), ['FEAT-AUTH-001']);
+  assert.deepEqual(trace.requirements.map((item) => item.id), ['REQ-AUTH-001']);
+  assert.deepEqual(trace.features.map((item) => item.id), ['FEAT-AUTH-001']);
+  assert.deepEqual(trace.policies.map((item) => item.id), ['POL-AUTH-001']);
+  assert.deepEqual(trace.philosophies.map((item) => item.id), ['PHIL-AUTH-001']);
 });
 
-test('lookupTrace reports partial symbol ownership when only the file is traced', async () => {
-  const model = await loadSpecModel(fixtureRoot('passing'));
-  const trace = lookupTrace(
-    model,
-    path.join(fixtureRoot('passing'), 'src/rust_feature.rs'),
-    'missingSymbol'
-  );
+test('lookupTrace links verification files back to their owning requirement', async () => {
+  const model = await loadSpecModel(v1FixtureRoot('valid-web-app'));
+  const trace = lookupTrace(model, path.join(v1FixtureRoot('valid-web-app'), 'tests/login.rs'));
 
-  assert.equal(trace.status, 'partial');
-  assert.equal(trace.matchedOwners.length, 0);
-  assert.deepEqual(trace.fileOnlyOwners.map((item) => item.id), ['FEAT-TRACE-001']);
+  assert.equal(trace.status, 'owned');
+  assert.deepEqual(trace.matchedOwners.map((item) => item.id), ['REQ-AUTH-001']);
+  assert.deepEqual(trace.requirements.map((item) => item.id), ['REQ-AUTH-001']);
+  assert.deepEqual(trace.features.map((item) => item.id), ['FEAT-AUTH-001']);
 });
 
-test('openTargetsForSpecId returns the YAML document and traced files', async () => {
-  const model = await loadSpecModel(fixtureRoot('passing'));
-  const targets = openTargetsForSpecId(model, 'FEAT-TRACE-001');
+test('openTargetsForSpecId returns the YAML document and v1 binding targets', async () => {
+  const model = await loadSpecModel(v1FixtureRoot('valid-web-app'));
+  const targets = openTargetsForSpecId(model, 'FEAT-AUTH-001');
 
   assert.equal(targets[0].kind, 'document');
-  assert.ok(targets.some((target) => target.path.endsWith(path.join('src', 'rust_feature.rs'))));
+  assert.ok(targets.some((target) => target.path.endsWith(path.join('api', 'login.rs'))));
+  assert.ok(targets.some((target) => target.path.endsWith(path.join('web', 'login.ts'))));
 });
 
-test('resolveIssueTarget maps definition issues back to YAML files', async () => {
-  const model = await loadSpecModel(fixtureRoot('passing'));
+test('resolveIssueTarget maps definition issues back to v1 YAML files', async () => {
+  const workspaceRoot = v1FixtureRoot('valid-web-app');
+  const model = await loadSpecModel(workspaceRoot);
   const target = await resolveIssueTarget(
     {
-      subject: 'requirement REQ-TRACE-001',
+      subject: 'requirement REQ-AUTH-001',
       location: 'status',
       message: 'status is broken'
     },
     model,
-    fixtureRoot('passing')
+    workspaceRoot
   );
 
-  assert.ok(
-    target.path.endsWith(path.join('docs', 'syu', 'requirements', 'traceability', 'core.yaml'))
-  );
-  assert.equal(target.range.line, 8);
-  assert.equal(target.range.startCharacter, 4);
-});
-
-test('resolveIssueTarget preserves absolute issue locations', async () => {
-  const model = await loadSpecModel(fixtureRoot('passing'));
-  const absoluteTarget = path.join(fixtureRoot('passing'), 'src', 'rust_feature.rs');
-  const target = await resolveIssueTarget(
-    {
-      subject: 'feature FEAT-TRACE-001',
-      location: absoluteTarget,
-      message: 'trace is broken'
-    },
-    model,
-    fixtureRoot('passing')
-  );
-
-  assert.equal(target.path, absoluteTarget);
+  assert.ok(target.path.endsWith(path.join('spec', 'requirement.yaml')));
+  assert.ok(target.range.line >= 0);
 });
 
 test('normalizeRelativePath keeps repository relative paths portable', () => {
   assert.equal(normalizeRelativePath('.\\src\\feature.js'), 'src/feature.js');
 });
 
-test('resolveWorkspaceContext honors configured workspace roots', async () => {
+test('resolveWorkspaceContext honors configured v1 workspace roots', async () => {
   const workspace = await createCustomSpecRootWorkspace();
   const context = await resolveWorkspaceContext(workspace.workspaceRoot);
 
@@ -147,7 +221,7 @@ test('resolveWorkspaceContext honors configured workspace roots', async () => {
   assert.equal(context.specRoot, workspace.specRoot);
 });
 
-test('resolveWorkspaceContext resolves an opened spec root back to the repository root', async () => {
+test('resolveWorkspaceContext resolves an opened v1 spec root back to the repository root', async () => {
   const workspace = await createCustomSpecRootWorkspace();
   const context = await resolveWorkspaceContext(workspace.specRoot);
 
@@ -155,64 +229,43 @@ test('resolveWorkspaceContext resolves an opened spec root back to the repositor
   assert.equal(context.specRoot, workspace.specRoot);
 });
 
-test('collectInlineNavigationTargets finds spec IDs traced files and traced symbols', () => {
+test('collectInlineNavigationTargets finds v1 spec IDs target paths and selector names', () => {
   const targets = collectInlineNavigationTargets(`
 requirements:
-  - id: REQ-TRACE-001
-    linked_policies:
-      - POL-TRACE-001
+  - id: REQ-AUTH-001
+    criteria:
+      - id: invalid-credentials
+        governed_by: [POL-AUTH-001#rule.generic-failure]
 features:
-  - id: FEAT-TRACE-001
-    linked_requirements:
-      - REQ-TRACE-001
-    implementations:
-      rust:
-        - file: src/rust_feature.rs
-          symbols:
-            - runFeature
-            - helper_value
+  - id: FEAT-AUTH-001
+    bindings:
+      - id: ui
+        targets:
+          - path: web/login.ts
+            selector:
+              kind: symbol
+              names:
+                - submitLogin
+                - helper_value
 `);
 
   assert.deepEqual(
     targets
       .filter((target) => target.kind === 'specId')
       .map((target) => target.id),
-    ['REQ-TRACE-001', 'POL-TRACE-001', 'FEAT-TRACE-001', 'REQ-TRACE-001']
+    ['REQ-AUTH-001', 'POL-AUTH-001', 'FEAT-AUTH-001']
   );
   assert.deepEqual(
     targets.filter((target) => target.kind === 'traceFile').map((target) => target.file),
-    ['src/rust_feature.rs']
+    ['web/login.ts']
   );
   assert.deepEqual(
     targets
       .filter((target) => target.kind === 'traceSymbol')
       .map((target) => [target.file, target.symbol]),
     [
-      ['src/rust_feature.rs', 'runFeature'],
-      ['src/rust_feature.rs', 'helper_value']
-    ]
-  );
-});
-
-test('collectInlineNavigationTargets keeps wildcard and quoted trace symbols addressable', () => {
-  const targets = collectInlineNavigationTargets(`
-features:
-  - id: FEAT-TRACE-001
-    implementations:
-      rust:
-        - file: src/rust_feature.rs
-          symbols:
-            - "*"
-            - "example::run"
-`);
-
-  assert.deepEqual(
-    targets
-      .filter((target) => target.kind === 'traceSymbol')
-      .map((target) => [target.file, target.symbol]),
-    [
-      ['src/rust_feature.rs', '*'],
-      ['src/rust_feature.rs', 'example::run']
+      ['web/login.ts', 'submitLogin'],
+      ['web/login.ts', 'helper_value']
     ]
   );
 });

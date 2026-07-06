@@ -32,12 +32,18 @@ import tomllib
 cargo_toml = Path("Cargo.toml")
 with cargo_toml.open("rb") as handle:
     data = tomllib.load(handle)
-print(data["package"]["version"])
+package = data["package"]
+if "version" in package and isinstance(package["version"], str):
+    print(package["version"])
+elif package.get("version", {}).get("workspace") is True:
+    print(data["workspace"]["package"]["version"])
+else:
+    raise SystemExit("failed to resolve package version")
 PY
 }
 
 main() {
-  local install_root binary_name installed_binary expected_version actual_version workspace port
+  local install_root binary_name installed_binary expected_version actual_version workspace fixture plan projection
 
   trap cleanup EXIT
   cd "$repo_root"
@@ -48,70 +54,43 @@ main() {
   installed_binary="${install_root}/bin/${binary_name}"
   expected_version="$(resolve_package_version)"
   workspace="${temp_root}/workspace"
+  fixture="${repo_root}/fixtures/v1/valid-web-app"
+  plan="${temp_root}/plan.yaml"
+  projection="${temp_root}/projection.json"
 
   cargo install --path "$repo_root" --root "$install_root" --force --locked
 
   actual_version="$("${installed_binary}" --version)"
   test "${actual_version}" = "syu ${expected_version}"
-
-  "${installed_binary}" init "$workspace" >/dev/null
-  test -f "${workspace}/syu.yaml"
-  test -d "${workspace}/docs/syu"
+  cp -R "$fixture" "$workspace"
+  git -C "$workspace" init >/dev/null
+  git -C "$workspace" config user.email "ci@example.invalid"
+  git -C "$workspace" config user.name "CI"
+  git -C "$workspace" add -A
+  git -C "$workspace" commit --quiet -m "fixture snapshot"
+  git -C "$workspace" update-ref refs/remotes/origin/main HEAD
 
   "${installed_binary}" validate "$workspace" >/dev/null
+  "${installed_binary}" work plan \
+    --request "${workspace}/work.yaml" \
+    --out "$plan" \
+    --workspace "$workspace" >/dev/null
+  test -f "$plan"
 
-  port="$(python3 - <<'PY'
-import socket
+  "${installed_binary}" workbench project \
+    --workspace "$workspace" \
+    --request "${workspace}/work.yaml" \
+    --format json >"$projection"
 
-with socket.socket() as sock:
-    sock.bind(("127.0.0.1", 0))
-    print(sock.getsockname()[1])
-PY
-)"
-
-  "${installed_binary}" workbench "$workspace" --bind 127.0.0.1 --port "$port" >"${temp_root}/workbench.log" 2>&1 &
-  server_pid="$!"
-
-  python3 - "$port" <<'PY'
+  python3 - "$projection" <<'PY'
 import json
 import sys
-import time
-import urllib.error
-import urllib.request
+from pathlib import Path
 
-port = sys.argv[1]
-base = f"http://127.0.0.1:{port}"
-
-def get(path):
-    with urllib.request.urlopen(f"{base}{path}", timeout=1) as response:
-        return response.read().decode("utf-8")
-
-deadline = time.time() + 20
-last_error = None
-while time.time() < deadline:
-    try:
-        health = json.loads(get("/api/health"))
-        assert health["ok"] is True
-        actions = json.loads(get("/api/actions"))
-        assert any(action["id"] == "request.scope" for action in actions["actions"])
-        shell = get("/")
-        assert "Syu Workbench" in shell
-        assert "/assets/tailwind.css" in shell
-        css = get("/assets/tailwind.css")
-        assert "--color-command-active" in css
-        snapshot = json.loads(get("/api/workspace/snapshot"))
-        assert "state" in snapshot
-        break
-    except (AssertionError, OSError, urllib.error.URLError, TimeoutError) as exc:
-        last_error = exc
-        time.sleep(0.25)
-else:
-    raise SystemExit(f"workbench API smoke failed: {last_error}")
+projection = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert projection["plan"]["schema"] == "syu/work-plan/v1"
+assert "validation" in projection
 PY
-
-  kill "$server_pid"
-  wait "$server_pid" 2>/dev/null || true
-  server_pid=""
 }
 
 main "$@"

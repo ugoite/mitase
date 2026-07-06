@@ -98,17 +98,8 @@ jobs:
       - name: Set up Rust
         uses: ./.github/actions/setup-rust
 
-      - name: Run goal-selected tests
-        run: scripts/ci/run-goal-tests.sh
-
-      - name: Upload goal test artifacts
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: goal-tests
-          path: |
-            target/syu/goal.yaml
-            target/syu/selected-tests.json
+      - name: Run v1 planner and validation tests
+        run: cargo test --workspace
 
   workbench:
     runs-on: ubuntu-latest
@@ -128,8 +119,8 @@ jobs:
       - name: Expose Tailwind CLI to Workbench checks
         run: echo "TAILWINDCSS_BIN=tailwindcss" >>"$GITHUB_ENV"
 
-      - name: Run Rust-native Workbench gates
-        run: scripts/ci/check-workbench.sh
+      - name: Run canonical Workbench projection gates
+        run: cargo check -p syu-workbench-server -p syu-app-ui
 
   actionlint:
     runs-on: ubuntu-latest

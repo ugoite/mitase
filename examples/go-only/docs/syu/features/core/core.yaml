@@ -1,0 +1,22 @@
+schema: syu/spec/v1
+kind: features
+namespace: go-only
+category: Go example
+features:
+- id: FEAT-GOONLY-001
+  title: Go starter behavior
+  summary: Keep a Go-first example aligned with the v1 ownership model.
+  status: implemented
+  bindings:
+  - id: implementation
+    role: implementation
+    facet: delivery
+    responsibility: Implement the owned behavior for this example workspace.
+    targets:
+    - id: target-1
+      adapter: go
+      path: go/app.go
+      selector:
+        kind: file
+    satisfies:
+    - REQ-GOONLY-001#criterion.owned-delivery
