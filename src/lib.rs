@@ -95,6 +95,8 @@ struct BrowserValidationRequest {
     context: String,
     #[serde(default)]
     slice: Option<String>,
+    #[serde(default)]
+    range: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -488,7 +490,8 @@ async fn web_export_context(
 async fn web_validate(
     State(state): State<WorkbenchWebState>,
     Json(request): Json<BrowserValidationRequest>,
-) -> std::result::Result<Json<syu_diagnostics::ValidationResult>, ApiError> {
+) -> std::result::Result<Json<syu_workbench_server::ValidationRunView>, ApiError> {
+    let started_at = std::time::SystemTime::now();
     let workspace = SpecWorkspace::load(&state.workspace_root)?;
     let index = workspace.index()?;
     let current_revision = revision(&workspace.root)?;
@@ -503,9 +506,15 @@ async fn web_validate(
             anyhow::anyhow!("slice validation requires a valid slice id"),
         ));
     }
-    let changed = (request.context == "git-range")
-        .then(|| changed_files(&workspace.root, "HEAD...HEAD"))
-        .transpose()?;
+    let (changed, basis) = if request.context == "git-range" {
+        let range = match request.range.as_deref() {
+            Some(range) if !range.trim().is_empty() => range.to_string(),
+            _ => default_workbench_range(&workspace)?,
+        };
+        (Some(changed_files(&workspace.root, &range)?), Some(range))
+    } else {
+        (None, Some(current_revision.clone()))
+    };
     let result = validate(&ValidationContext {
         config: &workspace.config,
         workspace: &workspace,
@@ -521,7 +530,33 @@ async fn web_validate(
         revision: Some(&current_revision),
         change_base_revision: None,
     });
-    Ok(Json(result))
+    Ok(Json(syu_workbench_server::ValidationRunView::completed(
+        request.context,
+        basis,
+        result,
+        changed.is_some(),
+        plan.is_some(),
+        started_at,
+    )))
+}
+
+fn default_workbench_range(workspace: &SpecWorkspace) -> Result<String> {
+    if let Some(baseline) = &workspace.config.validation.changed.baseline {
+        return range_from_baseline(&workspace.root, baseline);
+    }
+    for candidate in ["origin/main", "origin/master", "main", "master"] {
+        if let Ok(range) = range_from_baseline(
+            &workspace.root,
+            &syu_project_model::ChangeBaseline::MergeBase {
+                against: syu_project_model::GitRef(candidate.into()),
+            },
+        ) {
+            return Ok(range);
+        }
+    }
+    bail!(
+        "Git-range validation is not applicable: no configured baseline or default branch could be resolved"
+    )
 }
 
 async fn web_source(
