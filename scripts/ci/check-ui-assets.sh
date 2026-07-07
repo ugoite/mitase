@@ -19,6 +19,7 @@ check_ui_assets() {
   grep -F "@layer theme" "$built_css" >/dev/null
   grep -F -- "--color-command-active" "$built_css" >/dev/null
   grep -F -- "--color-evidence-pending" "$built_css" >/dev/null
+  python3 "$repo_root/scripts/ci/check-workbench-contract.py"
 
   if find "$repo_root" \
     -path "$repo_root/target" -prune -o \

@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+"""Static acceptance gate for the Workbench Visual Contract DOM and catalogs."""
+
+import json
+import re
+from collections import defaultdict
+from html.parser import HTMLParser
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[2]
+HTML = (ROOT / "crates/syu-app-ui/assets/workbench.html").read_text()
+CSS = (ROOT / "crates/syu-app-ui/assets/workbench.css").read_text()
+EN = json.loads((ROOT / "crates/syu-app-ui/assets/locales/en.json").read_text())
+JA = json.loads((ROOT / "crates/syu-app-ui/assets/locales/ja.json").read_text())
+
+
+class ContractParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.routes = []
+        self.keys = set()
+        self.unlocalized_names = []
+        self.tab = None
+        self.tab_icons = defaultdict(list)
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        for attribute in ("data-i18n", "data-i18n-placeholder", "data-i18n-title", "data-i18n-aria"):
+            if attribute in attrs:
+                self.keys.add(attrs[attribute])
+        if attrs.get("data-route"):
+            self.routes.append(attrs["data-route"])
+        if "aria-label" in attrs and "data-i18n-aria" not in attrs and attrs.get("aria-hidden") != "true":
+            self.unlocalized_names.append(attrs["aria-label"])
+        if tag == "button" and attrs.get("data-tab-group"):
+            self.tab = (attrs["data-tab-group"], [])
+        elif self.tab and tag in ("path", "circle", "rect"):
+            self.tab[1].append((tag, tuple(sorted(attrs.items()))))
+
+    def handle_endtag(self, tag):
+        if tag == "button" and self.tab:
+            group, icon = self.tab
+            self.tab_icons[group].append(tuple(icon))
+            self.tab = None
+
+
+parser = ContractParser()
+parser.feed(HTML)
+assert parser.routes[:5] == ["work", "scope", "items", "diagnostics", "settings"], parser.routes[:5]
+assert set(EN) == set(JA), "English and Japanese catalogs differ"
+assert not (parser.keys - set(EN)), f"missing catalog keys: {sorted(parser.keys - set(EN))}"
+assert not parser.unlocalized_names, f"unlocalized accessible names: {parser.unlocalized_names}"
+for group, icons in parser.tab_icons.items():
+    assert all(icons), f"{group} has a tab without an icon"
+    assert len(icons) == len(set(icons)), f"{group} repeats a section-tab icon"
+
+assert re.search(r'class="topbar command-bar"', HTML)
+assert 'class="gear"' not in HTML
+assert '<style' not in HTML
+assert 'HEAD...HEAD' not in HTML and 'HEAD…HEAD' not in HTML
+assert set(re.findall(r'data-settings-layer="([^"]+)"', HTML)) == {"application", "workspace"}
+assert set(re.findall(r'data-settings-page="([^"]+)"', HTML)) == {
+    "language", "appearance", "accessibility", "general", "profiles", "validation", "planning", "adapters", "yaml"
+}
+for asset in ("workbench.css", "catalog.js", "i18n.js", "app.js", "projection.js"):
+    assert f'/assets/{asset}' in HTML
+for token in ("--bg:#f6f7f8", "--paper:#fff", "--ink:#15171a", "--sidebar:246px", "--topbar:98px", "--rail:294px"):
+    assert token in CSS, f"missing normative CSS token {token}"
+assert "grid-template-columns:repeat(5,1fr)!important" in CSS
+print("Workbench DOM, icon, localization, asset, and geometry contract passed")

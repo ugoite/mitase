@@ -12,13 +12,17 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
+    collections::HashMap,
     fs,
     net::IpAddr,
     path::{Path, PathBuf},
     process::Command,
     sync::Arc,
 };
-use syu_app_ui::WorkbenchView;
+use syu_app_ui::{
+    WORKBENCH_APP_JS, WORKBENCH_CSS, WORKBENCH_I18N_JS, WORKBENCH_PROJECTION_JS, WorkbenchView,
+    locale_catalog_script,
+};
 use syu_planner::{export_context, plan};
 use syu_project_model::{ChangeBaseline, GitRef};
 use syu_spec_model::RepoPath;
@@ -34,6 +38,14 @@ use tokio::sync::RwLock;
 struct WorkbenchWebState {
     workspace_root: PathBuf,
     request: Arc<RwLock<Option<WorkRequest>>>,
+    preview_proofs: Arc<RwLock<HashMap<String, PreviewProof>>>,
+}
+
+#[derive(Debug, Clone)]
+struct PreviewProof {
+    expected_hash: String,
+    new_hash: String,
+    token: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -72,6 +84,8 @@ struct FileEdit {
     path: String,
     content: String,
     expected_hash: String,
+    #[serde(default)]
+    preview_token: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -88,6 +102,7 @@ struct FilePreview {
     new_hash: String,
     changed_lines: usize,
     validation_errors: Vec<String>,
+    preview_token: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -103,6 +118,8 @@ struct BrowserValidationRequest {
 struct ConfigEdit {
     config: syu_project_model::ProjectConfig,
     expected_hash: String,
+    #[serde(default)]
+    preview_token: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -382,11 +399,13 @@ fn run_workbench(args: WorkbenchArgs) -> Result<i32> {
             let state = WorkbenchWebState {
                 workspace_root: workspace.root,
                 request: Arc::new(RwLock::new(request)),
+                preview_proofs: Arc::new(RwLock::new(HashMap::new())),
             };
             let runtime = tokio::runtime::Runtime::new()?;
             runtime.block_on(async move {
                 let app = Router::new()
                     .route("/", get(web_index))
+                    .route("/assets/{name}", get(web_asset))
                     .route("/api/projection", get(web_projection))
                     .route("/api/work/request", put(web_update_request))
                     .route("/api/work/replan", post(web_replan))
@@ -436,6 +455,24 @@ async fn web_index(
 ) -> std::result::Result<Html<String>, ApiError> {
     let projection = current_projection(&state).await?;
     Ok(Html(WorkbenchView::new(&projection).render_html()))
+}
+
+async fn web_asset(AxumPath(name): AxumPath<String>) -> Response {
+    if name == "catalog.js" {
+        return (
+            [("content-type", "text/javascript; charset=utf-8")],
+            locale_catalog_script(),
+        )
+            .into_response();
+    }
+    let (content_type, content) = match name.as_str() {
+        "workbench.css" => ("text/css; charset=utf-8", WORKBENCH_CSS),
+        "app.js" => ("text/javascript; charset=utf-8", WORKBENCH_APP_JS),
+        "i18n.js" => ("text/javascript; charset=utf-8", WORKBENCH_I18N_JS),
+        "projection.js" => ("text/javascript; charset=utf-8", WORKBENCH_PROJECTION_JS),
+        _ => return StatusCode::NOT_FOUND.into_response(),
+    };
+    ([("content-type", content_type)], content).into_response()
 }
 
 async fn web_projection(
@@ -500,20 +537,52 @@ async fn web_validate(
         .slice
         .as_deref()
         .and_then(|id| plan.as_ref()?.slices.iter().find(|slice| slice.id == id));
-    if request.context == "slice" && selected_slice.is_none() {
-        return Err(ApiError(
-            StatusCode::BAD_REQUEST,
-            anyhow::anyhow!("slice validation requires a valid slice id"),
+    let context = request.context.replace('-', "_");
+    if (context == "work_plan" && plan.is_none())
+        || (context == "slice" && selected_slice.is_none())
+    {
+        let reason = if context == "slice" {
+            "Slice validation is not applicable because no valid slice is selected"
+        } else {
+            "Work plan validation is not applicable because no WorkPlan is selected"
+        };
+        return Ok(Json(
+            syu_workbench_server::ValidationRunView::not_applicable(context, reason),
         ));
     }
-    let (changed, basis) = if request.context == "git-range" {
+    let (changed, basis) = if context == "git_range" {
         let range = match request.range.as_deref() {
             Some(range) if !range.trim().is_empty() => range.to_string(),
-            _ => default_workbench_range(&workspace)?,
+            _ => match default_workbench_range(&workspace) {
+                Ok(range) => range,
+                Err(error) => {
+                    return Ok(Json(
+                        syu_workbench_server::ValidationRunView::not_applicable(
+                            context,
+                            error.to_string(),
+                        ),
+                    ));
+                }
+            },
         };
-        (Some(changed_files(&workspace.root, &range)?), Some(range))
+        let files = match changed_files(&workspace.root, &range) {
+            Ok(files) => files,
+            Err(error) => {
+                return Ok(Json(syu_workbench_server::ValidationRunView::failed(
+                    context,
+                    error.to_string(),
+                    started_at,
+                )));
+            }
+        };
+        (Some(files), Some(range))
     } else {
-        (None, Some(current_revision.clone()))
+        let basis = match context.as_str() {
+            "work_plan" => plan.as_ref().map(|plan| plan.id.clone()),
+            "slice" => selected_slice.map(|slice| slice.id.clone()),
+            _ => Some(current_revision.clone()),
+        };
+        (None, basis)
     };
     let result = validate(&ValidationContext {
         config: &workspace.config,
@@ -521,7 +590,7 @@ async fn web_validate(
         index: &index,
         changed_files: changed.as_deref(),
         reported_changed_files: None,
-        work_plan: (request.context == "work-plan" || request.context == "slice")
+        work_plan: (context == "work_plan" || context == "slice")
             .then_some(plan.as_ref())
             .flatten(),
         selected_slice,
@@ -530,12 +599,14 @@ async fn web_validate(
         revision: Some(&current_revision),
         change_base_revision: None,
     });
+    let evaluated_plan = context == "work_plan" || context == "slice";
     Ok(Json(syu_workbench_server::ValidationRunView::completed(
-        request.context,
+        context,
         basis,
         result,
         changed.is_some(),
-        plan.is_some(),
+        evaluated_plan,
+        workspace.config.validation.preset,
         started_at,
     )))
 }
@@ -580,12 +651,27 @@ async fn web_preview_file(
     let old = fs::read_to_string(&path).unwrap_or_default();
     ensure_source_hash(&old, &edit.expected_hash)?;
     let validation_errors = validate_candidate(&edit.path, &edit.content);
+    let new_hash = content_hash(&edit.content);
+    let preview_token = validation_errors
+        .is_empty()
+        .then(|| make_preview_token(&edit.path, &edit.expected_hash, &new_hash));
+    if let Some(token) = &preview_token {
+        state.preview_proofs.write().await.insert(
+            edit.path.clone(),
+            PreviewProof {
+                expected_hash: edit.expected_hash.clone(),
+                new_hash: new_hash.clone(),
+                token: token.clone(),
+            },
+        );
+    }
     Ok(Json(FilePreview {
         path: edit.path,
         old_hash: content_hash(&old),
-        new_hash: content_hash(&edit.content),
+        new_hash,
         changed_lines: changed_line_count(&old, &edit.content),
         validation_errors,
+        preview_token,
     }))
 }
 
@@ -596,6 +682,17 @@ async fn web_apply_file(
     let path = safe_workspace_path(&state.workspace_root, &edit.path)?;
     let old = fs::read_to_string(&path).unwrap_or_default();
     ensure_source_hash(&old, &edit.expected_hash)?;
+    let new_hash = content_hash(&edit.content);
+    let proof = state.preview_proofs.read().await.get(&edit.path).cloned();
+    let valid_proof = proof.is_some_and(|proof| preview_proof_matches(&edit, &new_hash, &proof));
+    if !valid_proof {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!(
+                "apply requires a successful preview for the same source hash and content"
+            ),
+        ));
+    }
     let errors = validate_candidate(&edit.path, &edit.content);
     if !errors.is_empty() {
         return Err(ApiError(
@@ -617,12 +714,14 @@ async fn web_apply_file(
         }
         return Err(ApiError(StatusCode::UNPROCESSABLE_ENTITY, error));
     }
+    state.preview_proofs.write().await.remove(&edit.path);
     Ok(Json(FilePreview {
         path: edit.path,
         old_hash: content_hash(&old),
-        new_hash: content_hash(&edit.content),
+        new_hash,
         changed_lines: changed_line_count(&old, &edit.content),
         validation_errors: Vec::new(),
+        preview_token: None,
     }))
 }
 
@@ -651,6 +750,7 @@ async fn web_preview_config(
             path: "syu.yaml".to_string(),
             content,
             expected_hash: edit.expected_hash,
+            preview_token: None,
         }),
     )
     .await
@@ -669,6 +769,7 @@ async fn web_apply_config(
             path: "syu.yaml".to_string(),
             content,
             expected_hash: edit.expected_hash,
+            preview_token: edit.preview_token,
         }),
     )
     .await
@@ -679,6 +780,7 @@ fn patch_config_source(
     config: &syu_project_model::ProjectConfig,
 ) -> std::result::Result<String, ApiError> {
     let mut output = source.to_string();
+    let original_config = serde_yaml::from_str::<syu_project_model::ProjectConfig>(source).ok();
     let list = |values: &[String]| format!("[{}]", values.join(", "));
     let paths = |values: &[RepoPath]| {
         format!(
@@ -690,13 +792,30 @@ fn patch_config_source(
                 .join(", ")
         )
     };
+    let patterns = |values: &[syu_project_model::RepoPathPattern]| {
+        format!(
+            "[{}]",
+            values
+                .iter()
+                .map(|pattern| pattern.0.clone())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    };
     output = replace_yaml_key(&output, "spec_roots", &paths(&config.workspace.spec_roots))?;
     output = replace_yaml_key(
         &output,
         "artifact_roots",
         &paths(&config.workspace.artifact_roots),
     )?;
+    output = replace_yaml_key(&output, "excludes", &patterns(&config.workspace.excludes))?;
     output = replace_yaml_key(&output, "active", &list(&config.profiles.active))?;
+    if original_config
+        .as_ref()
+        .is_none_or(|original| original.profiles.custom != config.profiles.custom)
+    {
+        output = replace_yaml_mapping(&output, 2, "custom", &config.profiles.custom)?;
+    }
     let preset = serde_yaml::to_string(&config.validation.preset)
         .map_err(anyhow::Error::from)?
         .trim()
@@ -707,6 +826,17 @@ fn patch_config_source(
         "deny_warnings",
         &config.validation.deny_warnings.to_string(),
     )?;
+    if original_config
+        .as_ref()
+        .is_none_or(|original| original.validation.rules != config.validation.rules)
+    {
+        output = replace_yaml_mapping(&output, 2, "rules", &config.validation.rules)?;
+    }
+    if original_config.as_ref().is_none_or(|original| {
+        original.validation.changed.baseline != config.validation.changed.baseline
+    }) {
+        output = replace_optional_baseline(&output, config.validation.changed.baseline.as_ref())?;
+    }
     output = replace_yaml_key(
         &output,
         "require_owned_changes",
@@ -730,8 +860,114 @@ fn patch_config_source(
     ] {
         output = replace_inline_scalar(&output, key, &value.to_string())?;
     }
+    if original_config.as_ref().is_none_or(|original| {
+        original.work.context.include_parent_principles
+            != config.work.context.include_parent_principles
+    }) {
+        output = replace_yaml_key_if_present(
+            &output,
+            "include_parent_principles",
+            &config.work.context.include_parent_principles.to_string(),
+        );
+    }
+    if original_config.as_ref().is_none_or(|original| {
+        original.work.context.include_parent_rules != config.work.context.include_parent_rules
+    }) {
+        output = replace_yaml_key_if_present(
+            &output,
+            "include_parent_rules",
+            &config.work.context.include_parent_rules.to_string(),
+        );
+    }
     output = replace_inline_list(&output, "enabled", &list(&config.adapters.enabled))?;
     Ok(output)
+}
+
+fn replace_yaml_mapping<T: Serialize>(
+    source: &str,
+    indent: usize,
+    key: &str,
+    value: &T,
+) -> std::result::Result<String, ApiError> {
+    let yaml = serde_yaml::to_string(value).map_err(anyhow::Error::from)?;
+    let yaml = yaml.trim();
+    let prefix = " ".repeat(indent);
+    let replacement = if yaml == "{}" {
+        format!("{prefix}{key}: {{}}")
+    } else {
+        let nested = yaml
+            .lines()
+            .map(|line| format!("{}{}", " ".repeat(indent + 2), line))
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!("{prefix}{key}:\n{nested}")
+    };
+    replace_yaml_block(source, indent, key, &replacement)
+}
+
+fn replace_optional_baseline(
+    source: &str,
+    baseline: Option<&ChangeBaseline>,
+) -> std::result::Result<String, ApiError> {
+    if let Some(baseline) = baseline {
+        let yaml = serde_yaml::to_string(baseline).map_err(anyhow::Error::from)?;
+        let nested = yaml
+            .trim()
+            .lines()
+            .map(|line| format!("      {line}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let replacement = format!("    baseline:\n{nested}");
+        if source
+            .lines()
+            .any(|line| line.trim_start().starts_with("baseline:"))
+        {
+            replace_yaml_block(source, 4, "baseline", &replacement)
+        } else {
+            Ok(source.replacen("  changed:\n", &format!("  changed:\n{replacement}\n"), 1))
+        }
+    } else if source
+        .lines()
+        .any(|line| line.trim_start().starts_with("baseline:"))
+    {
+        replace_yaml_block(source, 4, "baseline", "")
+    } else {
+        Ok(source.to_string())
+    }
+}
+
+fn replace_yaml_block(
+    source: &str,
+    indent: usize,
+    key: &str,
+    replacement: &str,
+) -> std::result::Result<String, ApiError> {
+    let lines = source.lines().collect::<Vec<_>>();
+    let marker = format!("{}{key}:", " ".repeat(indent));
+    let start = lines
+        .iter()
+        .position(|line| line.starts_with(&marker))
+        .ok_or_else(|| {
+            ApiError(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                anyhow::anyhow!("config source is missing {key}"),
+            )
+        })?;
+    let mut end = start + 1;
+    while end < lines.len() {
+        let line = lines[end];
+        if !line.trim().is_empty() && line.len() - line.trim_start().len() <= indent {
+            break;
+        }
+        end += 1;
+    }
+    let mut output = Vec::new();
+    output.extend_from_slice(&lines[..start]);
+    if !replacement.is_empty() {
+        output.extend(replacement.lines());
+    }
+    output.extend_from_slice(&lines[end..]);
+    Ok(format!("{}\n", output.join("\n")))
 }
 
 fn replace_yaml_key(source: &str, key: &str, value: &str) -> std::result::Result<String, ApiError> {
@@ -746,6 +982,16 @@ fn replace_yaml_key(source: &str, key: &str, value: &str) -> std::result::Result
     Ok(pattern
         .replace(source, format!("${{1}}{value}"))
         .into_owned())
+}
+
+fn replace_yaml_key_if_present(source: &str, key: &str, value: &str) -> String {
+    let Ok(pattern) = regex::Regex::new(&format!(r"(?m)^(\s*{}:\s*).*$", regex::escape(key)))
+    else {
+        return source.to_string();
+    };
+    pattern
+        .replace(source, format!("${{1}}{value}"))
+        .into_owned()
 }
 
 fn replace_inline_scalar(
@@ -794,6 +1040,16 @@ fn content_hash(content: &str) -> String {
     let mut digest = Sha256::new();
     digest.update(content.as_bytes());
     format!("sha256:{:x}", digest.finalize())
+}
+
+fn make_preview_token(path: &str, expected_hash: &str, new_hash: &str) -> String {
+    content_hash(&format!("{path}\n{expected_hash}\n{new_hash}"))
+}
+
+fn preview_proof_matches(edit: &FileEdit, new_hash: &str, proof: &PreviewProof) -> bool {
+    edit.preview_token.as_deref() == Some(&proof.token)
+        && edit.expected_hash == proof.expected_hash
+        && new_hash == proof.new_hash
 }
 
 fn ensure_source_hash(content: &str, expected: &str) -> std::result::Result<(), ApiError> {
@@ -1443,6 +1699,30 @@ Binary files a/assets/logo.png and b/assets/logo.png differ\n",
     }
 
     #[test]
+    fn apply_proof_is_bound_to_path_hash_and_previewed_content() {
+        let expected_hash = content_hash("before");
+        let new_hash = content_hash("after");
+        let token = make_preview_token("syu.yaml", &expected_hash, &new_hash);
+        let proof = PreviewProof {
+            expected_hash: expected_hash.clone(),
+            new_hash: new_hash.clone(),
+            token: token.clone(),
+        };
+        let edit = FileEdit {
+            path: "syu.yaml".into(),
+            content: "after".into(),
+            expected_hash,
+            preview_token: Some(token),
+        };
+        assert!(preview_proof_matches(&edit, &new_hash, &proof));
+        assert!(!preview_proof_matches(
+            &edit,
+            &content_hash("changed"),
+            &proof
+        ));
+    }
+
+    #[test]
     fn structured_config_edits_preserve_unrelated_source_lines() {
         let source = fs::read_to_string("fixtures/v1/valid-web-app/syu.yaml").unwrap();
         let mut config: syu_project_model::ProjectConfig = serde_yaml::from_str(&source).unwrap();
@@ -1451,6 +1731,27 @@ Binary files a/assets/logo.png and b/assets/logo.png differ\n",
         assert_eq!(changed_line_count(&source, &updated), 1);
         assert!(updated.contains("contract_rules:"));
         assert!(updated.contains("facets:"));
+        let reparsed: syu_project_model::ProjectConfig = serde_yaml::from_str(&updated).unwrap();
+        assert_eq!(reparsed, config);
+    }
+
+    #[test]
+    fn structured_config_edits_cover_every_workspace_subpage() {
+        let source = fs::read_to_string("syu.yaml").unwrap();
+        let mut config: syu_project_model::ProjectConfig = serde_yaml::from_str(&source).unwrap();
+        config
+            .workspace
+            .excludes
+            .push(syu_project_model::RepoPathPattern("tmp/**".into()));
+        config.validation.rules.insert(
+            "SYU-DOC-001".into(),
+            syu_project_model::RuleOverride::Warning,
+        );
+        config.validation.changed.baseline = Some(ChangeBaseline::MergeBase {
+            against: GitRef("origin/main".into()),
+        });
+        config.work.context.include_parent_rules = !config.work.context.include_parent_rules;
+        let updated = patch_config_source(&source, &config).unwrap();
         let reparsed: syu_project_model::ProjectConfig = serde_yaml::from_str(&updated).unwrap();
         assert_eq!(reparsed, config);
     }
