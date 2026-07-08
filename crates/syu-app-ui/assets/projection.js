@@ -23,6 +23,21 @@
     setTimeout(() => host?.classList.remove('show'), 3000);
   };
 
+  const ACTION_ICONS = {
+    edit: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4Z"></path><path d="m13.5 6.5 4 4"></path></svg>',
+    replan: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 6v5h-5"></path><path d="M18.5 15a7 7 0 1 1-.7-7.8L20 11"></path></svg>',
+    copy: '<svg aria-hidden="true" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"></path></svg>',
+    export: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg>',
+    raw: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="m8 9-4 3 4 3"></path><path d="m16 9 4 3-4 3"></path><path d="m14 5-4 14"></path></svg>',
+    download: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg>',
+    validate: '<svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="m8 12 3 3 5-6"></path></svg>',
+    plan: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 4h6l1 2h3v15H5V6h3l1-2Z"></path><path d="M9 12h6M9 16h5"></path></svg>',
+    save: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"></path></svg>',
+    reset: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 4v6h6"></path><path d="M5.5 15a7 7 0 1 0 .7-7.8L4 10"></path></svg>',
+    preview: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 12s3-6 9-6 9 6 9 6-3 6-9 6-9-6-9-6Z"></path><circle cx="12" cy="12" r="2.5"></circle></svg>',
+    open: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M14 4h6v6"></path><path d="M10 14 20 4"></path><path d="M20 14v6H4V4h6"></path></svg>',
+  };
+
   const requestedWork = projection.requested_work || null;
   const plan = projection.plan || null;
   let lastRun = projection.validation;
@@ -32,6 +47,8 @@
   let selectedItemKind = 'requirement';
   let selectedItemId = null;
   let selectedAnchor = null;
+  let itemSearchQuery = '';
+  let settingsBound = false;
 
   const statusLabel = status => ({
     ready: t('work.status.ready'),
@@ -40,7 +57,14 @@
   })[status] || status;
 
   const titleCase = value => value ? value.replaceAll('_', ' ').replace(/\b\w/g, m => m.toUpperCase()) : '';
-  const phaseStateClass = state => state === 'passed' ? 'green' : state === 'issues' ? 'red' : state === 'running' ? 'blue running' : 'gray';
+  const phaseStateClass = state => ({
+    passed: 'green',
+    issues: 'red',
+    failed: 'red',
+    running: 'blue running',
+    not_applicable: 'gray',
+    not_run: 'gray',
+  })[state] || 'gray';
   const phaseStateA11y = state => ({
     passed: 'a11y.passed',
     issues: 'a11y.issues',
@@ -73,13 +97,17 @@
     return node;
   }
 
-  function actionButton(label, ariaKey, onClick, className = 'btn compact') {
-    const button = el('button', className, label);
+  function actionButton(label, ariaKey, onClick, className = 'btn compact', icon = 'edit') {
+    const button = el('button', className);
     button.setAttribute('aria-label', t(ariaKey));
     button.dataset.i18nAria = ariaKey;
     button.dataset.i18nTitle = ariaKey;
     button.title = t(ariaKey);
-    button.addEventListener('click', onClick);
+    const iconWrap = el('span', 'btn-icon');
+    iconWrap.innerHTML = ACTION_ICONS[icon] || ACTION_ICONS.edit;
+    const textWrap = el('span', 'btn-label', label);
+    button.append(iconWrap, textWrap);
+    if (onClick) button.addEventListener('click', onClick);
     return button;
   }
 
@@ -127,11 +155,84 @@
     return card;
   }
 
+  function formatRef(value) {
+    return typeof value === 'string' ? value : JSON.stringify(value);
+  }
+
+  function renderRequestConstraints(constraints = {}) {
+    const rows = [];
+    if (constraints.include_facets?.length) rows.push(`${t('work.facets')}: ${constraints.include_facets.join(', ')}`);
+    if (constraints.exclude_paths?.length) rows.push(`${t('work.exclude_paths')}: ${constraints.exclude_paths.join(', ')}`);
+    if (constraints.max_slices) rows.push(`${t('work.max_slices')}: ${constraints.max_slices}`);
+    return rows;
+  }
+
+  function defaultWorkRequest() {
+    return {
+      schema: 'syu/work-request/v1',
+      id: `WORK-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}`,
+      summary: '',
+      operation: 'modify',
+      seeds: selectedAnchor ? [selectedAnchor] : [],
+      constraints: { include_facets: [], exclude_paths: [], max_slices: null },
+      requested_targets: [],
+    };
+  }
+
+  function baseWorkEmptyState(host, titleKey, descriptionKey) {
+    clear(host);
+    host?.append(emptyState(titleKey, descriptionKey));
+  }
+
+  function renderWorkIntake(host) {
+    const form = el('form', 'form request-intake');
+    form.append(canvasHead(
+      t('work.intake.title'),
+      t('work.intake.description'),
+      [chip(t('work.intake.ready'), 'blue-chip')],
+      [],
+    ));
+
+    const summaryLabel = el('label', '', t('work.request.summary'));
+    summaryLabel.htmlFor = 'work-request-summary';
+    const summary = el('textarea', 'textarea');
+    summary.id = 'work-request-summary';
+    summary.placeholder = t('work.request.summary_placeholder');
+
+    const operationLabel = el('label', '', t('work.request.operation'));
+    operationLabel.htmlFor = 'work-request-operation';
+    const operation = el('select', 'native-select');
+    operation.id = 'work-request-operation';
+    ['add', 'modify', 'remove', 'refactor', 'document', 'investigate'].forEach(value => {
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = t(`operation.${value}`);
+      operation.append(option);
+    });
+
+    const submit = actionButton(t('common.plan'), 'a11y.create_work', null, 'btn primary compact', 'plan');
+    submit.type = 'submit';
+    form.append(summaryLabel, summary, operationLabel, operation, submit);
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const request = defaultWorkRequest();
+      request.summary = summary.value.trim();
+      request.operation = operation.value;
+      if (!request.summary) return toast(t('work.request.summary_required'));
+      await api('/api/work/request', { method: 'PUT', body: JSON.stringify(request) });
+      location.assign('/?page=work&workTab=overview');
+    });
+    clear(host);
+    host?.append(form);
+  }
+
   function renderWork() {
     const page = one('[data-page="work"]');
     text(one('[data-work-plan-label]', page), plan?.id || requestedWork?.id || t('common.request'));
     text(one('[data-tab="slices"] .mini-count', page), plan?.slices.length || '');
     text(one('[data-tab="validation"] .mini-count', page), plan?.diagnostics.length || '');
+    const replan = buttonByKey('a11y.replan_work');
+    if (replan) replan.disabled = !plan;
     renderWorkOverview();
     renderWorkSlices();
     renderWorkContext();
@@ -141,63 +242,46 @@
   function renderWorkOverview() {
     const host = one('[data-work-overview]');
     clear(host);
+    if (!host) return;
     if (!plan) {
-      host?.append(emptyState('work.empty.title', 'work.empty.description'));
+      renderWorkIntake(host);
       return;
     }
-    const seeds = plan.request.seeds.map(seed => String(seed));
-    const constraints = [];
-    if (plan.request.constraints.include_facets.length) constraints.push(`Facets: ${plan.request.constraints.include_facets.join(', ')}`);
-    if (plan.request.constraints.exclude_paths.length) constraints.push(`Exclude: ${plan.request.constraints.exclude_paths.join(', ')}`);
-    if (plan.request.constraints.max_slices) constraints.push(`Maximum ${plan.request.constraints.max_slices} execution slices`);
-    if (!constraints.length) constraints.push('No additional planner constraints');
 
     const body = document.createDocumentFragment();
-    body.append(
-      canvasHead(
-        plan.request.summary,
-        `Canonical ${titleCase(String(plan.request.operation))} request for ${projection.workspace.root}`,
-        [
-          chip(statusLabel(plan.status), plan.status === 'blocked' ? 'red-chip' : plan.status === 'ready' ? 'green-chip' : 'orange-chip'),
-          chip(titleCase(String(plan.request.operation))),
-          chip(`basis ${plan.basis.revision.slice(0, 9)}`),
-        ],
-        [
-          actionButton(t('common.edit'), 'a11y.edit_request', () => openRequestEditor()),
-          actionButton(t('common.replan'), 'a11y.replan_work', async () => {
-            await api('/api/work/replan', { method: 'POST' });
-            location.reload();
-          }, 'btn primary compact'),
-        ],
-      ),
-    );
+    body.append(canvasHead(
+      plan.request.summary,
+      t('work.overview.description').replace('{root}', projection.workspace.root),
+      [
+        chip(statusLabel(plan.status), plan.status === 'blocked' ? 'red-chip' : plan.status === 'ready' ? 'green-chip' : 'orange-chip'),
+        chip(titleCase(String(plan.request.operation))),
+        chip(`${t('work.basis')} ${plan.basis.revision.slice(0, 9)}`),
+      ],
+      [],
+    ));
 
     const grid = el('div', 'grid2');
     grid.append(
-      summaryCard('work.card.changes', el('p', '', `This request expands to ${plan.slices.length} execution slice(s) and ${plan.diagnostics.length} plan diagnostic(s).`)),
-      summaryCard('work.card.reason', el('p', '', `Seeds, exact targets, and completion checks come from the canonical workspace graph for revision ${plan.basis.revision.slice(0, 9)}.`)),
+      summaryCard('work.card.intent', el('p', '', plan.request.summary)),
+      summaryCard('work.card.reason', el('p', '', t('work.card.reason.body').replace('{revision}', plan.basis.revision.slice(0, 9)))),
     );
     body.append(grid);
 
-    const grid2 = el('div', 'grid2');
-    grid2.style.marginTop = '12px';
-    grid2.append(
-      summaryCard('work.card.seed', linesList([
-        ...seeds.map(seed => `Seed: ${seed}`),
-        ...constraints,
-      ])),
-      summaryCard('work.card.limits', linesList([
-        `Workspace fingerprint ${projection.workspace.fingerprint.slice(0, 16)}...`,
-        `Operation ${String(plan.request.operation)}`,
-        `Completion checks ${plan.slices.reduce((sum, slice) => sum + slice.completion.length, 0)}`,
-      ])),
-    );
-    body.append(grid2);
+    const constraints = renderRequestConstraints(plan.request.constraints);
+    if (constraints.length || plan.request.seeds.length) {
+      const grid2 = el('div', 'grid2');
+      grid2.style.marginTop = '12px';
+      grid2.append(
+        summaryCard('work.card.seed', linesList(plan.request.seeds.map(seed => `${t('work.seed')}: ${formatRef(seed)}`))),
+        summaryCard('work.card.constraints', linesList(constraints.length ? constraints : [t('work.constraints.none')])),
+      );
+      body.append(grid2);
+    }
 
-    if (plan.diagnostics.length) {
+    if (plan.status === 'needs_review' || plan.status === 'blocked') {
       body.append(el('div', 'notice warn', t('work.notice.review')));
     }
-    host?.append(body);
+    host.append(body);
   }
 
   function renderWorkSlices() {
@@ -206,7 +290,7 @@
     clear(rail);
     clear(detail);
     if (!plan) {
-      detail?.append(emptyState('work.empty.title', 'work.empty.description'));
+      detail?.append(emptyState('work.slices.empty.title', 'work.slices.empty.description'));
       return;
     }
     rail?.append(el('div', 'rail-title', t('work.slices.title')));
@@ -242,25 +326,23 @@
         slice.acceptance[0]?.statement || slice.goal,
         [
           chip(titleCase(String(slice.confidence || 'exact')), 'green-chip'),
-          chip(`${slice.editable_targets.length} editable`),
-          chip(`${slice.verification_targets.length} verification`),
-          chip(`${slice.readonly_context.length} reference`),
+          chip(`${slice.editable_targets.length} ${t('work.context.editable').toLowerCase()}`),
+          chip(`${slice.verification_targets.length} ${t('work.context.verification').toLowerCase()}`),
+          chip(`${slice.readonly_context.length} ${t('work.context.reference').toLowerCase()}`),
         ],
         [
           actionButton(t('common.copy'), 'a11y.copy_slice', async () => {
-            if (!slice) return;
             await navigator.clipboard.writeText([slice.id, slice.goal, ...slice.anchors.map(String)].join('\n'));
             toast(t('toast.locator_copied'));
-          }),
+          }, 'btn compact', 'copy'),
           actionButton(t('common.export'), 'a11y.export_slice', async () => {
-            if (!slice) return;
             const yaml = await api(`/api/context/${encodeURIComponent(slice.id)}`, { method: 'POST' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(new Blob([yaml], { type: 'application/yaml' }));
             link.download = `${slice.id}-context.yaml`;
             link.click();
             URL.revokeObjectURL(link.href);
-          }, 'btn small primary compact'),
+          }, 'btn small primary compact', 'export'),
         ],
       ),
       (() => {
@@ -293,7 +375,7 @@
     clear(rail);
     clear(detail);
     if (!plan) {
-      detail?.append(emptyState('work.empty.title', 'work.empty.description'));
+      detail?.append(emptyState('work.context.empty.title', 'work.context.empty.description'));
       return;
     }
     const slice = currentSlice();
@@ -309,17 +391,17 @@
       const button = el('button', `rail-item${index === 0 ? ' active' : ''}`);
       button.append(el('span', `status-circle ${group.color}`));
       const label = document.createElement('span');
-      label.append(el('b', '', group.label), el('p', '', `${group.items.length} item(s)`));
+      label.append(el('b', '', group.label), el('p', '', t('common.items_count').replace('{count}', group.items.length)));
       button.append(label, el('span', 'n', String(group.items.length)));
       rail?.append(button);
     });
     detail?.append(
       canvasHead(
-        `Context Pack · ${slice.id}`,
-        `Human-readable projection of ${slice.id} context and supporting specification anchors.`,
+        `${t('work.context.title')} · ${slice.id}`,
+        t('work.context.description').replace('{slice}', slice.id),
         [chip(t('work.context.ready'), 'green-chip')],
         [
-          actionButton(t('common.raw'), 'a11y.preview_manifest', () => toast(slice.id)),
+          actionButton(t('common.raw'), 'a11y.preview_manifest', () => toast(slice.id), 'btn compact', 'raw'),
           actionButton(t('common.download'), 'a11y.download_context', async () => {
             const yaml = await api(`/api/context/${encodeURIComponent(slice.id)}`, { method: 'POST' });
             const link = document.createElement('a');
@@ -327,7 +409,7 @@
             link.download = `${slice.id}-context.yaml`;
             link.click();
             URL.revokeObjectURL(link.href);
-          }, 'btn small primary compact'),
+          }, 'btn small primary compact', 'download'),
         ],
       ),
       (() => {
@@ -342,7 +424,11 @@
       el('div', 'section-label', t('work.context.instruction')),
       (() => {
         const card = el('div', 'card');
-        card.append(el('p', '', `This slice carries ${slice.anchors.length} anchor(s), ${slice.editable_targets.length} editable target(s), ${slice.verification_targets.length} verification target(s), and ${slice.readonly_context.length} readonly target(s).`));
+        card.append(el('p', '', t('work.context.summary')
+          .replace('{anchors}', slice.anchors.length)
+          .replace('{editable}', slice.editable_targets.length)
+          .replace('{verification}', slice.verification_targets.length)
+          .replace('{readonly}', slice.readonly_context.length)));
         return card;
       })(),
       el('div', 'section-label', t('work.context.source')),
@@ -360,7 +446,7 @@
     clear(rail);
     clear(detail);
     if (!plan) {
-      detail?.append(emptyState('work.empty.title', 'work.empty.description'));
+      detail?.append(emptyState('work.validation.empty.title', 'work.validation.empty.description'));
       return;
     }
     rail?.append(el('div', 'rail-title', t('work.validation.plan_diagnostics')));
@@ -388,7 +474,7 @@
         diagnostic.rule_id,
         diagnostic.message,
         [chip(diagnostic.severity, diagnostic.severity === 'error' ? 'red-chip' : diagnostic.severity === 'warning' ? 'orange-chip' : 'blue-chip')],
-        [actionButton(t('filter.validate'), 'a11y.validate_plan', () => toast(diagnostic.rule_id), 'btn small primary compact')],
+        [actionButton(t('filter.validate'), 'a11y.validate_plan', () => toast(diagnostic.rule_id), 'btn small primary compact', 'validate')],
       ),
       (() => {
         const card = el('div', 'card');
@@ -451,8 +537,8 @@
           actionButton(t('common.copy'), 'a11y.copy_locator', async () => {
             if (selectedScopeTarget?.reference) await navigator.clipboard.writeText(selectedScopeTarget.reference);
             toast(t('toast.locator_copied'));
-          }),
-          actionButton(t('common.open'), 'a11y.open_source', () => selectedScopeTarget && toast(selectedScopeTarget.resolved_path), 'btn small primary compact'),
+          }, 'btn compact', 'copy'),
+          actionButton(t('common.open'), 'a11y.open_source', () => selectedScopeTarget && toast(selectedScopeTarget.resolved_path), 'btn small primary compact', 'open'),
         ],
       ),
       (() => {
@@ -466,9 +552,9 @@
         grid.append(
           summaryCard('scope.why', el('p', '', target.reason)),
           summaryCard('scope.lifecycle', linesList([
-            `Transition: ${target.transition || entry.group}`,
-            `Access: ${target.access || entry.group}`,
-            `Adapter: ${target.adapter || 'anchor'}`,
+            `${t('scope.transition')}: ${target.transition || entry.group}`,
+            `${t('scope.access')}: ${target.access || entry.group}`,
+            `${t('scope.adapter')}: ${target.adapter || 'anchor'}`,
           ])),
         );
         return grid;
@@ -489,33 +575,61 @@
     );
   }
 
+  function currentItems() {
+    const q = itemSearchQuery.trim().toLowerCase();
+    return projection.items
+      .filter(item => item.kind === selectedItemKind)
+      .filter(item => !q || [item.id, item.title, item.summary, item.path, ...(item.anchors || [])].some(value => String(value || '').toLowerCase().includes(q)));
+  }
+
+  function renderItemRailRow(rail, item) {
+    const button = el('button', `rail-item${item.id === selectedItemId ? ' active' : ''}`);
+    button.dataset.kind = item.kind;
+    const label = document.createElement('span');
+    label.append(el('b', '', item.id), el('p', '', item.title));
+    button.append(label, el('span', 'n', String(item.anchors.length)));
+    button.addEventListener('click', () => { selectedItemId = item.id; selectedAnchor = item.anchors[0] || null; renderItems(); });
+    rail?.append(button);
+  }
+
   function renderItems() {
     const page = one('[data-page="items"]');
     const kinds = ['philosophy', 'policy', 'requirement', 'feature'];
     kinds.forEach(kind => {
       text(one(`[data-tab="${kind}"] .mini-count`, page), projection.items.filter(item => item.kind === kind).length || '');
     });
+
+    const newButton = one('[data-items-new]', page);
+    text(one('.btn-label', newButton), t(`items.new.${selectedItemKind}`));
+    newButton?.setAttribute('aria-label', t(`a11y.new.${selectedItemKind}`));
+    if (newButton) {
+      newButton.dataset.i18nAria = `a11y.new.${selectedItemKind}`;
+      newButton.dataset.i18nTitle = `a11y.new.${selectedItemKind}`;
+      newButton.title = t(`a11y.new.${selectedItemKind}`);
+    }
+
     const rail = one('[data-items-rail]');
     const detail = one('[data-items-detail]');
     clear(rail);
     clear(detail);
-    const visible = projection.items.filter(item => item.kind === selectedItemKind);
-    if (!selectedItemId || !visible.some(item => item.id === selectedItemId)) {
-      selectedItemId = visible[0]?.id || projection.items[0]?.id || null;
+
+    const visible = currentItems();
+    if (!visible.some(item => item.id === selectedItemId)) selectedItemId = visible[0]?.id || null;
+
+    rail?.append(el('div', 'rail-title', t(`items.${selectedItemKind}`)));
+    visible.forEach(item => renderItemRailRow(rail, item));
+
+    if (!visible.length) {
+      detail?.append(emptyState('items.empty.title', 'items.empty.description'));
+      return;
     }
-    rail?.append(el('div', 'rail-title', titleCase(selectedItemKind)));
-    visible.forEach(item => {
-      const button = el('button', `rail-item${item.id === selectedItemId ? ' active' : ''}`);
-      button.dataset.kind = item.kind;
-      const label = document.createElement('span');
-      label.append(el('b', '', item.id), el('p', '', item.title));
-      button.append(label, el('span', 'n', String(item.anchors.length)));
-      button.addEventListener('click', () => { selectedItemId = item.id; selectedAnchor = item.anchors[0] || null; renderItems(); });
-      rail?.append(button);
-    });
-    const item = projection.items.find(candidate => candidate.id === selectedItemId) || visible[0];
-    if (!item) return;
+
+    const item = visible.find(candidate => candidate.id === selectedItemId) || visible[0];
     if (!selectedAnchor || !item.anchors.includes(selectedAnchor)) selectedAnchor = item.anchors[0] || null;
+    renderItemDetail(detail, item);
+  }
+
+  function renderItemDetail(detail, item) {
     detail?.append(
       canvasHead(
         item.title,
@@ -526,17 +640,17 @@
           item.priority ? chip(item.priority) : null,
         ],
         [
-          actionButton(t('common.edit'), 'a11y.edit_requirement', () => {
-            const current = projection.items.find(candidate => candidate.id === selectedItemId);
-            if (current) openItemEditor(current.path, current.id);
-          }),
-          actionButton(t('diagnostics.phase.plan'), 'a11y.create_work', async () => {
+          actionButton(t('common.edit'), 'a11y.edit_item', () => openItemEditor(item.path, item.id), 'btn compact', 'edit'),
+          actionButton(t('common.plan'), 'a11y.create_work', async () => {
             if (!selectedAnchor) return toast(t('toast.select_anchor'));
-            const request = { schema: 'syu/work-request/v1', id: `WORK-${Date.now()}`, summary: `Implement ${selectedAnchor}`, operation: 'modify', seeds: [selectedAnchor], constraints: { include_facets: [], exclude_paths: [] }, requested_targets: [] };
+            const request = defaultWorkRequest();
+            request.id = `WORK-${Date.now()}`;
+            request.summary = t('work.request.summary_from_anchor').replace('{anchor}', selectedAnchor);
+            request.seeds = [selectedAnchor];
             await api('/api/work/request', { method: 'PUT', body: JSON.stringify(request) });
             toast(t('toast.work_created'));
-            location.assign('/?page=work');
-          }, 'btn small primary compact'),
+            location.assign('/?page=work&workTab=overview');
+          }, 'btn small primary compact', 'plan'),
         ],
       ),
       (() => {
@@ -544,7 +658,9 @@
         const details = summaryCard('items.summary', el('p', '', item.description || item.summary || item.path));
         const planner = summaryCard('items.planner', (() => {
           const wrap = document.createElement('div');
-          wrap.append(el('p', '', selectedAnchor ? `Exact seed available: ${selectedAnchor}` : 'No exact seed available'));
+          wrap.append(el('p', '', selectedAnchor
+            ? t('items.exact_seed_available').replace('{anchor}', selectedAnchor)
+            : t('items.no_exact_seed')));
           return wrap;
         })());
         grid.append(details, planner);
@@ -619,8 +735,15 @@
     all('[data-tab-group="items"]').forEach(button => {
       button.addEventListener('click', () => {
         selectedItemKind = button.dataset.tab;
+        selectedItemId = null;
+        selectedAnchor = null;
         renderItems();
       });
+    });
+    one('[data-items-search]')?.addEventListener('input', event => {
+      itemSearchQuery = event.target.value;
+      selectedItemId = null;
+      renderItems();
     });
   }
 
@@ -631,6 +754,32 @@
         renderScope();
       });
     });
+  }
+
+  async function runValidationFromCurrentControl() {
+    const page = one('[data-page="diagnostics"]');
+    const context = one('select', page);
+    const range = one('[data-validation-range]', page);
+    const requested = context?.value || 'workspace';
+    try {
+      const next = await api('/api/validate', {
+        method: 'POST',
+        body: JSON.stringify({
+          context: requested,
+          range: requested === 'git_range' ? range?.value || null : null,
+          slice: requested === 'slice' ? currentSlice()?.id || null : null,
+        }),
+      });
+      renderRun(next);
+    } catch (error) {
+      renderRun({
+        ...lastRun,
+        state: 'failed',
+        reason: error.message,
+        diagnostics: [],
+        phases: (lastRun.phases || []).map(phase => ({ ...phase, state: 'failed' })),
+      });
+    }
   }
 
   function bindDiagnostics() {
@@ -646,12 +795,10 @@
     const phaseTabs = all('[role="tab"]', page);
     ['all', 'config', 'graph', 'targets', 'scope', 'plan'].forEach((phase, index) => { if (phaseTabs[index]) phaseTabs[index].dataset.diagnosticPhase = phase; });
     validate?.addEventListener('click', async () => {
-      const requested = context?.value || 'workspace';
       validate.disabled = true;
       all('[data-diagnostic-phase]', page).forEach(node => updatePhaseStatus(node, 'running'));
       try {
-        const run = await api('/api/validate', { method: 'POST', body: JSON.stringify({ context: requested, range: requested === 'git_range' ? range?.value || null : null, slice: requested === 'slice' ? currentSlice()?.id || null : null }) });
-        renderRun(run);
+        await runValidationFromCurrentControl();
       } finally {
         validate.disabled = false;
       }
@@ -665,6 +812,35 @@
     dot.className = `status-circle tab-status ${phaseStateClass(state)}`;
     const key = phaseStateA11y(state);
     dot.setAttribute('aria-label', key ? t(key) : state);
+  }
+
+  function diagnosticSummaryTitle(run) {
+    if (run.state === 'not_run') return t('diagnostics.not_run.title');
+    if (run.state === 'failed') return t('diagnostics.failed');
+    if (run.state === 'not_applicable') return t('diagnostics.not_applicable');
+    if (run.diagnostics.length === 0) return t('diagnostics.zero.title');
+    return `${run.diagnostics.length} ${t('diagnostics.issues_found')}`;
+  }
+
+  function diagnosticSummaryDescription(run) {
+    if (run.state === 'not_run') return t('diagnostics.not_run.description');
+    if (run.state === 'failed' || run.state === 'not_applicable') return run.reason || '';
+    if (run.diagnostics.length === 0) return t('diagnostics.zero.description');
+    return t('diagnostics.inspect_phases');
+  }
+
+  function renderValidationStats(run) {
+    const grid = el('div', 'grid3 validation-summary');
+    [
+      [t('diagnostics.evaluated'), run.evaluated_rule_count, t('diagnostics.rules_summary')],
+      [t('diagnostics.applicable'), run.applicable_phase_count, t('diagnostics.applicable_summary')],
+      [t('diagnostics.skipped'), run.skipped_phase_count, t('diagnostics.skipped_summary')],
+    ].forEach(([label, value, summary]) => {
+      const card = el('div', 'card');
+      card.append(el('h3', '', label), el('div', 'big-stat', String(value)), el('p', '', summary));
+      grid.append(card);
+    });
+    return grid;
   }
 
   function renderRun(run) {
@@ -694,43 +870,16 @@
     if (run.state === 'passed') chips.push(chip(t('diagnostics.passed'), 'green-chip'));
     if (run.context) chips.push(chip(titleCase(run.context.replace('-', '_'))));
     if (run.basis) chips.push(chip(run.basis));
+    if (run.completed_at) chips.push(chip(window.SyuPreferences.formatDate(run.completed_at), 'muted'));
+
     host?.append(
       canvasHead(
-        run.state === 'not_run' ? t('diagnostics.not_run.title')
-          : run.state === 'failed' ? t('diagnostics.failed')
-          : run.state === 'not_applicable' ? t('diagnostics.not_applicable')
-          : run.diagnostics.length === 0 ? t('diagnostics.zero.title')
-          : `${run.diagnostics.length} ${t('diagnostics.issues_found')}`,
-        run.state === 'not_run' ? t('diagnostics.not_run.description')
-          : run.state === 'failed' || run.state === 'not_applicable' ? (run.reason || '')
-          : run.diagnostics.length === 0 ? t('diagnostics.zero.description')
-          : t('diagnostics.inspect_phases'),
+        diagnosticSummaryTitle(run),
+        diagnosticSummaryDescription(run),
         chips,
-        run.completed_at ? [chip(window.SyuPreferences.formatDate(run.completed_at), 'muted')] : [],
-        [
-          actionButton(t('filter.validate'), 'a11y.validate_context', async () => {
-            const page = one('[data-page="diagnostics"]');
-            const context = one('select', page);
-            const range = one('[data-validation-range]', page);
-            const requested = context?.value || 'workspace';
-            const next = await api('/api/validate', { method: 'POST', body: JSON.stringify({ context: requested, range: requested === 'git_range' ? range?.value || null : null, slice: requested === 'slice' ? currentSlice()?.id || null : null }) });
-            renderRun(next);
-          }, 'btn primary compact'),
-        ],
+        [actionButton(t('filter.validate'), 'a11y.validate_context', runValidationFromCurrentControl, 'btn primary compact', 'validate')],
       ),
-      (() => {
-        const grid = el('div', 'grid3 validation-summary');
-        [
-          [t('diagnostics.evaluated'), run.evaluated_rule_count, t('diagnostics.rules_summary')],
-          [t('diagnostics.applicable'), run.applicable_phase_count, t('diagnostics.applicable_summary')],
-          [t('diagnostics.skipped'), run.skipped_phase_count, t('diagnostics.skipped_summary')],
-        ].forEach(([label, value, summary]) => {
-          const card = el('div', 'card');
-          card.append(el('h3', '', label), el('div', 'big-stat', String(value)), el('p', '', summary));
-          grid.append(card);
-        });
-        return grid;
-      })(),
+      renderValidationStats(run),
     );
   }
 
@@ -780,51 +929,39 @@
     );
   }
 
+  function newItemTemplate(kind, id) {
+    if (kind === 'philosophy') return `schema: syu/spec/v1\nkind: philosophies\nnamespace: workbench\ncategory: Workbench\nphilosophies:\n  - id: ${id}\n    title: ${t('items.template.philosophy_title')}\n    summary: ${t('items.template.philosophy_summary')}\n    principles: []\n    bindings: []\n`;
+    if (kind === 'policy') return `schema: syu/spec/v1\nkind: policies\nnamespace: workbench\ncategory: Workbench\npolicies:\n  - id: ${id}\n    title: ${t('items.template.policy_title')}\n    summary: ${t('items.template.policy_summary')}\n    description: ''\n    rules: []\n    bindings: []\n`;
+    if (kind === 'feature') return `schema: syu/spec/v1\nkind: features\nnamespace: workbench\ncategory: Workbench\nfeatures:\n  - id: ${id}\n    title: ${t('items.template.feature_title')}\n    summary: ${t('items.template.feature_summary')}\n    status: planned\n    bindings: []\n    contracts: []\n`;
+    return `schema: syu/spec/v1\nkind: requirements\nnamespace: workbench\ncategory: Workbench\nrequirements:\n  - id: ${id}\n    title: ${t('items.template.requirement_title')}\n    description: ${t('items.template.requirement_description')}\n    priority: medium\n    status: planned\n    criteria:\n      - id: acceptance\n        kind: behavior\n        statement: ${t('items.template.requirement_acceptance')}\n        governed_by: []\n    bindings: []\n`;
+  }
+
   function bindActions() {
-    buttonByKey('a11y.copy_locator')?.addEventListener('click', async () => {
-      if (selectedScopeTarget?.reference) await navigator.clipboard.writeText(selectedScopeTarget.reference);
-      toast(t('toast.locator_copied'));
-    });
-    buttonByKey('a11y.open_source')?.addEventListener('click', () => selectedScopeTarget && toast(selectedScopeTarget.resolved_path));
     buttonByKey('a11y.replan_work')?.addEventListener('click', async () => { await api('/api/work/replan', { method: 'POST' }); location.reload(); });
     buttonByKey('a11y.edit_request')?.addEventListener('click', () => openRequestEditor());
-    buttonByKey('a11y.export_slice')?.addEventListener('click', async () => {
-      const slice = currentSlice();
-      if (!slice) return;
-      const yaml = await api(`/api/context/${encodeURIComponent(slice.id)}`, { method: 'POST' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(new Blob([yaml], { type: 'application/yaml' }));
-      link.download = `${slice.id}-context.yaml`;
-      link.click();
-      URL.revokeObjectURL(link.href);
-    });
-    buttonByKey('a11y.create_work')?.addEventListener('click', async () => {
-      if (!selectedAnchor) return toast(t('toast.select_anchor'));
-      const request = { schema: 'syu/work-request/v1', id: `WORK-${Date.now()}`, summary: `Implement ${selectedAnchor}`, operation: 'modify', seeds: [selectedAnchor], constraints: { include_facets: [], exclude_paths: [] }, requested_targets: [] };
-      await api('/api/work/request', { method: 'PUT', body: JSON.stringify(request) });
-      toast(t('toast.work_created'));
-      location.assign('/?page=work');
-    });
-    buttonByKey('a11y.edit_requirement')?.addEventListener('click', () => {
-      const item = projection.items.find(candidate => candidate.id === selectedItemId);
-      if (item) openItemEditor(item.path, item.id);
-    });
-    buttonByKey('a11y.new_requirement')?.addEventListener('click', () => {
-      const id = `REQ-NEW-${Date.now().toString().slice(-6)}`;
-      openItemEditor(`docs/syu/requirements/${id.toLowerCase()}.yaml`, id, `schema: syu/spec/v1\nkind: requirements\nnamespace: workbench\ncategory: Workbench\nrequirements:\n  - id: ${id}\n    title: New requirement\n    description: Describe the requirement.\n    priority: medium\n    status: planned\n    criteria:\n      - id: acceptance\n        kind: behavior\n        statement: Describe the acceptance condition.\n        governed_by: []\n    bindings: []\n`);
+    one('[data-items-new]')?.addEventListener('click', () => {
+      const prefix = { philosophy: 'PHI', policy: 'POL', requirement: 'REQ', feature: 'FEAT' }[selectedItemKind] || 'ITEM';
+      const id = `${prefix}-NEW-${Date.now().toString().slice(-6)}`;
+      const folder = { philosophy: 'philosophy', policy: 'policies', requirement: 'requirements', feature: 'features' }[selectedItemKind] || 'requirements';
+      openItemEditor(`docs/syu/${folder}/${id.toLowerCase()}.yaml`, id, newItemTemplate(selectedItemKind, id));
     });
   }
 
   function openRequestEditor() {
-    if (!plan) return;
+    const source = plan?.request || requestedWork || defaultWorkRequest();
     const canvas = one('[data-work-overview]');
-    const form = el('form', 'form');
-    const title = el('h2', '', t('a11y.edit_request'));
+    clear(canvas);
+    if (!canvas) return;
+
+    const form = el('form', 'form request-editor');
+    form.append(canvasHead(t('a11y.edit_request'), t('work.request.editor_description'), [], []));
+
     const summaryLabel = el('label', '', t('work.request.summary'));
     summaryLabel.htmlFor = 'work-request-summary';
     const summary = el('textarea', 'textarea');
     summary.id = 'work-request-summary';
-    summary.value = plan.request.summary;
+    summary.value = source.summary || '';
+
     const operationLabel = el('label', '', t('work.request.operation'));
     operationLabel.htmlFor = 'work-request-operation';
     const operation = el('select', 'native-select');
@@ -832,22 +969,24 @@
     ['add', 'modify', 'remove', 'refactor', 'document', 'investigate'].forEach(value => {
       const option = document.createElement('option');
       option.value = value;
-      option.textContent = value;
-      option.selected = value === plan.request.operation;
+      option.textContent = t(`operation.${value}`);
+      option.selected = value === source.operation;
       operation.append(option);
     });
-    const save = el('button', 'btn primary', t('work.request.save'));
+
+    const save = actionButton(t('work.request.save'), 'work.request.save', null, 'btn primary compact', 'save');
     save.type = 'submit';
-    form.append(title, summaryLabel, summary, operationLabel, operation, save);
-    clear(canvas);
-    canvas?.append(form);
+    form.append(summaryLabel, summary, operationLabel, operation, save);
+    canvas.append(form);
+
     form.addEventListener('submit', async event => {
       event.preventDefault();
-      const request = structuredClone(plan.request);
-      request.summary = summary.value;
+      const request = structuredClone(source);
+      request.summary = summary.value.trim();
       request.operation = operation.value;
+      if (!request.summary) return toast(t('work.request.summary_required'));
       await api('/api/work/request', { method: 'PUT', body: JSON.stringify(request) });
-      location.assign('/?page=work');
+      location.assign('/?page=work&workTab=overview');
     });
   }
 
@@ -864,9 +1003,9 @@
     editor.value = source.content;
     details.append(summary, editor);
     const actions = el('div', 'actions');
-    const preview = el('button', 'btn', t('common.preview'));
-    const apply = el('button', 'btn primary', t('common.apply'));
-    const cancel = el('button', 'btn ghost', t('common.reset'));
+    const preview = actionButton(t('common.preview'), 'common.preview', null, 'btn compact', 'preview');
+    const apply = actionButton(t('common.apply'), 'common.apply', null, 'btn primary compact', 'save');
+    const cancel = actionButton(t('common.reset'), 'common.reset', null, 'btn ghost compact', 'reset');
     apply.disabled = true;
     actions.append(cancel, preview, apply);
     clear(canvas);
@@ -886,15 +1025,25 @@
   }
 
   async function hashEmptySource(path) {
-    const source = await api(`/api/source?path=${encodeURIComponent(path)}`);
-    return source.hash;
+    try {
+      const source = await api(`/api/source?path=${encodeURIComponent(path)}`);
+      return source.hash;
+    } catch {
+      return projection.config_hash || 'missing-source-hash';
+    }
+  }
+
+  function ensureSettingsBound() {
+    if (settingsBound) return;
+    settingsBound = true;
+    bindSettings();
   }
 
   function bindSettings() {
     const page = one('[data-page="settings"]');
     if (!page) return;
     let config = structuredClone(projection.config);
-    let configHash = null;
+    let configHash = projection.config_hash || null;
     let previewToken = null;
     let previewMode = 'structured';
     const general = one('[data-settings-page-panel="general"]', page);
@@ -910,7 +1059,18 @@
     const yamlPreview = one('pre.code', yamlPanel);
     const yamlEditor = document.createElement('textarea');
     yamlEditor.className = 'textarea code';
+    yamlEditor.value = yamlPreview?.textContent || '';
     yamlPreview?.replaceWith(yamlEditor);
+    const workspaceNotice = el('div', 'notice');
+    workspaceNotice.hidden = true;
+    one('[data-settings-layer-panel="workspace"] .settings-panel')?.prepend(workspaceNotice);
+
+    const showSettingsNotice = (message, kind = 'warn') => {
+      workspaceNotice.className = `notice${kind ? ` ${kind}` : ''}`;
+      workspaceNotice.textContent = message;
+      workspaceNotice.hidden = !message;
+    };
+
     const ruleField = el('textarea', 'textarea');
     ruleField.id = 'config-rule-overrides';
     const ruleContainer = el('div', 'field');
@@ -920,6 +1080,7 @@
     ruleLabel.textContent = t('settings.rule_overrides');
     ruleContainer.append(ruleLabel, ruleField);
     validation?.append(ruleContainer);
+
     const totalField = el('input', 'input');
     totalField.type = 'number';
     totalField.min = '1';
@@ -931,6 +1092,7 @@
     totalLabel.textContent = t('settings.total_bytes');
     totalContainer.append(totalLabel, totalField);
     planning?.querySelector('.form-row')?.append(totalContainer);
+
     const contextPrinciples = document.createElement('input');
     contextPrinciples.type = 'checkbox';
     const contextRules = document.createElement('input');
@@ -943,12 +1105,13 @@
       row.append(label, input);
       planning?.append(row);
     });
+
     const split = value => value.split(',').map(item => item.trim()).filter(Boolean);
     const baselineText = baseline => baseline?.strategy === 'merge-base' ? baseline.against : baseline?.strategy === 'revision' ? baseline.revision : baseline?.strategy === 'parent' ? 'parent' : '';
     const populate = source => {
       config = source.config;
       configHash = source.hash;
-      text(one('[data-settings-toolbar="workspace"] .select span:last-child', page), `source hash ${configHash.slice(0, 16)}…`);
+      text(one('[data-settings-toolbar="workspace"] .select span:last-child', page), `${t('settings.source_hash')} ${configHash.slice(0, 16)}…`);
       generalFields[0].value = config.workspace.spec_roots.join(', ');
       generalFields[1].value = config.workspace.artifact_roots.join(', ');
       generalFields[2].value = config.workspace.excludes.join(', ');
@@ -960,7 +1123,9 @@
       const toggles = all('.toggle', validation);
       toggles[0]?.classList.toggle('off', !config.validation.deny_warnings);
       toggles[1]?.classList.toggle('off', !config.validation.changed.require_owned_changes);
-      planningFields.slice(0, 4).forEach((field, index) => { field.value = [config.work.slicing.max_editable_files, config.work.slicing.max_editable_symbols, config.work.slicing.max_verification_targets, config.work.slicing.max_readonly_targets][index]; });
+      planningFields.slice(0, 4).forEach((field, index) => {
+        field.value = [config.work.slicing.max_editable_files, config.work.slicing.max_editable_symbols, config.work.slicing.max_verification_targets, config.work.slicing.max_readonly_targets][index];
+      });
       totalField.value = config.work.slicing.max_total_bytes;
       contextPrinciples.checked = config.work.context.include_parent_principles;
       contextRules.checked = config.work.context.include_parent_rules;
@@ -987,10 +1152,17 @@
       return config;
     };
     const load = async () => {
-      const [source, structured] = await Promise.all([api('/api/source?path=syu.yaml'), api('/api/config')]);
-      populate(structured);
-      yamlEditor.value = source.content;
+      populate({ config, hash: configHash || 'projection' });
+      try {
+        const [source, structured] = await Promise.all([api('/api/source?path=syu.yaml'), api('/api/config')]);
+        populate(structured);
+        yamlEditor.value = source.content;
+        showSettingsNotice('');
+      } catch (error) {
+        showSettingsNotice(error.message, 'warn');
+      }
     };
+
     all('.toggle', validation).forEach(toggle => {
       toggle.setAttribute('role', 'switch');
       toggle.tabIndex = 0;
@@ -1000,30 +1172,38 @@
     const applyButton = buttonByKey('a11y.apply_config');
     if (applyButton) applyButton.disabled = true;
     previewButton?.addEventListener('click', async () => {
-      const rawMode = !one('[data-settings-page-panel="yaml"]', page).hidden;
-      previewMode = rawMode ? 'yaml' : 'structured';
-      const result = rawMode
-        ? await api('/api/file/preview', { method: 'POST', body: JSON.stringify({ path: 'syu.yaml', content: yamlEditor.value, expected_hash: configHash }) })
-        : await api('/api/config/preview', { method: 'POST', body: JSON.stringify({ config: collect(), expected_hash: configHash }) });
-      previewToken = result.preview_token;
-      if (applyButton) applyButton.disabled = !previewToken;
-      toast(previewToken ? `${result.changed_lines} ${t('settings.changed_lines')}` : result.validation_errors.join('\n'));
+      try {
+        const rawMode = !one('[data-settings-page-panel="yaml"]', page).hidden;
+        previewMode = rawMode ? 'yaml' : 'structured';
+        const result = rawMode
+          ? await api('/api/file/preview', { method: 'POST', body: JSON.stringify({ path: 'syu.yaml', content: yamlEditor.value, expected_hash: configHash }) })
+          : await api('/api/config/preview', { method: 'POST', body: JSON.stringify({ config: collect(), expected_hash: configHash }) });
+        previewToken = result.preview_token;
+        if (applyButton) applyButton.disabled = !previewToken;
+        showSettingsNotice(previewToken ? `${result.changed_lines} ${t('settings.changed_lines')}` : result.validation_errors.join('\n'), previewToken ? '' : 'warn');
+      } catch (error) {
+        showSettingsNotice(error.message, 'error');
+      }
     });
     applyButton?.addEventListener('click', async () => {
       if (!previewToken) return;
-      const result = previewMode === 'yaml'
-        ? await api('/api/file/apply', { method: 'PUT', body: JSON.stringify({ path: 'syu.yaml', content: yamlEditor.value, expected_hash: configHash, preview_token: previewToken }) })
-        : await api('/api/config/apply', { method: 'PUT', body: JSON.stringify({ config: collect(), expected_hash: configHash, preview_token: previewToken }) });
-      configHash = result.new_hash;
-      previewToken = null;
-      applyButton.disabled = true;
-      toast(t('common.apply'));
+      try {
+        const result = previewMode === 'yaml'
+          ? await api('/api/file/apply', { method: 'PUT', body: JSON.stringify({ path: 'syu.yaml', content: yamlEditor.value, expected_hash: configHash, preview_token: previewToken }) })
+          : await api('/api/config/apply', { method: 'PUT', body: JSON.stringify({ config: collect(), expected_hash: configHash, preview_token: previewToken }) });
+        configHash = result.new_hash;
+        previewToken = null;
+        applyButton.disabled = true;
+        showSettingsNotice(t('common.apply'), 'success');
+      } catch (error) {
+        showSettingsNotice(error.message, 'error');
+      }
     });
     buttonByKey('a11y.open_yaml')?.addEventListener('click', () => {
       window.SyuPreferences.settingsLayer('workspace');
       window.SyuPreferences.settingsPage('workspace', 'yaml');
     });
-    load().catch(error => toast(error.message));
+    load();
   }
 
   function bindPalette() {
@@ -1059,12 +1239,19 @@
     renderRun(lastRun);
   }
 
+  window.SyuWorkbench = {
+    onRoute(page) {
+      if (page === 'settings') ensureSettingsBound();
+    },
+    renderAll,
+  };
+
   bindItemsTabs();
   bindScopeTabs();
   renderAll();
   bindDiagnostics();
   bindActions();
-  bindSettings();
   bindPalette();
+  if (document.querySelector('[data-page="settings"]')?.hidden === false) ensureSettingsBound();
   document.addEventListener('syu:locale', () => renderAll());
 })();

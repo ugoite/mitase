@@ -60,6 +60,11 @@ assert 'class="gear"' not in HTML
 assert '<style' not in HTML
 assert 'HEAD...HEAD' not in HTML and 'HEAD…HEAD' not in HTML
 assert set(re.findall(r'data-settings-layer="([^"]+)"', HTML)) == {"application", "workspace"}
+assert 'data-items-search=""' in HTML
+assert 'data-i18n-placeholder="items.search.placeholder"' in HTML
+assert 'data-items-new=""' in HTML
+assert re.search(r'data-settings-toolbar="workspace" hidden=""', HTML)
+assert re.search(r'data-settings-layer-panel="workspace" hidden=""', HTML)
 assert set(re.findall(r'data-settings-page="([^"]+)"', HTML)) == {
     "language", "appearance", "accessibility", "general", "profiles", "validation", "planning", "adapters", "yaml"
 }
@@ -70,5 +75,5 @@ for asset in ("workbench.css", "catalog.js", "i18n.js", "app.js", "projection.js
 for token in ("--bg:#f6f7f8", "--paper:#fff", "--ink:#15171a", "--sidebar:246px", "--topbar:98px", "--rail:294px"):
     assert token in CSS, f"missing normative CSS token {token}"
 assert "grid-template-columns:repeat(5,1fr)!important" in CSS
-assert "[data-settings-layer-panel][hidden]{display:none!important}" in CSS
+assert "[data-page][hidden],[data-panel][hidden],[data-settings-layer-panel][hidden],.settings-layout[hidden],.settings-panel[hidden],.settings-toolbar[hidden]{display:none!important}" in CSS
 print("Workbench DOM, icon, localization, asset, and geometry contract passed")
