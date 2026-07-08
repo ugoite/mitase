@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::{fs, path::Path};
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::{fs, path::Path};
 use syu_diagnostics::{Severity, ValidationResult};
 use syu_planner::plan;
 use syu_project_model::{ProjectConfig, ValidationPreset};
