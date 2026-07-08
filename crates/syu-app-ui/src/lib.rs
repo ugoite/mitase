@@ -105,6 +105,17 @@ mod tests {
         assert!(!html.contains("class=\"gear\""));
         assert!(html.contains("/assets/workbench.css"));
         assert!(html.contains("/assets/app.js"));
+        for banned in [
+            "REQ-WORKBENCH",
+            "SLICE-01",
+            "PLAN-WORKBENCH",
+            "UI-VISUAL-CONTRACT",
+            "No issues found",
+            "just now",
+        ] {
+            assert!(!html.contains(banned), "static demo content leaked: {banned}");
+        }
+        assert!(WORKBENCH_CSS.contains("[data-settings-layer-panel][hidden]{display:none!important}"));
     }
 
     #[test]

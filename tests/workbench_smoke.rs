@@ -28,4 +28,6 @@ fn workbench_projection_exposes_explicit_run_state_and_exact_anchors() {
                 .as_array()
                 .is_some_and(|anchors| !anchors.is_empty())))
     );
+    assert_eq!(projection["requested_work"]["id"], "WORK-AUTH-FAILURE");
+    assert!(projection["plan"].is_object());
 }

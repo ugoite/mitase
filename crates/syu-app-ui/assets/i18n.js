@@ -3,7 +3,7 @@
   const one = (selector, root = document) => root.querySelector(selector);
   const all = (selector, root = document) => [...root.querySelectorAll(selector)];
   const supported = ['en', 'ja'];
-  const params = new URL(location.href).searchParams;
+  const params = () => new URL(location.href).searchParams;
   const osLanguage = (navigator.language || 'en').toLowerCase().startsWith('ja') ? 'ja' : 'en';
   let locale = 'en';
   let themePreference = 'system';
@@ -69,14 +69,23 @@
     if (updateUrl) {
       const url = new URL(location.href); url.searchParams.set('settingsLayer', layer); history.replaceState({}, '', url);
     }
-    const requested = params.get('settingsPage');
+    const requested = params().get('settingsPage');
     const first = one(`[data-settings-layer-panel="${layer}"] [data-settings-page]`);
-    setPage(layer, requested || first?.dataset.settingsPage, updateUrl);
+    const fallback = first?.dataset.settingsPage;
+    const host = one(`[data-settings-layer-panel="${layer}"]`);
+    const exists = requested && one(`[data-settings-page="${requested}"]`, host);
+    setPage(layer, exists ? requested : fallback, updateUrl);
   }
 
   function setPage(layer, page, updateUrl = true) {
     const host = one(`[data-settings-layer-panel="${layer}"]`);
     if (!host || !page) return;
+    const target = one(`[data-settings-page="${page}"]`, host);
+    if (!target) {
+      const fallback = one('[data-settings-page]', host);
+      if (!fallback) return;
+      page = fallback.dataset.settingsPage;
+    }
     all('[data-settings-page]', host).forEach(element => element.classList.toggle('active', element.dataset.settingsPage === page));
     all('[data-settings-page-panel]', host).forEach(element => { element.hidden = element.dataset.settingsPagePanel !== page; });
     if (updateUrl) {
@@ -85,8 +94,8 @@
   }
 
   window.SyuPreferences = { translate, theme: applyTheme, settingsLayer: setLayer, settingsPage: setPage, t: required, formatNumber: value => numberFormatter.format(value), formatDate: value => dateFormatter.format(value) };
-  translate(params.get('lang') || localStorage.getItem('syu.locale') || osLanguage);
-  applyTheme(params.get('theme') || localStorage.getItem('syu.theme') || 'system');
+  translate(params().get('lang') || localStorage.getItem('syu.locale') || osLanguage);
+  applyTheme(params().get('theme') || localStorage.getItem('syu.theme') || 'system');
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (themePreference === 'system') applyTheme('system'); });
   all('[data-language-select]').forEach(element => element.addEventListener('change', () => { preferences.followOs = false; applyPreferences(); translate(element.value); }));
   const formatSelect = one('#format-locale');
@@ -105,5 +114,5 @@
   one('[data-reset-preferences]')?.addEventListener('click', () => { preferences = {}; applyPreferences(); translate(osLanguage); applyTheme('system'); });
   addEventListener('languagechange', () => { if (preferences.followOs) translate((navigator.language || 'en').toLowerCase().startsWith('ja') ? 'ja' : 'en'); });
   applyPreferences();
-  setLayer(params.get('settingsLayer') || 'application', false);
+  setLayer(params().get('settingsLayer') || 'application', false);
 })();

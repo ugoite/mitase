@@ -63,9 +63,12 @@ assert set(re.findall(r'data-settings-layer="([^"]+)"', HTML)) == {"application"
 assert set(re.findall(r'data-settings-page="([^"]+)"', HTML)) == {
     "language", "appearance", "accessibility", "general", "profiles", "validation", "planning", "adapters", "yaml"
 }
+for banned in ("REQ-WORKBENCH", "SLICE-01", "PLAN-WORKBENCH", "UI-VISUAL-CONTRACT", "just now", "No issues found"):
+    assert banned not in HTML, f"static demo content leaked into HTML: {banned}"
 for asset in ("workbench.css", "catalog.js", "i18n.js", "app.js", "projection.js"):
     assert f'/assets/{asset}' in HTML
 for token in ("--bg:#f6f7f8", "--paper:#fff", "--ink:#15171a", "--sidebar:246px", "--topbar:98px", "--rail:294px"):
     assert token in CSS, f"missing normative CSS token {token}"
 assert "grid-template-columns:repeat(5,1fr)!important" in CSS
+assert "[data-settings-layer-panel][hidden]{display:none!important}" in CSS
 print("Workbench DOM, icon, localization, asset, and geometry contract passed")
