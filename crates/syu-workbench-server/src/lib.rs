@@ -584,11 +584,18 @@ fn criterion_summary(item: &syu_spec_model::SpecId, criterion: &Criterion) -> Cr
         anchor: anchor_string(item, LocalAnchorKind::Criterion, &criterion.id),
         kind: format!("{:?}", criterion.kind).to_ascii_lowercase(),
         statement: criterion.statement.clone(),
-        governed_by: criterion.governed_by.iter().map(ToString::to_string).collect(),
+        governed_by: criterion
+            .governed_by
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
     }
 }
 
-fn bindings_for(item: &syu_spec_model::SpecId, bindings: &[ArtifactBinding]) -> Vec<BindingSummary> {
+fn bindings_for(
+    item: &syu_spec_model::SpecId,
+    bindings: &[ArtifactBinding],
+) -> Vec<BindingSummary> {
     bindings
         .iter()
         .map(|binding| {
@@ -620,7 +627,11 @@ fn bindings_for(item: &syu_spec_model::SpecId, bindings: &[ArtifactBinding]) -> 
                 verifies: binding.verifies.iter().map(ToString::to_string).collect(),
                 documents: binding.documents.iter().map(ToString::to_string).collect(),
                 enforces: binding.enforces.iter().map(ToString::to_string).collect(),
-                generated_from: binding.generated_from.iter().map(ToString::to_string).collect(),
+                generated_from: binding
+                    .generated_from
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
                 evidences: binding.evidences.iter().map(ToString::to_string).collect(),
             }
         })
@@ -640,7 +651,11 @@ fn contract_summary(item: &syu_spec_model::SpecId, contract: &Contract) -> Contr
                 role: participant.role.clone(),
             })
             .collect(),
-        guarantees: contract.guarantees.iter().map(ToString::to_string).collect(),
+        guarantees: contract
+            .guarantees
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
     }
 }
 

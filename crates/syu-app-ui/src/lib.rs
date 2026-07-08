@@ -113,9 +113,14 @@ mod tests {
             "No issues found",
             "just now",
         ] {
-            assert!(!html.contains(banned), "static demo content leaked: {banned}");
+            assert!(
+                !html.contains(banned),
+                "static demo content leaked: {banned}"
+            );
         }
-        assert!(WORKBENCH_CSS.contains("[data-settings-layer-panel][hidden]{display:none!important}"));
+        assert!(
+            WORKBENCH_CSS.contains("[data-settings-layer-panel][hidden]{display:none!important}")
+        );
     }
 
     #[test]
