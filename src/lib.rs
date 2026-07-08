@@ -25,7 +25,10 @@ use syu_app_ui::{
 };
 use syu_planner::{export_context, plan};
 use syu_project_model::{ChangeBaseline, GitRef};
-use syu_spec_model::RepoPath;
+use syu_spec_model::{
+    Criterion, Feature, LocalAnchorKind, LocalId, Philosophy, Policy, RepoPath, Requirement, Rule,
+    SpecAnchor, SpecDocument, SpecId,
+};
 use syu_validation::{
     ChangeStatus, ChangedFile, ChangedRange, PlanValidationMode, ValidationContext, validate,
 };
@@ -117,6 +120,29 @@ struct BrowserValidationRequest {
 #[derive(Debug, Deserialize)]
 struct ConfigEdit {
     config: syu_project_model::ProjectConfig,
+    expected_hash: String,
+    #[serde(default)]
+    preview_token: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct BranchScopeQuery {
+    range: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+struct ItemEditPayload {
+    id: String,
+    kind: String,
+    path: String,
+    title: String,
+    summary: Option<String>,
+    description: Option<String>,
+    status: Option<String>,
+    priority: Option<String>,
+    principles: Vec<syu_workbench_server::PrincipleSummary>,
+    rules: Vec<syu_workbench_server::RuleSummary>,
+    criteria: Vec<syu_workbench_server::CriterionSummary>,
     expected_hash: String,
     #[serde(default)]
     preview_token: Option<String>,
@@ -409,11 +435,14 @@ fn run_workbench(args: WorkbenchArgs) -> Result<i32> {
                     .route("/api/projection", get(web_projection))
                     .route("/api/work/request", put(web_update_request))
                     .route("/api/work/replan", post(web_replan))
+                    .route("/api/scope/branch", get(web_branch_scope))
                     .route(
                         "/api/context/{slice}",
                         post(web_export_context).get(web_export_context),
                     )
                     .route("/api/validate", post(web_validate))
+                    .route("/api/items/{id}/preview", post(web_preview_item))
+                    .route("/api/items/{id}/apply", put(web_apply_item))
                     .route("/api/source", get(web_source))
                     .route("/api/file/preview", post(web_preview_file))
                     .route("/api/file/apply", put(web_apply_file))
@@ -522,6 +551,35 @@ async fn web_export_context(
         &revision(&workspace.root)?,
     )?;
     Ok(serde_yaml::to_string(&context).map_err(anyhow::Error::from)?)
+}
+
+async fn web_branch_scope(
+    State(state): State<WorkbenchWebState>,
+    Query(query): Query<BranchScopeQuery>,
+) -> std::result::Result<Json<syu_workbench_server::BranchScopeView>, ApiError> {
+    let workspace = SpecWorkspace::load(&state.workspace_root)?;
+    let index = workspace.index()?;
+    let projection = current_projection(&state).await?;
+    let range = match query.range.as_deref() {
+        Some(range) if !range.trim().is_empty() => range.to_string(),
+        _ => match default_workbench_range(&workspace) {
+            Ok(range) => range,
+            Err(error) => {
+                return Ok(Json(syu_workbench_server::BranchScopeView::not_applicable(
+                    error.to_string(),
+                )));
+            }
+        },
+    };
+    let files = changed_files(&workspace.root, &range)
+        .map_err(|error| ApiError(StatusCode::BAD_REQUEST, anyhow::anyhow!(error.to_string())))?;
+    Ok(Json(syu_workbench_server::branch_scope_view(
+        &workspace,
+        &index,
+        &projection.items,
+        range,
+        &files,
+    )))
 }
 
 async fn web_validate(
@@ -723,6 +781,50 @@ async fn web_apply_file(
         validation_errors: Vec::new(),
         preview_token: None,
     }))
+}
+
+async fn web_preview_item(
+    State(state): State<WorkbenchWebState>,
+    AxumPath(id): AxumPath<String>,
+    Json(payload): Json<ItemEditPayload>,
+) -> std::result::Result<Json<FilePreview>, ApiError> {
+    ensure_item_identity(&id, &payload)?;
+    let path = safe_workspace_path(&state.workspace_root, &payload.path)?;
+    let old = fs::read_to_string(&path).unwrap_or_default();
+    ensure_source_hash(&old, &payload.expected_hash)?;
+    let content = rewrite_item_source(&old, &payload)?;
+    web_preview_file(
+        State(state),
+        Json(FileEdit {
+            path: payload.path,
+            content,
+            expected_hash: payload.expected_hash,
+            preview_token: None,
+        }),
+    )
+    .await
+}
+
+async fn web_apply_item(
+    State(state): State<WorkbenchWebState>,
+    AxumPath(id): AxumPath<String>,
+    Json(payload): Json<ItemEditPayload>,
+) -> std::result::Result<Json<FilePreview>, ApiError> {
+    ensure_item_identity(&id, &payload)?;
+    let path = safe_workspace_path(&state.workspace_root, &payload.path)?;
+    let old = fs::read_to_string(&path).unwrap_or_default();
+    ensure_source_hash(&old, &payload.expected_hash)?;
+    let content = rewrite_item_source(&old, &payload)?;
+    web_apply_file(
+        State(state),
+        Json(FileEdit {
+            path: payload.path,
+            content,
+            expected_hash: payload.expected_hash,
+            preview_token: payload.preview_token,
+        }),
+    )
+    .await
 }
 
 async fn web_config(
@@ -1034,6 +1136,255 @@ fn safe_workspace_path(root: &Path, relative: &str) -> std::result::Result<PathB
     let relative = RepoPath::new(relative)
         .map_err(|error| ApiError(StatusCode::BAD_REQUEST, anyhow::anyhow!(error)))?;
     Ok(root.join(relative.as_path()))
+}
+
+fn ensure_item_identity(id: &str, payload: &ItemEditPayload) -> std::result::Result<(), ApiError> {
+    if payload.id != id {
+        return Err(ApiError(
+            StatusCode::BAD_REQUEST,
+            anyhow::anyhow!("item id does not match request path"),
+        ));
+    }
+    Ok(())
+}
+
+fn rewrite_item_source(
+    source: &str,
+    payload: &ItemEditPayload,
+) -> std::result::Result<String, ApiError> {
+    let next = build_spec_item(payload)?;
+    let document = if source.trim().is_empty() {
+        new_item_document(payload, next)?
+    } else {
+        let document = serde_yaml::from_str(source).map_err(anyhow::Error::from)?;
+        replace_item_in_document(document, next)?
+    };
+    serde_yaml::to_string(&document)
+        .map_err(|error| ApiError(StatusCode::BAD_REQUEST, error.into()))
+}
+
+enum EditableSpecItem {
+    Philosophy(Philosophy),
+    Policy(Policy),
+    Requirement(Requirement),
+    Feature(Feature),
+}
+
+fn replace_item_in_document(
+    mut document: SpecDocument,
+    item: EditableSpecItem,
+) -> std::result::Result<SpecDocument, ApiError> {
+    match (&mut document, item) {
+        (SpecDocument::Philosophies { philosophies, .. }, EditableSpecItem::Philosophy(item)) => {
+            replace_by_id(philosophies, item.id.clone(), item, |entry| {
+                entry.id.clone()
+            })?;
+        }
+        (SpecDocument::Policies { policies, .. }, EditableSpecItem::Policy(item)) => {
+            replace_by_id(policies, item.id.clone(), item, |entry| entry.id.clone())?;
+        }
+        (SpecDocument::Requirements { requirements, .. }, EditableSpecItem::Requirement(item)) => {
+            replace_by_id(requirements, item.id.clone(), item, |entry| {
+                entry.id.clone()
+            })?;
+        }
+        (SpecDocument::Features { features, .. }, EditableSpecItem::Feature(item)) => {
+            replace_by_id(features, item.id.clone(), item, |entry| entry.id.clone())?;
+        }
+        _ => {
+            return Err(ApiError(
+                StatusCode::BAD_REQUEST,
+                anyhow::anyhow!("item kind does not match existing document"),
+            ));
+        }
+    }
+    Ok(document)
+}
+
+fn replace_by_id<T, F>(
+    items: &mut [T],
+    id: SpecId,
+    next: T,
+    key: F,
+) -> std::result::Result<(), ApiError>
+where
+    F: Fn(&T) -> SpecId,
+{
+    let Some(slot) = items.iter_mut().find(|entry| key(entry) == id) else {
+        return Err(ApiError(
+            StatusCode::NOT_FOUND,
+            anyhow::anyhow!("item {id} was not found in its source document"),
+        ));
+    };
+    *slot = next;
+    Ok(())
+}
+
+fn new_item_document(
+    payload: &ItemEditPayload,
+    item: EditableSpecItem,
+) -> std::result::Result<SpecDocument, ApiError> {
+    let namespace = "workbench".to_string();
+    let category = "Workbench".to_string();
+    match (payload.kind.as_str(), item) {
+        ("philosophy", EditableSpecItem::Philosophy(item)) => Ok(SpecDocument::Philosophies {
+            schema: syu_spec_model::SPEC_SCHEMA.into(),
+            namespace,
+            category,
+            philosophies: vec![item],
+        }),
+        ("policy", EditableSpecItem::Policy(item)) => Ok(SpecDocument::Policies {
+            schema: syu_spec_model::SPEC_SCHEMA.into(),
+            namespace,
+            category,
+            policies: vec![item],
+        }),
+        ("requirement", EditableSpecItem::Requirement(item)) => Ok(SpecDocument::Requirements {
+            schema: syu_spec_model::SPEC_SCHEMA.into(),
+            namespace,
+            category,
+            requirements: vec![item],
+        }),
+        ("feature", EditableSpecItem::Feature(item)) => Ok(SpecDocument::Features {
+            schema: syu_spec_model::SPEC_SCHEMA.into(),
+            namespace,
+            category,
+            features: vec![item],
+        }),
+        _ => Err(ApiError(
+            StatusCode::BAD_REQUEST,
+            anyhow::anyhow!("item kind is not supported"),
+        )),
+    }
+}
+
+fn build_spec_item(payload: &ItemEditPayload) -> std::result::Result<EditableSpecItem, ApiError> {
+    let id = parse_from_string::<SpecId>(&payload.id)?;
+    match payload.kind.as_str() {
+        "philosophy" => Ok(EditableSpecItem::Philosophy(Philosophy {
+            id,
+            title: payload.title.clone(),
+            summary: payload.summary.clone().unwrap_or_default(),
+            principles: payload
+                .principles
+                .iter()
+                .map(principle_from_summary)
+                .collect::<std::result::Result<_, _>>()?,
+            bindings: Vec::new(),
+        })),
+        "policy" => Ok(EditableSpecItem::Policy(Policy {
+            id,
+            title: payload.title.clone(),
+            summary: payload.summary.clone().unwrap_or_default(),
+            description: payload.description.clone().unwrap_or_default(),
+            rules: payload
+                .rules
+                .iter()
+                .map(rule_from_summary)
+                .collect::<std::result::Result<_, _>>()?,
+            bindings: Vec::new(),
+        })),
+        "requirement" => Ok(EditableSpecItem::Requirement(Requirement {
+            id,
+            title: payload.title.clone(),
+            description: payload.description.clone().unwrap_or_default(),
+            priority: parse_enum(payload.priority.as_deref().unwrap_or("medium"))?,
+            status: parse_enum(payload.status.as_deref().unwrap_or("planned"))?,
+            criteria: payload
+                .criteria
+                .iter()
+                .map(criterion_from_summary)
+                .collect::<std::result::Result<_, _>>()?,
+            bindings: Vec::new(),
+        })),
+        "feature" => Ok(EditableSpecItem::Feature(Feature {
+            id,
+            title: payload.title.clone(),
+            summary: payload.summary.clone().unwrap_or_default(),
+            status: parse_enum(payload.status.as_deref().unwrap_or("planned"))?,
+            bindings: Vec::new(),
+            contracts: Vec::new(),
+        })),
+        _ => Err(ApiError(
+            StatusCode::BAD_REQUEST,
+            anyhow::anyhow!("item kind {} is not supported", payload.kind),
+        )),
+    }
+}
+
+fn principle_from_summary(
+    summary: &syu_workbench_server::PrincipleSummary,
+) -> std::result::Result<syu_spec_model::Principle, ApiError> {
+    Ok(syu_spec_model::Principle {
+        id: local_id_from_anchor(&summary.anchor, LocalAnchorKind::Principle)?,
+        statement: summary.statement.clone(),
+        applies_to: summary.applies_to.clone(),
+    })
+}
+
+fn rule_from_summary(
+    summary: &syu_workbench_server::RuleSummary,
+) -> std::result::Result<Rule, ApiError> {
+    Ok(Rule {
+        id: local_id_from_anchor(&summary.anchor, LocalAnchorKind::Rule)?,
+        level: parse_enum(&summary.level)?,
+        statement: summary.statement.clone(),
+        governed_by: summary
+            .governed_by
+            .iter()
+            .map(|value| parse_from_string::<SpecAnchor>(value))
+            .collect::<std::result::Result<_, _>>()?,
+        applies_to: Default::default(),
+        enforcement: None,
+    })
+}
+
+fn criterion_from_summary(
+    summary: &syu_workbench_server::CriterionSummary,
+) -> std::result::Result<Criterion, ApiError> {
+    Ok(Criterion {
+        id: local_id_from_anchor(&summary.anchor, LocalAnchorKind::Criterion)?,
+        kind: parse_enum(&summary.kind)?,
+        statement: summary.statement.clone(),
+        governed_by: summary
+            .governed_by
+            .iter()
+            .map(|value| parse_from_string::<SpecAnchor>(value))
+            .collect::<std::result::Result<_, _>>()?,
+    })
+}
+
+fn local_id_from_anchor(
+    anchor: &str,
+    expected_kind: LocalAnchorKind,
+) -> std::result::Result<LocalId, ApiError> {
+    let parsed = parse_from_string::<SpecAnchor>(anchor)?;
+    if parsed.kind != expected_kind {
+        return Err(ApiError(
+            StatusCode::BAD_REQUEST,
+            anyhow::anyhow!("anchor {anchor} does not match expected kind"),
+        ));
+    }
+    Ok(parsed.local_id)
+}
+
+fn parse_enum<T>(value: &str) -> std::result::Result<T, ApiError>
+where
+    T: serde::de::DeserializeOwned,
+{
+    parse_from_string(value)
+}
+
+fn parse_from_string<T>(value: &str) -> std::result::Result<T, ApiError>
+where
+    T: serde::de::DeserializeOwned,
+{
+    serde_json::from_value(serde_json::Value::String(value.to_string())).map_err(|error| {
+        ApiError(
+            StatusCode::BAD_REQUEST,
+            anyhow::anyhow!("invalid value {value}: {error}"),
+        )
+    })
 }
 
 fn content_hash(content: &str) -> String {

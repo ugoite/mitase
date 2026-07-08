@@ -28,7 +28,12 @@ fn workbench_rendered_dom_uses_projection_driven_placeholders() {
         "data-diagnostic-result",
         "data-settings-layer-panel=\"application\"",
         "data-settings-layer-panel=\"workspace\"",
+        "data-tab=\"all\"",
+        "data-diagnostic-phase=\"all\"",
+        "data-scope-mode-button=\"branch\"",
     ] {
         assert!(html.contains(marker), "missing projection marker: {marker}");
     }
+
+    assert!(!html.contains("data-settings-page=\"yaml\""));
 }

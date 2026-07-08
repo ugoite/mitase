@@ -1,70 +1,420 @@
 <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Syu Workbench</title>
+  <link rel="stylesheet" href="/assets/workbench.css" />
+</head>
+<body>
+  <div class="app app-shell">
+    <aside class="role-sidebar" aria-label="Primary pages" data-i18n-aria="a11y.main_pages">
+      <div class="brand"><span class="brand-mark">sy</span><span class="brand-text">Syu</span></div>
+      <nav class="nav">
+        <button class="nav-item active" data-route="work">
+          <span class="ico"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"></path></svg></span>
+          <span class="nav-label" data-i18n="nav.work">Work</span>
+        </button>
+        <button class="nav-item" data-route="scope">
+          <span class="ico"><svg viewBox="0 0 24 24"><path d="M4 12h16M12 4v16M7 7l10 10M17 7 7 17"></path></svg></span>
+          <span class="nav-label" data-i18n="nav.scope">Scope</span>
+        </button>
+        <button class="nav-item" data-route="items">
+          <span class="ico"><svg viewBox="0 0 24 24"><path d="M5 5h14v14H5zM8 9h8M8 13h8M8 17h5"></path></svg></span>
+          <span class="nav-label" data-i18n="nav.items">Items</span>
+        </button>
+        <button class="nav-item" data-route="diagnostics">
+          <span class="ico"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"></path></svg></span>
+          <span class="nav-label" data-i18n="nav.diagnostics">Diagnostics</span>
+        </button>
+        <button class="nav-item settings-nav" data-route="settings" aria-label="Settings" data-i18n-aria="settings.title" data-i18n-title="settings.title" title="Settings">
+          <span class="ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.5"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.1A1.7 1.7 0 0 0 8.6 19a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.1A1.7 1.7 0 0 0 5 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.1A1.7 1.7 0 0 0 15.4 5a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.37.32.58.78.6 1.27V10h1v4h-.1a1.7 1.7 0 0 0-1.5 1Z"></path></svg></span>
+          <span class="nav-label" data-i18n="nav.settings">Settings</span>
+        </button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="workspace-mini">
+          <b>ugoite / syu</b>
+          <p data-i18n="workspace.ready">workspace ready</p>
+        </div>
+      </div>
+    </aside>
 
-<html lang="en"><head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/><title>Syu Workbench - Visual Contract v1.2 Localized Settings</title><link href="/assets/workbench.css" rel="stylesheet"/></head><body data-visual-contract="1.2-localized-settings">
-<div class="app app-shell">
-<aside aria-label="Primary pages" class="role-sidebar" data-i18n-aria="a11y.main_pages">
-<div class="brand"><span class="brand-mark">sy</span><span class="brand-text">Syu</span></div>
-<nav class="nav">
-<button class="nav-item active" data-route="work"><span class="ico"><svg viewbox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"></path></svg></span><span class="nav-label" data-i18n="nav.work">Work</span><span class="nav-badge"></span></button>
-<button class="nav-item" data-route="scope"><span class="ico"><svg viewbox="0 0 24 24"><path d="M4 12h16M12 4v16M7 7l10 10M17 7 7 17"></path></svg></span><span class="nav-label" data-i18n="nav.scope">Scope</span></button>
-<button class="nav-item" data-route="items"><span class="ico"><svg viewbox="0 0 24 24"><path d="M5 5h14v14H5zM8 9h8M8 13h8M8 17h5"></path></svg></span><span class="nav-label" data-i18n="nav.items">Items</span></button>
-<button class="nav-item" data-route="diagnostics"><span class="ico"><svg viewbox="0 0 24 24"><path d="m5 12 4 4L19 6"></path></svg></span><span class="nav-label" data-i18n="nav.diagnostics">Diagnostics</span></button>
-<button aria-label="Settings" class="nav-item settings-nav" data-i18n-aria="settings.title" data-i18n-title="settings.title" data-route="settings" title="Settings">
-<span class="ico"><svg aria-hidden="true" viewbox="0 0 24 24"><circle cx="12" cy="12" r="3.5"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21h-4v-.1A1.7 1.7 0 0 0 8.6 19a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3v-4h.1A1.7 1.7 0 0 0 5 8.6a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3h4v.1A1.7 1.7 0 0 0 15.4 5a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.4 9c.37.32.58.78.6 1.27V10h1v4h-.1a1.7 1.7 0 0 0-1.5 1Z"></path></svg></span>
-<span class="nav-label" data-i18n="nav.settings">Settings</span>
-</button></nav>
-<div class="sidebar-bottom"><div class="workspace-mini"><b>ugoite / syu</b><p data-i18n="workspace.ready">issue-762 · 8954b70 · workspace ready</p></div></div>
-</aside>
-<main class="main">
-<header class="topbar command-bar">
-<div class="command-wrap"><button class="command-box" data-open-palette=""><span class="key">⌘ K</span><span data-i18n="command.placeholder">Search work, slices, items, targets, validation…</span></button><div class="quick-filters"><button class="quick-pill active" data-i18n="filter.all">All</button><button class="quick-pill" data-i18n="filter.navigate">Navigate</button><button class="quick-pill" data-i18n="filter.plan">Plan</button><button class="quick-pill" data-i18n="filter.validate">Validate</button><button class="quick-pill" data-i18n="filter.config">Config</button></div></div>
-<div class="utility"><div class="branch">⑂ issue-762 <span aria-hidden="true" class="status-circle green"></span></div></div>
-</header>
-<div class="content content-viewport">
-<section class="surface" data-page="work">
-<div class="page-head"><div class="eyebrow" data-i18n="page.diagnostics.eyebrow">WORKBENCH</div><div class="title-row"><h1 data-i18n="nav.work">Work</h1><button aria-label="Work help" data-i18n-aria="a11y.work_help" class="help" data-i18n-title="a11y.work_help" title="Work help"><span class="help-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"></path><circle cx="12" cy="12" r="3"></circle></svg></span></button></div><div class="toolbar"><div class="select" data-focus-id="work-plan-selector"><span data-work-plan-label="" data-i18n="common.request">Request</span><span>⌄</span></div><button aria-label="Edit request" data-i18n-aria="a11y.edit_request" class="btn compact" data-i18n-title="a11y.edit_request" title="Edit request"><span class="btn-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4Z"></path><path d="m13.5 6.5 4 4"></path></svg></span><span class="btn-label" data-i18n="common.edit">Edit</span></button><button aria-label="Replan work" data-i18n-aria="a11y.replan_work" class="btn primary compact" data-i18n-title="a11y.replan_work" title="Replan work"><span class="btn-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M20 6v5h-5"></path><path d="M18.5 15a7 7 0 1 1-.7-7.8L20 11"></path></svg></span><span class="btn-label" data-i18n="common.replan">Replan</span></button></div></div>
-<div class="tabs"><button aria-label="Overview" class="tab active" data-i18n-aria="work.tab.overview" data-i18n-title="work.tab.overview" data-tab="overview" data-tab-group="work" title="Overview"><span class="tabicon"><svg aria-hidden="true" viewbox="0 0 24 24"><rect height="7" rx="1" width="7" x="4" y="4"></rect><rect height="4" rx="1" width="7" x="13" y="4"></rect><rect height="10" rx="1" width="7" x="13" y="10"></rect><rect height="7" rx="1" width="7" x="4" y="13"></rect></svg></span><span class="tab-label" data-i18n="work.tab.overview">Overview</span></button><button aria-label="Slices" class="tab" data-i18n-aria="work.tab.slices" data-i18n-title="work.tab.slices" data-tab="slices" data-tab-group="work" title="Slices"><span class="tabicon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="m12 3-8 4 8 4 8-4-8-4Z"></path><path d="m4 12 8 4 8-4"></path><path d="m4 17 8 4 8-4"></path></svg></span><span class="tab-label" data-i18n="work.tab.slices">Slices</span><span class="mini-count"></span></button><button aria-label="Context" class="tab" data-i18n-aria="diagnostics.context" data-i18n-title="diagnostics.context" data-tab="context" data-tab-group="work" title="Context"><span class="tabicon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="m4 7 8-4 8 4-8 4-8-4Z"></path><path d="M4 7v10l8 4 8-4V7"></path><path d="M12 11v10"></path></svg></span><span class="tab-label" data-i18n="work.tab.context">Context</span></button><button aria-label="Validation" class="tab" data-i18n-aria="settings.validation" data-i18n-title="settings.validation" data-tab="validation" data-tab-group="work" title="Validation"><span class="tabicon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M12 3 5 6v5c0 4.6 2.8 8 7 10 4.2-2 7-5.4 7-10V6l-7-3Z"></path><path d="m9 12 2 2 4-5"></path></svg></span><span class="tab-label" data-i18n="work.tab.validation">Validation</span><span class="mini-count"></span></button></div>
-<div class="workspace no-rail" data-panel="overview" data-panel-group="work"><div class="canvas" data-work-overview=""></div></div>
-<div class="workspace" data-panel="slices" data-panel-group="work" hidden=""><aside class="rail" data-work-slices-rail=""></aside><div class="canvas" data-work-slice-detail=""></div></div>
-<div class="workspace" data-panel="context" data-panel-group="work" hidden=""><aside class="rail" data-work-context-rail=""></aside><div class="canvas" data-work-context-detail=""></div></div>
-<div class="workspace" data-panel="validation" data-panel-group="work" hidden=""><aside class="rail" data-work-validation-rail=""></aside><div class="canvas" data-work-validation-detail=""></div></div>
-</section>
-<section class="surface" data-page="scope" hidden=""><div class="page-head"><div class="eyebrow" data-i18n="page.diagnostics.eyebrow">WORKBENCH</div><div class="title-row"><h1 data-i18n="nav.scope">Scope</h1><button aria-label="Help" data-i18n-aria="a11y.help" class="help" data-i18n-title="a11y.help" title="Help"><span class="help-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"></path><circle cx="12" cy="12" r="3"></circle></svg></span></button></div><div class="toolbar"><div class="seg-select"><span class="left" data-i18n="scope.work_plan">Work plan</span><span class="right" data-scope-plan-label=""><span data-i18n="common.request">Request</span><span>⌄</span></span></div><div class="select"><span data-scope-slice-label=""></span><span>⌄</span></div></div></div><div class="tabs"><button aria-label="Change" class="tab active" data-i18n-aria="scope.change" data-i18n-title="scope.change" data-tab="change" data-tab-group="scope" title="Change"><span class="tabicon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4Z"></path><path d="m13.5 6.5 4 4"></path></svg></span><span class="tab-label" data-i18n="scope.change">Change</span><span class="mini-count"></span></button><button aria-label="Verify" class="tab" data-i18n-aria="scope.verify" data-i18n-title="scope.verify" data-tab="verify" data-tab-group="scope" title="Verify"><span class="tabicon"><svg aria-hidden="true" viewbox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="m8 12 3 3 5-6"></path></svg></span><span class="tab-label" data-i18n="scope.verify">Verify</span><span class="mini-count"></span></button><button aria-label="Reference" class="tab" data-i18n-aria="work.context.reference" data-i18n-title="work.context.reference" data-tab="reference" data-tab-group="scope" title="Reference"><span class="tabicon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M4 5a3 3 0 0 1 3-2h5v16H7a3 3 0 0 0-3 2V5Z"></path><path d="M20 5a3 3 0 0 0-3-2h-5v16h5a3 3 0 0 1 3 2V5Z"></path></svg></span><span class="tab-label" data-i18n="work.context.reference">Reference</span><span class="mini-count"></span></button><button aria-label="Intent" class="tab" data-i18n-aria="scope.intent" data-i18n-title="scope.intent" data-tab="intent" data-tab-group="scope" title="Intent"><span class="tabicon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M8 12h8"></path><path d="m13 9 3 3-3 3"></path><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="12" r="3"></circle></svg></span><span class="tab-label" data-i18n="scope.intent">Intent</span><span class="mini-count"></span></button></div><div class="workspace"><aside class="rail" data-scope-rail=""></aside><div class="canvas" data-scope-detail=""></div></div></section>
-<section class="surface" data-page="items" hidden=""><div class="page-head"><div class="eyebrow" data-i18n="page.diagnostics.eyebrow">WORKBENCH</div><div class="title-row"><h1 data-i18n="nav.items">Items</h1><button aria-label="Help" data-i18n-aria="a11y.help" class="help" data-i18n-title="a11y.help" title="Help"><span class="help-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"></path><circle cx="12" cy="12" r="3"></circle></svg></span></button></div><div class="toolbar"><div class="search"><input data-i18n-placeholder="items.search.placeholder" data-items-search="" placeholder="Search specification items..."/></div><button aria-label="New requirement" data-focus-id="items-new-button" data-i18n-aria="a11y.new_requirement" class="btn primary compact" data-i18n-title="a11y.new_requirement" data-items-new="" title="New requirement"><span class="btn-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg></span><span class="btn-label" data-i18n="common.new">New</span></button></div></div><div class="tabs"><button aria-label="Philosophy" class="tab" data-i18n-aria="items.philosophy" data-i18n-title="items.philosophy" data-tab="philosophy" data-tab-group="items" title="Philosophy"><span class="tabicon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M12 3 4 8l8 5 8-5-8-5Z"></path><path d="m4 12 8 5 8-5"></path></svg></span><span class="tab-label" data-i18n="items.philosophy">Philosophy</span><span class="mini-count"></span></button><button aria-label="Policy" class="tab" data-i18n-aria="items.policy" data-i18n-title="items.policy" data-tab="policy" data-tab-group="items" title="Policy"><span class="tabicon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M6 3h12v18H6z"></path><path d="M9 7h6M9 11h6M9 15h4"></path></svg></span><span class="tab-label" data-i18n="items.policy">Policy</span><span class="mini-count"></span></button><button aria-label="Requirement" class="tab active" data-i18n-aria="items.requirement" data-i18n-title="items.requirement" data-tab="requirement" data-tab-group="items" title="Requirement"><span class="tabicon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M5 4h14v16H5z"></path><path d="m8 9 1 1 2-2M13 9h3M8 14l1 1 2-2M13 14h3"></path></svg></span><span class="tab-label" data-i18n="items.requirement">Requirement</span><span class="mini-count"></span></button><button aria-label="Feature" class="tab" data-i18n-aria="items.feature" data-i18n-title="items.feature" data-tab="feature" data-tab-group="items" title="Feature"><span class="tabicon"><svg aria-hidden="true" viewbox="0 0 24 24"><rect height="7" width="7" x="4" y="4"></rect><rect height="7" width="7" x="13" y="4"></rect><rect height="7" width="7" x="4" y="13"></rect><rect height="7" width="7" x="13" y="13"></rect></svg></span><span class="tab-label" data-i18n="items.feature">Feature</span><span class="mini-count"></span></button></div><div class="workspace"><aside class="rail" data-items-rail=""></aside><div class="canvas" data-items-detail=""></div></div></section>
-<section class="surface" data-page="diagnostics" hidden=""><div class="page-head"><div class="eyebrow" data-i18n="page.diagnostics.eyebrow">WORKBENCH</div><div class="title-row"><h1 data-i18n="diagnostics.title">Diagnostics</h1><button aria-label="Diagnostics help" data-i18n-aria="diagnostics.help" class="help" data-i18n-title="diagnostics.help" title="Diagnostics help"><span class="help-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"></path><circle cx="12" cy="12" r="3"></circle></svg></span></button></div><div class="toolbar"><div class="select"><span data-i18n="diagnostics.context">Context</span><select class="native-select" style="border:0;background:transparent;padding:0 0 0 6px"><option value="workspace" data-i18n="diagnostics.context.workspace">Workspace</option><option value="git_range" data-i18n="diagnostics.context.git_range">Git range</option><option value="work-plan" data-i18n="diagnostics.context.work_plan">Work plan</option><option value="slice" data-i18n="diagnostics.context.slice">Slice</option></select></div><input class="input" data-validation-range="" hidden="" placeholder="main...HEAD" style="max-width:180px"/><button aria-label="Validate selected context" data-i18n-aria="a11y.validate_context" class="btn primary compact" data-focus-id="validate-all" data-i18n-title="a11y.validate_context" title="Validate selected context"><span class="btn-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="m8 12 3 3 5-6"></path></svg></span><span class="btn-label" data-i18n="filter.validate">Validate</span></button></div></div><div aria-label="Validation phases" data-i18n-aria="a11y.validation_phases" class="tabs" role="tablist"><button aria-selected="true" class="tab active" data-i18n-title="diagnostics.phase.all" role="tab" title="All"><span class="tabicon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M3 6h.01M3 12h.01M3 18h.01"></path></svg></span><span class="tab-label" data-i18n="diagnostics.phase.all">All</span><span aria-label="Not run" data-i18n-aria="a11y.not_run" class="status-circle gray tab-status"></span></button><button aria-selected="false" class="tab" data-i18n-title="diagnostics.phase.config" role="tab" title="Config"><span class="tabicon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M4 6h6M14 6h6M4 12h10M18 12h2M4 18h2M10 18h10"></path><circle cx="12" cy="6" r="2"></circle><circle cx="16" cy="12" r="2"></circle><circle cx="8" cy="18" r="2"></circle></svg></span><span class="tab-label" data-i18n="diagnostics.phase.config">Config</span><span aria-label="Not run" data-i18n-aria="a11y.not_run" class="status-circle gray tab-status"></span></button><button aria-selected="false" class="tab" data-i18n-title="diagnostics.phase.graph" role="tab" title="Graph"><span class="tabicon"><svg aria-hidden="true" viewbox="0 0 24 24"><circle cx="6" cy="6" r="2"></circle><circle cx="18" cy="6" r="2"></circle><circle cx="12" cy="18" r="2"></circle><path d="m8 7 3 9M16 7l-3 9M8 6h8"></path></svg></span><span class="tab-label" data-i18n="diagnostics.phase.graph">Graph</span><span aria-label="Not run" data-i18n-aria="a11y.not_run" class="status-circle gray tab-status"></span></button><button aria-selected="false" class="tab" data-i18n-title="diagnostics.phase.targets" role="tab" title="Targets"><span class="tabicon"><svg aria-hidden="true" viewbox="0 0 24 24"><circle cx="12" cy="12" r="8"></circle><circle cx="12" cy="12" r="3"></circle><path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path></svg></span><span class="tab-label" data-i18n="diagnostics.phase.targets">Targets</span><span aria-label="Not run" data-i18n-aria="a11y.not_run" class="status-circle gray tab-status"></span></button><button aria-selected="false" class="tab" data-i18n-title="diagnostics.phase.scope" role="tab" title="Scope"><span class="tabicon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"></path><circle cx="12" cy="12" r="3"></circle></svg></span><span class="tab-label" data-i18n="diagnostics.phase.scope">Scope</span><span aria-label="Not run" data-i18n-aria="a11y.not_run" class="status-circle gray tab-status"></span></button><button aria-selected="false" class="tab" data-i18n-title="diagnostics.phase.plan" role="tab" title="Plan"><span class="tabicon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M9 4h6l1 2h3v15H5V6h3l1-2Z"></path><path d="M9 12h6M9 16h5"></path></svg></span><span class="tab-label" data-i18n="diagnostics.phase.plan">Plan</span><span aria-label="Not run" data-i18n-aria="a11y.not_run" class="status-circle gray tab-status"></span></button></div><div class="workspace no-rail"><div class="canvas" data-diagnostic-result=""></div></div></section>
-<section class="surface" data-page="settings" hidden="">
-<div class="page-head">
-<div class="eyebrow" data-i18n="page.settings.eyebrow">UTILITY</div>
-<div class="title-row"><h1 data-i18n="settings.title">Settings</h1><button aria-label="Settings help" class="help" data-i18n-aria="settings.help" data-i18n-title="settings.help" title="Settings help"><span class="help-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"></path><circle cx="12" cy="12" r="3"></circle></svg></span></button></div>
-<div class="toolbar settings-toolbar" data-settings-toolbar="application"><div class="select"><span data-i18n="settings.app.preferences">Application preferences</span><span data-i18n="settings.app.local">stored on this device</span></div><button aria-label="Reset application preferences" data-i18n-aria="a11y.reset_preferences" class="btn compact" data-reset-preferences="" data-i18n-title="a11y.reset_preferences" title="Reset application preferences"><span class="btn-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M4 4v6h6"></path><path d="M5.5 15a7 7 0 1 0 .7-7.8L4 10"></path></svg></span><span class="btn-label" data-i18n="common.reset">Reset</span></button></div>
-<div class="toolbar settings-toolbar" data-settings-toolbar="workspace" hidden=""><div class="select"><span>syu/config/v1 · syu.yaml</span><span>source hash 53ae…</span></div><button aria-label="Open raw YAML" data-i18n-aria="a11y.open_yaml" class="btn compact" data-i18n-title="a11y.open_yaml" title="Open raw YAML"><span class="btn-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="m8 9-4 3 4 3"></path><path d="m16 9 4 3-4 3"></path><path d="m14 5-4 14"></path></svg></span><span class="btn-label">YAML</span></button><button aria-label="Preview configuration diff" data-i18n-aria="a11y.preview_config" class="btn compact" data-i18n-title="a11y.preview_config" title="Preview configuration diff"><span class="btn-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M3 12s3-6 9-6 9 6 9 6-3 6-9 6-9-6-9-6Z"></path><circle cx="12" cy="12" r="2.5"></circle></svg></span><span class="btn-label" data-i18n="common.preview">Preview</span></button><button aria-label="Validate and apply" data-i18n-aria="a11y.apply_config" class="btn primary compact" data-i18n-title="a11y.apply_config" title="Validate and apply"><span class="btn-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="m5 12 4 4L19 6"></path></svg></span><span class="btn-label" data-i18n="common.apply">Apply</span></button></div>
-</div>
-<div aria-label="Settings layers" data-i18n-aria="a11y.settings_layers" class="tabs settings-tabs" role="tablist">
-<button aria-selected="true" class="tab active" data-settings-layer="application" role="tab"><span class="tabicon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M4 6h6M14 6h6M4 12h10M18 12h2M4 18h2M10 18h10"></path><circle cx="12" cy="6" r="2"></circle><circle cx="16" cy="12" r="2"></circle><circle cx="8" cy="18" r="2"></circle></svg></span><span class="tab-label" data-i18n="settings.layer.application">Application</span></button>
-<button aria-selected="false" class="tab" data-settings-layer="workspace" role="tab"><span class="tabicon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M4 7h16v13H4z"></path><path d="M8 7V4h8v3"></path></svg></span><span class="tab-label" data-i18n="settings.layer.workspace">Workspace</span></button>
-</div>
-<div class="settings-layout" data-settings-layer-panel="application">
-<aside aria-label="Application settings" data-i18n-aria="a11y.application_settings" class="settings-menu"><button class="settings-item active" data-settings-page="language"><span class="settings-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"></path></svg></span><span data-i18n="settings.language">Language</span></button><button class="settings-item" data-settings-page="appearance"><span class="settings-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9c0-.7-.1-1.4-.2-2.1A7 7 0 0 1 12 3Z"></path></svg></span><span data-i18n="settings.appearance">Appearance</span></button><button class="settings-item" data-settings-page="accessibility"><span class="settings-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><circle cx="12" cy="4" r="2"></circle><path d="M5 8h14M12 6v15M8 21l4-7 4 7"></path></svg></span><span data-i18n="settings.accessibility">Accessibility</span></button></aside>
-<div class="canvas white settings-panel" data-settings-page-panel="language"><div class="canvas-head"><div><h2 data-i18n="settings.language">Language</h2><p data-i18n="settings.language.description">Choose the language used by navigation, controls, help text, empty states, and accessibility labels.</p></div><div class="actions"><span class="chip green-chip" data-i18n="settings.applies_now">Applies immediately</span></div></div><div class="form"><div class="field"><label data-i18n="settings.interface_language" for="ui-language">Interface language</label><select class="native-select" data-focus-id="ui-language" data-language-select="" id="ui-language"><option value="en">English</option><option value="ja">日本語</option></select></div><div class="field"><label data-i18n="settings.format_locale" for="format-locale">Number and date format</label><select class="native-select" id="format-locale"><option data-i18n="settings.follow_interface">Follow interface language</option><option>English (United States)</option><option>日本語 (日本)</option></select></div><div class="toggle-row"><span data-i18n="settings.follow_os">Follow operating system language</span><span aria-label="Follow operating system language" data-i18n-aria="settings.follow_os" data-preference="follow-os" class="toggle off"></span></div></div><div class="notice" data-i18n="settings.language.notice" style="margin-top:16px">Technical identifiers, file paths, schema names, enum values, and user-authored specification text are never machine-translated.</div><div class="footer-note"><span data-i18n="settings.footer.language">Preference storage: application layer. This setting does not modify syu.yaml.</span></div></div>
-<div class="canvas white settings-panel" data-settings-page-panel="appearance" hidden=""><div class="canvas-head"><div><h2 data-i18n="settings.appearance">Appearance</h2><p data-i18n="settings.appearance.description">Choose how the Workbench is rendered on this device.</p></div></div><div class="choice-grid"><button class="choice-card" data-theme-choice="system"><span class="choice-preview split"></span><b data-i18n="settings.theme.system">System</b><small data-i18n="settings.theme.system_desc">Follow the operating system</small></button><button class="choice-card active" data-theme-choice="light"><span class="choice-preview light"></span><b data-i18n="settings.theme.light">Light</b><small data-i18n="settings.theme.light_desc">Bright paper surfaces</small></button><button class="choice-card" data-theme-choice="dark"><span class="choice-preview dark"></span><b data-i18n="settings.theme.dark">Dark</b><small data-i18n="settings.theme.dark_desc">Low-light surfaces</small></button></div><div class="toggle-row" style="margin-top:14px"><span data-i18n="settings.compact">Use compact density</span><span aria-label="Use compact density" data-i18n-aria="settings.compact" data-preference="compact" class="toggle off"></span></div><div class="footer-note"><span data-i18n="settings.footer.theme">Preference storage: application layer. Theme changes apply immediately and persist locally.</span></div></div>
-<div class="canvas white settings-panel" data-settings-page-panel="accessibility" hidden=""><div class="canvas-head"><div><h2 data-i18n="settings.accessibility">Accessibility</h2><p data-i18n="settings.accessibility.description">Adjust motion and visual assistance without changing project configuration.</p></div></div><div class="toggle-row"><span data-i18n="settings.reduce_motion">Reduce motion</span><span aria-label="Reduce motion" data-i18n-aria="settings.reduce_motion" data-preference="reduce-motion" class="toggle"></span></div><div class="toggle-row"><span data-i18n="settings.focus_visibility">Increase focus visibility</span><span aria-label="Increase focus visibility" data-i18n-aria="settings.focus_visibility" data-preference="focus-visibility" class="toggle"></span></div><div class="toggle-row"><span data-i18n="settings.status_text">Prefer text with status color</span><span aria-label="Prefer text with status color" data-i18n-aria="settings.status_text" data-preference="status-text" class="toggle"></span></div><div class="footer-note"><span data-i18n="settings.footer.accessibility">These preferences are local to this device and must be honored by every page.</span></div></div>
-</div>
-<div class="settings-layout" data-settings-layer-panel="workspace" hidden="">
-<aside aria-label="Workspace settings" data-i18n-aria="a11y.workspace_settings" class="settings-menu"><button class="settings-item active" data-settings-page="general"><span class="settings-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M4 7h16v13H4z"></path><path d="M8 7V4h8v3"></path></svg></span><span data-i18n="settings.general">General</span></button><button class="settings-item" data-settings-page="profiles"><span class="settings-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><circle cx="9" cy="9" r="3"></circle><path d="M3 20a6 6 0 0 1 12 0"></path><circle cx="17" cy="8" r="2"></circle><path d="M15 14a5 5 0 0 1 6 5"></path></svg></span><span data-i18n="settings.profiles">Profiles</span></button><button class="settings-item" data-settings-page="validation"><span class="settings-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M12 3 5 6v5c0 4.6 2.8 8 7 10 4.2-2 7-5.4 7-10V6l-7-3Z"></path><path d="m9 12 2 2 4-5"></path></svg></span><span data-i18n="settings.validation">Validation</span></button><button class="settings-item" data-settings-page="planning"><span class="settings-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M9 4h6l1 2h3v15H5V6h3l1-2Z"></path><path d="M9 12h6M9 16h5"></path></svg></span><span data-i18n="settings.planning">Planning</span></button><button class="settings-item" data-settings-page="adapters"><span class="settings-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="M8 3v5M16 3v5M6 8h12v4a6 6 0 0 1-12 0V8Z"></path><path d="M12 18v3"></path></svg></span><span data-i18n="settings.adapters">Adapters</span></button><button class="settings-item" data-settings-page="yaml"><span class="settings-icon"><svg aria-hidden="true" viewbox="0 0 24 24"><path d="m8 9-4 3 4 3"></path><path d="m16 9 4 3-4 3"></path><path d="m14 5-4 14"></path></svg></span><span data-i18n="settings.raw_yaml">YAML</span></button></aside>
-<div class="canvas white settings-panel" data-settings-page-panel="general"><div class="canvas-head"><div><h2 data-i18n="settings.layer.workspace">Workspace</h2><p data-i18n="settings.workspace.description">Repository roots used by the canonical workspace loader.</p></div><div class="actions"><span class="chip green-chip" data-i18n="settings.validation_passed">Validation passed</span></div></div><div class="form"><div class="field"><label data-i18n="settings.spec_roots">Specification roots</label><input class="input" value="docs/syu, spec"/></div><div class="field"><label data-i18n="settings.artifact_roots">Artifact roots</label><input class="input" value="src, crates, tests, website"/></div><div class="field"><label data-i18n="settings.excludes">Excludes</label><textarea class="textarea">target/**, .git/**, website/build/**</textarea></div></div><div class="footer-note"><span data-i18n="settings.footer.workspace">Configuration layer: workspace. Changes are written to syu.yaml through preview, validation, and source-hash checks.</span></div></div>
-<div class="canvas white settings-panel" data-settings-page-panel="profiles" hidden=""><div class="canvas-head"><div><h2 data-i18n="settings.profiles">Profiles</h2><p data-i18n="settings.profiles.description">Active validation and planning profiles for this workspace.</p></div></div><div class="form"><div class="field"><label data-i18n="settings.active_profiles">Active profiles</label><input class="input" value="agent-ready"/></div><div class="field"><label data-i18n="settings.custom_facets">Custom facets</label><textarea class="textarea">architecture: docs/**
-tooling: crates/**, src/**
-verification: crates/**, tests/**</textarea></div></div></div>
-<div class="canvas white settings-panel" data-settings-page-panel="validation" hidden=""><div class="canvas-head"><div><h2 data-i18n="settings.validation">Validation</h2><p data-i18n="settings.validation.description">Rules, presets, and changed-file behavior used by canonical validation.</p></div><div class="actions"><span class="chip green-chip">agent-ready</span></div></div><div class="form-row"><div class="field"><label data-i18n="settings.preset">Preset</label><select class="native-select"><option>agent-ready</option><option>strict</option><option>standard</option></select></div><div class="field"><label data-i18n="settings.baseline">Baseline</label><input class="input" value="origin/main"/></div></div><div class="toggle-row"><span data-i18n="settings.deny_warnings">Deny warnings</span><span aria-hidden="true" class="toggle off"></span></div><div class="toggle-row"><span data-i18n="settings.require_owned">Require owned changes</span><span aria-hidden="true" class="toggle"></span></div><div class="notice warn" data-i18n="settings.git_range_warning" style="margin-top:16px">Git-range validation must resolve an actual merge-base…HEAD range. A range with identical endpoints is invalid because it always evaluates an empty change set.</div><div class="footer-note"><span data-i18n="settings.footer.rules">Rule overrides remain structured. Fixed integrity rules cannot be disabled or downgraded.</span></div></div>
-<div class="canvas white settings-panel" data-settings-page-panel="planning" hidden=""><div class="canvas-head"><div><h2 data-i18n="settings.planning">Planning</h2><p data-i18n="settings.planning.description">ExecutionSlice budgets and ContextPack inclusion rules.</p></div></div><div class="form-row"><div class="field"><label data-i18n="settings.editable_files">Editable files</label><input class="input" value="4"/></div><div class="field"><label data-i18n="settings.editable_symbols">Editable symbols</label><input class="input" value="8"/></div><div class="field"><label data-i18n="settings.verification_targets">Verification targets</label><input class="input" value="6"/></div><div class="field"><label data-i18n="settings.readonly_targets">Readonly targets</label><input class="input" value="12"/></div></div></div>
-<div class="canvas white settings-panel" data-settings-page-panel="adapters" hidden=""><div class="canvas-head"><div><h2 data-i18n="settings.adapters">Adapters</h2><p data-i18n="settings.adapters.description">Repository adapters enabled for exact target resolution.</p></div></div><div class="form"><div class="field"><label data-i18n="settings.enabled_adapters">Enabled adapters</label><input class="input" value="rust, typescript, markdown, openapi, yaml, json"/></div></div></div>
-<div class="canvas white settings-panel" data-settings-page-panel="yaml" hidden=""><div class="canvas-head"><div><h2 data-i18n="settings.raw_yaml">Raw YAML</h2><p data-i18n="settings.raw.description">Advanced source-preserving editor. Structured settings remain the primary interface.</p></div></div><pre class="code">schema: syu/config/v1
-workspace:
-  spec_roots: [docs/syu]
-validation:
-  preset: agent-ready</pre><div class="notice" style="margin-top:14px"><span data-i18n="settings.yaml.notice">Preview and validation use the same apply path as structured settings. Never bypass the source hash.</span></div></div>
-</div>
-</section>
-</div></main></div>
-<div aria-label="Command palette" data-i18n-aria="a11y.command_palette" aria-modal="true" class="palette-overlay" role="dialog"><div class="palette-dialog"><div class="palette-input"><span class="key">⌘ K</span><input data-i18n-placeholder="command.placeholder" data-palette-input="" placeholder="Search work, slices, items, targets, validation…"/></div><div class="palette-section" data-i18n="palette.section">Navigate and focus</div><button class="palette-result active" data-command-focus="export-context" data-command-route="work" data-command-tab="context"><span class="r-ico">⇩</span><span><b data-i18n="palette.export">Export context pack</b><small><span data-i18n="palette.export_desc">Move to the selected Work slice context. Do not execute from the palette.</span></small></span><span class="route"><span data-i18n="palette.route.work_context">Work › Context</span></span></button><button class="palette-result" data-command-route="scope"><span class="r-ico">⌁</span><span><b data-i18n="palette.target">Open exact target</b><small><span data-i18n="palette.target_desc">Select an exact PlannedTarget in the Scope explorer.</span></small></span><span class="route"><span data-i18n="palette.route.scope_change">Scope › Change</span></span></button><button class="palette-result" data-command-focus="validate-all" data-command-route="diagnostics"><span class="r-ico">✓</span><span><b data-i18n="palette.validate">Validate current work plan</b><small><span data-i18n="palette.validate_desc">Move to the validation control and focus it.</span></small></span><span class="route"><span data-i18n="palette.route.diagnostics_plan">Diagnostics › Work Plan</span></span></button><button class="palette-result" data-command-focus="ui-language" data-command-route="settings"><span class="r-ico">⚙</span><span><b data-i18n="palette.settings">Open application settings</b><small data-i18n="palette.settings_desc">Choose language, appearance, accessibility, or workspace configuration.</small></span><span class="route" data-i18n="palette.route.settings">Settings › Language</span></button></div></div>
-<div aria-live="polite" class="toast" role="status"></div><script src="/assets/catalog.js"></script><script src="/assets/i18n.js"></script><script src="/assets/app.js"></script><script src="/assets/projection.js"></script></body></html>
+    <main class="main">
+      <header class="topbar command-bar">
+        <div class="command-wrap">
+          <button class="command-box" data-open-palette>
+            <span class="key">⌘ K</span>
+            <span data-i18n="command.placeholder">Search work, slices, items, targets, validation…</span>
+          </button>
+          <div class="quick-filters">
+            <button class="quick-pill active" data-i18n="filter.all">All</button>
+            <button class="quick-pill" data-i18n="filter.navigate">Navigate</button>
+            <button class="quick-pill" data-i18n="filter.plan">Plan</button>
+            <button class="quick-pill" data-i18n="filter.validate">Validate</button>
+            <button class="quick-pill" data-i18n="filter.config">Config</button>
+          </div>
+        </div>
+        <div class="utility"><div class="branch">⑂ issue-762</div></div>
+      </header>
+
+      <div class="content content-viewport">
+        <section class="surface" data-page="work">
+          <div class="page-head">
+            <div class="eyebrow" data-i18n="page.work.eyebrow">WORKBENCH</div>
+            <div class="title-row">
+              <h1 data-i18n="nav.work">Work</h1>
+              <button class="help" aria-label="Work help" data-i18n-aria="a11y.work_help" data-i18n-title="a11y.work_help" title="Work help">
+                <span class="help-icon"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"></path><circle cx="12" cy="12" r="3"></circle></svg></span>
+              </button>
+            </div>
+            <div class="toolbar">
+              <div class="select" data-focus-id="work-plan-selector"><span data-work-plan-label data-i18n="common.request">Request</span><span>⌄</span></div>
+              <button class="btn compact" data-work-new aria-label="New work" data-i18n-aria="a11y.work_new" data-i18n-title="a11y.work_new" title="New work">
+                <span class="btn-icon"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg></span>
+                <span class="btn-label" data-i18n="common.new">New</span>
+              </button>
+              <button class="btn compact" data-work-seed aria-label="Seed from selected item" data-i18n-aria="a11y.work_seed" data-i18n-title="a11y.work_seed" title="Seed from selected item">
+                <span class="btn-icon"><svg viewBox="0 0 24 24"><path d="M12 4v16M7 9l5-5 5 5M7 15h10"></path></svg></span>
+                <span class="btn-label" data-i18n="work.seed">Seed</span>
+              </button>
+              <button class="btn primary compact" data-work-plan aria-label="Plan work" data-i18n-aria="a11y.work_plan" data-i18n-title="a11y.work_plan" title="Plan work">
+                <span class="btn-icon"><svg viewBox="0 0 24 24"><path d="M9 4h6l1 2h3v15H5V6h3l1-2Z"></path><path d="M9 12h6M9 16h5"></path></svg></span>
+                <span class="btn-label" data-i18n="common.plan">Plan</span>
+              </button>
+            </div>
+          </div>
+          <div class="tabs">
+            <button class="tab active" data-tab="overview" data-tab-group="work" aria-selected="true" aria-label="Overview" data-i18n-aria="work.tab.overview" data-i18n-title="work.tab.overview" title="Overview">
+              <span class="tabicon"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1"></rect><rect x="13" y="4" width="7" height="4" rx="1"></rect><rect x="13" y="10" width="7" height="10" rx="1"></rect><rect x="4" y="13" width="7" height="7" rx="1"></rect></svg></span>
+              <span class="tab-label" data-i18n="work.tab.overview">Overview</span>
+            </button>
+            <button class="tab" data-tab="slices" data-tab-group="work" aria-selected="false" aria-label="Slices" data-i18n-aria="work.tab.slices" data-i18n-title="work.tab.slices" title="Slices">
+              <span class="tabicon"><svg viewBox="0 0 24 24"><path d="m12 3-8 4 8 4 8-4-8-4Z"></path><path d="m4 12 8 4 8-4"></path><path d="m4 17 8 4 8-4"></path></svg></span>
+              <span class="tab-label" data-i18n="work.tab.slices">Slices</span>
+              <span class="mini-count"></span>
+            </button>
+            <button class="tab" data-tab="context" data-tab-group="work" aria-selected="false" aria-label="Context" data-i18n-aria="work.tab.context" data-i18n-title="work.tab.context" title="Context">
+              <span class="tabicon"><svg viewBox="0 0 24 24"><path d="m4 7 8-4 8 4-8 4-8-4Z"></path><path d="M4 7v10l8 4 8-4V7"></path><path d="M12 11v10"></path></svg></span>
+              <span class="tab-label" data-i18n="work.tab.context">Context</span>
+            </button>
+            <button class="tab" data-tab="validation" data-tab-group="work" aria-selected="false" aria-label="Validation" data-i18n-aria="work.tab.validation" data-i18n-title="work.tab.validation" title="Validation">
+              <span class="tabicon"><svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.6 2.8 8 7 10 4.2-2 7-5.4 7-10V6l-7-3Z"></path><path d="m9 12 2 2 4-5"></path></svg></span>
+              <span class="tab-label" data-i18n="work.tab.validation">Validation</span>
+              <span class="mini-count"></span>
+            </button>
+          </div>
+          <div class="workspace no-rail" data-panel="overview" data-panel-group="work"><div class="canvas" data-work-overview></div></div>
+          <div class="workspace" data-panel="slices" data-panel-group="work" hidden><aside class="rail" data-work-slices-rail></aside><div class="canvas" data-work-slice-detail></div></div>
+          <div class="workspace" data-panel="context" data-panel-group="work" hidden><aside class="rail" data-work-context-rail></aside><div class="canvas" data-work-context-detail></div></div>
+          <div class="workspace" data-panel="validation" data-panel-group="work" hidden><aside class="rail" data-work-validation-rail></aside><div class="canvas" data-work-validation-detail></div></div>
+        </section>
+
+        <section class="surface" data-page="scope" hidden>
+          <div class="page-head">
+            <div class="eyebrow" data-i18n="page.scope.eyebrow">SCOPE</div>
+            <div class="title-row">
+              <h1 data-i18n="nav.scope">Scope</h1>
+              <button class="help" aria-label="Scope help" data-i18n-aria="a11y.help" data-i18n-title="a11y.help" title="Scope help">
+                <span class="help-icon"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"></path><circle cx="12" cy="12" r="3"></circle></svg></span>
+              </button>
+            </div>
+            <div class="toolbar">
+              <div class="seg-select scope-mode" data-scope-mode>
+                <button class="scope-mode-button active" data-scope-mode-button="plan" type="button" data-i18n="scope.mode.plan">Plan</button>
+                <button class="scope-mode-button" data-scope-mode-button="branch" type="button" data-i18n="scope.mode.branch">Branch</button>
+              </div>
+              <div class="select" data-scope-plan-control><span data-scope-plan-label data-i18n="common.request">Request</span><span data-scope-slice-label></span></div>
+              <div class="search" data-scope-range-control hidden><input data-scope-range placeholder="origin/main...HEAD" /></div>
+              <button class="btn compact" data-scope-refresh aria-label="Refresh scope" data-i18n-aria="a11y.refresh_scope" data-i18n-title="a11y.refresh_scope" title="Refresh scope">
+                <span class="btn-icon"><svg viewBox="0 0 24 24"><path d="M20 6v5h-5"></path><path d="M18.5 15a7 7 0 1 1-.7-7.8L20 11"></path></svg></span>
+                <span class="btn-label" data-i18n="common.replan">Refresh</span>
+              </button>
+              <button class="btn primary compact" data-scope-create-work aria-label="Create work from scope" data-i18n-aria="a11y.scope_create_work" data-i18n-title="a11y.scope_create_work" title="Create work from scope">
+                <span class="btn-icon"><svg viewBox="0 0 24 24"><path d="M9 4h6l1 2h3v15H5V6h3l1-2Z"></path><path d="M9 12h6M9 16h5"></path></svg></span>
+                <span class="btn-label" data-i18n="nav.work">Work</span>
+              </button>
+            </div>
+          </div>
+          <div class="tabs">
+            <button class="tab active" data-tab="change" data-tab-group="scope" aria-selected="true" aria-label="Change" data-i18n-aria="scope.change" data-i18n-title="scope.change" title="Change">
+              <span class="tabicon"><svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4Z"></path><path d="m13.5 6.5 4 4"></path></svg></span>
+              <span class="tab-label" data-i18n="scope.change">Change</span>
+              <span class="mini-count"></span>
+            </button>
+            <button class="tab" data-tab="verify" data-tab-group="scope" aria-selected="false" aria-label="Verify" data-i18n-aria="scope.verify" data-i18n-title="scope.verify" title="Verify">
+              <span class="tabicon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="m8 12 3 3 5-6"></path></svg></span>
+              <span class="tab-label" data-i18n="scope.verify">Verify</span>
+              <span class="mini-count"></span>
+            </button>
+            <button class="tab" data-tab="reference" data-tab-group="scope" aria-selected="false" aria-label="Reference" data-i18n-aria="work.context.reference" data-i18n-title="work.context.reference" title="Reference">
+              <span class="tabicon"><svg viewBox="0 0 24 24"><path d="M4 5a3 3 0 0 1 3-2h5v16H7a3 3 0 0 0-3 2V5Z"></path><path d="M20 5a3 3 0 0 0-3-2h-5v16h5a3 3 0 0 1 3 2V5Z"></path></svg></span>
+              <span class="tab-label" data-i18n="work.context.reference">Reference</span>
+              <span class="mini-count"></span>
+            </button>
+            <button class="tab" data-tab="intent" data-tab-group="scope" aria-selected="false" aria-label="Intent" data-i18n-aria="scope.intent" data-i18n-title="scope.intent" title="Intent">
+              <span class="tabicon"><svg viewBox="0 0 24 24"><path d="M8 12h8"></path><path d="m13 9 3 3-3 3"></path><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="12" r="3"></circle></svg></span>
+              <span class="tab-label" data-i18n="scope.intent">Intent</span>
+              <span class="mini-count"></span>
+            </button>
+          </div>
+          <div class="workspace"><aside class="rail" data-scope-rail></aside><div class="canvas" data-scope-detail></div></div>
+        </section>
+
+        <section class="surface" data-page="items" hidden>
+          <div class="page-head">
+            <div class="eyebrow" data-i18n="page.items.eyebrow">ITEMS</div>
+            <div class="title-row">
+              <h1 data-i18n="nav.items">Items</h1>
+              <button class="help" aria-label="Items help" data-i18n-aria="a11y.help" data-i18n-title="a11y.help" title="Items help">
+                <span class="help-icon"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"></path><circle cx="12" cy="12" r="3"></circle></svg></span>
+              </button>
+            </div>
+            <div class="toolbar">
+              <div class="search"><input data-items-search data-i18n-placeholder="items.search.placeholder" placeholder="Search specification items..." /></div>
+              <button class="btn primary compact" data-items-new aria-label="New item" data-i18n-aria="a11y.new_item" data-i18n-title="a11y.new_item" title="New item">
+                <span class="btn-icon"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg></span>
+                <span class="btn-label" data-i18n="common.new">New</span>
+              </button>
+            </div>
+          </div>
+          <div class="tabs">
+            <button class="tab active" data-tab="all" data-tab-group="items" aria-selected="true" aria-label="All" data-i18n-aria="items.all" data-i18n-title="items.all" title="All">
+              <span class="tabicon"><svg viewBox="0 0 24 24"><path d="M5 6h14M5 12h14M5 18h14"></path></svg></span>
+              <span class="tab-label" data-i18n="items.all">All</span>
+              <span class="mini-count"></span>
+            </button>
+            <button class="tab" data-tab="philosophy" data-tab-group="items" aria-selected="false" aria-label="Philosophy" data-i18n-aria="items.philosophy" data-i18n-title="items.philosophy" title="Philosophy">
+              <span class="tabicon"><svg viewBox="0 0 24 24"><path d="M12 3 4 8l8 5 8-5-8-5Z"></path><path d="m4 12 8 5 8-5"></path></svg></span>
+              <span class="tab-label" data-i18n="items.philosophy">Philosophy</span>
+              <span class="mini-count"></span>
+            </button>
+            <button class="tab" data-tab="policy" data-tab-group="items" aria-selected="false" aria-label="Policy" data-i18n-aria="items.policy" data-i18n-title="items.policy" title="Policy">
+              <span class="tabicon"><svg viewBox="0 0 24 24"><path d="M6 3h12v18H6z"></path><path d="M9 7h6M9 11h6M9 15h4"></path></svg></span>
+              <span class="tab-label" data-i18n="items.policy">Policy</span>
+              <span class="mini-count"></span>
+            </button>
+            <button class="tab" data-tab="requirement" data-tab-group="items" aria-selected="false" aria-label="Requirement" data-i18n-aria="items.requirement" data-i18n-title="items.requirement" title="Requirement">
+              <span class="tabicon"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5z"></path><path d="m8 9 1 1 2-2M13 9h3M8 14l1 1 2-2M13 14h3"></path></svg></span>
+              <span class="tab-label" data-i18n="items.requirement">Requirement</span>
+              <span class="mini-count"></span>
+            </button>
+            <button class="tab" data-tab="feature" data-tab-group="items" aria-selected="false" aria-label="Feature" data-i18n-aria="items.feature" data-i18n-title="items.feature" title="Feature">
+              <span class="tabicon"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7"></rect><rect x="13" y="4" width="7" height="7"></rect><rect x="4" y="13" width="7" height="7"></rect><rect x="13" y="13" width="7" height="7"></rect></svg></span>
+              <span class="tab-label" data-i18n="items.feature">Feature</span>
+              <span class="mini-count"></span>
+            </button>
+          </div>
+          <div class="workspace"><aside class="rail" data-items-rail></aside><div class="canvas" data-items-detail></div></div>
+        </section>
+
+        <section class="surface" data-page="diagnostics" hidden>
+          <div class="page-head">
+            <div class="eyebrow" data-i18n="page.diagnostics.eyebrow">WORKBENCH</div>
+            <div class="title-row">
+              <h1 data-i18n="diagnostics.title">Diagnostics</h1>
+              <button class="help" aria-label="Diagnostics help" data-i18n-aria="diagnostics.help" data-i18n-title="diagnostics.help" title="Diagnostics help">
+                <span class="help-icon"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"></path><circle cx="12" cy="12" r="3"></circle></svg></span>
+              </button>
+            </div>
+            <div class="toolbar">
+              <div class="select">
+                <span data-i18n="diagnostics.context">Context</span>
+                <select class="native-select" data-diagnostics-context>
+                  <option value="workspace" data-i18n="diagnostics.context.workspace">Workspace</option>
+                  <option value="git_range" data-i18n="diagnostics.context.git_range">Git range</option>
+                  <option value="work-plan" data-i18n="diagnostics.context.work_plan">Work plan</option>
+                  <option value="slice" data-i18n="diagnostics.context.slice">Slice</option>
+                </select>
+              </div>
+              <div class="search" data-diagnostics-range-wrap hidden><input class="input" data-validation-range placeholder="origin/main...HEAD" /></div>
+              <button class="btn primary compact" data-focus-id="validate-all" aria-label="Validate selected context" data-i18n-aria="a11y.validate_context" data-i18n-title="a11y.validate_context" title="Validate selected context">
+                <span class="btn-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="m8 12 3 3 5-6"></path></svg></span>
+                <span class="btn-label" data-i18n="filter.validate">Validate</span>
+              </button>
+            </div>
+          </div>
+          <div class="tabs" role="tablist" aria-label="Validation phases" data-i18n-aria="a11y.validation_phases">
+            <button class="tab active" role="tab" data-diagnostic-phase="all" aria-selected="true" aria-label="All" data-i18n-aria="diagnostics.phase.all" data-i18n-title="diagnostics.phase.all" title="All">
+              <span class="tabicon"><svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"></path></svg></span>
+              <span class="tab-label" data-i18n="diagnostics.phase.all">All</span>
+              <span class="status-circle gray tab-status" aria-label="Not run" data-i18n-aria="a11y.not_run"></span>
+            </button>
+            <button class="tab" role="tab" data-diagnostic-phase="config" aria-selected="false" aria-label="Config" data-i18n-aria="diagnostics.phase.config" data-i18n-title="diagnostics.phase.config" title="Config">
+              <span class="tabicon"><svg viewBox="0 0 24 24"><path d="M4 6h6M14 6h6M4 12h10M18 12h2M4 18h2M10 18h10"></path><circle cx="12" cy="6" r="2"></circle><circle cx="16" cy="12" r="2"></circle><circle cx="8" cy="18" r="2"></circle></svg></span>
+              <span class="tab-label" data-i18n="diagnostics.phase.config">Config</span>
+              <span class="status-circle gray tab-status" aria-label="Not run" data-i18n-aria="a11y.not_run"></span>
+            </button>
+            <button class="tab" role="tab" data-diagnostic-phase="graph" aria-selected="false" aria-label="Graph" data-i18n-aria="diagnostics.phase.graph" data-i18n-title="diagnostics.phase.graph" title="Graph">
+              <span class="tabicon"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2"></circle><circle cx="18" cy="6" r="2"></circle><circle cx="12" cy="18" r="2"></circle><path d="m8 7 3 9M16 7l-3 9M8 6h8"></path></svg></span>
+              <span class="tab-label" data-i18n="diagnostics.phase.graph">Graph</span>
+              <span class="status-circle gray tab-status" aria-label="Not run" data-i18n-aria="a11y.not_run"></span>
+            </button>
+            <button class="tab" role="tab" data-diagnostic-phase="targets" aria-selected="false" aria-label="Targets" data-i18n-aria="diagnostics.phase.targets" data-i18n-title="diagnostics.phase.targets" title="Targets">
+              <span class="tabicon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"></circle><circle cx="12" cy="12" r="3"></circle><path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path></svg></span>
+              <span class="tab-label" data-i18n="diagnostics.phase.targets">Targets</span>
+              <span class="status-circle gray tab-status" aria-label="Not run" data-i18n-aria="a11y.not_run"></span>
+            </button>
+            <button class="tab" role="tab" data-diagnostic-phase="scope" aria-selected="false" aria-label="Scope" data-i18n-aria="diagnostics.phase.scope" data-i18n-title="diagnostics.phase.scope" title="Scope">
+              <span class="tabicon"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"></path><circle cx="12" cy="12" r="3"></circle></svg></span>
+              <span class="tab-label" data-i18n="diagnostics.phase.scope">Scope</span>
+              <span class="status-circle gray tab-status" aria-label="Not run" data-i18n-aria="a11y.not_run"></span>
+            </button>
+            <button class="tab" role="tab" data-diagnostic-phase="plan" aria-selected="false" aria-label="Plan" data-i18n-aria="diagnostics.phase.plan" data-i18n-title="diagnostics.phase.plan" title="Plan">
+              <span class="tabicon"><svg viewBox="0 0 24 24"><path d="M9 4h6l1 2h3v15H5V6h3l1-2Z"></path><path d="M9 12h6M9 16h5"></path></svg></span>
+              <span class="tab-label" data-i18n="diagnostics.phase.plan">Plan</span>
+              <span class="status-circle gray tab-status" aria-label="Not run" data-i18n-aria="a11y.not_run"></span>
+            </button>
+          </div>
+          <div class="workspace no-rail"><div class="canvas" data-diagnostic-result></div></div>
+        </section>
+
+        <section class="surface" data-page="settings" hidden>
+          <div class="page-head">
+            <div class="eyebrow" data-i18n="page.settings.eyebrow">UTILITY</div>
+            <div class="title-row">
+              <h1 data-i18n="settings.title">Settings</h1>
+              <button class="help" aria-label="Settings help" data-i18n-aria="settings.help" data-i18n-title="settings.help" title="Settings help">
+                <span class="help-icon"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"></path><circle cx="12" cy="12" r="3"></circle></svg></span>
+              </button>
+            </div>
+            <div class="toolbar settings-toolbar" data-settings-toolbar="application">
+              <div class="select"><span data-i18n="settings.app.preferences">Application preferences</span><span data-i18n="settings.app.local">stored on this device</span></div>
+              <button class="btn compact" data-reset-preferences aria-label="Reset application preferences" data-i18n-aria="a11y.reset_preferences" data-i18n-title="a11y.reset_preferences" title="Reset application preferences">
+                <span class="btn-icon"><svg viewBox="0 0 24 24"><path d="M4 4v6h6"></path><path d="M5.5 15a7 7 0 1 0 .7-7.8L4 10"></path></svg></span>
+                <span class="btn-label" data-i18n="common.reset">Reset</span>
+              </button>
+            </div>
+            <div class="toolbar settings-toolbar" data-settings-toolbar="workspace" hidden>
+              <div class="select"><span>syu/config/v1 · syu.yaml</span><span data-settings-hash>source hash</span></div>
+              <button class="btn compact" data-settings-preview aria-label="Preview configuration diff" data-i18n-aria="a11y.preview_config" data-i18n-title="a11y.preview_config" title="Preview configuration diff">
+                <span class="btn-icon"><svg viewBox="0 0 24 24"><path d="M3 12s3-6 9-6 9 6 9 6-3 6-9 6-9-6-9-6Z"></path><circle cx="12" cy="12" r="2.5"></circle></svg></span>
+                <span class="btn-label" data-i18n="common.preview">Preview</span>
+              </button>
+              <button class="btn primary compact" data-settings-apply aria-label="Validate and apply" data-i18n-aria="a11y.apply_config" data-i18n-title="a11y.apply_config" title="Validate and apply">
+                <span class="btn-icon"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"></path></svg></span>
+                <span class="btn-label" data-i18n="common.apply">Apply</span>
+              </button>
+            </div>
+          </div>
+          <div class="tabs settings-tabs" role="tablist" aria-label="Settings layers" data-i18n-aria="a11y.settings_layers">
+            <button class="tab active" role="tab" aria-selected="true" data-settings-layer="application">
+              <span class="tabicon"><svg viewBox="0 0 24 24"><path d="M4 6h6M14 6h6M4 12h10M18 12h2M4 18h2M10 18h10"></path><circle cx="12" cy="6" r="2"></circle><circle cx="16" cy="12" r="2"></circle><circle cx="8" cy="18" r="2"></circle></svg></span>
+              <span class="tab-label" data-i18n="settings.layer.application">Application</span>
+            </button>
+            <button class="tab" role="tab" aria-selected="false" data-settings-layer="workspace">
+              <span class="tabicon"><svg viewBox="0 0 24 24"><path d="M4 7h16v13H4z"></path><path d="M8 7V4h8v3"></path></svg></span>
+              <span class="tab-label" data-i18n="settings.layer.workspace">Workspace</span>
+            </button>
+          </div>
+
+          <div class="settings-layout" data-settings-layer-panel="application">
+            <aside class="settings-menu" aria-label="Application settings" data-i18n-aria="a11y.application_settings">
+              <button class="settings-item active" data-settings-page="language"><span class="settings-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"></path></svg></span><span data-i18n="settings.language">Language</span></button>
+              <button class="settings-item" data-settings-page="appearance"><span class="settings-icon"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9c0-.7-.1-1.4-.2-2.1A7 7 0 0 1 12 3Z"></path></svg></span><span data-i18n="settings.appearance">Appearance</span></button>
+              <button class="settings-item" data-settings-page="accessibility"><span class="settings-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="4" r="2"></circle><path d="M5 8h14M12 6v15M8 21l4-7 4 7"></path></svg></span><span data-i18n="settings.accessibility">Accessibility</span></button>
+            </aside>
+            <div class="canvas white settings-panel" data-settings-page-panel="language">
+              <div class="canvas-head"><div><h2 data-i18n="settings.language">Language</h2><p data-i18n="settings.language.description">Choose the language used by navigation, controls, help text, empty states, and accessibility labels.</p></div><div class="actions"><span class="chip green-chip" data-i18n="settings.applies_now">Applies immediately</span></div></div>
+              <div class="form">
+                <div class="field"><label for="ui-language" data-i18n="settings.interface_language">Interface language</label><select class="native-select" id="ui-language" data-language-select data-focus-id="ui-language"><option value="en">English</option><option value="ja">日本語</option></select></div>
+                <div class="field"><label for="format-locale" data-i18n="settings.format_locale">Number and date format</label><select class="native-select" id="format-locale"><option data-i18n="settings.follow_interface">Follow interface language</option><option>English (United States)</option><option>日本語 (日本)</option></select></div>
+                <div class="toggle-row"><span data-i18n="settings.follow_os">Follow operating system language</span><span class="toggle off" data-preference="follow-os" aria-label="Follow operating system language" data-i18n-aria="settings.follow_os"></span></div>
+              </div>
+              <div class="notice" data-i18n="settings.language.notice">Technical identifiers, file paths, schema names, enum values, and user-authored specification text are never machine-translated.</div>
+            </div>
+            <div class="canvas white settings-panel" data-settings-page-panel="appearance" hidden>
+              <div class="canvas-head"><div><h2 data-i18n="settings.appearance">Appearance</h2><p data-i18n="settings.appearance.description">Choose how the Workbench is rendered on this device.</p></div></div>
+              <div class="choice-grid">
+                <button class="choice-card" data-theme-choice="system"><span class="choice-preview split"></span><b data-i18n="settings.theme.system">System</b><small data-i18n="settings.theme.system_desc">Follow the operating system</small></button>
+                <button class="choice-card active" data-theme-choice="light"><span class="choice-preview light"></span><b data-i18n="settings.theme.light">Light</b><small data-i18n="settings.theme.light_desc">Bright paper surfaces</small></button>
+                <button class="choice-card" data-theme-choice="dark"><span class="choice-preview dark"></span><b data-i18n="settings.theme.dark">Dark</b><small data-i18n="settings.theme.dark_desc">Low-light surfaces</small></button>
+              </div>
+              <div class="toggle-row"><span data-i18n="settings.compact">Use compact density</span><span class="toggle off" data-preference="compact" aria-label="Use compact density" data-i18n-aria="settings.compact"></span></div>
+            </div>
+            <div class="canvas white settings-panel" data-settings-page-panel="accessibility" hidden>
+              <div class="canvas-head"><div><h2 data-i18n="settings.accessibility">Accessibility</h2><p data-i18n="settings.accessibility.description">Adjust motion and visual assistance without changing project configuration.</p></div></div>
+              <div class="toggle-row"><span data-i18n="settings.reduce_motion">Reduce motion</span><span class="toggle" data-preference="reduce-motion" aria-label="Reduce motion" data-i18n-aria="settings.reduce_motion"></span></div>
+              <div class="toggle-row"><span data-i18n="settings.focus_visibility">Increase focus visibility</span><span class="toggle" data-preference="focus-visibility" aria-label="Increase focus visibility" data-i18n-aria="settings.focus_visibility"></span></div>
+              <div class="toggle-row"><span data-i18n="settings.status_text">Prefer text with status color</span><span class="toggle" data-preference="status-text" aria-label="Prefer text with status color" data-i18n-aria="settings.status_text"></span></div>
+            </div>
+          </div>
+
+          <div class="settings-layout" data-settings-layer-panel="workspace" hidden>
+            <aside class="settings-menu" aria-label="Workspace settings" data-i18n-aria="a11y.workspace_settings">
+              <button class="settings-item active" data-settings-page="general"><span class="settings-icon"><svg viewBox="0 0 24 24"><path d="M4 7h16v13H4z"></path><path d="M8 7V4h8v3"></path></svg></span><span data-i18n="settings.general">General</span></button>
+              <button class="settings-item" data-settings-page="profiles"><span class="settings-icon"><svg viewBox="0 0 24 24"><circle cx="9" cy="9" r="3"></circle><path d="M3 20a6 6 0 0 1 12 0"></path><circle cx="17" cy="8" r="2"></circle><path d="M15 14a5 5 0 0 1 6 5"></path></svg></span><span data-i18n="settings.profiles">Profiles</span></button>
+              <button class="settings-item" data-settings-page="validation"><span class="settings-icon"><svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.6 2.8 8 7 10 4.2-2 7-5.4 7-10V6l-7-3Z"></path><path d="m9 12 2 2 4-5"></path></svg></span><span data-i18n="settings.validation">Validation</span></button>
+              <button class="settings-item" data-settings-page="planning"><span class="settings-icon"><svg viewBox="0 0 24 24"><path d="M9 4h6l1 2h3v15H5V6h3l1-2Z"></path><path d="M9 12h6M9 16h5"></path></svg></span><span data-i18n="settings.planning">Planning</span></button>
+              <button class="settings-item" data-settings-page="adapters"><span class="settings-icon"><svg viewBox="0 0 24 24"><path d="M8 3v5M16 3v5M6 8h12v4a6 6 0 0 1-12 0V8Z"></path><path d="M12 18v3"></path></svg></span><span data-i18n="settings.adapters">Adapters</span></button>
+            </aside>
+            <div class="canvas white settings-panel" data-settings-page-panel="general">
+              <div class="canvas-head"><div><h2 data-i18n="settings.general">General</h2><p data-i18n="settings.workspace.description">Repository roots used by the canonical workspace loader.</p></div></div>
+              <div class="form two-column">
+                <div class="field"><label data-i18n="settings.spec_roots">Specification roots</label><input class="input" data-config-spec-roots /></div>
+                <div class="field"><label data-i18n="settings.artifact_roots">Artifact roots</label><input class="input" data-config-artifact-roots /></div>
+                <div class="field full"><label data-i18n="settings.excludes">Excludes</label><textarea class="textarea" data-config-excludes></textarea></div>
+              </div>
+            </div>
+            <div class="canvas white settings-panel" data-settings-page-panel="profiles" hidden>
+              <div class="canvas-head"><div><h2 data-i18n="settings.profiles">Profiles</h2><p data-i18n="settings.profiles.description">Active validation and planning profiles for this workspace.</p></div></div>
+              <div class="form two-column">
+                <div class="field"><label data-i18n="settings.active_profiles">Active profiles</label><input class="input" data-config-active-profiles /></div>
+                <div class="field full"><label data-i18n="settings.custom_facets">Custom facets</label><textarea class="textarea" data-config-custom-facets></textarea></div>
+              </div>
+            </div>
+            <div class="canvas white settings-panel" data-settings-page-panel="validation" hidden>
+              <div class="canvas-head"><div><h2 data-i18n="settings.validation">Validation</h2><p data-i18n="settings.validation.description">Rules, presets, and changed-file behavior used by canonical validation.</p></div></div>
+              <div class="form two-column">
+                <div class="field"><label data-i18n="settings.preset">Preset</label><select class="native-select" data-config-preset><option value="agent-ready">agent-ready</option><option value="strict">strict</option><option value="standard">standard</option></select></div>
+                <div class="field"><label data-i18n="settings.baseline">Baseline</label><input class="input" data-config-baseline /></div>
+                <div class="field full"><label data-i18n="settings.rule_overrides">Rule overrides</label><textarea class="textarea" data-config-rule-overrides></textarea></div>
+              </div>
+              <div class="toggle-row"><span data-i18n="settings.deny_warnings">Deny warnings</span><span class="toggle off" data-config-deny-warnings></span></div>
+              <div class="toggle-row"><span data-i18n="settings.require_owned">Require owned changes</span><span class="toggle off" data-config-require-owned></span></div>
+            </div>
+            <div class="canvas white settings-panel" data-settings-page-panel="planning" hidden>
+              <div class="canvas-head"><div><h2 data-i18n="settings.planning">Planning</h2><p data-i18n="settings.planning.description">ExecutionSlice budgets and ContextPack inclusion rules.</p></div></div>
+              <div class="form two-column">
+                <div class="field"><label data-i18n="settings.editable_files">Editable files</label><input class="input" type="number" data-config-editable-files /></div>
+                <div class="field"><label data-i18n="settings.editable_symbols">Editable symbols</label><input class="input" type="number" data-config-editable-symbols /></div>
+                <div class="field"><label data-i18n="settings.verification_targets">Verification targets</label><input class="input" type="number" data-config-verification-targets /></div>
+                <div class="field"><label data-i18n="settings.readonly_targets">Readonly targets</label><input class="input" type="number" data-config-readonly-targets /></div>
+                <div class="field"><label data-i18n="settings.total_bytes">Total bytes</label><input class="input" type="number" data-config-total-bytes /></div>
+              </div>
+              <div class="toggle-row"><span data-i18n="settings.include_principles">Include parent principles</span><span class="toggle off" data-config-include-principles></span></div>
+              <div class="toggle-row"><span data-i18n="settings.include_rules">Include parent rules</span><span class="toggle off" data-config-include-rules></span></div>
+            </div>
+            <div class="canvas white settings-panel" data-settings-page-panel="adapters" hidden>
+              <div class="canvas-head"><div><h2 data-i18n="settings.adapters">Adapters</h2><p data-i18n="settings.adapters.description">Repository adapters enabled for exact target resolution.</p></div></div>
+              <div class="form"><div class="field"><label data-i18n="settings.enabled_adapters">Enabled adapters</label><input class="input" data-config-adapters /></div></div>
+              <details class="preview-diff"><summary data-i18n="settings.preview_diff">Source diff preview</summary><pre class="code" data-settings-preview-output></pre></details>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <div class="palette-overlay" role="dialog" aria-modal="true" aria-label="Command palette" data-i18n-aria="a11y.command_palette">
+    <div class="palette-dialog">
+      <div class="palette-input">
+        <span class="key">⌘ K</span>
+        <input data-palette-input data-i18n-placeholder="command.placeholder" placeholder="Search work, slices, items, targets, validation…" />
+      </div>
+      <div class="palette-section" data-i18n="palette.section">Navigate and focus</div>
+      <button class="palette-result active" data-command-route="work" data-command-tab="context"><span class="r-ico">⇩</span><span><b data-i18n="palette.export">Export context pack</b></span><span class="route" data-i18n="palette.route.work_context">Work › Context</span></button>
+      <button class="palette-result" data-command-route="scope"><span class="r-ico">⌁</span><span><b data-i18n="palette.target">Open exact target</b></span><span class="route" data-i18n="palette.route.scope_change">Scope › Change</span></button>
+      <button class="palette-result" data-command-route="diagnostics" data-command-focus="validate-all"><span class="r-ico">✓</span><span><b data-i18n="palette.validate">Validate current work plan</b></span><span class="route" data-i18n="palette.route.diagnostics_plan">Diagnostics › Work Plan</span></button>
+      <button class="palette-result" data-command-route="settings" data-command-focus="ui-language"><span class="r-ico">⚙</span><span><b data-i18n="palette.settings">Open application settings</b></span><span class="route" data-i18n="palette.route.settings">Settings › Language</span></button>
+    </div>
+  </div>
+
+  <div class="toast" role="status" aria-live="polite"></div>
+
+  <script src="/assets/catalog.js"></script>
+  <script src="/assets/i18n.js"></script>
+  <script src="/assets/app.js"></script>
+  <script src="/assets/projection.js"></script>
+</body>
+</html>

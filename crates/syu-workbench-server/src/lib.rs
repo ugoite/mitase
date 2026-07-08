@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::collections::BTreeSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{fs, path::Path};
 use syu_diagnostics::{Severity, ValidationResult};
@@ -298,6 +300,7 @@ pub struct ItemSummary {
     pub id: String,
     pub kind: String,
     pub path: String,
+    pub source_hash: String,
     pub title: String,
     pub summary: String,
     pub description: Option<String>,
@@ -314,13 +317,46 @@ pub struct ItemSummary {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct BranchScopeView {
+    pub range: String,
+    pub state: String,
+    pub reason: Option<String>,
+    pub changed: Vec<BranchChangedTargetView>,
+    pub owned: Vec<BranchChangedTargetView>,
+    pub unowned: Vec<BranchChangedTargetView>,
+    pub affected_items: Vec<ItemSummary>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct BranchChangedTargetView {
+    pub path: String,
+    pub status: String,
+    pub owners: Vec<String>,
+    pub anchors: Vec<String>,
+}
+
+impl BranchScopeView {
+    pub fn not_applicable(reason: impl Into<String>) -> Self {
+        Self {
+            range: String::new(),
+            state: "not_applicable".into(),
+            reason: Some(reason.into()),
+            changed: Vec::new(),
+            owned: Vec::new(),
+            unowned: Vec::new(),
+            affected_items: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PrincipleSummary {
     pub anchor: String,
     pub statement: String,
     pub applies_to: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuleSummary {
     pub anchor: String,
     pub level: String,
@@ -328,7 +364,7 @@ pub struct RuleSummary {
     pub governed_by: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CriterionSummary {
     pub anchor: String,
     pub kind: String,
@@ -387,25 +423,36 @@ pub fn project(
     let mut items = Vec::new();
     for loaded in &workspace.documents {
         let path = relative_display(&workspace.root, &loaded.path);
+        let source_hash = content_hash(&fs::read_to_string(&loaded.path).unwrap_or_default());
         match &loaded.document {
             SpecDocument::Philosophies { philosophies, .. } => {
                 for item in philosophies {
-                    items.push(item_summary_from_philosophy(item, &path, &index));
+                    items.push(item_summary_from_philosophy(
+                        item,
+                        &path,
+                        &source_hash,
+                        &index,
+                    ));
                 }
             }
             SpecDocument::Policies { policies, .. } => {
                 for item in policies {
-                    items.push(item_summary_from_policy(item, &path, &index));
+                    items.push(item_summary_from_policy(item, &path, &source_hash, &index));
                 }
             }
             SpecDocument::Requirements { requirements, .. } => {
                 for item in requirements {
-                    items.push(item_summary_from_requirement(item, &path, &index));
+                    items.push(item_summary_from_requirement(
+                        item,
+                        &path,
+                        &source_hash,
+                        &index,
+                    ));
                 }
             }
             SpecDocument::Features { features, .. } => {
                 for item in features {
-                    items.push(item_summary_from_feature(item, &path, &index));
+                    items.push(item_summary_from_feature(item, &path, &source_hash, &index));
                 }
             }
         }
@@ -430,6 +477,70 @@ pub fn project(
     })
 }
 
+pub fn branch_scope_view(
+    workspace: &SpecWorkspace,
+    index: &syu_workspace::SpecIndex,
+    items: &[ItemSummary],
+    range: String,
+    files: &[syu_validation::ChangedFile],
+) -> BranchScopeView {
+    let mut changed = Vec::new();
+    let mut affected_ids = BTreeSet::new();
+    for file in files {
+        let path = file
+            .new_path
+            .as_ref()
+            .or(file.old_path.as_ref())
+            .map(|path| path.display().to_string())
+            .unwrap_or_default();
+        let refs = index
+            .path_to_targets
+            .get(&path)
+            .cloned()
+            .unwrap_or_default();
+        let owners = refs
+            .iter()
+            .map(|reference| reference.binding.item.to_string())
+            .collect::<BTreeSet<_>>();
+        let anchors = refs
+            .iter()
+            .map(ToString::to_string)
+            .collect::<BTreeSet<_>>();
+        affected_ids.extend(owners.iter().cloned());
+        changed.push(BranchChangedTargetView {
+            path,
+            status: format!("{:?}", file.status).to_ascii_lowercase(),
+            owners: owners.into_iter().collect(),
+            anchors: anchors.into_iter().collect(),
+        });
+    }
+    let owned = changed
+        .iter()
+        .filter(|entry| !entry.owners.is_empty())
+        .cloned()
+        .collect::<Vec<_>>();
+    let unowned = changed
+        .iter()
+        .filter(|entry| entry.owners.is_empty())
+        .cloned()
+        .collect::<Vec<_>>();
+    let affected_items = items
+        .iter()
+        .filter(|item| affected_ids.contains(&item.id))
+        .cloned()
+        .collect::<Vec<_>>();
+    let _ = workspace;
+    BranchScopeView {
+        range,
+        state: "ready".into(),
+        reason: None,
+        changed,
+        owned,
+        unowned,
+        affected_items,
+    }
+}
+
 fn default_work_request(workspace: &SpecWorkspace) -> Result<Option<WorkRequest>> {
     let path = workspace.root.join("work.yaml");
     if !path.is_file() {
@@ -442,6 +553,7 @@ fn default_work_request(workspace: &SpecWorkspace) -> Result<Option<WorkRequest>
 fn item_summary_from_philosophy(
     item: &Philosophy,
     path: &str,
+    source_hash: &str,
     index: &syu_workspace::SpecIndex,
 ) -> ItemSummary {
     let item_id = item.id.clone();
@@ -449,6 +561,7 @@ fn item_summary_from_philosophy(
         id: item.id.to_string(),
         kind: "philosophy".into(),
         path: path.into(),
+        source_hash: source_hash.into(),
         title: item.title.clone(),
         summary: item.summary.clone(),
         description: None,
@@ -474,6 +587,7 @@ fn item_summary_from_philosophy(
 fn item_summary_from_policy(
     item: &Policy,
     path: &str,
+    source_hash: &str,
     index: &syu_workspace::SpecIndex,
 ) -> ItemSummary {
     let item_id = item.id.clone();
@@ -481,6 +595,7 @@ fn item_summary_from_policy(
         id: item.id.to_string(),
         kind: "policy".into(),
         path: path.into(),
+        source_hash: source_hash.into(),
         title: item.title.clone(),
         summary: item.summary.clone(),
         description: (!item.description.is_empty()).then(|| item.description.clone()),
@@ -502,6 +617,7 @@ fn item_summary_from_policy(
 fn item_summary_from_requirement(
     item: &Requirement,
     path: &str,
+    source_hash: &str,
     index: &syu_workspace::SpecIndex,
 ) -> ItemSummary {
     let item_id = item.id.clone();
@@ -509,6 +625,7 @@ fn item_summary_from_requirement(
         id: item.id.to_string(),
         kind: "requirement".into(),
         path: path.into(),
+        source_hash: source_hash.into(),
         title: item.title.clone(),
         summary: item.description.clone(),
         description: Some(item.description.clone()),
@@ -530,6 +647,7 @@ fn item_summary_from_requirement(
 fn item_summary_from_feature(
     item: &syu_spec_model::Feature,
     path: &str,
+    source_hash: &str,
     index: &syu_workspace::SpecIndex,
 ) -> ItemSummary {
     let item_id = item.id.clone();
@@ -537,6 +655,7 @@ fn item_summary_from_feature(
         id: item.id.to_string(),
         kind: "feature".into(),
         path: path.into(),
+        source_hash: source_hash.into(),
         title: item.title.clone(),
         summary: item.summary.clone(),
         description: None,
@@ -553,6 +672,12 @@ fn item_summary_from_feature(
             .collect(),
         anchors: anchors_for(index, &item.id),
     }
+}
+
+fn content_hash(content: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(content.as_bytes());
+    format!("sha256:{:x}", hasher.finalize())
 }
 
 fn anchors_for(index: &syu_workspace::SpecIndex, item: &syu_spec_model::SpecId) -> Vec<String> {
