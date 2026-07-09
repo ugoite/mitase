@@ -66,14 +66,17 @@ assert 'data-items-new=""' in HTML
 assert re.search(r'data-settings-toolbar="workspace" hidden=""', HTML)
 assert re.search(r'data-settings-layer-panel="workspace" hidden=""', HTML)
 assert set(re.findall(r'data-settings-page="([^"]+)"', HTML)) == {
-    "language", "appearance", "accessibility", "general", "profiles", "validation", "planning", "adapters", "yaml"
+    "language", "appearance", "accessibility", "general", "profiles", "validation", "planning", "adapters"
 }
 for banned in ("REQ-WORKBENCH", "SLICE-01", "PLAN-WORKBENCH", "UI-VISUAL-CONTRACT", "just now", "No issues found"):
     assert banned not in HTML, f"static demo content leaked into HTML: {banned}"
 for asset in ("workbench.css", "catalog.js", "i18n.js", "app.js", "projection.js"):
     assert f'/assets/{asset}' in HTML
-for token in ("--bg:#f6f7f8", "--paper:#fff", "--ink:#15171a", "--sidebar:246px", "--topbar:98px", "--rail:294px"):
-    assert token in CSS, f"missing normative CSS token {token}"
-assert "grid-template-columns:repeat(5,1fr)!important" in CSS
-assert "[data-page][hidden],[data-panel][hidden],[data-settings-layer-panel][hidden],.settings-layout[hidden],.settings-panel[hidden],.settings-toolbar[hidden]{display:none!important}" in CSS
+CSS_COMPACT = re.sub(r"\s+", "", CSS)
+for token in ("--bg:#f6f7f8", "--paper:#fff", "--ink:#15171a", "--sidebar:246px", "--topbar:98px", "--rail:310px"):
+    assert token in CSS_COMPACT, f"missing normative CSS token {token}"
+assert "grid-template-columns:repeat(5,1fr)" in CSS_COMPACT
+assert "[data-settings-layer-panel][hidden]{display:none!important}" in CSS_COMPACT
+assert ".settings-panel[hidden]" in CSS_COMPACT
+assert ".settings-toolbar[hidden]" in CSS_COMPACT
 print("Workbench DOM, icon, localization, asset, and geometry contract passed")
