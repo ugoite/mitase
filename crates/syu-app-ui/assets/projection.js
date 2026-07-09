@@ -299,7 +299,6 @@
     ));
     const grid = el('div', 'grid2');
     grid.append(
-      summaryCard('work.card.intent', el('p', '', plan.request.summary)),
       summaryCard('work.card.reason', el('p', '', t('work.card.reason.body').replace('{revision}', plan.basis.revision.slice(0, 9)))),
     );
     body.append(grid);
@@ -1137,7 +1136,7 @@
       button.append(el('span', `status-circle ${diagnostic.severity === 'error' ? 'red' : diagnostic.severity === 'warning' ? 'orange' : 'blue'}`), label);
       button.addEventListener('click', () => {
         selectedDiagnosticKey = diagnostic.rule_id;
-        renderDiagnosticIssues(run, phase);
+        renderDiagnosticIssues(run, phaseId);
       });
       rail.append(button);
     });
@@ -1335,6 +1334,8 @@
     const noticeHost = el('div', 'notice');
     noticeHost.hidden = true;
     one('[data-settings-layer-panel="workspace"] .settings-panel', page)?.prepend(noticeHost);
+    const applyButton = one('[data-settings-apply]', page);
+    if (applyButton) applyButton.disabled = true;
 
     const setNotice = (message, kind = '') => {
       noticeHost.hidden = !message;
@@ -1542,7 +1543,7 @@
       try {
         const result = await api('/api/config/preview', { method: 'POST', body: JSON.stringify({ config: collect(), expected_hash: configHash }) });
         previewToken = result.preview_token;
-        one('[data-settings-apply]', page).disabled = !previewToken;
+        if (applyButton) applyButton.disabled = !previewToken;
         previewOutput.textContent = `${t('settings.changed_lines')}: ${result.changed_lines}\n${result.new_hash}`;
         setNotice(`${result.changed_lines} ${t('settings.changed_lines')}`, '');
       } catch (error) {
@@ -1556,7 +1557,7 @@
         const result = await api('/api/config/apply', { method: 'PUT', body: JSON.stringify({ config: collect(), expected_hash: configHash, preview_token: previewToken }) });
         configHash = result.new_hash;
         previewToken = null;
-        one('[data-settings-apply]', page).disabled = true;
+        if (applyButton) applyButton.disabled = true;
         previewOutput.textContent = `${t('common.apply')} · ${result.new_hash}`;
         setNotice(t('common.apply'), 'success');
       } catch (error) {
