@@ -21,6 +21,192 @@
   background: var(--bg);
   font-size: 14px;
 }
+:root[data-theme="dark"] {
+  --bg: #10151b;
+  --paper: #151a20;
+  --ink: #eef3f8;
+  --muted: #a8b1bd;
+  --line: #343c46;
+  --line-2: #2a323b;
+  --soft: #20262e;
+  --shadow: none;
+  color-scheme: dark;
+}
+
+html[data-theme="dark"],
+html[data-theme="dark"] body {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+[data-theme="dark"] .role-sidebar,
+[data-theme="dark"] .topbar,
+[data-theme="dark"] .surface,
+[data-theme="dark"] .canvas,
+[data-theme="dark"] .canvas.white,
+[data-theme="dark"] .palette-dialog {
+  background: var(--paper);
+  border-color: var(--line);
+  color: var(--ink);
+  box-shadow: none;
+}
+
+[data-theme="dark"] .role-sidebar {
+  background: #10151b;
+}
+
+[data-theme="dark"] .topbar {
+  background: rgba(21, 26, 32, .96);
+}
+
+[data-theme="dark"] .brand-mark {
+  border-color: #dce5ef;
+}
+
+[data-theme="dark"] .nav-item {
+  color: #c5ced9;
+}
+
+[data-theme="dark"] .nav-item .ico {
+  color: #b3bdca;
+}
+
+[data-theme="dark"] .nav-item.active,
+[data-theme="dark"] .quick-pill.active,
+[data-theme="dark"] .settings-item.active,
+[data-theme="dark"] .rail-item.active,
+[data-theme="dark"] .rail-subitem.active,
+[data-theme="dark"] .scope-mode-button.active {
+  background: #e8eef5;
+  color: #11161c;
+}
+
+[data-theme="dark"] .nav-item.active .ico,
+[data-theme="dark"] .rail-item.active p,
+[data-theme="dark"] .rail-subitem.active small {
+  color: #11161c;
+}
+
+[data-theme="dark"] .workspace-mini,
+[data-theme="dark"] .command-box,
+[data-theme="dark"] .branch,
+[data-theme="dark"] .quick-pill,
+[data-theme="dark"] .search,
+[data-theme="dark"] .select,
+[data-theme="dark"] .seg-select,
+[data-theme="dark"] .btn,
+[data-theme="dark"] .rail,
+[data-theme="dark"] .card,
+[data-theme="dark"] .target-locator,
+[data-theme="dark"] .settings-menu,
+[data-theme="dark"] .choice-card,
+[data-theme="dark"] .input,
+[data-theme="dark"] .textarea,
+[data-theme="dark"] .native-select,
+[data-theme="dark"] .settings-builder-empty,
+[data-theme="dark"] .settings-row,
+[data-theme="dark"] .chip,
+[data-theme="dark"] .chip-button {
+  background: #20262e;
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+[data-theme="dark"] .command-box,
+[data-theme="dark"] .command-box .key,
+[data-theme="dark"] .quick-pill,
+[data-theme="dark"] .branch,
+[data-theme="dark"] .eyebrow,
+[data-theme="dark"] .canvas-head p,
+[data-theme="dark"] .card p,
+[data-theme="dark"] .selector,
+[data-theme="dark"] .preview-diff summary,
+[data-theme="dark"] .settings-item,
+[data-theme="dark"] .rail-title,
+[data-theme="dark"] .rail-section,
+[data-theme="dark"] .rail-item p,
+[data-theme="dark"] .rail-subitem small,
+[data-theme="dark"] .empty-state p {
+  color: var(--muted);
+}
+
+[data-theme="dark"] .tab {
+  color: #aeb8c4;
+}
+
+[data-theme="dark"] .tab.active {
+  color: var(--ink);
+}
+
+[data-theme="dark"] .tab.active::after {
+  background: var(--ink);
+}
+
+[data-theme="dark"] .btn.primary,
+[data-theme="dark"] .chip-button.active {
+  background: #e8eef5;
+  border-color: #e8eef5;
+  color: #11161c;
+}
+
+[data-theme="dark"] .btn.ghost,
+[data-theme="dark"] .help {
+  background: #20262e;
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+[data-theme="dark"] .choice-card.active {
+  border-color: #f1f5f9;
+  box-shadow: 0 0 0 2px rgba(241, 245, 249, .18);
+}
+
+[data-theme="dark"] .choice-preview.light {
+  background: linear-gradient(90deg, #e8edf3 0 23%, #f7f9fb 23%);
+}
+
+[data-theme="dark"] .choice-preview.split {
+  background: linear-gradient(135deg, #f7f9fb 0 50%, #20252c 50%);
+}
+
+[data-theme="dark"] .path {
+  color: #e3e9f0;
+}
+
+[data-theme="dark"] .list li,
+[data-theme="dark"] .path-row,
+[data-theme="dark"] .toggle-row,
+[data-theme="dark"] .palette-input {
+  border-color: var(--line-2);
+}
+
+[data-theme="dark"] .toggle.off {
+  background: #d8e0e8;
+}
+
+[data-theme="dark"] .toggle.off::after {
+  background: #151a20;
+}
+
+[data-theme="dark"] .notice {
+  background: #182233;
+  color: #c7d6ea;
+}
+
+[data-theme="dark"] .palette-overlay {
+  background: rgba(0, 0, 0, .42);
+}
+
+[data-theme="dark"] .palette-result {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+[data-theme="dark"] .palette-result:hover,
+[data-theme="dark"] .palette-result.active {
+  background: #e8eef5;
+  color: #11161c;
+}
 
 * { box-sizing: border-box; }
 html, body { margin: 0; min-height: 100%; background: var(--bg); }
