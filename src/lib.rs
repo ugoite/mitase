@@ -574,7 +574,6 @@ async fn web_branch_scope(
     let files = changed_files(&workspace.root, &range)
         .map_err(|error| ApiError(StatusCode::BAD_REQUEST, anyhow::anyhow!(error.to_string())))?;
     Ok(Json(syu_workbench_server::branch_scope_view(
-        &workspace,
         &index,
         &projection.items,
         range,

@@ -478,7 +478,6 @@ pub fn project(
 }
 
 pub fn branch_scope_view(
-    workspace: &SpecWorkspace,
     index: &syu_workspace::SpecIndex,
     items: &[ItemSummary],
     range: String,
@@ -490,7 +489,7 @@ pub fn branch_scope_view(
         let path = file
             .new_path
             .as_ref()
-            .or(file.old_path.as_ref())
+            .or_else(|| file.old_path.as_ref())
             .map(|path| path.display().to_string())
             .unwrap_or_default();
         let refs = index
@@ -529,7 +528,6 @@ pub fn branch_scope_view(
         .filter(|item| affected_ids.contains(&item.id))
         .cloned()
         .collect::<Vec<_>>();
-    let _ = workspace;
     BranchScopeView {
         range,
         state: "ready".into(),
