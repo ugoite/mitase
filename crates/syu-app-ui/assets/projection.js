@@ -28,6 +28,7 @@
 
   const requestedWork = projection.requested_work || null;
   const plan = projection.plan || null;
+  let selectedAnchor = null;
   let draftWorkRequest = requestedWork ? clone(requestedWork) : defaultWorkRequest();
   let lastRun = projection.validation;
   let selectedSliceId = plan?.slices[0]?.id || null;
@@ -40,7 +41,6 @@
   let branchScopeLoaded = false;
   let selectedItemKind = 'all';
   let selectedItemId = null;
-  let selectedAnchor = null;
   let selectedContextGroup = 'editable';
   let selectedContextEntry = null;
   let selectedDiagnosticPhase = 'all';

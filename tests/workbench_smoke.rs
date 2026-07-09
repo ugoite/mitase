@@ -85,3 +85,17 @@ fn work_context_has_stateful_rail_selection() {
     assert!(WORKBENCH_PROJECTION_JS.contains("selectedContextEntry"));
     assert!(WORKBENCH_PROJECTION_JS.contains("renderWorkContextDetail"));
 }
+
+#[test]
+fn workbench_bootstrap_declares_selected_anchor_before_default_request() {
+    let selected_anchor = WORKBENCH_PROJECTION_JS
+        .find("let selectedAnchor = null;")
+        .expect("selectedAnchor declaration");
+    let default_request = WORKBENCH_PROJECTION_JS
+        .find("let draftWorkRequest = requestedWork ? clone(requestedWork) : defaultWorkRequest();")
+        .expect("default work request bootstrap");
+    assert!(
+        selected_anchor < default_request,
+        "selectedAnchor must be initialized before defaultWorkRequest() can read it"
+    );
+}
