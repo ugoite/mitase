@@ -54,6 +54,38 @@
     blocked: t('work.status.blocked'),
   })[status] || status;
 
+  const itemStatusLabel = value => value ? t(`items.status.${value}`) : '';
+  const itemPriorityLabel = value => value ? t(`items.priority.${value}`) : '';
+  const scopeGroupLabel = value => ({
+    change: t('scope.change'),
+    verify: t('scope.verify'),
+    reference: t('work.context.reference'),
+    intent: t('work.context.specification'),
+  })[value] || titleCase(String(value || ''));
+  const transitionLabel = value => ({
+    add: t('operation.add'),
+    modify: t('operation.modify'),
+    remove: t('operation.remove'),
+    readonly: t('work.context.reference'),
+    run_only: t('work.context.verification'),
+    'run-only': t('work.context.verification'),
+  })[value] || titleCase(String(value || '').replaceAll('-', '_'));
+  const accessLabel = value => ({
+    change: t('work.context.editable'),
+    editable: t('work.context.editable'),
+    verify: t('work.context.verification'),
+    verification: t('work.context.verification'),
+    reference: t('work.context.reference'),
+    readonly: t('work.context.reference'),
+    intent: t('work.context.specification'),
+  })[value] || titleCase(String(value || '').replaceAll('-', '_'));
+  const runContextLabel = value => ({
+    workspace: t('diagnostics.context.workspace'),
+    git_range: t('diagnostics.context.git_range'),
+    work_plan: t('diagnostics.context.work_plan'),
+    slice: t('diagnostics.context.slice'),
+  })[String(value || '').replaceAll('-', '_')] || titleCase(String(value || '').replaceAll('-', '_'));
+
   const phaseStateClass = state => ({
     passed: 'green',
     issues: 'orange',
@@ -587,7 +619,7 @@
       canvasHead(
         target.resolved_selector.description,
         target.reason,
-        [chip(entry.group), chip(entry.slice.id)],
+        [chip(scopeGroupLabel(entry.group)), chip(entry.slice.id)],
         [
           actionButton(t('common.copy'), 'a11y.copy_locator', async () => {
             await navigator.clipboard.writeText(target.reference);
@@ -606,8 +638,8 @@
         grid.append(
           summaryCard('scope.why', el('p', '', target.reason)),
           summaryCard('scope.lifecycle', linesList([
-            `${t('scope.transition')}: ${target.transition || entry.group}`,
-            `${t('scope.access')}: ${target.access || entry.group}`,
+            `${t('scope.transition')}: ${transitionLabel(target.transition || entry.group)}`,
+            `${t('scope.access')}: ${accessLabel(target.access || entry.group)}`,
             `${t('scope.adapter')}: ${target.adapter || 'anchor'}`,
           ])),
         );
@@ -737,7 +769,7 @@
       canvasHead(
         item.title,
         item.summary || item.path,
-        [chip(item.id), chip(t(`items.${item.kind}`)), item.status ? chip(item.status, 'green-chip') : null, item.priority ? chip(item.priority) : null],
+        [chip(item.id), chip(t(`items.${item.kind}`)), item.status ? chip(itemStatusLabel(item.status), 'green-chip') : null, item.priority ? chip(itemPriorityLabel(item.priority)) : null],
         [
           actionButton(t('common.edit'), 'a11y.edit_item', () => openItemEditor(item), 'btn compact', 'edit'),
           actionButton(t('common.plan'), 'a11y.create_work', async () => {
@@ -922,20 +954,23 @@
     if (draft.priority !== null && draft.priority !== undefined) {
       form.append(field('items.field.priority', selectControl(['low', 'medium', 'high', 'critical'], draft.priority, value => { draft.priority = value; }, value => t(`items.priority.${value}`))));
     }
-    if (draft.principles?.length) {
+    if (draft.kind === 'philosophy') {
+      draft.principles ||= [];
       form.append(statementEditor('items.principles', draft.principles, [
         { labelKey: 'items.field.anchor', control: row => inputControl(row.anchor, value => { row.anchor = value; }) },
         { labelKey: 'items.field.statement', control: row => textareaControl(row.statement, value => { row.statement = value; }) },
       ], index => ({ anchor: `${draft.id}#principle.row-${index + 1}`, statement: '', applies_to: [] }), rerender));
     }
-    if (draft.rules?.length) {
+    if (draft.kind === 'policy') {
+      draft.rules ||= [];
       form.append(statementEditor('items.rules', draft.rules, [
         { labelKey: 'items.field.anchor', control: row => inputControl(row.anchor, value => { row.anchor = value; }) },
         { labelKey: 'items.field.level', control: row => selectControl(['must', 'should', 'may'], row.level, value => { row.level = value; }) },
         { labelKey: 'items.field.statement', control: row => textareaControl(row.statement, value => { row.statement = value; }) },
       ], index => ({ anchor: `${draft.id}#rule.row-${index + 1}`, level: 'must', statement: '', governed_by: [] }), rerender));
     }
-    if (draft.criteria?.length) {
+    if (draft.kind === 'requirement') {
+      draft.criteria ||= [];
       form.append(statementEditor('items.criteria', draft.criteria, [
         { labelKey: 'items.field.anchor', control: row => inputControl(row.anchor, value => { row.anchor = value; }) },
         { labelKey: 'items.field.kind', control: row => selectControl(['behavior', 'quality', 'security', 'operational', 'documentation', 'compatibility', 'custom'], row.kind, value => { row.kind = value; }) },
@@ -1056,7 +1091,7 @@
     clear(host);
     const chips = [];
     if (run.state === 'passed') chips.push(chip(t('diagnostics.passed'), 'green-chip'));
-    if (run.context) chips.push(chip(titleCase(run.context.replace('-', '_'))));
+    if (run.context) chips.push(chip(runContextLabel(run.context)));
     if (run.basis) chips.push(chip(run.basis));
     if (run.completed_at) chips.push(chip(window.SyuPreferences.formatDate(run.completed_at), 'blue-chip'));
     host?.append(

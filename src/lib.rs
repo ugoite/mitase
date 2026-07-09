@@ -789,6 +789,8 @@ async fn web_preview_item(
     Json(payload): Json<ItemEditPayload>,
 ) -> std::result::Result<Json<FilePreview>, ApiError> {
     ensure_item_identity(&id, &payload)?;
+    let workspace = SpecWorkspace::load(&state.workspace_root)?;
+    ensure_item_path_in_spec_roots(&state.workspace_root, &workspace, &payload.path)?;
     let path = safe_workspace_path(&state.workspace_root, &payload.path)?;
     let old = fs::read_to_string(&path).unwrap_or_default();
     ensure_source_hash(&old, &payload.expected_hash)?;
@@ -811,6 +813,8 @@ async fn web_apply_item(
     Json(payload): Json<ItemEditPayload>,
 ) -> std::result::Result<Json<FilePreview>, ApiError> {
     ensure_item_identity(&id, &payload)?;
+    let workspace = SpecWorkspace::load(&state.workspace_root)?;
+    ensure_item_path_in_spec_roots(&state.workspace_root, &workspace, &payload.path)?;
     let path = safe_workspace_path(&state.workspace_root, &payload.path)?;
     let old = fs::read_to_string(&path).unwrap_or_default();
     ensure_source_hash(&old, &payload.expected_hash)?;
@@ -1146,6 +1150,28 @@ fn ensure_item_identity(id: &str, payload: &ItemEditPayload) -> std::result::Res
         ));
     }
     Ok(())
+}
+
+fn ensure_item_path_in_spec_roots(
+    root: &Path,
+    workspace: &SpecWorkspace,
+    relative: &str,
+) -> std::result::Result<(), ApiError> {
+    let path = safe_workspace_path(root, relative)?;
+    if workspace
+        .config
+        .workspace
+        .spec_roots
+        .iter()
+        .map(|spec_root| root.join(spec_root.as_path()))
+        .any(|spec_root| path.starts_with(spec_root))
+    {
+        return Ok(());
+    }
+    Err(ApiError(
+        StatusCode::BAD_REQUEST,
+        anyhow::anyhow!("item path must be under workspace.spec_roots"),
+    ))
 }
 
 fn rewrite_item_source(
@@ -2112,6 +2138,20 @@ Binary files a/assets/logo.png and b/assets/logo.png differ\n",
             &content_hash("changed"),
             &proof
         ));
+    }
+
+    #[test]
+    fn new_item_document_validates_under_spec_root() {
+        let workspace = SpecWorkspace::load("fixtures/v1/valid-web-app").unwrap();
+        let root = Path::new("fixtures/v1/valid-web-app");
+        assert!(
+            ensure_item_path_in_spec_roots(root, &workspace, "spec/requirements/req-new.yaml")
+                .is_ok()
+        );
+        assert!(
+            ensure_item_path_in_spec_roots(root, &workspace, "docs/syu/requirements/req-new.yaml")
+                .is_err()
+        );
     }
 
     #[test]
