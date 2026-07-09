@@ -121,7 +121,11 @@ setTimeout(()=>{
   if(!document.querySelector('[data-items-detail]')) failures.push('items detail missing');
 
   if(window.__SYU_VISUAL_ERRORS__.length) failures.push(`js errors: ${window.__SYU_VISUAL_ERRORS__.join(', ')}`);
-  document.body.append(document.createTextNode(failures.length ? `__SYU_TEST_FAIL__ ${failures.join('; ')}` : '__SYU_TEST_PASS__'));
+  const result = document.createElement('div');
+  result.id = 'syu-visual-behavior-result';
+  result.dataset.status = failures.length ? 'fail' : 'pass';
+  result.textContent = failures.join('; ');
+  document.body.append(result);
 }, 800);
 </script>
 HTML
@@ -154,8 +158,8 @@ render 15-scope-ja-light 1440 900 '?page=scope&scopeTab=change&lang=ja&theme=lig
 render 16-items-ja-light 1440 900 '?page=items&itemsTab=requirement&lang=ja&theme=light'
 
 behavior="$("$chrome" --headless --disable-gpu --no-sandbox --allow-file-access-from-files --virtual-time-budget=1800 --dump-dom "file://${tmp}/workbench.html?page=work&lang=en&theme=light")"
-echo "$behavior" | grep -q '__SYU_TEST_PASS__'
-if echo "$behavior" | grep -q '__SYU_TEST_FAIL__'; then
-  echo "$behavior" | grep '__SYU_TEST_FAIL__' >&2
+echo "$behavior" | grep -q 'id="syu-visual-behavior-result" data-status="pass"'
+if echo "$behavior" | grep -q 'id="syu-visual-behavior-result" data-status="fail"'; then
+  echo "$behavior" | grep 'id="syu-visual-behavior-result"' >&2
   exit 1
 fi
