@@ -54,15 +54,44 @@ pathlib.Path(sys.argv[3]).write_text(
 )
 PY
 
-state_script="$(cat "$tmp/state.html")<script src=\"file://${tmp}/api-mock.js\"></script><script src=\"file://${repo_root}/crates/syu-app-ui/assets/projection.js\"></script>"
+python3 - <<'PY' "$repo_root" "$tmp"
+import pathlib
+import sys
 
-sed \
-  -e "s|/assets/workbench.css|file://${repo_root}/crates/syu-app-ui/assets/workbench.css|" \
-  -e "s|/assets/catalog.js|file://${tmp}/catalog.js|" \
-  -e "s|/assets/i18n.js|file://${repo_root}/crates/syu-app-ui/assets/i18n.js|" \
-  -e "s|/assets/app.js|file://${repo_root}/crates/syu-app-ui/assets/app.js|" \
-  -e "s|<script src=\"/assets/projection.js\"></script>|${state_script}|" \
-  crates/syu-app-ui/assets/workbench.html >"$tmp/workbench.html"
+repo_root = pathlib.Path(sys.argv[1])
+tmp = pathlib.Path(sys.argv[2])
+
+state_script = (
+    (tmp / "state.html").read_text()
+    + f'<script src="file://{tmp}/api-mock.js"></script>'
+    + f'<script src="file://{repo_root}/crates/syu-app-ui/assets/projection.js"></script>'
+)
+
+html = (repo_root / "crates/syu-app-ui/assets/workbench.html").read_text()
+
+html = html.replace(
+    "/assets/workbench.css",
+    f"file://{repo_root}/crates/syu-app-ui/assets/workbench.css",
+)
+html = html.replace(
+    "/assets/catalog.js",
+    f"file://{tmp}/catalog.js",
+)
+html = html.replace(
+    "/assets/i18n.js",
+    f"file://{repo_root}/crates/syu-app-ui/assets/i18n.js",
+)
+html = html.replace(
+    "/assets/app.js",
+    f"file://{repo_root}/crates/syu-app-ui/assets/app.js",
+)
+html = html.replace(
+    '<script src="/assets/projection.js"></script>',
+    state_script,
+)
+
+(tmp / "workbench.html").write_text(html)
+PY
 
 cat >>"$tmp/workbench.html" <<'HTML'
 <script>
