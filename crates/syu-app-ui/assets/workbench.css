@@ -167,6 +167,15 @@ svg { display: block; stroke: currentColor; fill: none; stroke-width: 1.8; strok
 .input, .textarea, .native-select { width: 100%; border: 1px solid #d2d7dc; border-radius: 7px; background: #fff; padding: 0 10px; color: #4d5661; font-size: 12px; }
 .input, .native-select { height: 38px; }
 .textarea { min-height: 92px; padding-top: 9px; resize: vertical; }
+.settings-builder { display: grid; gap: 10px; }
+.settings-builder-empty { border: 1px dashed var(--line); border-radius: 8px; padding: 12px; color: var(--muted); background: #fbfbfc; font-size: 12px; }
+.settings-builder-actions { display: flex; justify-content: flex-end; }
+.settings-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 8px; align-items: end; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: #fbfbfc; }
+.settings-row .field { margin: 0; }
+.settings-row-actions { display: flex; justify-content: flex-end; }
+.chip-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-button { border: 1px solid #d4d9de; background: #fff; color: #4f5864; }
+.chip-button.active { border-color: #111418; background: #111418; color: #fff; }
 .toggle-row { display: flex; align-items: center; min-height: 40px; border-top: 1px solid var(--line-2); padding: 8px 0; font-size: 12px; gap: 12px; }
 .toggle { width: 34px; height: 19px; border-radius: 10px; background: #252a30; padding: 3px; margin-left: auto; }
 .toggle::after { content: ""; display: block; width: 13px; height: 13px; border-radius: 50%; background: #fff; margin-left: 15px; }
@@ -240,6 +249,7 @@ svg { display: block; stroke: currentColor; fill: none; stroke-width: 1.8; strok
   .content { padding: 16px; }
   .workspace, .settings-layout { grid-template-columns: 1fr; }
   .grid2, .grid3, .form.two-column, .choice-grid { grid-template-columns: 1fr; }
+  .settings-row { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 640px) {

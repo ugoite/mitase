@@ -35,6 +35,7 @@
   let selectedScopeTarget = null;
   let selectedScopeMode = 'plan';
   let selectedBranchEntry = null;
+  let selectedBranchAnchor = null;
   let branchScope = null;
   let branchScopeLoaded = false;
   let selectedItemKind = 'all';
@@ -637,6 +638,10 @@
     rail?.append(el('div', 'rail-title', `${t('scope.mode.branch')} · ${branchScope.range}`));
     if (!selectedBranchEntry || !branchScope.changed.some(entry => entry.path === selectedBranchEntry.path)) {
       selectedBranchEntry = branchScope.changed[0] || null;
+      selectedBranchAnchor = selectedBranchEntry?.anchors?.[0] || null;
+    }
+    if (selectedBranchEntry && !selectedBranchEntry.anchors.includes(selectedBranchAnchor)) {
+      selectedBranchAnchor = selectedBranchEntry.anchors[0] || null;
     }
     branchScope.changed.forEach(entry => {
       const button = el('button', `rail-item${selectedBranchEntry?.path === entry.path ? ' active' : ''}`);
@@ -645,6 +650,7 @@
       button.append(el('span', `status-circle ${entry.owners.length ? 'orange' : 'gray'}`), label);
       button.addEventListener('click', () => {
         selectedBranchEntry = entry;
+        selectedBranchAnchor = entry.anchors[0] || null;
         renderBranchScope();
       });
       rail?.append(button);
@@ -661,7 +667,23 @@
         [],
       ),
       summaryCard('scope.why', el('p', '', selectedBranchEntry.owners.length ? selectedBranchEntry.owners.join(', ') : t('scope.branch.unowned_description'))),
-      summaryCard('items.bindings', linesList(selectedBranchEntry.anchors.length ? selectedBranchEntry.anchors : [t('scope.branch.no_anchor')]))
+      (() => {
+        if (!selectedBranchEntry.anchors.length) {
+          return summaryCard('items.bindings', linesList([t('scope.branch.no_anchor')]));
+        }
+        const card = el('div', 'card');
+        card.append(el('h3', '', t('items.bindings')));
+        selectedBranchEntry.anchors.forEach(anchor => {
+          const button = el('button', `rail-subitem${selectedBranchAnchor === anchor ? ' active' : ''}`);
+          button.append(el('span', 'path', anchor));
+          button.addEventListener('click', () => {
+            selectedBranchAnchor = anchor;
+            renderBranchScope();
+          });
+          card.append(button);
+        });
+        return card;
+      })()
     );
   }
 
@@ -826,7 +848,7 @@
     return select;
   }
 
-  function statementEditor(labelKey, rows, columns, createRow) {
+  function statementEditor(labelKey, rows, columns, createRow, onAdd) {
     const wrap = el('div', 'card');
     wrap.append(el('h3', '', t(labelKey)));
     rows.forEach((row, index) => {
@@ -838,7 +860,7 @@
     });
     const addButton = actionButton(t('common.new'), 'a11y.new_item_row', () => {
       rows.push(createRow(rows.length));
-      renderItems();
+      onAdd?.();
     }, 'btn compact', 'plan');
     wrap.append(addButton);
     return wrap;
@@ -886,6 +908,7 @@
 
   function renderItemEditForm(draft) {
     const form = el('div', 'form');
+    const rerender = () => openItemEditor(draft);
     form.append(field('items.field.title', inputControl(draft.title, value => { draft.title = value; })));
     if (draft.kind === 'requirement') {
       form.append(field('items.field.description', textareaControl(draft.description || '', value => { draft.description = value; })));
@@ -903,35 +926,40 @@
       form.append(statementEditor('items.principles', draft.principles, [
         { labelKey: 'items.field.anchor', control: row => inputControl(row.anchor, value => { row.anchor = value; }) },
         { labelKey: 'items.field.statement', control: row => textareaControl(row.statement, value => { row.statement = value; }) },
-      ], index => ({ anchor: `${draft.id}#principle.row-${index + 1}`, statement: '', applies_to: [] })));
+      ], index => ({ anchor: `${draft.id}#principle.row-${index + 1}`, statement: '', applies_to: [] }), rerender));
     }
     if (draft.rules?.length) {
       form.append(statementEditor('items.rules', draft.rules, [
         { labelKey: 'items.field.anchor', control: row => inputControl(row.anchor, value => { row.anchor = value; }) },
         { labelKey: 'items.field.level', control: row => selectControl(['must', 'should', 'may'], row.level, value => { row.level = value; }) },
         { labelKey: 'items.field.statement', control: row => textareaControl(row.statement, value => { row.statement = value; }) },
-      ], index => ({ anchor: `${draft.id}#rule.row-${index + 1}`, level: 'must', statement: '', governed_by: [] })));
+      ], index => ({ anchor: `${draft.id}#rule.row-${index + 1}`, level: 'must', statement: '', governed_by: [] }), rerender));
     }
     if (draft.criteria?.length) {
       form.append(statementEditor('items.criteria', draft.criteria, [
         { labelKey: 'items.field.anchor', control: row => inputControl(row.anchor, value => { row.anchor = value; }) },
         { labelKey: 'items.field.kind', control: row => selectControl(['behavior', 'quality', 'security', 'operational', 'documentation', 'compatibility', 'custom'], row.kind, value => { row.kind = value; }) },
         { labelKey: 'items.field.statement', control: row => textareaControl(row.statement, value => { row.statement = value; }) },
-      ], index => ({ anchor: `${draft.id}#criterion.row-${index + 1}`, kind: 'behavior', statement: '', governed_by: [] })));
+      ], index => ({ anchor: `${draft.id}#criterion.row-${index + 1}`, kind: 'behavior', statement: '', governed_by: [] }), rerender));
     }
     if (draft.bindings?.length) form.append(summaryCard('items.bindings', linesList(draft.bindings.map(binding => `${binding.anchor} · ${binding.role} · ${binding.facet}`))));
     if (draft.contracts?.length) form.append(summaryCard('items.contracts', linesList(draft.contracts.map(contract => `${contract.anchor} · ${contract.kind}`))));
     return form;
   }
 
+  function firstSpecRoot() {
+    const root = projection.config?.workspace?.spec_roots?.[0] || 'spec';
+    return String(root).replace(/\/+$/, '');
+  }
+
   function newItemDraft(kind) {
     const idPrefix = { philosophy: 'PHI', policy: 'POL', requirement: 'REQ', feature: 'FEAT' }[kind] || 'REQ';
     const id = `${idPrefix}-NEW-${Date.now().toString().slice(-6)}`;
-    const folder = { philosophy: 'philosophy', policy: 'policies', requirement: 'requirements', feature: 'features' }[kind] || 'requirements';
+    const folder = { philosophy: 'philosophies', policy: 'policies', requirement: 'requirements', feature: 'features' }[kind] || 'requirements';
     return {
       id,
       kind,
-      path: `docs/syu/${folder}/${id.toLowerCase()}.yaml`,
+      path: `${firstSpecRoot()}/${folder}/${id.toLowerCase()}.yaml`,
       source_hash: EMPTY_HASH,
       title: '',
       summary: kind === 'requirement' ? undefined : '',
@@ -996,6 +1024,33 @@
     return grid;
   }
 
+  function describePhase(phase, run) {
+    if (!phase) return diagnosticSummaryDescription(run);
+    const label = t(`diagnostics.phase.${phase.id}`);
+    if (phase.state === 'not_applicable') return phase.not_applicable_reason || `${label} ${t('diagnostics.not_applicable').toLowerCase()}`;
+    if (phase.state === 'not_run') return `${label} ${t('diagnostics.not_run.description').toLowerCase()}`;
+    if (phase.state === 'failed') return run.reason || label;
+    if (phase.issue_count === 0) return `${label} ${t('diagnostics.zero.description').toLowerCase()}`;
+    return `${phase.issue_count} ${t('diagnostics.issues_found')}`;
+  }
+
+  function renderPhaseCard(run, phase) {
+    if (!phase) return null;
+    return summaryCard('diagnostics.title', (() => {
+      const body = document.createElement('div');
+      body.append(
+        el('h4', '', t(`diagnostics.phase.${phase.id}`)),
+        el('p', '', describePhase(phase, run)),
+        metaLine([
+          chip(phase.state === 'passed' ? t('diagnostics.passed') : titleCase(phase.state.replaceAll('_', ' ')), phase.state === 'passed' ? 'green-chip' : phase.state === 'issues' ? 'orange-chip' : phase.state === 'failed' ? 'red-chip' : 'blue-chip'),
+          chip(`${phase.evaluated_rules} ${t('diagnostics.rules_summary').toLowerCase()}`),
+          chip(`${phase.issue_count} ${t('diagnostics.issues_found')}`),
+        ]),
+      );
+      return body;
+    })());
+  }
+
   function renderDiagnosticSummary(run) {
     const host = one('[data-diagnostic-result]');
     clear(host);
@@ -1015,18 +1070,20 @@
     );
   }
 
-  function renderDiagnosticIssues(run, phase) {
+  function renderDiagnosticIssues(run, phaseId) {
     const page = one('[data-page="diagnostics"]');
     const workspace = one('.workspace', page);
     let rail = one('.diagnostic-rail', workspace);
-    const visible = run.diagnostics.filter(diagnostic => phase === 'all' || diagnostic.phase === phase);
+    const phase = phaseId === 'all' ? null : run.phases.find(item => item.id === phaseId) || null;
+    const visible = run.diagnostics.filter(diagnostic => phaseId === 'all' || diagnostic.phase === phaseId);
     renderDiagnosticSummary(run);
     if (!visible.length) {
       rail?.remove();
       workspace?.classList.add('no-rail');
-      if (run.state === 'passed' || run.state === 'not_run' || run.state === 'not_applicable' || run.state === 'failed') {
-        one('[data-diagnostic-result]')?.append(el('div', 'notice', diagnosticSummaryDescription(run)));
-      }
+      const host = one('[data-diagnostic-result]');
+      const phaseCard = renderPhaseCard(run, phase);
+      if (phaseCard) host?.append(phaseCard);
+      host?.append(el('div', 'notice', phase ? describePhase(phase, run) : diagnosticSummaryDescription(run)));
       return;
     }
     workspace?.classList.remove('no-rail');
@@ -1049,12 +1106,14 @@
       });
       rail.append(button);
     });
-    renderDiagnosticDetail(run, selected);
+    renderDiagnosticDetail(run, selected, phase);
   }
 
-  function renderDiagnosticDetail(run, diagnostic) {
+  function renderDiagnosticDetail(run, diagnostic, phase) {
     renderDiagnosticSummary(run);
     const host = one('[data-diagnostic-result]');
+    const phaseCard = renderPhaseCard(run, phase);
+    if (phaseCard) host?.append(phaseCard);
     host?.append(
       el('div', 'section-label', diagnostic.rule_id),
       (() => {
@@ -1153,6 +1212,23 @@
     }));
   }
 
+  function openWorkPage(tab = 'overview') {
+    one('[data-route="work"]')?.click();
+    one(`[data-tab-group="work"][data-tab="${tab}"]`)?.click();
+  }
+
+  function transitionForStatus(status) {
+    return ({
+      added: 'add',
+      modified: 'modify',
+      removed: 'remove',
+      deleted: 'remove',
+      renamed: 'modify',
+      copied: 'modify',
+      binary: 'modify',
+    })[status] || 'modify';
+  }
+
   function bindActions() {
     one('[data-items-new]')?.addEventListener('click', () => openItemEditor(newItemDraft(selectedItemKind === 'all' ? 'requirement' : selectedItemKind)));
     one('[data-work-new]')?.addEventListener('click', () => {
@@ -1178,19 +1254,21 @@
     });
     one('[data-scope-create-work]')?.addEventListener('click', async () => {
       if (selectedScopeMode === 'branch') {
-        const ownerId = selectedBranchEntry?.owners?.[0];
-        const item = projection.items.find(candidate => candidate.id === ownerId);
-        const anchor = item?.anchors?.[0];
-        if (!anchor) return toast(t('scope.branch.no_anchor'));
+        const reference = selectedBranchAnchor;
+        if (!reference) return toast(t('scope.branch.no_anchor'));
         const request = defaultWorkRequest();
         request.summary = t('scope.branch.work_summary').replace('{path}', selectedBranchEntry.path);
-        request.seeds = [anchor];
+        request.seeds = [];
+        request.requested_targets = [{ ref: reference, transition: transitionForStatus(selectedBranchEntry.status) }];
         await api('/api/work/request', { method: 'PUT', body: JSON.stringify(request) });
         location.assign('/?page=work&workTab=overview');
         return;
       }
-      if (!selectedScopeTarget?.reference) return toast(t('scope.empty.description'));
-      toast(selectedScopeTarget.reference);
+      const entry = workTargets().find(candidate => candidate.target.reference === selectedScopeTarget?.reference);
+      if (!entry?.slice?.id) return toast(t('scope.empty.description'));
+      selectedSliceId = entry.slice.id;
+      renderWork();
+      openWorkPage('slices');
     });
     one('[data-scope-range]')?.addEventListener('change', async () => {
       if (selectedScopeMode !== 'branch') return;
@@ -1215,6 +1293,9 @@
     let config = clone(projection.config);
     let configHash = EMPTY_HASH;
     let previewToken = null;
+    let customFacetRows = [];
+    let ruleOverrideRows = [];
+    let enabledAdapters = [];
     const previewOutput = one('[data-settings-preview-output]', page);
     const noticeHost = el('div', 'notice');
     noticeHost.hidden = true;
@@ -1229,6 +1310,8 @@
     const readToggle = node => !node.classList.contains('off');
     const setToggle = (node, value) => node.classList.toggle('off', !value);
     const splitCsv = value => value.split(',').map(part => part.trim()).filter(Boolean);
+    const uniq = values => [...new Set(values.filter(Boolean))];
+    const knownAdapters = ['rust', 'typescript', 'markdown', 'openapi', 'yaml', 'json'];
 
     const controls = {
       specRoots: one('[data-config-spec-roots]', page),
@@ -1251,6 +1334,86 @@
       adapters: one('[data-config-adapters]', page),
     };
 
+    const namedField = (label, control) => {
+      const wrap = el('div', 'field');
+      wrap.append(el('label', '', label), control);
+      return wrap;
+    };
+
+    function renderCustomFacetRows() {
+      clear(controls.customFacets);
+      if (!customFacetRows.length) {
+        controls.customFacets.append(el('div', 'settings-builder-empty', 'No custom facets yet.'));
+      }
+      customFacetRows.forEach((row, index) => {
+        const wrap = el('div', 'settings-row');
+        wrap.append(
+          namedField('Profile', inputControl(row.profile, value => { row.profile = value; })),
+          namedField('Facet', inputControl(row.facet, value => { row.facet = value; })),
+          namedField('Include paths', inputControl(row.include, value => { row.include = value; })),
+          (() => {
+            const actions = el('div', 'settings-row-actions');
+            actions.append(actionButton(t('common.reset'), 'common.reset', () => {
+              customFacetRows.splice(index, 1);
+              renderCustomFacetRows();
+            }, 'btn ghost compact', 'reset'));
+            return actions;
+          })(),
+        );
+        controls.customFacets.append(wrap);
+      });
+      const actions = el('div', 'settings-builder-actions');
+      actions.append(actionButton(t('common.new'), 'a11y.new_item_row', () => {
+        customFacetRows.push({ profile: '', facet: '', include: '' });
+        renderCustomFacetRows();
+      }, 'btn compact', 'plan'));
+      controls.customFacets.append(actions);
+    }
+
+    function renderRuleOverrideRows() {
+      clear(controls.ruleOverrides);
+      if (!ruleOverrideRows.length) {
+        controls.ruleOverrides.append(el('div', 'settings-builder-empty', 'No rule overrides yet.'));
+      }
+      ruleOverrideRows.forEach((row, index) => {
+        const wrap = el('div', 'settings-row');
+        wrap.append(
+          namedField('Rule ID', inputControl(row.rule, value => { row.rule = value; })),
+          namedField('Severity', selectControl(['error', 'warning', 'info', 'off'], row.level, value => { row.level = value; }, titleCase)),
+          (() => {
+            const actions = el('div', 'settings-row-actions');
+            actions.append(actionButton(t('common.reset'), 'common.reset', () => {
+              ruleOverrideRows.splice(index, 1);
+              renderRuleOverrideRows();
+            }, 'btn ghost compact', 'reset'));
+            return actions;
+          })(),
+        );
+        controls.ruleOverrides.append(wrap);
+      });
+      const actions = el('div', 'settings-builder-actions');
+      actions.append(actionButton(t('common.new'), 'a11y.new_item_row', () => {
+        ruleOverrideRows.push({ rule: '', level: 'warning' });
+        renderRuleOverrideRows();
+      }, 'btn compact', 'plan'));
+      controls.ruleOverrides.append(actions);
+    }
+
+    function renderAdapterChips() {
+      clear(controls.adapters);
+      uniq([...knownAdapters, ...enabledAdapters]).forEach(adapter => {
+        const button = el('button', `chip chip-button${enabledAdapters.includes(adapter) ? ' active' : ''}`, adapter);
+        button.type = 'button';
+        button.addEventListener('click', () => {
+          enabledAdapters = enabledAdapters.includes(adapter)
+            ? enabledAdapters.filter(value => value !== adapter)
+            : [...enabledAdapters, adapter];
+          renderAdapterChips();
+        });
+        controls.adapters.append(button);
+      });
+    }
+
     function populate(source) {
       config = source.config;
       configHash = source.hash;
@@ -1259,10 +1422,21 @@
       controls.artifactRoots.value = config.workspace.artifact_roots.join(', ');
       controls.excludes.value = config.workspace.excludes.join(', ');
       controls.activeProfiles.value = config.profiles.active.join(', ');
-      controls.customFacets.value = JSON.stringify(config.profiles.custom, null, 2);
+      customFacetRows = Object.entries(config.profiles.custom || {}).flatMap(([profile, entry]) =>
+        Object.entries(entry.facets || {}).map(([facet, rule]) => ({
+          profile,
+          facet,
+          include: (rule.include || []).join(', '),
+        }))
+      );
+      renderCustomFacetRows();
       controls.preset.value = config.validation.preset;
       controls.baseline.value = config.validation.changed.baseline?.against || '';
-      controls.ruleOverrides.value = JSON.stringify(config.validation.rules, null, 2);
+      ruleOverrideRows = Object.entries(config.validation.rules || {}).map(([rule, level]) => ({
+        rule,
+        level: String(level),
+      }));
+      renderRuleOverrideRows();
       setToggle(controls.denyWarnings, config.validation.deny_warnings);
       setToggle(controls.requireOwned, config.validation.changed.require_owned_changes);
       controls.editableFiles.value = config.work.slicing.max_editable_files;
@@ -1272,7 +1446,8 @@
       controls.totalBytes.value = config.work.slicing.max_total_bytes;
       setToggle(controls.includePrinciples, config.work.context.include_parent_principles);
       setToggle(controls.includeRules, config.work.context.include_parent_rules);
-      controls.adapters.value = config.adapters.enabled.join(', ');
+      enabledAdapters = [...config.adapters.enabled];
+      renderAdapterChips();
     }
 
     function collect() {
@@ -1280,10 +1455,29 @@
       config.workspace.artifact_roots = splitCsv(controls.artifactRoots.value);
       config.workspace.excludes = splitCsv(controls.excludes.value);
       config.profiles.active = splitCsv(controls.activeProfiles.value);
-      config.profiles.custom = JSON.parse(controls.customFacets.value || '{}');
+      const nextProfiles = {};
+      Object.entries(config.profiles.custom || {}).forEach(([profile, entry]) => {
+        nextProfiles[profile] = { ...entry, facets: { ...(entry.facets || {}) } };
+      });
+      Object.values(nextProfiles).forEach(entry => { entry.facets = {}; });
+      customFacetRows.forEach(row => {
+        const profile = row.profile.trim();
+        const facet = row.facet.trim();
+        if (!profile || !facet) return;
+        const current = nextProfiles[profile] || { facets: {}, contract_rules: [] };
+        current.facets = current.facets || {};
+        current.facets[facet] = { include: splitCsv(row.include) };
+        nextProfiles[profile] = current;
+      });
+      config.profiles.custom = nextProfiles;
       config.validation.preset = controls.preset.value;
       config.validation.changed.baseline = controls.baseline.value.trim() ? { strategy: 'merge-base', against: controls.baseline.value.trim() } : null;
-      config.validation.rules = JSON.parse(controls.ruleOverrides.value || '{}');
+      config.validation.rules = {};
+      ruleOverrideRows.forEach(row => {
+        const rule = row.rule.trim();
+        if (!rule) return;
+        config.validation.rules[rule] = row.level;
+      });
       config.validation.deny_warnings = readToggle(controls.denyWarnings);
       config.validation.changed.require_owned_changes = readToggle(controls.requireOwned);
       config.work.slicing.max_editable_files = Number(controls.editableFiles.value);
@@ -1293,11 +1487,11 @@
       config.work.slicing.max_total_bytes = Number(controls.totalBytes.value);
       config.work.context.include_parent_principles = readToggle(controls.includePrinciples);
       config.work.context.include_parent_rules = readToggle(controls.includeRules);
-      config.adapters.enabled = splitCsv(controls.adapters.value);
+      config.adapters.enabled = [...enabledAdapters];
       return config;
     }
 
-    all('.toggle', page).forEach(toggle => {
+    all('[data-settings-layer-panel="workspace"] .toggle', page).forEach(toggle => {
       toggle.setAttribute('role', 'switch');
       toggle.tabIndex = 0;
       toggle.addEventListener('click', () => toggle.classList.toggle('off'));

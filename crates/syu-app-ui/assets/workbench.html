@@ -360,7 +360,10 @@
               <div class="canvas-head"><div><h2 data-i18n="settings.profiles">Profiles</h2><p data-i18n="settings.profiles.description">Active validation and planning profiles for this workspace.</p></div></div>
               <div class="form two-column">
                 <div class="field"><label data-i18n="settings.active_profiles">Active profiles</label><input class="input" data-config-active-profiles /></div>
-                <div class="field full"><label data-i18n="settings.custom_facets">Custom facets</label><textarea class="textarea" data-config-custom-facets></textarea></div>
+                <div class="field full">
+                  <label data-i18n="settings.custom_facets">Custom facets</label>
+                  <div class="settings-builder" data-config-custom-facets></div>
+                </div>
               </div>
             </div>
             <div class="canvas white settings-panel" data-settings-page-panel="validation" hidden>
@@ -368,7 +371,10 @@
               <div class="form two-column">
                 <div class="field"><label data-i18n="settings.preset">Preset</label><select class="native-select" data-config-preset><option value="agent-ready">agent-ready</option><option value="strict">strict</option><option value="standard">standard</option></select></div>
                 <div class="field"><label data-i18n="settings.baseline">Baseline</label><input class="input" data-config-baseline /></div>
-                <div class="field full"><label data-i18n="settings.rule_overrides">Rule overrides</label><textarea class="textarea" data-config-rule-overrides></textarea></div>
+                <div class="field full">
+                  <label data-i18n="settings.rule_overrides">Rule overrides</label>
+                  <div class="settings-builder" data-config-rule-overrides></div>
+                </div>
               </div>
               <div class="toggle-row"><span data-i18n="settings.deny_warnings">Deny warnings</span><span class="toggle off" data-config-deny-warnings></span></div>
               <div class="toggle-row"><span data-i18n="settings.require_owned">Require owned changes</span><span class="toggle off" data-config-require-owned></span></div>
@@ -387,7 +393,12 @@
             </div>
             <div class="canvas white settings-panel" data-settings-page-panel="adapters" hidden>
               <div class="canvas-head"><div><h2 data-i18n="settings.adapters">Adapters</h2><p data-i18n="settings.adapters.description">Repository adapters enabled for exact target resolution.</p></div></div>
-              <div class="form"><div class="field"><label data-i18n="settings.enabled_adapters">Enabled adapters</label><input class="input" data-config-adapters /></div></div>
+              <div class="form">
+                <div class="field">
+                  <label data-i18n="settings.enabled_adapters">Enabled adapters</label>
+                  <div class="chip-grid" data-config-adapters></div>
+                </div>
+              </div>
               <details class="preview-diff"><summary data-i18n="settings.preview_diff">Source diff preview</summary><pre class="code" data-settings-preview-output></pre></details>
             </div>
           </div>

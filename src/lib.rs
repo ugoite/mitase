@@ -1152,13 +1152,15 @@ fn rewrite_item_source(
     source: &str,
     payload: &ItemEditPayload,
 ) -> std::result::Result<String, ApiError> {
-    let next = build_spec_item(payload)?;
-    let document = if source.trim().is_empty() {
-        new_item_document(payload, next)?
-    } else {
-        let document = serde_yaml::from_str(source).map_err(anyhow::Error::from)?;
-        replace_item_in_document(document, next)?
-    };
+    if source.trim().is_empty() {
+        let item = build_new_spec_item(payload)?;
+        let document = new_item_document(payload, item)?;
+        return serde_yaml::to_string(&document)
+            .map_err(|error| ApiError(StatusCode::BAD_REQUEST, error.into()));
+    }
+
+    let mut document: SpecDocument = serde_yaml::from_str(source).map_err(anyhow::Error::from)?;
+    patch_existing_item_in_document(&mut document, payload)?;
     serde_yaml::to_string(&document)
         .map_err(|error| ApiError(StatusCode::BAD_REQUEST, error.into()))
 }
@@ -1170,26 +1172,82 @@ enum EditableSpecItem {
     Feature(Feature),
 }
 
-fn replace_item_in_document(
-    mut document: SpecDocument,
-    item: EditableSpecItem,
-) -> std::result::Result<SpecDocument, ApiError> {
-    match (&mut document, item) {
-        (SpecDocument::Philosophies { philosophies, .. }, EditableSpecItem::Philosophy(item)) => {
-            replace_by_id(philosophies, item.id.clone(), item, |entry| {
-                entry.id.clone()
-            })?;
+fn patch_existing_item_in_document(
+    document: &mut SpecDocument,
+    payload: &ItemEditPayload,
+) -> std::result::Result<(), ApiError> {
+    let id = parse_from_string::<SpecId>(&payload.id)?;
+    match document {
+        SpecDocument::Philosophies { philosophies, .. } if payload.kind == "philosophy" => {
+            let item = philosophies
+                .iter_mut()
+                .find(|entry| entry.id == id)
+                .ok_or_else(|| {
+                    ApiError(
+                        StatusCode::NOT_FOUND,
+                        anyhow::anyhow!("item {} was not found", payload.id),
+                    )
+                })?;
+            item.title = payload.title.clone();
+            item.summary = payload.summary.clone().unwrap_or_default();
+            item.principles = payload
+                .principles
+                .iter()
+                .map(principle_from_summary)
+                .collect::<std::result::Result<_, _>>()?;
         }
-        (SpecDocument::Policies { policies, .. }, EditableSpecItem::Policy(item)) => {
-            replace_by_id(policies, item.id.clone(), item, |entry| entry.id.clone())?;
+        SpecDocument::Policies { policies, .. } if payload.kind == "policy" => {
+            let item = policies
+                .iter_mut()
+                .find(|entry| entry.id == id)
+                .ok_or_else(|| {
+                    ApiError(
+                        StatusCode::NOT_FOUND,
+                        anyhow::anyhow!("item {} was not found", payload.id),
+                    )
+                })?;
+            item.title = payload.title.clone();
+            item.summary = payload.summary.clone().unwrap_or_default();
+            item.description = payload.description.clone().unwrap_or_default();
+            item.rules = payload
+                .rules
+                .iter()
+                .map(rule_from_summary)
+                .collect::<std::result::Result<_, _>>()?;
         }
-        (SpecDocument::Requirements { requirements, .. }, EditableSpecItem::Requirement(item)) => {
-            replace_by_id(requirements, item.id.clone(), item, |entry| {
-                entry.id.clone()
-            })?;
+        SpecDocument::Requirements { requirements, .. } if payload.kind == "requirement" => {
+            let item = requirements
+                .iter_mut()
+                .find(|entry| entry.id == id)
+                .ok_or_else(|| {
+                    ApiError(
+                        StatusCode::NOT_FOUND,
+                        anyhow::anyhow!("item {} was not found", payload.id),
+                    )
+                })?;
+            item.title = payload.title.clone();
+            item.description = payload.description.clone().unwrap_or_default();
+            item.priority = parse_enum(payload.priority.as_deref().unwrap_or("medium"))?;
+            item.status = parse_enum(payload.status.as_deref().unwrap_or("planned"))?;
+            item.criteria = payload
+                .criteria
+                .iter()
+                .map(criterion_from_summary)
+                .collect::<std::result::Result<_, _>>()?;
         }
-        (SpecDocument::Features { features, .. }, EditableSpecItem::Feature(item)) => {
-            replace_by_id(features, item.id.clone(), item, |entry| entry.id.clone())?;
+        SpecDocument::Features { features, .. } if payload.kind == "feature" => {
+            let item = features
+                .iter_mut()
+                .find(|entry| entry.id == id)
+                .ok_or_else(|| {
+                    ApiError(
+                        StatusCode::NOT_FOUND,
+                        anyhow::anyhow!("item {} was not found", payload.id),
+                    )
+                })?;
+            item.title = payload.title.clone();
+            item.summary = payload.summary.clone().unwrap_or_default();
+            item.status = parse_enum(payload.status.as_deref().unwrap_or("planned"))?;
         }
         _ => {
             return Err(ApiError(
@@ -1198,25 +1256,6 @@ fn replace_item_in_document(
             ));
         }
     }
-    Ok(document)
-}
-
-fn replace_by_id<T, F>(
-    items: &mut [T],
-    id: SpecId,
-    next: T,
-    key: F,
-) -> std::result::Result<(), ApiError>
-where
-    F: Fn(&T) -> SpecId,
-{
-    let Some(slot) = items.iter_mut().find(|entry| key(entry) == id) else {
-        return Err(ApiError(
-            StatusCode::NOT_FOUND,
-            anyhow::anyhow!("item {id} was not found in its source document"),
-        ));
-    };
-    *slot = next;
     Ok(())
 }
 
@@ -1258,7 +1297,9 @@ fn new_item_document(
     }
 }
 
-fn build_spec_item(payload: &ItemEditPayload) -> std::result::Result<EditableSpecItem, ApiError> {
+fn build_new_spec_item(
+    payload: &ItemEditPayload,
+) -> std::result::Result<EditableSpecItem, ApiError> {
     let id = parse_from_string::<SpecId>(&payload.id)?;
     match payload.kind.as_str() {
         "philosophy" => Ok(EditableSpecItem::Philosophy(Philosophy {
@@ -2105,5 +2146,65 @@ Binary files a/assets/logo.png and b/assets/logo.png differ\n",
         let updated = patch_config_source(&source, &config).unwrap();
         let reparsed: syu_project_model::ProjectConfig = serde_yaml::from_str(&updated).unwrap();
         assert_eq!(reparsed, config);
+    }
+
+    #[test]
+    fn item_edit_preserves_bindings_and_contracts() {
+        let source = r#"
+schema: syu/spec/v1
+kind: features
+namespace: test
+category: Test
+features:
+  - id: FEAT-1
+    title: Old
+    summary: Old summary
+    status: implemented
+    bindings:
+      - id: impl
+        role: implementation
+        facet: ui
+        responsibility: Keep me
+        targets:
+          - id: target
+            path: web/login.ts
+            selector: { kind: file }
+            adapter: typescript
+        satisfies: []
+        verifies: []
+        documents: []
+        enforces: []
+        generated_from: []
+        evidences: []
+    contracts:
+      - id: http
+        kind: http
+        source: FEAT-1#binding.impl/target.target
+        participants:
+          - binding: FEAT-1#binding.impl
+            role: provider
+        guarantees: []
+"#;
+        let payload = ItemEditPayload {
+            id: "FEAT-1".into(),
+            kind: "feature".into(),
+            path: "spec/features/feat-1.yaml".into(),
+            title: "New".into(),
+            summary: Some("New summary".into()),
+            description: None,
+            status: Some("implemented".into()),
+            priority: None,
+            principles: vec![],
+            rules: vec![],
+            criteria: vec![],
+            expected_hash: content_hash(source),
+            preview_token: None,
+        };
+
+        let next = rewrite_item_source(source, &payload).unwrap();
+        assert!(next.contains("title: New"));
+        assert!(next.contains("responsibility: Keep me"));
+        assert!(next.contains("kind: http"));
+        assert!(serde_yaml::from_str::<SpecDocument>(&next).is_ok());
     }
 }
