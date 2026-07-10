@@ -1400,8 +1400,19 @@ fn rule_from_summary(
             .iter()
             .map(|value| parse_from_string::<SpecAnchor>(value))
             .collect::<std::result::Result<_, _>>()?,
-        applies_to: Default::default(),
-        enforcement: None,
+        applies_to: syu_spec_model::RuleAppliesTo {
+            roles: summary
+                .applies_to_roles
+                .iter()
+                .map(|value| parse_from_string(value))
+                .collect::<std::result::Result<_, _>>()?,
+        },
+        enforcement: summary
+            .enforcement
+            .as_ref()
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+            .map(|value| syu_spec_model::RuleEnforcement::External(value.to_string())),
     })
 }
 
@@ -2244,6 +2255,58 @@ features:
         assert!(next.contains("title: New"));
         assert!(next.contains("responsibility: Keep me"));
         assert!(next.contains("kind: http"));
+        assert!(serde_yaml::from_str::<SpecDocument>(&next).is_ok());
+    }
+
+    #[test]
+    fn item_edit_preserves_policy_rule_applies_to_and_enforcement() {
+        let source = r#"
+schema: syu/spec/v1
+kind: policies
+namespace: auth
+category: Authentication
+policies:
+  - id: POL-AUTH-001
+    title: Old
+    summary: Old summary
+    description: Old description
+    rules:
+      - id: generic-failure
+        level: must
+        statement: Login failures expose one generic response.
+        governed_by: []
+        applies_to: { roles: [implementation] }
+        enforcement: external
+    bindings: []
+"#;
+
+        let payload = ItemEditPayload {
+            id: "POL-AUTH-001".into(),
+            kind: "policy".into(),
+            path: "spec/policy.yaml".into(),
+            title: "New".into(),
+            summary: Some("New summary".into()),
+            description: Some("New description".into()),
+            status: None,
+            priority: None,
+            principles: vec![],
+            rules: vec![syu_workbench_server::RuleSummary {
+                anchor: "POL-AUTH-001#rule.generic-failure".into(),
+                level: "must".into(),
+                statement: "Login failures expose one generic response.".into(),
+                governed_by: vec![],
+                applies_to_roles: vec!["implementation".into()],
+                enforcement: Some("external".into()),
+            }],
+            criteria: vec![],
+            expected_hash: content_hash(source),
+            preview_token: None,
+        };
+
+        let next = rewrite_item_source(source, &payload).unwrap();
+        assert!(next.contains("applies_to:"));
+        assert!(next.contains("implementation"));
+        assert!(next.contains("enforcement: external"));
         assert!(serde_yaml::from_str::<SpecDocument>(&next).is_ok());
     }
 }

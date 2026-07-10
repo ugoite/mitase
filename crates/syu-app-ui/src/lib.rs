@@ -84,6 +84,20 @@ mod tests {
                 "missing dynamic UI catalog key: {key}"
             );
         }
+        for banned in [
+            "No custom facets yet.",
+            "No rule overrides yet.",
+            "namedField('Profile'",
+            "namedField('Facet'",
+            "namedField('Include paths'",
+            "namedField('Rule ID'",
+            "namedField('Severity'",
+        ] {
+            assert!(
+                !WORKBENCH_PROJECTION_JS.contains(banned),
+                "unlocalized UI text leaked: {banned}"
+            );
+        }
     }
 
     #[test]

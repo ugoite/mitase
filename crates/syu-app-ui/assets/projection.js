@@ -965,8 +965,10 @@
       form.append(statementEditor('items.rules', draft.rules, [
         { labelKey: 'items.field.anchor', control: row => inputControl(row.anchor, value => { row.anchor = value; }) },
         { labelKey: 'items.field.level', control: row => selectControl(['must', 'should', 'may'], row.level, value => { row.level = value; }) },
+        { labelKey: 'items.field.applies_to_roles', control: row => inputControl((row.applies_to_roles || []).join(', '), value => { row.applies_to_roles = value.split(',').map(part => part.trim()).filter(Boolean); }) },
+        { labelKey: 'items.field.enforcement', control: row => inputControl(row.enforcement || '', value => { row.enforcement = value.trim() || null; }) },
         { labelKey: 'items.field.statement', control: row => textareaControl(row.statement, value => { row.statement = value; }) },
-      ], index => ({ anchor: `${draft.id}#rule.row-${index + 1}`, level: 'must', statement: '', governed_by: [] }), rerender));
+      ], index => ({ anchor: `${draft.id}#rule.row-${index + 1}`, level: 'must', statement: '', governed_by: [], applies_to_roles: [], enforcement: null }), rerender));
     }
     if (draft.kind === 'requirement') {
       draft.criteria ||= [];
@@ -1001,7 +1003,7 @@
       status: kind === 'philosophy' || kind === 'policy' ? null : 'planned',
       priority: kind === 'requirement' ? 'medium' : null,
       principles: kind === 'philosophy' ? [{ anchor: `${id}#principle.intent`, statement: '', applies_to: [] }] : [],
-      rules: kind === 'policy' ? [{ anchor: `${id}#rule.default`, level: 'must', statement: '', governed_by: [] }] : [],
+      rules: kind === 'policy' ? [{ anchor: `${id}#rule.default`, level: 'must', statement: '', governed_by: [], applies_to_roles: [], enforcement: null }] : [],
       criteria: kind === 'requirement' ? [{ anchor: `${id}#criterion.acceptance`, kind: 'behavior', statement: '', governed_by: [] }] : [],
       bindings: [],
       contracts: [],
@@ -1098,7 +1100,15 @@
         diagnosticSummaryTitle(run),
         diagnosticSummaryDescription(run),
         chips,
-        [actionButton(t('filter.validate'), 'a11y.validate_context', runValidationFromCurrentControl, 'btn primary compact', 'validate')],
+        [actionButton(t('filter.validate'), 'a11y.validate_context', async event => {
+          const button = event.currentTarget;
+          button.disabled = true;
+          try {
+            await runValidationFromCurrentControl();
+          } finally {
+            button.disabled = false;
+          }
+        }, 'btn primary compact', 'validate')],
       ),
       renderValidationStats(run),
     );
@@ -1199,14 +1209,6 @@
         renderDiagnosticIssues(lastRun, selectedDiagnosticPhase);
       });
     });
-    buttonByKey('a11y.validate_context')?.addEventListener('click', async () => {
-      buttonByKey('a11y.validate_context').disabled = true;
-      try {
-        await runValidationFromCurrentControl();
-      } finally {
-        buttonByKey('a11y.validate_context').disabled = false;
-      }
-    });
     renderRun(lastRun);
   }
 
@@ -1274,7 +1276,9 @@
       draftWorkRequest = defaultWorkRequest();
       draftWorkRequest.summary = t('work.request.summary_from_anchor').replace('{anchor}', selectedAnchor);
       draftWorkRequest.seeds = [selectedAnchor];
-      location.assign('/?page=work&workTab=overview');
+      openWorkPage('overview');
+      const host = one('[data-work-overview]');
+      if (host) renderWorkRequestEditor(host, !plan);
     });
     one('[data-work-plan]')?.addEventListener('click', () => renderWorkRequestEditor(one('[data-work-overview]'), !plan));
     one('[data-scope-refresh]')?.addEventListener('click', async () => {
@@ -1379,14 +1383,14 @@
     function renderCustomFacetRows() {
       clear(controls.customFacets);
       if (!customFacetRows.length) {
-        controls.customFacets.append(el('div', 'settings-builder-empty', 'No custom facets yet.'));
+        controls.customFacets.append(el('div', 'settings-builder-empty', t('settings.builder.no_custom_facets')));
       }
       customFacetRows.forEach((row, index) => {
         const wrap = el('div', 'settings-row');
         wrap.append(
-          namedField('Profile', inputControl(row.profile, value => { row.profile = value; })),
-          namedField('Facet', inputControl(row.facet, value => { row.facet = value; })),
-          namedField('Include paths', inputControl(row.include, value => { row.include = value; })),
+          namedField(t('settings.builder.profile'), inputControl(row.profile, value => { row.profile = value; })),
+          namedField(t('settings.builder.facet'), inputControl(row.facet, value => { row.facet = value; })),
+          namedField(t('settings.builder.include_paths'), inputControl(row.include, value => { row.include = value; })),
           (() => {
             const actions = el('div', 'settings-row-actions');
             actions.append(actionButton(t('common.reset'), 'common.reset', () => {
@@ -1409,13 +1413,13 @@
     function renderRuleOverrideRows() {
       clear(controls.ruleOverrides);
       if (!ruleOverrideRows.length) {
-        controls.ruleOverrides.append(el('div', 'settings-builder-empty', 'No rule overrides yet.'));
+        controls.ruleOverrides.append(el('div', 'settings-builder-empty', t('settings.builder.no_rule_overrides')));
       }
       ruleOverrideRows.forEach((row, index) => {
         const wrap = el('div', 'settings-row');
         wrap.append(
-          namedField('Rule ID', inputControl(row.rule, value => { row.rule = value; })),
-          namedField('Severity', selectControl(['error', 'warning', 'info', 'off'], row.level, value => { row.level = value; }, titleCase)),
+          namedField(t('settings.builder.rule_id'), inputControl(row.rule, value => { row.rule = value; })),
+          namedField(t('settings.builder.severity'), selectControl(['error', 'warning', 'info', 'off'], row.level, value => { row.level = value; }, titleCase)),
           (() => {
             const actions = el('div', 'settings-row-actions');
             actions.append(actionButton(t('common.reset'), 'common.reset', () => {

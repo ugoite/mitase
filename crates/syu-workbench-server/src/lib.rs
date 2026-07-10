@@ -362,6 +362,10 @@ pub struct RuleSummary {
     pub level: String,
     pub statement: String,
     pub governed_by: Vec<String>,
+    #[serde(default)]
+    pub applies_to_roles: Vec<String>,
+    #[serde(default)]
+    pub enforcement: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -699,6 +703,15 @@ fn rule_summary(item: &syu_spec_model::SpecId, rule: &Rule) -> RuleSummary {
         .into(),
         statement: rule.statement.clone(),
         governed_by: rule.governed_by.iter().map(ToString::to_string).collect(),
+        applies_to_roles: rule
+            .applies_to
+            .roles
+            .iter()
+            .map(|role| binding_role_label(*role).to_string())
+            .collect(),
+        enforcement: rule.enforcement.as_ref().map(|value| match value {
+            syu_spec_model::RuleEnforcement::External(text) => text.clone(),
+        }),
     }
 }
 

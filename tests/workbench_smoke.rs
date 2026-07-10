@@ -99,3 +99,18 @@ fn workbench_bootstrap_declares_selected_anchor_before_default_request() {
         "selectedAnchor must be initialized before defaultWorkRequest() can read it"
     );
 }
+
+#[test]
+fn work_seed_button_does_not_discard_in_memory_seed_by_reloading() {
+    let seed_block = WORKBENCH_PROJECTION_JS
+        .split("one('[data-work-seed]')")
+        .nth(1)
+        .expect("seed action")
+        .split("one('[data-work-plan]')")
+        .next()
+        .expect("seed action end");
+    assert!(seed_block.contains("draftWorkRequest.seeds = [selectedAnchor]"));
+    assert!(seed_block.contains("openWorkPage('overview')"));
+    assert!(seed_block.contains("renderWorkRequestEditor"));
+    assert!(!seed_block.contains("location.assign"));
+}
