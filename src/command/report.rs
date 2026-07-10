@@ -246,7 +246,7 @@ fn load_lcov(path: &Path) -> Result<BTreeMap<PathBuf, (usize, usize)>> {
 
     for raw_line in fs::read_to_string(path)?.lines() {
         if let Some(path) = raw_line.strip_prefix("SF:") {
-            current_path = Some(PathBuf::from(path));
+            current_path = Some(normalize_lcov_path(Path::new(path)));
             covered = 0;
             total = 0;
         } else if let Some(payload) = raw_line.strip_prefix("DA:") {
@@ -263,6 +263,10 @@ fn load_lcov(path: &Path) -> Result<BTreeMap<PathBuf, (usize, usize)>> {
     }
 
     Ok(coverage)
+}
+
+fn normalize_lcov_path(path: &Path) -> PathBuf {
+    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
 fn rust_trace_paths(
