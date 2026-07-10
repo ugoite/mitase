@@ -19,6 +19,8 @@ profiles:
             - { role: consumer, facets: [ui], min: 1 }
 validation:
   preset: agent-ready
+  coverage:
+    target: connected
   deny_warnings: false
   rules: {}
   changed:

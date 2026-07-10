@@ -3,12 +3,12 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use syu_diagnostics::{Diagnostic, Severity, ValidationResult};
+use syu_diagnostics::{CoverageSummary, Diagnostic, ItemCoverage, Severity, ValidationResult};
 use syu_planner::plan as canonical_plan;
-use syu_project_model::{ProjectConfig, RuleOverride, ValidationPreset};
+use syu_project_model::{CoverageLevel, ProjectConfig, RuleOverride, ValidationPreset};
 use syu_spec_model::{
     BindingRole, BoundTargetRef, ItemStatus, LocalAnchorKind, RepoPath, RuleLevel, Selector,
-    SpecAnchor, SpecDocument,
+    SpecAnchor, SpecDocument, SpecId,
 };
 use syu_work_model::{
     ExecutionSlice, PlanConfidence, PlanExecution, TargetLifecycle, WORK_PLAN_SCHEMA, WorkPlan,
@@ -92,6 +92,7 @@ pub static RULES: &[RuleMetadata] = &[
     metadata!("SYU-COVERAGE-001"),
     metadata!("SYU-COVERAGE-002"),
     metadata!("SYU-COVERAGE-003"),
+    fixed_metadata!("SYU-COVERAGE-004"),
     metadata!("SYU-BINDING-001"),
     metadata!("SYU-BINDING-002"),
     metadata!("SYU-BINDING-003"),
@@ -190,6 +191,7 @@ pub fn validate(ctx: &ValidationContext<'_>) -> ValidationResult {
     validate_graph(ctx, &mut diagnostics);
     validate_targets(ctx, &mut diagnostics);
     validate_contracts(ctx, &mut diagnostics);
+    let coverage = validate_item_coverage(ctx, &mut diagnostics);
     validate_changes(ctx, &mut diagnostics);
     if let Some(plan) = ctx.work_plan {
         validate_plan(ctx, plan, &mut diagnostics);
@@ -224,7 +226,10 @@ pub fn validate(ctx: &ValidationContext<'_>) -> ValidationResult {
     diagnostics.sort_by(|a, b| {
         (&a.rule_id, &a.primary.path, &a.message).cmp(&(&b.rule_id, &b.primary.path, &b.message))
     });
-    ValidationResult { diagnostics }
+    ValidationResult {
+        diagnostics,
+        coverage: Some(coverage),
+    }
 }
 
 fn validate_rule_overrides(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
@@ -1291,6 +1296,284 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
             }
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CoverageItemKind {
+    Philosophy,
+    Policy,
+    Requirement,
+    Feature,
+}
+
+impl CoverageItemKind {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Philosophy => "philosophy",
+            Self::Policy => "policy",
+            Self::Requirement => "requirement",
+            Self::Feature => "feature",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct CoverageItem {
+    id: SpecId,
+    kind: CoverageItemKind,
+    required: bool,
+}
+
+/// Validate qualitative, repository-wide item coverage.  Coverage is deliberately
+/// independent of changed-files validation: it expresses how useful the whole
+/// specification graph is to Syu, not how large a particular diff is.
+fn validate_item_coverage(
+    ctx: &ValidationContext<'_>,
+    out: &mut Vec<Diagnostic>,
+) -> CoverageSummary {
+    let items = coverage_items(ctx);
+    let target = ctx.config.validation.coverage.target;
+    let mut covered_items = 0;
+    let mut summary_items = Vec::with_capacity(items.len());
+
+    for item in items {
+        let level = coverage_level_for_item(ctx, &item);
+        if item.required && level.is_some_and(|level| level >= target) {
+            covered_items += 1;
+        }
+        if item.required && !level.is_some_and(|level| level >= target) {
+            let path = ctx
+                .index
+                .item_paths
+                .get(&item.id)
+                .map(|path| path.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "syu.yaml".to_string());
+            push(
+                out,
+                "SYU-COVERAGE-004",
+                format!(
+                    "{} {} reaches {} coverage, but {} is required",
+                    item.kind.as_str(),
+                    item.id,
+                    level.map(CoverageLevel::as_str).unwrap_or("uncovered"),
+                    target.as_str(),
+                ),
+                path,
+                item_primary_anchor(ctx, &item.id),
+            );
+        }
+        summary_items.push(ItemCoverage {
+            item: item.id.to_string(),
+            kind: item.kind.as_str().to_string(),
+            level: level
+                .map(CoverageLevel::as_str)
+                .unwrap_or("uncovered")
+                .to_string(),
+            required: item.required,
+        });
+    }
+
+    let required_items = summary_items.iter().filter(|item| item.required).count();
+    CoverageSummary {
+        target: target.as_str().to_string(),
+        required_items,
+        covered_items,
+        items: summary_items,
+    }
+}
+
+fn coverage_items(ctx: &ValidationContext<'_>) -> Vec<CoverageItem> {
+    let mut items = Vec::new();
+    for loaded in &ctx.workspace.documents {
+        match &loaded.document {
+            SpecDocument::Philosophies { philosophies, .. } => {
+                items.extend(philosophies.iter().map(|item| CoverageItem {
+                    id: item.id.clone(),
+                    kind: CoverageItemKind::Philosophy,
+                    required: true,
+                }))
+            }
+            SpecDocument::Policies { policies, .. } => {
+                items.extend(policies.iter().map(|item| CoverageItem {
+                    id: item.id.clone(),
+                    kind: CoverageItemKind::Policy,
+                    required: true,
+                }))
+            }
+            SpecDocument::Requirements { requirements, .. } => {
+                items.extend(requirements.iter().map(|item| CoverageItem {
+                    id: item.id.clone(),
+                    kind: CoverageItemKind::Requirement,
+                    required: item.status == ItemStatus::Implemented,
+                }))
+            }
+            SpecDocument::Features { features, .. } => {
+                items.extend(features.iter().map(|item| CoverageItem {
+                    id: item.id.clone(),
+                    kind: CoverageItemKind::Feature,
+                    required: item.status == ItemStatus::Implemented,
+                }))
+            }
+        }
+    }
+    items.sort_by(|left, right| left.id.cmp(&right.id));
+    items
+}
+
+fn coverage_level_for_item(
+    ctx: &ValidationContext<'_>,
+    item: &CoverageItem,
+) -> Option<CoverageLevel> {
+    if !item_is_connected(ctx, item) {
+        return None;
+    }
+    if !item_is_owned(ctx, item) {
+        return Some(CoverageLevel::Connected);
+    }
+    if !item_is_agent_ready(ctx, item) {
+        return Some(CoverageLevel::Owned);
+    }
+    if !item_is_verified(ctx, item) {
+        return Some(CoverageLevel::AgentReady);
+    }
+    if !item_is_evidence_ready(ctx, item) {
+        return Some(CoverageLevel::Verified);
+    }
+    Some(CoverageLevel::EvidenceReady)
+}
+
+fn item_is_connected(ctx: &ValidationContext<'_>, item: &CoverageItem) -> bool {
+    let anchors = ctx
+        .index
+        .item_anchors
+        .get(&item.id)
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    match item.kind {
+        CoverageItemKind::Philosophy => anchors
+            .iter()
+            .any(|anchor| anchor.kind == LocalAnchorKind::Principle),
+        CoverageItemKind::Policy => anchors
+            .iter()
+            .any(|anchor| anchor.kind == LocalAnchorKind::Rule),
+        CoverageItemKind::Requirement => anchors
+            .iter()
+            .any(|anchor| anchor.kind == LocalAnchorKind::Criterion),
+        CoverageItemKind::Feature => anchors
+            .iter()
+            .any(|anchor| anchor.kind == LocalAnchorKind::Binding),
+    }
+}
+
+fn item_bindings<'a>(
+    ctx: &'a ValidationContext<'_>,
+    item: &SpecId,
+) -> impl Iterator<Item = (&'a SpecAnchor, &'a syu_spec_model::ArtifactBinding)> {
+    ctx.index
+        .bindings
+        .iter()
+        .filter(move |(anchor, _)| anchor.item == *item)
+}
+
+fn item_is_owned(ctx: &ValidationContext<'_>, item: &CoverageItem) -> bool {
+    if matches!(
+        item.kind,
+        CoverageItemKind::Philosophy | CoverageItemKind::Policy
+    ) {
+        return true;
+    }
+    let bindings = item_bindings(ctx, &item.id).collect::<Vec<_>>();
+    !bindings.is_empty()
+        && bindings
+            .iter()
+            .all(|(_, binding)| !binding.targets.is_empty())
+}
+
+fn item_is_agent_ready(ctx: &ValidationContext<'_>, item: &CoverageItem) -> bool {
+    if !item_bindings(ctx, &item.id).all(|(_, binding)| {
+        binding.role != BindingRole::Implementation
+            || binding
+                .targets
+                .iter()
+                .all(|target| matches!(target.selector, Selector::Symbol { .. }))
+    }) {
+        return false;
+    }
+    match item.kind {
+        CoverageItemKind::Requirement => {
+            item_criterion_anchors(ctx, &item.id)
+                .iter()
+                .all(|criterion| {
+                    ctx.index
+                        .criteria_to_implementations
+                        .contains_key(*criterion)
+                })
+        }
+        CoverageItemKind::Feature => item_bindings(ctx, &item.id)
+            .any(|(_, binding)| binding.role == BindingRole::Implementation),
+        CoverageItemKind::Philosophy | CoverageItemKind::Policy => true,
+    }
+}
+
+fn item_is_verified(ctx: &ValidationContext<'_>, item: &CoverageItem) -> bool {
+    if item.kind == CoverageItemKind::Requirement
+        && !item_criterion_anchors(ctx, &item.id)
+            .iter()
+            .all(|criterion| ctx.index.criteria_to_verifications.contains_key(*criterion))
+    {
+        return false;
+    }
+    ctx.index
+        .contracts
+        .iter()
+        .filter(|(anchor, _)| anchor.item == item.id)
+        .all(|(_, contract)| !contract.participants.is_empty() && !contract.guarantees.is_empty())
+}
+
+fn item_is_evidence_ready(ctx: &ValidationContext<'_>, item: &CoverageItem) -> bool {
+    match item.kind {
+        CoverageItemKind::Philosophy => item_anchors_of_kind(ctx, &item.id, LocalAnchorKind::Principle)
+            .iter()
+            .all(|principle| ctx.index.bindings.values().any(|binding| {
+                binding.documents.contains(*principle) || binding.evidences.contains(*principle)
+            })),
+        CoverageItemKind::Policy => item_anchors_of_kind(ctx, &item.id, LocalAnchorKind::Rule)
+            .iter()
+            .filter(|rule| matches!(ctx.index.anchors.get(*rule), Some(AnchorValue::Rule(value)) if value.level == RuleLevel::Must))
+            .all(|rule| ctx.index.bindings.values().any(|binding| {
+                binding.enforces.contains(*rule) || binding.evidences.contains(*rule)
+            })),
+        CoverageItemKind::Requirement | CoverageItemKind::Feature => true,
+    }
+}
+
+fn item_criterion_anchors<'a>(
+    ctx: &'a ValidationContext<'_>,
+    item: &SpecId,
+) -> Vec<&'a SpecAnchor> {
+    item_anchors_of_kind(ctx, item, LocalAnchorKind::Criterion)
+}
+
+fn item_anchors_of_kind<'a>(
+    ctx: &'a ValidationContext<'_>,
+    item: &SpecId,
+    kind: LocalAnchorKind,
+) -> Vec<&'a SpecAnchor> {
+    ctx.index
+        .item_anchors
+        .get(item)
+        .into_iter()
+        .flatten()
+        .filter(|anchor| anchor.kind == kind)
+        .collect()
+}
+
+fn item_primary_anchor(ctx: &ValidationContext<'_>, item: &SpecId) -> Option<SpecAnchor> {
+    ctx.index
+        .item_anchors
+        .get(item)
+        .and_then(|anchors| anchors.first())
+        .cloned()
 }
 
 fn validate_generated_binding(
@@ -2795,6 +3078,38 @@ requirements:
                 .iter()
                 .any(|diagnostic| diagnostic.rule_id == "SYU-GENERATED-001")
         );
+    }
+
+    #[test]
+    fn qualitative_coverage_requires_the_configured_level_for_every_implemented_item() {
+        let (tempdir, _, _) = load_fixture_workspace();
+        let config_path = tempdir.path().join("syu.yaml");
+        let config = fs::read_to_string(&config_path)
+            .unwrap()
+            .replace("target: connected", "target: evidence-ready");
+        fs::write(config_path, config).unwrap();
+        let workspace = SpecWorkspace::load(tempdir.path()).unwrap();
+        let index = workspace.index().unwrap();
+        let result = validate(&ValidationContext {
+            config: &workspace.config,
+            workspace: &workspace,
+            index: &index,
+            changed_files: None,
+            reported_changed_files: None,
+            work_plan: None,
+            selected_slice: None,
+            plan_mode: PlanValidationMode::PreState,
+            preset: workspace.config.validation.preset,
+            revision: None,
+            change_base_revision: None,
+        });
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.rule_id == "SYU-COVERAGE-004"
+                && diagnostic.message.contains("evidence-ready is required")
+        }));
+        let coverage = result.coverage.expect("coverage summary");
+        assert_eq!(coverage.target, "evidence-ready");
+        assert!(coverage.covered_items < coverage.required_items);
     }
 
     #[test]

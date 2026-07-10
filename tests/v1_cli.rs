@@ -62,6 +62,20 @@ fn validates_repository_and_plans_fixture() {
 }
 
 #[test]
+fn validates_qualitative_item_coverage() {
+    let output = Command::cargo_bin("syu")
+        .unwrap()
+        .args(["validate", ".", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(stdout.contains("\"target\": \"evidence-ready\""));
+    assert!(stdout.contains("\"required_items\": 6"));
+    assert!(stdout.contains("\"covered_items\": 6"));
+}
+
+#[test]
 fn rejects_stale_target_snapshots() {
     let temp = tempdir().unwrap();
     let plan = temp.path().join("plan.yaml");

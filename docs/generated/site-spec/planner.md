@@ -47,6 +47,26 @@ description: "Generated reference for docs/syu/planner.yaml"
               - export_context
       - **satisfies**:
         - REQ-WORK-001#criterion.exact-slice
+- **id**: FEAT-WORK-002
+  - **title**: Qualitative item coverage validator
+  - **summary**: Classify item-to-evidence traceability by the Syu benefit it unlocks and enforce a repository-wide target.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: coverage-engine
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Compute connected, owned, agent-ready, verified, and evidence-ready item coverage from the canonical graph.
+      - **targets**:
+        - **id**: coverage-validation
+          - **adapter**: rust
+          - **path**: crates/syu-validation/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - validate_item_coverage
+              - coverage_level_for_item
+      - **satisfies**:
+        - REQ-WORK-002#criterion.qualitative-coverage
 
 ## Source YAML
 
@@ -71,4 +91,19 @@ features:
             path: crates/syu-planner/src/lib.rs
             selector: { kind: symbol, names: [plan, build_implementation_slice, build_verification_slice, export_context] }
         satisfies: [REQ-WORK-001#criterion.exact-slice]
+  - id: FEAT-WORK-002
+    title: Qualitative item coverage validator
+    summary: Classify item-to-evidence traceability by the Syu benefit it unlocks and enforce a repository-wide target.
+    status: implemented
+    bindings:
+      - id: coverage-engine
+        role: implementation
+        facet: tooling
+        responsibility: Compute connected, owned, agent-ready, verified, and evidence-ready item coverage from the canonical graph.
+        targets:
+          - id: coverage-validation
+            adapter: rust
+            path: crates/syu-validation/src/lib.rs
+            selector: { kind: symbol, names: [validate_item_coverage, coverage_level_for_item] }
+        satisfies: [REQ-WORK-002#criterion.qualitative-coverage]
 ```
