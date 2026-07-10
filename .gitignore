@@ -12,3 +12,5 @@ editors/vscode/node_modules
 editors/vscode/.vscode-test
 /crates/syu-desktop/gen/
 __pycache__/
+.apt/
+.tmp/

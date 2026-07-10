@@ -1,30 +1,146 @@
 #![forbid(unsafe_code)]
-use syu_diagnostics::Diagnostic;
-use syu_work_model::{ExecutionSlice, PlannedTarget};
+
+mod components;
+mod document;
+mod pages;
+mod shell;
+
 use syu_workbench_server::WorkspaceProjection;
 
-/// Read-only UI view over the canonical server projection. The UI does not
-/// parse specification YAML or infer ownership, contracts, or edit scope.
+/// Browser document renderer. Page markup, styling, localization and behavior
+/// live in named modules and external assets; this type only composes them.
 pub struct WorkbenchView<'a> {
     projection: &'a WorkspaceProjection,
 }
+
 impl<'a> WorkbenchView<'a> {
     pub fn new(projection: &'a WorkspaceProjection) -> Self {
         Self { projection }
     }
-    pub fn slices(&self) -> impl Iterator<Item = &'a ExecutionSlice> {
-        self.projection.plan.iter().flat_map(|p| p.slices.iter())
+
+    pub fn render_html(&self) -> String {
+        document::render(self.projection)
     }
-    pub fn diagnostics(&self) -> impl Iterator<Item = &'a Diagnostic> {
-        self.projection.validation.diagnostics.iter()
+}
+
+pub const WORKBENCH_CSS: &str = include_str!("../assets/workbench.css");
+pub const WORKBENCH_APP_JS: &str = include_str!("../assets/app.js");
+pub const WORKBENCH_I18N_JS: &str = include_str!("../assets/i18n.js");
+pub const WORKBENCH_PROJECTION_JS: &str = include_str!("../assets/projection.js");
+
+pub fn locale_catalog_script() -> String {
+    format!(
+        "window.SYU_I18N={{en:{},ja:{}}};",
+        include_str!("../assets/locales/en.json"),
+        include_str!("../assets/locales/ja.json")
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn locale_catalogs_have_identical_semantic_keys() {
+        let en_catalog: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_str(include_str!("../assets/locales/en.json")).unwrap();
+        let ja: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_str(include_str!("../assets/locales/ja.json")).unwrap();
+        let en = en_catalog.keys().cloned().collect::<BTreeSet<_>>();
+        let ja = ja.keys().cloned().collect::<BTreeSet<_>>();
+        assert_eq!(
+            en, ja,
+            "English and Japanese catalogs must stay in lockstep"
+        );
+        let html = include_str!("../assets/workbench.html");
+        for attribute in [
+            "data-i18n=\"",
+            "data-i18n-placeholder=\"",
+            "data-i18n-title=\"",
+            "data-i18n-aria=\"",
+        ] {
+            for tail in html.split(attribute).skip(1) {
+                let key = tail.split('"').next().unwrap();
+                assert!(
+                    en_catalog.contains_key(key),
+                    "missing English catalog key: {key}"
+                );
+            }
+        }
+        for tag in html.split('<').filter(|tag| tag.contains("aria-label=\"")) {
+            assert!(
+                tag.contains("data-i18n-aria=\"") || tag.contains("aria-hidden=\"true\""),
+                "accessible name is not localized: {tag}"
+            );
+        }
+        for tail in WORKBENCH_PROJECTION_JS.split("t('").skip(1) {
+            let key = tail.split('\'').next().unwrap();
+            if !key.contains('.') {
+                continue;
+            }
+            assert!(
+                en_catalog.contains_key(key),
+                "missing dynamic UI catalog key: {key}"
+            );
+        }
+        for banned in [
+            "No custom facets yet.",
+            "No rule overrides yet.",
+            "namedField('Profile'",
+            "namedField('Facet'",
+            "namedField('Include paths'",
+            "namedField('Rule ID'",
+            "namedField('Severity'",
+        ] {
+            assert!(
+                !WORKBENCH_PROJECTION_JS.contains(banned),
+                "unlocalized UI text leaked: {banned}"
+            );
+        }
     }
-    pub fn editable(slice: &'a ExecutionSlice) -> impl Iterator<Item = &'a PlannedTarget> {
-        slice.editable_targets.iter()
+
+    #[test]
+    fn document_uses_external_assets_and_required_landmarks() {
+        let html = include_str!("../assets/workbench.html");
+        for landmark in [
+            "app-shell",
+            "class=\"role-sidebar\"",
+            "command-bar",
+            "content-viewport",
+            "class=\"surface\"",
+            "class=\"rail\"",
+            "class=\"canvas",
+            "data-route=\"settings\"",
+        ] {
+            assert!(html.contains(landmark), "missing landmark: {landmark}");
+        }
+        assert!(!html.contains("<style"));
+        assert!(!html.contains("class=\"gear\""));
+        assert!(html.contains("/assets/workbench.css"));
+        assert!(html.contains("/assets/app.js"));
+        for banned in [
+            "REQ-WORKBENCH",
+            "SLICE-01",
+            "PLAN-WORKBENCH",
+            "UI-VISUAL-CONTRACT",
+            "No issues found",
+            "just now",
+        ] {
+            assert!(
+                !html.contains(banned),
+                "static demo content leaked: {banned}"
+            );
+        }
+        assert!(
+            WORKBENCH_CSS.contains("[data-settings-layer-panel][hidden]{display:none!important}")
+        );
     }
-    pub fn verification(slice: &'a ExecutionSlice) -> impl Iterator<Item = &'a PlannedTarget> {
-        slice.verification_targets.iter()
-    }
-    pub fn readonly(slice: &'a ExecutionSlice) -> impl Iterator<Item = &'a PlannedTarget> {
-        slice.readonly_context.iter()
+
+    #[test]
+    fn browser_does_not_infer_diagnostic_phase_or_create_ambiguous_seed() {
+        assert!(!WORKBENCH_PROJECTION_JS.contains("rule_id.includes"));
+        assert!(WORKBENCH_PROJECTION_JS.contains("selectedAnchor"));
+        assert!(WORKBENCH_PROJECTION_JS.contains("seeds: [selectedAnchor]"));
     }
 }
