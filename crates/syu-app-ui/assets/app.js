@@ -4,8 +4,16 @@
 
   const DEFAULT_TAB = { work: 'overview', scope: 'change', items: 'all' };
   const TAB_PARAM = { work: 'workTab', scope: 'scopeTab', items: 'itemsTab' };
+  const VALID_PAGES = new Set(['work', 'scope', 'items', 'diagnostics', 'settings']);
+  const VALID_TABS = {
+    work: new Set(['overview', 'slices', 'context', 'validation']),
+    scope: new Set(['change', 'verify', 'reference', 'intent']),
+    items: new Set(['all', 'philosophy', 'policy', 'requirement', 'feature']),
+  };
 
-  const readTab = page => new URL(location).searchParams.get(TAB_PARAM[page] || `${page}Tab`) || DEFAULT_TAB[page] || null;
+  const normalizedPage = value => VALID_PAGES.has(value) ? value : 'work';
+  const normalizedTab = (group, value) => VALID_TABS[group]?.has(value) ? value : DEFAULT_TAB[group] || null;
+  const readTab = page => normalizedTab(page, new URL(location).searchParams.get(TAB_PARAM[page] || `${page}Tab`) || DEFAULT_TAB[page] || null);
 
   function updateUrl(mutator, push = true) {
     const url = new URL(location.href);
@@ -14,6 +22,7 @@
   }
 
   function showPage(page, push = true) {
+    page = normalizedPage(page);
     $$('[data-page]').forEach(node => { node.hidden = node.dataset.page !== page; });
     $$('[data-route]').forEach(node => node.classList.toggle('active', node.dataset.route === page));
     window.SyuWorkbench?.onRoute?.(page);
@@ -23,10 +32,13 @@
   }
 
   function selectTab(group, tab, push = true) {
+    tab = normalizedTab(group, tab);
+    if (!tab) return;
     $$(`[data-tab-group="${group}"]`).forEach(node => {
       const selected = node.dataset.tab === tab;
       node.classList.toggle('active', selected);
       node.setAttribute('aria-selected', String(selected));
+      node.tabIndex = selected ? 0 : -1;
     });
     $$(`[data-panel-group="${group}"]`).forEach(node => { node.hidden = node.dataset.panel !== tab; });
     if (push) updateUrl(url => { url.searchParams.set(TAB_PARAM[group] || `${group}Tab`, tab); });
@@ -34,6 +46,42 @@
 
   $$('[data-route]').forEach(node => node.addEventListener('click', () => showPage(node.dataset.route)));
   $$('[data-tab-group]').forEach(node => node.addEventListener('click', () => selectTab(node.dataset.tabGroup, node.dataset.tab)));
+
+  function setupTabs(group) {
+    const tabs = $$(`[data-tab-group="${group}"]`);
+    const panels = $$(`[data-panel-group="${group}"]`);
+    if (!tabs.length || !panels.length) return;
+    const tablist = tabs[0].closest('.tabs');
+    tablist?.setAttribute('role', 'tablist');
+    tabs.forEach(tab => {
+      tab.id = `${group}-tab-${tab.dataset.tab}`;
+      tab.setAttribute('role', 'tab');
+      tab.setAttribute('aria-controls', `${group}-panel-${tab.dataset.tab}`);
+      tab.tabIndex = tab.classList.contains('active') ? 0 : -1;
+    });
+    panels.forEach(panel => {
+      panel.id = `${group}-panel-${panel.dataset.panel}`;
+      panel.setAttribute('role', 'tabpanel');
+      panel.setAttribute('aria-labelledby', `${group}-tab-${panel.dataset.panel}`);
+      panel.tabIndex = 0;
+    });
+    tablist?.addEventListener('keydown', event => {
+      const current = tabs.indexOf(document.activeElement);
+      if (current < 0) return;
+      const nextIndex = {
+        ArrowRight: (current + 1) % tabs.length,
+        ArrowLeft: (current + tabs.length - 1) % tabs.length,
+        Home: 0,
+        End: tabs.length - 1,
+      }[event.key];
+      if (nextIndex === undefined) return;
+      event.preventDefault();
+      tabs[nextIndex].focus();
+      selectTab(group, tabs[nextIndex].dataset.tab);
+    });
+  }
+
+  Object.keys(DEFAULT_TAB).forEach(setupTabs);
 
   const overlay = $('.palette-overlay');
   const paletteInput = $('[data-palette-input]');

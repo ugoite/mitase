@@ -86,6 +86,16 @@
     slice: t('diagnostics.context.slice'),
   })[String(value || '').replaceAll('-', '_')] || titleCase(String(value || '').replaceAll('-', '_'));
 
+  const selectorLabel = selector => {
+    if (!selector) return '';
+    if (typeof selector === 'string') return selector;
+    if (selector.kind === 'file') return 'file';
+    if (selector.kind === 'symbol') return `symbol: ${(selector.names || []).join(', ')}`;
+    if (selector.kind === 'operation') return `operation: ${selector.method || ''} ${selector.path || ''}`.trim();
+    if (selector.kind === 'json-pointer') return `json-pointer: ${selector.value || ''}`;
+    return `${selector.kind || 'selector'}${selector.value ? `: ${selector.value}` : ''}`;
+  };
+
   const phaseStateClass = state => ({
     passed: 'green',
     issues: 'orange',
@@ -111,11 +121,11 @@
     });
     const body = await response.text();
     if (!response.ok) {
+      let message = body;
       try {
-        throw new Error(JSON.parse(body).error || body);
-      } catch {
-        throw new Error(body);
-      }
+        message = JSON.parse(body).error || body;
+      } catch {}
+      throw new Error(message);
     }
     try {
       return JSON.parse(body);
@@ -273,7 +283,13 @@
       summary: '',
       operation: 'modify',
       seeds: selectedAnchor ? [selectedAnchor] : [],
-      constraints: { include_facets: [], exclude_paths: [], max_slices: null },
+      constraints: {
+        include_facets: [],
+        exclude_paths: [],
+        max_slices: null,
+        max_added_bytes_per_target: null,
+        max_added_lines_per_target: null,
+      },
       requested_targets: [],
     };
   }
@@ -314,22 +330,98 @@
   function renderWorkRequestEditor(host, isEmpty) {
     host.dataset.mode = 'editor';
     clear(host);
-    const request = draftWorkRequest || defaultWorkRequest();
+    const initial = clone(plan?.request || requestedWork || defaultWorkRequest());
+    const request = clone(draftWorkRequest || initial);
+    const commitDraft = () => { draftWorkRequest = clone(request); };
+    const exactAnchors = projection.items.flatMap(item => item.anchors.map(anchor => ({ item, anchor })));
     const form = el('form', 'form');
     form.append(canvasHead(
       isEmpty ? t('work.intake.title') : t('work.request.editor_title'),
       isEmpty ? t('work.intake.description') : t('work.request.editor_description'),
       [chip(t('work.request.steps'), 'blue-chip')],
-      plan ? [actionButton(t('common.reset'), 'common.reset', () => { host.dataset.mode = ''; renderWorkOverview(); }, 'btn ghost compact', 'reset')] : [],
+      [actionButton(t('common.reset'), 'common.reset', () => {
+        draftWorkRequest = clone(initial);
+        host.dataset.mode = '';
+        renderWorkOverview();
+      }, 'btn ghost compact', 'reset')],
     ));
     const steps = el('div', 'meta-line');
     steps.append(chip(t('work.request.step.seed')), chip(t('work.request.step.plan')), chip(t('work.request.step.validate')));
     form.append(steps);
     form.append(field('work.request.summary', textareaControl(request.summary || '', value => { request.summary = value; }, 'work-request-summary')));
     form.append(field('work.request.operation', selectControl(['add', 'modify', 'remove', 'refactor', 'document', 'investigate'], request.operation || 'modify', value => { request.operation = value; }, value => t(`operation.${value}`), 'work-request-operation')));
-    form.append(field('work.request.seed', inputControl((request.seeds || []).map(String).join(', '), value => {
-      request.seeds = value.trim() ? value.split(',').map(entry => entry.trim()).filter(Boolean) : [];
-    })));
+    const seedCard = el('div', 'card');
+    seedCard.append(el('h3', '', t('work.request.seed')));
+    const selectedSeeds = el('div', 'meta-line');
+    (request.seeds || []).forEach(seed => {
+      const remove = actionButton(String(seed), 'common.reset', () => {
+        request.seeds = request.seeds.filter(value => String(value) !== String(seed));
+        commitDraft();
+        renderWorkRequestEditor(host, isEmpty);
+      }, 'chip chip-button active', 'reset');
+      selectedSeeds.append(remove);
+    });
+    seedCard.append(selectedSeeds);
+    const seedSearch = inputControl('', () => {
+      [...seedList.children].forEach(row => {
+        row.hidden = seedSearch.value.trim() && !row.textContent.toLowerCase().includes(seedSearch.value.trim().toLowerCase());
+      });
+    });
+    seedSearch.placeholder = t('items.search.placeholder');
+    const seedList = el('div', 'settings-builder');
+    exactAnchors.forEach(({ item, anchor }) => {
+      const row = el('button', 'rail-subitem');
+      row.type = 'button';
+      row.append(el('b', '', item.title), el('span', 'path', `${t(`items.${item.kind}`)} · ${anchor}`), el('p', '', item.summary || item.description || ''));
+      row.addEventListener('click', () => {
+        request.requested_targets = [];
+        request.seeds = [...new Set([...(request.seeds || []).map(String), anchor])];
+        commitDraft();
+        renderWorkRequestEditor(host, isEmpty);
+      });
+      seedList.append(row);
+    });
+    seedCard.append(field('items.search.label', seedSearch), seedList);
+    form.append(seedCard);
+
+    const constraints = request.constraints || {};
+    request.constraints = constraints;
+    form.append(field('work.facets', inputControl((constraints.include_facets || []).join(', '), value => { constraints.include_facets = value.split(',').map(part => part.trim()).filter(Boolean); })));
+    form.append(field('work.exclude_paths', inputControl((constraints.exclude_paths || []).join(', '), value => { constraints.exclude_paths = value.split(',').map(part => part.trim()).filter(Boolean); })));
+    [
+      ['work.max_slices', 'max_slices'],
+      ['work.max_added_bytes_per_target', 'max_added_bytes_per_target'],
+      ['work.max_added_lines_per_target', 'max_added_lines_per_target'],
+    ].forEach(([labelKey, key]) => {
+      const input = inputControl(constraints[key] ?? '', value => { constraints[key] = value.trim() ? Number(value) : null; });
+      input.type = 'number';
+      input.min = '0';
+      input.step = '1';
+      form.append(field(labelKey, input));
+    });
+    const targetCard = el('div', 'card');
+    targetCard.append(el('h3', '', t('work.request.targets')));
+    (request.requested_targets || []).forEach((target, index) => {
+      const row = el('div', 'form two-column');
+      row.append(
+        field('work.request.target_ref', inputControl(target.ref || '', value => { target.ref = value; request.seeds = []; })),
+        field('work.request.target_criterion', inputControl(target.criterion || '', value => { target.criterion = value.trim() || null; })),
+        field('work.request.target_transition', selectControl(['add', 'modify', 'remove', 'run-only', 'readonly'], target.transition || 'modify', value => { target.transition = value; })),
+        actionButton(t('common.reset'), 'common.reset', () => {
+          request.requested_targets.splice(index, 1);
+          commitDraft();
+          renderWorkRequestEditor(host, isEmpty);
+        }, 'btn ghost compact', 'reset'),
+      );
+      targetCard.append(row);
+    });
+    targetCard.append(actionButton(t('common.new'), 'a11y.new_item_row', () => {
+      request.seeds = [];
+      request.requested_targets = [...(request.requested_targets || []), { ref: '', criterion: null, transition: 'modify' }];
+      commitDraft();
+      renderWorkRequestEditor(host, isEmpty);
+    }, 'btn compact', 'plan'));
+    form.append(targetCard);
     const actions = el('div', 'actions');
     const planButton = actionButton(t('common.plan'), 'a11y.work_plan', null, 'btn primary compact', 'plan');
     planButton.type = 'submit';
@@ -338,7 +430,12 @@
     form.addEventListener('submit', async event => {
       event.preventDefault();
       if (!request.summary?.trim()) return toast(t('work.request.summary_required'));
-      draftWorkRequest = request;
+      if ((request.seeds || []).length && (request.requested_targets || []).length) return toast(t('work.request.seed_target_exclusive'));
+      for (const key of ['max_slices', 'max_added_bytes_per_target', 'max_added_lines_per_target']) {
+        const value = request.constraints?.[key];
+        if (value !== null && value !== undefined && (!Number.isInteger(value) || value < 0)) return toast(t('settings.number_invalid'));
+      }
+      draftWorkRequest = clone(request);
       await api('/api/work/request', { method: 'PUT', body: JSON.stringify(request) });
       location.assign('/?page=work&workTab=overview');
     });
@@ -393,6 +490,7 @@
             await navigator.clipboard.writeText([slice.id, slice.goal, ...slice.anchors.map(String)].join('\n'));
             toast(t('toast.locator_copied'));
           }, 'btn compact', 'copy'),
+          actionButton(t('common.replan'), 'a11y.work_plan', () => renderWorkRequestEditor(one('[data-work-slice-detail]'), false), 'btn compact', 'plan'),
           actionButton(t('common.export'), 'a11y.export_slice', async () => {
             const yaml = await api(`/api/context/${encodeURIComponent(slice.id)}`, { method: 'POST' });
             const link = document.createElement('a');
@@ -516,7 +614,26 @@
     }
     rail?.append(el('div', 'rail-title', t('work.validation.plan_diagnostics')));
     if (!plan.diagnostics.length) {
-      detail?.append(emptyState('diagnostics.not_run.title', 'diagnostics.not_run.description'));
+      detail?.append(canvasHead(
+        t('diagnostics.not_run.title'),
+        t('diagnostics.not_run.description'),
+        [],
+        [actionButton(t('filter.validate'), 'a11y.validate_plan', async event => {
+          const button = event.currentTarget;
+          button.disabled = true;
+          try {
+            const next = await api('/api/validate', { method: 'POST', body: JSON.stringify({ context: 'work_plan' }) });
+            lastRun = next;
+            openWorkPage('validation');
+            toast(t('filter.validate'));
+          } catch (error) {
+            lastRun = failedValidationRun('work_plan', error.message);
+            toast(error.message);
+          } finally {
+            button.disabled = false;
+          }
+        }, 'btn primary compact', 'validate')],
+      ));
       return;
     }
     const selected = plan.diagnostics.find(diagnostic => diagnostic.rule_id === selectedDiagnosticKey) || plan.diagnostics[0];
@@ -725,7 +842,6 @@
     button.append(label, el('span', 'n', String(item.anchors.length)));
     button.addEventListener('click', () => {
       selectedItemId = item.id;
-      selectedAnchor = item.anchors[0] || null;
       renderItems();
     });
     rail?.append(button);
@@ -759,7 +875,7 @@
       return;
     }
     const item = visible.find(candidate => candidate.id === selectedItemId) || visible[0];
-    if (!selectedAnchor || !item.anchors.includes(selectedAnchor)) selectedAnchor = item.anchors[0] || null;
+    if (selectedAnchor && !item.anchors.includes(selectedAnchor)) selectedAnchor = null;
     renderItemDetail(detail, item);
   }
 
@@ -771,7 +887,8 @@
         [chip(item.id), chip(t(`items.${item.kind}`)), item.status ? chip(itemStatusLabel(item.status), 'green-chip') : null, item.priority ? chip(itemPriorityLabel(item.priority)) : null],
         [
           actionButton(t('common.edit'), 'a11y.edit_item', () => openItemEditor(item), 'btn compact', 'edit'),
-          actionButton(t('common.plan'), 'a11y.create_work', async () => {
+          (() => {
+            const button = actionButton(t('common.plan'), 'a11y.create_work', async () => {
             if (!selectedAnchor) return toast(t('toast.select_anchor'));
             const request = defaultWorkRequest();
             request.id = `WORK-${Date.now()}`;
@@ -780,14 +897,17 @@
             draftWorkRequest = request;
             await api('/api/work/request', { method: 'PUT', body: JSON.stringify(request) });
             location.assign('/?page=work&workTab=overview');
-          }, 'btn primary compact', 'plan'),
+            }, 'btn primary compact', 'plan');
+            button.disabled = !selectedAnchor;
+            return button;
+          })(),
         ],
       ),
       (() => {
         const grid = el('div', 'grid2');
         grid.append(
           summaryCard('items.summary', el('p', '', item.description || item.summary || item.path)),
-          summaryCard('items.planner', el('p', '', selectedAnchor ? t('items.exact_seed_available').replace('{anchor}', selectedAnchor) : t('items.no_exact_seed'))),
+          summaryCard('items.planner', renderAnchorPicker(item)),
         );
         return grid;
       })(),
@@ -795,11 +915,33 @@
     );
   }
 
+  function renderAnchorPicker(item) {
+    const wrap = document.createElement('div');
+    if (!item.anchors.length) {
+      wrap.append(el('p', '', t('items.no_exact_seed')));
+      return wrap;
+    }
+    item.anchors.forEach(anchor => {
+      const label = el('label', 'radio-row');
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.name = `anchor-${item.id}`;
+      radio.checked = selectedAnchor === anchor;
+      radio.addEventListener('change', () => {
+        selectedAnchor = anchor;
+        renderItems();
+      });
+      label.append(radio, el('span', '', anchor));
+      wrap.append(label);
+    });
+    return wrap;
+  }
+
   function renderItemSections(item) {
     const sections = [];
-    if (item.principles.length) sections.push(renderStatementSection(t('items.principles'), item.principles.map(row => ({ title: row.anchor, body: row.statement, meta: row.applies_to.join(', ') }))));
-    if (item.rules.length) sections.push(renderStatementSection(t('items.rules'), item.rules.map(row => ({ title: row.anchor, body: row.statement, meta: [row.level, ...row.governed_by].join(' · ') }))));
-    if (item.criteria.length) sections.push(renderStatementSection(t('items.criteria'), item.criteria.map(row => ({ title: row.anchor, body: row.statement, meta: [row.kind, ...row.governed_by].join(' · ') }))));
+    if (item.principles.length) sections.push(renderStatementSection(t('items.principles'), item.principles.map(row => ({ title: row.statement, anchor: row.anchor, meta: [['items.field.applies_to', row.applies_to]] }))));
+    if (item.rules.length) sections.push(renderStatementSection(t('items.rules'), item.rules.map(row => ({ title: row.statement, anchor: row.anchor, meta: [['items.field.level', [row.level]], ['items.field.governed_by', row.governed_by], ['items.field.applies_to_roles', row.applies_to_roles], ['items.field.enforcement', row.enforcement ? [row.enforcement] : []]] }))));
+    if (item.criteria.length) sections.push(renderStatementSection(t('items.criteria'), item.criteria.map(row => ({ title: row.statement, anchor: row.anchor, meta: [['items.field.kind', [row.kind]], ['items.field.governed_by', row.governed_by]] }))));
     if (item.bindings.length) sections.push(renderBindingSection(item.bindings));
     if (item.contracts.length) sections.push(renderContractSection(item.contracts));
     return sections;
@@ -810,8 +952,11 @@
     const card = el('div', 'card');
     values.forEach(value => {
       const block = el('div', 'target-locator');
-      block.append(el('div', 'path', value.title), el('div', 'selector', value.body));
-      if (value.meta) block.append(el('p', '', value.meta));
+      block.append(el('div', 'selector', value.title), el('div', 'path', value.anchor));
+      (value.meta || []).forEach(([labelKey, entries]) => {
+        if (!entries?.length) return;
+        block.append(el('p', '', `${t(labelKey)}: ${entries.join(', ')}`));
+      });
       card.append(block);
     });
     return fragment(title, card);
@@ -821,11 +966,25 @@
     const title = el('div', 'section-label', t('items.bindings'));
     const card = el('div', 'card');
     bindings.forEach(binding => {
-      binding.targets.forEach(target => {
-        const row = el('div', 'path-row');
-        row.append(el('span', 'path', binding.anchor), chip(binding.role), chip(binding.facet), el('span', '', `${target.path} · ${target.selector}`));
-        card.append(row);
+      const block = el('div', 'target-locator');
+      block.append(el('div', 'selector', binding.responsibility || binding.facet), el('div', 'path', binding.anchor), metaLine([chip(binding.role), chip(binding.facet)]));
+      [
+        ['items.field.satisfies', binding.satisfies],
+        ['items.field.verifies', binding.verifies],
+        ['items.field.documents', binding.documents],
+        ['items.field.enforces', binding.enforces],
+        ['items.field.generated_from', binding.generated_from],
+        ['items.field.evidences', binding.evidences],
+      ].forEach(([labelKey, values]) => {
+        if (values?.length) block.append(el('p', '', `${t(labelKey)}: ${values.join(', ')}`));
       });
+      const targets = binding.targets?.length ? binding.targets : [{ reference: t('items.no_targets'), path: '', selector: null, adapter: '' }];
+      targets.forEach(target => {
+        const row = el('div', 'path-row');
+        row.append(el('span', 'path', target.reference), chip(target.adapter || t('items.no_targets')), el('span', '', [target.path, selectorLabel(target.selector)].filter(Boolean).join(' · ')));
+        block.append(row);
+      });
+      card.append(block);
     });
     return fragment(title, card);
   }
@@ -835,7 +994,9 @@
     const card = el('div', 'card');
     contracts.forEach(contract => {
       const block = el('div', 'target-locator');
-      block.append(el('div', 'path', contract.anchor), el('div', 'selector', `${contract.kind} · ${contract.source}`), el('p', '', contract.participants.map(row => `${row.role}: ${row.binding}`).join('\n')));
+      block.append(el('div', 'selector', `${contract.kind} · ${contract.source}`), el('div', 'path', contract.anchor));
+      if (contract.participants?.length) block.append(el('p', '', `${t('items.field.participants')}: ${contract.participants.map(row => `${row.role}: ${row.binding}`).join(', ')}`));
+      if (contract.guarantees?.length) block.append(el('p', '', `${t('items.field.guarantees')}: ${contract.guarantees.join(', ')}`));
       card.append(block);
     });
     return fragment(title, card);
@@ -887,6 +1048,24 @@
       columns.forEach(column => {
         rowWrap.append(field(column.labelKey, column.control(row, index)));
       });
+      const actions = el('div', 'actions');
+      const up = actionButton('↑', 'a11y.move_up', () => {
+        if (index <= 0) return;
+        [rows[index - 1], rows[index]] = [rows[index], rows[index - 1]];
+        onAdd?.();
+      }, 'btn compact', 'open');
+      const down = actionButton('↓', 'a11y.move_down', () => {
+        if (index >= rows.length - 1) return;
+        [rows[index + 1], rows[index]] = [rows[index], rows[index + 1]];
+        onAdd?.();
+      }, 'btn compact', 'open');
+      const del = actionButton(t('common.delete'), 'common.delete', () => {
+        if (!confirm(t('items.delete_confirm'))) return;
+        rows.splice(index, 1);
+        onAdd?.();
+      }, 'btn ghost compact', 'reset');
+      actions.append(up, down, del);
+      rowWrap.append(actions);
       wrap.append(rowWrap);
     });
     const addButton = actionButton(t('common.new'), 'a11y.new_item_row', () => {
@@ -895,6 +1074,10 @@
     }, 'btn compact', 'plan');
     wrap.append(addButton);
     return wrap;
+  }
+
+  function csvEditor(labelKey, value, onInput) {
+    return field(labelKey, inputControl((value || []).join(', '), next => onInput(next.split(',').map(part => part.trim()).filter(Boolean))));
   }
 
   function openItemEditor(item) {
@@ -958,6 +1141,7 @@
       form.append(statementEditor('items.principles', draft.principles, [
         { labelKey: 'items.field.anchor', control: row => inputControl(row.anchor, value => { row.anchor = value; }) },
         { labelKey: 'items.field.statement', control: row => textareaControl(row.statement, value => { row.statement = value; }) },
+        { labelKey: 'items.field.applies_to', control: row => inputControl((row.applies_to || []).join(', '), value => { row.applies_to = value.split(',').map(part => part.trim()).filter(Boolean); }) },
       ], index => ({ anchor: `${draft.id}#principle.row-${index + 1}`, statement: '', applies_to: [] }), rerender));
     }
     if (draft.kind === 'policy') {
@@ -965,6 +1149,7 @@
       form.append(statementEditor('items.rules', draft.rules, [
         { labelKey: 'items.field.anchor', control: row => inputControl(row.anchor, value => { row.anchor = value; }) },
         { labelKey: 'items.field.level', control: row => selectControl(['must', 'should', 'may'], row.level, value => { row.level = value; }) },
+        { labelKey: 'items.field.governed_by', control: row => inputControl((row.governed_by || []).join(', '), value => { row.governed_by = value.split(',').map(part => part.trim()).filter(Boolean); }) },
         { labelKey: 'items.field.applies_to_roles', control: row => inputControl((row.applies_to_roles || []).join(', '), value => { row.applies_to_roles = value.split(',').map(part => part.trim()).filter(Boolean); }) },
         { labelKey: 'items.field.enforcement', control: row => inputControl(row.enforcement || '', value => { row.enforcement = value.trim() || null; }) },
         { labelKey: 'items.field.statement', control: row => textareaControl(row.statement, value => { row.statement = value; }) },
@@ -975,12 +1160,119 @@
       form.append(statementEditor('items.criteria', draft.criteria, [
         { labelKey: 'items.field.anchor', control: row => inputControl(row.anchor, value => { row.anchor = value; }) },
         { labelKey: 'items.field.kind', control: row => selectControl(['behavior', 'quality', 'security', 'operational', 'documentation', 'compatibility', 'custom'], row.kind, value => { row.kind = value; }) },
+        { labelKey: 'items.field.governed_by', control: row => inputControl((row.governed_by || []).join(', '), value => { row.governed_by = value.split(',').map(part => part.trim()).filter(Boolean); }) },
         { labelKey: 'items.field.statement', control: row => textareaControl(row.statement, value => { row.statement = value; }) },
       ], index => ({ anchor: `${draft.id}#criterion.row-${index + 1}`, kind: 'behavior', statement: '', governed_by: [] }), rerender));
     }
-    if (draft.bindings?.length) form.append(summaryCard('items.bindings', linesList(draft.bindings.map(binding => `${binding.anchor} · ${binding.role} · ${binding.facet}`))));
-    if (draft.contracts?.length) form.append(summaryCard('items.contracts', linesList(draft.contracts.map(contract => `${contract.anchor} · ${contract.kind}`))));
+    draft.bindings ||= [];
+    form.append(bindingEditor(draft, rerender));
+    if (draft.kind === 'feature') {
+      draft.contracts ||= [];
+      form.append(contractEditor(draft, rerender));
+    }
     return form;
+  }
+
+  function bindingEditor(draft, rerender) {
+    const roles = ['implementation', 'verification', 'documentation', 'enforcement', 'contract_source', 'configuration', 'generated', 'migration', 'operation', 'evidence'];
+    const card = el('div', 'card');
+    card.append(el('h3', '', t('items.bindings')));
+    draft.bindings.forEach((binding, index) => {
+      binding.targets ||= [];
+      const block = el('div', 'form two-column');
+      block.append(
+        field('items.field.anchor', inputControl(binding.anchor, value => { binding.anchor = value; })),
+        field('items.field.role', selectControl(roles, binding.role, value => { binding.role = value; })),
+        field('items.field.facet', inputControl(binding.facet || '', value => { binding.facet = value; })),
+        field('items.field.responsibility', textareaControl(binding.responsibility || '', value => { binding.responsibility = value; })),
+        csvEditor('items.field.satisfies', binding.satisfies, value => { binding.satisfies = value; }),
+        csvEditor('items.field.verifies', binding.verifies, value => { binding.verifies = value; }),
+        csvEditor('items.field.documents', binding.documents, value => { binding.documents = value; }),
+        csvEditor('items.field.enforces', binding.enforces, value => { binding.enforces = value; }),
+        csvEditor('items.field.generated_from', binding.generated_from, value => { binding.generated_from = value; }),
+        csvEditor('items.field.evidences', binding.evidences, value => { binding.evidences = value; }),
+      );
+      binding.targets.forEach((target, targetIndex) => {
+        const targetBlock = el('div', 'form two-column full');
+        const selector = target.selector || { kind: 'file' };
+        target.selector = selector;
+        targetBlock.append(
+          field('items.field.target_ref', inputControl(target.reference || '', value => { target.reference = value; })),
+          field('items.field.path', inputControl(target.path || '', value => { target.path = value; })),
+          field('items.field.adapter', inputControl(target.adapter || '', value => { target.adapter = value; })),
+          field('items.field.selector_kind', selectControl(['file', 'symbol', 'operation', 'heading', 'json-pointer', 'marker'], selector.kind || 'file', value => { target.selector = { kind: value }; rerender(); })),
+        );
+        if (selector.kind === 'symbol') targetBlock.append(field('items.field.selector_value', inputControl((selector.names || []).join(', '), value => { selector.names = value.split(',').map(part => part.trim()).filter(Boolean); })));
+        if (selector.kind === 'operation') targetBlock.append(field('items.field.selector_value', inputControl(`${selector.method || ''} ${selector.path || ''}`.trim(), value => { const [method, ...path] = value.split(/\s+/); selector.method = method || ''; selector.path = path.join(' '); })));
+        if (!['file', 'symbol', 'operation'].includes(selector.kind)) targetBlock.append(field('items.field.selector_value', inputControl(selector.value || '', value => { selector.value = value; })));
+        targetBlock.append(actionButton(t('common.delete'), 'common.delete', () => {
+          if (!confirm(t('items.delete_confirm'))) return;
+          binding.targets.splice(targetIndex, 1);
+          rerender();
+        }, 'btn ghost compact', 'reset'));
+        block.append(targetBlock);
+      });
+      block.append(
+        actionButton(t('items.target_new'), 'a11y.new_item_row', () => {
+          binding.targets.push({ reference: `${binding.anchor}/target.target-${binding.targets.length + 1}`, path: '', selector: { kind: 'file' }, adapter: '' });
+          rerender();
+        }, 'btn compact', 'plan'),
+        actionButton(t('common.delete'), 'common.delete', () => {
+          if (!confirm(t('items.delete_confirm'))) return;
+          draft.bindings.splice(index, 1);
+          rerender();
+        }, 'btn ghost compact', 'reset'),
+      );
+      card.append(block);
+    });
+    card.append(actionButton(t('common.new'), 'a11y.new_item_row', () => {
+      draft.bindings.push({ anchor: `${draft.id}#binding.row-${draft.bindings.length + 1}`, role: 'implementation', facet: 'implementation', responsibility: '', targets: [], satisfies: [], verifies: [], documents: [], enforces: [], generated_from: [], evidences: [] });
+      rerender();
+    }, 'btn compact', 'plan'));
+    return card;
+  }
+
+  function contractEditor(draft, rerender) {
+    const card = el('div', 'card');
+    card.append(el('h3', '', t('items.contracts')));
+    draft.contracts.forEach((contract, index) => {
+      contract.participants ||= [];
+      const block = el('div', 'form two-column');
+      block.append(
+        field('items.field.anchor', inputControl(contract.anchor, value => { contract.anchor = value; })),
+        field('items.field.kind', selectControl(['http', 'event', 'function', 'schema', 'cli', 'file', 'custom'], contract.kind, value => { contract.kind = value; })),
+        field('items.field.source', inputControl(contract.source || '', value => { contract.source = value; })),
+        csvEditor('items.field.guarantees', contract.guarantees, value => { contract.guarantees = value; }),
+      );
+      contract.participants.forEach((participant, participantIndex) => {
+        block.append(
+          field('items.field.participant_binding', inputControl(participant.binding || '', value => { participant.binding = value; })),
+          field('items.field.participant_role', inputControl(participant.role || '', value => { participant.role = value; })),
+          actionButton(t('common.delete'), 'common.delete', () => {
+            if (!confirm(t('items.delete_confirm'))) return;
+            contract.participants.splice(participantIndex, 1);
+            rerender();
+          }, 'btn ghost compact', 'reset'),
+        );
+      });
+      block.append(
+        actionButton(t('items.participant_new'), 'a11y.new_item_row', () => {
+          contract.participants.push({ binding: '', role: '' });
+          rerender();
+        }, 'btn compact', 'plan'),
+        actionButton(t('common.delete'), 'common.delete', () => {
+          if (!confirm(t('items.delete_confirm'))) return;
+          draft.contracts.splice(index, 1);
+          rerender();
+        }, 'btn ghost compact', 'reset'),
+      );
+      card.append(block);
+    });
+    card.append(actionButton(t('common.new'), 'a11y.new_item_row', () => {
+      draft.contracts.push({ anchor: `${draft.id}#contract.row-${draft.contracts.length + 1}`, kind: 'http', source: '', participants: [], guarantees: [] });
+      rerender();
+    }, 'btn compact', 'plan'));
+    return card;
   }
 
   function firstSpecRoot() {
@@ -1169,6 +1461,31 @@
     );
   }
 
+  function failedValidationRun(context, message) {
+    return {
+      state: 'failed',
+      context,
+      basis: null,
+      started_at: null,
+      completed_at: Date.now(),
+      duration_ms: null,
+      evaluated_rule_count: 0,
+      issue_counts: { error: 0, warning: 0, info: 0 },
+      applicable_phase_count: 0,
+      skipped_phase_count: 5,
+      phases: ['config', 'graph', 'targets', 'scope', 'plan'].map(id => ({
+        id,
+        state: 'failed',
+        issue_count: 0,
+        evaluated_rules: 0,
+        issue_counts: { error: 0, warning: 0, info: 0 },
+        not_applicable_reason: message,
+      })),
+      diagnostics: [],
+      reason: message,
+    };
+  }
+
   async function runValidationFromCurrentControl() {
     const page = one('[data-page="diagnostics"]');
     const context = one('[data-diagnostics-context]', page);
@@ -1186,7 +1503,7 @@
       lastRun = next;
       renderRun(next);
     } catch (error) {
-      lastRun = { ...lastRun, state: 'failed', reason: error.message, diagnostics: [] };
+      lastRun = failedValidationRun(requested, error.message);
       renderRun(lastRun);
     }
   }
@@ -1272,10 +1589,7 @@
       renderWorkRequestEditor(one('[data-work-overview]'), true);
     });
     one('[data-work-seed]')?.addEventListener('click', () => {
-      if (!selectedAnchor) return toast(t('toast.select_anchor'));
       draftWorkRequest = defaultWorkRequest();
-      draftWorkRequest.summary = t('work.request.summary_from_anchor').replace('{anchor}', selectedAnchor);
-      draftWorkRequest.seeds = [selectedAnchor];
       openWorkPage('overview');
       const host = one('[data-work-overview]');
       if (host) renderWorkRequestEditor(host, !plan);
@@ -1360,7 +1674,9 @@
       activeProfiles: one('[data-config-active-profiles]', page),
       customFacets: one('[data-config-custom-facets]', page),
       preset: one('[data-config-preset]', page),
-      baseline: one('[data-config-baseline]', page),
+      baselineStrategy: one('[data-config-baseline-strategy]', page),
+      baselineRef: one('[data-config-baseline-ref]', page),
+      baselineRefWrap: one('[data-config-baseline-ref-wrap]', page),
       ruleOverrides: one('[data-config-rule-overrides]', page),
       denyWarnings: one('[data-config-deny-warnings]', page),
       requireOwned: one('[data-config-require-owned]', page),
@@ -1379,6 +1695,20 @@
       wrap.append(el('label', '', label), control);
       return wrap;
     };
+
+    function syncBaselineControl() {
+      const needsRef = ['merge-base', 'revision'].includes(controls.baselineStrategy.value);
+      controls.baselineRefWrap.hidden = !needsRef;
+      controls.baselineRef.required = needsRef;
+    }
+
+    function readNonNegativeInteger(control, labelKey) {
+      const value = Number(control.value);
+      if (!Number.isInteger(value) || value < 0) {
+        throw new Error(t('settings.number_invalid').replace('{field}', t(labelKey)));
+      }
+      return value;
+    }
 
     function renderCustomFacetRows() {
       clear(controls.customFacets);
@@ -1471,7 +1801,10 @@
       );
       renderCustomFacetRows();
       controls.preset.value = config.validation.preset;
-      controls.baseline.value = config.validation.changed.baseline?.against || '';
+      const baseline = config.validation.changed.baseline;
+      controls.baselineStrategy.value = baseline?.strategy || 'none';
+      controls.baselineRef.value = baseline?.against || baseline?.revision || '';
+      syncBaselineControl();
       ruleOverrideRows = Object.entries(config.validation.rules || {}).map(([rule, level]) => ({
         rule,
         level: String(level),
@@ -1511,7 +1844,19 @@
       });
       config.profiles.custom = nextProfiles;
       config.validation.preset = controls.preset.value;
-      config.validation.changed.baseline = controls.baseline.value.trim() ? { strategy: 'merge-base', against: controls.baseline.value.trim() } : null;
+      const strategy = controls.baselineStrategy.value;
+      const reference = controls.baselineRef.value.trim();
+      if (strategy === 'merge-base') {
+        if (!reference) throw new Error(t('settings.baseline_ref_required'));
+        config.validation.changed.baseline = { strategy, against: reference };
+      } else if (strategy === 'revision') {
+        if (!reference) throw new Error(t('settings.baseline_ref_required'));
+        config.validation.changed.baseline = { strategy, revision: reference };
+      } else if (strategy === 'parent') {
+        config.validation.changed.baseline = { strategy: 'parent' };
+      } else {
+        config.validation.changed.baseline = null;
+      }
       config.validation.rules = {};
       ruleOverrideRows.forEach(row => {
         const rule = row.rule.trim();
@@ -1520,11 +1865,11 @@
       });
       config.validation.deny_warnings = readToggle(controls.denyWarnings);
       config.validation.changed.require_owned_changes = readToggle(controls.requireOwned);
-      config.work.slicing.max_editable_files = Number(controls.editableFiles.value);
-      config.work.slicing.max_editable_symbols = Number(controls.editableSymbols.value);
-      config.work.slicing.max_verification_targets = Number(controls.verificationTargets.value);
-      config.work.slicing.max_readonly_targets = Number(controls.readonlyTargets.value);
-      config.work.slicing.max_total_bytes = Number(controls.totalBytes.value);
+      config.work.slicing.max_editable_files = readNonNegativeInteger(controls.editableFiles, 'settings.editable_files');
+      config.work.slicing.max_editable_symbols = readNonNegativeInteger(controls.editableSymbols, 'settings.editable_symbols');
+      config.work.slicing.max_verification_targets = readNonNegativeInteger(controls.verificationTargets, 'settings.verification_targets');
+      config.work.slicing.max_readonly_targets = readNonNegativeInteger(controls.readonlyTargets, 'settings.readonly_targets');
+      config.work.slicing.max_total_bytes = readNonNegativeInteger(controls.totalBytes, 'settings.total_bytes');
       config.work.context.include_parent_principles = readToggle(controls.includePrinciples);
       config.work.context.include_parent_rules = readToggle(controls.includeRules);
       config.adapters.enabled = [...enabledAdapters];
@@ -1542,6 +1887,7 @@
         }
       });
     });
+    controls.baselineStrategy?.addEventListener('change', syncBaselineControl);
 
     one('[data-settings-preview]', page)?.addEventListener('click', async () => {
       try {
@@ -1584,9 +1930,11 @@
   function bindPalette() {
     const dialog = one('.palette-dialog');
     if (!dialog) return;
+    all('[data-dynamic-palette]', dialog).forEach(node => node.remove());
     projection.items.slice(0, 8).forEach(item => {
       const button = el('button', 'palette-result');
-      button.append(el('span', 'r-ico', '→'), el('span', '', item.id), el('span', 'route', `items › ${item.kind}`));
+      button.dataset.dynamicPalette = 'true';
+      button.append(el('span', 'r-ico', '→'), el('span', '', item.id), el('span', 'route', `${t('nav.items')} › ${t(`items.${item.kind}`)}`));
       button.addEventListener('click', () => {
         one('[data-route="items"]')?.click();
         one(`[data-tab-group="items"][data-tab="${item.kind}"]`)?.click();
@@ -1604,6 +1952,7 @@
     renderScope();
     renderItems();
     renderRun(lastRun);
+    bindPalette();
   }
 
   window.SyuWorkbench = {
@@ -1629,5 +1978,9 @@
   bindActions();
   bindPalette();
   if (document.querySelector('[data-page="settings"]')?.hidden === false) ensureSettingsBound();
-  document.addEventListener('syu:locale', () => renderAll());
+  document.addEventListener('syu:locale', () => {
+    settingsBound = false;
+    renderAll();
+    if (document.querySelector('[data-page="settings"]')?.hidden === false) ensureSettingsBound();
+  });
 })();

@@ -376,7 +376,7 @@ pub struct CriterionSummary {
     pub governed_by: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BindingSummary {
     pub anchor: String,
     pub role: String,
@@ -391,15 +391,15 @@ pub struct BindingSummary {
     pub evidences: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BindingTargetSummary {
     pub reference: String,
     pub path: String,
-    pub selector: String,
+    pub selector: Selector,
     pub adapter: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContractSummary {
     pub anchor: String,
     pub kind: String,
@@ -408,7 +408,7 @@ pub struct ContractSummary {
     pub guarantees: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContractParticipantSummary {
     pub binding: String,
     pub role: String,
@@ -755,7 +755,7 @@ fn bindings_for(
                         }
                         .to_string(),
                         path: target.path.to_string_lossy().into_owned(),
-                        selector: selector_label(&target.selector),
+                        selector: target.selector.clone(),
                         adapter: target.adapter.clone(),
                     })
                     .collect(),
@@ -806,17 +806,6 @@ fn anchor_string(
         local_id: local_id.clone(),
     }
     .to_string()
-}
-
-fn selector_label(selector: &Selector) -> String {
-    match selector {
-        Selector::File => "file".into(),
-        Selector::Symbol { names } => format!("symbol: {}", names.join(", ")),
-        Selector::Operation { method, path } => format!("operation: {method} {path}"),
-        Selector::Heading { value } => format!("heading: {value}"),
-        Selector::JsonPointer { value } => format!("json-pointer: {value}"),
-        Selector::Marker { value } => format!("marker: {value}"),
-    }
 }
 
 fn binding_role_label(role: BindingRole) -> &'static str {

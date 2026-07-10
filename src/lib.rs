@@ -26,8 +26,9 @@ use syu_app_ui::{
 use syu_planner::{export_context, plan};
 use syu_project_model::{ChangeBaseline, GitRef};
 use syu_spec_model::{
-    Criterion, Feature, LocalAnchorKind, LocalId, Philosophy, Policy, RepoPath, Requirement, Rule,
-    SpecAnchor, SpecDocument, SpecId,
+    ArtifactBinding, ArtifactTarget, BoundTargetRef, Contract, ContractParticipant, Criterion,
+    Feature, LocalAnchorKind, LocalId, Philosophy, Policy, RepoPath, Requirement, Rule, SpecAnchor,
+    SpecDocument, SpecId,
 };
 use syu_validation::{
     ChangeStatus, ChangedFile, ChangedRange, PlanValidationMode, ValidationContext, validate,
@@ -143,6 +144,10 @@ struct ItemEditPayload {
     principles: Vec<syu_workbench_server::PrincipleSummary>,
     rules: Vec<syu_workbench_server::RuleSummary>,
     criteria: Vec<syu_workbench_server::CriterionSummary>,
+    #[serde(default)]
+    bindings: Vec<syu_workbench_server::BindingSummary>,
+    #[serde(default)]
+    contracts: Vec<syu_workbench_server::ContractSummary>,
     expected_hash: String,
     #[serde(default)]
     preview_token: Option<String>,
@@ -1220,6 +1225,7 @@ fn patch_existing_item_in_document(
                 .iter()
                 .map(principle_from_summary)
                 .collect::<std::result::Result<_, _>>()?;
+            item.bindings = bindings_from_summary(&payload.bindings)?;
         }
         SpecDocument::Policies { policies, .. } if payload.kind == "policy" => {
             let item = policies
@@ -1239,6 +1245,7 @@ fn patch_existing_item_in_document(
                 .iter()
                 .map(rule_from_summary)
                 .collect::<std::result::Result<_, _>>()?;
+            item.bindings = bindings_from_summary(&payload.bindings)?;
         }
         SpecDocument::Requirements { requirements, .. } if payload.kind == "requirement" => {
             let item = requirements
@@ -1259,6 +1266,7 @@ fn patch_existing_item_in_document(
                 .iter()
                 .map(criterion_from_summary)
                 .collect::<std::result::Result<_, _>>()?;
+            item.bindings = bindings_from_summary(&payload.bindings)?;
         }
         SpecDocument::Features { features, .. } if payload.kind == "feature" => {
             let item = features
@@ -1273,6 +1281,8 @@ fn patch_existing_item_in_document(
             item.title = payload.title.clone();
             item.summary = payload.summary.clone().unwrap_or_default();
             item.status = parse_enum(payload.status.as_deref().unwrap_or("planned"))?;
+            item.bindings = bindings_from_summary(&payload.bindings)?;
+            item.contracts = contracts_from_summary(&payload.contracts)?;
         }
         _ => {
             return Err(ApiError(
@@ -1336,7 +1346,7 @@ fn build_new_spec_item(
                 .iter()
                 .map(principle_from_summary)
                 .collect::<std::result::Result<_, _>>()?,
-            bindings: Vec::new(),
+            bindings: bindings_from_summary(&payload.bindings)?,
         })),
         "policy" => Ok(EditableSpecItem::Policy(Policy {
             id,
@@ -1348,7 +1358,7 @@ fn build_new_spec_item(
                 .iter()
                 .map(rule_from_summary)
                 .collect::<std::result::Result<_, _>>()?,
-            bindings: Vec::new(),
+            bindings: bindings_from_summary(&payload.bindings)?,
         })),
         "requirement" => Ok(EditableSpecItem::Requirement(Requirement {
             id,
@@ -1361,15 +1371,15 @@ fn build_new_spec_item(
                 .iter()
                 .map(criterion_from_summary)
                 .collect::<std::result::Result<_, _>>()?,
-            bindings: Vec::new(),
+            bindings: bindings_from_summary(&payload.bindings)?,
         })),
         "feature" => Ok(EditableSpecItem::Feature(Feature {
             id,
             title: payload.title.clone(),
             summary: payload.summary.clone().unwrap_or_default(),
             status: parse_enum(payload.status.as_deref().unwrap_or("planned"))?,
-            bindings: Vec::new(),
-            contracts: Vec::new(),
+            bindings: bindings_from_summary(&payload.bindings)?,
+            contracts: contracts_from_summary(&payload.contracts)?,
         })),
         _ => Err(ApiError(
             StatusCode::BAD_REQUEST,
@@ -1429,6 +1439,96 @@ fn criterion_from_summary(
             .map(|value| parse_from_string::<SpecAnchor>(value))
             .collect::<std::result::Result<_, _>>()?,
     })
+}
+
+fn bindings_from_summary(
+    summaries: &[syu_workbench_server::BindingSummary],
+) -> std::result::Result<Vec<ArtifactBinding>, ApiError> {
+    summaries
+        .iter()
+        .map(|summary| {
+            let anchor = parse_from_string::<SpecAnchor>(&summary.anchor)?;
+            if anchor.kind != LocalAnchorKind::Binding {
+                return Err(ApiError(
+                    StatusCode::BAD_REQUEST,
+                    anyhow::anyhow!("binding anchor {} is not a binding", summary.anchor),
+                ));
+            }
+            let targets = summary
+                .targets
+                .iter()
+                .map(|target| {
+                    let reference = parse_from_string::<BoundTargetRef>(&target.reference)?;
+                    if reference.binding != anchor {
+                        return Err(ApiError(
+                            StatusCode::BAD_REQUEST,
+                            anyhow::anyhow!(
+                                "target reference {} does not belong to {}",
+                                target.reference,
+                                summary.anchor
+                            ),
+                        ));
+                    }
+                    Ok(ArtifactTarget {
+                        id: reference.target_id,
+                        adapter: target.adapter.clone(),
+                        path: parse_from_string(&target.path)?,
+                        selector: target.selector.clone(),
+                    })
+                })
+                .collect::<std::result::Result<_, _>>()?;
+            Ok(ArtifactBinding {
+                id: anchor.local_id,
+                role: parse_enum(&summary.role)?,
+                facet: summary.facet.clone(),
+                responsibility: summary.responsibility.clone(),
+                targets,
+                satisfies: parse_anchor_list(&summary.satisfies)?,
+                verifies: parse_anchor_list(&summary.verifies)?,
+                documents: parse_anchor_list(&summary.documents)?,
+                enforces: parse_anchor_list(&summary.enforces)?,
+                generated_from: summary
+                    .generated_from
+                    .iter()
+                    .map(|value| parse_from_string::<BoundTargetRef>(value))
+                    .collect::<std::result::Result<_, _>>()?,
+                evidences: parse_anchor_list(&summary.evidences)?,
+            })
+        })
+        .collect()
+}
+
+fn contracts_from_summary(
+    summaries: &[syu_workbench_server::ContractSummary],
+) -> std::result::Result<Vec<Contract>, ApiError> {
+    summaries
+        .iter()
+        .map(|summary| {
+            Ok(Contract {
+                id: local_id_from_anchor(&summary.anchor, LocalAnchorKind::Contract)?,
+                kind: parse_enum(&summary.kind)?,
+                source: parse_from_string(&summary.source)?,
+                participants: summary
+                    .participants
+                    .iter()
+                    .map(|participant| {
+                        Ok(ContractParticipant {
+                            binding: parse_from_string(&participant.binding)?,
+                            role: participant.role.clone(),
+                        })
+                    })
+                    .collect::<std::result::Result<_, ApiError>>()?,
+                guarantees: parse_anchor_list(&summary.guarantees)?,
+            })
+        })
+        .collect()
+}
+
+fn parse_anchor_list(values: &[String]) -> std::result::Result<Vec<SpecAnchor>, ApiError> {
+    values
+        .iter()
+        .map(|value| parse_from_string::<SpecAnchor>(value))
+        .collect()
 }
 
 fn local_id_from_anchor(
@@ -2247,6 +2347,34 @@ features:
             principles: vec![],
             rules: vec![],
             criteria: vec![],
+            bindings: vec![syu_workbench_server::BindingSummary {
+                anchor: "FEAT-1#binding.impl".into(),
+                role: "implementation".into(),
+                facet: "implementation".into(),
+                responsibility: "Keep me".into(),
+                targets: vec![syu_workbench_server::BindingTargetSummary {
+                    reference: "FEAT-1#binding.impl/target.target".into(),
+                    path: "web/login.ts".into(),
+                    selector: syu_spec_model::Selector::File,
+                    adapter: "typescript".into(),
+                }],
+                satisfies: vec![],
+                verifies: vec![],
+                documents: vec![],
+                enforces: vec![],
+                generated_from: vec![],
+                evidences: vec![],
+            }],
+            contracts: vec![syu_workbench_server::ContractSummary {
+                anchor: "FEAT-1#contract.http".into(),
+                kind: "http".into(),
+                source: "FEAT-1#binding.impl/target.target".into(),
+                participants: vec![syu_workbench_server::ContractParticipantSummary {
+                    binding: "FEAT-1#binding.impl".into(),
+                    role: "provider".into(),
+                }],
+                guarantees: vec![],
+            }],
             expected_hash: content_hash(source),
             preview_token: None,
         };
@@ -2299,6 +2427,8 @@ policies:
                 enforcement: Some("external".into()),
             }],
             criteria: vec![],
+            bindings: vec![],
+            contracts: vec![],
             expected_hash: content_hash(source),
             preview_token: None,
         };

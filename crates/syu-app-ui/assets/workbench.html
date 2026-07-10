@@ -47,13 +47,6 @@
             <span class="key">⌘ K</span>
             <span data-i18n="command.placeholder">Search work, slices, items, targets, validation…</span>
           </button>
-          <div class="quick-filters">
-            <button class="quick-pill active" data-i18n="filter.all">All</button>
-            <button class="quick-pill" data-i18n="filter.navigate">Navigate</button>
-            <button class="quick-pill" data-i18n="filter.plan">Plan</button>
-            <button class="quick-pill" data-i18n="filter.validate">Validate</button>
-            <button class="quick-pill" data-i18n="filter.config">Config</button>
-          </div>
         </div>
         <div class="utility"><div class="branch">⑂ issue-762</div></div>
       </header>
@@ -64,12 +57,9 @@
             <div class="eyebrow" data-i18n="page.work.eyebrow">WORKBENCH</div>
             <div class="title-row">
               <h1 data-i18n="nav.work">Work</h1>
-              <button class="help" aria-label="Work help" data-i18n-aria="a11y.work_help" data-i18n-title="a11y.work_help" title="Work help">
-                <span class="help-icon"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"></path><circle cx="12" cy="12" r="3"></circle></svg></span>
-              </button>
             </div>
             <div class="toolbar">
-              <div class="select" data-focus-id="work-plan-selector"><span data-work-plan-label data-i18n="common.request">Request</span><span>⌄</span></div>
+              <div class="active-request-label" data-focus-id="work-plan-selector"><span data-work-plan-label data-i18n="common.request">Request</span></div>
               <button class="btn compact" data-work-new aria-label="New work" data-i18n-aria="a11y.work_new" data-i18n-title="a11y.work_new" title="New work">
                 <span class="btn-icon"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg></span>
                 <span class="btn-label" data-i18n="common.new">New</span>
@@ -115,16 +105,13 @@
             <div class="eyebrow" data-i18n="page.scope.eyebrow">SCOPE</div>
             <div class="title-row">
               <h1 data-i18n="nav.scope">Scope</h1>
-              <button class="help" aria-label="Scope help" data-i18n-aria="a11y.help" data-i18n-title="a11y.help" title="Scope help">
-                <span class="help-icon"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"></path><circle cx="12" cy="12" r="3"></circle></svg></span>
-              </button>
             </div>
             <div class="toolbar">
               <div class="seg-select scope-mode" data-scope-mode>
                 <button class="scope-mode-button active" data-scope-mode-button="plan" type="button" data-i18n="scope.mode.plan">Plan</button>
                 <button class="scope-mode-button" data-scope-mode-button="branch" type="button" data-i18n="scope.mode.branch">Branch</button>
               </div>
-              <div class="select" data-scope-plan-control><span data-scope-plan-label data-i18n="common.request">Request</span><span data-scope-slice-label></span></div>
+              <div class="active-request-label" data-scope-plan-control><span data-scope-plan-label data-i18n="common.request">Request</span><span data-scope-slice-label></span></div>
               <div class="search" data-scope-range-control hidden><input data-scope-range placeholder="origin/main...HEAD" /></div>
               <button class="btn compact" data-scope-refresh aria-label="Refresh scope" data-i18n-aria="a11y.refresh_scope" data-i18n-title="a11y.refresh_scope" title="Refresh scope">
                 <span class="btn-icon"><svg viewBox="0 0 24 24"><path d="M20 6v5h-5"></path><path d="M18.5 15a7 7 0 1 1-.7-7.8L20 11"></path></svg></span>
@@ -166,9 +153,6 @@
             <div class="eyebrow" data-i18n="page.items.eyebrow">ITEMS</div>
             <div class="title-row">
               <h1 data-i18n="nav.items">Items</h1>
-              <button class="help" aria-label="Items help" data-i18n-aria="a11y.help" data-i18n-title="a11y.help" title="Items help">
-                <span class="help-icon"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"></path><circle cx="12" cy="12" r="3"></circle></svg></span>
-              </button>
             </div>
             <div class="toolbar">
               <div class="search"><input data-items-search="" data-i18n-placeholder="items.search.placeholder" placeholder="Search specification items..." /></div>
@@ -213,9 +197,6 @@
             <div class="eyebrow" data-i18n="page.diagnostics.eyebrow">WORKBENCH</div>
             <div class="title-row">
               <h1 data-i18n="diagnostics.title">Diagnostics</h1>
-              <button class="help" aria-label="Diagnostics help" data-i18n-aria="diagnostics.help" data-i18n-title="diagnostics.help" title="Diagnostics help">
-                <span class="help-icon"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"></path><circle cx="12" cy="12" r="3"></circle></svg></span>
-              </button>
             </div>
             <div class="toolbar">
               <div class="select">
@@ -274,9 +255,6 @@
             <div class="eyebrow" data-i18n="page.settings.eyebrow">UTILITY</div>
             <div class="title-row">
               <h1 data-i18n="settings.title">Settings</h1>
-              <button class="help" aria-label="Settings help" data-i18n-aria="settings.help" data-i18n-title="settings.help" title="Settings help">
-                <span class="help-icon"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"></path><circle cx="12" cy="12" r="3"></circle></svg></span>
-              </button>
             </div>
             <div class="toolbar settings-toolbar" data-settings-toolbar="application">
               <div class="select"><span data-i18n="settings.app.preferences">Application preferences</span><span data-i18n="settings.app.local">stored on this device</span></div>
@@ -370,7 +348,19 @@
               <div class="canvas-head"><div><h2 data-i18n="settings.validation">Validation</h2><p data-i18n="settings.validation.description">Rules, presets, and changed-file behavior used by canonical validation.</p></div></div>
               <div class="form two-column">
                 <div class="field"><label data-i18n="settings.preset">Preset</label><select class="native-select" data-config-preset><option value="agent-ready">agent-ready</option><option value="strict">strict</option><option value="standard">standard</option></select></div>
-                <div class="field"><label data-i18n="settings.baseline">Baseline</label><input class="input" data-config-baseline /></div>
+                <div class="field">
+                  <label data-i18n="settings.baseline_strategy">Baseline strategy</label>
+                  <select class="native-select" data-config-baseline-strategy>
+                    <option value="none" data-i18n="settings.baseline.none">None</option>
+                    <option value="merge-base" data-i18n="settings.baseline.merge_base">Merge base</option>
+                    <option value="revision" data-i18n="settings.baseline.revision">Revision</option>
+                    <option value="parent" data-i18n="settings.baseline.parent">Parent commit</option>
+                  </select>
+                </div>
+                <div class="field" data-config-baseline-ref-wrap hidden>
+                  <label data-i18n="settings.baseline_ref">Git reference</label>
+                  <input class="input" data-config-baseline-ref />
+                </div>
                 <div class="field full">
                   <label data-i18n="settings.rule_overrides">Rule overrides</label>
                   <div class="settings-builder" data-config-rule-overrides></div>
@@ -382,11 +372,11 @@
             <div class="canvas white settings-panel" data-settings-page-panel="planning" hidden>
               <div class="canvas-head"><div><h2 data-i18n="settings.planning">Planning</h2><p data-i18n="settings.planning.description">ExecutionSlice budgets and ContextPack inclusion rules.</p></div></div>
               <div class="form two-column">
-                <div class="field"><label data-i18n="settings.editable_files">Editable files</label><input class="input" type="number" data-config-editable-files /></div>
-                <div class="field"><label data-i18n="settings.editable_symbols">Editable symbols</label><input class="input" type="number" data-config-editable-symbols /></div>
-                <div class="field"><label data-i18n="settings.verification_targets">Verification targets</label><input class="input" type="number" data-config-verification-targets /></div>
-                <div class="field"><label data-i18n="settings.readonly_targets">Readonly targets</label><input class="input" type="number" data-config-readonly-targets /></div>
-                <div class="field"><label data-i18n="settings.total_bytes">Total bytes</label><input class="input" type="number" data-config-total-bytes /></div>
+                <div class="field"><label data-i18n="settings.editable_files">Editable files</label><input class="input" type="number" min="0" step="1" required data-config-editable-files /></div>
+                <div class="field"><label data-i18n="settings.editable_symbols">Editable symbols</label><input class="input" type="number" min="0" step="1" required data-config-editable-symbols /></div>
+                <div class="field"><label data-i18n="settings.verification_targets">Verification targets</label><input class="input" type="number" min="0" step="1" required data-config-verification-targets /></div>
+                <div class="field"><label data-i18n="settings.readonly_targets">Readonly targets</label><input class="input" type="number" min="0" step="1" required data-config-readonly-targets /></div>
+                <div class="field"><label data-i18n="settings.total_bytes">Total bytes</label><input class="input" type="number" min="0" step="1" required data-config-total-bytes /></div>
               </div>
               <div class="toggle-row"><span data-i18n="settings.include_principles">Include parent principles</span><span class="toggle off" data-config-include-principles></span></div>
               <div class="toggle-row"><span data-i18n="settings.include_rules">Include parent rules</span><span class="toggle off" data-config-include-rules></span></div>

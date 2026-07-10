@@ -77,7 +77,7 @@ def main(reference, actual):
     )
     changed_ratio = changed_pixels / (width * height)
     print(f"{actual}: mean_error={mean_error:.2f}, changed_pixels={changed_ratio:.2%}")
-    if mean_error > 28 or changed_ratio > 0.24:
+    if mean_error > 6 or changed_ratio > 0.03:
         raise SystemExit("visual regression exceeds mean-error or changed-pixel threshold")
 
 

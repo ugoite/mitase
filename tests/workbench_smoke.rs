@@ -65,6 +65,35 @@ fn normal_ui_does_not_expose_raw_yaml_editors() {
 }
 
 #[test]
+fn workbench_removes_inert_controls_and_uses_structured_baseline_inputs() {
+    let html = include_str!("../crates/syu-app-ui/assets/workbench.html");
+    assert!(!html.contains("quick-pill"));
+    assert!(!html.contains("class=\"help\""));
+    assert!(!html.contains("data-config-baseline "));
+    assert!(html.contains("data-config-baseline-strategy"));
+    assert!(html.contains("data-config-baseline-ref"));
+    assert!(html.contains("active-request-label"));
+    assert!(!html.contains(
+        "data-work-plan-label data-i18n=\"common.request\">Request</span><span>⌄</span>"
+    ));
+}
+
+#[test]
+fn workbench_item_editor_covers_traceability_fields() {
+    assert!(WORKBENCH_PROJECTION_JS.contains("bindingEditor"));
+    assert!(WORKBENCH_PROJECTION_JS.contains("contractEditor"));
+    for field in [
+        "applies_to",
+        "governed_by",
+        "generated_from",
+        "guarantees",
+        "selector_kind",
+    ] {
+        assert!(WORKBENCH_PROJECTION_JS.contains(field));
+    }
+}
+
+#[test]
 fn tabs_never_scroll_vertically() {
     assert!(WORKBENCH_CSS.contains("overflow-y: hidden"));
     assert!(WORKBENCH_CSS.contains("max-height: 51px"));
@@ -101,7 +130,7 @@ fn workbench_bootstrap_declares_selected_anchor_before_default_request() {
 }
 
 #[test]
-fn work_seed_button_does_not_discard_in_memory_seed_by_reloading() {
+fn work_seed_button_opens_picker_without_global_selected_anchor_dependency() {
     let seed_block = WORKBENCH_PROJECTION_JS
         .split("one('[data-work-seed]')")
         .nth(1)
@@ -109,8 +138,8 @@ fn work_seed_button_does_not_discard_in_memory_seed_by_reloading() {
         .split("one('[data-work-plan]')")
         .next()
         .expect("seed action end");
-    assert!(seed_block.contains("draftWorkRequest.seeds = [selectedAnchor]"));
     assert!(seed_block.contains("openWorkPage('overview')"));
     assert!(seed_block.contains("renderWorkRequestEditor"));
+    assert!(!seed_block.contains("selectedAnchor"));
     assert!(!seed_block.contains("location.assign"));
 }
