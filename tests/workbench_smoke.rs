@@ -143,3 +143,37 @@ fn work_seed_button_opens_picker_without_global_selected_anchor_dependency() {
     assert!(!seed_block.contains("selectedAnchor"));
     assert!(!seed_block.contains("location.assign"));
 }
+
+#[test]
+fn workbench_starts_work_from_user_facing_origins_and_hides_expert_fields() {
+    assert!(WORKBENCH_PROJECTION_JS.contains("renderWorkStart"));
+    for marker in [
+        "work.start.branch",
+        "work.start.specification",
+        "work.start.describe",
+        "advancedDetails(advanced)",
+        "advancedDetails(metadata)",
+    ] {
+        assert!(WORKBENCH_PROJECTION_JS.contains(marker), "missing {marker}");
+    }
+    assert!(WORKBENCH_CSS.contains(".toolbar .btn.compact .btn-label { display: none; }"));
+    assert!(
+        WORKBENCH_CSS
+            .contains(".advanced-editor:not([open]) > .advanced-editor-body { display: none; }")
+    );
+}
+
+#[test]
+fn diagnostics_primary_action_runs_validation_without_duplicate_result_action() {
+    assert!(WORKBENCH_PROJECTION_JS.contains("validateButton?.addEventListener('click'"));
+    assert!(WORKBENCH_PROJECTION_JS.contains("await runValidationFromCurrentControl()"));
+    assert!(!WORKBENCH_PROJECTION_JS.contains("renderValidationStats"));
+    let summary = WORKBENCH_PROJECTION_JS
+        .split("function renderDiagnosticSummary")
+        .nth(1)
+        .expect("diagnostic summary")
+        .split("function renderDiagnosticIssues")
+        .next()
+        .expect("diagnostic summary end");
+    assert!(!summary.contains("runValidationFromCurrentControl"));
+}

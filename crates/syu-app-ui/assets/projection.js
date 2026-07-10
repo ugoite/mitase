@@ -177,6 +177,23 @@
     return wrap;
   }
 
+  function emptyStateWithActions(titleKey, descriptionKey, actions = []) {
+    const wrap = emptyState(titleKey, descriptionKey);
+    const actionWrap = el('div', 'empty-actions');
+    actions.filter(Boolean).forEach(action => actionWrap.append(action));
+    if (actionWrap.childElementCount) wrap.append(actionWrap);
+    return wrap;
+  }
+
+  function advancedDetails(...nodes) {
+    const details = el('details', 'advanced-editor');
+    const summary = el('summary', '', t('common.advanced'));
+    const body = el('div', 'advanced-editor-body');
+    nodes.filter(Boolean).forEach(node => body.append(node));
+    details.append(summary, body);
+    return details;
+  }
+
   function metaLine(values) {
     const line = el('div', 'meta-line');
     values.filter(Boolean).forEach(value => line.append(value));
@@ -264,6 +281,17 @@
       .sort((left, right) => (order[left.kind] - order[right.kind]) || left.id.localeCompare(right.id));
   }
 
+  function anchorDescription(item, anchor) {
+    const row = [
+      ...(item.principles || []),
+      ...(item.rules || []),
+      ...(item.criteria || []),
+      ...(item.bindings || []),
+      ...(item.contracts || []),
+    ].find(candidate => candidate.anchor === anchor);
+    return row?.statement || row?.responsibility || item.summary || item.description || item.title;
+  }
+
   function renderWork() {
     const page = one('[data-page="work"]');
     text(one('[data-work-plan-label]', page), plan?.id || draftWorkRequest.id || t('common.request'));
@@ -298,7 +326,11 @@
     const host = one('[data-work-overview]');
     clear(host);
     if (!host) return;
-    if (!plan || host.dataset.mode === 'editor') {
+    if (!plan && host.dataset.mode !== 'editor') {
+      renderWorkStart(host);
+      return;
+    }
+    if (host.dataset.mode === 'editor') {
       renderWorkRequestEditor(host, !plan);
       return;
     }
@@ -325,6 +357,32 @@
     if (plan.request.constraints.max_slices) constraints.push(`${t('work.max_slices')}: ${plan.request.constraints.max_slices}`);
     body.append(summaryCard('work.card.seed', linesList(constraints.length ? constraints : [t('work.constraints.none')])));
     host.append(body);
+  }
+
+  function renderWorkStart(host) {
+    const actions = el('div', 'work-start-grid');
+    const choice = (icon, titleKey, descriptionKey, onClick) => {
+      const button = el('button', 'work-start-card');
+      button.type = 'button';
+      button.append(el('span', 'work-start-icon', icon), el('b', '', t(titleKey)), el('p', '', t(descriptionKey)));
+      button.addEventListener('click', onClick);
+      return button;
+    };
+    actions.append(
+      choice('⑂', 'work.start.branch', 'work.start.branch_description', () => {
+        one('[data-route="scope"]')?.click();
+        one('[data-scope-mode-button="branch"]')?.click();
+      }),
+      choice('◇', 'work.start.specification', 'work.start.specification_description', () => one('[data-route="items"]')?.click()),
+      choice('+', 'work.start.describe', 'work.start.describe_description', () => {
+        host.dataset.mode = 'editor';
+        renderWorkRequestEditor(host, true);
+      }),
+    );
+    host.append(
+      canvasHead(t('work.empty.title'), t('work.empty.description')),
+      actions,
+    );
   }
 
   function renderWorkRequestEditor(host, isEmpty) {
@@ -372,7 +430,7 @@
     exactAnchors.forEach(({ item, anchor }) => {
       const row = el('button', 'rail-subitem');
       row.type = 'button';
-      row.append(el('b', '', item.title), el('span', 'path', `${t(`items.${item.kind}`)} · ${anchor}`), el('p', '', item.summary || item.description || ''));
+      row.append(el('b', '', item.title), el('span', '', `${t(`items.${item.kind}`)} · ${anchorDescription(item, anchor)}`), el('small', 'path', anchor));
       row.addEventListener('click', () => {
         request.requested_targets = [];
         request.seeds = [...new Set([...(request.seeds || []).map(String), anchor])];
@@ -386,8 +444,9 @@
 
     const constraints = request.constraints || {};
     request.constraints = constraints;
-    form.append(field('work.facets', inputControl((constraints.include_facets || []).join(', '), value => { constraints.include_facets = value.split(',').map(part => part.trim()).filter(Boolean); })));
-    form.append(field('work.exclude_paths', inputControl((constraints.exclude_paths || []).join(', '), value => { constraints.exclude_paths = value.split(',').map(part => part.trim()).filter(Boolean); })));
+    const advanced = el('div', 'form');
+    advanced.append(field('work.facets', inputControl((constraints.include_facets || []).join(', '), value => { constraints.include_facets = value.split(',').map(part => part.trim()).filter(Boolean); })));
+    advanced.append(field('work.exclude_paths', inputControl((constraints.exclude_paths || []).join(', '), value => { constraints.exclude_paths = value.split(',').map(part => part.trim()).filter(Boolean); })));
     [
       ['work.max_slices', 'max_slices'],
       ['work.max_added_bytes_per_target', 'max_added_bytes_per_target'],
@@ -397,7 +456,7 @@
       input.type = 'number';
       input.min = '0';
       input.step = '1';
-      form.append(field(labelKey, input));
+      advanced.append(field(labelKey, input));
     });
     const targetCard = el('div', 'card');
     targetCard.append(el('h3', '', t('work.request.targets')));
@@ -421,7 +480,8 @@
       commitDraft();
       renderWorkRequestEditor(host, isEmpty);
     }, 'btn compact', 'plan'));
-    form.append(targetCard);
+    advanced.append(targetCard);
+    form.append(advancedDetails(advanced));
     const actions = el('div', 'actions');
     const planButton = actionButton(t('common.plan'), 'a11y.work_plan', null, 'btn primary compact', 'plan');
     planButton.type = 'submit';
@@ -678,6 +738,7 @@
     const page = one('[data-page="scope"]');
     const planControl = one('[data-scope-plan-control]', page);
     const rangeControl = one('[data-scope-range-control]', page);
+    const createButton = one('[data-scope-create-work]', page);
     all('[data-scope-mode-button]', page).forEach(node => node.classList.toggle('active', node.dataset.scopeModeButton === selectedScopeMode));
     planControl.hidden = selectedScopeMode !== 'plan';
     rangeControl.hidden = selectedScopeMode !== 'branch';
@@ -701,7 +762,11 @@
     clear(rail);
     clear(detail);
     if (!plan) {
-      detail?.append(emptyState('scope.empty.title', 'scope.empty.description'));
+      if (createButton) createButton.disabled = true;
+      detail?.append(emptyStateWithActions('scope.empty.title', 'scope.empty.description', [
+        actionButton(t('scope.mode.branch'), 'scope.mode.branch', () => one('[data-scope-mode-button="branch"]')?.click(), 'btn primary compact', 'open'),
+        actionButton(t('work.start.specification'), 'a11y.open_items', () => one('[data-route="items"]')?.click(), 'btn compact', 'open'),
+      ]));
       return;
     }
     rail?.append(el('div', 'rail-title', t('scope.exact_targets')));
@@ -720,7 +785,9 @@
       });
       rail?.append(button);
     });
-    renderScopeDetail(visible.find(entry => entry.target.reference === selectedScopeTarget?.reference) || visible[0] || null);
+    const selectedEntry = visible.find(entry => entry.target.reference === selectedScopeTarget?.reference) || visible[0] || null;
+    if (createButton) createButton.disabled = !selectedEntry;
+    renderScopeDetail(selectedEntry);
   }
 
   function renderScopeDetail(entry) {
@@ -731,10 +798,11 @@
       return;
     }
     const target = entry.target;
+    const specification = entry.slice.anchors.map(String);
     detail?.append(
       canvasHead(
         target.resolved_selector.description,
-        target.reason,
+        '',
         [chip(scopeGroupLabel(entry.group)), chip(entry.slice.id)],
         [
           actionButton(t('common.copy'), 'a11y.copy_locator', async () => {
@@ -744,39 +812,37 @@
           actionButton(t('common.open'), 'a11y.open_source', () => toast(target.resolved_path), 'btn compact', 'open'),
         ],
       ),
-      (() => {
-        const locator = el('div', 'target-locator');
+      summaryCard('scope.why', el('p', '', target.reason)),
+      summaryCard('scope.specification', linesList(specification.length ? specification : [target.reference], 'purple')),
+      summaryCard('scope.code', (() => {
+        const locator = el('div', 'target-locator flat');
         locator.append(el('div', 'path', target.resolved_path), el('div', 'selector', target.reference));
         return locator;
-      })(),
-      (() => {
-        const grid = el('div', 'grid2');
-        grid.append(
-          summaryCard('scope.why', el('p', '', target.reason)),
-          summaryCard('scope.lifecycle', linesList([
-            `${t('scope.transition')}: ${transitionLabel(target.transition || entry.group)}`,
-            `${t('scope.access')}: ${accessLabel(target.access || entry.group)}`,
-            `${t('scope.adapter')}: ${target.adapter || 'anchor'}`,
-          ])),
-        );
-        return grid;
-      })(),
+      })()),
+      advancedDetails(summaryCard('scope.lifecycle', linesList([
+        `${t('scope.transition')}: ${transitionLabel(target.transition || entry.group)}`,
+        `${t('scope.access')}: ${accessLabel(target.access || entry.group)}`,
+        `${t('scope.adapter')}: ${target.adapter || 'anchor'}`,
+      ]))),
     );
   }
 
   function renderBranchScope() {
     const rail = one('[data-scope-rail]');
     const detail = one('[data-scope-detail]');
+    const createButton = one('[data-scope-create-work]', one('[data-page="scope"]'));
     clear(rail);
     clear(detail);
     ['change', 'verify', 'reference', 'intent'].forEach(group => {
       text(one(`[data-tab="${group}"] .mini-count`, one('[data-page="scope"]')), group === 'change' ? (branchScope?.changed?.length || '') : '');
     });
     if (!branchScope) {
+      if (createButton) createButton.disabled = true;
       detail?.append(emptyState('scope.branch.loading.title', 'scope.branch.loading.description'));
       return;
     }
     if (branchScope.state !== 'ready') {
+      if (createButton) createButton.disabled = true;
       detail?.append(
         canvasHead(t('scope.mode.branch'), branchScope.reason || t('scope.branch.not_applicable.description'), [chip(t('diagnostics.not_applicable'))], []),
         el('div', 'notice warn', branchScope.reason || t('scope.branch.not_applicable.description')),
@@ -804,13 +870,17 @@
       rail?.append(button);
     });
     if (!selectedBranchEntry) {
-      detail?.append(emptyState('scope.branch.empty.title', 'scope.branch.empty.description'));
+      if (createButton) createButton.disabled = true;
+      detail?.append(emptyStateWithActions('scope.branch.empty.title', 'scope.branch.empty.description', [
+        actionButton(t('work.start.specification'), 'a11y.open_items', () => one('[data-route="items"]')?.click(), 'btn primary compact', 'open'),
+      ]));
       return;
     }
+    if (createButton) createButton.disabled = !selectedBranchAnchor;
     detail?.append(
       canvasHead(
         selectedBranchEntry.path,
-        branchScope.range,
+        '',
         [chip(selectedBranchEntry.status), chip(selectedBranchEntry.owners.length ? t('scope.branch.owned') : t('scope.branch.unowned'))],
         [],
       ),
@@ -820,7 +890,7 @@
           return summaryCard('items.bindings', linesList([t('scope.branch.no_anchor')]));
         }
         const card = el('div', 'card');
-        card.append(el('h3', '', t('items.bindings')));
+        card.append(el('h3', '', t('scope.specification')));
         selectedBranchEntry.anchors.forEach(anchor => {
           const button = el('button', `rail-subitem${selectedBranchAnchor === anchor ? ' active' : ''}`);
           button.append(el('span', 'path', anchor));
@@ -880,15 +950,16 @@
   }
 
   function renderItemDetail(detail, item) {
+    const summary = item.description || item.summary || item.path;
     detail?.append(
       canvasHead(
         item.title,
-        item.summary || item.path,
+        summary,
         [chip(item.id), chip(t(`items.${item.kind}`)), item.status ? chip(itemStatusLabel(item.status), 'green-chip') : null, item.priority ? chip(itemPriorityLabel(item.priority)) : null],
         [
           actionButton(t('common.edit'), 'a11y.edit_item', () => openItemEditor(item), 'btn compact', 'edit'),
           (() => {
-            const button = actionButton(t('common.plan'), 'a11y.create_work', async () => {
+            const button = actionButton(t('items.create_work'), 'a11y.create_work', async () => {
             if (!selectedAnchor) return toast(t('toast.select_anchor'));
             const request = defaultWorkRequest();
             request.id = `WORK-${Date.now()}`;
@@ -903,14 +974,7 @@
           })(),
         ],
       ),
-      (() => {
-        const grid = el('div', 'grid2');
-        grid.append(
-          summaryCard('items.summary', el('p', '', item.description || item.summary || item.path)),
-          summaryCard('items.planner', renderAnchorPicker(item)),
-        );
-        return grid;
-      })(),
+      summaryCard('items.planner', renderAnchorPicker(item)),
       ...renderItemSections(item),
     );
   }
@@ -931,7 +995,9 @@
         selectedAnchor = anchor;
         renderItems();
       });
-      label.append(radio, el('span', '', anchor));
+      const copy = el('span', 'anchor-choice');
+      copy.append(el('b', '', anchorDescription(item, anchor)), el('small', 'path', anchor));
+      label.append(radio, copy);
       wrap.append(label);
     });
     return wrap;
@@ -1126,6 +1192,8 @@
     form.append(field('items.field.title', inputControl(draft.title, value => { draft.title = value; })));
     if (draft.kind === 'requirement') {
       form.append(field('items.field.description', textareaControl(draft.description || '', value => { draft.description = value; })));
+    } else if (draft.kind === 'feature') {
+      form.append(field('items.field.expected_behavior', textareaControl(draft.summary || '', value => { draft.summary = value; })));
     } else {
       form.append(field('items.field.summary', textareaControl(draft.summary || '', value => { draft.summary = value; })));
       if (draft.kind === 'policy') form.append(field('items.field.description', textareaControl(draft.description || '', value => { draft.description = value; })));
@@ -1139,38 +1207,64 @@
     if (draft.kind === 'philosophy') {
       draft.principles ||= [];
       form.append(statementEditor('items.principles', draft.principles, [
-        { labelKey: 'items.field.anchor', control: row => inputControl(row.anchor, value => { row.anchor = value; }) },
         { labelKey: 'items.field.statement', control: row => textareaControl(row.statement, value => { row.statement = value; }) },
-        { labelKey: 'items.field.applies_to', control: row => inputControl((row.applies_to || []).join(', '), value => { row.applies_to = value.split(',').map(part => part.trim()).filter(Boolean); }) },
       ], index => ({ anchor: `${draft.id}#principle.row-${index + 1}`, statement: '', applies_to: [] }), rerender));
     }
     if (draft.kind === 'policy') {
       draft.rules ||= [];
       form.append(statementEditor('items.rules', draft.rules, [
-        { labelKey: 'items.field.anchor', control: row => inputControl(row.anchor, value => { row.anchor = value; }) },
         { labelKey: 'items.field.level', control: row => selectControl(['must', 'should', 'may'], row.level, value => { row.level = value; }) },
-        { labelKey: 'items.field.governed_by', control: row => inputControl((row.governed_by || []).join(', '), value => { row.governed_by = value.split(',').map(part => part.trim()).filter(Boolean); }) },
-        { labelKey: 'items.field.applies_to_roles', control: row => inputControl((row.applies_to_roles || []).join(', '), value => { row.applies_to_roles = value.split(',').map(part => part.trim()).filter(Boolean); }) },
-        { labelKey: 'items.field.enforcement', control: row => inputControl(row.enforcement || '', value => { row.enforcement = value.trim() || null; }) },
         { labelKey: 'items.field.statement', control: row => textareaControl(row.statement, value => { row.statement = value; }) },
       ], index => ({ anchor: `${draft.id}#rule.row-${index + 1}`, level: 'must', statement: '', governed_by: [], applies_to_roles: [], enforcement: null }), rerender));
     }
     if (draft.kind === 'requirement') {
       draft.criteria ||= [];
       form.append(statementEditor('items.criteria', draft.criteria, [
-        { labelKey: 'items.field.anchor', control: row => inputControl(row.anchor, value => { row.anchor = value; }) },
-        { labelKey: 'items.field.kind', control: row => selectControl(['behavior', 'quality', 'security', 'operational', 'documentation', 'compatibility', 'custom'], row.kind, value => { row.kind = value; }) },
-        { labelKey: 'items.field.governed_by', control: row => inputControl((row.governed_by || []).join(', '), value => { row.governed_by = value.split(',').map(part => part.trim()).filter(Boolean); }) },
         { labelKey: 'items.field.statement', control: row => textareaControl(row.statement, value => { row.statement = value; }) },
       ], index => ({ anchor: `${draft.id}#criterion.row-${index + 1}`, kind: 'behavior', statement: '', governed_by: [] }), rerender));
     }
+
+    const metadata = el('div', 'form');
+    if (draft.kind === 'philosophy') {
+      metadata.append(statementMetadataEditor('items.principles', draft.principles, [
+        { labelKey: 'items.field.anchor', control: row => inputControl(row.anchor, value => { row.anchor = value; }) },
+        { labelKey: 'items.field.applies_to', control: row => inputControl((row.applies_to || []).join(', '), value => { row.applies_to = value.split(',').map(part => part.trim()).filter(Boolean); }) },
+      ]));
+    }
+    if (draft.kind === 'policy') {
+      metadata.append(statementMetadataEditor('items.rules', draft.rules, [
+        { labelKey: 'items.field.anchor', control: row => inputControl(row.anchor, value => { row.anchor = value; }) },
+        { labelKey: 'items.field.governed_by', control: row => inputControl((row.governed_by || []).join(', '), value => { row.governed_by = value.split(',').map(part => part.trim()).filter(Boolean); }) },
+        { labelKey: 'items.field.applies_to_roles', control: row => inputControl((row.applies_to_roles || []).join(', '), value => { row.applies_to_roles = value.split(',').map(part => part.trim()).filter(Boolean); }) },
+        { labelKey: 'items.field.enforcement', control: row => inputControl(row.enforcement || '', value => { row.enforcement = value.trim() || null; }) },
+      ]));
+    }
+    if (draft.kind === 'requirement') {
+      metadata.append(statementMetadataEditor('items.criteria', draft.criteria, [
+        { labelKey: 'items.field.anchor', control: row => inputControl(row.anchor, value => { row.anchor = value; }) },
+        { labelKey: 'items.field.kind', control: row => selectControl(['behavior', 'quality', 'security', 'operational', 'documentation', 'compatibility', 'custom'], row.kind, value => { row.kind = value; }) },
+        { labelKey: 'items.field.governed_by', control: row => inputControl((row.governed_by || []).join(', '), value => { row.governed_by = value.split(',').map(part => part.trim()).filter(Boolean); }) },
+      ]));
+    }
     draft.bindings ||= [];
-    form.append(bindingEditor(draft, rerender));
+    metadata.append(bindingEditor(draft, rerender));
     if (draft.kind === 'feature') {
       draft.contracts ||= [];
-      form.append(contractEditor(draft, rerender));
+      metadata.append(contractEditor(draft, rerender));
     }
+    form.append(advancedDetails(metadata));
     return form;
+  }
+
+  function statementMetadataEditor(labelKey, rows, columns) {
+    const wrap = el('div', 'card');
+    wrap.append(el('h3', '', t(labelKey)));
+    rows.forEach(row => {
+      const rowWrap = el('div', 'form two-column metadata-row');
+      columns.forEach(column => rowWrap.append(field(column.labelKey, column.control(row))));
+      wrap.append(rowWrap);
+    });
+    return wrap;
   }
 
   function bindingEditor(draft, rerender) {
@@ -1338,20 +1432,6 @@
     return t('diagnostics.inspect_phases');
   }
 
-  function renderValidationStats(run) {
-    const grid = el('div', 'grid3');
-    [
-      [t('diagnostics.evaluated'), run.evaluated_rule_count, t('diagnostics.rules_summary')],
-      [t('diagnostics.applicable'), run.applicable_phase_count, t('diagnostics.applicable_summary')],
-      [t('diagnostics.skipped'), run.skipped_phase_count, t('diagnostics.skipped_summary')],
-    ].forEach(([label, value, summary]) => {
-      const card = el('div', 'card');
-      card.append(el('h3', '', label), el('div', 'big-stat', String(value)), el('p', '', summary));
-      grid.append(card);
-    });
-    return grid;
-  }
-
   function describePhase(phase, run) {
     if (!phase) return diagnosticSummaryDescription(run);
     const label = t(`diagnostics.phase.${phase.id}`);
@@ -1392,17 +1472,8 @@
         diagnosticSummaryTitle(run),
         diagnosticSummaryDescription(run),
         chips,
-        [actionButton(t('filter.validate'), 'a11y.validate_context', async event => {
-          const button = event.currentTarget;
-          button.disabled = true;
-          try {
-            await runValidationFromCurrentControl();
-          } finally {
-            button.disabled = false;
-          }
-        }, 'btn primary compact', 'validate')],
+        [],
       ),
-      renderValidationStats(run),
     );
   }
 
@@ -1419,7 +1490,6 @@
       const host = one('[data-diagnostic-result]');
       const phaseCard = renderPhaseCard(run, phase);
       if (phaseCard) host?.append(phaseCard);
-      host?.append(el('div', 'notice', phase ? describePhase(phase, run) : diagnosticSummaryDescription(run)));
       return;
     }
     workspace?.classList.remove('no-rail');
@@ -1434,7 +1504,7 @@
     visible.forEach(diagnostic => {
       const button = el('button', `rail-item${diagnostic.rule_id === selectedDiagnosticKey ? ' active' : ''}`);
       const label = document.createElement('span');
-      label.append(el('b', '', diagnostic.rule_id), el('p', '', diagnostic.message));
+      label.append(el('b', '', diagnostic.message), el('p', '', diagnostic.rule_id));
       button.append(el('span', `status-circle ${diagnostic.severity === 'error' ? 'red' : diagnostic.severity === 'warning' ? 'orange' : 'blue'}`), label);
       button.addEventListener('click', () => {
         selectedDiagnosticKey = diagnostic.rule_id;
@@ -1451,11 +1521,15 @@
     const phaseCard = renderPhaseCard(run, phase);
     if (phaseCard) host?.append(phaseCard);
     host?.append(
-      el('div', 'section-label', diagnostic.rule_id),
       (() => {
         const card = el('div', 'card');
         const location = diagnostic.primary ? `${diagnostic.primary.path}:${diagnostic.primary.line ?? '-'}` : diagnostic.rule_id;
-        card.append(el('h4', '', diagnostic.message), el('p', '', location), metaLine([chip(diagnostic.severity), chip(diagnostic.phase), chip(diagnostic.rule_id)]), el('div', 'notice', diagnostic.help || diagnostic.message));
+        card.append(el('h4', '', diagnostic.message), el('div', 'notice', diagnostic.help || diagnostic.message));
+        const technical = advancedDetails(
+          metaLine([chip(diagnostic.severity), chip(diagnostic.phase), chip(diagnostic.rule_id)]),
+          el('p', 'path', location),
+        );
+        card.append(technical);
         return card;
       })(),
     );
@@ -1518,7 +1592,18 @@
     const page = one('[data-page="diagnostics"]');
     const context = one('[data-diagnostics-context]', page);
     const rangeWrap = one('[data-diagnostics-range-wrap]', page);
+    const validateButton = one('[data-focus-id="validate-all"]', page);
     context?.addEventListener('change', () => { rangeWrap.hidden = context.value !== 'git_range'; });
+    validateButton?.addEventListener('click', async () => {
+      validateButton.disabled = true;
+      validateButton.classList.add('running');
+      try {
+        await runValidationFromCurrentControl();
+      } finally {
+        validateButton.disabled = false;
+        validateButton.classList.remove('running');
+      }
+    });
     all('[data-diagnostic-phase]', page).forEach(tab => {
       tab.addEventListener('click', () => {
         selectedDiagnosticPhase = tab.dataset.diagnosticPhase;

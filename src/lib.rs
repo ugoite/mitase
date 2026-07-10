@@ -2439,4 +2439,94 @@ policies:
         assert!(next.contains("enforcement: external"));
         assert!(serde_yaml::from_str::<SpecDocument>(&next).is_ok());
     }
+
+    #[test]
+    fn basic_item_edits_preserve_philosophy_and_requirement_graph_fields() {
+        let philosophy_source = r#"
+schema: syu/spec/v1
+kind: philosophies
+namespace: delivery
+category: Delivery
+philosophies:
+  - id: PHIL-DELIVERY-001
+    title: Old title
+    summary: Keep intent traceable.
+    principles:
+      - id: exact-intent
+        statement: Intent remains connected to evidence.
+        applies_to: [product, work]
+    bindings: []
+"#;
+        let philosophy = ItemEditPayload {
+            id: "PHIL-DELIVERY-001".into(),
+            kind: "philosophy".into(),
+            path: "spec/philosophies/delivery.yaml".into(),
+            title: "New title".into(),
+            summary: Some("Keep intent traceable.".into()),
+            description: None,
+            status: None,
+            priority: None,
+            principles: vec![syu_workbench_server::PrincipleSummary {
+                anchor: "PHIL-DELIVERY-001#principle.exact-intent".into(),
+                statement: "Intent remains connected to evidence.".into(),
+                applies_to: vec!["product".into(), "work".into()],
+            }],
+            rules: vec![],
+            criteria: vec![],
+            bindings: vec![],
+            contracts: vec![],
+            expected_hash: content_hash(philosophy_source),
+            preview_token: None,
+        };
+        let next_philosophy = rewrite_item_source(philosophy_source, &philosophy).unwrap();
+        assert!(next_philosophy.contains("applies_to:"));
+        assert!(next_philosophy.contains("product"));
+        assert!(next_philosophy.contains("work"));
+
+        let requirement_source = r#"
+schema: syu/spec/v1
+kind: requirements
+namespace: delivery
+category: Delivery
+requirements:
+  - id: REQ-DELIVERY-001
+    title: Old title
+    description: Users can create implementation work.
+    priority: high
+    status: planned
+    criteria:
+      - id: create-work
+        kind: behavior
+        statement: Work can be created from an exact graph anchor.
+        governed_by: [PHIL-DELIVERY-001#principle.exact-intent]
+    bindings: []
+"#;
+        let requirement = ItemEditPayload {
+            id: "REQ-DELIVERY-001".into(),
+            kind: "requirement".into(),
+            path: "spec/requirements/delivery.yaml".into(),
+            title: "New title".into(),
+            summary: Some("Users can create implementation work.".into()),
+            description: Some("Users can create implementation work.".into()),
+            status: Some("planned".into()),
+            priority: Some("high".into()),
+            principles: vec![],
+            rules: vec![],
+            criteria: vec![syu_workbench_server::CriterionSummary {
+                anchor: "REQ-DELIVERY-001#criterion.create-work".into(),
+                kind: "behavior".into(),
+                statement: "Work can be created from an exact graph anchor.".into(),
+                governed_by: vec!["PHIL-DELIVERY-001#principle.exact-intent".into()],
+            }],
+            bindings: vec![],
+            contracts: vec![],
+            expected_hash: content_hash(requirement_source),
+            preview_token: None,
+        };
+        let next_requirement = rewrite_item_source(requirement_source, &requirement).unwrap();
+        assert!(next_requirement.contains("governed_by:"));
+        assert!(next_requirement.contains("PHIL-DELIVERY-001#principle.exact-intent"));
+        assert!(next_requirement.contains("priority: high"));
+        assert!(serde_yaml::from_str::<SpecDocument>(&next_requirement).is_ok());
+    }
 }
