@@ -1682,7 +1682,7 @@ fn plan_id(r: &WorkRequest, revision: &str) -> String {
     format!(
         "PLAN-{}-{}",
         r.id.trim_start_matches("WORK-"),
-        &revision.chars().take(8).collect::<String>()
+        revision.chars().take(8).collect::<String>()
     )
 }
 fn blocked_plan(

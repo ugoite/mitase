@@ -346,7 +346,7 @@ fn collect_yaml(root: &Path, relative: &Path, out: &mut Vec<PathBuf>) -> Result<
         let path = entry?.path();
         if path.is_dir() {
             let relative = path
-                .strip_prefix(root)
+                .strip_prefix(&canonical_root)
                 .context("spec path must stay relative to the workspace")?;
             collect_yaml(root, relative, out)?;
         } else if matches!(
@@ -796,5 +796,61 @@ mod tests {
                 .to_string()
                 .contains("marker ::dup:: is ambiguous")
         );
+    }
+
+    #[test]
+    fn nested_spec_directories_load_from_noncanonical_workspace_roots() {
+        let tempdir = tempdir().expect("tempdir");
+        fs::create_dir_all(tempdir.path().join("spec/requirements")).expect("nested spec dir");
+        fs::write(
+            tempdir.path().join("syu.yaml"),
+            concat!(
+                "schema: syu/config/v1\n",
+                "workspace:\n",
+                "  spec_roots: [spec]\n",
+                "  artifact_roots: [src]\n",
+                "  excludes: []\n",
+                "profiles: { active: [], custom: {} }\n",
+                "validation:\n",
+                "  preset: agent-ready\n",
+                "  deny_warnings: false\n",
+                "  rules: {}\n",
+                "  changed:\n",
+                "    baseline:\n",
+                "      strategy: merge-base\n",
+                "      against: origin/main\n",
+                "    require_owned_changes: true\n",
+                "work:\n",
+                "  slicing: { max_editable_files: 4, max_editable_symbols: 8, max_verification_targets: 6, max_readonly_targets: 12, max_total_bytes: 120000 }\n",
+                "  context: { include_parent_principles: true, include_parent_rules: true }\n",
+                "adapters: { enabled: [rust] }\n",
+            ),
+        )
+        .expect("config");
+        fs::write(
+            tempdir.path().join("spec/requirements/req-new.yaml"),
+            concat!(
+                "schema: syu/spec/v1\n",
+                "kind: requirements\n",
+                "namespace: test\n",
+                "category: Test\n",
+                "requirements:\n",
+                "  - id: REQ-NEW-001\n",
+                "    title: New requirement\n",
+                "    description: Nested spec file\n",
+                "    priority: medium\n",
+                "    status: planned\n",
+                "    criteria:\n",
+                "      - id: acceptance\n",
+                "        kind: behavior\n",
+                "        statement: Loads from nested directory\n",
+                "        governed_by: []\n",
+                "    bindings: []\n",
+            ),
+        )
+        .expect("spec");
+
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        assert_eq!(workspace.documents.len(), 1);
     }
 }

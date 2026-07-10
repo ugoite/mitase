@@ -41,13 +41,16 @@ description = "Specification-driven work planning and validation"
 
 [dependencies]
 anyhow.workspace = true
+axum = "0.8.9"
 clap.workspace = true
 regex = "1.12.2"
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
+sha2.workspace = true
 url = "2.5.7"
 syu-diagnostics = { path = "crates/syu-diagnostics" }
+syu-app-ui = { path = "crates/syu-app-ui" }
 syu-code-intel = { path = "crates/syu-code-intel" }
 syu-planner = { path = "crates/syu-planner" }
 syu-project-model = { path = "crates/syu-project-model" }
@@ -56,6 +59,7 @@ syu-validation = { path = "crates/syu-validation" }
 syu-work-model = { path = "crates/syu-work-model" }
 syu-workbench-server = { path = "crates/syu-workbench-server" }
 syu-workspace = { path = "crates/syu-workspace" }
+tokio = { version = "1.52.3", features = ["net", "rt-multi-thread", "signal", "sync"] }
 
 [dev-dependencies]
 assert_cmd = "2.2.2"

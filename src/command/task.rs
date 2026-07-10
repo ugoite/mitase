@@ -783,6 +783,7 @@ fn goal_plan_source_evidence(
     evidence: JsonTaskPlanSourceEvidence,
 ) -> syu_task_model::GoalPlanSourceEvidence {
     syu_task_model::GoalPlanSourceEvidence {
+        item_id: None,
         changed_files: evidence.changed_files,
         traced_requirements: evidence.traced_requirements,
         traced_features: evidence.traced_features,
@@ -807,6 +808,7 @@ fn json_task_plan_from_artifact(artifact: GoalPlanArtifact) -> Result<JsonTaskPl
             mode: match artifact.source.mode {
                 GoalPlanSourceMode::RequestDriven => "request_driven".to_string(),
                 GoalPlanSourceMode::DiffInferred => "diff_inferred".to_string(),
+                GoalPlanSourceMode::ItemDriven => "item_driven".to_string(),
             },
             request_artifact: artifact.source.request_artifact,
             classification: artifact.source.classification,
@@ -4423,6 +4425,7 @@ mod tests {
                     range: Some("origin/main...HEAD".to_string()),
                     confidence,
                     evidence: Some(GoalPlanSourceEvidence {
+                        item_id: None,
                         changed_files: vec!["src/command/task.rs".to_string()],
                         traced_requirements: vec!["REQ-CORE-032".to_string()],
                         traced_features: vec!["FEAT-TASK-005".to_string()],
