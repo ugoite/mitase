@@ -1,2 +1,53 @@
 @import "tailwindcss";
 @source "./src/**/*.{rs,html,css}";
+
+@theme {
+  --color-background: oklch(0.98 0.003 250);
+  --color-foreground: oklch(0.18 0.006 250);
+  --color-panel: oklch(1 0 0);
+  --color-panel-muted: oklch(0.96 0.003 250);
+  --color-border: oklch(0.88 0.004 250);
+  --color-command: oklch(0.97 0.003 250);
+  --color-command-active: oklch(0.93 0.004 250);
+  --color-goal: oklch(0.24 0.01 250);
+  --color-goal-active: oklch(0.35 0.01 250);
+  --color-spec-linked: oklch(0.42 0.01 250);
+  --color-code-linked: oklch(0.45 0.01 250);
+  --color-test-linked: oklch(0.38 0.01 250);
+  --color-scope-in: oklch(0.4 0.01 250);
+  --color-scope-out: oklch(0.52 0.012 250);
+  --color-scope-ambiguous: oklch(0.36 0.01 250);
+  --color-ownership-known: oklch(0.4 0.01 250);
+  --color-ownership-missing: oklch(0.54 0.012 250);
+  --color-ownership-ambiguous: oklch(0.38 0.01 250);
+  --color-evidence-pass: oklch(0.38 0.01 250);
+  --color-evidence-warn: oklch(0.48 0.01 250);
+  --color-evidence-fail: oklch(0.58 0.013 250);
+  --color-evidence-pending: oklch(0.4 0.01 250);
+}
+
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-foreground);
+}
+
+body {
+  color-scheme: light;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  background-color: var(--color-background);
+}
+
+.workbench-layout {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+}
+
+@media (min-width: 64rem) {
+  .workbench-layout {
+    display: block;
+  }
+}

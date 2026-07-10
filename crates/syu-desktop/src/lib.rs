@@ -8,7 +8,7 @@ use std::{
 use anyhow::{Context, Result};
 use dioxus::prelude::*;
 use serde::Serialize;
-use syu_app_ui::{AppShell, WorkbenchUiState};
+use syu_app_ui::{AppShell, WorkbenchPage, WorkbenchUiState};
 use syu_workbench::{
     WorkbenchActionId, WorkbenchActionMutability, WorkbenchState, workbench_actions,
 };
@@ -64,7 +64,7 @@ pub fn read_only_action_available(id: WorkbenchActionId) -> bool {
 pub fn render_shared_workbench_shell(state: WorkbenchState) -> String {
     let ui = WorkbenchUiState::from_state(state);
     dioxus_ssr::render_element(rsx! {
-        AppShell { ui }
+        AppShell { ui, active_page: WorkbenchPage::Work, sidebar_open: true }
     })
 }
 
@@ -107,6 +107,7 @@ pub fn run_with_config(config: DesktopLaunchConfig) -> Result<()> {
         bind: config.bind.clone(),
         port: config.port,
         allow_remote_bind: false,
+        show_log: false,
     };
     let url = config.local_url();
 

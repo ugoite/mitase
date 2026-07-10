@@ -119,8 +119,10 @@ jobs:
       - name: Expose Tailwind CLI to Workbench checks
         run: echo "TAILWINDCSS_BIN=tailwindcss" >>"$GITHUB_ENV"
 
-      - name: Run canonical Workbench projection gates
-        run: cargo check -p syu-workbench-server -p syu-app-ui
+      - name: Run Workbench contract and browser smoke
+        run: |
+          cargo check -p syu-workbench-server -p syu-app-ui
+          bash scripts/ci/workbench-visual.sh
 
   actionlint:
     runs-on: ubuntu-latest
