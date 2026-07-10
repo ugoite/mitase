@@ -37,6 +37,22 @@ pub struct SafeFix {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct ItemCoverage {
+    pub item: String,
+    pub kind: String,
+    pub level: String,
+    pub required: bool,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CoverageSummary {
+    pub target: String,
+    pub required_items: usize,
+    pub covered_items: usize,
+    pub items: Vec<ItemCoverage>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Diagnostic {
     pub rule_id: String,
     pub severity: Severity,
@@ -79,6 +95,8 @@ impl Diagnostic {
 #[serde(deny_unknown_fields)]
 pub struct ValidationResult {
     pub diagnostics: Vec<Diagnostic>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coverage: Option<CoverageSummary>,
 }
 impl ValidationResult {
     pub fn is_valid(&self) -> bool {

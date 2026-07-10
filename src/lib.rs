@@ -329,6 +329,12 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
                     d.severity, d.rule_id, d.primary.path, d.message
                 );
             }
+            if let Some(coverage) = &result.coverage {
+                println!(
+                    "coverage {}: {}/{} required items",
+                    coverage.target, coverage.covered_items, coverage.required_items
+                );
+            }
             println!("{} diagnostic(s)", result.diagnostics.len());
         }
     }

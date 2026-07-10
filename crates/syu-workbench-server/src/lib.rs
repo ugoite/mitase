@@ -910,6 +910,7 @@ mod tests {
                 "work issue",
                 "work.yaml",
             )],
+            coverage: None,
         };
         let run = ValidationRunView::completed(
             "work_plan",

@@ -1,7 +1,7 @@
 schema: syu/config/v1
 workspace:
   spec_roots: [docs/syu]
-  artifact_roots: [src, crates, docs, fixtures]
+  artifact_roots: [src, crates, docs, fixtures, tests]
   excludes: [target/**, node_modules/**, docs/generated/**]
 profiles:
   active: [agent-ready]
@@ -14,6 +14,8 @@ profiles:
       contract_rules: []
 validation:
   preset: agent-ready
+  coverage:
+    target: evidence-ready
   deny_warnings: false
   rules: {}
   changed:

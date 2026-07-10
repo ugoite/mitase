@@ -62,10 +62,58 @@ pub enum ValidationPreset {
     Strict,
     AgentReady,
 }
+
+/// The quality of the trace from a specification item to its repository evidence.
+///
+/// A coverage target is qualitative: reaching a target means every required item
+/// reaches that level, rather than meeting a percentage threshold.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CoverageLevel {
+    Connected,
+    Owned,
+    AgentReady,
+    Verified,
+    EvidenceReady,
+}
+
+impl CoverageLevel {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Connected => "connected",
+            Self::Owned => "owned",
+            Self::AgentReady => "agent-ready",
+            Self::Verified => "verified",
+            Self::EvidenceReady => "evidence-ready",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CoverageConfig {
+    #[serde(default = "default_coverage_target")]
+    pub target: CoverageLevel,
+}
+
+impl Default for CoverageConfig {
+    fn default() -> Self {
+        Self {
+            target: default_coverage_target(),
+        }
+    }
+}
+
+const fn default_coverage_target() -> CoverageLevel {
+    CoverageLevel::AgentReady
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ValidationConfig {
     pub preset: ValidationPreset,
+    #[serde(default)]
+    pub coverage: CoverageConfig,
     #[serde(default)]
     pub deny_warnings: bool,
     #[serde(default)]
@@ -125,4 +173,15 @@ pub struct ContextConfig {
 #[serde(deny_unknown_fields)]
 pub struct AdapterConfig {
     pub enabled: Vec<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CoverageConfig, CoverageLevel};
+
+    #[test]
+    fn coverage_defaults_to_agent_ready() {
+        assert_eq!(CoverageConfig::default().target, CoverageLevel::AgentReady);
+        assert_eq!(CoverageLevel::EvidenceReady.as_str(), "evidence-ready");
+    }
 }
