@@ -1,0 +1,4086 @@
+---
+title: "Repository coverage / Features Coverage"
+description: "Generated reference for docs/syu/features-coverage.yaml"
+---
+
+> Generated from `docs/syu/features-coverage.yaml`.
+
+## Parsed content
+
+### Schema
+
+- syu/spec/v1
+
+### Kind
+
+- features
+
+### Namespace
+
+- coverage
+
+### Category
+
+- Repository coverage
+
+### Features
+
+- **id**: FEAT-COVERAGE-001
+  - **title**: Exact repository symbol ownership
+  - **summary**: Bind every addressable implementation symbol to the coverage criterion that governs full-repository traceability.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: impl-001
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in crates/syu-app-ui/src/components.rs.
+      - **targets**:
+        - **id**: symbols-001
+          - **adapter**: rust
+          - **path**: crates/syu-app-ui/src/components.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - escape
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-002
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in crates/syu-app-ui/src/document.rs.
+      - **targets**:
+        - **id**: symbols-002
+          - **adapter**: rust
+          - **path**: crates/syu-app-ui/src/document.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - render
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-003
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in crates/syu-app-ui/src/lib.rs.
+      - **targets**:
+        - **id**: symbols-003
+          - **adapter**: rust
+          - **path**: crates/syu-app-ui/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - WorkbenchView
+              - WorkbenchView::new
+              - WorkbenchView::render_html
+              - locale_catalog_script
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-004
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in crates/syu-app-ui/src/pages.rs.
+      - **targets**:
+        - **id**: symbols-004
+          - **adapter**: rust
+          - **path**: crates/syu-app-ui/src/pages.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - attach_projection
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-005
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in crates/syu-app-ui/src/shell.rs.
+      - **targets**:
+        - **id**: symbols-005
+          - **adapter**: rust
+          - **path**: crates/syu-app-ui/src/shell.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - render
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-006
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in crates/syu-code-intel/src/branch_scope.rs.
+      - **targets**:
+        - **id**: symbols-006
+          - **adapter**: rust
+          - **path**: crates/syu-code-intel/src/branch_scope.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - AffectedSpecItem
+              - AmbiguousOwnership
+              - BranchScopeConfidence
+              - BranchScopeConfidence::label
+              - BranchScopeEvidence
+              - BranchScopeReport
+              - BranchScopeReport::from_evidence
+              - ChangedFileReport
+              - ChangedSymbolReport
+              - OutOfScopeChange
+              - RepoRiskSummary
+              - SpecImpactGraphEdge
+              - SpecImpactGraphNode
+              - SpecImpactGraphReport
+              - SpecImpactReport
+              - SuggestedGoalSplit
+              - TestInventoryReport
+              - TraceOwnershipReport
+              - UnownedChange
+              - build_repo_risk_reasons
+              - build_spec_impact_graph
+              - build_split_reasons
+              - build_warnings
+              - is_false
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-007
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in crates/syu-code-intel/src/lib.rs.
+      - **targets**:
+        - **id**: symbols-007
+          - **adapter**: rust
+          - **path**: crates/syu-code-intel/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - BraceScanMode
+              - Candidate
+              - Candidate::end
+              - Candidate::identity
+              - Candidate::kind
+              - Candidate::start
+              - CandidateView
+              - Finder
+              - Finder::scoped_identity
+              - Finder::visit_impl_item_fn
+              - Finder::visit_item_enum
+              - Finder::visit_item_fn
+              - Finder::visit_item_impl
+              - Finder::visit_item_mod
+              - Finder::visit_item_struct
+              - Finder::visit_item_trait
+              - InventorySymbol
+              - SymbolResolution
+              - Visitor
+              - Visitor::identity
+              - Visitor::push
+              - Visitor::visit_impl_item_fn
+              - Visitor::visit_item_enum
+              - Visitor::visit_item_fn
+              - Visitor::visit_item_impl
+              - Visitor::visit_item_mod
+              - Visitor::visit_item_struct
+              - Visitor::visit_item_trait
+              - attribute_is_test
+              - block_from_brace
+              - build
+              - indentation
+              - inventory_go
+              - inventory_line_definitions
+              - inventory_python
+              - inventory_rust
+              - inventory_shell
+              - inventory_symbols
+              - inventory_typescript
+              - is_comment_line
+              - line_column_to_byte
+              - line_start_byte
+              - resolution_from_span
+              - resolve_assignment_block
+              - resolve_go
+              - resolve_keyword_definition
+              - resolve_python
+              - resolve_rust
+              - resolve_shell
+              - resolve_symbol
+              - resolve_typescript
+              - starts_with_symbol
+              - symbol_matches
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-008
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in crates/syu-desktop/build.rs.
+      - **targets**:
+        - **id**: symbols-008
+          - **adapter**: rust
+          - **path**: crates/syu-desktop/build.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - main
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-009
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in crates/syu-desktop/src/lib.rs.
+      - **targets**:
+        - **id**: symbols-009
+          - **adapter**: rust
+          - **path**: crates/syu-desktop/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - DesktopActionBridge
+              - DesktopLaunchConfig
+              - DesktopLaunchConfig::from_workspace
+              - DesktopLaunchConfig::local_url
+              - canonical_workspace_root
+              - default_config_from_args
+              - desktop_action_bridge
+              - desktop_actions
+              - read_only_action_available
+              - render_shared_workbench_shell
+              - run
+              - run_with_config
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-010
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in crates/syu-desktop/src/main.rs.
+      - **targets**:
+        - **id**: symbols-010
+          - **adapter**: rust
+          - **path**: crates/syu-desktop/src/main.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - main
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-011
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in crates/syu-diagnostics/src/lib.rs.
+      - **targets**:
+        - **id**: symbols-011
+          - **adapter**: rust
+          - **path**: crates/syu-diagnostics/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - ArtifactCoverageSummary
+              - CoverageAxisSummary
+              - CoverageGap
+              - CoverageSummary
+              - Diagnostic
+              - Diagnostic::error
+              - Evidence
+              - Location
+              - RelatedLocation
+              - SafeFix
+              - Severity
+              - ValidationResult
+              - ValidationResult::is_valid
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-012
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in crates/syu-domain/src/lib.rs.
+      - **targets**:
+        - **id**: symbols-012
+          - **adapter**: rust
+          - **path**: crates/syu-domain/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - GitRange
+              - GitRange::as_ref
+              - GitRange::fmt
+              - GitRange::from
+              - Issue
+              - Issue::error
+              - Issue::warning
+              - LanguageName
+              - LanguageName::as_ref
+              - LanguageName::fmt
+              - LanguageName::from
+              - Severity
+              - SpecId
+              - SpecId::as_ref
+              - SpecId::fmt
+              - SpecId::from
+              - SpecKind
+              - SpecKind::label
+              - TraceReference
+              - WorkspaceRoot
+              - WorkspaceRoot::as_ref
+              - WorkspaceRoot::fmt
+              - WorkspaceRoot::from
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-013
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in crates/syu-planner/src/lib.rs.
+      - **targets**:
+        - **id**: symbols-013
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - RequestedGroup
+              - SliceGroup
+              - TargetPlanOptions
+              - TargetPolicy
+              - basis
+              - blocked_plan
+              - build_context_pack
+              - build_documentation_slice
+              - build_requested_criterion_slice
+              - build_requested_target_slice
+              - compile_exclude_matcher
+              - completion_checks
+              - contract_readonly_context
+              - criterion_verification_targets
+              - declared_selector
+              - declared_target_plan
+              - dedup
+              - default_non_goals
+              - default_transition
+              - exact_target_plan
+              - expand_seed
+              - finalize_plan
+              - finalize_requested_slice
+              - finalize_slice
+              - group_requested_targets
+              - group_targets
+              - one_target
+              - plan_id
+              - primary_bindings
+              - rebuild_split_slice
+              - requested_target_criterion
+              - requested_target_slice_id
+              - slice_budget
+              - slice_budget_can_shrink_with_editable_split
+              - slice_budget_exceeds
+              - slice_exceeds_limits
+              - slice_spec_context
+              - split_groups
+              - split_slice_if_needed
+              - target_budget_bytes
+              - target_groups
+              - target_policy
+              - targets
+              - tests::write_minimal_workspace
+              - transition_map
+              - validate_context_pack_budget
+              - validate_serialized_context_pack_budget
+              - validate_target_access_uniqueness
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-014
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in crates/syu-project-model/src/lib.rs.
+      - **targets**:
+        - **id**: symbols-014
+          - **adapter**: rust
+          - **path**: crates/syu-project-model/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - AdapterConfig
+              - ChangeBaseline
+              - ChangedConfig
+              - ContextConfig
+              - ContractRule
+              - CoverageConfig
+              - CoverageLevel
+              - CoverageLevel::as_str
+              - FacetRule
+              - GitRef
+              - ParticipantRequirement
+              - Profile
+              - ProfilesConfig
+              - ProjectConfig
+              - RepoPathPattern
+              - RuleOverride
+              - SliceLimits
+              - ValidationConfig
+              - ValidationPreset
+              - WorkConfig
+              - WorkspaceConfig
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-015
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in crates/syu-spec-model/src/lib.rs.
+      - **targets**:
+        - **id**: symbols-015
+          - **adapter**: rust
+          - **path**: crates/syu-spec-model/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - ArtifactBinding
+              - ArtifactTarget
+              - BindingRole
+              - BoundTargetRef
+              - BoundTargetRef::deserialize
+              - BoundTargetRef::fmt
+              - BoundTargetRef::from_str
+              - BoundTargetRef::serialize
+              - Contract
+              - ContractKind
+              - ContractParticipant
+              - Criterion
+              - CriterionKind
+              - Feature
+              - ItemStatus
+              - LocalAnchorKind
+              - LocalAnchorKind::label
+              - Philosophy
+              - Policy
+              - Principle
+              - Priority
+              - RepoPath
+              - RepoPath::as_path
+              - RepoPath::as_ref
+              - RepoPath::deserialize
+              - RepoPath::display
+              - RepoPath::new
+              - RepoPath::serialize
+              - RepoPath::to_string_lossy
+              - Requirement
+              - Rule
+              - RuleAppliesTo
+              - RuleEnforcement
+              - RuleLevel
+              - Selector
+              - SpecAnchor
+              - SpecAnchor::deserialize
+              - SpecAnchor::fmt
+              - SpecAnchor::from_str
+              - SpecAnchor::serialize
+              - SpecDocument
+              - SpecDocument::schema
+              - SpecItemRef
+              - is_local_id
+              - is_spec_id
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-016
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in crates/syu-validation/src/lib.rs.
+      - **targets**:
+        - **id**: symbols-016
+          - **adapter**: rust
+          - **path**: crates/syu-validation/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - BaselineWorkspace
+              - ChangeStatus
+              - ChangedFile
+              - ChangedRange
+              - OverridePolicy
+              - PlanValidationMode
+              - RuleMetadata
+              - TargetRangeSide
+              - ValidationContext
+              - ValidationRule
+              - anchor_changed
+              - artifact_level
+              - binding_set_for_criterion
+              - binding_targets_changed_across_indexes
+              - binding_targets_for_index
+              - canonical_relation
+              - change_is_within_editable_scope
+              - changed_anchor_path
+              - changed_anchors_for_documents
+              - changed_file_impacts_target
+              - changed_range_covers
+              - changed_side_covers
+              - changed_side_is_fully_covered
+              - changed_side_overlaps
+              - check_kind
+              - collect_changed_anchors
+              - contract_level
+              - criterion_has_counterpart
+              - criterion_has_evidence
+              - criterion_level
+              - editable_target_matches_hunkless_change
+              - ensure_present_target_exceeds_budget
+              - generated_binding_has_cycle
+              - git_ls_tree
+              - git_show
+              - git_workspace_context
+              - is_fixed_error_rule
+              - load_workspace_at_revision
+              - matching_bindings
+              - normalize_end
+              - normalize_workspace_path
+              - participant_bindings_for_contract
+              - principle_level
+              - push
+              - reported_change_set_covers
+              - rule_level
+              - rule_metadata
+              - same_changed_file_identity
+              - spec_anchor_level
+              - target_budget_bytes
+              - target_changed_by_files
+              - target_is_exact_inventory_target
+              - target_line_range
+              - target_matches_changed_file_path
+              - target_overlaps_change
+              - target_selector_is_file
+              - tests::copy_dir
+              - tests::fixture_root
+              - tests::init_git_repo
+              - tests::load_fixture_workspace
+              - tests::sample_target
+              - tests::write_generated_binding_workspace
+              - validate
+              - validate_changed_spec_impact
+              - validate_changes
+              - validate_config
+              - validate_contracts
+              - validate_document_shapes
+              - validate_generated_binding
+              - validate_graph
+              - validate_plan
+              - validate_rule_overrides
+              - validate_slice_scope
+              - validate_spec_axis
+              - validate_targets
+              - workspace_relative_display
+              - workspace_relative_repo_path
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-017
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in crates/syu-work-model/src/lib.rs.
+      - **targets**:
+        - **id**: symbols-017
+          - **adapter**: rust
+          - **path**: crates/syu-work-model/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - AcceptanceRef
+              - ArtifactContextEntry
+              - CompletionCheck
+              - ContextInstructions
+              - ContextMode
+              - ContextPack
+              - ContractParticipantContext
+              - ExecutionSlice
+              - IntendedTargetContext
+              - NonGoal
+              - PlanBasis
+              - PlanConfidence
+              - PlanExecution
+              - PlanStatus
+              - PlannedTarget
+              - RequestedTarget
+              - RequestedTarget::criterion
+              - RequestedTarget::reference
+              - RequestedTarget::transition
+              - ResolvedSelector
+              - SliceBudgetUsage
+              - SpecContextEntry
+              - SupportContext
+              - TargetAccessMode
+              - TargetContext
+              - TargetLifecycle
+              - TargetTransition
+              - WorkConstraints
+              - WorkOperation
+              - WorkPlan
+              - WorkRequest
+              - WorkSeed
+              - work_plan_digest
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-018
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in crates/syu-workbench-server/src/lib.rs.
+      - **targets**:
+        - **id**: symbols-018
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - BindingSummary
+              - BindingTargetSummary
+              - BranchChangedTargetView
+              - BranchScopeView
+              - BranchScopeView::not_applicable
+              - ContractParticipantSummary
+              - ContractSummary
+              - CriterionSummary
+              - IssueCounts
+              - ItemSummary
+              - PrincipleSummary
+              - RuleSummary
+              - ValidationDiagnosticView
+              - ValidationPhaseView
+              - ValidationRunState
+              - ValidationRunView
+              - ValidationRunView::completed
+              - ValidationRunView::failed
+              - ValidationRunView::not_applicable
+              - ValidationRunView::not_run
+              - WorkspaceProjection
+              - WorkspaceSummary
+              - anchor_string
+              - anchors_for
+              - binding_role_label
+              - bindings_for
+              - branch_scope_view
+              - content_hash
+              - contract_kind_label
+              - contract_summary
+              - criterion_summary
+              - default_work_request
+              - diagnostic_phase
+              - epoch_ms
+              - issue_counts
+              - item_summary_from_feature
+              - item_summary_from_philosophy
+              - item_summary_from_policy
+              - item_summary_from_requirement
+              - phase_views
+              - priority_label
+              - project
+              - relative_display
+              - rule_summary
+              - rules_in_phase
+              - status_label
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-019
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in crates/syu-workspace/src/lib.rs.
+      - **targets**:
+        - **id**: symbols-019
+          - **adapter**: rust
+          - **path**: crates/syu-workspace/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - AnchorValue
+              - ArtifactInventoryEntry
+              - LoadedDocument
+              - ResolvedTarget
+              - SpecIndex
+              - SpecIndex::anchor
+              - SpecIndex::build
+              - SpecIndex::insert
+              - SpecIndex::insert_binding
+              - SpecIndex::target
+              - SpecWorkspace
+              - SpecWorkspace::artifact_inventory
+              - SpecWorkspace::fingerprint
+              - SpecWorkspace::index
+              - SpecWorkspace::load
+              - SpecWorkspace::path_is_artifact
+              - SpecWorkspace::path_is_excluded
+              - SpecWorkspace::path_is_spec
+              - WorkspaceMatcher
+              - WorkspaceMatcher::build
+              - WorkspaceMatcher::contains
+              - WorkspaceMatcher::is_excluded
+              - adapter_for_path
+              - collect_artifact_files
+              - collect_yaml
+              - compile_excludes
+              - extract_heading_block
+              - extract_marker_block
+              - extract_yaml_block
+              - find_root
+              - hash_bytes
+              - resolve_target
+              - resolve_target_with_adapters
+              - selector_supports_editable
+              - tests::target
+              - tests::write_workspace
+              - unique_item
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-020
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in fixtures/v1/valid-web-app/api/login.rs.
+      - **targets**:
+        - **id**: symbols-020
+          - **adapter**: rust
+          - **path**: fixtures/v1/valid-web-app/api/login.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - login
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-021
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/command/add.rs.
+      - **targets**:
+        - **id**: symbols-021
+          - **adapter**: rust
+          - **path**: src/command/add.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - FeatureRegistryUpdate
+              - ParsedId
+              - ParsedId::parse
+              - ReciprocalLinkField
+              - ResolvedAddInvocation
+              - TargetPath
+              - add_follow_up_steps
+              - append_yaml_list_item
+              - default_document_path
+              - default_folder_slug
+              - default_title
+              - display_workspace_path
+              - ensure_target_within_spec_root
+              - format_instruction_list
+              - normalize_definition_id
+              - normalize_feature_kind
+              - path_label
+              - prepare_feature_registry_update
+              - print_add_summary
+              - prompt_for_parsed_id
+              - reciprocal_link_back_instruction
+              - reciprocal_link_entry_instruction
+              - reciprocal_link_fields
+              - render_item_block
+              - render_new_document
+              - render_reciprocal_link_stub
+              - resolve_add_invocation
+              - resolve_add_invocation_with_prompt_io
+              - resolve_explicit_file
+              - resolve_feature_kind
+              - resolve_interactive_file_prompt
+              - resolve_target_path
+              - resolve_workspace_and_id
+              - run_add_command
+              - scaffold_missing_link_instruction
+              - suggested_linked_id
+              - suggested_linked_kinds
+              - tests::FakePromptIo
+              - tests::FakePromptIo::is_terminal
+              - tests::FakePromptIo::prompt_line
+              - tests::git
+              - tests::test_workspace
+              - tests::write_file
+              - title_case_slug
+              - title_case_tokens
+              - validate_existing_document
+              - write_feature_registry_update
+              - write_stub_document
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-022
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/command/audit.rs.
+      - **targets**:
+        - **id**: symbols-022
+          - **adapter**: rust
+          - **path**: src/command/audit.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - AuditFinding
+              - AuditFindingKind
+              - AuditSummary
+              - JsonAuditOutput
+              - collect_findings
+              - feature_terms
+              - first_opposing_term_pair
+              - jaccard_score
+              - linked_philosophies
+              - linked_requirement_explicitly_scopes_term_pair
+              - orphaned_policy_findings
+              - overlap_findings
+              - policy_terms
+              - print_text_results
+              - render_text_results
+              - requirement_terms
+              - run_audit_command
+              - sorted_terms
+              - summarize_findings
+              - tension_findings
+              - tokenize
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-023
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/command/browse.rs.
+      - **targets**:
+        - **id**: symbols-023
+          - **adapter**: rust
+          - **path**: src/command/browse.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - BrowseState
+              - BrowseState::entity_entries
+              - BrowseState::feature
+              - BrowseState::json_entries
+              - BrowseState::lookup
+              - BrowseState::non_interactive_json
+              - BrowseState::philosophy
+              - BrowseState::policy
+              - BrowseState::print_feature_detail
+              - BrowseState::print_links
+              - BrowseState::print_non_interactive
+              - BrowseState::print_philosophy_detail
+              - BrowseState::print_policy_detail
+              - BrowseState::print_requirement_detail
+              - BrowseState::print_summary
+              - BrowseState::requirement
+              - BrowseState::run
+              - BrowseState::show_entity_detail
+              - BrowseState::show_entity_list
+              - BrowseState::show_error_detail
+              - BrowseState::show_error_list
+              - BrowseState::show_top_level_menu
+              - EntityRef
+              - JsonBrowseEntry
+              - JsonBrowseGroups
+              - JsonBrowseOutput
+              - TopLevelSection
+              - TopLevelSection::count
+              - TopLevelSection::into_view
+              - TopLevelSection::label
+              - View
+              - collapse_whitespace
+              - format_non_interactive_issue
+              - print_trace_summary
+              - prompt_number
+              - run_browse_command
+              - tests::fixture_path
+              - tests::state_for_fixture
+              - wait_for_enter
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-024
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/command/check.rs.
+      - **targets**:
+        - **id**: symbols-024
+          - **adapter**: rust
+          - **path**: src/command/check.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - AutofixChangeRequest
+              - AutofixMode
+              - AutofixPlan
+              - AutofixPlanChange
+              - AutofixRun
+              - AutofixSummary
+              - AutofixTransaction
+              - AutofixTransaction::committed_writes
+              - AutofixTransaction::rollback
+              - AutofixTransaction::write
+              - DeliveryStatus
+              - DisabledRuleGroup
+              - DisabledRuleNotice
+              - DisabledRuleNotice::describe
+              - DisabledRuleNotice::from_group
+              - FilteredIssueView
+              - FilteredIssueView::describe_filters
+              - FilteredIssueView::from_filters
+              - IssueFilters
+              - IssueFilters::from_args
+              - IssueFilters::is_active
+              - IssueFilters::matches
+              - ItemLocation
+              - JsonCheckOutput
+              - MutableLoadedDocument
+              - OwnershipDeclaration
+              - RequirementValidationIndex
+              - TextReportSummary
+              - TextReportSummary::from_config
+              - TraceRole
+              - TraceRole::label
+              - TraceRole::relation_name
+              - TraceRole::subject_kind
+              - TraceValidationCache
+              - TraceValidationCache::default
+              - TraceValidationCache::inspect_symbol
+              - TraceValidationCache::new
+              - TraceValidationCache::read_file
+              - TraceValidationTarget
+              - ValidationResources
+              - apply_autofix
+              - apply_autofix_for_reference
+              - apply_autofix_for_reference_with_transaction
+              - apply_autofix_for_trace_map_with_transaction
+              - apply_autofix_run
+              - apply_cli_override_issue_guidance
+              - apply_feature_reciprocals
+              - apply_graph_autofix
+              - apply_philosophy_reciprocals
+              - apply_policy_reciprocals
+              - apply_requirement_reciprocals
+              - collapse_whitespace
+              - collect_check_result
+              - collect_check_result_from_workspace
+              - collect_check_result_from_workspace_with_mode
+              - collect_feature_yaml_paths
+              - dedupe_feature_links
+              - dedupe_philosophy_links
+              - dedupe_policy_links
+              - dedupe_requirement_links
+              - dedupe_unique_values
+              - describe_trace_reference
+              - disabled_rule_groups
+              - effective_fix
+              - ensure_sidecar_ownership_manifest
+              - entry_covers_symbols
+              - evaluate_trace_ownership
+              - feature_registry_entries_for_documents
+              - feature_registry_entries_match
+              - feature_registry_kind
+              - filter_check_result
+              - finalize_autofix_error
+              - format_issue_id_list
+              - format_reference_location
+              - index_features
+              - index_philosophies
+              - index_policies
+              - index_requirements
+              - insert_unique_value
+              - load_feature_documents_for_autofix
+              - load_ownership_manifest
+              - looks_like_feature_document
+              - manifest_declares_owner
+              - merge_ownership_entry
+              - normalize_delivery_status
+              - normalize_delivery_status_label
+              - normalize_ownership_symbols
+              - normalize_trace_hygiene_for_feature_documents
+              - normalize_trace_hygiene_for_requirement_documents
+              - normalize_trace_reference
+              - normalize_trace_references
+              - normalized_openapi_method
+              - normalized_openapi_path
+              - ownership_manifest_path
+              - ownership_symbols_hint
+              - plan_autofix
+              - preferred_trace_file_path
+              - record_planned_change
+              - record_updated_file
+              - render_autofix_plan
+              - render_text_report
+              - report_orphaned_definition
+              - required_ownership_symbols
+              - resolve_openapi_path_item
+              - run_autofix
+              - run_check_command
+              - severity_label
+              - sync_feature_registry
+              - tests::apply_autofix_for_reference
+              - tests::feature
+              - tests::git
+              - tests::philosophy
+              - tests::policy
+              - tests::requirement
+              - tests::requirement_validation_index
+              - tests::test_workspace
+              - tests::validation_resources
+              - tests::write_valid_planned_workspace
+              - trace_reference_dedup_key
+              - trace_reference_duplicate_key
+              - validate_delivery_status
+              - validate_duplicate_links
+              - validate_duplicate_trace_references
+              - validate_feature
+              - validate_feature_registry_entries
+              - validate_feature_registry_entries_inner
+              - validate_feature_with_cache
+              - validate_historical_id_reuse
+              - validate_historical_id_reuse_for_ids
+              - validate_linked_delivery_states
+              - validate_non_empty_field
+              - validate_openapi_trace_reference
+              - validate_orphaned_definitions
+              - validate_ownership_manifest
+              - validate_philosophy
+              - validate_policy
+              - validate_requirement
+              - validate_requirement_with_cache
+              - validate_trace_map
+              - validate_unique_ids
+              - verify_trace_reference
+              - verify_trace_reference_with_cache
+              - with_validate_overrides
+              - workspace_display_path
+              - workspace_item_count
+              - write_modified_documents
+              - write_or_plan_autofix_change
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-025
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/command/completion.rs.
+      - **targets**:
+        - **id**: symbols-025
+          - **adapter**: rust
+          - **path**: src/command/completion.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - run_completion_command
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-026
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/command/doctor.rs.
+      - **targets**:
+        - **id**: symbols-026
+          - **adapter**: rust
+          - **path**: src/command/doctor.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - DeserializePackageMetadata
+              - DoctorCheck
+              - DoctorReport
+              - DoctorStatus
+              - DoctorStatus::label
+              - DoctorSummary
+              - DoctorSummary::from_checks
+              - PackageMetadata
+              - PackageMetadata::from_path
+              - build_doctor_report
+              - build_node_check
+              - build_npm_check
+              - build_rust_msrv_check
+              - cargo_executable
+              - command_version
+              - dependency_install_needs_refresh
+              - expected_npm_version
+              - modified_time
+              - npm_executable
+              - parse_major_version
+              - parse_numeric_version
+              - print_text_report
+              - read_rust_version
+              - run_doctor_command
+              - rust_msrv_check
+              - rust_toolchain_checks
+              - shell_workspace_arg
+              - surface_check_id
+              - surface_checks
+              - surface_dependency_check
+              - surface_label
+              - surface_node_check
+              - surface_npm_check
+              - tests::write_mock_command
+              - version_at_least
+              - workspace_config_check
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-027
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/command/explain.rs.
+      - **targets**:
+        - **id**: symbols-027
+          - **adapter**: rust
+          - **path**: src/command/explain.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - ExplainAssessment
+              - ExplainAssessment::label
+              - ExplainAssessment::summary
+              - ExplainChain
+              - ExplainOutput
+              - build_explain_output
+              - render_explain_text
+              - render_nodes
+              - run_explain_command
+              - selector_is_ambiguous
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-028
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/command/init.rs.
+      - **targets**:
+        - **id**: symbols-028
+          - **adapter**: rust
+          - **path**: src/command/init.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - ResolvedInitOptions
+              - StarterIdPrefixes
+              - StarterIdPrefixes::feature_id
+              - StarterIdPrefixes::philosophy_id
+              - StarterIdPrefixes::policy_id
+              - StarterIdPrefixes::requirement_id
+              - StarterTemplateCatalogEntry
+              - default_id_prefixes
+              - ensure_workspace_path_can_be_created
+              - ensure_writable_targets
+              - feature_document_path
+              - feature_kind
+              - feature_registry_template
+              - feature_template
+              - go_module_path
+              - infer_project_name
+              - is_executable_shell_scaffold
+              - maybe_mark_scaffold_file_executable
+              - normalize_id_token
+              - normalize_shared_id_stem
+              - normalize_typed_prefix
+              - parse_starter_template_prompt
+              - path_label
+              - philosophy_template
+              - policy_template
+              - prepare_workspace_root
+              - project_slug
+              - prompt_for_spec_root
+              - prompt_for_starter_template
+              - render_default_config
+              - render_go_module_file
+              - render_java_pom_file
+              - render_ruby_gemfile
+              - render_typescript_package_file
+              - requirement_document_path
+              - requirement_template
+              - resolve_init_id_prefixes
+              - resolve_init_options_with_prompt_io
+              - resolve_init_spec_root
+              - resolve_interactive_id_prefixes
+              - run_init_command
+              - run_init_command_with_prompt_io
+              - scaffold_files
+              - starter_source_files
+              - starter_template_catalog
+              - starter_template_example_commands
+              - starter_template_names
+              - tests::FakePromptIo
+              - tests::FakePromptIo::is_terminal
+              - tests::FakePromptIo::prompt_line
+              - validate_interactive_init_mode
+              - write_scaffold_file
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-029
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/command/issue_text.rs.
+      - **targets**:
+        - **id**: symbols-029
+          - **adapter**: rust
+          - **path**: src/command/issue_text.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - TextIssueFormat
+              - collapse_whitespace
+              - format_text_issue
+              - issue_message_with_rule_title
+              - issue_subject_with_location
+              - issue_suggestion
+              - rule_title_suffix
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-030
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/command/list.rs.
+      - **targets**:
+        - **id**: symbols-030
+          - **adapter**: rust
+          - **path**: src/command/list.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - JsonAllKindsOutput
+              - JsonListOutput
+              - ambiguous_kind_error
+              - invalid_kind_error
+              - levenshtein_distance
+              - looks_like_workspace_path
+              - parse_list_positionals
+              - parse_list_two_positionals
+              - print_section_list
+              - print_text_list
+              - run_list_command
+              - suggested_lookup_kind
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-031
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/command/log.rs.
+      - **targets**:
+        - **id**: symbols-031
+          - **adapter**: rust
+          - **path**: src/command/log.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - GitHistoryRecord
+              - HistoricalDefinitionDiscovery
+              - HistoryLifecycleEvent
+              - HistoryRequest
+              - HistoryResponse
+              - HistoryScope
+              - HistoryScopeResponse
+              - HistoryTarget
+              - HistoryTargetRequest
+              - HistoryView
+              - MatchedCommit
+              - ResolvedHistoryTarget
+              - TrackedPath
+              - TrackedPath::definition
+              - build_historical_lifecycle_events
+              - build_history_response
+              - build_history_target
+              - collect_related_tracked_paths
+              - collect_trace_paths
+              - commit_is_ancestor_of
+              - commit_recency_cmp
+              - dedupe_tracked_paths
+              - discover_historical_definition
+              - git_command
+              - git_show_file
+              - historical_entity_kind
+              - historical_title_for_id
+              - history_event
+              - is_yaml_document
+              - load_git_history
+              - load_git_history_for_path
+              - load_git_history_records
+              - lookup_kind_for_id
+              - normalize_path_filter
+              - normalized_tracked_path
+              - order_commits_by_repository_history
+              - parse_git_field
+              - parse_git_history
+              - parse_git_history_records
+              - render_history_text
+              - render_tracked_path
+              - resolve_git_repository_root
+              - resolve_historical_history_target
+              - resolve_history_entity
+              - resolve_history_scope
+              - run_log_command
+              - sort_commits_by_history_relationship
+              - sort_ready_commits
+              - tests::PathGuard
+              - tests::PathGuard::drop
+              - tests::PathGuard::set
+              - tests::git
+              - tests::git_commit
+              - tests::git_stdout
+              - tests::init_test_git_repository
+              - tests::set_executable
+              - tests::trace_map
+              - tests::write_fake_git_for_history_log_failure
+              - tests::write_fake_git_for_merge_base_failure
+              - tests::write_fake_git_for_merge_base_graph
+              - tests::write_fake_git_for_scope_merge_base_empty_output
+              - tests::write_fake_git_for_scope_merge_base_failure
+              - tests::write_related_workspace_fixture
+              - tracked_paths_for_feature
+              - tracked_paths_for_non_trace_layer
+              - tracked_paths_for_requirement
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-032
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/command/lookup.rs.
+      - **targets**:
+        - **id**: symbols-032
+          - **adapter**: rust
+          - **path**: src/command/lookup.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - EntitySummary
+              - SearchResult
+              - WorkspaceEntity
+              - WorkspaceLookup
+              - WorkspaceLookup::document_path_for_id
+              - WorkspaceLookup::document_paths
+              - WorkspaceLookup::entries
+              - WorkspaceLookup::entries_with_document_paths
+              - WorkspaceLookup::extend_search_results
+              - WorkspaceLookup::feature
+              - WorkspaceLookup::find
+              - WorkspaceLookup::new
+              - WorkspaceLookup::philosophy
+              - WorkspaceLookup::policy
+              - WorkspaceLookup::requirement
+              - WorkspaceLookup::search
+              - WorkspaceLookup::title_for
+              - field_matches_query
+              - kind_for_id
+              - workspace_relative_display
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-033
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/command/mod.rs.
+      - **targets**:
+        - **id**: symbols-033
+          - **adapter**: rust
+          - **path**: src/command/mod.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - empty_shell_path
+              - is_shell_safe_path
+              - quote_shell_path
+              - shell_quote_path
+              - tests::expected_empty_shell_path
+              - tests::expected_quoted_path
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-034
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/command/prompt.rs.
+      - **targets**:
+        - **id**: symbols-034
+          - **adapter**: rust
+          - **path**: src/command/prompt.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - PromptIo
+              - StdioPromptIo
+              - StdioPromptIo::is_terminal
+              - StdioPromptIo::prompt_line
+              - ensure_prompt_terminal
+              - normalize_prompt_response
+              - prompt_bool
+              - prompt_optional
+              - prompt_optional_with_default
+              - prompt_required
+              - prompt_with_default
+              - tests::FakePromptIo
+              - tests::FakePromptIo::is_terminal
+              - tests::FakePromptIo::prompt_line
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-035
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/command/relate.rs.
+      - **targets**:
+        - **id**: symbols-035
+          - **adapter**: rust
+          - **path**: src/command/relate.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - DirectMatches
+              - Feature::owner_id
+              - Feature::trace_map
+              - Gap
+              - JsonRelateOutput
+              - JsonRelateRangeOutput
+              - RelateRangeSummary
+              - RelatedIds
+              - RelatedIds::add
+              - RelatedNode
+              - RelatedNode::lookup_kind
+              - RelatedTrace
+              - RelatedTrace::owner_lookup_kind
+              - RelationCatalog
+              - RelationCatalog::load
+              - RelationCatalog::node
+              - RelationCatalog::nodes_for
+              - RelationCatalog::nodes_matching_path
+              - Requirement::owner_id
+              - Requirement::trace_map
+              - SelectionKind
+              - SelectionKind::label
+              - SelectionResolution
+              - SelectionSource
+              - SelectionSummary
+              - TraceOwner
+              - build_relation_range_report
+              - build_relation_report
+              - collect_all_owner_traces
+              - collect_gaps
+              - collect_matching_traces_for_path
+              - collect_matching_traces_for_symbol
+              - collect_node_map
+              - collect_owner_traces
+              - collect_related_ids_for_changed_files
+              - collect_related_traces
+              - expand_downstream_ids
+              - expand_related_ids
+              - expand_upstream_ids
+              - is_path_like
+              - normalize_selector_path
+              - related_node_from_summary
+              - render_range_relation_text
+              - render_relation_text
+              - render_trace_line
+              - resolve_definition_selection
+              - resolve_path_selection
+              - resolve_selection
+              - resolve_symbol_selection
+              - run_relate_command
+              - run_relate_range
+              - selector_matches_existing_workspace_path
+              - tests::demo_catalog
+              - tests::demo_workspace
+              - trace_is_direct_match
+              - write_gap_section
+              - write_node_section
+              - write_trace_section
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-036
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/command/report.rs.
+      - **targets**:
+        - **id**: symbols-036
+          - **adapter**: rust
+          - **path**: src/command/report.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - FeatureCoverageDetail
+              - comma_or_dash
+              - coverage_label
+              - dedup_paths
+              - load_lcov
+              - normalize_lcov_path
+              - render_feature_coverage_row
+              - render_requirement_coverage_row
+              - render_spec_coverage_summary
+              - resolve_configured_report_output
+              - resolve_report_output
+              - run_report_command
+              - rust_trace_paths
+              - summarize_paths
+              - tests::copy_dir_recursive
+              - tests::fixture_path
+              - tests::write_config
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-037
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/command/search.rs.
+      - **targets**:
+        - **id**: symbols-037
+          - **adapter**: rust
+          - **path**: src/command/search.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - JsonSearchOutput
+              - print_text_results
+              - run_search_command
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-038
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/command/show.rs.
+      - **targets**:
+        - **id**: symbols-038
+          - **adapter**: rust
+          - **path**: src/command/show.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - JsonShowOutput
+              - collapse_whitespace
+              - print_entity_json
+              - print_json_output
+              - render_entity_text
+              - render_feature
+              - render_philosophy
+              - render_policy
+              - render_requirement
+              - run_show_command
+              - shell_quote_path
+              - write_common_header
+              - write_links
+              - write_trace_map
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-039
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/command/task.rs.
+      - **targets**:
+        - **id**: symbols-039
+          - **adapter**: rust
+          - **path**: src/command/task.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - DiffInferenceOutcome
+              - InferredFileMatches
+              - JsonRequestArtifactContext
+              - JsonScaffoldUpdate
+              - JsonScopeSignals
+              - JsonTaskCheckOutput
+              - JsonTaskClassifyOutput
+              - JsonTaskPlanCompletion
+              - JsonTaskPlanCoverage
+              - JsonTaskPlanGoal
+              - JsonTaskPlanImplementationPlan
+              - JsonTaskPlanItem
+              - JsonTaskPlanOutput
+              - JsonTaskPlanPersistentItems
+              - JsonTaskPlanScope
+              - JsonTaskPlanScopeEntry
+              - JsonTaskPlanSource
+              - JsonTaskPlanSourceEvidence
+              - JsonTaskPlanSpecMapping
+              - JsonTaskPlanTestPlan
+              - JsonTaskScaffoldOutput
+              - JsonTaskScopeOutput
+              - JsonTaskTestSelectCommand
+              - JsonTaskTestSelectEscalation
+              - JsonTaskTestSelectOutput
+              - RankedRelatedItem
+              - SearchResult::id
+              - SearchResult::kind
+              - SearchResult::title
+              - SearchResultView
+              - TaskSearchResult::id
+              - TaskSearchResult::kind
+              - TaskSearchResult::title
+              - TaskTestSelectionEntry
+              - TracedItemMatch
+              - add_task_test_selection_reference
+              - affected_task_test_selection_escalation
+              - bool_label
+              - build_diff_goal_plan_id
+              - build_diff_inferred_goal_plan
+              - build_globset
+              - build_goal_plan
+              - build_goal_plan_id
+              - build_inference_notes
+              - build_inference_reasons
+              - build_inferred_goal_non_goals
+              - build_inferred_goal_statement
+              - build_inferred_goal_title
+              - build_scaffold_plan
+              - build_shared_request_work_plan
+              - build_task_test_selection
+              - build_task_test_selection_commands
+              - check_goal_plan
+              - classify_request
+              - collect_explicit_items
+              - collect_feature_candidates
+              - collect_feature_ids
+              - collect_goal_plan_test_references
+              - collect_ids_by_kind
+              - collect_inference_requirement_context
+              - collect_inferred_file_matches
+              - collect_linked_feature_requirement_tests
+              - collect_linked_requirement_tests
+              - collect_ranked_related_items
+              - collect_related_inference_items
+              - collect_scoped_results
+              - collect_spec_items_for_path
+              - collect_task_plan_persistent_items
+              - collect_traced_items_for_path
+              - count_keyword_hits
+              - count_task_test_selection_entries
+              - default_scaffold_folder
+              - describe_keyword_hits
+              - feature_registry_file_label
+              - format_task_test_selection_reason
+              - full_task_test_selection_commands
+              - goal_plan_confidence_label
+              - goal_plan_coverage_mode_label
+              - goal_plan_medium_confidence_warning
+              - goal_plan_mentions_shared_utilities
+              - goal_plan_required_test_symbol_exists
+              - goal_plan_requires_implementation_scope
+              - goal_plan_requires_required_tests
+              - goal_plan_scope_is_ambiguous
+              - goal_plan_selection_mode_label
+              - goal_plan_source_confidence_warning
+              - goal_plan_source_evidence
+              - id_stem
+              - indent_block
+              - infer_diff_plan
+              - infer_requirement_action
+              - infer_title_from_file_path
+              - inferred_confidence
+              - insert_inference_item
+              - insert_inference_lookup_item
+              - is_false
+              - is_production_path
+              - is_shared_utility_path
+              - item_to_search_result
+              - join_task_test_selection_reasons
+              - json_persistent_item_from_goal_plan
+              - json_persistent_items_from_goal_plan
+              - json_scope_entry_from_goal_plan
+              - json_task_plan_from_artifact
+              - load_goal_plan_artifact
+              - load_request_artifact
+              - merge_inference_items
+              - merge_related_items
+              - next_available_scaffold_id
+              - normalize_scaffold_stem
+              - path_label
+              - path_matches_scope
+              - print_classify_text_output
+              - print_feature_candidates
+              - print_items
+              - print_plan_item_section
+              - print_scaffold_text_output
+              - print_scope_text_output
+              - print_source_evidence_section
+              - print_task_check_text_output
+              - print_task_test_selection_text_output
+              - push_goal_plan_source_confidence_issues
+              - render_feature_document
+              - render_goal_plan_output
+              - render_goal_plan_text_output
+              - render_requirement_document
+              - render_scope_entry
+              - request_plan_confidence
+              - requirement_prefix
+              - resolve_goal_plan_test_path
+              - resolve_scaffold_document_path
+              - resolve_scaffold_id
+              - resolve_task_plan_output_path
+              - rewrite_spec_prefix
+              - run_task_check_command
+              - run_task_classify_command
+              - run_task_command
+              - run_task_infer_command
+              - run_task_plan_command
+              - run_task_scaffold_command
+              - run_task_scope_command
+              - run_task_test_select_command
+              - rust_test_target_name
+              - sanitize_goal_plan_id
+              - scaffold_relative_path
+              - scaffold_stem
+              - scaffold_title
+              - scope_pattern_has_glob_metacharacters
+              - scope_request
+              - slugify
+              - summarize_persistent_item_ids
+              - summarize_request
+              - task_trace_targets
+              - tests::commit_all
+              - tests::init_git_repo
+              - tests::update_origin_main
+              - tests::write_request_artifact
+              - tests::write_workspace
+              - title_case_slug
+              - to_affected_spec_item
+              - to_branch_scope_search_result
+              - to_task_search_result
+              - to_task_search_results
+              - truncate_text
+              - unique_candidate_seed
+              - validate_goal_plan_completion
+              - validate_goal_plan_diff_inferred_source
+              - validate_goal_plan_required_tests
+              - validate_goal_plan_spec_ids
+              - validate_goal_plan_test_reference
+              - validate_goal_plan_work_blockers
+              - validate_goal_test_language
+              - warn_goal_plan_source_range_mismatch
+              - work_surface_from_id
+              - work_surface_from_label
+              - workspace_relative_display
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-040
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/command/templates.rs.
+      - **targets**:
+        - **id**: symbols-040
+          - **adapter**: rust
+          - **path**: src/command/templates.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - JsonTemplatesOutput
+              - TemplateCatalogEntry
+              - TemplateCatalogEntry::relationship_label
+              - TemplateRelationship
+              - print_text_catalog
+              - render_text_catalog
+              - run_templates_command
+              - template_catalog_entries
+              - template_relationship
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-041
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/command/trace.rs.
+      - **targets**:
+        - **id**: symbols-041
+          - **adapter**: rust
+          - **path**: src/command/trace.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - MatchMode
+              - MatchMode::from_label
+              - MatchMode::label
+              - MatchMode::matched_label
+              - RelatedEntities
+              - TraceLookupOutput
+              - TraceLookupStatus
+              - TraceLookupStatus::label
+              - TraceOwnerMatch
+              - TraceOwnerMetadata
+              - TraceRangeEntityGroup
+              - TraceRangeIdSummary
+              - TraceRangeOutput
+              - TraceRangeReviewFinding
+              - TraceRangeReviewFindingKind
+              - TraceRangeReviewFindingKind::label
+              - TraceRangeReviewOutput
+              - TraceRangeScopeGuard
+              - TraceRangeSummary
+              - TraceScopeGuardItem
+              - TraceScopeGuardOwner
+              - TraceScopeGuardViolation
+              - TraceSkippedFile
+              - collect_entities_into_map
+              - collect_feature_matches
+              - collect_range_id_summary
+              - collect_related_entities
+              - collect_requirement_context
+              - collect_requirement_matches
+              - collect_trace_matches
+              - collect_trace_range_outputs
+              - collect_trace_review_output
+              - collect_trace_scope_guard
+              - compute_range_summary
+              - find_owner_match
+              - insert_summary
+              - lookup_status
+              - lookup_trace
+              - match_mode
+              - normalize_lookup_file
+              - push_entity_section
+              - push_owner_match
+              - push_range_owner_match
+              - push_review_finding
+              - push_trace_operation
+              - query_label
+              - render_range_id_group
+              - render_range_id_items
+              - render_range_text
+              - render_scope_guard_text
+              - render_strict_review_text
+              - render_text_output
+              - render_trace_range_output
+              - resolve_scope_guard_item
+              - run_trace_command
+              - trace_owner_match
+              - trace_range
+              - trace_selector
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-042
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/command/workbench.rs.
+      - **targets**:
+        - **id**: symbols-042
+          - **adapter**: rust
+          - **path**: src/command/workbench.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - resolve_workbench_launch
+              - run_workbench_command
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-043
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/lib.rs.
+      - **targets**:
+        - **id**: symbols-043
+          - **adapter**: rust
+          - **path**: src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - ApiError
+              - ApiError::from
+              - ApiError::into_response
+              - ApiErrorBody
+              - BranchScopeQuery
+              - BrowserValidationRequest
+              - Cli
+              - CommandKind
+              - ConfigEdit
+              - ConfigSource
+              - EditableSpecItem
+              - FileEdit
+              - FilePreview
+              - FileQuery
+              - FileSource
+              - Format
+              - ItemEditPayload
+              - PreviewProof
+              - ValidateArgs
+              - ValidationInputs
+              - WorkArgs
+              - WorkCommand
+              - WorkbenchArgs
+              - WorkbenchCommand
+              - WorkbenchFormat
+              - WorkbenchWebState
+              - base_revision_from_baseline
+              - bindings_from_summary
+              - build_new_spec_item
+              - change_base_revision_for_range
+              - changed_files
+              - changed_files_against_revision
+              - changed_files_for_validation
+              - changed_line_count
+              - content_hash
+              - contracts_from_summary
+              - criterion_from_summary
+              - current_projection
+              - default_workbench_range
+              - ensure_clean_plan_workspace
+              - ensure_item_identity
+              - ensure_item_path_in_spec_roots
+              - ensure_source_hash
+              - governed_change
+              - local_id_from_anchor
+              - make_preview_token
+              - merge_base
+              - merge_base_pair
+              - new_item_document
+              - parse_anchor_list
+              - parse_binary_patch_paths
+              - parse_changed_files
+              - parse_cli_baseline
+              - parse_diff_span
+              - parse_enum
+              - parse_from_string
+              - parse_hunk_header
+              - patch_config_source
+              - patch_existing_item_in_document
+              - preview_proof_matches
+              - principle_from_summary
+              - range_from_baseline
+              - read_yaml
+              - replace_inline_list
+              - replace_inline_scalar
+              - replace_optional_baseline
+              - replace_yaml_block
+              - replace_yaml_key
+              - replace_yaml_key_if_present
+              - replace_yaml_mapping
+              - revision
+              - revision_parent
+              - rewrite_item_source
+              - rule_from_summary
+              - run
+              - run_validate
+              - run_work
+              - run_workbench
+              - safe_workspace_path
+              - synthesize_untracked_ranges
+              - validate_candidate
+              - validation_inputs_for_cli
+              - web_apply_config
+              - web_apply_file
+              - web_apply_item
+              - web_asset
+              - web_branch_scope
+              - web_config
+              - web_export_context
+              - web_index
+              - web_preview_config
+              - web_preview_file
+              - web_preview_item
+              - web_projection
+              - web_replan
+              - web_source
+              - web_update_request
+              - web_validate
+              - write_yaml
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-044
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/lsp/handlers.rs.
+      - **targets**:
+        - **id**: symbols-044
+          - **adapter**: rust
+          - **path**: src/lsp/handlers.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - LspHandlers
+              - LspHandlers::handle_hover
+              - LspHandlers::handle_initialize
+              - LspHandlers::handle_initialized
+              - LspHandlers::handle_shutdown
+              - LspHandlers::new
+              - create_hover_for_spec_id
+              - find_spec_id_at_position
+              - tests::fixture_path
+              - uri_to_path
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-045
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/lsp/mod.rs.
+      - **targets**:
+        - **id**: symbols-045
+          - **adapter**: rust
+          - **path**: src/lsp/mod.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - run_lsp_server
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-046
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/lsp/protocol.rs.
+      - **targets**:
+        - **id**: symbols-046
+          - **adapter**: rust
+          - **path**: src/lsp/protocol.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - Hover
+              - InitializeParams
+              - InitializeResult
+              - LspError
+              - LspError::fmt
+              - LspError::internal
+              - LspError::invalid_params
+              - LspError::method_not_found
+              - MarkupContent
+              - MarkupContent::markdown
+              - Message
+              - Notification
+              - Position
+              - Range
+              - Request
+              - RequestId
+              - Response
+              - ResponseError
+              - ResponseError::from
+              - ServerCapabilities
+              - TextDocumentIdentifier
+              - TextDocumentPositionParams
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-047
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/lsp/server.rs.
+      - **targets**:
+        - **id**: symbols-047
+          - **adapter**: rust
+          - **path**: src/lsp/server.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - LspServer
+              - LspServer::handle_message
+              - LspServer::handle_notification
+              - LspServer::handle_request
+              - LspServer::new
+              - LspServer::read_message
+              - LspServer::run
+              - LspServer::write_message
+              - error_response
+              - parse_optional_params
+              - parse_required_params
+              - tests::fixture_path
+              - tests::message_bytes
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-048
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in src/main.rs.
+      - **targets**:
+        - **id**: symbols-048
+          - **adapter**: rust
+          - **path**: src/main.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - main
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+    - **id**: impl-049
+      - **role**: implementation
+      - **facet**: tooling
+      - **responsibility**: Own every addressable implementation symbol in tests/v1_cli.rs.
+      - **targets**:
+        - **id**: symbols-049
+          - **adapter**: rust
+          - **path**: tests/v1_cli.rs
+          - **selector**:
+            - **kind**: symbol
+            - **names**:
+              - git
+              - init_workspace_repo
+      - **satisfies**:
+        - REQ-COVERAGE-001#criterion.inventory-owned
+
+## Source YAML
+
+```yaml
+schema: syu/spec/v1
+kind: features
+namespace: coverage
+category: Repository coverage
+features:
+  - id: FEAT-COVERAGE-001
+    title: Exact repository symbol ownership
+    summary: Bind every addressable implementation symbol to the coverage criterion that governs full-repository traceability.
+    status: implemented
+    bindings:
+      - id: impl-001
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in crates/syu-app-ui/src/components.rs.
+        targets:
+          - id: symbols-001
+            adapter: rust
+            path: crates/syu-app-ui/src/components.rs
+            selector:
+              kind: symbol
+              names:
+                - escape
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-002
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in crates/syu-app-ui/src/document.rs.
+        targets:
+          - id: symbols-002
+            adapter: rust
+            path: crates/syu-app-ui/src/document.rs
+            selector:
+              kind: symbol
+              names:
+                - render
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-003
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in crates/syu-app-ui/src/lib.rs.
+        targets:
+          - id: symbols-003
+            adapter: rust
+            path: crates/syu-app-ui/src/lib.rs
+            selector:
+              kind: symbol
+              names:
+                - WorkbenchView
+                - WorkbenchView::new
+                - WorkbenchView::render_html
+                - locale_catalog_script
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-004
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in crates/syu-app-ui/src/pages.rs.
+        targets:
+          - id: symbols-004
+            adapter: rust
+            path: crates/syu-app-ui/src/pages.rs
+            selector:
+              kind: symbol
+              names:
+                - attach_projection
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-005
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in crates/syu-app-ui/src/shell.rs.
+        targets:
+          - id: symbols-005
+            adapter: rust
+            path: crates/syu-app-ui/src/shell.rs
+            selector:
+              kind: symbol
+              names:
+                - render
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-006
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in crates/syu-code-intel/src/branch_scope.rs.
+        targets:
+          - id: symbols-006
+            adapter: rust
+            path: crates/syu-code-intel/src/branch_scope.rs
+            selector:
+              kind: symbol
+              names:
+                - AffectedSpecItem
+                - AmbiguousOwnership
+                - BranchScopeConfidence
+                - BranchScopeConfidence::label
+                - BranchScopeEvidence
+                - BranchScopeReport
+                - BranchScopeReport::from_evidence
+                - ChangedFileReport
+                - ChangedSymbolReport
+                - OutOfScopeChange
+                - RepoRiskSummary
+                - SpecImpactGraphEdge
+                - SpecImpactGraphNode
+                - SpecImpactGraphReport
+                - SpecImpactReport
+                - SuggestedGoalSplit
+                - TestInventoryReport
+                - TraceOwnershipReport
+                - UnownedChange
+                - build_repo_risk_reasons
+                - build_spec_impact_graph
+                - build_split_reasons
+                - build_warnings
+                - is_false
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-007
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in crates/syu-code-intel/src/lib.rs.
+        targets:
+          - id: symbols-007
+            adapter: rust
+            path: crates/syu-code-intel/src/lib.rs
+            selector:
+              kind: symbol
+              names:
+                - BraceScanMode
+                - Candidate
+                - Candidate::end
+                - Candidate::identity
+                - Candidate::kind
+                - Candidate::start
+                - CandidateView
+                - Finder
+                - Finder::scoped_identity
+                - Finder::visit_impl_item_fn
+                - Finder::visit_item_enum
+                - Finder::visit_item_fn
+                - Finder::visit_item_impl
+                - Finder::visit_item_mod
+                - Finder::visit_item_struct
+                - Finder::visit_item_trait
+                - InventorySymbol
+                - SymbolResolution
+                - Visitor
+                - Visitor::identity
+                - Visitor::push
+                - Visitor::visit_impl_item_fn
+                - Visitor::visit_item_enum
+                - Visitor::visit_item_fn
+                - Visitor::visit_item_impl
+                - Visitor::visit_item_mod
+                - Visitor::visit_item_struct
+                - Visitor::visit_item_trait
+                - attribute_is_test
+                - block_from_brace
+                - build
+                - indentation
+                - inventory_go
+                - inventory_line_definitions
+                - inventory_python
+                - inventory_rust
+                - inventory_shell
+                - inventory_symbols
+                - inventory_typescript
+                - is_comment_line
+                - line_column_to_byte
+                - line_start_byte
+                - resolution_from_span
+                - resolve_assignment_block
+                - resolve_go
+                - resolve_keyword_definition
+                - resolve_python
+                - resolve_rust
+                - resolve_shell
+                - resolve_symbol
+                - resolve_typescript
+                - starts_with_symbol
+                - symbol_matches
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-008
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in crates/syu-desktop/build.rs.
+        targets:
+          - id: symbols-008
+            adapter: rust
+            path: crates/syu-desktop/build.rs
+            selector:
+              kind: symbol
+              names:
+                - main
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-009
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in crates/syu-desktop/src/lib.rs.
+        targets:
+          - id: symbols-009
+            adapter: rust
+            path: crates/syu-desktop/src/lib.rs
+            selector:
+              kind: symbol
+              names:
+                - DesktopActionBridge
+                - DesktopLaunchConfig
+                - DesktopLaunchConfig::from_workspace
+                - DesktopLaunchConfig::local_url
+                - canonical_workspace_root
+                - default_config_from_args
+                - desktop_action_bridge
+                - desktop_actions
+                - read_only_action_available
+                - render_shared_workbench_shell
+                - run
+                - run_with_config
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-010
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in crates/syu-desktop/src/main.rs.
+        targets:
+          - id: symbols-010
+            adapter: rust
+            path: crates/syu-desktop/src/main.rs
+            selector:
+              kind: symbol
+              names:
+                - main
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-011
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in crates/syu-diagnostics/src/lib.rs.
+        targets:
+          - id: symbols-011
+            adapter: rust
+            path: crates/syu-diagnostics/src/lib.rs
+            selector:
+              kind: symbol
+              names:
+                - ArtifactCoverageSummary
+                - CoverageAxisSummary
+                - CoverageGap
+                - CoverageSummary
+                - Diagnostic
+                - Diagnostic::error
+                - Evidence
+                - Location
+                - RelatedLocation
+                - SafeFix
+                - Severity
+                - ValidationResult
+                - ValidationResult::is_valid
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-012
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in crates/syu-domain/src/lib.rs.
+        targets:
+          - id: symbols-012
+            adapter: rust
+            path: crates/syu-domain/src/lib.rs
+            selector:
+              kind: symbol
+              names:
+                - GitRange
+                - GitRange::as_ref
+                - GitRange::fmt
+                - GitRange::from
+                - Issue
+                - Issue::error
+                - Issue::warning
+                - LanguageName
+                - LanguageName::as_ref
+                - LanguageName::fmt
+                - LanguageName::from
+                - Severity
+                - SpecId
+                - SpecId::as_ref
+                - SpecId::fmt
+                - SpecId::from
+                - SpecKind
+                - SpecKind::label
+                - TraceReference
+                - WorkspaceRoot
+                - WorkspaceRoot::as_ref
+                - WorkspaceRoot::fmt
+                - WorkspaceRoot::from
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-013
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in crates/syu-planner/src/lib.rs.
+        targets:
+          - id: symbols-013
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector:
+              kind: symbol
+              names:
+                - RequestedGroup
+                - SliceGroup
+                - TargetPlanOptions
+                - TargetPolicy
+                - basis
+                - blocked_plan
+                - build_context_pack
+                - build_documentation_slice
+                - build_requested_criterion_slice
+                - build_requested_target_slice
+                - compile_exclude_matcher
+                - completion_checks
+                - contract_readonly_context
+                - criterion_verification_targets
+                - declared_selector
+                - declared_target_plan
+                - dedup
+                - default_non_goals
+                - default_transition
+                - exact_target_plan
+                - expand_seed
+                - finalize_plan
+                - finalize_requested_slice
+                - finalize_slice
+                - group_requested_targets
+                - group_targets
+                - one_target
+                - plan_id
+                - primary_bindings
+                - rebuild_split_slice
+                - requested_target_criterion
+                - requested_target_slice_id
+                - slice_budget
+                - slice_budget_can_shrink_with_editable_split
+                - slice_budget_exceeds
+                - slice_exceeds_limits
+                - slice_spec_context
+                - split_groups
+                - split_slice_if_needed
+                - target_budget_bytes
+                - target_groups
+                - target_policy
+                - targets
+                - tests::write_minimal_workspace
+                - transition_map
+                - validate_context_pack_budget
+                - validate_serialized_context_pack_budget
+                - validate_target_access_uniqueness
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-014
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in crates/syu-project-model/src/lib.rs.
+        targets:
+          - id: symbols-014
+            adapter: rust
+            path: crates/syu-project-model/src/lib.rs
+            selector:
+              kind: symbol
+              names:
+                - AdapterConfig
+                - ChangeBaseline
+                - ChangedConfig
+                - ContextConfig
+                - ContractRule
+                - CoverageConfig
+                - CoverageLevel
+                - CoverageLevel::as_str
+                - FacetRule
+                - GitRef
+                - ParticipantRequirement
+                - Profile
+                - ProfilesConfig
+                - ProjectConfig
+                - RepoPathPattern
+                - RuleOverride
+                - SliceLimits
+                - ValidationConfig
+                - ValidationPreset
+                - WorkConfig
+                - WorkspaceConfig
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-015
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in crates/syu-spec-model/src/lib.rs.
+        targets:
+          - id: symbols-015
+            adapter: rust
+            path: crates/syu-spec-model/src/lib.rs
+            selector:
+              kind: symbol
+              names:
+                - ArtifactBinding
+                - ArtifactTarget
+                - BindingRole
+                - BoundTargetRef
+                - BoundTargetRef::deserialize
+                - BoundTargetRef::fmt
+                - BoundTargetRef::from_str
+                - BoundTargetRef::serialize
+                - Contract
+                - ContractKind
+                - ContractParticipant
+                - Criterion
+                - CriterionKind
+                - Feature
+                - ItemStatus
+                - LocalAnchorKind
+                - LocalAnchorKind::label
+                - Philosophy
+                - Policy
+                - Principle
+                - Priority
+                - RepoPath
+                - RepoPath::as_path
+                - RepoPath::as_ref
+                - RepoPath::deserialize
+                - RepoPath::display
+                - RepoPath::new
+                - RepoPath::serialize
+                - RepoPath::to_string_lossy
+                - Requirement
+                - Rule
+                - RuleAppliesTo
+                - RuleEnforcement
+                - RuleLevel
+                - Selector
+                - SpecAnchor
+                - SpecAnchor::deserialize
+                - SpecAnchor::fmt
+                - SpecAnchor::from_str
+                - SpecAnchor::serialize
+                - SpecDocument
+                - SpecDocument::schema
+                - SpecItemRef
+                - is_local_id
+                - is_spec_id
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-016
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in crates/syu-validation/src/lib.rs.
+        targets:
+          - id: symbols-016
+            adapter: rust
+            path: crates/syu-validation/src/lib.rs
+            selector:
+              kind: symbol
+              names:
+                - BaselineWorkspace
+                - ChangeStatus
+                - ChangedFile
+                - ChangedRange
+                - OverridePolicy
+                - PlanValidationMode
+                - RuleMetadata
+                - TargetRangeSide
+                - ValidationContext
+                - ValidationRule
+                - anchor_changed
+                - artifact_level
+                - binding_set_for_criterion
+                - binding_targets_changed_across_indexes
+                - binding_targets_for_index
+                - canonical_relation
+                - change_is_within_editable_scope
+                - changed_anchor_path
+                - changed_anchors_for_documents
+                - changed_file_impacts_target
+                - changed_range_covers
+                - changed_side_covers
+                - changed_side_is_fully_covered
+                - changed_side_overlaps
+                - check_kind
+                - collect_changed_anchors
+                - contract_level
+                - criterion_has_counterpart
+                - criterion_has_evidence
+                - criterion_level
+                - editable_target_matches_hunkless_change
+                - ensure_present_target_exceeds_budget
+                - generated_binding_has_cycle
+                - git_ls_tree
+                - git_show
+                - git_workspace_context
+                - is_fixed_error_rule
+                - load_workspace_at_revision
+                - matching_bindings
+                - normalize_end
+                - normalize_workspace_path
+                - participant_bindings_for_contract
+                - principle_level
+                - push
+                - reported_change_set_covers
+                - rule_level
+                - rule_metadata
+                - same_changed_file_identity
+                - spec_anchor_level
+                - target_budget_bytes
+                - target_changed_by_files
+                - target_is_exact_inventory_target
+                - target_line_range
+                - target_matches_changed_file_path
+                - target_overlaps_change
+                - target_selector_is_file
+                - tests::copy_dir
+                - tests::fixture_root
+                - tests::init_git_repo
+                - tests::load_fixture_workspace
+                - tests::sample_target
+                - tests::write_generated_binding_workspace
+                - validate
+                - validate_changed_spec_impact
+                - validate_changes
+                - validate_config
+                - validate_contracts
+                - validate_document_shapes
+                - validate_generated_binding
+                - validate_graph
+                - validate_plan
+                - validate_rule_overrides
+                - validate_slice_scope
+                - validate_spec_axis
+                - validate_targets
+                - workspace_relative_display
+                - workspace_relative_repo_path
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-017
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in crates/syu-work-model/src/lib.rs.
+        targets:
+          - id: symbols-017
+            adapter: rust
+            path: crates/syu-work-model/src/lib.rs
+            selector:
+              kind: symbol
+              names:
+                - AcceptanceRef
+                - ArtifactContextEntry
+                - CompletionCheck
+                - ContextInstructions
+                - ContextMode
+                - ContextPack
+                - ContractParticipantContext
+                - ExecutionSlice
+                - IntendedTargetContext
+                - NonGoal
+                - PlanBasis
+                - PlanConfidence
+                - PlanExecution
+                - PlanStatus
+                - PlannedTarget
+                - RequestedTarget
+                - RequestedTarget::criterion
+                - RequestedTarget::reference
+                - RequestedTarget::transition
+                - ResolvedSelector
+                - SliceBudgetUsage
+                - SpecContextEntry
+                - SupportContext
+                - TargetAccessMode
+                - TargetContext
+                - TargetLifecycle
+                - TargetTransition
+                - WorkConstraints
+                - WorkOperation
+                - WorkPlan
+                - WorkRequest
+                - WorkSeed
+                - work_plan_digest
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-018
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in crates/syu-workbench-server/src/lib.rs.
+        targets:
+          - id: symbols-018
+            adapter: rust
+            path: crates/syu-workbench-server/src/lib.rs
+            selector:
+              kind: symbol
+              names:
+                - BindingSummary
+                - BindingTargetSummary
+                - BranchChangedTargetView
+                - BranchScopeView
+                - BranchScopeView::not_applicable
+                - ContractParticipantSummary
+                - ContractSummary
+                - CriterionSummary
+                - IssueCounts
+                - ItemSummary
+                - PrincipleSummary
+                - RuleSummary
+                - ValidationDiagnosticView
+                - ValidationPhaseView
+                - ValidationRunState
+                - ValidationRunView
+                - ValidationRunView::completed
+                - ValidationRunView::failed
+                - ValidationRunView::not_applicable
+                - ValidationRunView::not_run
+                - WorkspaceProjection
+                - WorkspaceSummary
+                - anchor_string
+                - anchors_for
+                - binding_role_label
+                - bindings_for
+                - branch_scope_view
+                - content_hash
+                - contract_kind_label
+                - contract_summary
+                - criterion_summary
+                - default_work_request
+                - diagnostic_phase
+                - epoch_ms
+                - issue_counts
+                - item_summary_from_feature
+                - item_summary_from_philosophy
+                - item_summary_from_policy
+                - item_summary_from_requirement
+                - phase_views
+                - priority_label
+                - project
+                - relative_display
+                - rule_summary
+                - rules_in_phase
+                - status_label
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-019
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in crates/syu-workspace/src/lib.rs.
+        targets:
+          - id: symbols-019
+            adapter: rust
+            path: crates/syu-workspace/src/lib.rs
+            selector:
+              kind: symbol
+              names:
+                - AnchorValue
+                - ArtifactInventoryEntry
+                - LoadedDocument
+                - ResolvedTarget
+                - SpecIndex
+                - SpecIndex::anchor
+                - SpecIndex::build
+                - SpecIndex::insert
+                - SpecIndex::insert_binding
+                - SpecIndex::target
+                - SpecWorkspace
+                - SpecWorkspace::artifact_inventory
+                - SpecWorkspace::fingerprint
+                - SpecWorkspace::index
+                - SpecWorkspace::load
+                - SpecWorkspace::path_is_artifact
+                - SpecWorkspace::path_is_excluded
+                - SpecWorkspace::path_is_spec
+                - WorkspaceMatcher
+                - WorkspaceMatcher::build
+                - WorkspaceMatcher::contains
+                - WorkspaceMatcher::is_excluded
+                - adapter_for_path
+                - collect_artifact_files
+                - collect_yaml
+                - compile_excludes
+                - extract_heading_block
+                - extract_marker_block
+                - extract_yaml_block
+                - find_root
+                - hash_bytes
+                - resolve_target
+                - resolve_target_with_adapters
+                - selector_supports_editable
+                - tests::target
+                - tests::write_workspace
+                - unique_item
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-020
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in fixtures/v1/valid-web-app/api/login.rs.
+        targets:
+          - id: symbols-020
+            adapter: rust
+            path: fixtures/v1/valid-web-app/api/login.rs
+            selector:
+              kind: symbol
+              names:
+                - login
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-021
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/command/add.rs.
+        targets:
+          - id: symbols-021
+            adapter: rust
+            path: src/command/add.rs
+            selector:
+              kind: symbol
+              names:
+                - FeatureRegistryUpdate
+                - ParsedId
+                - ParsedId::parse
+                - ReciprocalLinkField
+                - ResolvedAddInvocation
+                - TargetPath
+                - add_follow_up_steps
+                - append_yaml_list_item
+                - default_document_path
+                - default_folder_slug
+                - default_title
+                - display_workspace_path
+                - ensure_target_within_spec_root
+                - format_instruction_list
+                - normalize_definition_id
+                - normalize_feature_kind
+                - path_label
+                - prepare_feature_registry_update
+                - print_add_summary
+                - prompt_for_parsed_id
+                - reciprocal_link_back_instruction
+                - reciprocal_link_entry_instruction
+                - reciprocal_link_fields
+                - render_item_block
+                - render_new_document
+                - render_reciprocal_link_stub
+                - resolve_add_invocation
+                - resolve_add_invocation_with_prompt_io
+                - resolve_explicit_file
+                - resolve_feature_kind
+                - resolve_interactive_file_prompt
+                - resolve_target_path
+                - resolve_workspace_and_id
+                - run_add_command
+                - scaffold_missing_link_instruction
+                - suggested_linked_id
+                - suggested_linked_kinds
+                - tests::FakePromptIo
+                - tests::FakePromptIo::is_terminal
+                - tests::FakePromptIo::prompt_line
+                - tests::git
+                - tests::test_workspace
+                - tests::write_file
+                - title_case_slug
+                - title_case_tokens
+                - validate_existing_document
+                - write_feature_registry_update
+                - write_stub_document
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-022
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/command/audit.rs.
+        targets:
+          - id: symbols-022
+            adapter: rust
+            path: src/command/audit.rs
+            selector:
+              kind: symbol
+              names:
+                - AuditFinding
+                - AuditFindingKind
+                - AuditSummary
+                - JsonAuditOutput
+                - collect_findings
+                - feature_terms
+                - first_opposing_term_pair
+                - jaccard_score
+                - linked_philosophies
+                - linked_requirement_explicitly_scopes_term_pair
+                - orphaned_policy_findings
+                - overlap_findings
+                - policy_terms
+                - print_text_results
+                - render_text_results
+                - requirement_terms
+                - run_audit_command
+                - sorted_terms
+                - summarize_findings
+                - tension_findings
+                - tokenize
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-023
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/command/browse.rs.
+        targets:
+          - id: symbols-023
+            adapter: rust
+            path: src/command/browse.rs
+            selector:
+              kind: symbol
+              names:
+                - BrowseState
+                - BrowseState::entity_entries
+                - BrowseState::feature
+                - BrowseState::json_entries
+                - BrowseState::lookup
+                - BrowseState::non_interactive_json
+                - BrowseState::philosophy
+                - BrowseState::policy
+                - BrowseState::print_feature_detail
+                - BrowseState::print_links
+                - BrowseState::print_non_interactive
+                - BrowseState::print_philosophy_detail
+                - BrowseState::print_policy_detail
+                - BrowseState::print_requirement_detail
+                - BrowseState::print_summary
+                - BrowseState::requirement
+                - BrowseState::run
+                - BrowseState::show_entity_detail
+                - BrowseState::show_entity_list
+                - BrowseState::show_error_detail
+                - BrowseState::show_error_list
+                - BrowseState::show_top_level_menu
+                - EntityRef
+                - JsonBrowseEntry
+                - JsonBrowseGroups
+                - JsonBrowseOutput
+                - TopLevelSection
+                - TopLevelSection::count
+                - TopLevelSection::into_view
+                - TopLevelSection::label
+                - View
+                - collapse_whitespace
+                - format_non_interactive_issue
+                - print_trace_summary
+                - prompt_number
+                - run_browse_command
+                - tests::fixture_path
+                - tests::state_for_fixture
+                - wait_for_enter
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-024
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/command/check.rs.
+        targets:
+          - id: symbols-024
+            adapter: rust
+            path: src/command/check.rs
+            selector:
+              kind: symbol
+              names:
+                - AutofixChangeRequest
+                - AutofixMode
+                - AutofixPlan
+                - AutofixPlanChange
+                - AutofixRun
+                - AutofixSummary
+                - AutofixTransaction
+                - AutofixTransaction::committed_writes
+                - AutofixTransaction::rollback
+                - AutofixTransaction::write
+                - DeliveryStatus
+                - DisabledRuleGroup
+                - DisabledRuleNotice
+                - DisabledRuleNotice::describe
+                - DisabledRuleNotice::from_group
+                - FilteredIssueView
+                - FilteredIssueView::describe_filters
+                - FilteredIssueView::from_filters
+                - IssueFilters
+                - IssueFilters::from_args
+                - IssueFilters::is_active
+                - IssueFilters::matches
+                - ItemLocation
+                - JsonCheckOutput
+                - MutableLoadedDocument
+                - OwnershipDeclaration
+                - RequirementValidationIndex
+                - TextReportSummary
+                - TextReportSummary::from_config
+                - TraceRole
+                - TraceRole::label
+                - TraceRole::relation_name
+                - TraceRole::subject_kind
+                - TraceValidationCache
+                - TraceValidationCache::default
+                - TraceValidationCache::inspect_symbol
+                - TraceValidationCache::new
+                - TraceValidationCache::read_file
+                - TraceValidationTarget
+                - ValidationResources
+                - apply_autofix
+                - apply_autofix_for_reference
+                - apply_autofix_for_reference_with_transaction
+                - apply_autofix_for_trace_map_with_transaction
+                - apply_autofix_run
+                - apply_cli_override_issue_guidance
+                - apply_feature_reciprocals
+                - apply_graph_autofix
+                - apply_philosophy_reciprocals
+                - apply_policy_reciprocals
+                - apply_requirement_reciprocals
+                - collapse_whitespace
+                - collect_check_result
+                - collect_check_result_from_workspace
+                - collect_check_result_from_workspace_with_mode
+                - collect_feature_yaml_paths
+                - dedupe_feature_links
+                - dedupe_philosophy_links
+                - dedupe_policy_links
+                - dedupe_requirement_links
+                - dedupe_unique_values
+                - describe_trace_reference
+                - disabled_rule_groups
+                - effective_fix
+                - ensure_sidecar_ownership_manifest
+                - entry_covers_symbols
+                - evaluate_trace_ownership
+                - feature_registry_entries_for_documents
+                - feature_registry_entries_match
+                - feature_registry_kind
+                - filter_check_result
+                - finalize_autofix_error
+                - format_issue_id_list
+                - format_reference_location
+                - index_features
+                - index_philosophies
+                - index_policies
+                - index_requirements
+                - insert_unique_value
+                - load_feature_documents_for_autofix
+                - load_ownership_manifest
+                - looks_like_feature_document
+                - manifest_declares_owner
+                - merge_ownership_entry
+                - normalize_delivery_status
+                - normalize_delivery_status_label
+                - normalize_ownership_symbols
+                - normalize_trace_hygiene_for_feature_documents
+                - normalize_trace_hygiene_for_requirement_documents
+                - normalize_trace_reference
+                - normalize_trace_references
+                - normalized_openapi_method
+                - normalized_openapi_path
+                - ownership_manifest_path
+                - ownership_symbols_hint
+                - plan_autofix
+                - preferred_trace_file_path
+                - record_planned_change
+                - record_updated_file
+                - render_autofix_plan
+                - render_text_report
+                - report_orphaned_definition
+                - required_ownership_symbols
+                - resolve_openapi_path_item
+                - run_autofix
+                - run_check_command
+                - severity_label
+                - sync_feature_registry
+                - tests::apply_autofix_for_reference
+                - tests::feature
+                - tests::git
+                - tests::philosophy
+                - tests::policy
+                - tests::requirement
+                - tests::requirement_validation_index
+                - tests::test_workspace
+                - tests::validation_resources
+                - tests::write_valid_planned_workspace
+                - trace_reference_dedup_key
+                - trace_reference_duplicate_key
+                - validate_delivery_status
+                - validate_duplicate_links
+                - validate_duplicate_trace_references
+                - validate_feature
+                - validate_feature_registry_entries
+                - validate_feature_registry_entries_inner
+                - validate_feature_with_cache
+                - validate_historical_id_reuse
+                - validate_historical_id_reuse_for_ids
+                - validate_linked_delivery_states
+                - validate_non_empty_field
+                - validate_openapi_trace_reference
+                - validate_orphaned_definitions
+                - validate_ownership_manifest
+                - validate_philosophy
+                - validate_policy
+                - validate_requirement
+                - validate_requirement_with_cache
+                - validate_trace_map
+                - validate_unique_ids
+                - verify_trace_reference
+                - verify_trace_reference_with_cache
+                - with_validate_overrides
+                - workspace_display_path
+                - workspace_item_count
+                - write_modified_documents
+                - write_or_plan_autofix_change
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-025
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/command/completion.rs.
+        targets:
+          - id: symbols-025
+            adapter: rust
+            path: src/command/completion.rs
+            selector:
+              kind: symbol
+              names:
+                - run_completion_command
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-026
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/command/doctor.rs.
+        targets:
+          - id: symbols-026
+            adapter: rust
+            path: src/command/doctor.rs
+            selector:
+              kind: symbol
+              names:
+                - DeserializePackageMetadata
+                - DoctorCheck
+                - DoctorReport
+                - DoctorStatus
+                - DoctorStatus::label
+                - DoctorSummary
+                - DoctorSummary::from_checks
+                - PackageMetadata
+                - PackageMetadata::from_path
+                - build_doctor_report
+                - build_node_check
+                - build_npm_check
+                - build_rust_msrv_check
+                - cargo_executable
+                - command_version
+                - dependency_install_needs_refresh
+                - expected_npm_version
+                - modified_time
+                - npm_executable
+                - parse_major_version
+                - parse_numeric_version
+                - print_text_report
+                - read_rust_version
+                - run_doctor_command
+                - rust_msrv_check
+                - rust_toolchain_checks
+                - shell_workspace_arg
+                - surface_check_id
+                - surface_checks
+                - surface_dependency_check
+                - surface_label
+                - surface_node_check
+                - surface_npm_check
+                - tests::write_mock_command
+                - version_at_least
+                - workspace_config_check
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-027
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/command/explain.rs.
+        targets:
+          - id: symbols-027
+            adapter: rust
+            path: src/command/explain.rs
+            selector:
+              kind: symbol
+              names:
+                - ExplainAssessment
+                - ExplainAssessment::label
+                - ExplainAssessment::summary
+                - ExplainChain
+                - ExplainOutput
+                - build_explain_output
+                - render_explain_text
+                - render_nodes
+                - run_explain_command
+                - selector_is_ambiguous
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-028
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/command/init.rs.
+        targets:
+          - id: symbols-028
+            adapter: rust
+            path: src/command/init.rs
+            selector:
+              kind: symbol
+              names:
+                - ResolvedInitOptions
+                - StarterIdPrefixes
+                - StarterIdPrefixes::feature_id
+                - StarterIdPrefixes::philosophy_id
+                - StarterIdPrefixes::policy_id
+                - StarterIdPrefixes::requirement_id
+                - StarterTemplateCatalogEntry
+                - default_id_prefixes
+                - ensure_workspace_path_can_be_created
+                - ensure_writable_targets
+                - feature_document_path
+                - feature_kind
+                - feature_registry_template
+                - feature_template
+                - go_module_path
+                - infer_project_name
+                - is_executable_shell_scaffold
+                - maybe_mark_scaffold_file_executable
+                - normalize_id_token
+                - normalize_shared_id_stem
+                - normalize_typed_prefix
+                - parse_starter_template_prompt
+                - path_label
+                - philosophy_template
+                - policy_template
+                - prepare_workspace_root
+                - project_slug
+                - prompt_for_spec_root
+                - prompt_for_starter_template
+                - render_default_config
+                - render_go_module_file
+                - render_java_pom_file
+                - render_ruby_gemfile
+                - render_typescript_package_file
+                - requirement_document_path
+                - requirement_template
+                - resolve_init_id_prefixes
+                - resolve_init_options_with_prompt_io
+                - resolve_init_spec_root
+                - resolve_interactive_id_prefixes
+                - run_init_command
+                - run_init_command_with_prompt_io
+                - scaffold_files
+                - starter_source_files
+                - starter_template_catalog
+                - starter_template_example_commands
+                - starter_template_names
+                - tests::FakePromptIo
+                - tests::FakePromptIo::is_terminal
+                - tests::FakePromptIo::prompt_line
+                - validate_interactive_init_mode
+                - write_scaffold_file
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-029
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/command/issue_text.rs.
+        targets:
+          - id: symbols-029
+            adapter: rust
+            path: src/command/issue_text.rs
+            selector:
+              kind: symbol
+              names:
+                - TextIssueFormat
+                - collapse_whitespace
+                - format_text_issue
+                - issue_message_with_rule_title
+                - issue_subject_with_location
+                - issue_suggestion
+                - rule_title_suffix
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-030
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/command/list.rs.
+        targets:
+          - id: symbols-030
+            adapter: rust
+            path: src/command/list.rs
+            selector:
+              kind: symbol
+              names:
+                - JsonAllKindsOutput
+                - JsonListOutput
+                - ambiguous_kind_error
+                - invalid_kind_error
+                - levenshtein_distance
+                - looks_like_workspace_path
+                - parse_list_positionals
+                - parse_list_two_positionals
+                - print_section_list
+                - print_text_list
+                - run_list_command
+                - suggested_lookup_kind
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-031
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/command/log.rs.
+        targets:
+          - id: symbols-031
+            adapter: rust
+            path: src/command/log.rs
+            selector:
+              kind: symbol
+              names:
+                - GitHistoryRecord
+                - HistoricalDefinitionDiscovery
+                - HistoryLifecycleEvent
+                - HistoryRequest
+                - HistoryResponse
+                - HistoryScope
+                - HistoryScopeResponse
+                - HistoryTarget
+                - HistoryTargetRequest
+                - HistoryView
+                - MatchedCommit
+                - ResolvedHistoryTarget
+                - TrackedPath
+                - TrackedPath::definition
+                - build_historical_lifecycle_events
+                - build_history_response
+                - build_history_target
+                - collect_related_tracked_paths
+                - collect_trace_paths
+                - commit_is_ancestor_of
+                - commit_recency_cmp
+                - dedupe_tracked_paths
+                - discover_historical_definition
+                - git_command
+                - git_show_file
+                - historical_entity_kind
+                - historical_title_for_id
+                - history_event
+                - is_yaml_document
+                - load_git_history
+                - load_git_history_for_path
+                - load_git_history_records
+                - lookup_kind_for_id
+                - normalize_path_filter
+                - normalized_tracked_path
+                - order_commits_by_repository_history
+                - parse_git_field
+                - parse_git_history
+                - parse_git_history_records
+                - render_history_text
+                - render_tracked_path
+                - resolve_git_repository_root
+                - resolve_historical_history_target
+                - resolve_history_entity
+                - resolve_history_scope
+                - run_log_command
+                - sort_commits_by_history_relationship
+                - sort_ready_commits
+                - tests::PathGuard
+                - tests::PathGuard::drop
+                - tests::PathGuard::set
+                - tests::git
+                - tests::git_commit
+                - tests::git_stdout
+                - tests::init_test_git_repository
+                - tests::set_executable
+                - tests::trace_map
+                - tests::write_fake_git_for_history_log_failure
+                - tests::write_fake_git_for_merge_base_failure
+                - tests::write_fake_git_for_merge_base_graph
+                - tests::write_fake_git_for_scope_merge_base_empty_output
+                - tests::write_fake_git_for_scope_merge_base_failure
+                - tests::write_related_workspace_fixture
+                - tracked_paths_for_feature
+                - tracked_paths_for_non_trace_layer
+                - tracked_paths_for_requirement
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-032
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/command/lookup.rs.
+        targets:
+          - id: symbols-032
+            adapter: rust
+            path: src/command/lookup.rs
+            selector:
+              kind: symbol
+              names:
+                - EntitySummary
+                - SearchResult
+                - WorkspaceEntity
+                - WorkspaceLookup
+                - WorkspaceLookup::document_path_for_id
+                - WorkspaceLookup::document_paths
+                - WorkspaceLookup::entries
+                - WorkspaceLookup::entries_with_document_paths
+                - WorkspaceLookup::extend_search_results
+                - WorkspaceLookup::feature
+                - WorkspaceLookup::find
+                - WorkspaceLookup::new
+                - WorkspaceLookup::philosophy
+                - WorkspaceLookup::policy
+                - WorkspaceLookup::requirement
+                - WorkspaceLookup::search
+                - WorkspaceLookup::title_for
+                - field_matches_query
+                - kind_for_id
+                - workspace_relative_display
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-033
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/command/mod.rs.
+        targets:
+          - id: symbols-033
+            adapter: rust
+            path: src/command/mod.rs
+            selector:
+              kind: symbol
+              names:
+                - empty_shell_path
+                - is_shell_safe_path
+                - quote_shell_path
+                - shell_quote_path
+                - tests::expected_empty_shell_path
+                - tests::expected_quoted_path
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-034
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/command/prompt.rs.
+        targets:
+          - id: symbols-034
+            adapter: rust
+            path: src/command/prompt.rs
+            selector:
+              kind: symbol
+              names:
+                - PromptIo
+                - StdioPromptIo
+                - StdioPromptIo::is_terminal
+                - StdioPromptIo::prompt_line
+                - ensure_prompt_terminal
+                - normalize_prompt_response
+                - prompt_bool
+                - prompt_optional
+                - prompt_optional_with_default
+                - prompt_required
+                - prompt_with_default
+                - tests::FakePromptIo
+                - tests::FakePromptIo::is_terminal
+                - tests::FakePromptIo::prompt_line
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-035
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/command/relate.rs.
+        targets:
+          - id: symbols-035
+            adapter: rust
+            path: src/command/relate.rs
+            selector:
+              kind: symbol
+              names:
+                - DirectMatches
+                - Feature::owner_id
+                - Feature::trace_map
+                - Gap
+                - JsonRelateOutput
+                - JsonRelateRangeOutput
+                - RelateRangeSummary
+                - RelatedIds
+                - RelatedIds::add
+                - RelatedNode
+                - RelatedNode::lookup_kind
+                - RelatedTrace
+                - RelatedTrace::owner_lookup_kind
+                - RelationCatalog
+                - RelationCatalog::load
+                - RelationCatalog::node
+                - RelationCatalog::nodes_for
+                - RelationCatalog::nodes_matching_path
+                - Requirement::owner_id
+                - Requirement::trace_map
+                - SelectionKind
+                - SelectionKind::label
+                - SelectionResolution
+                - SelectionSource
+                - SelectionSummary
+                - TraceOwner
+                - build_relation_range_report
+                - build_relation_report
+                - collect_all_owner_traces
+                - collect_gaps
+                - collect_matching_traces_for_path
+                - collect_matching_traces_for_symbol
+                - collect_node_map
+                - collect_owner_traces
+                - collect_related_ids_for_changed_files
+                - collect_related_traces
+                - expand_downstream_ids
+                - expand_related_ids
+                - expand_upstream_ids
+                - is_path_like
+                - normalize_selector_path
+                - related_node_from_summary
+                - render_range_relation_text
+                - render_relation_text
+                - render_trace_line
+                - resolve_definition_selection
+                - resolve_path_selection
+                - resolve_selection
+                - resolve_symbol_selection
+                - run_relate_command
+                - run_relate_range
+                - selector_matches_existing_workspace_path
+                - tests::demo_catalog
+                - tests::demo_workspace
+                - trace_is_direct_match
+                - write_gap_section
+                - write_node_section
+                - write_trace_section
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-036
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/command/report.rs.
+        targets:
+          - id: symbols-036
+            adapter: rust
+            path: src/command/report.rs
+            selector:
+              kind: symbol
+              names:
+                - FeatureCoverageDetail
+                - comma_or_dash
+                - coverage_label
+                - dedup_paths
+                - load_lcov
+                - normalize_lcov_path
+                - render_feature_coverage_row
+                - render_requirement_coverage_row
+                - render_spec_coverage_summary
+                - resolve_configured_report_output
+                - resolve_report_output
+                - run_report_command
+                - rust_trace_paths
+                - summarize_paths
+                - tests::copy_dir_recursive
+                - tests::fixture_path
+                - tests::write_config
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-037
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/command/search.rs.
+        targets:
+          - id: symbols-037
+            adapter: rust
+            path: src/command/search.rs
+            selector:
+              kind: symbol
+              names:
+                - JsonSearchOutput
+                - print_text_results
+                - run_search_command
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-038
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/command/show.rs.
+        targets:
+          - id: symbols-038
+            adapter: rust
+            path: src/command/show.rs
+            selector:
+              kind: symbol
+              names:
+                - JsonShowOutput
+                - collapse_whitespace
+                - print_entity_json
+                - print_json_output
+                - render_entity_text
+                - render_feature
+                - render_philosophy
+                - render_policy
+                - render_requirement
+                - run_show_command
+                - shell_quote_path
+                - write_common_header
+                - write_links
+                - write_trace_map
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-039
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/command/task.rs.
+        targets:
+          - id: symbols-039
+            adapter: rust
+            path: src/command/task.rs
+            selector:
+              kind: symbol
+              names:
+                - DiffInferenceOutcome
+                - InferredFileMatches
+                - JsonRequestArtifactContext
+                - JsonScaffoldUpdate
+                - JsonScopeSignals
+                - JsonTaskCheckOutput
+                - JsonTaskClassifyOutput
+                - JsonTaskPlanCompletion
+                - JsonTaskPlanCoverage
+                - JsonTaskPlanGoal
+                - JsonTaskPlanImplementationPlan
+                - JsonTaskPlanItem
+                - JsonTaskPlanOutput
+                - JsonTaskPlanPersistentItems
+                - JsonTaskPlanScope
+                - JsonTaskPlanScopeEntry
+                - JsonTaskPlanSource
+                - JsonTaskPlanSourceEvidence
+                - JsonTaskPlanSpecMapping
+                - JsonTaskPlanTestPlan
+                - JsonTaskScaffoldOutput
+                - JsonTaskScopeOutput
+                - JsonTaskTestSelectCommand
+                - JsonTaskTestSelectEscalation
+                - JsonTaskTestSelectOutput
+                - RankedRelatedItem
+                - SearchResult::id
+                - SearchResult::kind
+                - SearchResult::title
+                - SearchResultView
+                - TaskSearchResult::id
+                - TaskSearchResult::kind
+                - TaskSearchResult::title
+                - TaskTestSelectionEntry
+                - TracedItemMatch
+                - add_task_test_selection_reference
+                - affected_task_test_selection_escalation
+                - bool_label
+                - build_diff_goal_plan_id
+                - build_diff_inferred_goal_plan
+                - build_globset
+                - build_goal_plan
+                - build_goal_plan_id
+                - build_inference_notes
+                - build_inference_reasons
+                - build_inferred_goal_non_goals
+                - build_inferred_goal_statement
+                - build_inferred_goal_title
+                - build_scaffold_plan
+                - build_shared_request_work_plan
+                - build_task_test_selection
+                - build_task_test_selection_commands
+                - check_goal_plan
+                - classify_request
+                - collect_explicit_items
+                - collect_feature_candidates
+                - collect_feature_ids
+                - collect_goal_plan_test_references
+                - collect_ids_by_kind
+                - collect_inference_requirement_context
+                - collect_inferred_file_matches
+                - collect_linked_feature_requirement_tests
+                - collect_linked_requirement_tests
+                - collect_ranked_related_items
+                - collect_related_inference_items
+                - collect_scoped_results
+                - collect_spec_items_for_path
+                - collect_task_plan_persistent_items
+                - collect_traced_items_for_path
+                - count_keyword_hits
+                - count_task_test_selection_entries
+                - default_scaffold_folder
+                - describe_keyword_hits
+                - feature_registry_file_label
+                - format_task_test_selection_reason
+                - full_task_test_selection_commands
+                - goal_plan_confidence_label
+                - goal_plan_coverage_mode_label
+                - goal_plan_medium_confidence_warning
+                - goal_plan_mentions_shared_utilities
+                - goal_plan_required_test_symbol_exists
+                - goal_plan_requires_implementation_scope
+                - goal_plan_requires_required_tests
+                - goal_plan_scope_is_ambiguous
+                - goal_plan_selection_mode_label
+                - goal_plan_source_confidence_warning
+                - goal_plan_source_evidence
+                - id_stem
+                - indent_block
+                - infer_diff_plan
+                - infer_requirement_action
+                - infer_title_from_file_path
+                - inferred_confidence
+                - insert_inference_item
+                - insert_inference_lookup_item
+                - is_false
+                - is_production_path
+                - is_shared_utility_path
+                - item_to_search_result
+                - join_task_test_selection_reasons
+                - json_persistent_item_from_goal_plan
+                - json_persistent_items_from_goal_plan
+                - json_scope_entry_from_goal_plan
+                - json_task_plan_from_artifact
+                - load_goal_plan_artifact
+                - load_request_artifact
+                - merge_inference_items
+                - merge_related_items
+                - next_available_scaffold_id
+                - normalize_scaffold_stem
+                - path_label
+                - path_matches_scope
+                - print_classify_text_output
+                - print_feature_candidates
+                - print_items
+                - print_plan_item_section
+                - print_scaffold_text_output
+                - print_scope_text_output
+                - print_source_evidence_section
+                - print_task_check_text_output
+                - print_task_test_selection_text_output
+                - push_goal_plan_source_confidence_issues
+                - render_feature_document
+                - render_goal_plan_output
+                - render_goal_plan_text_output
+                - render_requirement_document
+                - render_scope_entry
+                - request_plan_confidence
+                - requirement_prefix
+                - resolve_goal_plan_test_path
+                - resolve_scaffold_document_path
+                - resolve_scaffold_id
+                - resolve_task_plan_output_path
+                - rewrite_spec_prefix
+                - run_task_check_command
+                - run_task_classify_command
+                - run_task_command
+                - run_task_infer_command
+                - run_task_plan_command
+                - run_task_scaffold_command
+                - run_task_scope_command
+                - run_task_test_select_command
+                - rust_test_target_name
+                - sanitize_goal_plan_id
+                - scaffold_relative_path
+                - scaffold_stem
+                - scaffold_title
+                - scope_pattern_has_glob_metacharacters
+                - scope_request
+                - slugify
+                - summarize_persistent_item_ids
+                - summarize_request
+                - task_trace_targets
+                - tests::commit_all
+                - tests::init_git_repo
+                - tests::update_origin_main
+                - tests::write_request_artifact
+                - tests::write_workspace
+                - title_case_slug
+                - to_affected_spec_item
+                - to_branch_scope_search_result
+                - to_task_search_result
+                - to_task_search_results
+                - truncate_text
+                - unique_candidate_seed
+                - validate_goal_plan_completion
+                - validate_goal_plan_diff_inferred_source
+                - validate_goal_plan_required_tests
+                - validate_goal_plan_spec_ids
+                - validate_goal_plan_test_reference
+                - validate_goal_plan_work_blockers
+                - validate_goal_test_language
+                - warn_goal_plan_source_range_mismatch
+                - work_surface_from_id
+                - work_surface_from_label
+                - workspace_relative_display
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-040
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/command/templates.rs.
+        targets:
+          - id: symbols-040
+            adapter: rust
+            path: src/command/templates.rs
+            selector:
+              kind: symbol
+              names:
+                - JsonTemplatesOutput
+                - TemplateCatalogEntry
+                - TemplateCatalogEntry::relationship_label
+                - TemplateRelationship
+                - print_text_catalog
+                - render_text_catalog
+                - run_templates_command
+                - template_catalog_entries
+                - template_relationship
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-041
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/command/trace.rs.
+        targets:
+          - id: symbols-041
+            adapter: rust
+            path: src/command/trace.rs
+            selector:
+              kind: symbol
+              names:
+                - MatchMode
+                - MatchMode::from_label
+                - MatchMode::label
+                - MatchMode::matched_label
+                - RelatedEntities
+                - TraceLookupOutput
+                - TraceLookupStatus
+                - TraceLookupStatus::label
+                - TraceOwnerMatch
+                - TraceOwnerMetadata
+                - TraceRangeEntityGroup
+                - TraceRangeIdSummary
+                - TraceRangeOutput
+                - TraceRangeReviewFinding
+                - TraceRangeReviewFindingKind
+                - TraceRangeReviewFindingKind::label
+                - TraceRangeReviewOutput
+                - TraceRangeScopeGuard
+                - TraceRangeSummary
+                - TraceScopeGuardItem
+                - TraceScopeGuardOwner
+                - TraceScopeGuardViolation
+                - TraceSkippedFile
+                - collect_entities_into_map
+                - collect_feature_matches
+                - collect_range_id_summary
+                - collect_related_entities
+                - collect_requirement_context
+                - collect_requirement_matches
+                - collect_trace_matches
+                - collect_trace_range_outputs
+                - collect_trace_review_output
+                - collect_trace_scope_guard
+                - compute_range_summary
+                - find_owner_match
+                - insert_summary
+                - lookup_status
+                - lookup_trace
+                - match_mode
+                - normalize_lookup_file
+                - push_entity_section
+                - push_owner_match
+                - push_range_owner_match
+                - push_review_finding
+                - push_trace_operation
+                - query_label
+                - render_range_id_group
+                - render_range_id_items
+                - render_range_text
+                - render_scope_guard_text
+                - render_strict_review_text
+                - render_text_output
+                - render_trace_range_output
+                - resolve_scope_guard_item
+                - run_trace_command
+                - trace_owner_match
+                - trace_range
+                - trace_selector
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-042
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/command/workbench.rs.
+        targets:
+          - id: symbols-042
+            adapter: rust
+            path: src/command/workbench.rs
+            selector:
+              kind: symbol
+              names:
+                - resolve_workbench_launch
+                - run_workbench_command
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-043
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/lib.rs.
+        targets:
+          - id: symbols-043
+            adapter: rust
+            path: src/lib.rs
+            selector:
+              kind: symbol
+              names:
+                - ApiError
+                - ApiError::from
+                - ApiError::into_response
+                - ApiErrorBody
+                - BranchScopeQuery
+                - BrowserValidationRequest
+                - Cli
+                - CommandKind
+                - ConfigEdit
+                - ConfigSource
+                - EditableSpecItem
+                - FileEdit
+                - FilePreview
+                - FileQuery
+                - FileSource
+                - Format
+                - ItemEditPayload
+                - PreviewProof
+                - ValidateArgs
+                - ValidationInputs
+                - WorkArgs
+                - WorkCommand
+                - WorkbenchArgs
+                - WorkbenchCommand
+                - WorkbenchFormat
+                - WorkbenchWebState
+                - base_revision_from_baseline
+                - bindings_from_summary
+                - build_new_spec_item
+                - change_base_revision_for_range
+                - changed_files
+                - changed_files_against_revision
+                - changed_files_for_validation
+                - changed_line_count
+                - content_hash
+                - contracts_from_summary
+                - criterion_from_summary
+                - current_projection
+                - default_workbench_range
+                - ensure_clean_plan_workspace
+                - ensure_item_identity
+                - ensure_item_path_in_spec_roots
+                - ensure_source_hash
+                - governed_change
+                - local_id_from_anchor
+                - make_preview_token
+                - merge_base
+                - merge_base_pair
+                - new_item_document
+                - parse_anchor_list
+                - parse_binary_patch_paths
+                - parse_changed_files
+                - parse_cli_baseline
+                - parse_diff_span
+                - parse_enum
+                - parse_from_string
+                - parse_hunk_header
+                - patch_config_source
+                - patch_existing_item_in_document
+                - preview_proof_matches
+                - principle_from_summary
+                - range_from_baseline
+                - read_yaml
+                - replace_inline_list
+                - replace_inline_scalar
+                - replace_optional_baseline
+                - replace_yaml_block
+                - replace_yaml_key
+                - replace_yaml_key_if_present
+                - replace_yaml_mapping
+                - revision
+                - revision_parent
+                - rewrite_item_source
+                - rule_from_summary
+                - run
+                - run_validate
+                - run_work
+                - run_workbench
+                - safe_workspace_path
+                - synthesize_untracked_ranges
+                - validate_candidate
+                - validation_inputs_for_cli
+                - web_apply_config
+                - web_apply_file
+                - web_apply_item
+                - web_asset
+                - web_branch_scope
+                - web_config
+                - web_export_context
+                - web_index
+                - web_preview_config
+                - web_preview_file
+                - web_preview_item
+                - web_projection
+                - web_replan
+                - web_source
+                - web_update_request
+                - web_validate
+                - write_yaml
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-044
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/lsp/handlers.rs.
+        targets:
+          - id: symbols-044
+            adapter: rust
+            path: src/lsp/handlers.rs
+            selector:
+              kind: symbol
+              names:
+                - LspHandlers
+                - LspHandlers::handle_hover
+                - LspHandlers::handle_initialize
+                - LspHandlers::handle_initialized
+                - LspHandlers::handle_shutdown
+                - LspHandlers::new
+                - create_hover_for_spec_id
+                - find_spec_id_at_position
+                - tests::fixture_path
+                - uri_to_path
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-045
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/lsp/mod.rs.
+        targets:
+          - id: symbols-045
+            adapter: rust
+            path: src/lsp/mod.rs
+            selector:
+              kind: symbol
+              names:
+                - run_lsp_server
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-046
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/lsp/protocol.rs.
+        targets:
+          - id: symbols-046
+            adapter: rust
+            path: src/lsp/protocol.rs
+            selector:
+              kind: symbol
+              names:
+                - Hover
+                - InitializeParams
+                - InitializeResult
+                - LspError
+                - LspError::fmt
+                - LspError::internal
+                - LspError::invalid_params
+                - LspError::method_not_found
+                - MarkupContent
+                - MarkupContent::markdown
+                - Message
+                - Notification
+                - Position
+                - Range
+                - Request
+                - RequestId
+                - Response
+                - ResponseError
+                - ResponseError::from
+                - ServerCapabilities
+                - TextDocumentIdentifier
+                - TextDocumentPositionParams
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-047
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/lsp/server.rs.
+        targets:
+          - id: symbols-047
+            adapter: rust
+            path: src/lsp/server.rs
+            selector:
+              kind: symbol
+              names:
+                - LspServer
+                - LspServer::handle_message
+                - LspServer::handle_notification
+                - LspServer::handle_request
+                - LspServer::new
+                - LspServer::read_message
+                - LspServer::run
+                - LspServer::write_message
+                - error_response
+                - parse_optional_params
+                - parse_required_params
+                - tests::fixture_path
+                - tests::message_bytes
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-048
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in src/main.rs.
+        targets:
+          - id: symbols-048
+            adapter: rust
+            path: src/main.rs
+            selector:
+              kind: symbol
+              names:
+                - main
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+      - id: impl-049
+        role: implementation
+        facet: tooling
+        responsibility: Own every addressable implementation symbol in tests/v1_cli.rs.
+        targets:
+          - id: symbols-049
+            adapter: rust
+            path: tests/v1_cli.rs
+            selector:
+              kind: symbol
+              names:
+                - git
+                - init_workspace_repo
+        satisfies: [REQ-COVERAGE-001#criterion.inventory-owned]
+```

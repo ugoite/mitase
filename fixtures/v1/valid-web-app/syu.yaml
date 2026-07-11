@@ -20,7 +20,8 @@ profiles:
 validation:
   preset: agent-ready
   coverage:
-    target: connected
+    artifact_ownership: off
+    spec_fulfillment: off
   deny_warnings: false
   rules: {}
   changed:

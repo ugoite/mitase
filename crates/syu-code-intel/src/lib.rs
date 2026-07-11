@@ -16,6 +16,27 @@ pub struct SymbolResolution {
     pub excerpt_hash: String,
 }
 
+/// A declaration discovered by an adapter. `identity` is stable within the
+/// file and is the exact value that an agent-ready binding must select.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InventorySymbol {
+    pub name: String,
+    pub identity: String,
+    pub kind: String,
+    pub is_test: bool,
+}
+
+pub fn inventory_symbols(adapter: &str, source: &str) -> Result<Vec<InventorySymbol>> {
+    match adapter {
+        "rust" => inventory_rust(source),
+        "typescript" | "javascript" => inventory_typescript(source),
+        "shell" => inventory_shell(source),
+        "python" => inventory_python(source),
+        "go" => inventory_go(source),
+        _ => bail!("adapter {adapter} does not support symbol inventory"),
+    }
+}
+
 #[derive(Clone)]
 struct Candidate {
     kind: &'static str,
@@ -91,50 +112,55 @@ fn resolve_rust(source: &str, name: &str) -> Result<SymbolResolution> {
         }
 
         fn visit_item_fn(&mut self, value: &'ast syn::ItemFn) {
-            if value.sig.ident == self.name {
+            let identity = self.scoped_identity(&value.sig.ident.to_string());
+            if symbol_matches(&self.name, &value.sig.ident.to_string(), &identity) {
                 self.candidates.push(Candidate {
                     kind: "function",
-                    identity: self.scoped_identity(&value.sig.ident.to_string()),
+                    identity,
                     span: value.span(),
                 });
             }
         }
 
         fn visit_impl_item_fn(&mut self, value: &'ast syn::ImplItemFn) {
-            if value.sig.ident == self.name {
+            let identity = self.scoped_identity(&value.sig.ident.to_string());
+            if symbol_matches(&self.name, &value.sig.ident.to_string(), &identity) {
                 self.candidates.push(Candidate {
                     kind: "method",
-                    identity: self.scoped_identity(&value.sig.ident.to_string()),
+                    identity,
                     span: value.span(),
                 });
             }
         }
 
         fn visit_item_struct(&mut self, value: &'ast syn::ItemStruct) {
-            if value.ident == self.name {
+            let identity = self.scoped_identity(&value.ident.to_string());
+            if symbol_matches(&self.name, &value.ident.to_string(), &identity) {
                 self.candidates.push(Candidate {
                     kind: "struct",
-                    identity: self.scoped_identity(&value.ident.to_string()),
+                    identity,
                     span: value.span(),
                 });
             }
         }
 
         fn visit_item_enum(&mut self, value: &'ast syn::ItemEnum) {
-            if value.ident == self.name {
+            let identity = self.scoped_identity(&value.ident.to_string());
+            if symbol_matches(&self.name, &value.ident.to_string(), &identity) {
                 self.candidates.push(Candidate {
                     kind: "enum",
-                    identity: self.scoped_identity(&value.ident.to_string()),
+                    identity,
                     span: value.span(),
                 });
             }
         }
 
         fn visit_item_trait(&mut self, value: &'ast syn::ItemTrait) {
-            if value.ident == self.name {
+            let identity = self.scoped_identity(&value.ident.to_string());
+            if symbol_matches(&self.name, &value.ident.to_string(), &identity) {
                 self.candidates.push(Candidate {
                     kind: "trait",
-                    identity: self.scoped_identity(&value.ident.to_string()),
+                    identity,
                     span: value.span(),
                 });
             }
@@ -154,6 +180,175 @@ fn resolve_rust(source: &str, name: &str) -> Result<SymbolResolution> {
         [candidate] => resolution_from_span(source, candidate),
         _ => bail!("symbol {name} is ambiguous in Rust source"),
     }
+}
+
+fn symbol_matches(requested: &str, name: &str, identity: &str) -> bool {
+    requested == name || requested == identity
+}
+
+fn inventory_rust(source: &str) -> Result<Vec<InventorySymbol>> {
+    let file = syn::parse_file(source)?;
+    struct Visitor {
+        symbols: Vec<InventorySymbol>,
+        module_path: Vec<String>,
+        impl_path: Vec<String>,
+    }
+    impl Visitor {
+        fn identity(&self, leaf: &str) -> String {
+            self.module_path
+                .iter()
+                .chain(self.impl_path.iter())
+                .cloned()
+                .chain(std::iter::once(leaf.to_string()))
+                .collect::<Vec<_>>()
+                .join("::")
+        }
+        fn push(&mut self, name: String, kind: &str, is_test: bool) {
+            self.symbols.push(InventorySymbol {
+                identity: self.identity(&name),
+                name,
+                kind: kind.to_string(),
+                is_test,
+            });
+        }
+    }
+    impl<'ast> syn::visit::Visit<'ast> for Visitor {
+        fn visit_item_mod(&mut self, value: &'ast syn::ItemMod) {
+            self.module_path.push(value.ident.to_string());
+            syn::visit::visit_item_mod(self, value);
+            self.module_path.pop();
+        }
+        fn visit_item_impl(&mut self, value: &'ast syn::ItemImpl) {
+            if let syn::Type::Path(path) = &*value.self_ty
+                && let Some(segment) = path.path.segments.last()
+            {
+                self.impl_path.push(segment.ident.to_string());
+                syn::visit::visit_item_impl(self, value);
+                self.impl_path.pop();
+            } else {
+                syn::visit::visit_item_impl(self, value);
+            }
+        }
+        fn visit_item_fn(&mut self, value: &'ast syn::ItemFn) {
+            let is_test = value.attrs.iter().any(attribute_is_test);
+            self.push(value.sig.ident.to_string(), "function", is_test);
+            syn::visit::visit_item_fn(self, value);
+        }
+        fn visit_impl_item_fn(&mut self, value: &'ast syn::ImplItemFn) {
+            let is_test = value.attrs.iter().any(attribute_is_test);
+            self.push(value.sig.ident.to_string(), "method", is_test);
+            syn::visit::visit_impl_item_fn(self, value);
+        }
+        fn visit_item_struct(&mut self, value: &'ast syn::ItemStruct) {
+            self.push(value.ident.to_string(), "struct", false);
+            syn::visit::visit_item_struct(self, value);
+        }
+        fn visit_item_enum(&mut self, value: &'ast syn::ItemEnum) {
+            self.push(value.ident.to_string(), "enum", false);
+            syn::visit::visit_item_enum(self, value);
+        }
+        fn visit_item_trait(&mut self, value: &'ast syn::ItemTrait) {
+            self.push(value.ident.to_string(), "trait", false);
+            syn::visit::visit_item_trait(self, value);
+        }
+    }
+    fn attribute_is_test(attribute: &syn::Attribute) -> bool {
+        attribute
+            .path()
+            .segments
+            .last()
+            .is_some_and(|segment| segment.ident == "test")
+    }
+    let mut visitor = Visitor {
+        symbols: Vec::new(),
+        module_path: Vec::new(),
+        impl_path: Vec::new(),
+    };
+    syn::visit::Visit::visit_file(&mut visitor, &file);
+    visitor
+        .symbols
+        .sort_by(|left, right| left.identity.cmp(&right.identity));
+    Ok(visitor.symbols)
+}
+
+fn inventory_typescript(source: &str) -> Result<Vec<InventorySymbol>> {
+    inventory_line_definitions(
+        source,
+        &["function ", "class ", "const ", "let ", "var "],
+        |name| name.starts_with("test_") || name.starts_with("test"),
+    )
+}
+
+fn inventory_python(source: &str) -> Result<Vec<InventorySymbol>> {
+    inventory_line_definitions(source, &["def ", "class "], |name| {
+        name.starts_with("test_")
+    })
+}
+
+fn inventory_go(source: &str) -> Result<Vec<InventorySymbol>> {
+    inventory_line_definitions(source, &["func "], |name| {
+        name.starts_with("Test") || name.starts_with("Benchmark") || name.starts_with("Example")
+    })
+}
+
+fn inventory_shell(source: &str) -> Result<Vec<InventorySymbol>> {
+    let mut symbols = Vec::new();
+    for line in source
+        .lines()
+        .map(str::trim_start)
+        .filter(|line| !is_comment_line(line))
+    {
+        let candidate = line.strip_prefix("function ").unwrap_or(line);
+        let name = candidate
+            .split(|character: char| character == '(' || character.is_whitespace())
+            .next()
+            .unwrap_or("");
+        if !name.is_empty() && candidate.contains('(') {
+            symbols.push(InventorySymbol {
+                name: name.to_string(),
+                identity: name.to_string(),
+                kind: "function".to_string(),
+                is_test: name.starts_with("test_"),
+            });
+        }
+    }
+    symbols.sort_by(|left, right| left.identity.cmp(&right.identity));
+    symbols.dedup_by(|left, right| left.identity == right.identity);
+    Ok(symbols)
+}
+
+fn inventory_line_definitions(
+    source: &str,
+    prefixes: &[&str],
+    is_test: impl Fn(&str) -> bool,
+) -> Result<Vec<InventorySymbol>> {
+    let mut symbols = Vec::new();
+    for line in source
+        .lines()
+        .map(str::trim_start)
+        .filter(|line| !is_comment_line(line))
+    {
+        for prefix in prefixes {
+            let Some(rest) = line.strip_prefix(prefix) else {
+                continue;
+            };
+            let name = rest
+                .split(|character: char| !character.is_alphanumeric() && character != '_')
+                .next()
+                .unwrap_or("");
+            if !name.is_empty() {
+                symbols.push(InventorySymbol {
+                    name: name.to_string(),
+                    identity: name.to_string(),
+                    kind: "definition".to_string(),
+                    is_test: is_test(name),
+                });
+            }
+        }
+    }
+    symbols.sort_by(|left, right| left.identity.cmp(&right.identity));
+    symbols.dedup_by(|left, right| left.identity == right.identity);
+    Ok(symbols)
 }
 
 fn resolution_from_span(source: &str, candidate: &impl CandidateView) -> Result<SymbolResolution> {
@@ -669,6 +864,30 @@ mod tests {
         .unwrap_err()
         .to_string();
         assert!(error.contains("ambiguous"));
+    }
+
+    #[test]
+    fn rust_inventory_distinguishes_implementation_and_test_identities() {
+        let inventory = inventory_symbols(
+            "rust",
+            "fn helper() {}\n#[test]\nfn regression() {}\nstruct Service;\nimpl Service { fn run() {} }\n",
+        )
+        .unwrap();
+        assert!(
+            inventory
+                .iter()
+                .any(|symbol| symbol.identity == "helper" && !symbol.is_test)
+        );
+        assert!(
+            inventory
+                .iter()
+                .any(|symbol| symbol.identity == "regression" && symbol.is_test)
+        );
+        assert!(
+            inventory
+                .iter()
+                .any(|symbol| symbol.identity == "Service::run")
+        );
     }
 
     #[test]

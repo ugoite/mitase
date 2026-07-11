@@ -70,9 +70,17 @@ fn validates_qualitative_item_coverage() {
         .unwrap();
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("\"target\": \"evidence-ready\""));
-    assert!(stdout.contains("\"required_items\": 6"));
-    assert!(stdout.contains("\"covered_items\": 6"));
+    let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let artifact = &report["coverage"]["artifact_ownership"];
+    assert_eq!(artifact["implementation"]["target"], "agent-ready");
+    assert_eq!(
+        artifact["implementation"]["covered"],
+        artifact["implementation"]["total"]
+    );
+    assert_eq!(artifact["tests"]["covered"], artifact["tests"]["total"]);
+    let spec = &report["coverage"]["spec_fulfillment"];
+    assert_eq!(spec["target"], "agent-ready");
+    assert_eq!(spec["covered"], spec["total"]);
 }
 
 #[test]
@@ -368,6 +376,7 @@ fn exclude_paths_skip_unresolvable_targets_before_resolution() {
             "profiles: { active: [], custom: {} }\n",
             "validation:\n",
             "  preset: standard\n",
+            "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
             "  deny_warnings: false\n",
             "  rules: {}\n",
             "  changed:\n",
@@ -538,6 +547,7 @@ fn modify_plan_validates_after_editable_body_change() {
             "profiles: { active: [], custom: {} }\n",
             "validation:\n",
             "  preset: standard\n",
+            "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
             "  deny_warnings: false\n",
             "  rules: {}\n",
             "  changed:\n",
@@ -714,6 +724,7 @@ fn modify_plan_rejects_same_file_sibling_change_outside_scope() {
             "profiles: { active: [], custom: {} }\n",
             "validation:\n",
             "  preset: standard\n",
+            "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
             "  deny_warnings: false\n",
             "  rules: {}\n",
             "  changed:\n",
@@ -890,6 +901,7 @@ fn modify_plan_does_not_allow_head_head_to_hide_scope_violations() {
             "profiles: { active: [], custom: {} }\n",
             "validation:\n",
             "  preset: standard\n",
+            "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
             "  deny_warnings: false\n",
             "  rules: {}\n",
             "  changed:\n",
@@ -1069,6 +1081,7 @@ fn add_plan_supports_missing_declared_target_and_validates_after_creation() {
             "profiles: { active: [], custom: {} }\n",
             "validation:\n",
             "  preset: standard\n",
+            "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
             "  deny_warnings: false\n",
             "  rules: {}\n",
             "  changed:\n",
@@ -1256,6 +1269,7 @@ fn add_plan_existing_file_uses_real_container_snapshot_and_nonzero_budget() {
             "profiles: { active: [], custom: {} }\n",
             "validation:\n",
             "  preset: standard\n",
+            "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
             "  deny_warnings: false\n",
             "  rules: {}\n",
             "  changed:\n",
@@ -1405,6 +1419,7 @@ fn add_plan_enforces_line_budget_for_file_targets() {
             "profiles: { active: [], custom: {} }\n",
             "validation:\n",
             "  preset: standard\n",
+            "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
             "  deny_warnings: false\n",
             "  rules: {}\n",
             "  changed:\n",
@@ -1581,6 +1596,7 @@ fn remove_plan_rejects_missing_target() {
             "profiles: { active: [], custom: {} }\n",
             "validation:\n",
             "  preset: standard\n",
+            "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
             "  deny_warnings: false\n",
             "  rules: {}\n",
             "  changed:\n",
@@ -1702,6 +1718,7 @@ fn remove_plan_validates_after_target_is_deleted() {
             "profiles: { active: [], custom: {} }\n",
             "validation:\n",
             "  preset: standard\n",
+            "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
             "  deny_warnings: false\n",
             "  rules: {}\n",
             "  changed:\n",
@@ -1939,6 +1956,7 @@ fn oversized_slice_is_split_deterministically() {
             "profiles: { active: [], custom: {} }\n",
             "validation:\n",
             "  preset: standard\n",
+            "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
             "  deny_warnings: false\n",
             "  rules: {}\n",
             "  changed:\n",
@@ -2066,6 +2084,7 @@ fn post_state_multi_slice_validation_requires_selected_slice() {
             "profiles: { active: [], custom: {} }\n",
             "validation:\n",
             "  preset: standard\n",
+            "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
             "  deny_warnings: false\n",
             "  rules: {}\n",
             "  changed:\n",
@@ -2228,6 +2247,7 @@ fn work_plan_requires_clean_governed_workspace() {
             "profiles: { active: [], custom: {} }\n",
             "validation:\n",
             "  preset: standard\n",
+            "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
             "  deny_warnings: false\n",
             "  rules: {}\n",
             "  changed:\n",
@@ -2347,6 +2367,7 @@ fn verification_budget_overflow_blocks_instead_of_splitting_closure() {
             "profiles: { active: [], custom: {} }\n",
             "validation:\n",
             "  preset: standard\n",
+            "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
             "  deny_warnings: false\n",
             "  rules: {}\n",
             "  changed:\n",
@@ -2481,6 +2502,7 @@ fn split_respects_max_slices_constraint() {
             "profiles: { active: [], custom: {} }\n",
             "validation:\n",
             "  preset: standard\n",
+            "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
             "  deny_warnings: false\n",
             "  rules: {}\n",
             "  changed:\n",
@@ -2593,6 +2615,7 @@ fn exact_documentation_target_builds_document_slice() {
             "profiles: { active: [], custom: {} }\n",
             "validation:\n",
             "  preset: standard\n",
+            "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
             "  deny_warnings: false\n",
             "  rules: {}\n",
             "  changed:\n",
@@ -2720,6 +2743,7 @@ fn plan_blocks_when_context_pack_serialized_budget_would_overflow() {
             "profiles: { active: [], custom: {} }\n",
             "validation:\n",
             "  preset: standard\n",
+            "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
             "  deny_warnings: false\n",
             "  rules: {}\n",
             "  changed:\n",
@@ -2976,6 +3000,7 @@ fn normal_validate_does_not_require_git_repository() {
             "profiles: { active: [], custom: {} }\n",
             "validation:\n",
             "  preset: standard\n",
+            "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
             "  deny_warnings: false\n",
             "  rules: {}\n",
             "  changed:\n",
@@ -3099,6 +3124,7 @@ fn strict_preset_enables_changed_ownership_rules() {
             "profiles: { active: [], custom: {} }\n",
             "validation:\n",
             "  preset: standard\n",
+            "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
             "  deny_warnings: false\n",
             "  rules: {}\n",
             "  changed:\n",
@@ -3162,6 +3188,7 @@ fn validate_rejects_unknown_rule_overrides() {
             "profiles: { active: [], custom: {} }\n",
             "validation:\n",
             "  preset: standard\n",
+            "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
             "  deny_warnings: false\n",
             "  rules:\n",
             "    UNKNOWN-RULE-001: off\n",
@@ -3227,6 +3254,7 @@ fn strict_preset_requires_changed_spec_impact_updates() {
             "profiles: { active: [], custom: {} }\n",
             "validation:\n",
             "  preset: strict\n",
+            "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
             "  deny_warnings: false\n",
             "  rules: {}\n",
             "  changed:\n",
@@ -3337,6 +3365,7 @@ fn strict_preset_only_flags_the_changed_criterion_in_a_shared_document() {
             "profiles: { active: [], custom: {} }\n",
             "validation:\n",
             "  preset: strict\n",
+            "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
             "  deny_warnings: false\n",
             "  rules: {}\n",
             "  changed:\n",
@@ -3510,6 +3539,7 @@ fn strict_preset_requires_all_contract_participants_to_change() {
             "profiles: { active: [], custom: {} }\n",
             "validation:\n",
             "  preset: strict\n",
+            "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
             "  deny_warnings: false\n",
             "  rules: {}\n",
             "  changed:\n",

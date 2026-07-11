@@ -2245,6 +2245,7 @@ mod tests {
                 "profiles: { active: [], custom: {} }\n",
                 "validation:\n",
                 "  preset: standard\n",
+                "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
                 "  deny_warnings: false\n",
                 "  rules: {}\n",
                 "  changed:\n",

@@ -6,6 +6,9 @@ workspace:
 profiles: { active: [], custom: {} }
 validation:
   preset: standard
+  coverage:
+    artifact_ownership: off
+    spec_fulfillment: off
   deny_warnings: false
   rules: {}
   changed:

@@ -331,8 +331,18 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
             }
             if let Some(coverage) = &result.coverage {
                 println!(
-                    "coverage {}: {}/{} required items",
-                    coverage.target, coverage.covered_items, coverage.required_items
+                    "artifact ownership {}: implementation {}/{}; tests {}/{}",
+                    coverage.artifact_ownership.implementation.target,
+                    coverage.artifact_ownership.implementation.covered,
+                    coverage.artifact_ownership.implementation.total,
+                    coverage.artifact_ownership.tests.covered,
+                    coverage.artifact_ownership.tests.total,
+                );
+                println!(
+                    "spec fulfillment {}: {}/{}",
+                    coverage.spec_fulfillment.target,
+                    coverage.spec_fulfillment.covered,
+                    coverage.spec_fulfillment.total,
                 );
             }
             println!("{} diagnostic(s)", result.diagnostics.len());

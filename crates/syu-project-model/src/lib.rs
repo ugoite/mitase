@@ -70,6 +70,7 @@ pub enum ValidationPreset {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum CoverageLevel {
+    Off,
     Connected,
     Owned,
     AgentReady,
@@ -80,6 +81,7 @@ pub enum CoverageLevel {
 impl CoverageLevel {
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::Off => "off",
             Self::Connected => "connected",
             Self::Owned => "owned",
             Self::AgentReady => "agent-ready",
@@ -92,27 +94,18 @@ impl CoverageLevel {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CoverageConfig {
-    #[serde(default = "default_coverage_target")]
-    pub target: CoverageLevel,
-}
-
-impl Default for CoverageConfig {
-    fn default() -> Self {
-        Self {
-            target: default_coverage_target(),
-        }
-    }
-}
-
-const fn default_coverage_target() -> CoverageLevel {
-    CoverageLevel::AgentReady
+    /// All discovered implementation and test symbols must have a matching
+    /// specification binding at this level.
+    pub artifact_ownership: CoverageLevel,
+    /// All delivery anchors in the specification must have implementation and
+    /// verification evidence at this level.
+    pub spec_fulfillment: CoverageLevel,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ValidationConfig {
     pub preset: ValidationPreset,
-    #[serde(default)]
     pub coverage: CoverageConfig,
     #[serde(default)]
     pub deny_warnings: bool,
@@ -177,11 +170,10 @@ pub struct AdapterConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::{CoverageConfig, CoverageLevel};
+    use super::CoverageLevel;
 
     #[test]
-    fn coverage_defaults_to_agent_ready() {
-        assert_eq!(CoverageConfig::default().target, CoverageLevel::AgentReady);
+    fn coverage_levels_have_stable_yaml_names() {
         assert_eq!(CoverageLevel::EvidenceReady.as_str(), "evidence-ready");
     }
 }
