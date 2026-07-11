@@ -1636,9 +1636,7 @@ fn principle_level(ctx: &ValidationContext<'_>, anchor: &SpecAnchor) -> Option<C
 }
 
 fn rule_level(ctx: &ValidationContext<'_>, anchor: &SpecAnchor) -> Option<CoverageLevel> {
-    let Some(principles) = ctx.index.rules_to_principles.get(anchor) else {
-        return None;
-    };
+    let principles = ctx.index.rules_to_principles.get(anchor)?;
     if principles.is_empty() {
         return None;
     }
@@ -1667,9 +1665,7 @@ fn criterion_level(
     inventory: &[ArtifactInventoryEntry],
     anchor: &SpecAnchor,
 ) -> Option<CoverageLevel> {
-    let Some(rules) = ctx.index.criteria_to_rules.get(anchor) else {
-        return None;
-    };
+    let rules = ctx.index.criteria_to_rules.get(anchor)?;
     if rules.is_empty() {
         return None;
     }
