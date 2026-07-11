@@ -15,7 +15,8 @@ profiles: { active: [], custom: {} }
 validation:
   preset: standard
   coverage:
-    target: agent-ready
+    artifact_ownership: agent-ready
+    spec_fulfillment: agent-ready
   deny_warnings: false
   rules: {}
   changed:
@@ -38,27 +39,30 @@ Key fields:
 - `workspace.spec_roots`: v1 spec document roots
 - `workspace.artifact_roots`: code and evidence roots that changed-file validation treats as owned artifacts
 - `validation.changed.baseline`: optional changed-file baseline
-- `validation.coverage.target`: qualitative whole-workspace item coverage target
+- `validation.coverage.artifact_ownership`: artifact-to-spec coverage target
+- `validation.coverage.spec_fulfillment`: spec-to-artifact coverage target
 - `work.slicing.*`: limits used by planning and context export
 - `adapters.enabled`: adapters allowed for target resolution
 
 The active root CLI does not rely on the historical `spec.root`, `report.output`, or reciprocal-link validation settings.
 
-## Item coverage targets
+## Bidirectional coverage targets
 
-Item coverage is not line coverage. A target is satisfied only when every
-implemented item in the repository reaches the selected Syu benefit level.
-`planned` items are reported but do not block validation, and `deprecated`
-items are outside the active target.
+Coverage is not line coverage. Both fields are required and each evaluates its
+own full-repository denominator: `artifact_ownership` discovers every
+addressable implementation symbol and test; `spec_fulfillment` evaluates every
+delivery anchor in the spec graph. `workspace.excludes` is the only way to
+remove generated or otherwise out-of-scope artifacts from the first denominator.
 
-| Target | What Syu can do with every implemented item |
-| --- | --- |
-| `connected` | Explain its specification anchors and graph relationships. |
-| `owned` | Find explicit bindings and repository targets. |
-| `agent-ready` | Produce exact, editable implementation work. This is the default. |
-| `verified` | Find verification bindings and complete contract evidence. |
-| `evidence-ready` | Trace intent through implementation, verification, documentation, and enforcement evidence. |
+| Target | Artifact ownership | Spec fulfillment |
+| --- | --- | --- |
+| `connected` | A binding refers to the symbol or test. | The anchor has a valid graph relation. |
+| `owned` | One canonical implementation or verification binding owns it. | Required implementation and verification bindings exist. |
+| `agent-ready` | An exact canonical identity, responsibility, facet, and criterion relation make it editable. | Bound targets resolve to exact inventory identities. |
+| `verified` | Its criterion has the opposite implementation/test evidence. | Every implemented criterion is implemented and tested. |
+| `evidence-ready` | Its criterion reaches policy enforcement and philosophy evidence. | The full intent-to-evidence chain closes. |
 
-Use `evidence-ready` when the repository wants Syu's strongest delivery and
-review guidance. Missing the configured target is always a validation error;
-there are no per-item exclusions.
+`off` is explicit and useful while incrementally adopting Syu; it still keeps
+the two coverage directions visible in the configuration. Missing either
+configured target is always a validation error. A newly added
+unowned function or test therefore changes the denominator and fails validation.

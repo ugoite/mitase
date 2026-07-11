@@ -8,6 +8,8 @@ This section is generated from the YAML source under `docs/syu/`.
 ## Available documents
 
 - [Delivery governance / Delivery](delivery)
+- [Repository coverage / Features Coverage](features-coverage)
 - [Foundation / Foundation](foundation)
 - [Work planning / Planner](planner)
+- [Repository coverage / Requirements Coverage](requirements-coverage)
 - [Work planning / Work](work)

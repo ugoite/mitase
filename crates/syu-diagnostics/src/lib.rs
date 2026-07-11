@@ -37,19 +37,31 @@ pub struct SafeFix {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ItemCoverage {
-    pub item: String,
+pub struct CoverageGap {
+    pub subject: String,
     pub kind: String,
     pub level: String,
     pub required: bool,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct CoverageSummary {
+pub struct CoverageAxisSummary {
     pub target: String,
-    pub required_items: usize,
-    pub covered_items: usize,
-    pub items: Vec<ItemCoverage>,
+    pub total: usize,
+    pub covered: usize,
+    pub gaps: Vec<CoverageGap>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ArtifactCoverageSummary {
+    pub implementation: CoverageAxisSummary,
+    pub tests: CoverageAxisSummary,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CoverageSummary {
+    pub artifact_ownership: ArtifactCoverageSummary,
+    pub spec_fulfillment: CoverageAxisSummary,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

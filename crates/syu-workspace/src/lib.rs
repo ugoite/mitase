@@ -7,7 +7,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use syu_code_intel::resolve_symbol;
+use syu_code_intel::{InventorySymbol, inventory_symbols, resolve_symbol};
 use syu_project_model::{CONFIG_SCHEMA, ProjectConfig};
 use syu_spec_model::*;
 
@@ -21,6 +21,12 @@ pub struct SpecWorkspace {
     pub config: ProjectConfig,
     pub documents: Vec<LoadedDocument>,
     matcher: WorkspaceMatcher,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArtifactInventoryEntry {
+    pub path: RepoPath,
+    pub adapter: String,
+    pub symbol: InventorySymbol,
 }
 #[derive(Debug)]
 struct WorkspaceMatcher {
@@ -111,6 +117,97 @@ impl SpecWorkspace {
     }
     pub fn path_is_excluded(&self, path: &Path) -> bool {
         self.matcher.is_excluded(path)
+    }
+
+    /// Discover every addressable implementation symbol and test case in the
+    /// configured artifact scope.  Non-code adapters deliberately contribute no
+    /// entries: coverage only has a symbol/test denominator where an adapter can
+    /// resolve the same identity later for planning.
+    pub fn artifact_inventory(&self) -> Result<Vec<ArtifactInventoryEntry>> {
+        let mut files = BTreeSet::new();
+        for root in &self.config.workspace.artifact_roots {
+            collect_artifact_files(&self.root, root.as_path(), &mut files)?;
+        }
+        let mut entries = Vec::new();
+        for path in files {
+            let relative = path
+                .strip_prefix(&self.root)
+                .context("artifact path must stay within workspace")?;
+            if self.path_is_excluded(relative) || self.path_is_spec(relative) {
+                continue;
+            }
+            let Some(adapter) = adapter_for_path(relative) else {
+                continue;
+            };
+            if !self
+                .config
+                .adapters
+                .enabled
+                .iter()
+                .any(|enabled| enabled == adapter)
+            {
+                continue;
+            }
+            let source = fs::read_to_string(&path)
+                .with_context(|| format!("read inventory source {}", path.display()))?;
+            let repo_path = RepoPath::new(relative).map_err(anyhow::Error::msg)?;
+            for symbol in inventory_symbols(adapter, &source)
+                .with_context(|| format!("inventory {}", path.display()))?
+            {
+                entries.push(ArtifactInventoryEntry {
+                    path: repo_path.clone(),
+                    adapter: adapter.to_string(),
+                    symbol,
+                });
+            }
+        }
+        entries.sort_by(|left, right| {
+            (&left.path.to_string_lossy(), &left.symbol.identity)
+                .cmp(&(&right.path.to_string_lossy(), &right.symbol.identity))
+        });
+        Ok(entries)
+    }
+}
+
+fn collect_artifact_files(root: &Path, relative: &Path, out: &mut BTreeSet<PathBuf>) -> Result<()> {
+    let path = root.join(relative);
+    let metadata = fs::symlink_metadata(&path)
+        .with_context(|| format!("artifact root does not exist: {}", relative.display()))?;
+    if metadata.file_type().is_symlink() {
+        bail!(
+            "artifact root must not be a symlink: {}",
+            relative.display()
+        );
+    }
+    if metadata.is_file() {
+        out.insert(path);
+        return Ok(());
+    }
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        let path = entry.path();
+        let metadata = entry.metadata()?;
+        if metadata.is_dir() {
+            let relative = path
+                .strip_prefix(root)
+                .context("artifact path must stay within workspace")?;
+            collect_artifact_files(root, relative, out)?;
+        } else if metadata.is_file() {
+            out.insert(path);
+        }
+    }
+    Ok(())
+}
+
+fn adapter_for_path(path: &Path) -> Option<&'static str> {
+    match path.extension().and_then(|extension| extension.to_str()) {
+        Some("rs") => Some("rust"),
+        Some("ts" | "tsx") => Some("typescript"),
+        Some("js" | "mjs" | "cjs") => Some("javascript"),
+        Some("py") => Some("python"),
+        Some("go") => Some("go"),
+        Some("sh") => Some("shell"),
+        _ => None,
     }
 }
 
@@ -467,10 +564,39 @@ pub fn resolve_target_with_adapters(
                 if unique.len() != names.len() {
                     bail!("symbol selector must not contain duplicate symbol names");
                 }
-                let resolved = names
-                    .iter()
-                    .map(|name| resolve_symbol(&target.adapter, &text, name))
-                    .collect::<Result<Vec<_>>>()?;
+                // Full-repository ownership bindings group many exact
+                // identities in one target.  Parse the file once for those
+                // bindings instead of resolving every identity independently.
+                let resolved = if names.len() > 1 {
+                    match inventory_symbols(&target.adapter, &text) {
+                        Ok(inventory) => {
+                            for name in names {
+                                if !inventory.iter().any(|symbol| symbol.identity == *name) {
+                                    bail!("symbol {name} has no definition");
+                                }
+                            }
+                            vec![syu_code_intel::SymbolResolution {
+                                identity: names.join(", "),
+                                kind: "inventory".to_string(),
+                                byte_start: 0,
+                                byte_end: content.len(),
+                                line_start: 1,
+                                line_end: text.lines().count().max(1),
+                                excerpt: text.to_string(),
+                                excerpt_hash: hash_bytes(&content),
+                            }]
+                        }
+                        Err(_) => names
+                            .iter()
+                            .map(|name| resolve_symbol(&target.adapter, &text, name))
+                            .collect::<Result<Vec<_>>>()?,
+                    }
+                } else {
+                    names
+                        .iter()
+                        .map(|name| resolve_symbol(&target.adapter, &text, name))
+                        .collect::<Result<Vec<_>>>()?
+                };
                 let start = resolved.iter().map(|r| r.byte_start).min().unwrap_or(0);
                 let end = resolved.iter().map(|r| r.byte_end).max().unwrap_or(0);
                 let excerpt = text[start..end].to_string();
@@ -813,6 +939,7 @@ mod tests {
                 "profiles: { active: [], custom: {} }\n",
                 "validation:\n",
                 "  preset: agent-ready\n",
+"  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
                 "  deny_warnings: false\n",
                 "  rules: {}\n",
                 "  changed:\n",

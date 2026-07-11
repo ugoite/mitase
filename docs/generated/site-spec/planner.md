@@ -64,7 +64,7 @@ description: "Generated reference for docs/syu/planner.yaml"
             - **kind**: symbol
             - **names**:
               - validate_item_coverage
-              - coverage_level_for_item
+              - validate_artifact_axis
       - **satisfies**:
         - REQ-WORK-002#criterion.qualitative-coverage
 
@@ -104,6 +104,6 @@ features:
           - id: coverage-validation
             adapter: rust
             path: crates/syu-validation/src/lib.rs
-            selector: { kind: symbol, names: [validate_item_coverage, coverage_level_for_item] }
+            selector: { kind: symbol, names: [validate_item_coverage, validate_artifact_axis] }
         satisfies: [REQ-WORK-002#criterion.qualitative-coverage]
 ```

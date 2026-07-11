@@ -48,8 +48,8 @@ description: "Generated reference for docs/syu/work.yaml"
           - **selector**:
             - **kind**: symbol
             - **names**:
-              - anchors_roundtrip
-              - target_refs_do_not_use_array_positions
+              - tests::anchors_roundtrip
+              - tests::target_refs_do_not_use_array_positions
       - **verifies**:
         - REQ-WORK-001#criterion.exact-slice
 - **id**: REQ-WORK-002
@@ -106,7 +106,7 @@ requirements:
           - id: anchor-test
             adapter: rust
             path: crates/syu-spec-model/src/lib.rs
-            selector: { kind: symbol, names: [anchors_roundtrip, target_refs_do_not_use_array_positions] }
+            selector: { kind: symbol, names: [tests::anchors_roundtrip, tests::target_refs_do_not_use_array_positions] }
         verifies: [REQ-WORK-001#criterion.exact-slice]
   - id: REQ-WORK-002
     title: Require qualitative item coverage

@@ -9,13 +9,15 @@ profiles:
     agent-ready:
       facets:
         architecture: { include: [docs/**] }
-        tooling: { include: [crates/**, src/**] }
-        verification: { include: [crates/**, tests/**] }
+        tooling: { include: [crates/**, src/**, fixtures/**, tests/**] }
+        verification: { include: [crates/**, src/**, tests/**] }
+        fixtures: { include: [fixtures/**] }
       contract_rules: []
 validation:
   preset: agent-ready
   coverage:
-    target: evidence-ready
+    artifact_ownership: agent-ready
+    spec_fulfillment: agent-ready
   deny_warnings: false
   rules: {}
   changed:
