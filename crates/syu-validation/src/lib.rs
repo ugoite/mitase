@@ -3298,6 +3298,11 @@ requirements:
     #[test]
     fn artifact_coverage_rejects_unowned_implementation_and_test_symbols() {
         let (tempdir, _, _) = load_fixture_workspace();
+        let config_path = tempdir.path().join("syu.yaml");
+        let config = fs::read_to_string(&config_path)
+            .unwrap()
+            .replace("artifact_ownership: off", "artifact_ownership: connected");
+        fs::write(config_path, config).unwrap();
         fs::write(
             tempdir.path().join("api/login.rs"),
             "pub fn login() {}\npub fn unowned_public_api() {}\n",
