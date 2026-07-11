@@ -113,7 +113,7 @@ fn resolve_rust(source: &str, name: &str) -> Result<SymbolResolution> {
 
         fn visit_item_fn(&mut self, value: &'ast syn::ItemFn) {
             let identity = self.scoped_identity(&value.sig.ident.to_string());
-            if symbol_matches(&self.name, &value.sig.ident.to_string(), &identity) {
+            if symbol_matches(self.name, &value.sig.ident.to_string(), &identity) {
                 self.candidates.push(Candidate {
                     kind: "function",
                     identity,
@@ -124,7 +124,7 @@ fn resolve_rust(source: &str, name: &str) -> Result<SymbolResolution> {
 
         fn visit_impl_item_fn(&mut self, value: &'ast syn::ImplItemFn) {
             let identity = self.scoped_identity(&value.sig.ident.to_string());
-            if symbol_matches(&self.name, &value.sig.ident.to_string(), &identity) {
+            if symbol_matches(self.name, &value.sig.ident.to_string(), &identity) {
                 self.candidates.push(Candidate {
                     kind: "method",
                     identity,
@@ -135,7 +135,7 @@ fn resolve_rust(source: &str, name: &str) -> Result<SymbolResolution> {
 
         fn visit_item_struct(&mut self, value: &'ast syn::ItemStruct) {
             let identity = self.scoped_identity(&value.ident.to_string());
-            if symbol_matches(&self.name, &value.ident.to_string(), &identity) {
+            if symbol_matches(self.name, &value.ident.to_string(), &identity) {
                 self.candidates.push(Candidate {
                     kind: "struct",
                     identity,
@@ -146,7 +146,7 @@ fn resolve_rust(source: &str, name: &str) -> Result<SymbolResolution> {
 
         fn visit_item_enum(&mut self, value: &'ast syn::ItemEnum) {
             let identity = self.scoped_identity(&value.ident.to_string());
-            if symbol_matches(&self.name, &value.ident.to_string(), &identity) {
+            if symbol_matches(self.name, &value.ident.to_string(), &identity) {
                 self.candidates.push(Candidate {
                     kind: "enum",
                     identity,
@@ -157,7 +157,7 @@ fn resolve_rust(source: &str, name: &str) -> Result<SymbolResolution> {
 
         fn visit_item_trait(&mut self, value: &'ast syn::ItemTrait) {
             let identity = self.scoped_identity(&value.ident.to_string());
-            if symbol_matches(&self.name, &value.ident.to_string(), &identity) {
+            if symbol_matches(self.name, &value.ident.to_string(), &identity) {
                 self.candidates.push(Candidate {
                     kind: "trait",
                     identity,
