@@ -193,6 +193,7 @@ requirements:
                 - tests::heading_selectors_reject_ambiguity
                 - tests::marker_selectors_reject_ambiguity
                 - tests::nested_spec_directories_load_from_noncanonical_workspace_roots
+                - tests::build_inventory_excludes_unreachable_rust_files
         verifies: [REQ-COVERAGE-001#criterion.inventory-owned]
       - id: test-012
         role: verification

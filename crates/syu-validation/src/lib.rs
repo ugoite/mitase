@@ -1688,7 +1688,13 @@ fn criterion_level(
         .iter()
         .chain(&verifications)
         .filter_map(|binding| ctx.index.bindings.get(binding))
+        // Build-aware inventory is authoritative: bindings for archived or
+        // unreachable code cannot make an active criterion less work-ready.
+        .filter(|binding| binding_has_active_target(binding, inventory))
         .collect::<Vec<_>>();
+    if bindings.is_empty() {
+        return Some(CoverageLevel::Connected);
+    }
     if !bindings.iter().all(|binding| !binding.targets.is_empty()) {
         return Some(CoverageLevel::Owned);
     }
@@ -1707,6 +1713,24 @@ fn criterion_level(
         return Some(CoverageLevel::Verified);
     }
     Some(CoverageLevel::EvidenceReady)
+}
+
+fn binding_has_active_target(
+    binding: &syu_spec_model::ArtifactBinding,
+    inventory: &[ArtifactInventoryEntry],
+) -> bool {
+    binding.targets.iter().any(|target| match &target.selector {
+        Selector::Symbol { names } => names.iter().any(|name| {
+            inventory.iter().any(|entry| {
+                entry.path == target.path
+                    && entry.adapter == target.adapter
+                    && entry.symbol.identity == *name
+            })
+        }),
+        _ => inventory
+            .iter()
+            .any(|entry| entry.path == target.path && entry.adapter == target.adapter),
+    })
 }
 
 fn target_is_exact_inventory_target(

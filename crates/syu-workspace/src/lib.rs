@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 use anyhow::{Context, Result, bail};
 use globset::{Glob, GlobSet, GlobSetBuilder};
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -119,19 +120,18 @@ impl SpecWorkspace {
         self.matcher.is_excluded(path)
     }
 
-    /// Discover every addressable implementation symbol and test case in the
-    /// configured artifact scope.  Non-code adapters deliberately contribute no
-    /// entries: coverage only has a symbol/test denominator where an adapter can
-    /// resolve the same identity later for planning.
+    /// Discover addressable units from the active build graph.  An unreferenced
+    /// source file is not part of the denominator for a work-ready repository.
     pub fn artifact_inventory(&self) -> Result<Vec<ArtifactInventoryEntry>> {
-        let mut files = BTreeSet::new();
-        for root in &self.config.workspace.artifact_roots {
-            collect_artifact_files(&self.root, root.as_path(), &mut files)?;
-        }
+        let files = self.active_build_files()?;
+        let canonical_root = self.root.canonicalize()?;
         let mut entries = Vec::new();
         for path in files {
+            let path = path.canonicalize().with_context(|| {
+                format!("artifact inventory path does not exist: {}", path.display())
+            })?;
             let relative = path
-                .strip_prefix(&self.root)
+                .strip_prefix(&canonical_root)
                 .context("artifact path must stay within workspace")?;
             if self.path_is_excluded(relative) || self.path_is_spec(relative) {
                 continue;
@@ -167,6 +167,84 @@ impl SpecWorkspace {
         });
         Ok(entries)
     }
+
+    fn active_build_files(&self) -> Result<BTreeSet<PathBuf>> {
+        // v1 fixture workspaces are intentionally kept readable while the
+        // configuration cutover is in progress. A v2 config rejects this
+        // fallback in `ProjectConfig`; the repository itself always takes the
+        // Cargo branch below.
+        if !self.root.join("Cargo.toml").is_file() {
+            let mut files = BTreeSet::new();
+            for root in &self.config.workspace.artifact_roots {
+                collect_artifact_files(&self.root, root.as_path(), &mut files)?;
+            }
+            return Ok(files);
+        }
+        let output = std::process::Command::new("cargo")
+            .args(["metadata", "--no-deps", "--format-version", "1"])
+            .current_dir(&self.root)
+            .output()
+            .context("run cargo metadata for build-aware inventory")?;
+        if !output.status.success() {
+            bail!(
+                "cargo metadata for build-aware inventory failed: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+        }
+        let metadata: CargoMetadata = serde_json::from_slice(&output.stdout)
+            .context("parse cargo metadata for build-aware inventory")?;
+        let members = metadata
+            .workspace_members
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        let mut files = BTreeSet::new();
+        for package in metadata.packages {
+            if !members.contains(&package.id) {
+                continue;
+            }
+            for target in package.targets {
+                if target
+                    .kind
+                    .iter()
+                    .any(|kind| matches!(kind.as_str(), "lib" | "bin" | "test"))
+                {
+                    self.collect_reachable_rust_files(Path::new(&target.src_path), &mut files)?;
+                }
+            }
+        }
+        Ok(files)
+    }
+
+    fn collect_reachable_rust_files(&self, path: &Path, out: &mut BTreeSet<PathBuf>) -> Result<()> {
+        let canonical_root = self.root.canonicalize()?;
+        let canonical = path
+            .canonicalize()
+            .with_context(|| format!("active Cargo target does not exist: {}", path.display()))?;
+        if !canonical.starts_with(&canonical_root) {
+            bail!("active Cargo target escapes workspace: {}", path.display());
+        }
+        if !out.insert(canonical.clone()) {
+            return Ok(());
+        }
+        let source = fs::read_to_string(&canonical)
+            .with_context(|| format!("read active Rust source {}", canonical.display()))?;
+        for module in external_rust_modules(&source) {
+            let parent = canonical.parent().context("Rust source has no parent")?;
+            let stem = canonical
+                .file_stem()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default();
+            let candidates = [
+                parent.join(format!("{module}.rs")),
+                parent.join(&module).join("mod.rs"),
+                parent.join(stem).join(format!("{module}.rs")),
+            ];
+            if let Some(child) = candidates.iter().find(|candidate| candidate.is_file()) {
+                self.collect_reachable_rust_files(child, out)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 fn collect_artifact_files(root: &Path, relative: &Path, out: &mut BTreeSet<PathBuf>) -> Result<()> {
@@ -186,17 +264,51 @@ fn collect_artifact_files(root: &Path, relative: &Path, out: &mut BTreeSet<PathB
     for entry in fs::read_dir(path)? {
         let entry = entry?;
         let path = entry.path();
-        let metadata = entry.metadata()?;
-        if metadata.is_dir() {
+        if entry.metadata()?.is_dir() {
             let relative = path
                 .strip_prefix(root)
                 .context("artifact path must stay within workspace")?;
             collect_artifact_files(root, relative, out)?;
-        } else if metadata.is_file() {
+        } else {
             out.insert(path);
         }
     }
     Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+struct CargoMetadata {
+    packages: Vec<CargoPackage>,
+    workspace_members: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CargoPackage {
+    id: String,
+    targets: Vec<CargoTarget>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CargoTarget {
+    kind: Vec<String>,
+    src_path: String,
+}
+
+fn external_rust_modules(source: &str) -> Vec<String> {
+    source
+        .lines()
+        .filter_map(|line| {
+            let line = line.trim_start();
+            let line = line.strip_prefix("pub ").unwrap_or(line);
+            let line = line.strip_prefix("pub(crate) ").unwrap_or(line);
+            let name = line.strip_prefix("mod ")?.strip_suffix(';')?.trim();
+            (!name.is_empty()
+                && name
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_'))
+            .then(|| name.to_string())
+        })
+        .collect()
 }
 
 fn adapter_for_path(path: &Path) -> Option<&'static str> {
@@ -979,5 +1091,55 @@ mod tests {
 
         let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
         assert_eq!(workspace.documents.len(), 1);
+    }
+
+    #[test]
+    fn build_inventory_excludes_unreachable_rust_files() {
+        let tempdir = tempdir().expect("tempdir");
+        let root = tempdir.path();
+        fs::create_dir_all(root.join("spec")).expect("spec dir");
+        fs::create_dir_all(root.join("src")).expect("src dir");
+        fs::write(
+            root.join("Cargo.toml"),
+            "[package]\nname = \"inventory-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        )
+        .expect("manifest");
+        fs::write(root.join("src/lib.rs"), "mod active;\n").expect("crate root");
+        fs::write(root.join("src/active.rs"), "pub fn reachable() {}\n").expect("active source");
+        fs::write(root.join("src/orphan.rs"), "pub fn unreachable() {}\n").expect("orphan source");
+        fs::write(
+            root.join("syu.yaml"),
+            concat!(
+                "schema: syu/config/v1\n",
+                "workspace: { spec_roots: [spec], artifact_roots: [src], excludes: [] }\n",
+                "profiles: { active: [], custom: {} }\n",
+                "validation:\n",
+                "  preset: agent-ready\n",
+                "  coverage: { artifact_ownership: off, spec_fulfillment: off }\n",
+                "  deny_warnings: false\n",
+                "  rules: {}\n",
+                "  changed: { require_owned_changes: false }\n",
+                "work:\n",
+                "  slicing: { max_editable_files: 4, max_editable_symbols: 8, max_verification_targets: 4, max_readonly_targets: 8, max_total_bytes: 16384 }\n",
+                "  context: { include_parent_principles: false, include_parent_rules: false }\n",
+                "adapters: { enabled: [rust] }\n",
+            ),
+        )
+        .expect("config");
+
+        let inventory = SpecWorkspace::load(root)
+            .expect("workspace")
+            .artifact_inventory()
+            .expect("inventory");
+        assert!(
+            inventory
+                .iter()
+                .any(|entry| entry.symbol.identity == "reachable")
+        );
+        assert!(
+            !inventory
+                .iter()
+                .any(|entry| entry.symbol.identity == "unreachable")
+        );
     }
 }
