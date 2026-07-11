@@ -460,6 +460,7 @@ features:
                 - ValidationRule
                 - anchor_changed
                 - artifact_level
+                - binding_has_active_target
                 - binding_set_for_criterion
                 - binding_targets_changed_across_indexes
                 - binding_targets_for_index
@@ -642,6 +643,9 @@ features:
               names:
                 - AnchorValue
                 - ArtifactInventoryEntry
+                - CargoMetadata
+                - CargoPackage
+                - CargoTarget
                 - LoadedDocument
                 - ResolvedTarget
                 - SpecIndex
@@ -652,6 +656,8 @@ features:
                 - SpecIndex::target
                 - SpecWorkspace
                 - SpecWorkspace::artifact_inventory
+                - SpecWorkspace::active_build_files
+                - SpecWorkspace::collect_reachable_rust_files
                 - SpecWorkspace::fingerprint
                 - SpecWorkspace::index
                 - SpecWorkspace::load
@@ -664,6 +670,7 @@ features:
                 - WorkspaceMatcher::is_excluded
                 - adapter_for_path
                 - collect_artifact_files
+                - external_rust_modules
                 - collect_yaml
                 - compile_excludes
                 - extract_heading_block

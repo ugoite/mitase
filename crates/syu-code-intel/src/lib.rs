@@ -24,6 +24,10 @@ pub struct InventorySymbol {
     pub identity: String,
     pub kind: String,
     pub is_test: bool,
+    /// Public symbols are externally reachable work entrypoints. Private
+    /// helpers may inherit an ownership scope, but these always need an exact
+    /// work target at seedable readiness and above.
+    pub is_public: bool,
 }
 
 pub fn inventory_symbols(adapter: &str, source: &str) -> Result<Vec<InventorySymbol>> {
@@ -203,12 +207,13 @@ fn inventory_rust(source: &str) -> Result<Vec<InventorySymbol>> {
                 .collect::<Vec<_>>()
                 .join("::")
         }
-        fn push(&mut self, name: String, kind: &str, is_test: bool) {
+        fn push(&mut self, name: String, kind: &str, is_test: bool, is_public: bool) {
             self.symbols.push(InventorySymbol {
                 identity: self.identity(&name),
                 name,
                 kind: kind.to_string(),
                 is_test,
+                is_public,
             });
         }
     }
@@ -231,24 +236,49 @@ fn inventory_rust(source: &str) -> Result<Vec<InventorySymbol>> {
         }
         fn visit_item_fn(&mut self, value: &'ast syn::ItemFn) {
             let is_test = value.attrs.iter().any(attribute_is_test);
-            self.push(value.sig.ident.to_string(), "function", is_test);
+            self.push(
+                value.sig.ident.to_string(),
+                "function",
+                is_test,
+                matches!(value.vis, syn::Visibility::Public(_)),
+            );
             syn::visit::visit_item_fn(self, value);
         }
         fn visit_impl_item_fn(&mut self, value: &'ast syn::ImplItemFn) {
             let is_test = value.attrs.iter().any(attribute_is_test);
-            self.push(value.sig.ident.to_string(), "method", is_test);
+            self.push(
+                value.sig.ident.to_string(),
+                "method",
+                is_test,
+                matches!(value.vis, syn::Visibility::Public(_)),
+            );
             syn::visit::visit_impl_item_fn(self, value);
         }
         fn visit_item_struct(&mut self, value: &'ast syn::ItemStruct) {
-            self.push(value.ident.to_string(), "struct", false);
+            self.push(
+                value.ident.to_string(),
+                "struct",
+                false,
+                matches!(value.vis, syn::Visibility::Public(_)),
+            );
             syn::visit::visit_item_struct(self, value);
         }
         fn visit_item_enum(&mut self, value: &'ast syn::ItemEnum) {
-            self.push(value.ident.to_string(), "enum", false);
+            self.push(
+                value.ident.to_string(),
+                "enum",
+                false,
+                matches!(value.vis, syn::Visibility::Public(_)),
+            );
             syn::visit::visit_item_enum(self, value);
         }
         fn visit_item_trait(&mut self, value: &'ast syn::ItemTrait) {
-            self.push(value.ident.to_string(), "trait", false);
+            self.push(
+                value.ident.to_string(),
+                "trait",
+                false,
+                matches!(value.vis, syn::Visibility::Public(_)),
+            );
             syn::visit::visit_item_trait(self, value);
         }
     }
@@ -309,6 +339,7 @@ fn inventory_shell(source: &str) -> Result<Vec<InventorySymbol>> {
                 identity: name.to_string(),
                 kind: "function".to_string(),
                 is_test: name.starts_with("test_"),
+                is_public: false,
             });
         }
     }
@@ -342,6 +373,7 @@ fn inventory_line_definitions(
                     identity: name.to_string(),
                     kind: "definition".to_string(),
                     is_test: is_test(name),
+                    is_public: false,
                 });
             }
         }
