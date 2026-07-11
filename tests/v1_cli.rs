@@ -3716,3 +3716,49 @@ fn rejects_unknown_configuration_fields() {
         .assert()
         .failure();
 }
+
+#[test]
+fn rejects_missing_bidirectional_coverage_configuration() {
+    let temp = tempdir().unwrap();
+    let source = Path::new("fixtures/v1/valid-web-app");
+    for entry in fs::read_dir(source).unwrap() {
+        let entry = entry.unwrap();
+        let destination = temp.path().join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            fs::create_dir_all(&destination).unwrap();
+            for nested in fs::read_dir(entry.path()).unwrap() {
+                let nested = nested.unwrap();
+                let nested_destination = destination.join(nested.file_name());
+                if nested.file_type().unwrap().is_dir() {
+                    fs::create_dir_all(&nested_destination).unwrap();
+                    for leaf in fs::read_dir(nested.path()).unwrap() {
+                        let leaf = leaf.unwrap();
+                        fs::copy(leaf.path(), nested_destination.join(leaf.file_name())).unwrap();
+                    }
+                } else {
+                    fs::copy(nested.path(), nested_destination).unwrap();
+                }
+            }
+        } else {
+            fs::copy(entry.path(), destination).unwrap();
+        }
+    }
+    let config_path = temp.path().join("syu.yaml");
+    let config = fs::read_to_string(&config_path).unwrap().replace(
+        "  coverage:\n    artifact_ownership: off\n    spec_fulfillment: off\n",
+        "",
+    );
+    fs::write(&config_path, config).unwrap();
+    let output = Command::cargo_bin("syu")
+        .unwrap()
+        .args(["validate"])
+        .arg(temp.path())
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8(output.stderr)
+            .unwrap()
+            .contains("missing field `coverage`")
+    );
+}

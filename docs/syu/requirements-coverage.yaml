@@ -926,6 +926,7 @@ requirements:
                 - plan_blocks_when_context_pack_serialized_budget_would_overflow
                 - post_state_multi_slice_validation_requires_selected_slice
                 - refactor_plan_adds_contract_consistency_completion
+                - rejects_missing_bidirectional_coverage_configuration
                 - rejects_rehashed_editable_target_tampering_against_basis_revision
                 - rejects_stale_target_snapshots
                 - rejects_tampered_path_selector_and_budget_snapshots
