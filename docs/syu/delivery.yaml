@@ -17,10 +17,12 @@ policies:
       - id: shared-validator
         role: enforcement
         facet: tooling
-        responsibility: Enforce graph coverage, exact targets, and plan scope through one validation engine.
+        responsibility: Enforce graph integrity, exact targets, and plan scope through one validation engine.
         targets:
           - id: validation-entry
             adapter: rust
             path: crates/syu-validation/src/lib.rs
-            selector: { kind: symbol, names: [validate, validate_plan] }
-        enforces: [POL-DELIVERY-001#rule.exact-ownership]
+            selector: { kind: symbol, name: validate }
+            claims:
+              - kind: enforces
+                rule: POL-DELIVERY-001#rule.exact-ownership

@@ -1,7 +1,9 @@
 #![forbid(unsafe_code)]
 use anyhow::{Context, Result, bail};
 use globset::{Glob, GlobSet, GlobSetBuilder};
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
 use syu_diagnostics::Diagnostic;
 use syu_spec_model::{
     ArtifactBinding, BoundTargetRef, LocalAnchorKind, RepoPath, Selector, SpecAnchor,
@@ -10,6 +12,27 @@ use syu_work_model::*;
 use syu_workspace::{
     AnchorValue, SpecIndex, SpecWorkspace, resolve_target_with_adapters, selector_supports_editable,
 };
+
+fn enabled_adapters(workspace: &SpecWorkspace) -> Vec<String> {
+    workspace
+        .config
+        .inventory
+        .profiles
+        .iter()
+        .find(|profile| profile.id == workspace.config.inventory.active_profile)
+        .map(|profile| profile.providers.keys().cloned().collect())
+        .unwrap_or_else(|| {
+            vec![
+                "rust".into(),
+                "javascript".into(),
+                "typescript".into(),
+                "markdown".into(),
+                "openapi".into(),
+                "yaml".into(),
+                "json".into(),
+            ]
+        })
+}
 
 pub fn plan(
     request: &WorkRequest,
@@ -258,14 +281,14 @@ fn expand_seed(index: &SpecIndex, seed: &SpecAnchor, criteria: &mut BTreeSet<Spe
         }
         LocalAnchorKind::Binding => {
             if let Some(b) = index.bindings.get(seed) {
-                criteria.extend(b.satisfies.iter().chain(&b.verifies).cloned());
+                criteria.extend(binding_criteria(b));
             }
         }
         LocalAnchorKind::Contract => {
             if let Some(c) = index.contracts.get(seed) {
                 for p in &c.participants {
-                    if let Some(b) = index.bindings.get(&p.binding) {
-                        criteria.extend(b.satisfies.iter().cloned());
+                    if let Some(b) = index.bindings.get(&p.target.binding) {
+                        criteria.extend(binding_criteria(b));
                     }
                 }
             }
@@ -342,16 +365,24 @@ fn group_requested_targets(
     Ok(groups)
 }
 
-fn requested_target_criterion(binding: &ArtifactBinding) -> Result<Option<SpecAnchor>> {
-    let mut criteria = binding
-        .satisfies
+fn binding_criteria(binding: &ArtifactBinding) -> Vec<SpecAnchor> {
+    binding
+        .targets
         .iter()
-        .chain(&binding.verifies)
-        .chain(&binding.documents)
-        .chain(&binding.enforces)
-        .chain(&binding.evidences)
-        .cloned()
-        .collect::<Vec<_>>();
+        .flat_map(|target| target.claims.iter())
+        .filter_map(|claim| match claim {
+            syu_spec_model::TargetClaim::Satisfies { criterion }
+            | syu_spec_model::TargetClaim::Verifies { criterion, .. } => Some(criterion.clone()),
+            syu_spec_model::TargetClaim::Documents { anchor }
+            | syu_spec_model::TargetClaim::Evidences { anchor } => Some(anchor.clone()),
+            syu_spec_model::TargetClaim::Enforces { rule } => Some(rule.clone()),
+            syu_spec_model::TargetClaim::GeneratedFrom { .. } => None,
+        })
+        .collect()
+}
+
+fn requested_target_criterion(binding: &ArtifactBinding) -> Result<Option<SpecAnchor>> {
+    let mut criteria = binding_criteria(binding);
     criteria.sort();
     criteria.dedup();
     match criteria.len() {
@@ -372,7 +403,7 @@ fn primary_bindings(
             .iter()
             .filter(|(_, binding)| {
                 binding.role == syu_spec_model::BindingRole::Documentation
-                    && binding.documents.contains(criterion)
+                    && binding.targets.iter().any(|target| target.claims.iter().any(|claim| matches!(claim, syu_spec_model::TargetClaim::Documents { anchor } if anchor == criterion)))
             })
             .map(|(anchor, _)| anchor.clone())
             .collect::<Vec<_>>(),
@@ -1118,10 +1149,10 @@ fn finalize_slice(
         dedup(&mut readonly);
     }
     anchors.extend(contracts.clone());
-    if workspace.config.work.context.include_parent_rules {
+    if true {
         for rule in index.criteria_to_rules.get(criterion).into_iter().flatten() {
             anchors.push(rule.clone());
-            if workspace.config.work.context.include_parent_principles {
+            if true {
                 anchors.extend(
                     index
                         .rules_to_principles
@@ -1386,18 +1417,22 @@ fn contract_readonly_context(
                 ));
             }
             for participant in &contract.participants {
-                if &participant.binding != implementation
-                    && let Some(other) = index.bindings.get(&participant.binding)
+                if &participant.target.binding != implementation
+                    && let Some(other) = index.bindings.get(&participant.target.binding)
+                    && let Some(target) = index.target(&participant.target)
                 {
-                    readonly.extend(targets(
+                    readonly.extend(one_target(
                         workspace,
-                        &participant.binding,
+                        &participant.target,
                         other,
-                        target_policy(TargetTransition::Readonly),
-                        "Contract counterpart; readonly in this slice.",
-                        WorkOperation::Modify,
-                        None,
-                        None,
+                        target,
+                        TargetPlanOptions {
+                            policy: target_policy(TargetTransition::Readonly),
+                            reason: "Contract counterpart; readonly in this slice.",
+                            operation: WorkOperation::Modify,
+                            add_budget_bytes: None,
+                            add_budget_lines: None,
+                        },
                         exclude_matcher,
                         blockers,
                     ));
@@ -1485,7 +1520,7 @@ fn one_target(
         return vec![];
     }
     let resolved =
-        resolve_target_with_adapters(&workspace.root, target, &workspace.config.adapters.enabled);
+        resolve_target_with_adapters(&workspace.root, target, &enabled_adapters(workspace));
     match resolved {
         Ok(r) => {
             if matches!(options.policy.transition, TargetTransition::Add) {
@@ -1614,8 +1649,7 @@ fn declared_target_plan(
 
 fn declared_selector(selector: &Selector) -> (String, Vec<String>) {
     match selector {
-        Selector::File => ("file".into(), Vec::new()),
-        Selector::Symbol { names } => (format!("symbols {}", names.join(", ")), names.clone()),
+        Selector::Symbol { name } => (format!("symbol {name}"), vec![name.clone()]),
         Selector::Operation { method, path } => (
             format!("operation {} {path}", method.to_ascii_uppercase()),
             Vec::new(),
@@ -1985,7 +2019,7 @@ pub fn export_context(
                         .participants
                         .iter()
                         .map(|participant| ContractParticipantContext {
-                            binding: participant.binding.clone(),
+                            target: participant.target.clone(),
                             role: participant.role.clone(),
                         })
                         .collect(),
@@ -2057,7 +2091,7 @@ fn slice_spec_context(slice: &ExecutionSlice, index: &SpecIndex) -> Vec<SpecCont
                         .participants
                         .iter()
                         .map(|participant| ContractParticipantContext {
-                            binding: participant.binding.clone(),
+                            target: participant.target.clone(),
                             role: participant.role.clone(),
                         })
                         .collect(),
@@ -2097,7 +2131,7 @@ fn build_context_pack(
                 resolve_target_with_adapters(
                     &workspace.root,
                     declared,
-                    &workspace.config.adapters.enabled,
+                    &enabled_adapters(workspace),
                 )
                 .ok()
             });
@@ -2158,9 +2192,12 @@ fn build_context_pack(
                                 adapter: target.adapter.clone(),
                                 path: RepoPath::new(target.resolved_path.clone())
                                     .expect("resolved path is a valid repo path"),
-                                selector: syu_spec_model::Selector::File,
+                                selector: syu_spec_model::Selector::Marker {
+                                    value: "crate".into(),
+                                },
+                                claims: vec![],
                             },
-                            &workspace.config.adapters.enabled,
+                            &enabled_adapters(workspace),
                         )
                         .ok()
                     {
@@ -2188,6 +2225,46 @@ fn build_context_pack(
                                 reason: "Container context for new target.".into(),
                                 excerpt: container.excerpt,
                             }));
+                        }
+                    } else if matches!(target.lifecycle, TargetLifecycle::EnsurePresent) {
+                        // Ownership/module scopes can be wider than an exact
+                        // selector. When no explicit marker resolves, include
+                        // the existing file as bounded readonly support rather
+                        // than dropping context for a new private target.
+                        let path = workspace.root.join(&target.resolved_path);
+                        let bytes = fs::read(&path).unwrap_or_default();
+                        if !bytes.is_empty() {
+                            let excerpt = String::from_utf8_lossy(&bytes).into_owned();
+                            let mut hash = Sha256::new();
+                            hash.update(&bytes);
+                            let digest = format!("sha256:{:x}", hash.finalize());
+                            let support_id = format!("support:{}", target.reference);
+                            if included_supports.insert(support_id.clone()) {
+                                artifact_context.push(ArtifactContextEntry::Support(
+                                    SupportContext {
+                                        support_id,
+                                        supports: target.reference.clone(),
+                                        mode: ContextMode::Readonly,
+                                        access: TargetAccessMode::Readonly,
+                                        path: target.resolved_path.clone(),
+                                        selector: ResolvedSelector {
+                                            description: "ownership container".into(),
+                                            symbols: vec![],
+                                        },
+                                        line_start: 1,
+                                        line_end: excerpt.lines().count().max(1),
+                                        byte_start: 0,
+                                        byte_end: bytes.len(),
+                                        adapter: target.adapter.clone(),
+                                        facet: target.facet.clone(),
+                                        role: target.role,
+                                        content_hash: digest.clone(),
+                                        excerpt_hash: digest,
+                                        reason: "Container context for new target.".into(),
+                                        excerpt,
+                                    },
+                                ));
+                            }
                         }
                     }
                 }
@@ -2240,15 +2317,24 @@ mod tests {
                 "schema: syu/config/v1\n",
                 "workspace:\n",
                 "  spec_roots: [spec]\n",
-                "  artifact_roots: [src]\n",
                 "  excludes: []\n",
-                "profiles: { active: [], custom: {} }\n",
+                "inventory:\n",
+                "  active_profile: default\n",
+                "  profiles:\n",
+                "    - id: default\n",
+                "      providers: { rust: {} }\n",
                 "validation:\n",
                 "  preset: standard\n",
-                "  deny_warnings: false\n",
-                "  rules: {}\n",
+                "  readiness:\n",
+                "    target: off\n",
+                "    limits:\n",
+                "      max_ownership_scope_units: 64\n",
+                "      max_targets_per_binding: 12\n",
+                "      max_slices_per_seed: 4\n",
                 "  changed:\n",
                 "    require_owned_changes: false\n",
+                "    require_plan: false\n",
+                "verification: { runners: {} }\n",
                 "work:\n",
                 "  slicing:\n",
                 "    max_editable_files: 2\n",
@@ -2256,10 +2342,6 @@ mod tests {
                 "    max_verification_targets: 2\n",
                 "    max_readonly_targets: 2\n",
                 "    max_total_bytes: 4096\n",
-                "  context:\n",
-                "    include_parent_principles: false\n",
-                "    include_parent_rules: false\n",
-                "adapters: { enabled: [rust] }\n",
             ),
         )
         .expect("config");
@@ -2280,10 +2362,24 @@ mod tests {
                 "        role: implementation\n",
                 "        facet: backend\n",
                 "        responsibility: Implement the target.\n",
+                "        owns:\n",
+                "          - id: handler-module\n",
+                "            adapter: rust\n",
+                "            path: src/handler.rs\n",
+                "            selector: { kind: module, name: crate }\n",
                 "        targets:\n",
-                "          - { id: handler-present, adapter: rust, path: src/handler.rs, selector: { kind: symbol, names: [handler] } }\n",
-                "          - { id: handler-missing, adapter: rust, path: src/handler.rs, selector: { kind: symbol, names: [handler_missing] } }\n",
-                "        satisfies: [REQ-TEST-001#criterion.test]\n",
+                "          - id: handler-present\n",
+                "            adapter: rust\n",
+                "            path: src/handler.rs\n",
+                "            selector: { kind: symbol, name: handler }\n",
+                "            claims:\n",
+                "              - kind: satisfies\n",
+                "                criterion: REQ-TEST-001#criterion.test\n",
+                "          - id: handler-missing\n",
+                "            adapter: rust\n",
+                "            path: src/handler.rs\n",
+                "            selector: { kind: symbol, name: handler_missing }\n",
+                "            claims: []\n",
             ),
         )
         .expect("feature spec");
@@ -2412,9 +2508,16 @@ mod tests {
                 "        facet: backend\n",
                 "        responsibility: Implement the target.\n",
                 "        targets:\n",
-                "          - { id: operation-missing, adapter: rust, path: src/api.yaml, selector: { kind: operation, method: post, path: /new } }\n",
-                "          - { id: pointer-missing, adapter: rust, path: src/api.yaml, selector: { kind: json-pointer, value: /paths/~1new } }\n",
-                "        satisfies: [REQ-TEST-001#criterion.test]\n",
+                "          - id: operation-missing\n",
+                "            adapter: openapi\n",
+                "            path: src/api.yaml\n",
+                "            selector: { kind: operation, method: post, path: /new }\n",
+                "            claims: [{ kind: satisfies, criterion: REQ-TEST-001#criterion.test }]\n",
+                "          - id: pointer-missing\n",
+                "            adapter: yaml\n",
+                "            path: src/api.yaml\n",
+                "            selector: { kind: json-pointer, value: /paths/~1new }\n",
+                "            claims: []\n",
             ),
         )
         .expect("feature spec");
@@ -2491,10 +2594,9 @@ mod tests {
                 "        facet: backend\n",
                 "        responsibility: Implement the target.\n",
                 "        targets:\n",
-                "          - { id: handler-present, adapter: rust, path: src/handler.rs, selector: { kind: symbol, names: [handler] } }\n",
-                "          - { id: handler-missing, adapter: rust, path: src/handler.rs, selector: { kind: symbol, names: [handler_missing] } }\n",
-                "          - { id: registry-missing, adapter: rust, path: src/registry.rs, selector: { kind: symbol, names: [registry_missing] } }\n",
-                "        satisfies: [REQ-TEST-001#criterion.test]\n",
+                "          - { id: handler-present, adapter: rust, path: src/handler.rs, selector: { kind: symbol, name: handler }, claims: [{ kind: satisfies, criterion: REQ-TEST-001#criterion.test }] }\n",
+                "          - { id: handler-missing, adapter: rust, path: src/handler.rs, selector: { kind: symbol, name: handler_missing }, claims: [] }\n",
+                "          - { id: registry-missing, adapter: rust, path: src/registry.rs, selector: { kind: symbol, name: registry_missing }, claims: [] }\n",
             ),
         )
         .expect("feature spec");

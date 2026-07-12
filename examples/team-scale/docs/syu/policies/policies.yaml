@@ -27,9 +27,11 @@ policies:
     responsibility: Keep the example rule connected to an active owned artifact.
     targets:
     - id: policy-target
-      adapter: rust
+      adapter: shell
       path: src/auth/login.rs
       selector:
-        kind: file
-    enforces:
-    - POL-TEAMSCALE-001#rule.traceable-delivery
+        kind: marker
+        value: "pub fn legacy_login_flow() {}"
+      claims:
+      - kind: enforces
+        rule: POL-TEAMSCALE-001#rule.traceable-delivery

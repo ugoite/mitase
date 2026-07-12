@@ -22,5 +22,9 @@ requirements:
           - id: anchor-test
             adapter: rust
             path: crates/syu-spec-model/src/lib.rs
-            selector: { kind: symbol, names: [anchors_roundtrip, target_refs_do_not_use_array_positions] }
-        verifies: [REQ-WORK-001#criterion.exact-slice]
+            selector: { kind: symbol, name: anchors_roundtrip }
+            claims:
+              - kind: verifies
+                criterion: REQ-WORK-001#criterion.exact-slice
+                covers: [FEAT-WORK-001#binding.planner-engine/target.plan]
+                runner: { runner: cargo-test, arguments: { package: syu-spec-model, test: anchors_roundtrip } }

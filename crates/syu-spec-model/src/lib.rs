@@ -235,13 +235,68 @@ fn is_local_id(value: &str) -> bool {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
-pub enum Selector {
+pub enum OwnershipSelector {
     File,
-    Symbol { names: Vec<String> },
+    Module { name: String },
+    PathPrefix { value: RepoPath },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum ExactSelector {
+    Symbol { name: String },
     Operation { method: String, path: String },
     Heading { value: String },
     JsonPointer { value: String },
     Marker { value: String },
+}
+
+/// `Selector` used to be the public name for artifact selection.  Keep the
+/// type name stable while replacing its shape with one exact identity.
+pub type Selector = ExactSelector;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OwnershipScope {
+    pub id: LocalId,
+    pub adapter: String,
+    pub path: RepoPath,
+    pub selector: OwnershipSelector,
+    #[serde(default)]
+    pub supports: Vec<SpecAnchor>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum TargetClaim {
+    Satisfies {
+        criterion: SpecAnchor,
+    },
+    Verifies {
+        criterion: SpecAnchor,
+        covers: Vec<BoundTargetRef>,
+        runner: VerificationRunnerRef,
+    },
+    Documents {
+        anchor: SpecAnchor,
+    },
+    Enforces {
+        rule: SpecAnchor,
+    },
+    GeneratedFrom {
+        targets: Vec<BoundTargetRef>,
+    },
+    Evidences {
+        anchor: SpecAnchor,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VerificationRunnerRef {
+    pub runner: String,
+    #[serde(default)]
+    pub arguments: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -250,7 +305,9 @@ pub struct ArtifactTarget {
     pub id: LocalId,
     pub adapter: String,
     pub path: RepoPath,
-    pub selector: Selector,
+    pub selector: ExactSelector,
+    #[serde(default)]
+    pub claims: Vec<TargetClaim>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -275,19 +332,9 @@ pub struct ArtifactBinding {
     pub role: BindingRole,
     pub facet: String,
     pub responsibility: String,
+    #[serde(default)]
+    pub owns: Vec<OwnershipScope>,
     pub targets: Vec<ArtifactTarget>,
-    #[serde(default)]
-    pub satisfies: Vec<SpecAnchor>,
-    #[serde(default)]
-    pub verifies: Vec<SpecAnchor>,
-    #[serde(default)]
-    pub documents: Vec<SpecAnchor>,
-    #[serde(default)]
-    pub enforces: Vec<SpecAnchor>,
-    #[serde(default)]
-    pub generated_from: Vec<BoundTargetRef>,
-    #[serde(default)]
-    pub evidences: Vec<SpecAnchor>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -415,7 +462,7 @@ pub enum ContractKind {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ContractParticipant {
-    pub binding: SpecAnchor,
+    pub target: BoundTargetRef,
     pub role: String,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -514,5 +561,40 @@ mod tests {
         assert!(serde_yaml::from_str::<LocalId>("Bad_ID").is_err());
         assert!(serde_yaml::from_str::<RepoPath>("../outside").is_err());
         assert!(serde_yaml::from_str::<RepoPath>("/absolute").is_err());
+    }
+
+    #[test]
+    fn selectors_are_single_exact_identities() {
+        assert!(
+            serde_yaml::from_str::<ExactSelector>("kind: symbol\nnames: [one, two]\n").is_err()
+        );
+        assert!(
+            serde_yaml::from_str::<ExactSelector>("kind: symbol\nname: one\nextra: true\n")
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn binding_level_relations_and_non_target_contract_refs_are_rejected() {
+        let binding_relation = r#"
+schema: syu/spec/v1
+kind: features
+namespace: x
+category: X
+features:
+  - id: FEAT-1
+    title: x
+    summary: x
+    status: planned
+    bindings:
+      - id: b
+        role: implementation
+        facet: x
+        responsibility: x
+        satisfies: [REQ-1#criterion.x]
+        targets: []
+"#;
+        assert!(serde_yaml::from_str::<SpecDocument>(binding_relation).is_err());
+        assert!("FEAT-1#binding.b".parse::<BoundTargetRef>().is_err());
     }
 }

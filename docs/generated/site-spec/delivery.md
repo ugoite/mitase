@@ -43,7 +43,7 @@ description: "Generated reference for docs/syu/delivery.yaml"
     - **id**: shared-validator
       - **role**: enforcement
       - **facet**: tooling
-      - **responsibility**: Enforce graph coverage, exact targets, and plan scope through one validation engine.
+      - **responsibility**: Enforce graph integrity, exact targets, and plan scope through one validation engine.
       - **targets**:
         - **id**: validation-entry
           - **adapter**: rust
@@ -78,7 +78,7 @@ policies:
       - id: shared-validator
         role: enforcement
         facet: tooling
-        responsibility: Enforce graph coverage, exact targets, and plan scope through one validation engine.
+        responsibility: Enforce graph integrity, exact targets, and plan scope through one validation engine.
         targets:
           - id: validation-entry
             adapter: rust

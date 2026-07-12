@@ -25,7 +25,6 @@ pub struct SpecWorkspace {
 #[derive(Debug)]
 struct WorkspaceMatcher {
     spec_roots: Vec<RepoPath>,
-    artifact_roots: Vec<RepoPath>,
     excludes: Option<GlobSet>,
 }
 
@@ -57,11 +56,15 @@ impl SpecWorkspace {
     pub fn load(start: impl AsRef<Path>) -> Result<Self> {
         let root = find_root(start.as_ref())?;
         let config_path = root.join("syu.yaml");
-        let config: ProjectConfig = serde_yaml::from_str(
-            &fs::read_to_string(&config_path)
-                .with_context(|| format!("read {}", config_path.display()))?,
-        )
-        .context("parse syu/config/v1")?;
+        let config_source = fs::read_to_string(&config_path)
+            .with_context(|| format!("read {}", config_path.display()))?;
+        let config: ProjectConfig = match serde_yaml::from_str(&config_source) {
+            Ok(config) => config,
+            Err(_) if is_obsolete_pre_release_config(&config_source) => bail!(
+                "The document uses an obsolete pre-release syu/config/v1 shape.\nRewrite it using the current syu/config/v1 model."
+            ),
+            Err(error) => return Err(error).context("parse syu/config/v1"),
+        };
         if config.schema != CONFIG_SCHEMA {
             bail!("config schema must be {CONFIG_SCHEMA}");
         }
@@ -73,8 +76,16 @@ impl SpecWorkspace {
         paths.sort();
         let mut documents = Vec::new();
         for path in paths {
-            let document: SpecDocument = serde_yaml::from_str(&fs::read_to_string(&path)?)
-                .with_context(|| format!("strict parse {}", path.display()))?;
+            let source = fs::read_to_string(&path)?;
+            let document: SpecDocument = match serde_yaml::from_str(&source) {
+                Ok(document) => document,
+                Err(_error) if is_obsolete_pre_release_spec(&source) => bail!(
+                    "The document uses an obsolete pre-release syu/spec/v1 shape.\nRewrite it using the current syu/spec/v1 model."
+                ),
+                Err(error) => {
+                    return Err(error).with_context(|| format!("strict parse {}", path.display()));
+                }
+            };
             if document.schema() != SPEC_SCHEMA {
                 bail!("{}: schema must be {SPEC_SCHEMA}", path.display());
             }
@@ -107,11 +118,36 @@ impl SpecWorkspace {
         self.matcher.contains(&self.matcher.spec_roots, path)
     }
     pub fn path_is_artifact(&self, path: &Path) -> bool {
-        self.matcher.contains(&self.matcher.artifact_roots, path)
+        !path.is_absolute() && !self.path_is_excluded(path)
     }
     pub fn path_is_excluded(&self, path: &Path) -> bool {
         self.matcher.is_excluded(path)
     }
+}
+
+fn is_obsolete_pre_release_spec(source: &str) -> bool {
+    [
+        "satisfies:",
+        "verifies:",
+        "documents:",
+        "enforces:",
+        "generated_from:",
+        "evidences:",
+        "names:",
+        "binding:",
+    ]
+    .iter()
+    .any(|field| {
+        source
+            .lines()
+            .any(|line| line.trim_start().starts_with(field))
+    })
+}
+
+fn is_obsolete_pre_release_config(source: &str) -> bool {
+    ["version:", "spec:", "validate:"]
+        .iter()
+        .any(|field| source.lines().any(|line| line.starts_with(field)))
 }
 
 impl SpecIndex {
@@ -193,7 +229,7 @@ impl SpecIndex {
                             out.contracts.insert(anchor.clone(), contract.clone());
                             for p in &contract.participants {
                                 out.binding_to_contracts
-                                    .entry(p.binding.clone())
+                                    .entry(p.target.binding.clone())
                                     .or_default()
                                     .push(anchor.clone());
                             }
@@ -204,12 +240,9 @@ impl SpecIndex {
         }
         for (anchor, binding) in &out.bindings {
             for target in &binding.targets {
-                if workspace.config.workspace.artifact_roots.is_empty() {
-                    bail!("workspace.artifact_roots cannot be empty when bindings exist");
-                }
                 if !workspace.path_is_artifact(target.path.as_path()) {
                     bail!(
-                        "target path {} is outside workspace.artifact_roots",
+                        "target path {} is excluded from inventory",
                         target.path.display()
                     );
                 }
@@ -227,17 +260,22 @@ impl SpecIndex {
                         target_id: target.id.clone(),
                     });
             }
-            for criterion in &binding.satisfies {
-                out.criteria_to_implementations
-                    .entry(criterion.clone())
-                    .or_default()
-                    .push(anchor.clone());
-            }
-            for criterion in &binding.verifies {
-                out.criteria_to_verifications
-                    .entry(criterion.clone())
-                    .or_default()
-                    .push(anchor.clone());
+            for target in &binding.targets {
+                for claim in &target.claims {
+                    match claim {
+                        TargetClaim::Satisfies { criterion } => out
+                            .criteria_to_implementations
+                            .entry(criterion.clone())
+                            .or_default()
+                            .push(anchor.clone()),
+                        TargetClaim::Verifies { criterion, .. } => out
+                            .criteria_to_verifications
+                            .entry(criterion.clone())
+                            .or_default()
+                            .push(anchor.clone()),
+                        _ => {}
+                    }
+                }
             }
         }
         for values in out
@@ -364,7 +402,6 @@ impl WorkspaceMatcher {
         let excludes = compile_excludes(&config.workspace.excludes)?;
         Ok(Self {
             spec_roots: config.workspace.spec_roots.clone(),
-            artifact_roots: config.workspace.artifact_roots.clone(),
             excludes,
         })
     }
@@ -447,40 +484,21 @@ pub fn resolve_target_with_adapters(
     let text = String::from_utf8_lossy(&content);
     let (description, symbols, byte_start, byte_end, line_start, line_end, excerpt, excerpt_hash) =
         match &target.selector {
-            Selector::File => (
-                "file".into(),
-                vec![],
-                0,
-                content.len(),
-                1,
-                text.lines().count(),
-                text.to_string(),
-                hash_bytes(&content),
-            ),
-            Selector::Symbol { names } => {
-                if names.is_empty() {
-                    bail!("symbol selector must contain at least one symbol");
+            Selector::Symbol { name } => {
+                if name.trim().is_empty() {
+                    bail!("symbol selector must not be empty");
                 }
-                let mut unique = names.clone();
-                unique.sort();
-                unique.dedup();
-                if unique.len() != names.len() {
-                    bail!("symbol selector must not contain duplicate symbol names");
-                }
-                let resolved = names
-                    .iter()
-                    .map(|name| resolve_symbol(&target.adapter, &text, name))
-                    .collect::<Result<Vec<_>>>()?;
-                let start = resolved.iter().map(|r| r.byte_start).min().unwrap_or(0);
-                let end = resolved.iter().map(|r| r.byte_end).max().unwrap_or(0);
+                let resolved = resolve_symbol(&target.adapter, &text, name)?;
+                let start = resolved.byte_start;
+                let end = resolved.byte_end;
                 let excerpt = text[start..end].to_string();
                 (
-                    format!("symbols {}", names.join(", ")),
-                    names.clone(),
+                    format!("symbol {name}"),
+                    vec![name.clone()],
                     start,
                     end,
-                    resolved.iter().map(|r| r.line_start).min().unwrap_or(1),
-                    resolved.iter().map(|r| r.line_end).max().unwrap_or(1),
+                    resolved.line_start,
+                    resolved.line_end,
                     excerpt.clone(),
                     hash_bytes(excerpt.as_bytes()),
                 )
@@ -625,10 +643,7 @@ pub fn resolve_target_with_adapters(
 pub fn selector_supports_editable(selector: &Selector) -> bool {
     matches!(
         selector,
-        Selector::File
-            | Selector::Symbol { .. }
-            | Selector::Heading { .. }
-            | Selector::Marker { .. }
+        Selector::Symbol { .. } | Selector::Heading { .. } | Selector::Marker { .. }
     )
 }
 fn hash_bytes(value: &[u8]) -> String {
@@ -755,6 +770,7 @@ mod tests {
             adapter: "rust".into(),
             path: RepoPath::new("src/doc.md").expect("path"),
             selector,
+            claims: vec![],
         }
     }
 
@@ -808,22 +824,26 @@ mod tests {
                 "schema: syu/config/v1\n",
                 "workspace:\n",
                 "  spec_roots: [spec]\n",
-                "  artifact_roots: [src]\n",
                 "  excludes: []\n",
-                "profiles: { active: [], custom: {} }\n",
+                "inventory:\n",
+                "  active_profile: default\n",
+                "  profiles:\n",
+                "    - id: default\n",
+                "      providers: { rust: {} }\n",
                 "validation:\n",
                 "  preset: agent-ready\n",
-                "  deny_warnings: false\n",
-                "  rules: {}\n",
+                "  readiness:\n",
+                "    target: closed-loop\n",
+                "    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_seed: 4 }\n",
                 "  changed:\n",
                 "    baseline:\n",
                 "      strategy: merge-base\n",
                 "      against: origin/main\n",
                 "    require_owned_changes: true\n",
+                "    require_plan: true\n",
+                "verification: { runners: {} }\n",
                 "work:\n",
                 "  slicing: { max_editable_files: 4, max_editable_symbols: 8, max_verification_targets: 6, max_readonly_targets: 12, max_total_bytes: 120000 }\n",
-                "  context: { include_parent_principles: true, include_parent_rules: true }\n",
-                "adapters: { enabled: [rust] }\n",
             ),
         )
         .expect("config");

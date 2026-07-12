@@ -23,17 +23,17 @@ fn workbench_projection_exposes_explicit_run_state_and_exact_anchors() {
         String::from_utf8_lossy(&output.stderr)
     );
     let projection: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(projection["validation"]["state"], "not_run");
-    assert!(projection["validation"]["phases"].is_array());
+    assert_eq!(projection["diagnostics"]["validation"]["state"], "not_run");
+    assert!(projection["diagnostics"]["validation"]["phases"].is_array());
     assert!(
-        projection["items"]
+        projection["specifications"]["items"]
             .as_array()
             .is_some_and(|items| items.iter().any(|item| item["anchors"]
                 .as_array()
                 .is_some_and(|anchors| !anchors.is_empty())))
     );
-    assert_eq!(projection["requested_work"]["id"], "WORK-AUTH-FAILURE");
-    assert!(projection["plan"].is_object());
+    assert!(projection["work"]["request"].is_null());
+    assert!(projection["work"]["plan"].is_null());
 }
 
 #[test]
@@ -50,7 +50,7 @@ fn items_initial_tab_is_all_and_projection_lists_every_spec_item() {
             SpecDocument::Features { features, .. } => features.len(),
         })
         .sum::<usize>();
-    assert_eq!(projection.items.len(), expected);
+    assert_eq!(projection.specifications.items.len(), expected);
     let html = WorkbenchView::new(&projection).render_html();
     assert!(html.contains("data-tab=\"all\""));
 }

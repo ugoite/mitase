@@ -11,3 +11,5 @@ This section is generated from the YAML source under `docs/syu/`.
 - [Foundation / Foundation](foundation)
 - [Work planning / Planner](planner)
 - [Work planning / Work](work)
+- [Syu functional units / Capabilities](capabilities)
+- [Workbench behavior / Workbench](workbench)

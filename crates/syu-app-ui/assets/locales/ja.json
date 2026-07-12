@@ -190,7 +190,6 @@
   "settings.workspace.description": "canonicalワークスペースローダーが使用するリポジトリルートです。",
   "settings.validation_passed": "診断済み",
   "settings.spec_roots": "仕様ルート",
-  "settings.artifact_roots": "成果物ルート",
   "settings.excludes": "除外",
   "settings.profiles.description": "このワークスペースで有効な診断・計画プロファイルです。",
   "settings.active_profiles": "有効なプロファイル",

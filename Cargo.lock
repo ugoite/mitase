@@ -948,6 +948,7 @@ dependencies = [
  "syu-app-ui",
  "syu-code-intel",
  "syu-diagnostics",
+ "syu-inventory",
  "syu-planner",
  "syu-project-model",
  "syu-spec-model",
@@ -989,6 +990,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "syu-inventory"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "proc-macro2",
+ "serde",
+ "serde_yaml",
+ "sha2",
+ "syn",
+ "syu-project-model",
+ "syu-spec-model",
+ "tempfile",
+]
+
+[[package]]
 name = "syu-planner"
 version = "0.1.0"
 dependencies = [
@@ -1009,6 +1025,7 @@ name = "syu-project-model"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_yaml",
  "syu-spec-model",
 ]
 
@@ -1050,7 +1067,9 @@ name = "syu-workbench-server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum",
  "serde",
+ "serde_json",
  "serde_yaml",
  "sha2",
  "syu-diagnostics",
@@ -1060,6 +1079,7 @@ dependencies = [
  "syu-validation",
  "syu-work-model",
  "syu-workspace",
+ "tokio",
 ]
 
 [[package]]

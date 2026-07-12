@@ -190,7 +190,6 @@
   "settings.workspace.description": "Repository roots used by the canonical workspace loader.",
   "settings.validation_passed": "Validation passed",
   "settings.spec_roots": "Specification roots",
-  "settings.artifact_roots": "Artifact roots",
   "settings.excludes": "Excludes",
   "settings.profiles.description": "Active validation and planning profiles for this workspace.",
   "settings.active_profiles": "Active profiles",

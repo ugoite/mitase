@@ -13,15 +13,21 @@ features:
         facet: ui
         responsibility: Submit login and show generic failure.
         targets:
-          - { id: submit, adapter: typescript, path: web/login.ts, selector: { kind: symbol, names: [submitLogin] } }
-        satisfies: [REQ-AUTH-001#criterion.invalid-credentials]
+          - id: submit
+            adapter: typescript
+            path: web/login.ts
+            selector: { kind: symbol, name: submitLogin }
+            claims: [{ kind: satisfies, criterion: REQ-AUTH-001#criterion.invalid-credentials }]
       - id: backend
         role: implementation
         facet: backend
         responsibility: Reject invalid credentials without a session.
         targets:
-          - { id: handler, adapter: rust, path: api/login.rs, selector: { kind: symbol, names: [login] } }
-        satisfies: [REQ-AUTH-001#criterion.invalid-credentials]
+          - id: handler
+            adapter: rust
+            path: api/login.rs
+            selector: { kind: symbol, name: login }
+            claims: [{ kind: satisfies, criterion: REQ-AUTH-001#criterion.invalid-credentials }]
       - id: schema
         role: contract-source
         facet: api
@@ -33,5 +39,5 @@ features:
         kind: http
         source: FEAT-AUTH-001#binding.schema/target.operation
         participants:
-          - { binding: FEAT-AUTH-001#binding.backend, role: provider }
-          - { binding: FEAT-AUTH-001#binding.ui, role: consumer }
+          - { target: FEAT-AUTH-001#binding.backend/target.handler, role: provider }
+          - { target: FEAT-AUTH-001#binding.ui/target.submit, role: consumer }

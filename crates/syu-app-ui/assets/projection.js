@@ -1034,21 +1034,12 @@
     bindings.forEach(binding => {
       const block = el('div', 'target-locator');
       block.append(el('div', 'selector', binding.responsibility || binding.facet), el('div', 'path', binding.anchor), metaLine([chip(binding.role), chip(binding.facet)]));
-      [
-        ['items.field.satisfies', binding.satisfies],
-        ['items.field.verifies', binding.verifies],
-        ['items.field.documents', binding.documents],
-        ['items.field.enforces', binding.enforces],
-        ['items.field.generated_from', binding.generated_from],
-        ['items.field.evidences', binding.evidences],
-      ].forEach(([labelKey, values]) => {
-        if (values?.length) block.append(el('p', '', `${t(labelKey)}: ${values.join(', ')}`));
-      });
       const targets = binding.targets?.length ? binding.targets : [{ reference: t('items.no_targets'), path: '', selector: null, adapter: '' }];
       targets.forEach(target => {
         const row = el('div', 'path-row');
         row.append(el('span', 'path', target.reference), chip(target.adapter || t('items.no_targets')), el('span', '', [target.path, selectorLabel(target.selector)].filter(Boolean).join(' · ')));
         block.append(row);
+        (target.claims || []).forEach(claim => block.append(el('p', '', `${claim.kind}: ${claim.criterion || claim.anchor || claim.rule || ''}`)));
       });
       card.append(block);
     });
@@ -1279,26 +1270,20 @@
         field('items.field.role', selectControl(roles, binding.role, value => { binding.role = value; })),
         field('items.field.facet', inputControl(binding.facet || '', value => { binding.facet = value; })),
         field('items.field.responsibility', textareaControl(binding.responsibility || '', value => { binding.responsibility = value; })),
-        csvEditor('items.field.satisfies', binding.satisfies, value => { binding.satisfies = value; }),
-        csvEditor('items.field.verifies', binding.verifies, value => { binding.verifies = value; }),
-        csvEditor('items.field.documents', binding.documents, value => { binding.documents = value; }),
-        csvEditor('items.field.enforces', binding.enforces, value => { binding.enforces = value; }),
-        csvEditor('items.field.generated_from', binding.generated_from, value => { binding.generated_from = value; }),
-        csvEditor('items.field.evidences', binding.evidences, value => { binding.evidences = value; }),
       );
       binding.targets.forEach((target, targetIndex) => {
         const targetBlock = el('div', 'form two-column full');
-        const selector = target.selector || { kind: 'file' };
+        const selector = target.selector || { kind: 'symbol', name: '' };
         target.selector = selector;
         targetBlock.append(
           field('items.field.target_ref', inputControl(target.reference || '', value => { target.reference = value; })),
           field('items.field.path', inputControl(target.path || '', value => { target.path = value; })),
           field('items.field.adapter', inputControl(target.adapter || '', value => { target.adapter = value; })),
-          field('items.field.selector_kind', selectControl(['file', 'symbol', 'operation', 'heading', 'json-pointer', 'marker'], selector.kind || 'file', value => { target.selector = { kind: value }; rerender(); })),
+          field('items.field.selector_kind', selectControl(['symbol', 'operation', 'heading', 'json-pointer', 'marker'], selector.kind || 'symbol', value => { target.selector = { kind: value }; rerender(); })),
         );
-        if (selector.kind === 'symbol') targetBlock.append(field('items.field.selector_value', inputControl((selector.names || []).join(', '), value => { selector.names = value.split(',').map(part => part.trim()).filter(Boolean); })));
+        if (selector.kind === 'symbol') targetBlock.append(field('items.field.selector_value', inputControl(selector.name || '', value => { selector.name = value.trim(); })));
         if (selector.kind === 'operation') targetBlock.append(field('items.field.selector_value', inputControl(`${selector.method || ''} ${selector.path || ''}`.trim(), value => { const [method, ...path] = value.split(/\s+/); selector.method = method || ''; selector.path = path.join(' '); })));
-        if (!['file', 'symbol', 'operation'].includes(selector.kind)) targetBlock.append(field('items.field.selector_value', inputControl(selector.value || '', value => { selector.value = value; })));
+        if (!['symbol', 'operation'].includes(selector.kind)) targetBlock.append(field('items.field.selector_value', inputControl(selector.value || '', value => { selector.value = value; })));
         targetBlock.append(actionButton(t('common.delete'), 'common.delete', () => {
           if (!confirm(t('items.delete_confirm'))) return;
           binding.targets.splice(targetIndex, 1);
@@ -1754,7 +1739,6 @@
 
     const controls = {
       specRoots: one('[data-config-spec-roots]', page),
-      artifactRoots: one('[data-config-artifact-roots]', page),
       excludes: one('[data-config-excludes]', page),
       activeProfiles: one('[data-config-active-profiles]', page),
       customFacets: one('[data-config-custom-facets]', page),
@@ -1874,60 +1858,34 @@
       configHash = source.hash;
       text(one('[data-settings-hash]', page), `${t('settings.source_hash')} ${configHash.slice(0, 16)}…`);
       controls.specRoots.value = config.workspace.spec_roots.join(', ');
-      controls.artifactRoots.value = config.workspace.artifact_roots.join(', ');
       controls.excludes.value = config.workspace.excludes.join(', ');
-      controls.activeProfiles.value = config.profiles.active.join(', ');
-      customFacetRows = Object.entries(config.profiles.custom || {}).flatMap(([profile, entry]) =>
-        Object.entries(entry.facets || {}).map(([facet, rule]) => ({
-          profile,
-          facet,
-          include: (rule.include || []).join(', '),
-        }))
-      );
+      controls.activeProfiles.value = config.inventory.active_profile || '';
+      customFacetRows = [];
       renderCustomFacetRows();
       controls.preset.value = config.validation.preset;
       const baseline = config.validation.changed.baseline;
       controls.baselineStrategy.value = baseline?.strategy || 'none';
       controls.baselineRef.value = baseline?.against || baseline?.revision || '';
       syncBaselineControl();
-      ruleOverrideRows = Object.entries(config.validation.rules || {}).map(([rule, level]) => ({
-        rule,
-        level: String(level),
-      }));
+      ruleOverrideRows = [];
       renderRuleOverrideRows();
-      setToggle(controls.denyWarnings, config.validation.deny_warnings);
+      setToggle(controls.denyWarnings, false);
       setToggle(controls.requireOwned, config.validation.changed.require_owned_changes);
       controls.editableFiles.value = config.work.slicing.max_editable_files;
       controls.editableSymbols.value = config.work.slicing.max_editable_symbols;
       controls.verificationTargets.value = config.work.slicing.max_verification_targets;
       controls.readonlyTargets.value = config.work.slicing.max_readonly_targets;
       controls.totalBytes.value = config.work.slicing.max_total_bytes;
-      setToggle(controls.includePrinciples, config.work.context.include_parent_principles);
-      setToggle(controls.includeRules, config.work.context.include_parent_rules);
-      enabledAdapters = [...config.adapters.enabled];
+      setToggle(controls.includePrinciples, false);
+      setToggle(controls.includeRules, false);
+      enabledAdapters = Object.keys(config.inventory.profiles?.find(profile => profile.id === config.inventory.active_profile)?.providers || {});
       renderAdapterChips();
     }
 
     function collect() {
       config.workspace.spec_roots = splitCsv(controls.specRoots.value);
-      config.workspace.artifact_roots = splitCsv(controls.artifactRoots.value);
       config.workspace.excludes = splitCsv(controls.excludes.value);
-      config.profiles.active = splitCsv(controls.activeProfiles.value);
-      const nextProfiles = {};
-      Object.entries(config.profiles.custom || {}).forEach(([profile, entry]) => {
-        nextProfiles[profile] = { ...entry, facets: { ...(entry.facets || {}) } };
-      });
-      Object.values(nextProfiles).forEach(entry => { entry.facets = {}; });
-      customFacetRows.forEach(row => {
-        const profile = row.profile.trim();
-        const facet = row.facet.trim();
-        if (!profile || !facet) return;
-        const current = nextProfiles[profile] || { facets: {}, contract_rules: [] };
-        current.facets = current.facets || {};
-        current.facets[facet] = { include: splitCsv(row.include) };
-        nextProfiles[profile] = current;
-      });
-      config.profiles.custom = nextProfiles;
+      config.inventory.active_profile = controls.activeProfiles.value.trim();
       config.validation.preset = controls.preset.value;
       const strategy = controls.baselineStrategy.value;
       const reference = controls.baselineRef.value.trim();
@@ -1942,22 +1900,14 @@
       } else {
         config.validation.changed.baseline = null;
       }
-      config.validation.rules = {};
-      ruleOverrideRows.forEach(row => {
-        const rule = row.rule.trim();
-        if (!rule) return;
-        config.validation.rules[rule] = row.level;
-      });
-      config.validation.deny_warnings = readToggle(controls.denyWarnings);
       config.validation.changed.require_owned_changes = readToggle(controls.requireOwned);
       config.work.slicing.max_editable_files = readNonNegativeInteger(controls.editableFiles, 'settings.editable_files');
       config.work.slicing.max_editable_symbols = readNonNegativeInteger(controls.editableSymbols, 'settings.editable_symbols');
       config.work.slicing.max_verification_targets = readNonNegativeInteger(controls.verificationTargets, 'settings.verification_targets');
       config.work.slicing.max_readonly_targets = readNonNegativeInteger(controls.readonlyTargets, 'settings.readonly_targets');
       config.work.slicing.max_total_bytes = readNonNegativeInteger(controls.totalBytes, 'settings.total_bytes');
-      config.work.context.include_parent_principles = readToggle(controls.includePrinciples);
-      config.work.context.include_parent_rules = readToggle(controls.includeRules);
-      config.adapters.enabled = [...enabledAdapters];
+      const active = config.inventory.profiles.find(profile => profile.id === config.inventory.active_profile);
+      if (active) active.providers = Object.fromEntries(enabledAdapters.map(adapter => [adapter, {}]));
       return config;
     }
 

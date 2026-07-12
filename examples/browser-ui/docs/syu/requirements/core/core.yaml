@@ -23,9 +23,15 @@ requirements:
     responsibility: Verify the owned example behavior through checked-in evidence.
     targets:
     - id: target-1
-      adapter: typescript
+      adapter: shell
       path: src/components/Counter.test.tsx
       selector:
-        kind: file
-    verifies:
-    - REQ-BROWSERUI-001#criterion.owned-delivery
+        kind: marker
+        value: "export function test_counter_increments() {"
+      claims:
+      - kind: verifies
+        criterion: REQ-BROWSERUI-001#criterion.owned-delivery
+        covers:
+        - FEAT-BROWSERUI-001#binding.implementation/target.target-1
+        runner:
+          runner: cargo-test

@@ -14,9 +14,11 @@ features:
     responsibility: Implement the owned behavior for this example workspace.
     targets:
     - id: target-1
-      adapter: rust
+      adapter: shell
       path: src/trace.rs
       selector:
-        kind: file
-    satisfies:
-    - REQ-RUSTONLY-001#criterion.owned-delivery
+        kind: marker
+        value: "pub fn rust_requirement_test() {}"
+      claims:
+      - kind: satisfies
+        criterion: REQ-RUSTONLY-001#criterion.owned-delivery

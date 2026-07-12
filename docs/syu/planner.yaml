@@ -16,5 +16,7 @@ features:
           - id: plan
             adapter: rust
             path: crates/syu-planner/src/lib.rs
-            selector: { kind: symbol, names: [plan, build_implementation_slice, build_verification_slice, export_context] }
-        satisfies: [REQ-WORK-001#criterion.exact-slice]
+            selector: { kind: symbol, name: plan }
+            claims:
+              - kind: satisfies
+                criterion: REQ-WORK-001#criterion.exact-slice

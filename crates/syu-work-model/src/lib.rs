@@ -8,6 +8,7 @@ use syu_spec_model::{
 
 pub const WORK_REQUEST_SCHEMA: &str = "syu/work-request/v1";
 pub const WORK_PLAN_SCHEMA: &str = "syu/work-plan/v1";
+pub const VERIFICATION_RECEIPT_SCHEMA: &str = "syu/verification-receipt/v1";
 pub const CONTEXT_PACK_SCHEMA: &str = "syu/context-pack/v1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -271,7 +272,7 @@ pub enum SpecContextEntry {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ContractParticipantContext {
-    pub binding: SpecAnchor,
+    pub target: BoundTargetRef,
     pub role: String,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -364,6 +365,32 @@ pub struct ContextPack {
     pub spec_context: Vec<SpecContextEntry>,
     pub artifact_context: Vec<ArtifactContextEntry>,
     pub completion: Vec<CompletionCheck>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VerificationReceipt {
+    pub schema: String,
+    pub plan_digest: String,
+    pub slice_id: String,
+    pub revision: String,
+    pub workspace_fingerprint: String,
+    pub started_at: String,
+    pub completed_at: String,
+    pub executions: Vec<VerificationExecution>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VerificationExecution {
+    pub target: BoundTargetRef,
+    pub runner: String,
+    pub command: Vec<String>,
+    pub exit_code: i32,
+    pub stdout_digest: String,
+    pub stderr_digest: String,
+    pub implementation_digests: std::collections::BTreeMap<BoundTargetRef, String>,
+    pub verification_digest: String,
 }
 
 pub fn work_plan_digest(plan: &WorkPlan) -> String {

@@ -32,7 +32,6 @@ async function createCustomSpecRootWorkspace() {
       'schema: syu/config/v1',
       'workspace:',
       '  spec_roots: [spec/contracts]',
-      '  artifact_roots: [src, tests]',
       '  excludes: []',
       'profiles: { active: [], custom: {} }',
       'validation:',

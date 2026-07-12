@@ -21,9 +21,15 @@ requirements:
     responsibility: Verify the owned example behavior through checked-in evidence.
     targets:
     - id: target-1
-      adapter: go
+      adapter: shell
       path: go/app_test.go
       selector:
-        kind: file
-    verifies:
-    - REQ-GOONLY-001#criterion.owned-delivery
+        kind: marker
+        value: "func TestGoRequirement(t *testing.T) {"
+      claims:
+      - kind: verifies
+        criterion: REQ-GOONLY-001#criterion.owned-delivery
+        covers:
+        - FEAT-GOONLY-001#binding.implementation/target.target-1
+        runner:
+          runner: cargo-test

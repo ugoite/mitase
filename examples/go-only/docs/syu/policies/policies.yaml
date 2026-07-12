@@ -27,9 +27,11 @@ policies:
     responsibility: Keep the example rule connected to an active owned artifact.
     targets:
     - id: policy-target
-      adapter: go
+      adapter: shell
       path: go/app.go
       selector:
-        kind: file
-    enforces:
-    - POL-GOONLY-001#rule.traceable-delivery
+        kind: marker
+        value: "func GoFeatureImpl() string {"
+      claims:
+      - kind: enforces
+        rule: POL-GOONLY-001#rule.traceable-delivery

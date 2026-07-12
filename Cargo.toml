@@ -6,6 +6,7 @@ members = [
   "crates/syu-work-model",
   "crates/syu-diagnostics",
   "crates/syu-workspace",
+  "crates/syu-inventory",
   "crates/syu-validation",
   "crates/syu-planner",
   "crates/syu-workbench-server",
@@ -50,6 +51,7 @@ serde_yaml.workspace = true
 sha2.workspace = true
 url = "2.5.7"
 syu-diagnostics = { path = "crates/syu-diagnostics" }
+syu-inventory = { path = "crates/syu-inventory" }
 syu-app-ui = { path = "crates/syu-app-ui" }
 syu-code-intel = { path = "crates/syu-code-intel" }
 syu-planner = { path = "crates/syu-planner" }

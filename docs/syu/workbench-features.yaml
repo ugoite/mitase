@@ -1,0 +1,92 @@
+schema: syu/spec/v1
+kind: features
+namespace: workbench
+category: Workbench implementation
+features:
+  - id: FEAT-WORKBENCH-SERVER-001
+    title: Workbench server
+    summary: Expose canonical read, work, validation, edit, and security APIs.
+    status: implemented
+    bindings:
+      - id: server
+        role: implementation
+        facet: server
+        responsibility: Serve canonical Workbench read and mutation routes.
+        targets:
+          - id: project
+            adapter: rust
+            path: crates/syu-workbench-server/src/lib.rs
+            selector: { kind: symbol, name: project }
+            claims:
+              - kind: satisfies
+                criterion: REQ-WORKBENCH-006#criterion.accessible-navigation
+  - id: FEAT-WORKBENCH-PROJECTION-001
+    title: Workbench projection
+    summary: Project canonical readiness, work, scope, specification, and diagnostics state.
+    status: implemented
+    bindings:
+      - id: projection
+        role: implementation
+        facet: projection
+        responsibility: Build the canonical Workbench projection.
+        targets:
+          - id: project
+            adapter: rust
+            path: crates/syu-workbench-server/src/lib.rs
+            selector: { kind: symbol, name: project }
+            claims:
+              - kind: satisfies
+                criterion: REQ-WORKBENCH-001#criterion.canonical-projection
+  - id: FEAT-WORKBENCH-WORK-UI-001
+    title: Workbench work UI
+    summary: Drive the WorkRequest to result-validation journey from the Work page.
+    status: implemented
+    bindings:
+      - id: work
+        role: implementation
+        facet: work
+        responsibility: Execute the canonical verification stage of a Workbench work session.
+        targets:
+          - id: verify
+            adapter: rust
+            path: crates/syu-workbench-server/src/lib.rs
+            selector: { kind: symbol, name: execute_verification }
+            claims:
+              - kind: satisfies
+                criterion: REQ-WORKBENCH-002#criterion.work-session
+  - id: FEAT-WORKBENCH-READINESS-UI-001
+    title: Workbench readiness UI
+    summary: Display readiness blockers and exact target context from the server projection.
+    status: implemented
+    bindings:
+      - id: readiness
+        role: implementation
+        facet: readiness
+        responsibility: Project readiness state from canonical workspace data.
+        targets:
+          - id: readiness
+            adapter: rust
+            path: crates/syu-workbench-server/src/lib.rs
+            selector: { kind: symbol, name: project }
+            claims:
+              - kind: satisfies
+                criterion: REQ-WORKBENCH-005#criterion.secure-local-server
+  - id: FEAT-WORKBENCH-SPEC-EDITOR-001
+    title: Workbench specification editor
+    summary: Preview and apply structured specification and configuration edits transactionally.
+    status: implemented
+    bindings:
+      - id: editor
+        role: implementation
+        facet: editor
+        responsibility: Apply validated structured edits through the Workbench transaction boundary.
+        targets:
+          - id: atomic-edit
+            adapter: rust
+            path: crates/syu-workbench-server/src/lib.rs
+            selector: { kind: symbol, name: atomic_replace }
+            claims:
+              - kind: satisfies
+                criterion: REQ-WORKBENCH-003#criterion.transactional-spec-edit
+              - kind: satisfies
+                criterion: REQ-WORKBENCH-004#criterion.transactional-config-edit

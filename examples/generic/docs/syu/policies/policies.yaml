@@ -30,6 +30,8 @@ policies:
       adapter: shell
       path: scripts/bootstrap-generic.sh
       selector:
-        kind: file
-    enforces:
-    - POL-GENERIC-001#rule.traceable-delivery
+        kind: marker
+        value: "#!/usr/bin/env bash"
+      claims:
+      - kind: enforces
+        rule: POL-GENERIC-001#rule.traceable-delivery

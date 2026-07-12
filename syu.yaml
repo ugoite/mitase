@@ -1,23 +1,32 @@
 schema: syu/config/v1
 workspace:
   spec_roots: [docs/syu]
-  artifact_roots: [src, crates, docs, fixtures]
   excludes: [target/**, node_modules/**, docs/generated/**]
-profiles:
-  active: [agent-ready]
-  custom:
-    agent-ready:
-      facets:
-        architecture: { include: [docs/**] }
-        tooling: { include: [crates/**, src/**] }
-        verification: { include: [crates/**, tests/**] }
-      contract_rules: []
+inventory:
+  active_profile: default
+  profiles:
+    - id: default
+      providers:
+        rust: {}
+        javascript: {}
+        documentation: {}
+        markdown: {}
+        declared: {}
 validation:
   preset: agent-ready
-  deny_warnings: false
-  rules: {}
+  readiness:
+    target: closed-loop
+    scopes: { production: closed-loop, verification: verifiable, documentation: traceable, generated: traceable }
+    probes: { implemented_criteria: all, public_entrypoints: all, contracts: all, changed_units: true }
+    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_seed: 4 }
   changed:
     require_owned_changes: true
+    require_plan: true
+verification:
+  runners:
+    cargo-test:
+      executable: cargo
+      arguments: [test, -p, "{package}", "{test}"]
 work:
   slicing:
     max_editable_files: 4
@@ -25,8 +34,3 @@ work:
     max_verification_targets: 6
     max_readonly_targets: 12
     max_total_bytes: 120000
-  context:
-    include_parent_principles: true
-    include_parent_rules: true
-adapters:
-  enabled: [rust, typescript, markdown, openapi, yaml, json]

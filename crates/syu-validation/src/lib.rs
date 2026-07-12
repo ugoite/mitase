@@ -3,9 +3,9 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use syu_diagnostics::{Diagnostic, Severity, ValidationResult};
+use syu_diagnostics::{Diagnostic, ValidationPhase, ValidationResult};
 use syu_planner::plan as canonical_plan;
-use syu_project_model::{ProjectConfig, RuleOverride, ValidationPreset};
+use syu_project_model::{ProjectConfig, ValidationPreset};
 use syu_spec_model::{
     BindingRole, BoundTargetRef, ItemStatus, LocalAnchorKind, RepoPath, RuleLevel, Selector,
     SpecAnchor, SpecDocument,
@@ -89,9 +89,6 @@ pub static RULES: &[RuleMetadata] = &[
     metadata!("SYU-REQUIREMENT-001"),
     metadata!("SYU-REQUIREMENT-002"),
     metadata!("SYU-FEATURE-001"),
-    metadata!("SYU-COVERAGE-001"),
-    metadata!("SYU-COVERAGE-002"),
-    metadata!("SYU-COVERAGE-003"),
     metadata!("SYU-BINDING-001"),
     metadata!("SYU-BINDING-002"),
     metadata!("SYU-BINDING-003"),
@@ -133,6 +130,43 @@ pub static RULES: &[RuleMetadata] = &[
     fixed_metadata!("SYU-WORK-011"),
     fixed_metadata!("SYU-WORK-012"),
 ];
+
+/// Canonical rule-to-phase classification for presentation clients.  This is
+/// intentionally kept beside the validator so no caller needs to infer
+/// semantics from a rule-id string.
+pub fn phase_for_rule(rule: &str) -> ValidationPhase {
+    if rule.starts_with("SYU-WORK-") {
+        ValidationPhase::Plan
+    } else if rule.starts_with("SYU-CHANGE-") || rule == "SYU-OPERATION-001" {
+        ValidationPhase::Scope
+    } else if [
+        "SYU-BINDING-",
+        "SYU-TARGET-",
+        "SYU-CONTRACT-",
+        "SYU-FACET-",
+        "SYU-GENERATED-",
+    ]
+    .iter()
+    .any(|prefix| rule.starts_with(prefix))
+    {
+        ValidationPhase::Targets
+    } else if [
+        "SYU-ID-",
+        "SYU-ANCHOR-",
+        "SYU-PHILOSOPHY-",
+        "SYU-POLICY-",
+        "SYU-REQUIREMENT-",
+        "SYU-FEATURE-",
+        "SYU-DOC-",
+    ]
+    .iter()
+    .any(|prefix| rule.starts_with(prefix))
+    {
+        ValidationPhase::Graph
+    } else {
+        ValidationPhase::Config
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChangeStatus {
@@ -177,6 +211,16 @@ pub struct ValidationContext<'a> {
     pub revision: Option<&'a str>,
     pub change_base_revision: Option<&'a str>,
 }
+
+fn enabled_adapters(config: &ProjectConfig) -> Vec<String> {
+    config
+        .inventory
+        .profiles
+        .iter()
+        .find(|profile| profile.id == config.inventory.active_profile)
+        .map(|profile| profile.providers.keys().cloned().collect())
+        .unwrap_or_default()
+}
 pub trait ValidationRule {
     fn metadata(&self) -> &'static RuleMetadata;
     fn evaluate(&self, ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>);
@@ -184,40 +228,35 @@ pub trait ValidationRule {
 
 pub fn validate(ctx: &ValidationContext<'_>) -> ValidationResult {
     let mut diagnostics = Vec::new();
-    validate_rule_overrides(ctx, &mut diagnostics);
+    let start = diagnostics.len();
     validate_config(ctx, &mut diagnostics);
+    set_phase(&mut diagnostics[start..], ValidationPhase::Config);
+    let start = diagnostics.len();
     validate_document_shapes(ctx, &mut diagnostics);
+    set_phase(&mut diagnostics[start..], ValidationPhase::Graph);
+    let start = diagnostics.len();
     validate_graph(ctx, &mut diagnostics);
+    set_phase(&mut diagnostics[start..], ValidationPhase::Graph);
+    let start = diagnostics.len();
     validate_targets(ctx, &mut diagnostics);
+    set_phase(&mut diagnostics[start..], ValidationPhase::Targets);
+    let start = diagnostics.len();
     validate_contracts(ctx, &mut diagnostics);
+    set_phase(&mut diagnostics[start..], ValidationPhase::Targets);
+    let start = diagnostics.len();
     validate_changes(ctx, &mut diagnostics);
+    set_phase(&mut diagnostics[start..], ValidationPhase::Scope);
     if let Some(plan) = ctx.work_plan {
+        let start = diagnostics.len();
         validate_plan(ctx, plan, &mut diagnostics);
+        set_phase(&mut diagnostics[start..], ValidationPhase::Plan);
     }
     diagnostics.retain_mut(|diagnostic| {
-        let integrity = is_fixed_error_rule(&diagnostic.rule_id);
-        match ctx
-            .config
-            .validation
-            .rules
-            .get(&diagnostic.rule_id)
-            .copied()
+        if !is_fixed_error_rule(&diagnostic.rule_id)
+            && rule_metadata(&diagnostic.rule_id)
+                .is_some_and(|metadata| !metadata.presets.contains(&ctx.preset))
         {
-            Some(RuleOverride::Off) if !integrity => return false,
-            Some(RuleOverride::Warning) => diagnostic.severity = Severity::Warning,
-            Some(RuleOverride::Info) => diagnostic.severity = Severity::Info,
-            Some(RuleOverride::Error) => diagnostic.severity = Severity::Error,
-            None if !integrity
-                && rule_metadata(&diagnostic.rule_id)
-                    .is_some_and(|metadata| !metadata.presets.contains(&ctx.preset)) =>
-            {
-                return false;
-            }
-            None => {}
-            _ => {}
-        }
-        if ctx.config.validation.deny_warnings && diagnostic.severity == Severity::Warning {
-            diagnostic.severity = Severity::Error;
+            return false;
         }
         true
     });
@@ -227,45 +266,27 @@ pub fn validate(ctx: &ValidationContext<'_>) -> ValidationResult {
     ValidationResult { diagnostics }
 }
 
-fn validate_rule_overrides(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
-    for rule_id in ctx.config.validation.rules.keys() {
-        if rule_metadata(rule_id).is_none() {
-            push(
-                out,
-                "SYU-SCHEMA-002",
-                format!("unknown validation rule override: {rule_id}"),
-                "syu.yaml",
-                None,
-            );
-        } else if matches!(
-            ctx.config.validation.rules.get(rule_id),
-            Some(RuleOverride::Off | RuleOverride::Warning | RuleOverride::Info)
-        ) && is_fixed_error_rule(rule_id)
-        {
-            push(
-                out,
-                "SYU-SCHEMA-002",
-                format!("validation rule {rule_id} cannot be downgraded or suppressed"),
-                "syu.yaml",
-                None,
-            );
-        }
+fn set_phase(diagnostics: &mut [Diagnostic], phase: ValidationPhase) {
+    for diagnostic in diagnostics {
+        diagnostic.phase = phase;
     }
 }
 
 fn validate_config(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
-    let active_profiles = ctx
+    if !ctx
         .config
+        .inventory
         .profiles
-        .active
         .iter()
-        .filter(|name| !ctx.config.profiles.custom.contains_key(*name))
-        .collect::<Vec<_>>();
-    for profile in active_profiles {
+        .any(|profile| profile.id == ctx.config.inventory.active_profile)
+    {
         push(
             out,
             "SYU-SCHEMA-002",
-            format!("active profile {profile} is not defined"),
+            format!(
+                "active inventory profile {} is not defined",
+                ctx.config.inventory.active_profile
+            ),
             "syu.yaml",
             None,
         );
@@ -320,7 +341,12 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
         for owner in owners.into_iter().flatten() {
             if let Some(binding) = ctx.index.bindings.get(&owner.binding)
                 && binding.role == BindingRole::Implementation
-                && binding.satisfies.is_empty()
+                && !binding.targets.iter().any(|target| {
+                    target
+                        .claims
+                        .iter()
+                        .any(|claim| matches!(claim, syu_spec_model::TargetClaim::Satisfies { .. }))
+                })
             {
                 push(
                     out,
@@ -551,11 +577,7 @@ fn load_workspace_at_revision(root: &Path, revision: &str) -> Option<BaselineWor
                 .spec_roots
                 .iter()
                 .any(|root| relative.starts_with(root.as_path()))
-            || config
-                .workspace
-                .artifact_roots
-                .iter()
-                .any(|root| relative.starts_with(root.as_path()));
+            || !relative.as_os_str().is_empty();
         if !include {
             continue;
         }
@@ -739,7 +761,7 @@ fn participant_bindings_for_contract(
             old_contract
                 .participants
                 .iter()
-                .map(|participant| participant.binding.clone()),
+                .map(|participant| participant.target.binding.clone()),
         );
     }
     if let Some(new_contract) = current.contracts.get(contract) {
@@ -747,7 +769,7 @@ fn participant_bindings_for_contract(
             new_contract
                 .participants
                 .iter()
-                .map(|participant| participant.binding.clone()),
+                .map(|participant| participant.target.binding.clone()),
         );
     }
     bindings
@@ -786,7 +808,7 @@ fn target_changed_by_files(
             resolve_target_with_adapters(
                 &workspace.root,
                 target,
-                &workspace.config.adapters.enabled,
+                &enabled_adapters(&workspace.config),
             )
             .ok()
             .map(|resolved| {
@@ -810,7 +832,7 @@ fn target_changed_by_files(
             resolve_target_with_adapters(
                 &current_workspace.root,
                 target,
-                &current_workspace.config.adapters.enabled,
+                &enabled_adapters(&current_workspace.config),
             )
             .ok()
             .map(|resolved| {
@@ -1038,7 +1060,7 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         .index
                         .bindings
                         .values()
-                        .any(|b| b.enforces.contains(anchor) || b.evidences.contains(anchor))
+                        .any(|b| b.targets.iter().any(|target| target.claims.iter().any(|claim| matches!(claim, syu_spec_model::TargetClaim::Enforces { rule } if rule == anchor) || matches!(claim, syu_spec_model::TargetClaim::Evidences { anchor: evidence } if evidence == anchor))))
                         || rule.enforcement.is_some();
                     if !covered {
                         push(
@@ -1064,40 +1086,6 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 for target in &criterion.governed_by {
                     check_kind(ctx, out, target, LocalAnchorKind::Rule, &path);
                 }
-                let status = ctx.index.criterion_status.get(anchor).copied();
-                if status == Some(ItemStatus::Implemented)
-                    && !ctx.index.criteria_to_implementations.contains_key(anchor)
-                {
-                    push(
-                        out,
-                        "SYU-COVERAGE-001",
-                        "criterion has no implementation binding",
-                        &path,
-                        Some(anchor.clone()),
-                    );
-                }
-                if status == Some(ItemStatus::Implemented)
-                    && !ctx.index.criteria_to_verifications.contains_key(anchor)
-                {
-                    push(
-                        out,
-                        "SYU-COVERAGE-002",
-                        "criterion has no verification binding",
-                        &path,
-                        Some(anchor.clone()),
-                    );
-                }
-                if status == Some(ItemStatus::Deprecated)
-                    && ctx.index.criteria_to_implementations.contains_key(anchor)
-                {
-                    push(
-                        out,
-                        "SYU-COVERAGE-003",
-                        "deprecated requirement retains active implementation bindings",
-                        &path,
-                        Some(anchor.clone()),
-                    );
-                }
             }
             AnchorValue::Binding(binding) => {
                 if binding.responsibility.trim().is_empty() {
@@ -1118,14 +1106,39 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         Some(anchor.clone()),
                     );
                 }
-                let relation = match binding.role {
-                    BindingRole::Implementation => &binding.satisfies,
-                    BindingRole::Verification => &binding.verifies,
-                    BindingRole::Documentation => &binding.documents,
-                    BindingRole::Enforcement => &binding.enforces,
-                    BindingRole::Evidence => &binding.evidences,
-                    _ => &Vec::new(),
-                };
+                let relation = binding
+                    .targets
+                    .iter()
+                    .flat_map(|target| target.claims.iter())
+                    .filter_map(|claim| match claim {
+                        syu_spec_model::TargetClaim::Satisfies { criterion }
+                            if binding.role == BindingRole::Implementation =>
+                        {
+                            Some(criterion)
+                        }
+                        syu_spec_model::TargetClaim::Verifies { criterion, .. }
+                            if binding.role == BindingRole::Verification =>
+                        {
+                            Some(criterion)
+                        }
+                        syu_spec_model::TargetClaim::Documents { anchor }
+                            if binding.role == BindingRole::Documentation =>
+                        {
+                            Some(anchor)
+                        }
+                        syu_spec_model::TargetClaim::Enforces { rule }
+                            if binding.role == BindingRole::Enforcement =>
+                        {
+                            Some(rule)
+                        }
+                        syu_spec_model::TargetClaim::Evidences { anchor }
+                            if binding.role == BindingRole::Evidence =>
+                        {
+                            Some(anchor)
+                        }
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>();
                 if matches!(
                     binding.role,
                     BindingRole::Implementation
@@ -1143,7 +1156,7 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         Some(anchor.clone()),
                     );
                 }
-                for target in relation {
+                for target in &relation {
                     if !ctx.index.anchors.contains_key(target) {
                         push(
                             out,
@@ -1154,24 +1167,31 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         );
                     }
                 }
-                let relation_count = [
-                    binding.satisfies.len(),
-                    binding.verifies.len(),
-                    binding.documents.len(),
-                    binding.enforces.len(),
-                    binding.evidences.len(),
-                ]
-                .into_iter()
-                .filter(|count| *count > 0)
-                .count();
-                if relation_count > usize::from(!relation.is_empty()) {
-                    push(
-                        out,
-                        "SYU-BINDING-002",
-                        "binding contains a relation field incompatible with its role",
-                        &path,
-                        Some(anchor.clone()),
-                    );
+                for artifact_target in &binding.targets {
+                    for claim in &artifact_target.claims {
+                        if let syu_spec_model::TargetClaim::Verifies { covers, .. } = claim {
+                            if covers.is_empty() {
+                                push(
+                                    out,
+                                    "SYU-VERIFICATION-001",
+                                    "verification target must cover at least one exact target",
+                                    &path,
+                                    Some(anchor.clone()),
+                                );
+                            }
+                            for covered in covers {
+                                if ctx.index.target(covered).is_none() {
+                                    push(
+                                        out,
+                                        "SYU-VERIFICATION-002",
+                                        format!("verification covers unresolved target {covered}"),
+                                        &path,
+                                        Some(anchor.clone()),
+                                    );
+                                }
+                            }
+                        }
+                    }
                 }
                 let expected_kind = match binding.role {
                     BindingRole::Implementation | BindingRole::Verification => {
@@ -1182,11 +1202,23 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                     _ => None,
                 };
                 if let Some(expected) = expected_kind {
-                    for target in relation {
+                    for target in &relation {
                         check_kind(ctx, out, target, expected, &path);
                     }
                 }
-                if binding.role == BindingRole::Generated && binding.generated_from.is_empty() {
+                let generated_from = binding
+                    .targets
+                    .iter()
+                    .flat_map(|target| target.claims.iter())
+                    .filter_map(|claim| match claim {
+                        syu_spec_model::TargetClaim::GeneratedFrom { targets } => {
+                            Some(targets.as_slice())
+                        }
+                        _ => None,
+                    })
+                    .flatten()
+                    .collect::<Vec<_>>();
+                if binding.role == BindingRole::Generated && generated_from.is_empty() {
                     push(
                         out,
                         "SYU-GENERATED-001",
@@ -1195,8 +1227,8 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         Some(anchor.clone()),
                     );
                 }
-                if binding.role == BindingRole::Generated && !binding.generated_from.is_empty() {
-                    validate_generated_binding(ctx, anchor, binding, out, &path);
+                if binding.role == BindingRole::Generated && !generated_from.is_empty() {
+                    validate_generated_binding(ctx, anchor, &generated_from, out, &path);
                 }
             }
             AnchorValue::Contract(contract) => {
@@ -1266,23 +1298,23 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                             Some(anchor.clone()),
                         );
                     }
-                    if !seen_participants.insert((p.binding.clone(), p.role.clone())) {
+                    if !seen_participants.insert((p.target.clone(), p.role.clone())) {
                         push(
                             out,
                             "SYU-CONTRACT-007",
                             format!(
                                 "contract participant is duplicated: {} {}",
-                                p.binding, p.role
+                                p.target, p.role
                             ),
                             &path,
                             Some(anchor.clone()),
                         );
                     }
-                    if !ctx.index.bindings.contains_key(&p.binding) {
+                    if ctx.index.target(&p.target).is_none() {
                         push(
                             out,
                             "SYU-CONTRACT-003",
-                            format!("contract participant {} does not exist", p.binding),
+                            format!("contract participant {} does not exist", p.target),
                             &path,
                             Some(anchor.clone()),
                         );
@@ -1296,12 +1328,12 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
 fn validate_generated_binding(
     ctx: &ValidationContext<'_>,
     anchor: &SpecAnchor,
-    binding: &syu_spec_model::ArtifactBinding,
+    generated_from: &[&BoundTargetRef],
     out: &mut Vec<Diagnostic>,
     path: &str,
 ) {
     let mut seen = BTreeSet::<BoundTargetRef>::new();
-    for generated in &binding.generated_from {
+    for generated in generated_from {
         if generated.binding == *anchor {
             push(
                 out,
@@ -1312,7 +1344,7 @@ fn validate_generated_binding(
             );
             continue;
         }
-        if !seen.insert(generated.clone()) {
+        if !seen.insert((*generated).clone()) {
             push(
                 out,
                 "SYU-GENERATED-002",
@@ -1363,23 +1395,32 @@ fn generated_binding_has_cycle(
         visiting.remove(anchor);
         return false;
     }
-    let cycle = binding.generated_from.iter().any(|reference| {
-        reference.binding == *anchor
-            || ctx
-                .index
-                .bindings
-                .get(&reference.binding)
-                .is_some_and(|next| {
-                    next.role == BindingRole::Generated
-                        && (visiting.contains(&reference.binding)
-                            || generated_binding_has_cycle(
-                                ctx,
-                                &reference.binding,
-                                visiting,
-                                visited,
-                            ))
-                })
-    });
+    let cycle = binding
+        .targets
+        .iter()
+        .flat_map(|target| target.claims.iter())
+        .filter_map(|claim| match claim {
+            syu_spec_model::TargetClaim::GeneratedFrom { targets } => Some(targets),
+            _ => None,
+        })
+        .flatten()
+        .any(|reference| {
+            reference.binding == *anchor
+                || ctx
+                    .index
+                    .bindings
+                    .get(&reference.binding)
+                    .is_some_and(|next| {
+                        next.role == BindingRole::Generated
+                            && (visiting.contains(&reference.binding)
+                                || generated_binding_has_cycle(
+                                    ctx,
+                                    &reference.binding,
+                                    visiting,
+                                    visited,
+                                ))
+                    })
+        });
     visiting.remove(anchor);
     cycle
 }
@@ -1427,22 +1468,7 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
         .filter(|target| target.lifecycle == TargetLifecycle::EnsureAbsent)
         .map(|target| target.reference.clone())
         .collect::<BTreeSet<_>>();
-    let known_facets = ctx
-        .config
-        .profiles
-        .active
-        .iter()
-        .filter_map(|name| ctx.config.profiles.custom.get(name))
-        .flat_map(|profile| profile.facets.keys())
-        .collect::<BTreeSet<_>>();
-    let facet_rules = ctx
-        .config
-        .profiles
-        .active
-        .iter()
-        .filter_map(|name| ctx.config.profiles.custom.get(name))
-        .flat_map(|profile| profile.facets.iter())
-        .collect::<Vec<_>>();
+    let known_facets = BTreeSet::<String>::new();
     for (anchor, binding) in &ctx.index.bindings {
         let path = ctx
             .index
@@ -1474,24 +1500,12 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 );
             }
             match &target.selector {
-                Selector::Symbol { names } => {
-                    if names.is_empty() {
+                Selector::Symbol { name } => {
+                    if name.trim().is_empty() {
                         push(
                             out,
                             "SYU-TARGET-001",
                             "symbol selector must contain at least one name",
-                            target.path.to_string_lossy(),
-                            Some(anchor.clone()),
-                        );
-                    }
-                    let mut unique = names.clone();
-                    unique.sort();
-                    unique.dedup();
-                    if unique.len() != names.len() {
-                        push(
-                            out,
-                            "SYU-TARGET-001",
-                            "symbol selector must not contain duplicate names",
                             target.path.to_string_lossy(),
                             Some(anchor.clone()),
                         );
@@ -1538,7 +1552,6 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 _ => {}
             }
             let expected = match &target.selector {
-                Selector::File => true,
                 Selector::Symbol { .. } => {
                     matches!(
                         target.adapter.as_str(),
@@ -1562,7 +1575,7 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 );
             }
             if binding.role == BindingRole::Implementation
-                && !matches!(target.selector, Selector::Symbol { .. } | Selector::File)
+                && !matches!(target.selector, Selector::Symbol { .. })
                 && ctx.preset == ValidationPreset::AgentReady
             {
                 push(
@@ -1572,44 +1585,6 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                     target.path.to_string_lossy(),
                     Some(anchor.clone()),
                 );
-            }
-            if binding.role == BindingRole::Implementation
-                && matches!(target.selector, Selector::File)
-                && ctx.preset == ValidationPreset::AgentReady
-            {
-                push(
-                    out,
-                    "SYU-TARGET-004",
-                    "implementation target is file-only and too broad for executable work",
-                    target.path.to_string_lossy(),
-                    Some(anchor.clone()),
-                );
-            }
-            if let Some((_, rule)) = facet_rules
-                .iter()
-                .find(|(facet, _)| facet.as_str() == binding.facet)
-            {
-                let target_path = target.path.to_string_lossy();
-                let matches = rule.include.iter().any(|pattern| {
-                    pattern
-                        .strip_suffix("/**")
-                        .map_or(target_path == pattern.as_str(), |prefix| {
-                            target_path == prefix || target_path.starts_with(&format!("{prefix}/"))
-                        })
-                });
-                if !matches {
-                    push(
-                        out,
-                        "SYU-FACET-002",
-                        format!(
-                            "target path {} contradicts facet {}",
-                            target.path.display(),
-                            binding.facet
-                        ),
-                        target.path.to_string_lossy(),
-                        Some(anchor.clone()),
-                    );
-                }
             }
             let target_ref = BoundTargetRef {
                 binding: anchor.clone(),
@@ -1630,7 +1605,7 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
             if let Err(e) = resolve_target_with_adapters(
                 &ctx.workspace.root,
                 target,
-                &ctx.config.adapters.enabled,
+                &enabled_adapters(ctx.config),
             ) && !allowed_absent_targets.contains(&target_ref)
             {
                 push(
@@ -1646,63 +1621,6 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
 }
 
 fn validate_contracts(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
-    let profiles = ctx
-        .config
-        .profiles
-        .active
-        .iter()
-        .filter_map(|n| ctx.config.profiles.custom.get(n));
-    for (anchor, contract) in &ctx.index.contracts {
-        let path = ctx
-            .index
-            .item_paths
-            .get(&anchor.item)
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_default();
-        for profile in profiles.clone() {
-            for rule in &profile.contract_rules {
-                if rule.kind != contract.kind {
-                    continue;
-                }
-                for required in &rule.require_participants {
-                    if required.role.trim().is_empty() {
-                        push(
-                            out,
-                            "SYU-CONTRACT-004",
-                            "contract requirement role must not be empty",
-                            &path,
-                            Some(anchor.clone()),
-                        );
-                        continue;
-                    }
-                    let count = contract
-                        .participants
-                        .iter()
-                        .filter(|p| {
-                            p.role == required.role
-                                && ctx
-                                    .index
-                                    .bindings
-                                    .get(&p.binding)
-                                    .is_some_and(|b| required.facets.contains(&b.facet))
-                        })
-                        .count();
-                    if count < required.min {
-                        push(
-                            out,
-                            "SYU-CONTRACT-004",
-                            format!(
-                                "contract requires at least {} {} participant(s)",
-                                required.min, required.role
-                            ),
-                            &path,
-                            Some(anchor.clone()),
-                        );
-                    }
-                }
-            }
-        }
-    }
     for (criterion, implementations) in &ctx.index.criteria_to_implementations {
         let facets = implementations
             .iter()
@@ -1715,7 +1633,7 @@ fn validate_contracts(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                     contract
                         .participants
                         .iter()
-                        .any(|participant| &participant.binding == implementation)
+                        .any(|participant| &participant.target.binding == implementation)
                 })
             });
             if !connected {
@@ -1756,7 +1674,13 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
         );
     }
     let basis_workspace = load_workspace_at_revision(&ctx.workspace.root, &plan.basis.revision);
-    if basis_workspace.is_none() {
+    // A Workbench plan can be created against the current uncommitted
+    // workspace.  In that case the revision is real, but its spec files may
+    // not exist in the commit yet; the fingerprint still proves that the
+    // loaded workspace is exactly the plan basis.
+    let current_workspace_is_basis = basis_workspace.is_none()
+        && plan.basis.workspace_fingerprint == ctx.workspace.fingerprint();
+    if basis_workspace.is_none() && !current_workspace_is_basis {
         push(
             out,
             "SYU-WORK-009",
@@ -1929,7 +1853,7 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                 resolve_target_with_adapters(
                     &ctx.workspace.root,
                     declared,
-                    &ctx.config.adapters.enabled,
+                    &enabled_adapters(ctx.config),
                 )
                 .ok()
             }) {
@@ -2025,7 +1949,7 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                             resolve_target_with_adapters(
                                 &ctx.workspace.root,
                                 declared,
-                                &ctx.config.adapters.enabled,
+                                &enabled_adapters(ctx.config),
                             )
                             .ok()
                         })
@@ -2056,7 +1980,7 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                             resolve_target_with_adapters(
                                 &ctx.workspace.root,
                                 declared,
-                                &ctx.config.adapters.enabled,
+                                &enabled_adapters(ctx.config),
                             )
                             .ok()
                         })
@@ -2097,16 +2021,16 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
         for contract_anchor in &slice.contracts {
             if let Some(contract) = ctx.index.contracts.get(contract_anchor) {
                 for participant in &contract.participants {
-                    if !slice.anchors.contains(&participant.binding)
+                    if !slice.anchors.contains(&participant.target.binding)
                         && !slice
                             .readonly_context
                             .iter()
-                            .any(|target| target.reference.binding == participant.binding)
+                            .any(|target| target.reference == participant.target)
                     {
                         push(
                             out,
                             "SYU-WORK-008",
-                            format!("contract counterpart is absent: {}", participant.binding),
+                            format!("contract counterpart is absent: {}", participant.target),
                             "work-plan",
                             Some(contract_anchor.clone()),
                         );
@@ -2343,7 +2267,7 @@ fn target_line_range(
             resolve_target_with_adapters(
                 &ctx.workspace.root,
                 declared,
-                &ctx.config.adapters.enabled,
+                &enabled_adapters(ctx.config),
             )
             .ok()
         })
@@ -2514,16 +2438,21 @@ mod tests {
                 "schema: syu/config/v1\n",
                 "workspace:\n",
                 "  spec_roots: [spec]\n",
-                "  artifact_roots: [src]\n",
                 "  excludes: []\n",
-                "profiles: { active: [], custom: {} }\n",
+                "inventory:\n",
+                "  active_profile: default\n",
+                "  profiles:\n",
+                "    - id: default\n",
+                "      providers: { rust: {} }\n",
                 "validation:\n",
                 "  preset: standard\n",
-                "  deny_warnings: false\n",
-                "  rules:\n",
-                "    SYU-GENERATED-001: off\n",
+                "  readiness:\n",
+                "    target: off\n",
+                "    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_seed: 4 }\n",
                 "  changed:\n",
                 "    require_owned_changes: false\n",
+                "    require_plan: false\n",
+                "verification: { runners: {} }\n",
                 "work:\n",
                 "  slicing:\n",
                 "    max_editable_files: 2\n",
@@ -2531,10 +2460,6 @@ mod tests {
                 "    max_verification_targets: 2\n",
                 "    max_readonly_targets: 2\n",
                 "    max_total_bytes: 4096\n",
-                "  context:\n",
-                "    include_parent_principles: false\n",
-                "    include_parent_rules: false\n",
-                "adapters: { enabled: [rust] }\n",
             ),
         )
         .expect("config");
@@ -2557,8 +2482,7 @@ mod tests {
                 "        facet: backend\n",
                 "        responsibility: Generated artifact.\n",
                 "        targets:\n",
-                "          - { id: generated-file, adapter: rust, path: src/generated.rs, selector: { kind: file } }\n",
-                "        generated_from: []\n",
+                "          - { id: generated-file, adapter: rust, path: src/generated.rs, selector: { kind: marker, value: 'pub fn generated' }, claims: [] }\n",
             ),
         )
         .expect("feature spec");
@@ -2640,14 +2564,6 @@ requirements:
     priority: high
     status: implemented
     criteria: []
-    bindings:
-      - id: login-test
-        role: verification
-        facet: verification
-        responsibility: Prove invalid credentials create no session.
-        targets:
-          - { id: case, adapter: rust, path: tests/login.rs, selector: { kind: symbol, names: [invalid_credentials] } }
-        verifies: [REQ-AUTH-001#criterion.invalid-credentials]
 "#,
         )
         .unwrap();
@@ -2690,14 +2606,6 @@ requirements:
     priority: high
     status: implemented
     criteria: []
-    bindings:
-      - id: login-test
-        role: verification
-        facet: verification
-        responsibility: Prove invalid credentials create no session.
-        targets:
-          - { id: case, adapter: rust, path: tests/login.rs, selector: { kind: symbol, names: [invalid_credentials] } }
-        verifies: [REQ-AUTH-001#criterion.invalid-credentials]
 "#,
         )
         .unwrap();
@@ -2765,7 +2673,7 @@ requirements:
     }
 
     #[test]
-    fn fixed_error_structural_rules_cannot_be_suppressed() {
+    fn generated_binding_without_source_is_rejected() {
         let tempdir = tempdir().expect("tempdir");
         write_generated_binding_workspace(tempdir.path());
         let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
@@ -2783,12 +2691,6 @@ requirements:
             revision: None,
             change_base_revision: None,
         });
-        assert!(result.diagnostics.iter().any(|diagnostic| {
-            diagnostic.rule_id == "SYU-SCHEMA-002"
-                && diagnostic
-                    .message
-                    .contains("cannot be downgraded or suppressed")
-        }));
         assert!(
             result
                 .diagnostics
