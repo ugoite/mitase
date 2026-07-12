@@ -865,6 +865,7 @@ async fn api_discard(State(service): State<Arc<WorkbenchService>>) -> Result<Sta
 #[serde(deny_unknown_fields)]
 pub struct WorkspaceProjection {
     pub snapshot: WorkspaceSummary,
+    pub config: syu_project_model::ProjectConfig,
     pub navigation: NavigationView,
     pub capabilities: Vec<ActionCapabilityView>,
     pub work: WorkSessionView,
@@ -1369,6 +1370,7 @@ pub fn project(
             fingerprint: workspace.fingerprint(),
             config_schema: workspace.config.schema.clone(),
         },
+        config: workspace.config.clone(),
         navigation: NavigationView {
             selected_page: WorkbenchPage::Work,
             pages: vec![

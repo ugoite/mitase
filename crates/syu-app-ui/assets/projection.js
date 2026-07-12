@@ -4,7 +4,15 @@
   const stateNode = document.querySelector('#syu-projection');
   if (!stateNode) return;
 
-  const projection = JSON.parse(stateNode.textContent);
+  const rawProjection = JSON.parse(stateNode.textContent);
+  const projection = {
+    ...rawProjection,
+    items: rawProjection.items || rawProjection.specifications?.items || [],
+    workspace: rawProjection.workspace || rawProjection.snapshot || {},
+    requested_work: rawProjection.requested_work || rawProjection.work?.request || null,
+    plan: rawProjection.plan || rawProjection.work?.plan || null,
+    validation: rawProjection.validation || rawProjection.diagnostics?.validation,
+  };
   const one = (selector, root = document) => root.querySelector(selector);
   const all = (selector, root = document) => [...root.querySelectorAll(selector)];
   const t = key => window.SyuPreferences.t(key);
