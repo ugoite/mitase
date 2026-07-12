@@ -124,6 +124,35 @@ pub fn plan(
                     }
                 }
             }
+            WorkSeed::ArtifactIdentity { artifact_identity }
+            | WorkSeed::ChangedUnit {
+                changed_unit: artifact_identity,
+            } => {
+                let targets = index
+                    .target_to_artifact
+                    .iter()
+                    .filter(|(_, identity)| *identity == artifact_identity)
+                    .map(|(target, _)| target)
+                    .collect::<Vec<_>>();
+                if targets.is_empty() {
+                    return Ok(blocked_plan(
+                        request,
+                        workspace,
+                        revision,
+                        "SYU-WORK-001",
+                        format!("artifact identity {artifact_identity} does not resolve"),
+                    ));
+                }
+                for target in targets {
+                    if let Some(declared) = index.target(target) {
+                        for claim in &declared.claims {
+                            if let syu_spec_model::TargetClaim::Satisfies { criterion } = claim {
+                                criteria.insert(criterion.clone());
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
     if criteria.is_empty() && request.requested_targets.is_empty() {
@@ -1389,14 +1418,23 @@ fn contract_readonly_context(
 ) -> (Vec<PlannedTarget>, Vec<SpecAnchor>) {
     let mut readonly = vec![];
     let mut contracts = vec![];
-    for contract_anchor in index
-        .binding_to_contracts
+    let contract_anchors = index
+        .bindings
         .get(implementation)
         .into_iter()
+        .flat_map(|binding| {
+            binding.targets.iter().map(|target| BoundTargetRef {
+                binding: implementation.clone(),
+                target_id: target.id.clone(),
+            })
+        })
+        .filter_map(|target| index.contracts_by_target.get(&target))
         .flatten()
-    {
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    for contract_anchor in contract_anchors {
         contracts.push(contract_anchor.clone());
-        if let Some(contract) = index.contracts.get(contract_anchor) {
+        if let Some(contract) = index.contracts.get(&contract_anchor) {
             if let Some(target) = index.target(&contract.source)
                 && let Some(source_binding) = index.bindings.get(&contract.source.binding)
             {

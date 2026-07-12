@@ -26,6 +26,8 @@ pub enum WorkOperation {
 pub enum WorkSeed {
     Anchor(SpecAnchor),
     Item(SpecItemRef),
+    ArtifactIdentity { artifact_identity: String },
+    ChangedUnit { changed_unit: String },
 }
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

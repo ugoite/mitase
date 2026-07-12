@@ -8,6 +8,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use syu_code_intel::resolve_symbol;
+use syu_inventory::{ArtifactUnit, ArtifactUnitKind, InventoryContext, InventoryRegistry};
 use syu_project_model::{CONFIG_SCHEMA, ProjectConfig};
 use syu_spec_model::*;
 
@@ -42,6 +43,14 @@ pub struct SpecIndex {
     pub item_paths: BTreeMap<SpecId, PathBuf>,
     pub path_to_targets: BTreeMap<String, Vec<BoundTargetRef>>,
     pub criterion_status: BTreeMap<SpecAnchor, ItemStatus>,
+    pub artifact_units: Vec<ArtifactUnit>,
+    pub artifact_owners: BTreeMap<String, Vec<BoundTargetRef>>,
+    pub target_to_artifact: BTreeMap<BoundTargetRef, String>,
+    pub criteria_to_implementation_targets: BTreeMap<SpecAnchor, Vec<BoundTargetRef>>,
+    pub criteria_to_verification_targets: BTreeMap<SpecAnchor, Vec<BoundTargetRef>>,
+    pub contracts_by_target: BTreeMap<BoundTargetRef, Vec<SpecAnchor>>,
+    pub verification_by_target: BTreeMap<BoundTargetRef, Vec<BoundTargetRef>>,
+    pub inventory_error: Option<String>,
 }
 #[derive(Debug, Clone)]
 pub enum AnchorValue {
@@ -111,6 +120,46 @@ impl SpecWorkspace {
                 hash.update(relative.to_string_lossy().as_bytes());
             }
             hash.update(fs::read(&doc.path).unwrap_or_default());
+        }
+        if let Some(profile) = self
+            .config
+            .inventory
+            .profiles
+            .iter()
+            .find(|profile| profile.id == self.config.inventory.active_profile)
+        {
+            hash.update(b"inventory-profile:v1");
+            hash.update(profile.id.as_bytes());
+            if let Ok(value) = serde_yaml::to_string(profile) {
+                hash.update(value.as_bytes());
+            }
+            if let Ok(units) = InventoryRegistry::discover(
+                &InventoryContext {
+                    workspace_root: self.root.clone(),
+                    profile: profile.id.clone(),
+                    settings: serde_yaml::Value::Null,
+                    excludes: self
+                        .config
+                        .workspace
+                        .excludes
+                        .iter()
+                        .map(|p| p.0.clone())
+                        .collect(),
+                },
+                profile,
+            ) {
+                for unit in units {
+                    hash.update(unit.identity.as_bytes());
+                    hash.update(unit.digest.as_bytes());
+                }
+            }
+        }
+        for (runner, definition) in &self.config.verification.runners {
+            hash.update(runner.as_bytes());
+            hash.update(definition.executable.as_bytes());
+            for argument in &definition.arguments {
+                hash.update(argument.as_bytes());
+            }
         }
         format!("sha256:{:x}", hash.finalize())
     }
@@ -287,6 +336,104 @@ impl SpecIndex {
             values.sort();
             values.dedup();
         }
+        let profile = workspace
+            .config
+            .inventory
+            .profiles
+            .iter()
+            .find(|profile| profile.id == workspace.config.inventory.active_profile)
+            .ok_or_else(|| anyhow::anyhow!("active inventory profile is not defined"))?;
+        match InventoryRegistry::discover(
+            &InventoryContext {
+                workspace_root: workspace.root.clone(),
+                profile: profile.id.clone(),
+                settings: serde_yaml::Value::Null,
+                excludes: workspace
+                    .config
+                    .workspace
+                    .excludes
+                    .iter()
+                    .map(|p| p.0.clone())
+                    .collect(),
+            },
+            profile,
+        ) {
+            Ok(units) => out.artifact_units = units,
+            Err(error) => out.inventory_error = Some(error.to_string()),
+        }
+        for (binding_anchor, binding) in &out.bindings {
+            for target in &binding.targets {
+                let target_ref = BoundTargetRef {
+                    binding: binding_anchor.clone(),
+                    target_id: target.id.clone(),
+                };
+                let identities = artifact_identities_for_target(&out.artifact_units, target);
+                if identities.len() == 1 {
+                    out.target_to_artifact
+                        .insert(target_ref.clone(), identities[0].clone());
+                    if matches!(
+                        binding.role,
+                        BindingRole::Implementation
+                            | BindingRole::Documentation
+                            | BindingRole::Enforcement
+                            | BindingRole::Configuration
+                            | BindingRole::Migration
+                            | BindingRole::Operation
+                    ) {
+                        out.artifact_owners
+                            .entry(identities[0].clone())
+                            .or_default()
+                            .push(target_ref.clone());
+                    }
+                }
+                for claim in &target.claims {
+                    match claim {
+                        TargetClaim::Satisfies { criterion } => out
+                            .criteria_to_implementation_targets
+                            .entry(criterion.clone())
+                            .or_default()
+                            .push(target_ref.clone()),
+                        TargetClaim::Verifies {
+                            criterion, covers, ..
+                        } => {
+                            out.criteria_to_verification_targets
+                                .entry(criterion.clone())
+                                .or_default()
+                                .push(target_ref.clone());
+                            for covered in covers {
+                                out.verification_by_target
+                                    .entry(covered.clone())
+                                    .or_default()
+                                    .push(target_ref.clone());
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        for (contract_anchor, contract) in &out.contracts {
+            for participant in &contract.participants {
+                out.contracts_by_target
+                    .entry(participant.target.clone())
+                    .or_default()
+                    .push(contract_anchor.clone());
+            }
+        }
+        for values in out
+            .artifact_owners
+            .values_mut()
+            .chain(out.criteria_to_implementation_targets.values_mut())
+            .chain(out.criteria_to_verification_targets.values_mut())
+            .chain(out.verification_by_target.values_mut())
+        {
+            values.sort();
+            values.dedup();
+        }
+        for values in out.contracts_by_target.values_mut() {
+            values.sort();
+            values.dedup();
+        }
         for values in out.path_to_targets.values_mut() {
             values.sort();
             values.dedup();
@@ -334,6 +481,35 @@ impl SpecIndex {
     pub fn anchor(&self, anchor: &SpecAnchor) -> Option<&AnchorValue> {
         self.anchors.get(anchor)
     }
+}
+
+fn artifact_identities_for_target(units: &[ArtifactUnit], target: &ArtifactTarget) -> Vec<String> {
+    units
+        .iter()
+        .filter(|unit| {
+            if unit.path != target.path
+                || !matches!(
+                    unit.reachability,
+                    syu_inventory::ArtifactReachability::Active
+                )
+            {
+                return false;
+            }
+            match &target.selector {
+                Selector::Symbol { name } => {
+                    unit.kind == ArtifactUnitKind::Symbol
+                        && (unit.identity.ends_with(&format!("::{name}"))
+                            || unit.identity.ends_with(&format!("::{name})")))
+                }
+                Selector::Operation { .. } => unit.kind == ArtifactUnitKind::Operation,
+                Selector::Heading { .. } => unit.kind == ArtifactUnitKind::Heading,
+                Selector::JsonPointer { .. } | Selector::Marker { .. } => {
+                    unit.kind == ArtifactUnitKind::File
+                }
+            }
+        })
+        .map(|unit| unit.identity.clone())
+        .collect()
 }
 
 fn unique_item(ids: &mut BTreeSet<SpecId>, id: &SpecId) -> Result<()> {

@@ -96,6 +96,8 @@ impl Diagnostic {
 #[serde(deny_unknown_fields)]
 pub struct ValidationResult {
     pub diagnostics: Vec<Diagnostic>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub readiness: Option<serde_json::Value>,
 }
 impl ValidationResult {
     pub fn is_valid(&self) -> bool {

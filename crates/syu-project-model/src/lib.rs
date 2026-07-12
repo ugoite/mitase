@@ -49,7 +49,7 @@ pub struct ValidationConfig {
     pub readiness: ReadinessConfig,
     pub changed: ChangedConfig,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ReadinessLevel {
     Off,

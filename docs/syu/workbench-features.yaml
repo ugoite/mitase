@@ -16,7 +16,7 @@ features:
           - id: project
             adapter: rust
             path: crates/syu-workbench-server/src/lib.rs
-            selector: { kind: symbol, name: project }
+            selector: { kind: symbol, name: api_index }
             claims:
               - kind: satisfies
                 criterion: REQ-WORKBENCH-006#criterion.accessible-navigation
@@ -67,7 +67,7 @@ features:
           - id: readiness
             adapter: rust
             path: crates/syu-workbench-server/src/lib.rs
-            selector: { kind: symbol, name: project }
+            selector: { kind: symbol, name: readiness_view }
             claims:
               - kind: satisfies
                 criterion: REQ-WORKBENCH-005#criterion.secure-local-server

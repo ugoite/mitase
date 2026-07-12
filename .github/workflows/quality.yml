@@ -15,3 +15,13 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
       - run: cargo run -- validate workspace .
+      - name: Prove closed-loop readiness
+        run: |
+          cargo run -- readiness report . --format json > readiness.json
+          python3 - <<'PY'
+          import json
+          report = json.load(open("readiness.json"))
+          for axis in ("inventory", "ownership", "seedability", "workability", "verification", "closed_loop"):
+              value = report[axis]
+              assert value["required"] == value["ready"], (axis, value)
+          PY

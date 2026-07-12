@@ -3,7 +3,6 @@ mod lsp;
 
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand, ValueEnum};
-use serde::Serialize;
 use std::{
     fs,
     net::IpAddr,
@@ -179,6 +178,8 @@ enum WorkbenchCommand {
         session_token: Option<String>,
         #[arg(long)]
         show_log: bool,
+        #[arg(long)]
+        no_open: bool,
     },
 }
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -204,22 +205,6 @@ pub fn run() -> Result<i32> {
         }
     }
 }
-#[derive(Serialize)]
-struct ReadinessAxis {
-    required: usize,
-    ready: usize,
-    blockers: Vec<String>,
-}
-#[derive(Serialize)]
-struct ReadinessReport {
-    target: String,
-    inventory: ReadinessAxis,
-    ownership: ReadinessAxis,
-    seedability: ReadinessAxis,
-    workability: ReadinessAxis,
-    verification: ReadinessAxis,
-    closed_loop: ReadinessAxis,
-}
 fn run_readiness(args: ReadinessArgs) -> Result<i32> {
     let ReadinessCommand::Report { workspace, format } = args.command;
     let workspace = SpecWorkspace::load(workspace)?;
@@ -231,95 +216,26 @@ fn run_readiness(args: ReadinessArgs) -> Result<i32> {
         .iter()
         .find(|profile| profile.id == workspace.config.inventory.active_profile)
         .context("active inventory profile is not defined")?;
-    let inventory = InventoryRegistry::discover(
+    let inventory_result = InventoryRegistry::discover(
         &InventoryContext {
             workspace_root: workspace.root.clone(),
             profile: profile.id.clone(),
+            settings: serde_yaml::Value::Null,
+            excludes: workspace
+                .config
+                .workspace
+                .excludes
+                .iter()
+                .map(|pattern| pattern.0.clone())
+                .collect(),
         },
         profile,
     );
-    let inventory = match inventory {
-        Ok(units) => ReadinessAxis {
-            required: units.len(),
-            ready: units.len(),
-            blockers: vec![],
-        },
-        Err(error) => ReadinessAxis {
-            required: 1,
-            ready: 0,
-            blockers: vec![error.to_string()],
-        },
-    };
-    let targets = index
-        .bindings
-        .values()
-        .map(|binding| binding.targets.len())
-        .sum::<usize>();
-    let owned = index
-        .bindings
-        .values()
-        .flat_map(|binding| binding.targets.iter())
-        .filter(|target| !target.claims.is_empty())
-        .count();
-    let criteria = index
-        .criterion_status
-        .iter()
-        .filter(|(_, status)| **status == syu_spec_model::ItemStatus::Implemented)
-        .map(|(anchor, _)| anchor.clone())
-        .collect::<Vec<_>>();
-    let mut blockers = Vec::new();
-    for criterion in &criteria {
-        let request = WorkRequest {
-            schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
-            id: format!("readiness-{}", criterion.local_id),
-            summary: "readiness probe".into(),
-            operation: syu_work_model::WorkOperation::Modify,
-            seeds: vec![syu_work_model::WorkSeed::Anchor(criterion.clone())],
-            constraints: Default::default(),
-            requested_targets: vec![],
-        };
-        match plan(&request, &workspace, &index, "readiness") {
-            Ok(plan)
-                if matches!(plan.status, syu_work_model::PlanStatus::Ready)
-                    && !plan.slices.is_empty() => {}
-            Ok(plan) => blockers.push(format!("{criterion}: {:?}", plan.status)),
-            Err(error) => blockers.push(format!("{criterion}: {error}")),
-        }
+    if let Err(error) = inventory_result {
+        bail!("inventory readiness failed: {error}");
     }
-    // Every implemented criterion is a required verification unit.  Counting
-    // implementation bindings here under-counts criteria when one exact
-    // target satisfies more than one criterion.
-    let verification_required = criteria.len();
-    let verified = index.bindings.values().flat_map(|binding| binding.targets.iter()).filter(|target| target.claims.iter().any(|claim| matches!(claim, syu_spec_model::TargetClaim::Verifies { covers, .. } if !covers.is_empty()))).count();
-    let report = ReadinessReport {
-        target: "closed-loop".into(),
-        inventory,
-        ownership: ReadinessAxis {
-            required: targets,
-            ready: owned,
-            blockers: vec![],
-        },
-        seedability: ReadinessAxis {
-            required: criteria.len(),
-            ready: criteria.len(),
-            blockers: vec![],
-        },
-        workability: ReadinessAxis {
-            required: criteria.len(),
-            ready: criteria.len().saturating_sub(blockers.len()),
-            blockers: blockers.clone(),
-        },
-        verification: ReadinessAxis {
-            required: verification_required,
-            ready: verified,
-            blockers: vec![],
-        },
-        closed_loop: ReadinessAxis {
-            required: criteria.len(),
-            ready: criteria.len().saturating_sub(blockers.len()),
-            blockers,
-        },
-    };
+    let report =
+        syu_validation::evaluate_readiness(&workspace, &index, &revision(&workspace.root)?, true)?;
     match format {
         Format::Json => println!("{}", serde_json::to_string_pretty(&report)?),
         Format::Text => println!(
@@ -352,9 +268,6 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
         | ValidateCommand::Plan(args) => args,
         ValidateCommand::Result(args) => {
             let receipt: syu_work_model::VerificationReceipt = read_yaml(&args.receipt)?;
-            if receipt.schema != syu_work_model::VERIFICATION_RECEIPT_SCHEMA {
-                bail!("receipt schema must be syu/verification-receipt/v1");
-            }
             let plan_path = args
                 .validate
                 .plan
@@ -362,18 +275,15 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
                 .context("validate result requires --plan")?;
             let plan: WorkPlan = read_yaml(plan_path)?;
             let workspace = SpecWorkspace::load(&args.validate.workspace)?;
-            if receipt.plan_digest != plan.canonical_digest
-                || receipt.workspace_fingerprint != workspace.fingerprint()
-            {
-                bail!("verification receipt does not match the plan or workspace fingerprint");
-            }
-            if receipt
-                .executions
-                .iter()
-                .any(|execution| execution.exit_code != 0)
-            {
-                bail!("verification receipt contains failed executions");
-            }
+            let index = workspace.index()?;
+            syu_workbench_server::validate_verification_receipt(
+                &workspace,
+                &index,
+                &plan,
+                &receipt.slice_id,
+                &receipt,
+                &revision(&workspace.root)?,
+            )?;
             args.validate
         }
     };
@@ -521,6 +431,7 @@ fn run_workbench(args: WorkbenchArgs) -> Result<i32> {
         allow_remote_bind: args.allow_remote_bind,
         session_token: args.session_token,
         show_log: false,
+        no_open: args.no_open,
     });
     match command {
         WorkbenchCommand::Project {
@@ -553,6 +464,7 @@ fn run_workbench(args: WorkbenchArgs) -> Result<i32> {
             allow_remote_bind,
             session_token,
             show_log,
+            no_open,
         } => {
             if !bind.is_loopback() && !allow_remote_bind {
                 bail!("remote --bind requires --allow-remote-bind");
@@ -574,6 +486,7 @@ fn run_workbench(args: WorkbenchArgs) -> Result<i32> {
                     bind,
                     port,
                     session_token,
+                    no_open,
                 });
             if let Some(request) = request {
                 server.with_request(request).run()?;

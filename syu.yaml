@@ -26,7 +26,7 @@ verification:
   runners:
     cargo-test:
       executable: cargo
-      arguments: [test, -p, "{package}", "{test}"]
+      arguments: [test, -p, "{package}"]
 work:
   slicing:
     max_editable_files: 4

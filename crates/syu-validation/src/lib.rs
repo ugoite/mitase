@@ -1,11 +1,13 @@
 #![forbid(unsafe_code)]
+mod readiness;
+pub use readiness::{ReadinessAxis, ReadinessReport, evaluate as evaluate_readiness};
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use syu_diagnostics::{Diagnostic, ValidationPhase, ValidationResult};
 use syu_planner::plan as canonical_plan;
-use syu_project_model::{ProjectConfig, ValidationPreset};
+use syu_project_model::{ProjectConfig, ReadinessLevel, ValidationPreset};
 use syu_spec_model::{
     BindingRole, BoundTargetRef, ItemStatus, LocalAnchorKind, RepoPath, RuleLevel, Selector,
     SpecAnchor, SpecDocument,
@@ -129,13 +131,14 @@ pub static RULES: &[RuleMetadata] = &[
     fixed_metadata!("SYU-WORK-010"),
     fixed_metadata!("SYU-WORK-011"),
     fixed_metadata!("SYU-WORK-012"),
+    fixed_metadata!("SYU-READINESS-001"),
 ];
 
 /// Canonical rule-to-phase classification for presentation clients.  This is
 /// intentionally kept beside the validator so no caller needs to infer
 /// semantics from a rule-id string.
 pub fn phase_for_rule(rule: &str) -> ValidationPhase {
-    if rule.starts_with("SYU-WORK-") {
+    if rule.starts_with("SYU-WORK-") || rule.starts_with("SYU-READINESS-") {
         ValidationPhase::Plan
     } else if rule.starts_with("SYU-CHANGE-") || rule == "SYU-OPERATION-001" {
         ValidationPhase::Scope
@@ -263,7 +266,50 @@ pub fn validate(ctx: &ValidationContext<'_>) -> ValidationResult {
     diagnostics.sort_by(|a, b| {
         (&a.rule_id, &a.primary.path, &a.message).cmp(&(&b.rule_id, &b.primary.path, &b.message))
     });
-    ValidationResult { diagnostics }
+    let readiness = crate::evaluate_readiness(
+        ctx.workspace,
+        ctx.index,
+        ctx.revision.unwrap_or("working-tree"),
+        true,
+    );
+    if let Ok(report) = &readiness {
+        let unmet = [
+            ("inventory", &report.inventory),
+            ("ownership", &report.ownership),
+            ("seedability", &report.seedability),
+            ("workability", &report.workability),
+            ("verification", &report.verification),
+            ("closed_loop", &report.closed_loop),
+        ]
+        .iter()
+        .any(|(_, axis)| axis.ready < axis.required);
+        if readiness_required(ctx.config.validation.readiness.target) && unmet {
+            diagnostics.push(syu_diagnostics::Diagnostic::error(
+                "SYU-READINESS-001",
+                "workspace does not meet the configured readiness target",
+                "syu.yaml",
+            ));
+        }
+    } else if readiness_required(ctx.config.validation.readiness.target) {
+        diagnostics.push(syu_diagnostics::Diagnostic::error(
+            "SYU-READINESS-001",
+            format!(
+                "readiness evaluation failed: {}",
+                readiness.as_ref().unwrap_err()
+            ),
+            "workspace",
+        ));
+    }
+    ValidationResult {
+        diagnostics,
+        readiness: readiness
+            .ok()
+            .and_then(|report| serde_json::to_value(report).ok()),
+    }
+}
+
+fn readiness_required(level: ReadinessLevel) -> bool {
+    !matches!(level, ReadinessLevel::Off)
 }
 
 fn set_phase(diagnostics: &mut [Diagnostic], phase: ValidationPhase) {

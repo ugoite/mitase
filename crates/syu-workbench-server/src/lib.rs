@@ -66,6 +66,7 @@ pub struct WorkbenchLaunchConfig {
     pub bind: IpAddr,
     pub port: u16,
     pub session_token: Option<String>,
+    pub no_open: bool,
 }
 pub struct WorkbenchServer {
     pub service: Arc<WorkbenchService>,
@@ -92,6 +93,7 @@ impl WorkbenchServer {
                 bind: "127.0.0.1".parse().expect("loopback address"),
                 port: 7737,
                 session_token: None,
+                no_open: false,
             },
         }
     }
@@ -108,11 +110,12 @@ impl WorkbenchServer {
     pub fn projection(&self, revision: &str) -> Result<WorkspaceProjection> {
         let workspace = SpecWorkspace::load(&self.service.workspace_root)?;
         let session = self.service.session.read().expect("workbench session lock");
-        project(&workspace, session.draft_request.as_ref(), revision)
+        project_session(&workspace, &session, revision)
     }
     pub fn run(self) -> Result<()> {
         let bind = self.launch.bind;
         let port = self.launch.port;
+        let no_open = self.launch.no_open;
         if !bind.is_loopback()
             && self
                 .launch
@@ -165,6 +168,12 @@ impl WorkbenchServer {
                 .with_state(service);
             let listener = tokio::net::TcpListener::bind((bind, port)).await?;
             println!("Syu Workbench listening on http://{bind}:{port}");
+            if !no_open {
+                let url = format!("http://{bind}:{port}");
+                if let Err(error) = open_browser(&url) {
+                    eprintln!("warning: could not open Workbench browser: {error}");
+                }
+            }
             axum::serve(listener, app)
                 .with_graceful_shutdown(async {
                     let _ = tokio::signal::ctrl_c().await;
@@ -173,6 +182,25 @@ impl WorkbenchServer {
             Ok::<(), anyhow::Error>(())
         })
     }
+}
+
+fn open_browser(url: &str) -> Result<()> {
+    #[cfg(target_os = "macos")]
+    let mut command = Command::new("open");
+    #[cfg(target_os = "linux")]
+    let mut command = Command::new("xdg-open");
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut command = Command::new("cmd");
+        command.arg("/C").arg("start");
+        command
+    };
+    command
+        .arg(url)
+        .status()?
+        .success()
+        .then_some(())
+        .ok_or_else(|| anyhow::anyhow!("browser command failed"))
 }
 
 fn security_token(root: &Path) -> String {
@@ -234,8 +262,7 @@ async fn mutation_guard(
 pub struct MutationBasis {
     pub expected_revision: String,
     pub expected_workspace_fingerprint: String,
-    #[serde(default)]
-    pub expected_source_hash: Option<String>,
+    pub expected_source_hash: String,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -298,6 +325,9 @@ fn current_revision(root: &std::path::Path) -> Result<String> {
     Ok(String::from_utf8(output.stdout)?.trim().into())
 }
 fn basis(service: &WorkbenchService, expected: &MutationBasis) -> Result<SpecWorkspace> {
+    if expected.expected_source_hash.is_empty() {
+        anyhow::bail!("mutation requires expected_source_hash");
+    }
     let workspace = SpecWorkspace::load(&service.workspace_root)?;
     let revision = current_revision(&workspace.root)?;
     if revision != expected.expected_revision
@@ -314,25 +344,21 @@ async fn api_projection(
 ) -> Result<Json<WorkspaceProjection>, ApiError> {
     let workspace = SpecWorkspace::load(&service.workspace_root)?;
     let revision = current_revision(&workspace.root)?;
-    let request = service
+    let session = service
         .session
         .read()
-        .map_err(|_| anyhow::anyhow!("workbench session lock"))?
-        .draft_request
-        .clone();
-    Ok(Json(project(&workspace, request.as_ref(), &revision)?))
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+    Ok(Json(project_session(&workspace, &session, &revision)?))
 }
 
 async fn api_index(State(service): State<Arc<WorkbenchService>>) -> Result<Html<String>, ApiError> {
     let workspace = SpecWorkspace::load(&service.workspace_root)?;
     let revision = current_revision(&workspace.root)?;
-    let request = service
+    let session = service
         .session
         .read()
-        .map_err(|_| anyhow::anyhow!("workbench session lock"))?
-        .draft_request
-        .clone();
-    let projection = project(&workspace, request.as_ref(), &revision)?;
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+    let projection = project_session(&workspace, &session, &revision)?;
     let json = serde_json::to_string(&projection)
         .map_err(anyhow::Error::from)?
         .replace('<', "\\u003c");
@@ -444,7 +470,9 @@ async fn api_readiness(
 ) -> Result<Json<ReadinessView>, ApiError> {
     let workspace = SpecWorkspace::load(&service.workspace_root)?;
     let revision = current_revision(&workspace.root)?;
-    Ok(Json(project(&workspace, None, &revision)?.readiness))
+    let index = workspace.index()?;
+    let report = syu_validation::evaluate_readiness(&workspace, &index, &revision, true)?;
+    Ok(Json(readiness_view(&report)))
 }
 
 async fn api_specifications(
@@ -553,12 +581,7 @@ async fn api_specification_apply(
         ));
     }
     let old = fs::read_to_string(&path).map_err(anyhow::Error::from)?;
-    if command
-        .basis
-        .expected_source_hash
-        .as_deref()
-        .is_some_and(|hash| hash != content_hash(&old))
-    {
+    if command.basis.expected_source_hash != content_hash(&old) {
         return Err(ApiError(
             StatusCode::CONFLICT,
             anyhow::anyhow!("source changed since this view was loaded"),
@@ -596,12 +619,7 @@ async fn api_config_apply(
         .map_err(|error| anyhow::anyhow!("strict config parse failed: {error}"))?;
     let path = workspace.root.join("syu.yaml");
     let old = fs::read_to_string(&path).map_err(anyhow::Error::from)?;
-    if command
-        .basis
-        .expected_source_hash
-        .as_deref()
-        .is_some_and(|hash| hash != content_hash(&old))
-    {
+    if command.basis.expected_source_hash != content_hash(&old) {
         return Err(ApiError(
             StatusCode::CONFLICT,
             anyhow::anyhow!("source changed since this view was loaded"),
@@ -674,11 +692,11 @@ async fn api_request(
         .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
     session.draft_request = Some(command.request);
     session.plan = Some(plan);
-    Ok(Json(project(
-        &workspace,
-        session.draft_request.as_ref(),
-        &revision,
-    )?))
+    session.selected_slice = None;
+    session.context_pack = None;
+    session.verification_receipt = None;
+    session.last_validation = None;
+    Ok(Json(project_session(&workspace, &session, &revision)?))
 }
 async fn api_plan(
     State(service): State<Arc<WorkbenchService>>,
@@ -697,6 +715,10 @@ async fn api_plan(
         .ok_or_else(|| anyhow::anyhow!("no work request selected"))?;
     let plan = plan(&request, &workspace, &index, &revision)?;
     session.plan = Some(plan.clone());
+    session.selected_slice = None;
+    session.context_pack = None;
+    session.verification_receipt = None;
+    session.last_validation = None;
     Ok(Json(plan))
 }
 async fn api_context(
@@ -717,6 +739,7 @@ async fn api_context(
     let context =
         syu_planner::export_context(plan, &command.slice_id, &workspace, &index, &revision)?;
     session.context_pack = Some(context.clone());
+    session.selected_slice = Some(command.slice_id.clone());
     Ok(Json(context))
 }
 
@@ -743,7 +766,10 @@ async fn api_validate(
         changed_files: None,
         reported_changed_files: None,
         work_plan: Some(plan),
-        selected_slice: None,
+        selected_slice: session
+            .selected_slice
+            .as_ref()
+            .and_then(|id| plan.slices.iter().find(|slice| &slice.id == id)),
         plan_mode: PlanValidationMode::PreState,
         preset: workspace.config.validation.preset,
         revision: Some(&revision),
@@ -776,6 +802,20 @@ async fn api_verify(
         .plan
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("no work plan"))?;
+    if session
+        .selected_slice
+        .as_deref()
+        .is_none_or(|selected| selected != command.slice_id)
+        || !session
+            .last_validation
+            .as_ref()
+            .is_some_and(|validation| matches!(validation.state, ValidationRunState::Passed))
+    {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("verification requires a validated selected slice"),
+        ));
+    }
     let receipt = execute_verification(&workspace, &index, plan, &command.slice_id, &revision)?;
     session.verification_receipt = Some(receipt.clone());
     Ok(Json(receipt))
@@ -793,20 +833,24 @@ async fn api_result(
         .plan
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("no work plan"))?;
-    if command.receipt.plan_digest != plan.canonical_digest
-        || command.receipt.revision != current_revision(&workspace.root)?
-        || command.receipt.workspace_fingerprint != workspace.fingerprint()
-        || command
-            .receipt
-            .executions
-            .iter()
-            .any(|execution| execution.exit_code != 0)
-    {
+    let canonical = session
+        .verification_receipt
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("no server-generated verification receipt exists"))?;
+    if &command.receipt != canonical {
         return Err(ApiError(
             StatusCode::CONFLICT,
             anyhow::anyhow!("verification receipt does not close the selected plan"),
         ));
     }
+    validate_verification_receipt(
+        &workspace,
+        &workspace.index()?,
+        plan,
+        &canonical.slice_id,
+        canonical,
+        &current_revision(&workspace.root)?,
+    )?;
     Ok(StatusCode::NO_CONTENT)
 }
 async fn api_discard(State(service): State<Arc<WorkbenchService>>) -> Result<StatusCode, ApiError> {
@@ -846,6 +890,9 @@ pub struct WorkSessionView {
     pub request: Option<WorkRequest>,
     pub plan: Option<WorkPlan>,
     pub verification_receipt: Option<VerificationReceipt>,
+    pub context_pack: Option<syu_work_model::ContextPack>,
+    pub selected_slice: Option<String>,
+    pub validation: ValidationRunView,
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct ReadinessView {
@@ -1182,6 +1229,9 @@ pub struct BranchChangedTargetView {
     pub status: String,
     pub owners: Vec<String>,
     pub anchors: Vec<String>,
+    pub artifact_identities: Vec<String>,
+    pub unresolved_reason: Option<String>,
+    pub plan_inclusion_reason: Option<String>,
 }
 
 impl BranchScopeView {
@@ -1311,6 +1361,7 @@ pub fn project(
         .map(|r| plan(r, workspace, &index, revision))
         .transpose()?;
     let validation = ValidationRunView::not_run();
+    let readiness_report = syu_validation::evaluate_readiness(workspace, &index, revision, true)?;
     Ok(WorkspaceProjection {
         snapshot: WorkspaceSummary {
             root: workspace.root.display().to_string(),
@@ -1339,10 +1390,16 @@ pub fn project(
             },
             ActionCapabilityView {
                 id: "work.verify".into(),
-                enabled: plan.as_ref().is_some_and(|plan| !plan.slices.is_empty()),
+                enabled: plan.as_ref().is_some_and(|plan| {
+                    matches!(plan.status, syu_work_model::PlanStatus::Ready)
+                        && !plan.slices.is_empty()
+                }),
                 disabled_reason: plan
                     .as_ref()
-                    .is_none_or(|plan| plan.slices.is_empty())
+                    .is_none_or(|plan| {
+                        !matches!(plan.status, syu_work_model::PlanStatus::Ready)
+                            || plan.slices.is_empty()
+                    })
                     .then(|| "Validate the selected plan before verification.".into()),
             },
         ],
@@ -1350,16 +1407,86 @@ pub fn project(
             request: requested_work,
             plan,
             verification_receipt: None,
+            context_pack: None,
+            selected_slice: None,
+            validation: validation.clone(),
         },
-        readiness: ReadinessView {
-            target: "closed-loop".into(),
-            status: "Not run".into(),
-            blocking_subjects: 0,
-        },
+        readiness: readiness_view(&readiness_report),
         scope: ScopeView::default(),
         specifications: SpecificationCatalogView { items },
         diagnostics: DiagnosticsView { validation },
     })
+}
+
+fn readiness_view(report: &syu_validation::ReadinessReport) -> ReadinessView {
+    let blockers = report.inventory.blockers.len()
+        + report.ownership.blockers.len()
+        + report.seedability.blockers.len()
+        + report.workability.blockers.len()
+        + report.verification.blockers.len()
+        + report.closed_loop.blockers.len();
+    let has_subjects = report.inventory.required > 0 || report.closed_loop.required > 0;
+    ReadinessView {
+        target: report.target.clone(),
+        status: if !has_subjects {
+            "Unknown".into()
+        } else if blockers == 0 {
+            "Ready".into()
+        } else {
+            "Blocked".into()
+        },
+        blocking_subjects: blockers,
+    }
+}
+
+fn project_session(
+    workspace: &SpecWorkspace,
+    session: &WorkbenchSession,
+    revision: &str,
+) -> Result<WorkspaceProjection> {
+    let mut projection = project(workspace, session.draft_request.as_ref(), revision)?;
+    projection.work.plan = session.plan.clone().or(projection.work.plan);
+    projection.work.verification_receipt = session.verification_receipt.clone();
+    projection.work.context_pack = session.context_pack.clone();
+    projection.work.selected_slice = session.selected_slice.clone();
+    projection.work.validation = session
+        .last_validation
+        .clone()
+        .unwrap_or_else(ValidationRunView::not_run);
+    let plan_validated = session
+        .last_validation
+        .as_ref()
+        .is_some_and(|validation| matches!(validation.state, ValidationRunState::Passed));
+    let slice_selected = session.selected_slice.as_ref().is_some_and(|id| {
+        projection
+            .work
+            .plan
+            .as_ref()
+            .is_some_and(|plan| plan.slices.iter().any(|slice| &slice.id == id))
+    });
+    let verifiable = projection
+        .work
+        .plan
+        .as_ref()
+        .is_some_and(|plan| matches!(plan.status, syu_work_model::PlanStatus::Ready))
+        && plan_validated
+        && slice_selected
+        && projection.work.plan.as_ref().is_some_and(|plan| {
+            plan.slices
+                .iter()
+                .find(|slice| Some(&slice.id) == session.selected_slice.as_ref())
+                .is_some_and(|slice| !slice.verification_targets.is_empty())
+        });
+    if let Some(capability) = projection
+        .capabilities
+        .iter_mut()
+        .find(|capability| capability.id == "work.verify")
+    {
+        capability.enabled = verifiable;
+        capability.disabled_reason = (!verifiable)
+            .then(|| "Validate a selected verifiable slice before verification.".into());
+    }
+    Ok(projection)
 }
 
 /// Executes only runner declarations from the canonical configuration.  The UI
@@ -1372,6 +1499,9 @@ pub fn execute_verification(
     slice_id: &str,
     revision: &str,
 ) -> Result<VerificationReceipt> {
+    if !matches!(plan.status, syu_work_model::PlanStatus::Ready) {
+        anyhow::bail!("verification requires a validated ready plan");
+    }
     let slice = plan
         .slices
         .iter()
@@ -1379,14 +1509,19 @@ pub fn execute_verification(
         .ok_or_else(|| anyhow::anyhow!("slice {slice_id} not found"))?;
     let started_at = epoch_seconds();
     let mut executions = Vec::new();
+    if slice.verification_targets.is_empty() {
+        anyhow::bail!("selected slice has no verification targets");
+    }
     for planned in &slice.verification_targets {
         let target = index.target(&planned.reference).ok_or_else(|| {
             anyhow::anyhow!("verification target {} is unresolved", planned.reference)
         })?;
+        let mut claim_count = 0;
         for claim in &target.claims {
             let TargetClaim::Verifies { runner, covers, .. } = claim else {
                 continue;
             };
+            claim_count += 1;
             if covers.is_empty() {
                 anyhow::bail!("verification target {} has no covers", planned.reference);
             }
@@ -1429,8 +1564,14 @@ pub fn execute_verification(
                 verification_digest: verification.content_hash,
             });
         }
+        if claim_count != 1 {
+            anyhow::bail!(
+                "verification target {} must have exactly one verification claim",
+                planned.reference
+            );
+        }
     }
-    Ok(VerificationReceipt {
+    let receipt = VerificationReceipt {
         schema: VERIFICATION_RECEIPT_SCHEMA.into(),
         plan_digest: plan.canonical_digest.clone(),
         slice_id: slice_id.into(),
@@ -1439,7 +1580,107 @@ pub fn execute_verification(
         started_at: started_at.clone(),
         completed_at: epoch_seconds(),
         executions,
-    })
+    };
+    validate_verification_receipt(workspace, index, plan, slice_id, &receipt, revision)?;
+    Ok(receipt)
+}
+
+pub fn validate_verification_receipt(
+    workspace: &SpecWorkspace,
+    index: &syu_workspace::SpecIndex,
+    plan: &WorkPlan,
+    slice_id: &str,
+    receipt: &VerificationReceipt,
+    revision: &str,
+) -> Result<()> {
+    if receipt.schema != VERIFICATION_RECEIPT_SCHEMA {
+        anyhow::bail!("receipt schema must be {VERIFICATION_RECEIPT_SCHEMA}");
+    }
+    if !matches!(plan.status, syu_work_model::PlanStatus::Ready) {
+        anyhow::bail!("receipt plan is not validated");
+    }
+    let slice = plan
+        .slices
+        .iter()
+        .find(|slice| slice.id == slice_id)
+        .ok_or_else(|| anyhow::anyhow!("slice {slice_id} not found"))?;
+    if receipt.plan_digest != plan.canonical_digest
+        || receipt.slice_id != slice_id
+        || receipt.revision != revision
+        || receipt.workspace_fingerprint != workspace.fingerprint()
+    {
+        anyhow::bail!("verification receipt basis is stale or does not match the selected slice");
+    }
+    let expected = slice
+        .verification_targets
+        .iter()
+        .map(|target| target.reference.clone())
+        .collect::<BTreeSet<_>>();
+    let actual = receipt
+        .executions
+        .iter()
+        .map(|execution| execution.target.clone())
+        .collect::<Vec<_>>();
+    if actual.len() != expected.len() || actual.into_iter().collect::<BTreeSet<_>>() != expected {
+        anyhow::bail!(
+            "verification receipt execution set does not exactly match the selected slice"
+        );
+    }
+    for execution in &receipt.executions {
+        if execution.exit_code != 0 {
+            anyhow::bail!("verification receipt contains failed executions");
+        }
+        let target = index.target(&execution.target).ok_or_else(|| {
+            anyhow::anyhow!("verification target {} is unresolved", execution.target)
+        })?;
+        let claim = target
+            .claims
+            .iter()
+            .find_map(|claim| match claim {
+                TargetClaim::Verifies { runner, covers, .. } => Some((runner, covers)),
+                _ => None,
+            })
+            .ok_or_else(|| anyhow::anyhow!("{} is not a verification target", execution.target))?;
+        let configured = workspace
+            .config
+            .verification
+            .runners
+            .get(&claim.0.runner)
+            .ok_or_else(|| {
+                anyhow::anyhow!("verification runner {} is not configured", claim.0.runner)
+            })?;
+        let arguments = configured
+            .arguments
+            .iter()
+            .map(|argument| expand_runner_argument(argument, &claim.0.arguments))
+            .collect::<Vec<_>>();
+        let expected_command = std::iter::once(configured.executable.clone())
+            .chain(arguments)
+            .collect::<Vec<_>>();
+        if execution.runner != claim.0.runner
+            || execution.command != expected_command
+            || execution.command.is_empty()
+        {
+            anyhow::bail!("verification receipt command does not match the configured runner");
+        }
+        let verification = syu_workspace::resolve_target(&workspace.root, target)?;
+        if execution.verification_digest != verification.content_hash {
+            anyhow::bail!("verification target digest is stale");
+        }
+        for covered in claim.1 {
+            let covered_target = index
+                .target(covered)
+                .ok_or_else(|| anyhow::anyhow!("covered target {covered} is unresolved"))?;
+            let resolved = syu_workspace::resolve_target(&workspace.root, covered_target)?;
+            if execution.implementation_digests.get(covered) != Some(&resolved.content_hash) {
+                anyhow::bail!("implementation digest for {covered} is stale");
+            }
+        }
+        if execution.implementation_digests.len() != claim.1.len() {
+            anyhow::bail!("receipt implementation digest set is not exact");
+        }
+    }
+    Ok(())
 }
 
 fn expand_runner_argument(template: &str, values: &BTreeMap<String, String>) -> String {
@@ -1489,12 +1730,23 @@ pub fn branch_scope_view(
             .iter()
             .map(ToString::to_string)
             .collect::<BTreeSet<_>>();
+        let artifact_identities = index
+            .artifact_units
+            .iter()
+            .filter(|unit| unit.path.to_string_lossy() == path)
+            .map(|unit| unit.identity.clone())
+            .collect::<Vec<_>>();
         affected_ids.extend(owners.iter().cloned());
         changed.push(BranchChangedTargetView {
             path,
             status: format!("{:?}", file.status).to_ascii_lowercase(),
             owners: owners.into_iter().collect(),
             anchors: anchors.into_iter().collect(),
+            unresolved_reason: (artifact_identities.is_empty() && refs.is_empty())
+                .then(|| "no active artifact identity or exact target".into()),
+            plan_inclusion_reason: (!refs.is_empty())
+                .then(|| "exact target/path relation is present in canonical index".into()),
+            artifact_identities,
         });
     }
     let owned = changed
@@ -1873,6 +2125,7 @@ mod tests {
                 "work issue",
                 "work.yaml",
             )],
+            readiness: None,
         };
         let run = ValidationRunView::completed(
             "work_plan",

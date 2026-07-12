@@ -986,6 +986,7 @@ name = "syu-diagnostics"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_json",
  "syu-spec-model",
 ]
 
@@ -995,6 +996,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "proc-macro2",
+ "quote",
  "serde",
  "serde_yaml",
  "sha2",
@@ -1041,8 +1043,12 @@ dependencies = [
 name = "syu-validation"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
  "serde_yaml",
  "syu-diagnostics",
+ "syu-inventory",
  "syu-planner",
  "syu-project-model",
  "syu-spec-model",
@@ -1092,6 +1098,7 @@ dependencies = [
  "serde_yaml",
  "sha2",
  "syu-code-intel",
+ "syu-inventory",
  "syu-project-model",
  "syu-spec-model",
  "tempfile",
