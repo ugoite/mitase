@@ -26,6 +26,8 @@ inventory:
             - README.md
             - .github/ISSUE_TEMPLATE/bug_report.yml
             - .github/pull_request_template.md
+            - .github/workflows/branch-push.yml
+            - .github/workflows/ci.yml
             - .github/workflows/quality.yml
             - CONTRIBUTING.md
             - Cargo.lock

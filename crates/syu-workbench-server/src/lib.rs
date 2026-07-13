@@ -1025,14 +1025,23 @@ fn branch_changed_files(root: &Path, range: &str) -> Result<Vec<syu_validation::
 fn configured_change_range(workspace: &SpecWorkspace) -> Result<String> {
     match workspace.config.validation.changed.baseline.as_ref() {
         Some(ChangeBaseline::MergeBase { against }) => {
-            git_merge_base(&workspace.root, "HEAD", &against.0).or_else(|_| Ok("HEAD^".into()))
+            git_merge_base(&workspace.root, "HEAD", &against.0)
+                .or_else(|_| parent_or_current(&workspace.root))
         }
         Some(ChangeBaseline::Revision { revision }) => Ok(revision.0.clone()),
-        Some(ChangeBaseline::Parent) => Ok("HEAD^".into()),
-        None => {
-            git_merge_base(&workspace.root, "HEAD", "origin/main").or_else(|_| Ok("HEAD^".into()))
-        }
+        Some(ChangeBaseline::Parent) => parent_or_current(&workspace.root),
+        None => git_merge_base(&workspace.root, "HEAD", "origin/main")
+            .or_else(|_| parent_or_current(&workspace.root)),
     }
+}
+
+fn parent_or_current(root: &Path) -> Result<String> {
+    git_output(root, &["rev-parse", "HEAD^"])
+        .map(|output| String::from_utf8_lossy(&output).trim().to_owned())
+        .or_else(|_| {
+            git_output(root, &["rev-parse", "HEAD"])
+                .map(|output| String::from_utf8_lossy(&output).trim().to_owned())
+        })
 }
 
 fn git_merge_base(root: &Path, left: &str, right: &str) -> Result<String> {

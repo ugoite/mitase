@@ -559,7 +559,9 @@ fn default_change_baseline(workspace: &SpecWorkspace) -> Result<String> {
     if let Some(baseline) = &workspace.config.validation.changed.baseline {
         return base_revision_from_baseline(workspace, baseline);
     }
-    merge_base(&workspace.root, "origin/main").or_else(|_| revision_parent(&workspace.root))
+    merge_base(&workspace.root, "origin/main")
+        .or_else(|_| revision_parent(&workspace.root))
+        .or_else(|_| revision(&workspace.root))
 }
 
 fn validation_inputs_for_cli(
@@ -636,9 +638,9 @@ fn parse_cli_baseline(value: &str) -> Result<ChangeBaseline> {
 
 fn range_from_baseline(root: &Path, baseline: &ChangeBaseline) -> Result<String> {
     match baseline {
-        ChangeBaseline::MergeBase { against } => {
-            Ok(merge_base(root, &against.0).or_else(|_| revision_parent(root))?)
-        }
+        ChangeBaseline::MergeBase { against } => Ok(merge_base(root, &against.0)
+            .or_else(|_| revision_parent(root))
+            .or_else(|_| revision(root))?),
         ChangeBaseline::Revision { revision } => Ok(revision.0.clone()),
         ChangeBaseline::Parent => Ok("HEAD^".into()),
     }
@@ -649,9 +651,9 @@ fn base_revision_from_baseline(
     baseline: &ChangeBaseline,
 ) -> Result<String> {
     match baseline {
-        ChangeBaseline::MergeBase { against } => {
-            merge_base(&workspace.root, &against.0).or_else(|_| revision_parent(&workspace.root))
-        }
+        ChangeBaseline::MergeBase { against } => merge_base(&workspace.root, &against.0)
+            .or_else(|_| revision_parent(&workspace.root))
+            .or_else(|_| revision(&workspace.root)),
         ChangeBaseline::Revision { revision } => Ok(revision.0.clone()),
         ChangeBaseline::Parent => revision_parent(&workspace.root),
     }

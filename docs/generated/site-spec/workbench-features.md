@@ -50,6 +50,16 @@ description: "Generated reference for docs/syu/workbench-features.yaml"
           - **path**: .github/workflows/quality.yml
           - **selector**:
             - **kind**: file
+        - **id**: selfhost-github-workflows-ci-yml
+          - **adapter**: declared
+          - **path**: .github/workflows/ci.yml
+          - **selector**:
+            - **kind**: file
+        - **id**: selfhost-github-workflows-branch-push-yml
+          - **adapter**: declared
+          - **path**: .github/workflows/branch-push.yml
+          - **selector**:
+            - **kind**: file
         - **id**: selfhost-contributing-md
           - **adapter**: declared
           - **path**: CONTRIBUTING.md
@@ -1638,6 +1648,16 @@ features:
     - id: selfhost-github-workflows-quality-yml
       adapter: declared
       path: .github/workflows/quality.yml
+      selector:
+        kind: file
+    - id: selfhost-github-workflows-ci-yml
+      adapter: declared
+      path: .github/workflows/ci.yml
+      selector:
+        kind: file
+    - id: selfhost-github-workflows-branch-push-yml
+      adapter: declared
+      path: .github/workflows/branch-push.yml
       selector:
         kind: file
     - id: selfhost-contributing-md

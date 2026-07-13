@@ -1101,6 +1101,7 @@ fn readiness_change_baseline(workspace: &SpecWorkspace, revision: &str) -> Resul
             &["merge-base", revision, against.0.as_str()],
         )
         .or_else(|_| git_text(&workspace.root, &["rev-parse", "HEAD^"]))
+        .or_else(|_| Ok::<String, anyhow::Error>(revision.to_owned()))
         .context("resolve configured readiness merge-base"),
         Some(syu_project_model::ChangeBaseline::Revision { revision }) => Ok(revision.0.clone()),
         Some(syu_project_model::ChangeBaseline::Parent) => {
@@ -1108,6 +1109,7 @@ fn readiness_change_baseline(workspace: &SpecWorkspace, revision: &str) -> Resul
         }
         None => git_text(&workspace.root, &["merge-base", revision, "origin/main"])
             .or_else(|_| git_text(&workspace.root, &["rev-parse", &format!("{revision}^")]))
+            .or_else(|_| Ok::<String, anyhow::Error>(revision.to_owned()))
             .context("resolve default readiness baseline"),
     }
 }
