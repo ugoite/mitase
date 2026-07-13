@@ -15,13 +15,17 @@
           <span class="ico"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"></path></svg></span>
           <span class="nav-label" data-i18n="nav.work">Work</span>
         </button>
+        <button class="nav-item" data-route="readiness">
+          <span class="ico"><svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.6 2.8 8 7 10 4.2-2 7-5.4 7-10V6l-7-3Z"></path><path d="m9 12 2 2 4-5"></path></svg></span>
+          <span class="nav-label" data-i18n="nav.readiness">Readiness</span>
+        </button>
         <button class="nav-item" data-route="scope">
           <span class="ico"><svg viewBox="0 0 24 24"><path d="M4 12h16M12 4v16M7 7l10 10M17 7 7 17"></path></svg></span>
           <span class="nav-label" data-i18n="nav.scope">Scope</span>
         </button>
-        <button class="nav-item" data-route="items">
+        <button class="nav-item" data-route="specifications">
           <span class="ico"><svg viewBox="0 0 24 24"><path d="M5 5h14v14H5zM8 9h8M8 13h8M8 17h5"></path></svg></span>
-          <span class="nav-label" data-i18n="nav.items">Items</span>
+          <span class="nav-label" data-i18n="nav.specifications">Specifications</span>
         </button>
         <button class="nav-item" data-route="diagnostics">
           <span class="ico"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"></path></svg></span>
@@ -52,6 +56,14 @@
       </header>
 
       <div class="content content-viewport">
+        <section class="surface" data-page="readiness" hidden>
+          <div class="page-head">
+            <div class="eyebrow">READINESS</div>
+            <div class="title-row"><h1 data-i18n="nav.readiness">Readiness</h1></div>
+            <div class="toolbar"><button class="btn primary compact" data-readiness-run type="button">Run readiness</button></div>
+          </div>
+          <div class="workspace no-rail"><div class="canvas" data-readiness-content></div></div>
+        </section>
         <section class="surface" data-page="work">
           <div class="page-head">
             <div class="eyebrow" data-i18n="page.work.eyebrow">WORKBENCH</div>
@@ -148,7 +160,7 @@
           <div class="workspace"><aside class="rail" data-scope-rail></aside><div class="canvas" data-scope-detail></div></div>
         </section>
 
-        <section class="surface" data-page="items" hidden>
+        <section class="surface" data-page="specifications" hidden>
           <div class="page-head">
             <div class="eyebrow" data-i18n="page.items.eyebrow">ITEMS</div>
             <div class="title-row">

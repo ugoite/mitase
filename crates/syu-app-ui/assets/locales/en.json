@@ -1,6 +1,8 @@
 {
   "nav.work": "Work",
+  "nav.readiness": "Readiness",
   "nav.scope": "Scope",
+  "nav.specifications": "Specifications",
   "nav.items": "Items",
   "nav.diagnostics": "Diagnostics",
   "nav.settings": "Settings",

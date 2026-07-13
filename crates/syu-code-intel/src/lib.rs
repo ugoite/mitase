@@ -51,6 +51,7 @@ fn resolve_typescript(source: &str, name: &str) -> Result<SymbolResolution> {
 
 fn resolve_rust(source: &str, name: &str) -> Result<SymbolResolution> {
     let file = syn::parse_file(source)?;
+    let (qualifier, leaf) = name.rsplit_once("::").unwrap_or(("", name));
 
     struct Finder<'a> {
         name: &'a str,
@@ -142,14 +143,30 @@ fn resolve_rust(source: &str, name: &str) -> Result<SymbolResolution> {
     }
 
     let mut finder = Finder {
-        name,
+        name: leaf,
         candidates: Vec::new(),
         module_path: Vec::new(),
         impl_path: Vec::new(),
     };
     syn::visit::Visit::visit_file(&mut finder, &file);
 
-    match finder.candidates.as_slice() {
+    let candidates = finder
+        .candidates
+        .into_iter()
+        .filter(|candidate| {
+            qualifier.is_empty()
+                || candidate
+                    .identity
+                    .ends_with(&format!("{qualifier}::{leaf}"))
+                || candidate
+                    .identity
+                    .ends_with(&format!("::{qualifier}::{leaf}"))
+                || candidate
+                    .identity
+                    .ends_with(&format!("::impl({qualifier})::{leaf}"))
+        })
+        .collect::<Vec<_>>();
+    match candidates.as_slice() {
         [] => bail!("symbol {name} has no Rust definition"),
         [candidate] => resolution_from_span(source, candidate),
         _ => bail!("symbol {name} is ambiguous in Rust source"),
@@ -669,6 +686,13 @@ mod tests {
         .unwrap_err()
         .to_string();
         assert!(error.contains("ambiguous"));
+    }
+
+    #[test]
+    fn rust_qualified_method_selector_resolves_exact_impl() {
+        let source = "struct Service; impl Service { fn new() {} } fn new() {}";
+        let resolved = resolve_symbol("rust", source, "Service::new").unwrap();
+        assert!(resolved.identity.ends_with("Service::new"));
     }
 
     #[test]

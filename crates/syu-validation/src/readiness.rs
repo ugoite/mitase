@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use serde::Serialize;
 use std::process::Command;
 use syu_project_model::ReadinessLevel;
-use syu_spec_model::{BindingRole, ItemStatus, TargetClaim};
+use syu_spec_model::{BindingRole, ItemStatus, OwnershipSelector, TargetClaim};
 use syu_workspace::{SpecIndex, SpecWorkspace};
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -24,13 +24,48 @@ pub struct ReadinessReport {
 }
 
 impl ReadinessAxis {
-    fn empty(message: impl Into<String>) -> Self {
+    pub fn empty(message: impl Into<String>) -> Self {
         Self {
             required: 0,
             ready: 0,
             blockers: vec![message.into()],
         }
     }
+
+    pub fn is_ready(&self) -> bool {
+        self.ready == self.required && self.blockers.is_empty()
+    }
+}
+
+pub fn required_axes(level: ReadinessLevel) -> &'static [ReadinessAxisId] {
+    use ReadinessAxisId::*;
+    match level {
+        ReadinessLevel::Off => &[],
+        ReadinessLevel::Traceable => &[Inventory, Ownership],
+        ReadinessLevel::Seedable => &[Inventory, Ownership, Seedability],
+        ReadinessLevel::WorkReady => &[Inventory, Ownership, Seedability, Workability],
+        ReadinessLevel::Verifiable => {
+            &[Inventory, Ownership, Seedability, Workability, Verification]
+        }
+        ReadinessLevel::ClosedLoop => &[
+            Inventory,
+            Ownership,
+            Seedability,
+            Workability,
+            Verification,
+            ClosedLoop,
+        ],
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReadinessAxisId {
+    Inventory,
+    Ownership,
+    Seedability,
+    Workability,
+    Verification,
+    ClosedLoop,
 }
 
 pub fn evaluate(
@@ -65,43 +100,86 @@ pub fn evaluate(
         }
     };
 
-    let claimed = index
-        .target_to_artifact
-        .keys()
-        .filter(|target| {
-            index
-                .bindings
-                .get(&target.binding)
-                .is_some_and(|binding| binding.role == BindingRole::Implementation)
-        })
-        .cloned()
-        .collect::<Vec<_>>();
-    let ownership_blockers = claimed
+    let active_identities = active
         .iter()
-        .filter_map(|target| {
-            let identity = index.target_to_artifact.get(target)?;
+        .map(|unit| unit.identity.as_str())
+        .collect::<Vec<_>>();
+    let ownership_blockers = active_identities
+        .iter()
+        .filter_map(|identity| {
             let owners = index
                 .artifact_owners
-                .get(identity)
+                .get(*identity)
                 .map(Vec::len)
                 .unwrap_or(0);
             (owners != 1).then(|| format!("{identity} has {owners} owners"))
         })
         .collect::<Vec<_>>();
-    let ownership = if claimed.is_empty() {
+    let mut ownership_blockers = ownership_blockers;
+    for (binding_anchor, binding) in &index.bindings {
+        if binding.targets.len()
+            > workspace
+                .config
+                .validation
+                .readiness
+                .limits
+                .max_targets_per_binding
+        {
+            ownership_blockers.push(format!(
+                "{binding_anchor} has {} targets, exceeding max_targets_per_binding",
+                binding.targets.len()
+            ));
+        }
+        for scope in &binding.owns {
+            let matched = active
+                .iter()
+                .filter(|unit| scope_matches(scope, unit))
+                .count();
+            if matched
+                > workspace
+                    .config
+                    .validation
+                    .readiness
+                    .limits
+                    .max_ownership_scope_units
+            {
+                ownership_blockers.push(format!(
+                    "{binding_anchor}/scope.{} covers {matched} active units, exceeding max_ownership_scope_units",
+                    scope.id
+                ));
+            }
+        }
+    }
+    let ownership = if active.is_empty() {
         ReadinessAxis::empty("no declared artifact subjects")
     } else {
         ReadinessAxis {
-            required: claimed.len(),
-            ready: claimed.len().saturating_sub(ownership_blockers.len()),
+            required: active.len(),
+            ready: active.len().saturating_sub(ownership_blockers.len()),
             blockers: ownership_blockers,
         }
     };
 
+    let configured_criteria = workspace
+        .config
+        .validation
+        .readiness
+        .probes
+        .implemented_criteria
+        .as_deref();
     let criteria = index
         .criterion_status
         .iter()
-        .filter(|(_, status)| **status == ItemStatus::Implemented)
+        .filter(|(anchor, status)| {
+            **status == ItemStatus::Implemented
+                && configured_criteria.is_none_or(|selection| {
+                    selection == "all"
+                        || selection
+                            .split(',')
+                            .map(str::trim)
+                            .any(|candidate| candidate == anchor.to_string())
+                })
+        })
         .map(|(anchor, _)| anchor.clone())
         .filter(|criterion| scope_level(workspace, criterion, index) >= ReadinessLevel::Seedable)
         .collect::<Vec<_>>();
@@ -151,6 +229,38 @@ pub fn evaluate(
                 seed_blockers.push(format!("{criterion}: {error}"));
                 work_blockers.push(format!("{criterion}: {error}"));
             }
+        }
+        let implementation_facets = index
+            .criteria_to_implementation_targets
+            .get(criterion)
+            .into_iter()
+            .flatten()
+            .filter_map(|target| {
+                index
+                    .bindings
+                    .get(&target.binding)
+                    .map(|binding| binding.facet.as_str())
+            })
+            .collect::<std::collections::BTreeSet<_>>();
+        if workspace
+            .config
+            .validation
+            .readiness
+            .probes
+            .contracts
+            .as_deref()
+            .is_some_and(|selection| selection == "all")
+            && implementation_facets.len() > 1
+            && index
+                .criteria_to_implementation_targets
+                .get(criterion)
+                .into_iter()
+                .flatten()
+                .any(|target| !index.contracts_by_target.contains_key(target))
+        {
+            work_blockers.push(format!(
+                "{criterion}: implementation target is not closed by a contract"
+            ));
         }
     }
     let seedability = axis_for(criteria.len(), seed_blockers);
@@ -220,6 +330,14 @@ pub fn evaluate(
                         .iter()
                         .map(|argument| expand(argument, &claim.arguments))
                         .collect::<Vec<_>>();
+                    if args.iter().any(|argument| argument.contains('{')) {
+                        criterion_executed = false;
+                        closed_loop_blockers.push(format!(
+                            "{criterion}: runner {} has unresolved arguments",
+                            claim.runner
+                        ));
+                        continue;
+                    }
                     let output = probe_runner(&runner.executable, &args, &workspace.root);
                     if !output.is_ok_and(|output| output.status.success()) {
                         criterion_executed = false;
@@ -257,15 +375,43 @@ pub fn evaluate(
     })
 }
 
+fn scope_matches(
+    scope: &syu_spec_model::OwnershipScope,
+    unit: &syu_inventory::ArtifactUnit,
+) -> bool {
+    if scope.adapter != unit.adapter {
+        return false;
+    }
+    match &scope.selector {
+        OwnershipSelector::File => {
+            scope.path == unit.path && unit.kind == syu_inventory::ArtifactUnitKind::File
+        }
+        OwnershipSelector::Module { name } => {
+            scope.path == unit.path
+                && (unit.identity.contains(&format!("::{name}::"))
+                    || unit.identity.ends_with(&format!("::{name}")))
+        }
+        OwnershipSelector::PathPrefix { value } => unit.path.as_path().starts_with(value.as_path()),
+    }
+}
+
 fn probe_runner(
     executable: &str,
-    _arguments: &[String],
+    arguments: &[String],
     root: &std::path::Path,
 ) -> std::io::Result<std::process::Output> {
-    Command::new(executable)
-        .arg("--version")
-        .current_dir(root)
-        .output()
+    let mut command = Command::new(executable);
+    command.args(arguments).current_dir(root);
+    // Readiness may itself run from inside Cargo's test harness. Give nested
+    // Cargo probes an isolated target directory so the probe exercises the
+    // configured command without contending for the parent Cargo lock.
+    if executable == "cargo" {
+        command.env(
+            "CARGO_TARGET_DIR",
+            std::env::temp_dir().join(format!("syu-readiness-{}", std::process::id())),
+        );
+    }
+    command.output()
 }
 
 fn axis_for(required: usize, blockers: Vec<String>) -> ReadinessAxis {
@@ -317,4 +463,23 @@ fn expand(template: &str, values: &std::collections::BTreeMap<String, String>) -
         .fold(template.to_owned(), |value, (key, replacement)| {
             value.replace(&format!("{{{key}}}"), replacement)
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_axis_with_blocker_is_not_ready() {
+        assert!(!ReadinessAxis::empty("no subjects").is_ready());
+    }
+
+    #[test]
+    fn readiness_levels_add_axes_monotonically() {
+        assert_eq!(required_axes(ReadinessLevel::Traceable).len(), 2);
+        assert_eq!(required_axes(ReadinessLevel::Seedable).len(), 3);
+        assert_eq!(required_axes(ReadinessLevel::WorkReady).len(), 4);
+        assert_eq!(required_axes(ReadinessLevel::Verifiable).len(), 5);
+        assert_eq!(required_axes(ReadinessLevel::ClosedLoop).len(), 6);
+    }
 }

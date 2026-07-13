@@ -17,13 +17,14 @@ pub struct LoadedDocument {
     pub path: PathBuf,
     pub document: SpecDocument,
 }
+#[derive(Clone)]
 pub struct SpecWorkspace {
     pub root: PathBuf,
     pub config: ProjectConfig,
     pub documents: Vec<LoadedDocument>,
     matcher: WorkspaceMatcher,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct WorkspaceMatcher {
     spec_roots: Vec<RepoPath>,
     excludes: Option<GlobSet>,
@@ -62,6 +63,25 @@ pub enum AnchorValue {
 }
 
 impl SpecWorkspace {
+    pub fn overlay_document(&self, path: &Path, document: SpecDocument) -> Result<Self> {
+        let mut overlay = self.clone();
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let loaded = overlay
+            .documents
+            .iter_mut()
+            .find(|loaded| loaded.path == canonical)
+            .ok_or_else(|| anyhow::anyhow!("overlay path is not a loaded specification"))?;
+        loaded.document = document;
+        Ok(overlay)
+    }
+
+    pub fn overlay_config(&self, config: ProjectConfig) -> Result<Self> {
+        let mut overlay = self.clone();
+        overlay.matcher = WorkspaceMatcher::build(&config)?;
+        overlay.config = config;
+        Ok(overlay)
+    }
+
     pub fn load(start: impl AsRef<Path>) -> Result<Self> {
         let root = find_root(start.as_ref())?;
         let config_path = root.join("syu.yaml");
@@ -368,10 +388,18 @@ impl SpecIndex {
                     target_id: target.id.clone(),
                 };
                 let identities = artifact_identities_for_target(&out.artifact_units, target);
-                if identities.len() == 1 {
+                if identities.len() > 1 {
+                    bail!(
+                        "target {target_ref} resolves to {} active artifact identities; exact selectors must resolve exactly one",
+                        identities.len()
+                    );
+                }
+                if let Some(identity) = identities.first() {
                     out.target_to_artifact
-                        .insert(target_ref.clone(), identities[0].clone());
-                    if matches!(
+                        .insert(target_ref.clone(), identity.clone());
+                }
+                if let Some(identity) = identities.first()
+                    && matches!(
                         binding.role,
                         BindingRole::Implementation
                             | BindingRole::Documentation
@@ -379,12 +407,12 @@ impl SpecIndex {
                             | BindingRole::Configuration
                             | BindingRole::Migration
                             | BindingRole::Operation
-                    ) {
-                        out.artifact_owners
-                            .entry(identities[0].clone())
-                            .or_default()
-                            .push(target_ref.clone());
-                    }
+                    )
+                {
+                    out.artifact_owners
+                        .entry(identity.clone())
+                        .or_default()
+                        .push(target_ref.clone());
                 }
                 for claim in &target.claims {
                     match claim {
@@ -408,6 +436,28 @@ impl SpecIndex {
                             }
                         }
                         _ => {}
+                    }
+                }
+            }
+        }
+        // Exact target ownership wins. Scopes then fill only units that are
+        // not already claimed, which prevents a helper from acquiring two
+        // effective owners through an enclosing scope and an exact target.
+        for (binding_anchor, binding) in &out.bindings {
+            let owner = binding.targets.first().map(|target| BoundTargetRef {
+                binding: binding_anchor.clone(),
+                target_id: target.id.clone(),
+            });
+            let Some(owner) = owner else { continue };
+            for scope in &binding.owns {
+                for unit in &out.artifact_units {
+                    if scope_matches(scope, unit)
+                        && !out.artifact_owners.contains_key(&unit.identity)
+                    {
+                        out.artifact_owners
+                            .entry(unit.identity.clone())
+                            .or_default()
+                            .push(owner.clone());
                     }
                 }
             }
@@ -498,10 +548,16 @@ fn artifact_identities_for_target(units: &[ArtifactUnit], target: &ArtifactTarge
             match &target.selector {
                 Selector::Symbol { name } => {
                     unit.kind == ArtifactUnitKind::Symbol
-                        && (unit.identity.ends_with(&format!("::{name}"))
-                            || unit.identity.ends_with(&format!("::{name})")))
+                        && symbol_identity_matches(&unit.identity, name)
                 }
-                Selector::Operation { .. } => unit.kind == ArtifactUnitKind::Operation,
+                Selector::Operation { method, path } => {
+                    unit.kind == ArtifactUnitKind::Operation
+                        && unit.identity.ends_with(&format!(
+                            "::{} {}",
+                            method.to_ascii_uppercase(),
+                            path
+                        ))
+                }
                 Selector::Heading { .. } => unit.kind == ArtifactUnitKind::Heading,
                 Selector::JsonPointer { .. } | Selector::Marker { .. } => {
                     unit.kind == ArtifactUnitKind::File
@@ -510,6 +566,30 @@ fn artifact_identities_for_target(units: &[ArtifactUnit], target: &ArtifactTarge
         })
         .map(|unit| unit.identity.clone())
         .collect()
+}
+
+fn symbol_identity_matches(identity: &str, name: &str) -> bool {
+    identity.ends_with(&format!("::{name}"))
+        || identity.contains(&format!("::{name}@"))
+        || identity.ends_with(&format!("::{name})"))
+        || name.rsplit_once("::").is_some_and(|(container, leaf)| {
+            identity.ends_with(&format!("::impl({container})::{leaf}"))
+        })
+}
+
+fn scope_matches(scope: &OwnershipScope, unit: &ArtifactUnit) -> bool {
+    if scope.adapter != unit.adapter {
+        return false;
+    }
+    match &scope.selector {
+        OwnershipSelector::File => scope.path == unit.path && unit.kind == ArtifactUnitKind::File,
+        OwnershipSelector::Module { name } => {
+            scope.path == unit.path
+                && (unit.identity.contains(&format!("::{name}::"))
+                    || unit.identity.ends_with(&format!("::{name}")))
+        }
+        OwnershipSelector::PathPrefix { value } => unit.path.as_path().starts_with(value.as_path()),
+    }
 }
 
 fn unique_item(ids: &mut BTreeSet<SpecId>, id: &SpecId) -> Result<()> {

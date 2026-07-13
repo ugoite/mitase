@@ -1,6 +1,8 @@
 {
   "nav.work": "作業",
+  "nav.readiness": "Readiness",
   "nav.scope": "範囲",
+  "nav.specifications": "仕様",
   "nav.items": "仕様項目",
   "nav.diagnostics": "診断",
   "nav.settings": "設定",

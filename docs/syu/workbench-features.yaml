@@ -12,6 +12,21 @@ features:
         role: implementation
         facet: server
         responsibility: Serve canonical Workbench read and mutation routes.
+        owns:
+          - { id: rust-crates, adapter: rust, path: crates, selector: { kind: path-prefix, value: crates } }
+          - { id: rust-src, adapter: rust, path: src, selector: { kind: path-prefix, value: src } }
+          - { id: rust-tests, adapter: rust, path: tests, selector: { kind: path-prefix, value: tests } }
+          - { id: markdown-docs, adapter: markdown, path: docs, selector: { kind: path-prefix, value: docs } }
+          - { id: markdown-examples, adapter: markdown, path: examples, selector: { kind: path-prefix, value: examples } }
+          - { id: markdown-skills, adapter: markdown, path: skills, selector: { kind: path-prefix, value: skills } }
+          - { id: markdown-agents, adapter: markdown, path: .agents, selector: { kind: path-prefix, value: .agents } }
+          - { id: markdown-github, adapter: markdown, path: .github, selector: { kind: path-prefix, value: .github } }
+          - { id: markdown-editors, adapter: markdown, path: editors, selector: { kind: path-prefix, value: editors } }
+          - { id: markdown-readme, adapter: markdown, path: README.md, selector: { kind: path-prefix, value: README.md } }
+          - { id: markdown-contributing, adapter: markdown, path: CONTRIBUTING.md, selector: { kind: path-prefix, value: CONTRIBUTING.md } }
+          - { id: javascript-assets, adapter: javascript, path: crates/syu-app-ui/assets, selector: { kind: path-prefix, value: crates/syu-app-ui/assets } }
+          - { id: javascript-editors, adapter: javascript, path: editors, selector: { kind: path-prefix, value: editors } }
+          - { id: javascript-website, adapter: javascript, path: website, selector: { kind: path-prefix, value: website } }
         targets:
           - id: project
             adapter: rust

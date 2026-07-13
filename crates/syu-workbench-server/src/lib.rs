@@ -53,6 +53,7 @@ pub struct WorkbenchSession {
     pub context_pack: Option<syu_work_model::ContextPack>,
     pub verification_receipt: Option<VerificationReceipt>,
     pub last_validation: Option<ValidationRunView>,
+    pub readiness: Option<ReadinessView>,
 }
 
 pub struct WorkbenchEngine;
@@ -154,6 +155,7 @@ impl WorkbenchServer {
                 )
                 .route("/api/config/preview", post(api_config_preview))
                 .route("/api/config/apply", put(api_config_apply))
+                .route("/api/config", get(api_config))
                 .route("/api/scope/branch", get(api_branch_scope))
                 .route("/api/source", get(api_source))
                 .route("/api/work/request", post(api_request))
@@ -240,7 +242,7 @@ async fn mutation_guard(
     let origin_valid = headers
         .get("origin")
         .and_then(|value| value.to_str().ok())
-        .is_none_or(|origin| origin == security.expected_origin);
+        .is_some_and(|origin| origin == security.expected_origin);
     let session_valid = security.remote_session_token.as_ref().is_none_or(|token| {
         headers
             .get("x-syu-session-token")
@@ -310,7 +312,15 @@ impl IntoResponse for ApiError {
 }
 impl From<anyhow::Error> for ApiError {
     fn from(value: anyhow::Error) -> Self {
-        Self(StatusCode::BAD_REQUEST, value)
+        let status = if value.to_string().contains("Workspace changed")
+            || value.to_string().contains("source changed")
+            || value.to_string().contains("stale")
+        {
+            StatusCode::CONFLICT
+        } else {
+            StatusCode::BAD_REQUEST
+        };
+        Self(status, value)
     }
 }
 fn current_revision(root: &std::path::Path) -> Result<String> {
@@ -332,12 +342,23 @@ fn basis(service: &WorkbenchService, expected: &MutationBasis) -> Result<SpecWor
     let revision = current_revision(&workspace.root)?;
     if revision != expected.expected_revision
         || workspace.fingerprint() != expected.expected_workspace_fingerprint
+        || workspace_source_hash(&workspace) != expected.expected_source_hash
     {
         anyhow::bail!(
             "Workspace changed since this view was loaded. Refresh the projection before applying the operation."
         );
     }
     Ok(workspace)
+}
+
+fn workspace_source_hash(workspace: &SpecWorkspace) -> String {
+    let mut source = String::new();
+    for document in &workspace.documents {
+        source.push_str(&document.path.to_string_lossy());
+        source.push_str(&fs::read_to_string(&document.path).unwrap_or_default());
+    }
+    source.push_str(&serde_yaml::to_string(&workspace.config).unwrap_or_default());
+    content_hash(&source)
 }
 async fn api_projection(
     State(service): State<Arc<WorkbenchService>>,
@@ -472,7 +493,13 @@ async fn api_readiness(
     let revision = current_revision(&workspace.root)?;
     let index = workspace.index()?;
     let report = syu_validation::evaluate_readiness(&workspace, &index, &revision, true)?;
-    Ok(Json(readiness_view(&report)))
+    let view = readiness_view(&report);
+    service
+        .session
+        .write()
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))?
+        .readiness = Some(view.clone());
+    Ok(Json(view))
 }
 
 async fn api_specifications(
@@ -562,6 +589,8 @@ async fn api_specification_preview(
             anyhow::anyhow!("specification schema must be syu/spec/v1"),
         ));
     }
+    let overlay = workspace.overlay_document(&path, document.clone())?;
+    overlay.index()?;
     Ok(Json(edit_preview(&path, &command.content)?))
 }
 
@@ -580,13 +609,9 @@ async fn api_specification_apply(
             anyhow::anyhow!("specification schema must be syu/spec/v1"),
         ));
     }
+    let overlay = workspace.overlay_document(&path, document.clone())?;
+    overlay.index()?;
     let old = fs::read_to_string(&path).map_err(anyhow::Error::from)?;
-    if command.basis.expected_source_hash != content_hash(&old) {
-        return Err(ApiError(
-            StatusCode::CONFLICT,
-            anyhow::anyhow!("source changed since this view was loaded"),
-        ));
-    }
     let preview = edit_preview(&path, &command.content)?;
     atomic_replace(&path, &command.content)?;
     if let Err(error) = SpecWorkspace::load(&workspace.root).and_then(|candidate| candidate.index())
@@ -604,10 +629,20 @@ async fn api_config_preview(
     let workspace = basis(&service, &command.basis)?;
     let _: syu_project_model::ProjectConfig = serde_yaml::from_str(&command.content)
         .map_err(|error| anyhow::anyhow!("strict config parse failed: {error}"))?;
+    let config: syu_project_model::ProjectConfig =
+        serde_yaml::from_str(&command.content).map_err(anyhow::Error::from)?;
+    let overlay = workspace.overlay_config(config)?;
+    overlay.index()?;
     Ok(Json(edit_preview(
         &workspace.root.join("syu.yaml"),
         &command.content,
     )?))
+}
+
+async fn api_config(
+    State(service): State<Arc<WorkbenchService>>,
+) -> Result<Json<syu_project_model::ProjectConfig>, ApiError> {
+    Ok(Json(SpecWorkspace::load(&service.workspace_root)?.config))
 }
 
 async fn api_config_apply(
@@ -617,14 +652,12 @@ async fn api_config_apply(
     let workspace = basis(&service, &command.basis)?;
     let _: syu_project_model::ProjectConfig = serde_yaml::from_str(&command.content)
         .map_err(|error| anyhow::anyhow!("strict config parse failed: {error}"))?;
+    let config: syu_project_model::ProjectConfig =
+        serde_yaml::from_str(&command.content).map_err(anyhow::Error::from)?;
+    let overlay = workspace.overlay_config(config)?;
+    overlay.index()?;
     let path = workspace.root.join("syu.yaml");
     let old = fs::read_to_string(&path).map_err(anyhow::Error::from)?;
-    if command.basis.expected_source_hash != content_hash(&old) {
-        return Err(ApiError(
-            StatusCode::CONFLICT,
-            anyhow::anyhow!("source changed since this view was loaded"),
-        ));
-    }
     let preview = edit_preview(&path, &command.content)?;
     atomic_replace(&path, &command.content)?;
     if let Err(error) = SpecWorkspace::load(&workspace.root).and_then(|candidate| candidate.index())
@@ -640,7 +673,50 @@ async fn api_branch_scope(
 ) -> Result<Json<ScopeView>, ApiError> {
     let workspace = SpecWorkspace::load(&service.workspace_root)?;
     let revision = current_revision(&workspace.root)?;
-    Ok(Json(project(&workspace, None, &revision)?.scope))
+    let index = workspace.index()?;
+    let items = project(&workspace, None, &revision)?.specifications.items;
+    let changed = branch_changed_files(&workspace.root)?;
+    Ok(Json(ScopeView {
+        branch: Some(branch_scope_view(
+            &index,
+            &items,
+            "origin/main...HEAD".into(),
+            &changed,
+        )),
+    }))
+}
+
+fn branch_changed_files(root: &Path) -> Result<Vec<syu_validation::ChangedFile>> {
+    let output = Command::new("git")
+        .args(["-C"])
+        .arg(root)
+        .args(["diff", "--name-status", "origin/main...HEAD"])
+        .output()?;
+    if !output.status.success() {
+        return Ok(Vec::new());
+    }
+    let mut files = Vec::new();
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let mut parts = line.split('\t');
+        let Some(status) = parts.next() else { continue };
+        let path = parts.next().unwrap_or_default();
+        let Ok(path) = syu_spec_model::RepoPath::new(path) else {
+            continue;
+        };
+        let status = match status.chars().next().unwrap_or('M') {
+            'A' => syu_validation::ChangeStatus::Added,
+            'D' => syu_validation::ChangeStatus::Deleted,
+            'R' => syu_validation::ChangeStatus::Renamed,
+            _ => syu_validation::ChangeStatus::Modified,
+        };
+        files.push(syu_validation::ChangedFile {
+            status,
+            old_path: None,
+            new_path: Some(path),
+            hunks: vec![],
+        });
+    }
+    Ok(files)
 }
 
 #[derive(Debug, Deserialize)]
@@ -759,6 +835,16 @@ async fn api_validate(
         .plan
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("no work plan"))?;
+    let canonical_plan = syu_planner::plan(&plan.request, &workspace, &index, &revision)?;
+    if canonical_plan.canonical_digest != plan.canonical_digest
+        || canonical_plan.slices != plan.slices
+        || canonical_plan.status != plan.status
+    {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("stored work plan is not the deterministic canonical plan"),
+        ));
+    }
     let result = validate(&ValidationContext {
         config: &workspace.config,
         workspace: &workspace,
@@ -802,6 +888,16 @@ async fn api_verify(
         .plan
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("no work plan"))?;
+    let canonical_plan = syu_planner::plan(&plan.request, &workspace, &index, &revision)?;
+    if canonical_plan.canonical_digest != plan.canonical_digest
+        || canonical_plan.slices != plan.slices
+        || canonical_plan.status != plan.status
+    {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("stored work plan is not the deterministic canonical plan"),
+        ));
+    }
     if session
         .selected_slice
         .as_deref()
@@ -825,19 +921,22 @@ async fn api_result(
     Json(command): Json<ResultCommand>,
 ) -> Result<StatusCode, ApiError> {
     let workspace = basis(&service, &command.basis)?;
-    let session = service
+    let (plan, canonical) = service
         .session
         .read()
-        .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
-    let plan = session
-        .plan
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("no work plan"))?;
-    let canonical = session
-        .verification_receipt
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("no server-generated verification receipt exists"))?;
-    if &command.receipt != canonical {
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))
+        .and_then(|session| {
+            Ok((
+                session
+                    .plan
+                    .clone()
+                    .ok_or_else(|| anyhow::anyhow!("no work plan"))?,
+                session.verification_receipt.clone().ok_or_else(|| {
+                    anyhow::anyhow!("no server-generated verification receipt exists")
+                })?,
+            ))
+        })?;
+    if command.receipt != canonical {
         return Err(ApiError(
             StatusCode::CONFLICT,
             anyhow::anyhow!("verification receipt does not close the selected plan"),
@@ -846,11 +945,50 @@ async fn api_result(
     validate_verification_receipt(
         &workspace,
         &workspace.index()?,
-        plan,
+        &plan,
         &canonical.slice_id,
-        canonical,
+        &canonical,
         &current_revision(&workspace.root)?,
     )?;
+    let index = workspace.index()?;
+    let changed = branch_changed_files(&workspace.root)?;
+    let slice = plan
+        .slices
+        .iter()
+        .find(|slice| slice.id == canonical.slice_id);
+    let result = validate(&ValidationContext {
+        config: &workspace.config,
+        workspace: &workspace,
+        index: &index,
+        changed_files: Some(&changed),
+        reported_changed_files: None,
+        work_plan: Some(&plan),
+        selected_slice: slice,
+        plan_mode: PlanValidationMode::PostState,
+        preset: workspace.config.validation.preset,
+        revision: Some(&current_revision(&workspace.root)?),
+        change_base_revision: None,
+    });
+    let view = ValidationRunView::completed(
+        "work-result",
+        Some(plan.canonical_digest.clone()),
+        result.clone(),
+        false,
+        true,
+        workspace.config.validation.preset,
+        SystemTime::now(),
+    );
+    service
+        .session
+        .write()
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))?
+        .last_validation = Some(view);
+    if !result.is_valid() {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("post-state result validation failed"),
+        ));
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 async fn api_discard(State(service): State<Arc<WorkbenchService>>) -> Result<StatusCode, ApiError> {
@@ -900,6 +1038,8 @@ pub struct ReadinessView {
     pub target: String,
     pub status: String,
     pub blocking_subjects: usize,
+    pub axes: BTreeMap<String, syu_validation::ReadinessAxis>,
+    pub blockers: Vec<String>,
 }
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct ScopeView {
@@ -1190,6 +1330,7 @@ pub struct WorkspaceSummary {
     pub revision: String,
     pub fingerprint: String,
     pub config_schema: String,
+    pub source_hash: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1362,13 +1503,14 @@ pub fn project(
         .map(|r| plan(r, workspace, &index, revision))
         .transpose()?;
     let validation = ValidationRunView::not_run();
-    let readiness_report = syu_validation::evaluate_readiness(workspace, &index, revision, true)?;
+    let readiness = readiness_not_run(&workspace.config);
     Ok(WorkspaceProjection {
         snapshot: WorkspaceSummary {
             root: workspace.root.display().to_string(),
             revision: revision.to_string(),
             fingerprint: workspace.fingerprint(),
             config_schema: workspace.config.schema.clone(),
+            source_hash: workspace_source_hash(workspace),
         },
         config: workspace.config.clone(),
         navigation: NavigationView {
@@ -1413,7 +1555,7 @@ pub fn project(
             selected_slice: None,
             validation: validation.clone(),
         },
-        readiness: readiness_view(&readiness_report),
+        readiness,
         scope: ScopeView::default(),
         specifications: SpecificationCatalogView { items },
         diagnostics: DiagnosticsView { validation },
@@ -1421,23 +1563,41 @@ pub fn project(
 }
 
 fn readiness_view(report: &syu_validation::ReadinessReport) -> ReadinessView {
-    let blockers = report.inventory.blockers.len()
-        + report.ownership.blockers.len()
-        + report.seedability.blockers.len()
-        + report.workability.blockers.len()
-        + report.verification.blockers.len()
-        + report.closed_loop.blockers.len();
-    let has_subjects = report.inventory.required > 0 || report.closed_loop.required > 0;
+    let axes = BTreeMap::from([
+        ("inventory".into(), report.inventory.clone()),
+        ("ownership".into(), report.ownership.clone()),
+        ("seedability".into(), report.seedability.clone()),
+        ("workability".into(), report.workability.clone()),
+        ("verification".into(), report.verification.clone()),
+        ("closed_loop".into(), report.closed_loop.clone()),
+    ]);
+    let blocker_details = axes
+        .values()
+        .flat_map(|axis| axis.blockers.clone())
+        .collect::<Vec<_>>();
+    let has_subjects = axes.values().any(|axis| axis.required > 0);
     ReadinessView {
         target: report.target.clone(),
         status: if !has_subjects {
-            "Unknown".into()
-        } else if blockers == 0 {
+            "Blocked".into()
+        } else if blocker_details.is_empty() {
             "Ready".into()
         } else {
             "Blocked".into()
         },
-        blocking_subjects: blockers,
+        blocking_subjects: blocker_details.len(),
+        axes,
+        blockers: blocker_details,
+    }
+}
+
+fn readiness_not_run(config: &syu_project_model::ProjectConfig) -> ReadinessView {
+    ReadinessView {
+        target: format!("{:?}", config.validation.readiness.target).to_ascii_lowercase(),
+        status: "Not run".into(),
+        blocking_subjects: 0,
+        axes: BTreeMap::new(),
+        blockers: vec![],
     }
 }
 
@@ -1447,6 +1607,9 @@ fn project_session(
     revision: &str,
 ) -> Result<WorkspaceProjection> {
     let mut projection = project(workspace, session.draft_request.as_ref(), revision)?;
+    if let Some(readiness) = &session.readiness {
+        projection.readiness = readiness.clone();
+    }
     projection.work.plan = session.plan.clone().or(projection.work.plan);
     projection.work.verification_receipt = session.verification_receipt.clone();
     projection.work.context_pack = session.context_pack.clone();

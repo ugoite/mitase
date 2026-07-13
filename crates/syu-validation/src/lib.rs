@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 mod readiness;
-pub use readiness::{ReadinessAxis, ReadinessReport, evaluate as evaluate_readiness};
+pub use readiness::{
+    ReadinessAxis, ReadinessAxisId, ReadinessReport, evaluate as evaluate_readiness, required_axes,
+};
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -10,7 +12,7 @@ use syu_planner::plan as canonical_plan;
 use syu_project_model::{ProjectConfig, ReadinessLevel, ValidationPreset};
 use syu_spec_model::{
     BindingRole, BoundTargetRef, ItemStatus, LocalAnchorKind, RepoPath, RuleLevel, Selector,
-    SpecAnchor, SpecDocument,
+    SpecAnchor, SpecDocument, TargetClaim,
 };
 use syu_work_model::{
     ExecutionSlice, PlanConfidence, PlanExecution, TargetLifecycle, WORK_PLAN_SCHEMA, WorkPlan,
@@ -273,16 +275,16 @@ pub fn validate(ctx: &ValidationContext<'_>) -> ValidationResult {
         true,
     );
     if let Ok(report) = &readiness {
-        let unmet = [
-            ("inventory", &report.inventory),
-            ("ownership", &report.ownership),
-            ("seedability", &report.seedability),
-            ("workability", &report.workability),
-            ("verification", &report.verification),
-            ("closed_loop", &report.closed_loop),
-        ]
-        .iter()
-        .any(|(_, axis)| axis.ready < axis.required);
+        let unmet = required_axes(ctx.config.validation.readiness.target)
+            .iter()
+            .any(|axis| match axis {
+                ReadinessAxisId::Inventory => !report.inventory.is_ready(),
+                ReadinessAxisId::Ownership => !report.ownership.is_ready(),
+                ReadinessAxisId::Seedability => !report.seedability.is_ready(),
+                ReadinessAxisId::Workability => !report.workability.is_ready(),
+                ReadinessAxisId::Verification => !report.verification.is_ready(),
+                ReadinessAxisId::ClosedLoop => !report.closed_loop.is_ready(),
+            });
         if readiness_required(ctx.config.validation.readiness.target) && unmet {
             diagnostics.push(syu_diagnostics::Diagnostic::error(
                 "SYU-READINESS-001",
@@ -1661,6 +1663,92 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                     target.path.to_string_lossy(),
                     Some(anchor.clone()),
                 );
+            }
+        }
+    }
+    for (anchor, binding) in &ctx.index.bindings {
+        if binding.role != BindingRole::Verification {
+            continue;
+        }
+        for target in &binding.targets {
+            let reference = BoundTargetRef {
+                binding: anchor.clone(),
+                target_id: target.id.clone(),
+            };
+            for claim in &target.claims {
+                let TargetClaim::Verifies {
+                    criterion,
+                    covers,
+                    runner,
+                } = claim
+                else {
+                    continue;
+                };
+                if covers.is_empty() {
+                    push(
+                        out,
+                        "SYU-VERIFICATION-001",
+                        "verification target must cover at least one implementation target",
+                        target.path.to_string_lossy(),
+                        Some(anchor.clone()),
+                    );
+                }
+                for covered in covers {
+                    let valid = ctx.index.target(covered).is_some_and(|covered_target| {
+                        ctx.index.bindings.get(&covered.binding).is_some_and(|covered_binding| {
+                            covered_binding.role == BindingRole::Implementation
+                                && covered_target.claims.iter().any(|claim| matches!(claim, TargetClaim::Satisfies { criterion: actual } if actual == criterion))
+                        })
+                    });
+                    if !valid {
+                        push(
+                            out,
+                            "SYU-VERIFICATION-002",
+                            format!(
+                                "{reference} covers a non-implementation target or a target for another criterion: {covered}"
+                            ),
+                            target.path.to_string_lossy(),
+                            Some(anchor.clone()),
+                        );
+                    }
+                }
+                let Some(configured) = ctx.config.verification.runners.get(&runner.runner) else {
+                    push(
+                        out,
+                        "SYU-VERIFICATION-002",
+                        format!("verification runner {} is not configured", runner.runner),
+                        target.path.to_string_lossy(),
+                        Some(anchor.clone()),
+                    );
+                    continue;
+                };
+                for argument in &configured.arguments {
+                    if argument.contains('{')
+                        && runner
+                            .arguments
+                            .keys()
+                            .all(|key| !argument.contains(&format!("{{{key}}}")))
+                    {
+                        push(
+                            out,
+                            "SYU-VERIFICATION-002",
+                            format!(
+                                "verification runner argument has an unresolved placeholder: {argument}"
+                            ),
+                            target.path.to_string_lossy(),
+                            Some(anchor.clone()),
+                        );
+                    }
+                }
+            }
+        }
+    }
+    for (criterion, implementations) in &ctx.index.criteria_to_implementation_targets {
+        for implementation in implementations {
+            if !ctx.index.criteria_to_verification_targets.get(criterion).into_iter().flatten().any(|verification| {
+                ctx.index.target(verification).is_some_and(|target| target.claims.iter().any(|claim| matches!(claim, TargetClaim::Verifies { criterion: actual, covers, .. } if actual == criterion && covers.contains(implementation))))
+            }) {
+                push(out, "SYU-VERIFICATION-002", format!("implementation target {implementation} is not covered by a verification target for {criterion}"), "workspace", Some(criterion.clone()));
             }
         }
     }

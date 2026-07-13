@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use syu_diagnostics::Diagnostic;
 use syu_spec_model::{
-    ArtifactBinding, BoundTargetRef, LocalAnchorKind, RepoPath, Selector, SpecAnchor,
+    ArtifactBinding, BoundTargetRef, LocalAnchorKind, RepoPath, Selector, SpecAnchor, TargetClaim,
 };
 use syu_work_model::*;
 use syu_workspace::{
@@ -546,6 +546,10 @@ fn build_implementation_slice(
             &mut blockers,
         )
     };
+    let editable_refs = editable
+        .iter()
+        .map(|target| target.reference.clone())
+        .collect::<BTreeSet<_>>();
     let mut verification = criterion_verification_targets(
         request,
         workspace,
@@ -556,7 +560,23 @@ fn build_implementation_slice(
         target_policy(TargetTransition::RunOnly),
         exclude_matcher,
         &mut blockers,
-    );
+    )
+    .into_iter()
+    .filter(|planned| {
+        index.target(&planned.reference).is_some_and(|target| {
+            target.claims.iter().any(|claim| {
+                matches!(
+                    claim,
+                    TargetClaim::Verifies {
+                        criterion: actual,
+                        covers,
+                        ..
+                    } if actual == criterion && covers.iter().any(|covered| editable_refs.contains(covered))
+                )
+            })
+        })
+    })
+    .collect();
     let (mut readonly, contracts) = contract_readonly_context(
         workspace,
         index,

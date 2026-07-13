@@ -47,7 +47,7 @@ class ContractParser(HTMLParser):
 
 parser = ContractParser()
 parser.feed(HTML)
-assert parser.routes[:5] == ["work", "scope", "items", "diagnostics", "settings"], parser.routes[:5]
+assert parser.routes[:6] == ["work", "readiness", "scope", "specifications", "diagnostics", "settings"], parser.routes[:6]
 assert set(EN) == set(JA), "English and Japanese catalogs differ"
 assert not (parser.keys - set(EN)), f"missing catalog keys: {sorted(parser.keys - set(EN))}"
 assert not parser.unlocalized_names, f"unlocalized accessible names: {parser.unlocalized_names}"

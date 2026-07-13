@@ -95,12 +95,112 @@ impl InventoryProvider for FileInventoryProvider {
         }
         files.sort();
         files.dedup();
-        let units = files
-            .into_iter()
-            .map(|path| unit(&context.workspace_root, &self.adapter, path))
-            .collect::<Result<Vec<_>>>()?;
+        let mut units = Vec::new();
+        for path in files {
+            units.push(unit(&context.workspace_root, &self.adapter, path.clone())?);
+            if self.adapter == "markdown" {
+                units.extend(markdown_headings(&context.workspace_root, path)?);
+            }
+        }
         Ok(InventoryFragment { units })
     }
+}
+
+fn openapi_operations(root: &Path, path: PathBuf) -> Result<Vec<ArtifactUnit>> {
+    let relative = path
+        .strip_prefix(root)
+        .context("OpenAPI path escaped workspace")?;
+    let repo_path = RepoPath::new(relative).map_err(anyhow::Error::msg)?;
+    let document: serde_yaml::Value = serde_yaml::from_str(&fs::read_to_string(&path)?)?;
+    let mut units = Vec::new();
+    if let Some(paths) = document
+        .get("paths")
+        .and_then(serde_yaml::Value::as_mapping)
+    {
+        for (path_value, operations) in paths {
+            let Some(path_value) = path_value.as_str() else {
+                continue;
+            };
+            let Some(operations) = operations.as_mapping() else {
+                continue;
+            };
+            for (method_value, _) in operations {
+                let Some(method) = method_value.as_str() else {
+                    continue;
+                };
+                if !matches!(
+                    method.to_ascii_lowercase().as_str(),
+                    "get" | "post" | "put" | "patch" | "delete" | "head" | "options" | "trace"
+                ) {
+                    continue;
+                }
+                units.push(ArtifactUnit {
+                    adapter: "openapi".into(),
+                    path: repo_path.clone(),
+                    identity: format!(
+                        "openapi:{}::{} {}",
+                        repo_path.to_string_lossy(),
+                        method.to_ascii_uppercase(),
+                        path_value
+                    ),
+                    kind: ArtifactUnitKind::Operation,
+                    exposure: ArtifactExposure::Public,
+                    reachability: ArtifactReachability::Active,
+                    span: SourceSpan {
+                        byte_start: 0,
+                        byte_end: 0,
+                        line_start: 1,
+                        line_end: 1,
+                    },
+                    digest: digest(format!("{} {}", method, path_value).as_bytes()),
+                });
+            }
+        }
+    }
+    Ok(units)
+}
+
+fn markdown_headings(root: &Path, path: PathBuf) -> Result<Vec<ArtifactUnit>> {
+    let relative = path
+        .strip_prefix(root)
+        .context("markdown path escaped workspace")?;
+    let repo_path = RepoPath::new(relative).map_err(anyhow::Error::msg)?;
+    let source = fs::read_to_string(&path)?;
+    let mut units = Vec::new();
+    for (line_index, line) in source.lines().enumerate() {
+        let trimmed = line.trim_start();
+        let Some(value) = trimmed
+            .strip_prefix('#')
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            continue;
+        };
+        units.push(ArtifactUnit {
+            adapter: "markdown".into(),
+            path: repo_path.clone(),
+            identity: format!("markdown:{}::heading::{value}", repo_path.to_string_lossy()),
+            kind: ArtifactUnitKind::Heading,
+            exposure: ArtifactExposure::Workspace,
+            reachability: ArtifactReachability::Active,
+            span: SourceSpan {
+                byte_start: source
+                    .lines()
+                    .take(line_index)
+                    .map(|line| line.len() + 1)
+                    .sum(),
+                byte_end: source
+                    .lines()
+                    .take(line_index + 1)
+                    .map(|line| line.len() + 1)
+                    .sum(),
+                line_start: line_index + 1,
+                line_end: line_index + 1,
+            },
+            digest: digest(line.as_bytes()),
+        });
+    }
+    Ok(units)
 }
 fn collect(
     root: &Path,
@@ -169,7 +269,13 @@ pub fn union(
     for provider in providers {
         units.extend(provider.discover(context)?.units);
     }
-    units.sort_by(|a, b| a.identity.cmp(&b.identity));
+    units.sort_by(|a, b| {
+        (a.path.to_string_lossy(), a.identity.as_str())
+            .cmp(&(b.path.to_string_lossy(), b.identity.as_str()))
+    });
+    units.dedup_by(|a, b| {
+        a.path == b.path && a.kind == b.kind && matches!(a.kind, ArtifactUnitKind::File)
+    });
     if units.is_empty() {
         bail!("active inventory is empty");
     }
@@ -313,12 +419,79 @@ impl InventoryProvider for ExtensionInventoryProvider {
             )?;
         }
         files.sort();
-        let units = files
-            .into_iter()
-            .map(|path| unit(&context.workspace_root, &self.adapter, path))
-            .collect::<Result<Vec<_>>>()?;
+        let mut units = Vec::new();
+        for path in files {
+            units.push(unit(&context.workspace_root, &self.adapter, path.clone())?);
+            if self.adapter == "markdown" {
+                units.extend(markdown_headings(&context.workspace_root, path)?);
+            } else if self.adapter == "openapi" {
+                units.extend(openapi_operations(&context.workspace_root, path)?);
+            } else if matches!(self.adapter.as_str(), "javascript" | "typescript") {
+                units.extend(source_symbol_units(
+                    &context.workspace_root,
+                    path,
+                    &self.adapter,
+                )?);
+            }
+        }
         Ok(InventoryFragment { units })
     }
+}
+
+fn source_symbol_units(root: &Path, path: PathBuf, adapter: &str) -> Result<Vec<ArtifactUnit>> {
+    let relative = path
+        .strip_prefix(root)
+        .context("source path escaped workspace")?;
+    let repo_path = RepoPath::new(relative).map_err(anyhow::Error::msg)?;
+    let source = fs::read_to_string(&path)?;
+    let mut units = Vec::new();
+    for (line_index, line) in source.lines().enumerate() {
+        let trimmed = line
+            .trim_start()
+            .strip_prefix("export ")
+            .unwrap_or(line.trim_start())
+            .strip_prefix("default ")
+            .unwrap_or(
+                line.trim_start()
+                    .strip_prefix("export ")
+                    .unwrap_or(line.trim_start()),
+            );
+        let trimmed = trimmed.strip_prefix("async ").unwrap_or(trimmed);
+        let name = ["function ", "class ", "const ", "let ", "var "]
+            .iter()
+            .find_map(|prefix| trimmed.strip_prefix(prefix))
+            .and_then(|rest| {
+                rest.split(|character: char| !character.is_ascii_alphanumeric() && character != '_')
+                    .next()
+            })
+            .filter(|name| !name.is_empty());
+        let Some(name) = name else { continue };
+        units.push(ArtifactUnit {
+            adapter: adapter.into(),
+            path: repo_path.clone(),
+            identity: format!(
+                "{adapter}:{}::{}@{}",
+                repo_path.to_string_lossy(),
+                name,
+                line_index + 1
+            ),
+            kind: ArtifactUnitKind::Symbol,
+            exposure: if line.trim_start().starts_with("export ") {
+                ArtifactExposure::Public
+            } else {
+                ArtifactExposure::Workspace
+            },
+            reachability: ArtifactReachability::Active,
+            span: SourceSpan {
+                byte_start: 0,
+                byte_end: 0,
+                line_start: line_index + 1,
+                line_end: line_index + 1,
+            },
+            digest: digest(line.as_bytes()),
+        });
+    }
+    Ok(units)
 }
 
 /// Rust inventory uses the syntax tree rather than line-oriented symbol
@@ -364,6 +537,7 @@ fn discover_rust(
         )?;
     } else {
         for root in roots {
+            files.push(root.clone());
             collect_reachable_rust(
                 &context.workspace_root,
                 &root,
@@ -384,6 +558,9 @@ fn discover_rust(
             .strip_prefix(&context.workspace_root)
             .context("Rust inventory path escaped workspace")?;
         let repo_path = RepoPath::new(relative).map_err(anyhow::Error::msg)?;
+        let is_test_file = relative.components().any(|component| {
+            component.as_os_str() == "tests" || component.as_os_str() == "benches"
+        });
         let mut visitor = RustVisitor {
             adapter: "rust".into(),
             path: repo_path,
@@ -393,6 +570,7 @@ fn discover_rust(
             module_path: vec![module_name(&path)],
             impl_type: None,
             attributes: Vec::new(),
+            test_file: is_test_file,
         };
         visitor.visit_file(&syntax);
         units.extend(visitor.units);
@@ -409,6 +587,7 @@ struct RustVisitor<'a> {
     module_path: Vec<String>,
     impl_type: Option<String>,
     attributes: Vec<String>,
+    test_file: bool,
 }
 
 impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
@@ -510,7 +689,14 @@ impl RustVisitor<'_> {
                 self.semantic_name(name)
             ),
             kind: ArtifactUnitKind::Symbol,
-            exposure: if matches!(visibility, syn::Visibility::Public(_)) {
+            exposure: if self.test_file
+                || self
+                    .attributes
+                    .iter()
+                    .any(|attribute| attribute.contains("cfg(test)"))
+            {
+                ArtifactExposure::Test
+            } else if matches!(visibility, syn::Visibility::Public(_)) {
                 ArtifactExposure::Public
             } else {
                 ArtifactExposure::Private
@@ -618,6 +804,50 @@ fn glob_match(pattern: &str, path: &Path) -> bool {
 }
 
 fn cargo_roots(root: &Path) -> Result<Vec<PathBuf>> {
+    if root.join("Cargo.toml").is_file()
+        && let Ok(output) = std::process::Command::new("cargo")
+            .args([
+                "metadata",
+                "--no-deps",
+                "--format-version",
+                "1",
+                "--manifest-path",
+            ])
+            .arg(root.join("Cargo.toml"))
+            .current_dir(root)
+            .output()
+        && output.status.success()
+    {
+        #[derive(Deserialize)]
+        struct Metadata {
+            packages: Vec<Package>,
+        }
+        #[derive(Deserialize)]
+        struct Package {
+            manifest_path: PathBuf,
+            targets: Vec<PackageTarget>,
+        }
+        #[derive(Deserialize)]
+        struct PackageTarget {
+            src_path: PathBuf,
+            kind: Vec<String>,
+        }
+        let metadata: Metadata =
+            serde_json::from_slice(&output.stdout).context("parse cargo metadata output")?;
+        let mut roots = BTreeSet::new();
+        for package in metadata.packages {
+            for target in package.targets {
+                if target.kind.iter().any(|kind| {
+                    matches!(kind.as_str(), "lib" | "bin" | "example" | "test" | "bench")
+                }) {
+                    roots.insert(target.src_path);
+                }
+            }
+            let _ = package.manifest_path;
+        }
+        let roots = roots.into_iter().collect::<Vec<_>>();
+        return Ok(roots);
+    }
     let mut manifests = Vec::new();
     collect_manifests(root, root, &mut manifests)?;
     let mut roots = BTreeSet::new();
@@ -729,6 +959,27 @@ fn collect_reachable_rust(
         }
         if let Some(candidate) = candidate {
             collect_reachable_rust(root, &candidate, excludes, out)?;
+        }
+    }
+    for macro_name in ["include!", "include_str!", "include_bytes!"] {
+        let mut remainder = source.as_str();
+        while let Some(start) = remainder.find(macro_name) {
+            remainder = &remainder[start + macro_name.len()..];
+            let Some(quote_start) = remainder.find('"') else {
+                break;
+            };
+            let after_quote = &remainder[quote_start + 1..];
+            let Some(quote_end) = after_quote.find('"') else {
+                break;
+            };
+            let candidate = file
+                .parent()
+                .unwrap_or(root)
+                .join(&after_quote[..quote_end]);
+            if candidate.is_file() {
+                collect_reachable_rust(root, &candidate, excludes, out)?;
+            }
+            remainder = &after_quote[quote_end + 1..];
         }
     }
     Ok(())

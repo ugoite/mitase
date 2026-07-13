@@ -21,6 +21,13 @@
   const clone = value => JSON.parse(JSON.stringify(value));
   const buttonByKey = key => one(`[data-i18n-aria="${key}"]`);
   const EMPTY_HASH = 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+  let csrfToken = '';
+
+  const mutationBasis = () => ({
+    expected_revision: projection.workspace.revision || projection.snapshot?.revision || '',
+    expected_workspace_fingerprint: projection.workspace.fingerprint || projection.snapshot?.fingerprint || '',
+    expected_source_hash: projection.workspace.source_hash || EMPTY_HASH,
+  });
 
   const ACTION_ICONS = {
     edit: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4Z"></path><path d="m13.5 6.5 4 4"></path></svg>',
@@ -123,9 +130,29 @@
   })[state];
 
   async function api(url, options = {}) {
-    const response = await fetch(url, {
-      headers: { 'content-type': 'application/json' },
-      ...options,
+    let requestUrl = url;
+    let requestOptions = { ...options };
+    let payload = null;
+    if (requestOptions.body) {
+      try { payload = JSON.parse(requestOptions.body); } catch {}
+    }
+    if (requestUrl === '/api/work/request') {
+      requestOptions = { ...requestOptions, method: 'POST', body: JSON.stringify({ basis: mutationBasis(), request: payload?.request || payload }) };
+    } else if (requestUrl.startsWith('/api/specifications/')) {
+      const anchor = requestUrl.split('/').slice(3).join('/');
+      requestUrl = `/api/specifications/${anchor}`;
+      requestOptions = { ...requestOptions, body: JSON.stringify({ basis: mutationBasis(), content: payload?.content || JSON.stringify(payload) }) };
+    } else if (requestUrl.startsWith('/api/config/')) {
+      requestOptions = { ...requestOptions, body: JSON.stringify({ basis: mutationBasis(), content: JSON.stringify(payload?.config || payload) }) };
+    }
+    const mutating = ['POST', 'PUT', 'DELETE'].includes((requestOptions.method || 'GET').toUpperCase());
+    if (mutating && !csrfToken) {
+      const csrfResponse = await fetch('/api/projection');
+      csrfToken = csrfResponse.headers.get('x-syu-csrf-token') || '';
+    }
+    const response = await fetch(requestUrl, {
+      headers: { 'content-type': 'application/json', ...(mutating && csrfToken ? { 'x-syu-csrf-token': csrfToken } : {}), ...(requestOptions.headers || {}) },
+      ...requestOptions,
     });
     const body = await response.text();
     if (!response.ok) {
@@ -381,7 +408,7 @@
         one('[data-route="scope"]')?.click();
         one('[data-scope-mode-button="branch"]')?.click();
       }),
-      choice('◇', 'work.start.specification', 'work.start.specification_description', () => one('[data-route="items"]')?.click()),
+      choice('◇', 'work.start.specification', 'work.start.specification_description', () => one('[data-route="specifications"]')?.click()),
       choice('+', 'work.start.describe', 'work.start.describe_description', () => {
         host.dataset.mode = 'editor';
         renderWorkRequestEditor(host, true);
@@ -504,7 +531,7 @@
         if (value !== null && value !== undefined && (!Number.isInteger(value) || value < 0)) return toast(t('settings.number_invalid'));
       }
       draftWorkRequest = clone(request);
-      await api('/api/work/request', { method: 'PUT', body: JSON.stringify(request) });
+      await api('/api/work/request', { method: 'POST', body: JSON.stringify({ basis: mutationBasis(), request }) });
       location.assign('/?page=work&workTab=overview');
     });
     host.append(form);
@@ -560,7 +587,7 @@
           }, 'btn compact', 'copy'),
           actionButton(t('common.replan'), 'a11y.work_plan', () => renderWorkRequestEditor(one('[data-work-slice-detail]'), false), 'btn compact', 'plan'),
           actionButton(t('common.export'), 'a11y.export_slice', async () => {
-            const yaml = await api(`/api/context/${encodeURIComponent(slice.id)}`, { method: 'POST' });
+            const yaml = await api('/api/work/context', { method: 'POST', body: JSON.stringify({ basis: mutationBasis(), slice_id: slice.id }) });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(new Blob([yaml], { type: 'application/yaml' }));
             link.download = `${slice.id}-context.yaml`;
@@ -650,7 +677,7 @@
         t('work.context.description').replace('{slice}', slice.id),
         [chip(selectedGroup.label), chip(t('work.context.ready'), 'green-chip')],
         [actionButton(t('common.download'), 'a11y.download_context', async () => {
-          const yaml = await api(`/api/context/${encodeURIComponent(slice.id)}`, { method: 'POST' });
+            const yaml = await api('/api/work/context', { method: 'POST', body: JSON.stringify({ basis: mutationBasis(), slice_id: slice.id }) });
           const link = document.createElement('a');
           link.href = URL.createObjectURL(new Blob([yaml], { type: 'application/yaml' }));
           link.download = `${slice.id}-context.yaml`;
@@ -690,7 +717,7 @@
           const button = event.currentTarget;
           button.disabled = true;
           try {
-            const next = await api('/api/validate', { method: 'POST', body: JSON.stringify({ context: 'work_plan' }) });
+            const next = await api('/api/work/validate', { method: 'POST', body: JSON.stringify(mutationBasis()) });
             lastRun = next;
             openWorkPage('validation');
             toast(t('filter.validate'));
@@ -773,7 +800,7 @@
       if (createButton) createButton.disabled = true;
       detail?.append(emptyStateWithActions('scope.empty.title', 'scope.empty.description', [
         actionButton(t('scope.mode.branch'), 'scope.mode.branch', () => one('[data-scope-mode-button="branch"]')?.click(), 'btn primary compact', 'open'),
-        actionButton(t('work.start.specification'), 'a11y.open_items', () => one('[data-route="items"]')?.click(), 'btn compact', 'open'),
+        actionButton(t('work.start.specification'), 'a11y.open_items', () => one('[data-route="specifications"]')?.click(), 'btn compact', 'open'),
       ]));
       return;
     }
@@ -880,7 +907,7 @@
     if (!selectedBranchEntry) {
       if (createButton) createButton.disabled = true;
       detail?.append(emptyStateWithActions('scope.branch.empty.title', 'scope.branch.empty.description', [
-        actionButton(t('work.start.specification'), 'a11y.open_items', () => one('[data-route="items"]')?.click(), 'btn primary compact', 'open'),
+        actionButton(t('work.start.specification'), 'a11y.open_items', () => one('[data-route="specifications"]')?.click(), 'btn primary compact', 'open'),
       ]));
       return;
     }
@@ -931,7 +958,7 @@
   }
 
   function renderItems() {
-    const page = one('[data-page="items"]');
+    const page = one('[data-page="specifications"]');
     text(one('[data-tab="all"] .mini-count', page), String(projection.items.length));
     ['philosophy', 'policy', 'requirement', 'feature'].forEach(kind => {
       text(one(`[data-tab="${kind}"] .mini-count`, page), projection.items.filter(item => item.kind === kind).length || '');
@@ -957,6 +984,23 @@
     renderItemDetail(detail, item);
   }
 
+  function renderReadiness() {
+    const host = one('[data-readiness-content]');
+    if (!host) return;
+    clear(host);
+    const readiness = projection.readiness || { status: 'Not run', target: 'unknown', axes: {}, blockers: [] };
+    const rows = Object.entries(readiness.axes || {}).map(([name, axis]) => {
+      const row = el('div', 'card');
+      row.append(el('h3', '', titleCase(name.replaceAll('_', ' '))));
+      row.append(el('p', '', `${axis.ready}/${axis.required}`));
+      if (axis.blockers?.length) row.append(linesList(axis.blockers, 'red'));
+      return row;
+    });
+    host.append(canvasHead(`${readiness.target} · ${readiness.status}`, 'Readiness is evaluated explicitly from the canonical server state.', [], []));
+    rows.forEach(row => host.append(row));
+    if (readiness.blockers?.length) host.append(summaryCard('diagnostics.issues', linesList(readiness.blockers, 'red')));
+  }
+
   function renderItemDetail(detail, item) {
     const summary = item.description || item.summary || item.path;
     detail?.append(
@@ -974,7 +1018,7 @@
             request.summary = t('work.request.summary_from_anchor').replace('{anchor}', selectedAnchor);
             request.seeds = [selectedAnchor];
             draftWorkRequest = request;
-            await api('/api/work/request', { method: 'PUT', body: JSON.stringify(request) });
+            await api('/api/work/request', { method: 'POST', body: JSON.stringify({ basis: mutationBasis(), request }) });
             location.assign('/?page=work&workTab=overview');
             }, 'btn primary compact', 'plan');
             button.disabled = !selectedAnchor;
@@ -1153,7 +1197,7 @@
     let previewToken = null;
     const apply = actionButton(t('common.apply'), 'common.apply', async () => {
       try {
-        const result = await api(`/api/items/${encodeURIComponent(draft.id)}/apply`, { method: 'PUT', body: JSON.stringify({ ...draft, preview_token: previewToken }) });
+        const result = await api(`/api/specifications/${encodeURIComponent(draft.id)}/apply`, { method: 'PUT', body: JSON.stringify({ ...draft }) });
         toast(`${t('common.apply')} · ${result.changed_lines}`);
         location.reload();
       } catch (error) {
@@ -1170,7 +1214,7 @@
           actionButton(t('common.reset'), 'common.reset', () => renderItems(), 'btn ghost compact', 'reset'),
           actionButton(t('common.preview'), 'common.preview', async () => {
             try {
-              const result = await api(`/api/items/${encodeURIComponent(draft.id)}/preview`, { method: 'POST', body: JSON.stringify(draft) });
+              const result = await api(`/api/specifications/${encodeURIComponent(draft.id)}/preview`, { method: 'POST', body: JSON.stringify({ ...draft }) });
               previewToken = result.preview_token;
               apply.disabled = !previewToken;
               toast(`${result.changed_lines} ${t('settings.changed_lines')}`);
@@ -1559,13 +1603,9 @@
     const range = one('[data-validation-range]', page);
     const requested = context?.value || 'workspace';
     try {
-      const next = await api('/api/validate', {
+      const next = await api('/api/work/validate', {
         method: 'POST',
-        body: JSON.stringify({
-          context: requested,
-          range: requested === 'git_range' ? range?.value || null : null,
-          slice: requested === 'slice' ? currentSlice()?.id || null : null,
-        }),
+        body: JSON.stringify(mutationBasis()),
       });
       lastRun = next;
       renderRun(next);
@@ -1690,7 +1730,7 @@
         request.summary = t('scope.branch.work_summary').replace('{path}', selectedBranchEntry.path);
         request.seeds = [];
         request.requested_targets = [{ ref: reference, transition: transitionForStatus(selectedBranchEntry.status) }];
-        await api('/api/work/request', { method: 'PUT', body: JSON.stringify(request) });
+        await api('/api/work/request', { method: 'POST', body: JSON.stringify({ basis: mutationBasis(), request }) });
         location.assign('/?page=work&workTab=overview');
         return;
       }
@@ -1947,7 +1987,7 @@
     one('[data-settings-apply]', page)?.addEventListener('click', async () => {
       if (!previewToken) return;
       try {
-        const result = await api('/api/config/apply', { method: 'PUT', body: JSON.stringify({ config: collect(), expected_hash: configHash, preview_token: previewToken }) });
+        const result = await api('/api/config/apply', { method: 'PUT', body: JSON.stringify({ config: collect() }) });
         configHash = result.new_hash;
         previewToken = null;
         if (applyButton) applyButton.disabled = true;
@@ -1979,7 +2019,7 @@
       button.dataset.dynamicPalette = 'true';
       button.append(el('span', 'r-ico', '→'), el('span', '', item.id), el('span', 'route', `${t('nav.items')} › ${t(`items.${item.kind}`)}`));
       button.addEventListener('click', () => {
-        one('[data-route="items"]')?.click();
+        one('[data-route="specifications"]')?.click();
         one(`[data-tab-group="items"][data-tab="${item.kind}"]`)?.click();
         selectedItemId = item.id;
         selectedAnchor = item.anchors[0] || null;
@@ -1994,6 +2034,7 @@
     renderWork();
     renderScope();
     renderItems();
+    renderReadiness();
     renderRun(lastRun);
     bindPalette();
   }
@@ -2019,6 +2060,18 @@
   renderAll();
   bindDiagnostics();
   bindActions();
+  one('[data-readiness-run]')?.addEventListener('click', async () => {
+    const button = one('[data-readiness-run]');
+    button.disabled = true;
+    try {
+      projection.readiness = await api('/api/readiness');
+      renderReadiness();
+    } catch (error) {
+      toast(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  });
   bindPalette();
   if (document.querySelector('[data-page="settings"]')?.hidden === false) ensureSettingsBound();
   document.addEventListener('syu:locale', () => {
