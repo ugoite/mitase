@@ -127,7 +127,7 @@ jobs:
             release-artifacts
 
       - name: Set up ORAS
-        uses: oras-project/setup-oras@v2.0.0
+        uses: oras-project/setup-oras@v2.0.1
 
       - name: Publish package artifacts
         shell: bash
