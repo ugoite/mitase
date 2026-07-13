@@ -1025,7 +1025,7 @@ fn branch_changed_files(root: &Path, range: &str) -> Result<Vec<syu_validation::
 fn configured_change_range(workspace: &SpecWorkspace) -> Result<String> {
     match workspace.config.validation.changed.baseline.as_ref() {
         Some(ChangeBaseline::MergeBase { against }) => {
-            git_merge_base(&workspace.root, "HEAD", &against.0)
+            git_merge_base(&workspace.root, "HEAD", &against.0).or_else(|_| Ok("HEAD^".into()))
         }
         Some(ChangeBaseline::Revision { revision }) => Ok(revision.0.clone()),
         Some(ChangeBaseline::Parent) => Ok("HEAD^".into()),
