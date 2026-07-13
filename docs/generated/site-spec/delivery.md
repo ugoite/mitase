@@ -50,11 +50,10 @@ description: "Generated reference for docs/syu/delivery.yaml"
           - **path**: crates/syu-validation/src/lib.rs
           - **selector**:
             - **kind**: symbol
-            - **names**:
-              - validate
-              - validate_plan
-      - **enforces**:
-        - POL-DELIVERY-001#rule.exact-ownership
+            - **name**: validate
+          - **claims**:
+            - **kind**: enforces
+              - **rule**: POL-DELIVERY-001#rule.exact-ownership
 
 ## Source YAML
 
@@ -83,6 +82,8 @@ policies:
           - id: validation-entry
             adapter: rust
             path: crates/syu-validation/src/lib.rs
-            selector: { kind: symbol, names: [validate, validate_plan] }
-        enforces: [POL-DELIVERY-001#rule.exact-ownership]
+            selector: { kind: symbol, name: validate }
+            claims:
+              - kind: enforces
+                rule: POL-DELIVERY-001#rule.exact-ownership
 ```

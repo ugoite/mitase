@@ -123,6 +123,11 @@ pub struct ResolvedSelector {
 pub struct PlannedTarget {
     #[serde(rename = "ref")]
     pub reference: BoundTargetRef,
+    /// When a request originates from a changed semantic unit, retain that
+    /// exact identity even when its owner binding also declares a broader
+    /// entrypoint target.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact_identity: Option<String>,
     pub transition: TargetTransition,
     #[serde(default)]
     pub lifecycle: TargetLifecycle,

@@ -115,7 +115,7 @@ async function createCustomSpecRootWorkspace() {
       '        facet: verification',
       '        responsibility: Verify the custom behavior.',
       '        targets:',
-      '          - { id: case, adapter: rust, path: tests/check.rs, selector: { kind: symbol, names: [check_behavior] } }',
+      '          - { id: case, adapter: rust, path: tests/check.rs, selector: { kind: symbol, name: check_behavior } }',
       '        verifies: [REQ-CUSTOM-001#criterion.check]',
       ''
     ].join('\n')
@@ -138,7 +138,7 @@ async function createCustomSpecRootWorkspace() {
       '        facet: backend',
       '        responsibility: Implement the custom behavior.',
       '        targets:',
-      '          - { id: code, adapter: rust, path: src/lib.rs, selector: { kind: symbol, names: [run] } }',
+      '          - { id: code, adapter: rust, path: src/lib.rs, selector: { kind: symbol, name: run } }',
       '        satisfies: [REQ-CUSTOM-001#criterion.check]',
       ''
     ].join('\n')
@@ -243,9 +243,7 @@ features:
           - path: web/login.ts
             selector:
               kind: symbol
-              names:
-                - submitLogin
-                - helper_value
+              name: submitLogin
 `);
 
   assert.deepEqual(
@@ -262,9 +260,6 @@ features:
     targets
       .filter((target) => target.kind === 'traceSymbol')
       .map((target) => [target.file, target.symbol]),
-    [
-      ['web/login.ts', 'submitLogin'],
-      ['web/login.ts', 'helper_value']
-    ]
+    [['web/login.ts', 'submitLogin']]
   );
 });

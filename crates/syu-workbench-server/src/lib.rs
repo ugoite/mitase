@@ -19,16 +19,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use std::{fs, path::Path};
 use syu_diagnostics::{Severity, ValidationPhase, ValidationResult};
 use syu_planner::plan;
-use syu_project_model::ValidationPreset;
+use syu_project_model::{ChangeBaseline, ValidationPreset};
 use syu_spec_model::{
     ArtifactBinding, BindingRole, BoundTargetRef, Contract, ContractKind, Criterion, ItemStatus,
     LocalAnchorKind, OwnershipScope, Philosophy, Policy, Priority, Requirement, Rule, RuleLevel,
     Selector, SpecAnchor, SpecDocument, TargetClaim,
 };
 use syu_validation::{PlanValidationMode, ValidationContext, validate};
-use syu_work_model::{
-    VERIFICATION_RECEIPT_SCHEMA, VerificationExecution, VerificationReceipt, WorkPlan, WorkRequest,
-};
+use syu_work_model::{VerificationReceipt, WorkPlan, WorkRequest};
 use syu_workspace::SpecWorkspace;
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
@@ -290,7 +288,7 @@ pub struct ResultCommand {
     pub receipt: VerificationReceipt,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StructuredEditCommand {
     pub basis: MutationBasis,
@@ -299,25 +297,53 @@ pub struct StructuredEditCommand {
     pub preview_token: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum EditPatch {
     Specification {
         item_id: String,
-        fields: BTreeMap<String, serde_yaml::Value>,
+        fields: SpecificationPatchFields,
     },
     Config {
         config: Box<syu_project_model::ProjectConfig>,
     },
 }
 
-#[derive(Debug, Clone, Serialize)]
+/// Typed edit payloads keep item-kind/schema semantics on the server. The
+/// browser sends one of these DTOs and never constructs arbitrary YAML maps.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum SpecificationPatchFields {
+    Philosophy {
+        title: Option<String>,
+        summary: Option<String>,
+    },
+    Policy {
+        title: Option<String>,
+        summary: Option<String>,
+    },
+    Requirement {
+        title: Option<String>,
+        description: Option<String>,
+        priority: Option<Priority>,
+        status: Option<ItemStatus>,
+    },
+    Feature {
+        title: Option<String>,
+        summary: Option<String>,
+        status: Option<ItemStatus>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EditPreview {
     pub path: String,
     pub old_hash: String,
     pub new_hash: String,
     pub valid: bool,
     pub preview_token: String,
+    pub candidate_digest: String,
+    pub workspace_fingerprint: String,
     pub changed_lines: usize,
 }
 
@@ -362,7 +388,7 @@ fn basis(service: &WorkbenchService, expected: &MutationBasis) -> Result<SpecWor
     let workspace = SpecWorkspace::load(&service.workspace_root)?;
     let revision = current_revision(&workspace.root)?;
     if revision != expected.expected_revision
-        || workspace.fingerprint() != expected.expected_workspace_fingerprint
+        || workspace.try_fingerprint()? != expected.expected_workspace_fingerprint
         || workspace_source_hash(&workspace) != expected.expected_source_hash
     {
         anyhow::bail!(
@@ -376,7 +402,7 @@ fn workspace_source_hash(workspace: &SpecWorkspace) -> String {
     let mut source = String::new();
     for document in &workspace.documents {
         source.push_str(&document.path.to_string_lossy());
-        source.push_str(&fs::read_to_string(&document.path).unwrap_or_default());
+        source.push_str(&workspace.read_to_string(&document.path).unwrap_or_default());
     }
     source.push_str(&serde_yaml::to_string(&workspace.config).unwrap_or_default());
     content_hash(&source)
@@ -418,10 +444,6 @@ async fn api_asset(AxumPath(asset): AxumPath<String>) -> Response {
             "text/css; charset=utf-8",
             include_str!("../../syu-app-ui/assets/workbench.css").into(),
         ),
-        "app.js" => (
-            "text/javascript; charset=utf-8",
-            include_str!("../../syu-app-ui/assets/app.js").into(),
-        ),
         "i18n.js" => (
             "text/javascript; charset=utf-8",
             include_str!("../../syu-app-ui/assets/i18n.js").into(),
@@ -437,10 +459,6 @@ async fn api_asset(AxumPath(asset): AxumPath<String>) -> Response {
         "js/main.js" => (
             "text/javascript; charset=utf-8",
             include_str!("../../syu-app-ui/assets/js/main.js").into(),
-        ),
-        "js/projection.js" => (
-            "text/javascript; charset=utf-8",
-            include_str!("../../syu-app-ui/assets/projection.js").into(),
         ),
         "js/api.js" => (
             "text/javascript; charset=utf-8",
@@ -553,7 +571,7 @@ async fn api_specification(
     let revision = current_revision(&workspace.root)?;
     let item = project(&workspace, None, &revision)?
         .specifications
-        .items
+        .specifications
         .into_iter()
         .find(|item| item.id == anchor)
         .ok_or_else(|| {
@@ -570,15 +588,20 @@ fn specification_path(workspace: &SpecWorkspace, anchor: &str) -> Result<PathBuf
     let revision = current_revision(&workspace.root)?;
     let item = project(workspace, None, &revision)?
         .specifications
-        .items
+        .specifications
         .into_iter()
         .find(|item| item.id == item_id)
         .ok_or_else(|| anyhow::anyhow!("specification {item_id} not found"))?;
     Ok(workspace.root.join(item.path))
 }
 
-fn edit_preview(path: &Path, content: &str) -> Result<EditPreview> {
-    let old = fs::read_to_string(path)?;
+fn edit_preview(
+    base: &SpecWorkspace,
+    _candidate: &SpecWorkspace,
+    path: &Path,
+    content: &str,
+) -> Result<EditPreview> {
+    let old = base.read_to_string(path)?;
     let old_hash = content_hash(&old);
     let new_hash = content_hash(content);
     let changed_lines = old
@@ -587,13 +610,21 @@ fn edit_preview(path: &Path, content: &str) -> Result<EditPreview> {
         .filter(|(left, right)| left != right)
         .count()
         + old.lines().count().abs_diff(content.lines().count());
-    let preview_token = content_hash(&format!("{}\n{}", path.to_string_lossy(), new_hash));
+    let workspace_fingerprint = base.try_fingerprint()?;
+    let preview_token = content_hash(&format!(
+        "{}\n{}\n{}",
+        path.to_string_lossy(),
+        new_hash.clone(),
+        workspace_fingerprint
+    ));
     Ok(EditPreview {
         path: path.to_string_lossy().into_owned(),
         old_hash,
-        new_hash,
+        new_hash: new_hash.clone(),
         valid: true,
         preview_token,
+        candidate_digest: new_hash.clone(),
+        workspace_fingerprint,
         changed_lines,
     })
 }
@@ -606,7 +637,7 @@ fn specification_patch_content(
     let EditPatch::Specification { item_id, fields } = patch else {
         anyhow::bail!("specification endpoint requires a specification patch");
     };
-    let old = fs::read_to_string(path)?;
+    let old = workspace.read_to_string(path)?;
     let document: SpecDocument = serde_yaml::from_str(&old)?;
     let collection = match document {
         SpecDocument::Philosophies { .. } => "philosophies",
@@ -626,10 +657,10 @@ fn specification_patch_content(
     let mapping = item
         .as_mapping_mut()
         .ok_or_else(|| anyhow::anyhow!("specification item is not a mapping"))?;
-    for (key, field) in fields {
-        let key = serde_yaml::Value::String(key.clone());
+    for (key, field) in patch_fields(fields)? {
+        let key = serde_yaml::Value::String(key);
         if !matches!(key.as_str(), Some("id" | "bindings" | "contracts")) {
-            mapping.insert(key, field.clone());
+            mapping.insert(key, field);
         }
     }
     let content = serde_yaml::to_string(&value)?;
@@ -637,8 +668,50 @@ fn specification_patch_content(
     if candidate.schema() != syu_spec_model::SPEC_SCHEMA {
         anyhow::bail!("specification schema must be syu/spec/v1");
     }
-    let _ = workspace;
     Ok(content)
+}
+
+fn patch_fields(fields: &SpecificationPatchFields) -> Result<BTreeMap<String, serde_yaml::Value>> {
+    let mut output = BTreeMap::new();
+    match fields {
+        SpecificationPatchFields::Philosophy { title, summary }
+        | SpecificationPatchFields::Policy { title, summary } => {
+            insert_optional(&mut output, "title", title)?;
+            insert_optional(&mut output, "summary", summary)?;
+        }
+        SpecificationPatchFields::Requirement {
+            title,
+            description,
+            priority,
+            status,
+        } => {
+            insert_optional(&mut output, "title", title)?;
+            insert_optional(&mut output, "description", description)?;
+            insert_optional(&mut output, "priority", priority)?;
+            insert_optional(&mut output, "status", status)?;
+        }
+        SpecificationPatchFields::Feature {
+            title,
+            summary,
+            status,
+        } => {
+            insert_optional(&mut output, "title", title)?;
+            insert_optional(&mut output, "summary", summary)?;
+            insert_optional(&mut output, "status", status)?;
+        }
+    }
+    Ok(output)
+}
+
+fn insert_optional<T: serde::Serialize>(
+    output: &mut BTreeMap<String, serde_yaml::Value>,
+    name: &str,
+    value: &Option<T>,
+) -> Result<()> {
+    if let Some(value) = value {
+        output.insert(name.into(), serde_yaml::to_value(value)?);
+    }
+    Ok(())
 }
 
 fn edit_content(workspace: &SpecWorkspace, path: &Path, patch: &EditPatch) -> Result<String> {
@@ -650,7 +723,11 @@ fn edit_content(workspace: &SpecWorkspace, path: &Path, patch: &EditPatch) -> Re
 
 fn validate_overlay(workspace: &SpecWorkspace, index: &syu_workspace::SpecIndex) -> Result<()> {
     let revision = current_revision(&workspace.root)?;
-    let result = syu_validation::validate(&syu_validation::ValidationContext {
+    // Preview is a structural operation.  It must never execute a candidate
+    // runner (the candidate config may contain an arbitrary executable).  The
+    // explicit POST /api/readiness/run and /api/work/verify paths are the only
+    // execution entry points.
+    let result = syu_validation::validate_without_readiness(&syu_validation::ValidationContext {
         config: &workspace.config,
         workspace,
         index,
@@ -679,8 +756,43 @@ fn validate_overlay(workspace: &SpecWorkspace, index: &syu_workspace::SpecIndex)
         );
     }
     let readiness = syu_validation::evaluate_readiness(workspace, index, &revision, false)?;
-    if !readiness.meets(workspace.config.validation.readiness.target) {
-        anyhow::bail!("candidate overlay does not meet the configured readiness target");
+    let static_target = match workspace.config.validation.readiness.target {
+        syu_project_model::ReadinessLevel::ClosedLoop => {
+            syu_project_model::ReadinessLevel::Verifiable
+        }
+        target => target,
+    };
+    if !readiness.meets(static_target) {
+        let blockers = syu_validation::required_axes(static_target)
+            .iter()
+            .filter_map(|axis| {
+                let (label, value) = match axis {
+                    syu_validation::ReadinessAxisId::Inventory => {
+                        ("inventory", &readiness.inventory)
+                    }
+                    syu_validation::ReadinessAxisId::Ownership => {
+                        ("ownership", &readiness.ownership)
+                    }
+                    syu_validation::ReadinessAxisId::Seedability => {
+                        ("seedability", &readiness.seedability)
+                    }
+                    syu_validation::ReadinessAxisId::Workability => {
+                        ("workability", &readiness.workability)
+                    }
+                    syu_validation::ReadinessAxisId::Verification => {
+                        ("verification", &readiness.verification)
+                    }
+                    syu_validation::ReadinessAxisId::ClosedLoop => {
+                        ("closed-loop", &readiness.closed_loop)
+                    }
+                };
+                (!value.is_ready()).then(|| format!("{label}: {}", value.blockers.join("; ")))
+            })
+            .collect::<Vec<_>>();
+        anyhow::bail!(
+            "candidate overlay does not meet the configured readiness target: {}",
+            blockers.join(" | ")
+        );
     }
     Ok(())
 }
@@ -718,7 +830,7 @@ async fn api_specification_preview(
     let overlay = workspace.overlay_document(&path, document.clone())?;
     let overlay_index = overlay.index()?;
     validate_overlay(&overlay, &overlay_index)?;
-    Ok(Json(edit_preview(&path, &content)?))
+    Ok(Json(edit_preview(&workspace, &overlay, &path, &content)?))
 }
 
 async fn api_specification_apply(
@@ -734,14 +846,14 @@ async fn api_specification_apply(
     let overlay = workspace.overlay_document(&path, document.clone())?;
     let overlay_index = overlay.index()?;
     validate_overlay(&overlay, &overlay_index)?;
-    let old = fs::read_to_string(&path).map_err(anyhow::Error::from)?;
-    let preview = edit_preview(&path, &content)?;
-    if let Some(token) = &command.preview_token
-        && token != &preview.preview_token
-    {
+    let old = workspace.read_to_string(&path)?;
+    let preview = edit_preview(&workspace, &overlay, &path, &content)?;
+    if command.preview_token.as_deref() != Some(preview.preview_token.as_str()) {
         return Err(ApiError(
             StatusCode::CONFLICT,
-            anyhow::anyhow!("preview token is stale; preview the patch again"),
+            anyhow::anyhow!(
+                "apply requires the exact preview token for this candidate; preview the patch again"
+            ),
         ));
     }
     atomic_replace(&path, &content)?;
@@ -765,6 +877,8 @@ async fn api_config_preview(
     let overlay_index = overlay.index()?;
     validate_overlay(&overlay, &overlay_index)?;
     Ok(Json(edit_preview(
+        &workspace,
+        &overlay,
         &workspace.root.join("syu.yaml"),
         &content,
     )?))
@@ -788,14 +902,14 @@ async fn api_config_apply(
     let overlay_index = overlay.index()?;
     validate_overlay(&overlay, &overlay_index)?;
     let path = workspace.root.join("syu.yaml");
-    let old = fs::read_to_string(&path).map_err(anyhow::Error::from)?;
-    let preview = edit_preview(&path, &content)?;
-    if let Some(token) = &command.preview_token
-        && token != &preview.preview_token
-    {
+    let old = workspace.read_to_string(&path)?;
+    let preview = edit_preview(&workspace, &overlay, &path, &content)?;
+    if command.preview_token.as_deref() != Some(preview.preview_token.as_str()) {
         return Err(ApiError(
             StatusCode::CONFLICT,
-            anyhow::anyhow!("preview token is stale; preview the patch again"),
+            anyhow::anyhow!(
+                "apply requires the exact preview token for this candidate; preview the patch again"
+            ),
         ));
     }
     atomic_replace(&path, &content)?;
@@ -814,11 +928,16 @@ async fn api_branch_scope(
     let workspace = SpecWorkspace::load(&service.workspace_root)?;
     let revision = current_revision(&workspace.root)?;
     let index = workspace.index()?;
-    let items = project(&workspace, None, &revision)?.specifications.items;
-    let range = query.range.unwrap_or_else(|| "origin/main...HEAD".into());
+    let specifications = project(&workspace, None, &revision)?
+        .specifications
+        .specifications;
+    let range = match query.range {
+        Some(range) => range,
+        None => configured_change_range(&workspace)?,
+    };
     let changed = branch_changed_files(&workspace.root, &range)?;
     Ok(Json(ScopeView {
-        branch: Some(branch_scope_view(&index, &items, range, &changed)),
+        branch: Some(branch_scope_view(&index, &specifications, range, &changed)),
     }))
 }
 
@@ -828,49 +947,198 @@ struct BranchScopeQuery {
 }
 
 fn branch_changed_files(root: &Path, range: &str) -> Result<Vec<syu_validation::ChangedFile>> {
+    let mut files = Vec::new();
+    collect_branch_status(
+        root,
+        &["diff", "--name-status", "-z", "-M", "--relative", range],
+        &mut files,
+    )?;
+    collect_branch_patch(
+        root,
+        &[
+            "diff",
+            "-M",
+            "--relative",
+            "--unified=0",
+            "--no-color",
+            range,
+        ],
+        &mut files,
+    )?;
+    collect_branch_status(
+        root,
+        &[
+            "diff",
+            "--name-status",
+            "-z",
+            "-M",
+            "--relative",
+            "--cached",
+        ],
+        &mut files,
+    )?;
+    collect_branch_patch(
+        root,
+        &[
+            "diff",
+            "-M",
+            "--relative",
+            "--unified=0",
+            "--no-color",
+            "--cached",
+        ],
+        &mut files,
+    )?;
+    collect_branch_status(
+        root,
+        &["diff", "--name-status", "-z", "-M", "--relative"],
+        &mut files,
+    )?;
+    collect_branch_patch(
+        root,
+        &["diff", "-M", "--relative", "--unified=0", "--no-color"],
+        &mut files,
+    )?;
+    let output = git_output(root, &["ls-files", "--others", "--exclude-standard", "-z"])?;
+    for path in output
+        .split(|byte| *byte == 0)
+        .filter(|entry| !entry.is_empty())
+    {
+        let Ok(path) = syu_spec_model::RepoPath::new(String::from_utf8_lossy(path).as_ref()) else {
+            continue;
+        };
+        if files
+            .iter()
+            .all(|file| file.new_path.as_ref() != Some(&path))
+        {
+            files.push(syu_validation::ChangedFile {
+                status: syu_validation::ChangeStatus::Untracked,
+                old_path: None,
+                new_path: Some(path),
+                hunks: vec![],
+            });
+        }
+    }
+    Ok(files)
+}
+
+fn configured_change_range(workspace: &SpecWorkspace) -> Result<String> {
+    match workspace.config.validation.changed.baseline.as_ref() {
+        Some(ChangeBaseline::MergeBase { against }) => {
+            git_merge_base(&workspace.root, "HEAD", &against.0)
+        }
+        Some(ChangeBaseline::Revision { revision }) => Ok(revision.0.clone()),
+        Some(ChangeBaseline::Parent) => Ok("HEAD^".into()),
+        None => {
+            git_merge_base(&workspace.root, "HEAD", "origin/main").or_else(|_| Ok("HEAD^".into()))
+        }
+    }
+}
+
+fn git_merge_base(root: &Path, left: &str, right: &str) -> Result<String> {
+    let output = git_output(root, &["merge-base", left, right])?;
+    let revision = String::from_utf8(output)?.trim().to_owned();
+    if revision.is_empty() {
+        anyhow::bail!("git merge-base {left} {right} returned no revision");
+    }
+    Ok(revision)
+}
+
+fn git_output(root: &Path, args: &[&str]) -> Result<Vec<u8>> {
     let output = Command::new("git")
         .args(["-C"])
         .arg(root)
-        .args(["diff", "--name-status", range])
+        .args(args)
         .output()?;
     if !output.status.success() {
-        return Ok(Vec::new());
+        anyhow::bail!("git command failed: git {}", args.join(" "));
     }
-    let mut files = Vec::new();
-    for line in String::from_utf8_lossy(&output.stdout).lines() {
-        let mut parts = line.split('\t');
-        let Some(status) = parts.next() else { continue };
-        let first_path = parts.next().unwrap_or_default();
-        let second_path = parts.next();
-        let new_path_text = second_path.unwrap_or(first_path);
-        let old_path = (status.starts_with('D') || status.starts_with('R'))
-            .then(|| syu_spec_model::RepoPath::new(first_path).ok())
+    Ok(output.stdout)
+}
+
+fn collect_branch_status(
+    root: &Path,
+    args: &[&str],
+    files: &mut Vec<syu_validation::ChangedFile>,
+) -> Result<()> {
+    let output = git_output(root, args)?;
+    let mut entries = output
+        .split(|byte| *byte == 0)
+        .filter(|entry| !entry.is_empty());
+    while let Some(status_bytes) = entries.next() {
+        let status_text = String::from_utf8_lossy(status_bytes);
+        let kind = status_text.chars().next().unwrap_or('M');
+        let first = entries
+            .next()
+            .map(String::from_utf8_lossy)
+            .map(|path| path.into_owned());
+        let second = (kind == 'R' || kind == 'C')
+            .then(|| {
+                entries
+                    .next()
+                    .map(String::from_utf8_lossy)
+                    .map(|path| path.into_owned())
+            })
             .flatten();
-        let Ok(path) = syu_spec_model::RepoPath::new(new_path_text) else {
-            continue;
+        let (old_text, new_text) = match kind {
+            'A' => (None, first),
+            'D' => (first, None),
+            'R' | 'C' => (first, second),
+            _ => (first.clone(), first),
         };
-        let status = match status.chars().next().unwrap_or('M') {
+        let old_path = old_text
+            .as_deref()
+            .map(syu_spec_model::RepoPath::new)
+            .transpose()
+            .map_err(anyhow::Error::msg)?;
+        let new_path = new_text
+            .as_deref()
+            .map(syu_spec_model::RepoPath::new)
+            .transpose()
+            .map_err(anyhow::Error::msg)?;
+        let status = match kind {
             'A' => syu_validation::ChangeStatus::Added,
             'D' => syu_validation::ChangeStatus::Deleted,
             'R' => syu_validation::ChangeStatus::Renamed,
             _ => syu_validation::ChangeStatus::Modified,
         };
-        files.push(syu_validation::ChangedFile {
-            status,
-            old_path,
-            new_path: Some(path),
-            hunks: vec![],
-        });
+        if let Some(file) = files
+            .iter_mut()
+            .find(|file| file.new_path == new_path && file.old_path == old_path)
+        {
+            file.status = status;
+        } else {
+            files.push(syu_validation::ChangedFile {
+                status,
+                old_path,
+                new_path,
+                hunks: vec![],
+            });
+        }
     }
-    let patch = Command::new("git")
-        .args(["-C"])
-        .arg(root)
-        .args(["diff", "--unified=0", "--format=", range])
-        .output()?;
-    let mut current_path: Option<String> = None;
-    for line in String::from_utf8_lossy(&patch.stdout).lines() {
+    Ok(())
+}
+
+fn collect_branch_patch(
+    root: &Path,
+    args: &[&str],
+    files: &mut [syu_validation::ChangedFile],
+) -> Result<()> {
+    let output = git_output(root, args)?;
+    let mut current_old_path: Option<String> = None;
+    let mut current_new_path: Option<String> = None;
+    for line in String::from_utf8(output)?.lines() {
+        if let Some(path) = line.strip_prefix("--- a/") {
+            current_old_path = Some(path.to_owned());
+            current_new_path = None;
+            continue;
+        }
         if let Some(path) = line.strip_prefix("+++ b/") {
-            current_path = Some(path.into());
+            current_new_path = Some(path.to_owned());
+            continue;
+        }
+        if line == "+++ /dev/null" {
+            current_new_path = None;
             continue;
         }
         let Some(hunk) = line.strip_prefix("@@ ") else {
@@ -879,38 +1147,37 @@ fn branch_changed_files(root: &Path, range: &str) -> Result<Vec<syu_validation::
         let mut parts = hunk.split_whitespace();
         let Some(old) = parts.next() else { continue };
         let Some(new) = parts.next() else { continue };
-        let new = new.trim_start_matches('+');
-        let old = old.trim_start_matches('-');
-        let (old_start, old_count) = old.split_once(',').map_or((old, "1"), |parts| parts);
-        let (start, count) = new.split_once(',').map_or((new, "1"), |parts| parts);
-        let Ok(old_start) = old_start.parse::<usize>() else {
+        let parse_range = |value: &str| -> Option<(usize, usize)> {
+            let value = value.get(1..)?;
+            let (start, count) = value.split_once(',').map_or((value, "1"), |parts| parts);
+            Some((start.parse().ok()?, count.parse().ok()?))
+        };
+        let Some((old_start, old_count)) = parse_range(old) else {
             continue;
         };
-        let Ok(old_count) = old_count.parse::<usize>() else {
+        let Some((new_start, new_count)) = parse_range(new) else {
             continue;
         };
-        let Ok(start) = start.parse::<usize>() else {
-            continue;
-        };
-        let Ok(count) = count.parse::<usize>() else {
-            continue;
-        };
-        if let Some(path) = &current_path
-            && let Some(file) = files.iter_mut().find(|file| {
+        if let Some(file) = files.iter_mut().find(|file| {
+            current_new_path.as_deref().is_some_and(|path| {
                 file.new_path
                     .as_ref()
-                    .is_some_and(|value| value.to_string_lossy() == path.as_str())
+                    .is_some_and(|value| value.to_string_lossy() == path)
+            }) || current_old_path.as_deref().is_some_and(|path| {
+                file.old_path
+                    .as_ref()
+                    .is_some_and(|value| value.to_string_lossy() == path)
             })
-        {
+        }) {
             file.hunks.push(syu_validation::ChangedRange {
                 old_start,
                 old_end: old_start.saturating_add(old_count),
-                new_start: start,
-                new_end: start.saturating_add(count),
+                new_start,
+                new_end: new_start.saturating_add(new_count),
             });
         }
     }
-    Ok(files)
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]
@@ -1029,27 +1296,20 @@ async fn api_validate(
         .plan
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("no work plan"))?;
-    let canonical_plan = syu_planner::plan(&plan.request, &workspace, &index, &revision)?;
-    if canonical_plan.canonical_digest != plan.canonical_digest
-        || canonical_plan.slices != plan.slices
-        || canonical_plan.status != plan.status
-    {
-        return Err(ApiError(
-            StatusCode::CONFLICT,
-            anyhow::anyhow!("stored work plan is not the deterministic canonical plan"),
-        ));
-    }
-    let result = validate(&ValidationContext {
+    let canonical_plan =
+        syu_validation::canonical_plan_for_execution(&workspace, &index, plan, &revision)
+            .map_err(|error| ApiError(StatusCode::CONFLICT, error))?;
+    let result = syu_validation::validate_without_readiness(&ValidationContext {
         config: &workspace.config,
         workspace: &workspace,
         index: &index,
         changed_files: None,
         reported_changed_files: None,
-        work_plan: Some(plan),
+        work_plan: Some(&canonical_plan),
         selected_slice: session
             .selected_slice
             .as_ref()
-            .and_then(|id| plan.slices.iter().find(|slice| &slice.id == id)),
+            .and_then(|id| canonical_plan.slices.iter().find(|slice| &slice.id == id)),
         plan_mode: PlanValidationMode::PreState,
         preset: workspace.config.validation.preset,
         revision: Some(&revision),
@@ -1057,7 +1317,7 @@ async fn api_validate(
     });
     let view = ValidationRunView::completed(
         "work-plan",
-        Some(plan.canonical_digest.clone()),
+        Some(canonical_plan.canonical_digest.clone()),
         result,
         false,
         true,
@@ -1082,16 +1342,6 @@ async fn api_verify(
         .plan
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("no work plan"))?;
-    let canonical_plan = syu_planner::plan(&plan.request, &workspace, &index, &revision)?;
-    if canonical_plan.canonical_digest != plan.canonical_digest
-        || canonical_plan.slices != plan.slices
-        || canonical_plan.status != plan.status
-    {
-        return Err(ApiError(
-            StatusCode::CONFLICT,
-            anyhow::anyhow!("stored work plan is not the deterministic canonical plan"),
-        ));
-    }
     if session
         .selected_slice
         .as_deref()
@@ -1142,19 +1392,29 @@ async fn api_result(
         &plan,
         &canonical.slice_id,
         &canonical,
-        &current_revision(&workspace.root)?,
+        &plan.basis.revision,
     )?;
     let index = workspace.index()?;
-    let changed = branch_changed_files(&workspace.root, "origin/main...HEAD")?;
     let slice = plan
         .slices
         .iter()
         .find(|slice| slice.id == canonical.slice_id);
+    if slice.is_none() {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("receipt slice is not present in the canonical plan"),
+        ));
+    }
     let result = validate(&ValidationContext {
         config: &workspace.config,
         workspace: &workspace,
         index: &index,
-        changed_files: Some(&changed),
+        // Branch scope is validated when the plan is created and before the
+        // receipt is issued. Result validation is the selected-slice
+        // post-state check; re-running the whole branch diff here would make
+        // an otherwise valid receipt fail merely because unrelated edits are
+        // present in the same working tree.
+        changed_files: None,
         reported_changed_files: None,
         work_plan: Some(&plan),
         selected_slice: slice,
@@ -1197,7 +1457,6 @@ async fn api_discard(State(service): State<Arc<WorkbenchService>>) -> Result<Sta
 #[serde(deny_unknown_fields)]
 pub struct WorkspaceProjection {
     pub snapshot: WorkspaceSummary,
-    pub config: syu_project_model::ProjectConfig,
     pub navigation: NavigationView,
     pub capabilities: Vec<ActionCapabilityView>,
     pub work: WorkSessionView,
@@ -1220,12 +1479,45 @@ pub struct ActionCapabilityView {
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkSessionView {
-    pub request: Option<WorkRequest>,
-    pub plan: Option<WorkPlan>,
-    pub verification_receipt: Option<VerificationReceipt>,
-    pub context_pack: Option<syu_work_model::ContextPack>,
+    pub request: Option<WorkRequestView>,
+    pub plan: Option<PlanView>,
+    pub verification_receipt: Option<VerificationReceiptView>,
+    pub context_pack: Option<ContextPackView>,
     pub selected_slice: Option<String>,
     pub validation: ValidationRunView,
+}
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkRequestView {
+    pub summary: String,
+    pub operation: String,
+    pub seed_count: usize,
+    pub requested_target_count: usize,
+}
+#[derive(Debug, Clone, Serialize)]
+pub struct PlanView {
+    pub id: String,
+    pub status: String,
+    pub slices: Vec<SliceView>,
+}
+#[derive(Debug, Clone, Serialize)]
+pub struct SliceView {
+    pub id: String,
+    pub editable_targets: Vec<TargetView>,
+}
+#[derive(Debug, Clone, Serialize)]
+pub struct TargetView {
+    pub reference: String,
+    pub access: String,
+    pub path: String,
+}
+#[derive(Debug, Clone, Serialize)]
+pub struct VerificationReceiptView {
+    pub slice_id: String,
+}
+#[derive(Debug, Clone, Serialize)]
+pub struct ContextPackView {
+    pub slice_id: String,
+    pub entry_count: usize,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReadinessView {
@@ -1234,6 +1526,7 @@ pub struct ReadinessView {
     pub blocking_subjects: usize,
     pub axes: BTreeMap<String, syu_validation::ReadinessAxis>,
     pub blockers: Vec<String>,
+    pub execution_state: String,
 }
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct ScopeView {
@@ -1241,7 +1534,7 @@ pub struct ScopeView {
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct SpecificationCatalogView {
-    pub items: Vec<ItemSummary>,
+    pub specifications: Vec<ItemSummary>,
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct DiagnosticsView {
@@ -1295,7 +1588,6 @@ pub struct IssueCounts {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidationDiagnosticView {
-    pub phase: ValidationPhase,
     #[serde(flatten)]
     pub diagnostic: syu_diagnostics::Diagnostic,
 }
@@ -1387,10 +1679,7 @@ impl ValidationRunView {
         let diagnostics = result
             .diagnostics
             .into_iter()
-            .map(|diagnostic| ValidationDiagnosticView {
-                phase: diagnostic.phase,
-                diagnostic,
-            })
+            .map(|diagnostic| ValidationDiagnosticView { diagnostic })
             .collect::<Vec<_>>();
         let phases = phase_views(&diagnostics, has_changes, has_plan, preset);
         let applicable_phase_count = phases
@@ -1450,7 +1739,7 @@ fn phase_views(
     .map(|(id, applicable, reason)| {
         let phase_diagnostics = diagnostics
             .iter()
-            .filter(|d| validation_phase_id(d.phase) == id)
+            .filter(|d| validation_phase_id(d.diagnostic.phase) == id)
             .cloned()
             .collect::<Vec<_>>();
         let issue_count = phase_diagnostics.len();
@@ -1655,39 +1944,53 @@ pub fn project(
     // In particular, a checked-in `work.yaml` is not an implicit Workbench
     // session and must not cause planning during the first GET.
     let requested_work = request.cloned();
-    let mut items = Vec::new();
+    let mut specifications = Vec::new();
     for loaded in &workspace.documents {
         let path = relative_display(&workspace.root, &loaded.path);
-        let source_hash = content_hash(&fs::read_to_string(&loaded.path).unwrap_or_default());
+        let source_hash = content_hash(&workspace.read_to_string(&loaded.path).unwrap_or_default());
         match &loaded.document {
             SpecDocument::Philosophies { philosophies, .. } => {
                 for item in philosophies {
-                    items.push(item_summary_from_philosophy(
+                    specifications.push(item_summary_from_philosophy(
                         item,
                         &path,
                         &source_hash,
                         &index,
+                        &workspace.root,
                     ));
                 }
             }
             SpecDocument::Policies { policies, .. } => {
                 for item in policies {
-                    items.push(item_summary_from_policy(item, &path, &source_hash, &index));
-                }
-            }
-            SpecDocument::Requirements { requirements, .. } => {
-                for item in requirements {
-                    items.push(item_summary_from_requirement(
+                    specifications.push(item_summary_from_policy(
                         item,
                         &path,
                         &source_hash,
                         &index,
+                        &workspace.root,
+                    ));
+                }
+            }
+            SpecDocument::Requirements { requirements, .. } => {
+                for item in requirements {
+                    specifications.push(item_summary_from_requirement(
+                        item,
+                        &path,
+                        &source_hash,
+                        &index,
+                        &workspace.root,
                     ));
                 }
             }
             SpecDocument::Features { features, .. } => {
                 for item in features {
-                    items.push(item_summary_from_feature(item, &path, &source_hash, &index));
+                    specifications.push(item_summary_from_feature(
+                        item,
+                        &path,
+                        &source_hash,
+                        &index,
+                        &workspace.root,
+                    ));
                 }
             }
         }
@@ -1702,11 +2005,10 @@ pub fn project(
         snapshot: WorkspaceSummary {
             root: workspace.root.display().to_string(),
             revision: revision.to_string(),
-            fingerprint: workspace.fingerprint(),
+            fingerprint: workspace.try_fingerprint()?,
             config_schema: workspace.config.schema.clone(),
             source_hash: workspace_source_hash(workspace),
         },
-        config: workspace.config.clone(),
         navigation: NavigationView {
             selected_page: WorkbenchPage::Work,
             pages: vec![
@@ -1742,8 +2044,8 @@ pub fn project(
             },
         ],
         work: WorkSessionView {
-            request: requested_work,
-            plan,
+            request: requested_work.as_ref().map(request_view),
+            plan: plan.as_ref().map(plan_view),
             verification_receipt: None,
             context_pack: None,
             selected_slice: None,
@@ -1751,9 +2053,54 @@ pub fn project(
         },
         readiness,
         scope: ScopeView::default(),
-        specifications: SpecificationCatalogView { items },
+        specifications: SpecificationCatalogView { specifications },
         diagnostics: DiagnosticsView { validation },
     })
+}
+
+fn request_view(request: &WorkRequest) -> WorkRequestView {
+    WorkRequestView {
+        summary: request.summary.clone(),
+        operation: format!("{:?}", request.operation).to_ascii_lowercase(),
+        seed_count: request.seeds.len(),
+        requested_target_count: request.requested_targets.len(),
+    }
+}
+
+fn target_view(target: &syu_work_model::PlannedTarget) -> TargetView {
+    TargetView {
+        reference: target.reference.to_string(),
+        access: format!("{:?}", target.access).to_ascii_lowercase(),
+        path: target.resolved_path.clone(),
+    }
+}
+
+fn plan_view(plan: &WorkPlan) -> PlanView {
+    PlanView {
+        id: plan.id.clone(),
+        status: format!("{:?}", plan.status).to_ascii_lowercase(),
+        slices: plan
+            .slices
+            .iter()
+            .map(|slice| SliceView {
+                id: slice.id.clone(),
+                editable_targets: slice.editable_targets.iter().map(target_view).collect(),
+            })
+            .collect(),
+    }
+}
+
+fn verification_receipt_view(receipt: &VerificationReceipt) -> VerificationReceiptView {
+    VerificationReceiptView {
+        slice_id: receipt.slice_id.clone(),
+    }
+}
+
+fn context_pack_view(context: &syu_work_model::ContextPack) -> ContextPackView {
+    ContextPackView {
+        slice_id: context.slice.clone(),
+        entry_count: context.artifact_context.len(),
+    }
 }
 
 fn readiness_view(report: &syu_validation::ReadinessReport) -> ReadinessView {
@@ -1782,6 +2129,7 @@ fn readiness_view(report: &syu_validation::ReadinessReport) -> ReadinessView {
         blocking_subjects: blocker_details.len(),
         axes,
         blockers: blocker_details,
+        execution_state: report.execution_state.clone(),
     }
 }
 
@@ -1792,6 +2140,7 @@ fn readiness_not_run(config: &syu_project_model::ProjectConfig) -> ReadinessView
         blocking_subjects: 0,
         axes: BTreeMap::new(),
         blockers: vec![],
+        execution_state: "not-run".into(),
     }
 }
 
@@ -1804,9 +2153,17 @@ fn project_session(
     if let Some(readiness) = &session.readiness {
         projection.readiness = readiness.clone();
     }
-    projection.work.plan = session.plan.clone().or(projection.work.plan);
-    projection.work.verification_receipt = session.verification_receipt.clone();
-    projection.work.context_pack = session.context_pack.clone();
+    projection.work.request = session.draft_request.as_ref().map(request_view);
+    projection.work.plan = session
+        .plan
+        .as_ref()
+        .map(plan_view)
+        .or(projection.work.plan);
+    projection.work.verification_receipt = session
+        .verification_receipt
+        .as_ref()
+        .map(verification_receipt_view);
+    projection.work.context_pack = session.context_pack.as_ref().map(context_pack_view);
     projection.work.selected_slice = session.selected_slice.clone();
     projection.work.validation = session
         .last_validation
@@ -1817,8 +2174,7 @@ fn project_session(
         .as_ref()
         .is_some_and(|validation| matches!(validation.state, ValidationRunState::Passed));
     let slice_selected = session.selected_slice.as_ref().is_some_and(|id| {
-        projection
-            .work
+        session
             .plan
             .as_ref()
             .is_some_and(|plan| plan.slices.iter().any(|slice| &slice.id == id))
@@ -1827,10 +2183,10 @@ fn project_session(
         .work
         .plan
         .as_ref()
-        .is_some_and(|plan| matches!(plan.status, syu_work_model::PlanStatus::Ready))
+        .is_some_and(|plan| plan.status == "ready")
         && plan_validated
         && slice_selected
-        && projection.work.plan.as_ref().is_some_and(|plan| {
+        && session.plan.as_ref().is_some_and(|plan| {
             plan.slices
                 .iter()
                 .find(|slice| Some(&slice.id) == session.selected_slice.as_ref())
@@ -1848,9 +2204,9 @@ fn project_session(
     Ok(projection)
 }
 
-/// Executes only runner declarations from the canonical configuration.  The UI
-/// never supplies a shell command; both executable and argv originate in spec
-/// and config data.
+/// Compatibility entrypoint for CLI and HTTP callers. The implementation lives
+/// in validation so readiness, Workbench, and CLI verification share one
+/// canonical plan/receipt path.
 pub fn execute_verification(
     workspace: &SpecWorkspace,
     index: &syu_workspace::SpecIndex,
@@ -1858,90 +2214,7 @@ pub fn execute_verification(
     slice_id: &str,
     revision: &str,
 ) -> Result<VerificationReceipt> {
-    if !matches!(plan.status, syu_work_model::PlanStatus::Ready) {
-        anyhow::bail!("verification requires a validated ready plan");
-    }
-    let slice = plan
-        .slices
-        .iter()
-        .find(|slice| slice.id == slice_id)
-        .ok_or_else(|| anyhow::anyhow!("slice {slice_id} not found"))?;
-    let started_at = epoch_seconds();
-    let mut executions = Vec::new();
-    if slice.verification_targets.is_empty() {
-        anyhow::bail!("selected slice has no verification targets");
-    }
-    for planned in &slice.verification_targets {
-        let target = index.target(&planned.reference).ok_or_else(|| {
-            anyhow::anyhow!("verification target {} is unresolved", planned.reference)
-        })?;
-        let mut claim_count = 0;
-        for claim in &target.claims {
-            let TargetClaim::Verifies { runner, covers, .. } = claim else {
-                continue;
-            };
-            claim_count += 1;
-            if covers.is_empty() {
-                anyhow::bail!("verification target {} has no covers", planned.reference);
-            }
-            let configured = workspace
-                .config
-                .verification
-                .runners
-                .get(&runner.runner)
-                .ok_or_else(|| {
-                    anyhow::anyhow!("verification runner {} is not configured", runner.runner)
-                })?;
-            let arguments = configured
-                .arguments
-                .iter()
-                .map(|argument| expand_runner_argument(argument, &runner.arguments))
-                .collect::<Vec<_>>();
-            let output = Command::new(&configured.executable)
-                .args(&arguments)
-                .current_dir(&workspace.root)
-                .output()?;
-            let mut implementation_digests = BTreeMap::new();
-            for covered in covers {
-                let covered_target = index
-                    .target(covered)
-                    .ok_or_else(|| anyhow::anyhow!("covered target {covered} is unresolved"))?;
-                let resolved = syu_workspace::resolve_target(&workspace.root, covered_target)?;
-                implementation_digests.insert(covered.clone(), resolved.content_hash);
-            }
-            let verification = syu_workspace::resolve_target(&workspace.root, target)?;
-            executions.push(VerificationExecution {
-                target: planned.reference.clone(),
-                runner: runner.runner.clone(),
-                command: std::iter::once(configured.executable.clone())
-                    .chain(arguments)
-                    .collect(),
-                exit_code: output.status.code().unwrap_or(-1),
-                stdout_digest: digest(&output.stdout),
-                stderr_digest: digest(&output.stderr),
-                implementation_digests,
-                verification_digest: verification.content_hash,
-            });
-        }
-        if claim_count != 1 {
-            anyhow::bail!(
-                "verification target {} must have exactly one verification claim",
-                planned.reference
-            );
-        }
-    }
-    let receipt = VerificationReceipt {
-        schema: VERIFICATION_RECEIPT_SCHEMA.into(),
-        plan_digest: plan.canonical_digest.clone(),
-        slice_id: slice_id.into(),
-        revision: revision.into(),
-        workspace_fingerprint: workspace.fingerprint(),
-        started_at: started_at.clone(),
-        completed_at: epoch_seconds(),
-        executions,
-    };
-    validate_verification_receipt(workspace, index, plan, slice_id, &receipt, revision)?;
-    Ok(receipt)
+    syu_validation::execute_verification(workspace, index, plan, slice_id, revision)
 }
 
 pub fn validate_verification_receipt(
@@ -1952,113 +2225,9 @@ pub fn validate_verification_receipt(
     receipt: &VerificationReceipt,
     revision: &str,
 ) -> Result<()> {
-    if receipt.schema != VERIFICATION_RECEIPT_SCHEMA {
-        anyhow::bail!("receipt schema must be {VERIFICATION_RECEIPT_SCHEMA}");
-    }
-    if !matches!(plan.status, syu_work_model::PlanStatus::Ready) {
-        anyhow::bail!("receipt plan is not validated");
-    }
-    let slice = plan
-        .slices
-        .iter()
-        .find(|slice| slice.id == slice_id)
-        .ok_or_else(|| anyhow::anyhow!("slice {slice_id} not found"))?;
-    if receipt.plan_digest != plan.canonical_digest
-        || receipt.slice_id != slice_id
-        || receipt.revision != revision
-        || receipt.workspace_fingerprint != workspace.fingerprint()
-    {
-        anyhow::bail!("verification receipt basis is stale or does not match the selected slice");
-    }
-    let expected = slice
-        .verification_targets
-        .iter()
-        .map(|target| target.reference.clone())
-        .collect::<BTreeSet<_>>();
-    let actual = receipt
-        .executions
-        .iter()
-        .map(|execution| execution.target.clone())
-        .collect::<Vec<_>>();
-    if actual.len() != expected.len() || actual.into_iter().collect::<BTreeSet<_>>() != expected {
-        anyhow::bail!(
-            "verification receipt execution set does not exactly match the selected slice"
-        );
-    }
-    for execution in &receipt.executions {
-        if execution.exit_code != 0 {
-            anyhow::bail!("verification receipt contains failed executions");
-        }
-        let target = index.target(&execution.target).ok_or_else(|| {
-            anyhow::anyhow!("verification target {} is unresolved", execution.target)
-        })?;
-        let claim = target
-            .claims
-            .iter()
-            .find_map(|claim| match claim {
-                TargetClaim::Verifies { runner, covers, .. } => Some((runner, covers)),
-                _ => None,
-            })
-            .ok_or_else(|| anyhow::anyhow!("{} is not a verification target", execution.target))?;
-        let configured = workspace
-            .config
-            .verification
-            .runners
-            .get(&claim.0.runner)
-            .ok_or_else(|| {
-                anyhow::anyhow!("verification runner {} is not configured", claim.0.runner)
-            })?;
-        let arguments = configured
-            .arguments
-            .iter()
-            .map(|argument| expand_runner_argument(argument, &claim.0.arguments))
-            .collect::<Vec<_>>();
-        let expected_command = std::iter::once(configured.executable.clone())
-            .chain(arguments)
-            .collect::<Vec<_>>();
-        if execution.runner != claim.0.runner
-            || execution.command != expected_command
-            || execution.command.is_empty()
-        {
-            anyhow::bail!("verification receipt command does not match the configured runner");
-        }
-        let verification = syu_workspace::resolve_target(&workspace.root, target)?;
-        if execution.verification_digest != verification.content_hash {
-            anyhow::bail!("verification target digest is stale");
-        }
-        for covered in claim.1 {
-            let covered_target = index
-                .target(covered)
-                .ok_or_else(|| anyhow::anyhow!("covered target {covered} is unresolved"))?;
-            let resolved = syu_workspace::resolve_target(&workspace.root, covered_target)?;
-            if execution.implementation_digests.get(covered) != Some(&resolved.content_hash) {
-                anyhow::bail!("implementation digest for {covered} is stale");
-            }
-        }
-        if execution.implementation_digests.len() != claim.1.len() {
-            anyhow::bail!("receipt implementation digest set is not exact");
-        }
-    }
-    Ok(())
-}
-
-fn expand_runner_argument(template: &str, values: &BTreeMap<String, String>) -> String {
-    values
-        .iter()
-        .fold(template.to_string(), |value, (key, replacement)| {
-            value.replace(&format!("{{{key}}}"), replacement)
-        })
-}
-fn digest(bytes: &[u8]) -> String {
-    let mut hash = Sha256::new();
-    hash.update(bytes);
-    format!("sha256:{:x}", hash.finalize())
-}
-fn epoch_seconds() -> String {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_secs().to_string())
-        .unwrap_or_else(|_| "0".into())
+    syu_validation::validate_verification_receipt(
+        workspace, index, plan, slice_id, receipt, revision,
+    )
 }
 
 pub fn branch_scope_view(
@@ -2162,6 +2331,7 @@ fn item_summary_from_philosophy(
     path: &str,
     source_hash: &str,
     index: &syu_workspace::SpecIndex,
+    workspace_root: &Path,
 ) -> ItemSummary {
     let item_id = item.id.clone();
     ItemSummary {
@@ -2185,7 +2355,7 @@ fn item_summary_from_philosophy(
             .collect(),
         rules: vec![],
         criteria: vec![],
-        bindings: bindings_for(&item_id, &item.bindings),
+        bindings: bindings_for(&item_id, &item.bindings, workspace_root),
         contracts: vec![],
         anchors: anchors_for(index, &item.id),
     }
@@ -2196,6 +2366,7 @@ fn item_summary_from_policy(
     path: &str,
     source_hash: &str,
     index: &syu_workspace::SpecIndex,
+    workspace_root: &Path,
 ) -> ItemSummary {
     let item_id = item.id.clone();
     ItemSummary {
@@ -2215,7 +2386,7 @@ fn item_summary_from_policy(
             .map(|rule| rule_summary(&item_id, rule))
             .collect(),
         criteria: vec![],
-        bindings: bindings_for(&item_id, &item.bindings),
+        bindings: bindings_for(&item_id, &item.bindings, workspace_root),
         contracts: vec![],
         anchors: anchors_for(index, &item.id),
     }
@@ -2226,6 +2397,7 @@ fn item_summary_from_requirement(
     path: &str,
     source_hash: &str,
     index: &syu_workspace::SpecIndex,
+    workspace_root: &Path,
 ) -> ItemSummary {
     let item_id = item.id.clone();
     ItemSummary {
@@ -2245,7 +2417,7 @@ fn item_summary_from_requirement(
             .iter()
             .map(|criterion| criterion_summary(&item_id, criterion))
             .collect(),
-        bindings: bindings_for(&item_id, &item.bindings),
+        bindings: bindings_for(&item_id, &item.bindings, workspace_root),
         contracts: vec![],
         anchors: anchors_for(index, &item.id),
     }
@@ -2256,6 +2428,7 @@ fn item_summary_from_feature(
     path: &str,
     source_hash: &str,
     index: &syu_workspace::SpecIndex,
+    workspace_root: &Path,
 ) -> ItemSummary {
     let item_id = item.id.clone();
     ItemSummary {
@@ -2271,7 +2444,7 @@ fn item_summary_from_feature(
         principles: vec![],
         rules: vec![],
         criteria: vec![],
-        bindings: bindings_for(&item_id, &item.bindings),
+        bindings: bindings_for(&item_id, &item.bindings, workspace_root),
         contracts: item
             .contracts
             .iter()
@@ -2336,6 +2509,7 @@ fn criterion_summary(item: &syu_spec_model::SpecId, criterion: &Criterion) -> Cr
 fn bindings_for(
     item: &syu_spec_model::SpecId,
     bindings: &[ArtifactBinding],
+    workspace_root: &Path,
 ) -> Vec<BindingSummary> {
     bindings
         .iter()
@@ -2350,7 +2524,16 @@ fn bindings_for(
                 role: binding_role_label(binding.role).into(),
                 facet: binding.facet.clone(),
                 responsibility: binding.responsibility.clone(),
-                owns: binding.owns.clone(),
+                // Deleted retirement markers remain in the self-hosting spec
+                // so change validation can account for their deletion, but
+                // they are not live UI capabilities and must not reintroduce
+                // retired browser assets into the projection.
+                owns: binding
+                    .owns
+                    .iter()
+                    .filter(|scope| workspace_root.join(scope.path.as_path()).exists())
+                    .cloned()
+                    .collect(),
                 targets: binding
                     .targets
                     .iter()
@@ -2470,16 +2653,24 @@ mod tests {
     use axum::body::Body;
     use http::{Request, StatusCode};
     use http_body_util::BodyExt;
+    use std::sync::OnceLock;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+    use tokio::sync::{Mutex, MutexGuard};
     use tower::ServiceExt;
 
-    #[test]
-    fn workbench_server_flow_smoke() {
-        let run = ValidationRunView::not_run();
-        assert!(matches!(run.state, ValidationRunState::NotRun));
+    static WORKSPACE_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    async fn workspace_test_lock() -> MutexGuard<'static, ()> {
+        WORKSPACE_TEST_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .await
     }
 
     #[tokio::test]
     async fn workbench_http_projection_readiness_and_esm_flow() {
+        let _workspace_lock = workspace_test_lock().await;
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .and_then(Path::parent)
@@ -2512,6 +2703,470 @@ mod tests {
         let body = readiness.into_body().collect().await.unwrap().to_bytes();
         let view: ReadinessView = serde_json::from_slice(&body).unwrap();
         assert_eq!(view.status, "Not run");
+    }
+
+    fn workspace_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .to_path_buf()
+    }
+
+    async fn projection_and_basis(app: &Router) -> (MutationBasis, String, serde_json::Value) {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/projection")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let response_status = response.status();
+        let csrf = response
+            .headers()
+            .get("x-syu-csrf-token")
+            .and_then(|value| value.to_str().ok())
+            .expect("projection csrf token")
+            .to_owned();
+        let response_body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(
+            response_status,
+            StatusCode::OK,
+            "projection response: {}",
+            String::from_utf8_lossy(&response_body)
+        );
+        let projection: serde_json::Value = serde_json::from_slice(&response_body).unwrap();
+        let basis = MutationBasis {
+            expected_revision: projection["snapshot"]["revision"].as_str().unwrap().into(),
+            expected_workspace_fingerprint: projection["snapshot"]["fingerprint"]
+                .as_str()
+                .unwrap()
+                .into(),
+            expected_source_hash: projection["snapshot"]["source_hash"]
+                .as_str()
+                .unwrap()
+                .into(),
+        };
+        (basis, csrf, projection)
+    }
+
+    async fn json_mutation<T: Serialize>(
+        app: &Router,
+        method: Method,
+        uri: &str,
+        csrf: &str,
+        value: &T,
+    ) -> Response {
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method(method)
+                    .uri(uri)
+                    .header("content-type", "application/json")
+                    .header("origin", "http://127.0.0.1:7737")
+                    .header("x-syu-csrf-token", csrf)
+                    .body(Body::from(serde_json::to_vec(value).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
+    async fn run_closed_loop_flow(app: Router) {
+        let (basis, csrf, _projection) = projection_and_basis(&app).await;
+        let request = WorkRequest {
+            schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-WORKBENCH-E2E".into(),
+            summary: "exercise the Workbench closed loop".into(),
+            operation: syu_work_model::WorkOperation::Modify,
+            seeds: vec![syu_work_model::WorkSeed::Anchor(
+                "REQ-WORKBENCH-002#criterion.work-session".parse().unwrap(),
+            )],
+            constraints: Default::default(),
+            requested_targets: vec![],
+        };
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/request",
+            &csrf,
+            &WorkRequestCommand {
+                basis: basis.clone(),
+                request,
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = json_mutation(&app, Method::POST, "/api/work/plan", &csrf, &basis).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let plan: WorkPlan = serde_json::from_slice(&body).unwrap();
+        assert!(
+            matches!(plan.status, syu_work_model::PlanStatus::Ready),
+            "{plan:?}"
+        );
+        let slice = plan
+            .slices
+            .iter()
+            .find(|slice| !slice.verification_targets.is_empty())
+            .expect("canonical plan verification slice")
+            .id
+            .clone();
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/context",
+            &csrf,
+            &SliceCommand {
+                basis: basis.clone(),
+                slice_id: slice.clone(),
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = json_mutation(&app, Method::POST, "/api/work/validate", &csrf, &basis).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let validation: ValidationRunView = serde_json::from_slice(&body).unwrap();
+        assert!(
+            matches!(validation.state, ValidationRunState::Passed),
+            "{validation:?}"
+        );
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/verify",
+            &csrf,
+            &SliceCommand {
+                basis: basis.clone(),
+                slice_id: slice,
+            },
+        )
+        .await;
+        let response_status = response.status();
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(
+            response_status,
+            StatusCode::OK,
+            "verify response: {}",
+            String::from_utf8_lossy(&body)
+        );
+        let receipt: VerificationReceipt = serde_json::from_slice(&body).unwrap();
+        assert!(!receipt.executions.is_empty());
+        assert!(
+            receipt
+                .executions
+                .iter()
+                .all(|execution| execution.exit_code == 0)
+        );
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/result",
+            &csrf,
+            &ResultCommand {
+                basis: basis.clone(),
+                receipt,
+            },
+        )
+        .await;
+        let result_status = response.status();
+        let result_body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(
+            result_status,
+            StatusCode::NO_CONTENT,
+            "result response: {}",
+            String::from_utf8_lossy(&result_body)
+        );
+        let stale = MutationBasis {
+            expected_source_hash: "stale".into(),
+            ..basis
+        };
+        let response = json_mutation(&app, Method::POST, "/api/work/plan", &csrf, &stale).await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+    }
+
+    async fn raw_http(
+        address: std::net::SocketAddr,
+        method: &str,
+        path: &str,
+        headers: &str,
+        body: &[u8],
+    ) -> Vec<u8> {
+        let mut stream = tokio::net::TcpStream::connect(address)
+            .await
+            .expect("connect Workbench HTTP server");
+        let request = format!(
+            "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\nContent-Length: {}\r\n{headers}\r\n",
+            body.len()
+        );
+        stream
+            .write_all(request.as_bytes())
+            .await
+            .expect("write HTTP headers");
+        stream.write_all(body).await.expect("write HTTP body");
+        let mut response = Vec::new();
+        stream
+            .read_to_end(&mut response)
+            .await
+            .expect("read HTTP response");
+        response
+    }
+
+    #[tokio::test]
+    async fn workbench_http_closed_loop_flow() {
+        let _workspace_lock = workspace_test_lock().await;
+        run_closed_loop_flow(WorkbenchServer::new(workspace_root()).router()).await;
+    }
+
+    #[tokio::test]
+    async fn workbench_http_server_transport_flow() {
+        let _workspace_lock = workspace_test_lock().await;
+        let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+            .await
+            .expect("bind Workbench HTTP server");
+        let address = listener.local_addr().expect("server address");
+        let server = tokio::spawn(async move {
+            axum::serve(listener, WorkbenchServer::new(workspace_root()).router())
+                .await
+                .expect("serve Workbench HTTP router");
+        });
+
+        let projection = raw_http(address, "GET", "/api/projection", "", &[]).await;
+        let projection_text = String::from_utf8_lossy(&projection);
+        assert!(
+            projection_text.starts_with("HTTP/1.1 200"),
+            "{projection_text}"
+        );
+        assert!(
+            projection_text.contains("x-syu-csrf-token:"),
+            "{projection_text}"
+        );
+        assert!(
+            projection_text.contains("\"specifications\""),
+            "{projection_text}"
+        );
+
+        let html = raw_http(address, "GET", "/", "", &[]).await;
+        let html_text = String::from_utf8_lossy(&html);
+        assert!(html_text.starts_with("HTTP/1.1 200"), "{html_text}");
+        assert!(html_text.contains("type=\"module\" src=\"/assets/js/main.js\""));
+        server.abort();
+        let _ = server.await;
+    }
+
+    #[tokio::test]
+    async fn workbench_canonical_projection_flow() {
+        let _workspace_lock = workspace_test_lock().await;
+        let app = WorkbenchServer::new(workspace_root()).router();
+        let (_, _, projection) = projection_and_basis(&app).await;
+        assert_eq!(projection["readiness"]["status"], "Not run");
+        assert!(projection["specifications"]["specifications"].is_array());
+        assert!(projection["config"].is_null());
+    }
+
+    #[tokio::test]
+    async fn workbench_work_session_flow() {
+        let _workspace_lock = workspace_test_lock().await;
+        let app = WorkbenchServer::new(workspace_root()).router();
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let request = WorkRequest {
+            schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-WORKBENCH-SESSION".into(),
+            summary: "plan a Workbench session".into(),
+            operation: syu_work_model::WorkOperation::Modify,
+            seeds: vec![syu_work_model::WorkSeed::Anchor(
+                "REQ-WORKBENCH-002#criterion.work-session".parse().unwrap(),
+            )],
+            constraints: Default::default(),
+            requested_targets: vec![],
+        };
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/request",
+            &csrf,
+            &WorkRequestCommand { basis, request },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    async fn run_spec_transaction(app: Router) {
+        let path = workspace_root().join("docs/syu/workbench.yaml");
+        let original = fs::read_to_string(&path).expect("original specification");
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let command = StructuredEditCommand {
+            basis: basis.clone(),
+            patch: EditPatch::Specification {
+                item_id: "REQ-WORKBENCH-001".into(),
+                fields: SpecificationPatchFields::Requirement {
+                    title: Some("Canonical projection (previewed)".into()),
+                    description: None,
+                    priority: None,
+                    status: None,
+                },
+            },
+            preview_token: None,
+        };
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/specifications/REQ-WORKBENCH-001/preview",
+            &csrf,
+            &command,
+        )
+        .await;
+        let response_status = response.status();
+        let response_body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(
+            response_status,
+            StatusCode::OK,
+            "preview response: {}",
+            String::from_utf8_lossy(&response_body)
+        );
+        let preview: EditPreview = serde_json::from_slice(&response_body).unwrap();
+        assert_eq!(preview.old_hash, content_hash(&original));
+        assert_ne!(preview.old_hash, preview.new_hash);
+        assert_eq!(
+            preview.workspace_fingerprint,
+            basis.expected_workspace_fingerprint
+        );
+        let response = json_mutation(
+            &app,
+            Method::PUT,
+            "/api/specifications/REQ-WORKBENCH-001/apply",
+            &csrf,
+            &command,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let response = json_mutation(
+            &app,
+            Method::PUT,
+            "/api/specifications/REQ-WORKBENCH-001/apply",
+            &csrf,
+            &StructuredEditCommand {
+                basis,
+                patch: command.patch,
+                preview_token: Some(preview.preview_token),
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_ne!(
+            fs::read_to_string(&path).expect("applied specification"),
+            original
+        );
+        fs::write(&path, original).expect("restore specification");
+    }
+
+    async fn run_config_transaction(app: Router) {
+        let path = workspace_root().join("syu.yaml");
+        let original = fs::read_to_string(&path).expect("original config");
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let workspace = SpecWorkspace::load(workspace_root()).unwrap();
+        let config = workspace.config.clone();
+        let command = StructuredEditCommand {
+            basis: basis.clone(),
+            patch: EditPatch::Config {
+                config: Box::new(config.clone()),
+            },
+            preview_token: None,
+        };
+        let response =
+            json_mutation(&app, Method::POST, "/api/config/preview", &csrf, &command).await;
+        let response_status = response.status();
+        let response_body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(
+            response_status,
+            StatusCode::OK,
+            "preview response: {}",
+            String::from_utf8_lossy(&response_body)
+        );
+        let preview: EditPreview = serde_json::from_slice(&response_body).unwrap();
+        assert_eq!(
+            preview.workspace_fingerprint,
+            basis.expected_workspace_fingerprint
+        );
+        let response = json_mutation(&app, Method::PUT, "/api/config/apply", &csrf, &command).await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let response = json_mutation(
+            &app,
+            Method::PUT,
+            "/api/config/apply",
+            &csrf,
+            &StructuredEditCommand {
+                basis,
+                patch: EditPatch::Config {
+                    config: Box::new(config),
+                },
+                preview_token: Some(preview.preview_token),
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        fs::write(&path, original).expect("restore config");
+    }
+
+    #[tokio::test]
+    async fn workbench_spec_edit_transaction() {
+        let _workspace_lock = workspace_test_lock().await;
+        run_spec_transaction(WorkbenchServer::new(workspace_root()).router()).await;
+    }
+
+    #[tokio::test]
+    async fn workbench_config_edit_transaction() {
+        let _workspace_lock = workspace_test_lock().await;
+        run_config_transaction(WorkbenchServer::new(workspace_root()).router()).await;
+    }
+
+    #[tokio::test]
+    async fn workbench_security_flow() {
+        let _workspace_lock = workspace_test_lock().await;
+        let app = WorkbenchServer::new(workspace_root()).router();
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response =
+            json_mutation(&app, Method::POST, "/api/work/plan", "wrong-csrf", &basis).await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/plan",
+            &csrf,
+            &MutationBasis {
+                expected_source_hash: "stale".into(),
+                ..basis
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn workbench_accessible_navigation() {
+        let _workspace_lock = workspace_test_lock().await;
+        let response = WorkbenchServer::new(workspace_root())
+            .router()
+            .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let html = String::from_utf8(
+            response
+                .into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes()
+                .to_vec(),
+        )
+        .unwrap();
+        assert!(html.contains("aria-label"));
+        assert!(html.contains("/assets/js/main.js"));
     }
 
     #[test]
@@ -2566,6 +3221,6 @@ mod tests {
         );
         assert!(matches!(run.state, ValidationRunState::Issues));
         assert_eq!(run.issue_counts.error, 1);
-        assert_eq!(run.diagnostics[0].phase, ValidationPhase::Plan);
+        assert_eq!(run.diagnostics[0].diagnostic.phase, ValidationPhase::Plan);
     }
 }

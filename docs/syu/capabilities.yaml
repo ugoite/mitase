@@ -6,85 +6,257 @@ features:
   - id: FEAT-SPEC-MODEL-001
     title: Spec model
     summary: Parse and validate the canonical syu/spec/v1 model.
-    status: planned
-    bindings: []
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: model
+        responsibility: Provide the typed specification model.
+        targets:
+          - { id: spec-document, adapter: rust, path: crates/syu-spec-model/src/lib.rs, selector: { kind: symbol, name: SpecDocument } }
+
   - id: FEAT-PROJECT-CONFIG-001
     title: Project configuration
     summary: Load and validate syu/config/v1 project configuration.
-    status: planned
-    bindings: []
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: configuration
+        responsibility: Provide the typed project configuration model.
+        targets:
+          - { id: project-config, adapter: rust, path: crates/syu-project-model/src/lib.rs, selector: { kind: symbol, name: ProjectConfig } }
+
   - id: FEAT-INVENTORY-001
     title: Inventory providers
     summary: Discover active artifact units through profile-selected providers.
-    status: planned
-    bindings: []
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: inventory
+        responsibility: Discover provider-owned semantic artifact units.
+        targets:
+          - { id: inventory-registry, adapter: rust, path: crates/syu-inventory/src/lib.rs, selector: { kind: symbol, name: InventoryRegistry } }
+
   - id: FEAT-IDENTITY-001
     title: Exact artifact identity
     summary: Resolve one exact editable or observable artifact target per identity.
-    status: planned
-    bindings: []
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: identity
+        responsibility: Resolve exact targets through the overlay-aware workspace.
+        targets:
+          - id: target-resolver
+            adapter: rust
+            path: crates/syu-workspace/src/lib.rs
+            selector: { kind: symbol, name: resolve_target_in_workspace }
+            claims:
+              - kind: satisfies
+                criterion: REQ-PUBLIC-001#criterion.entrypoint
+
   - id: FEAT-INDEX-001
     title: Graph indexing
     summary: Index specifications, targets, claims, and contracts into one graph.
-    status: planned
-    bindings: []
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: index
+        responsibility: Build the canonical specification and artifact index.
+        targets:
+          - { id: spec-index, adapter: rust, path: crates/syu-workspace/src/lib.rs, selector: { kind: symbol, name: SpecIndex } }
+
   - id: FEAT-OWNERSHIP-001
     title: Ownership resolution
     summary: Resolve ownership scopes and target claims without path-only inference.
-    status: planned
-    bindings: []
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: ownership
+        responsibility: Represent exact and scoped ownership references.
+        targets:
+          - { id: ownership-ref, adapter: rust, path: crates/syu-workspace/src/lib.rs, selector: { kind: symbol, name: OwnershipRef } }
+
   - id: FEAT-READINESS-001
     title: Readiness validation
     summary: Evaluate traceable, seedable, work-ready, verifiable, and closed-loop readiness.
-    status: planned
-    bindings: []
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: readiness
+        responsibility: Evaluate readiness subjects and canonical execution closure.
+        targets:
+          - id: readiness-evaluate
+            adapter: rust
+            path: crates/syu-validation/src/readiness.rs
+            selector: { kind: symbol, name: evaluate }
+            claims:
+              - kind: satisfies
+                criterion: REQ-PUBLIC-001#criterion.entrypoint
+
   - id: FEAT-CHANGE-VALIDATION-001
     title: Change validation
     summary: Validate changed work against the canonical workspace and plan.
-    status: planned
-    bindings: []
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: validation
+        responsibility: Validate semantic changed units against ownership and plan scope.
+        targets:
+          - id: change-validate
+            adapter: rust
+            path: crates/syu-validation/src/lib.rs
+            selector: { kind: symbol, name: validate }
+            claims:
+              - kind: satisfies
+                criterion: REQ-PUBLIC-001#criterion.entrypoint
+
   - id: FEAT-PLANNER-001
     title: Canonical planning
     summary: Generate deterministic bounded execution slices from exact work seeds.
-    status: planned
-    bindings: []
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: planner
+        responsibility: Generate deterministic bounded work slices.
+        targets:
+          - id: canonical-plan
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: symbol, name: plan }
+            claims:
+              - kind: satisfies
+                criterion: REQ-WORK-001#criterion.exact-slice
+
   - id: FEAT-CONTEXT-001
     title: Context export
     summary: Export bounded specification and artifact context for a slice.
-    status: planned
-    bindings: []
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: context
+        responsibility: Export the bounded context pack for a canonical slice.
+        targets:
+          - id: context-export
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: symbol, name: export_context }
+            claims:
+              - kind: satisfies
+                criterion: REQ-PUBLIC-001#criterion.entrypoint
+
   - id: FEAT-CONTRACT-001
     title: Contract closure
     summary: Close contract participants and guarantees over exact targets.
-    status: planned
-    bindings: []
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: contract
+        responsibility: Represent exact contract participants and guarantees.
+        targets:
+          - { id: contract-model, adapter: rust, path: crates/syu-spec-model/src/lib.rs, selector: { kind: symbol, name: Contract } }
+
   - id: FEAT-VERIFICATION-001
     title: Verification execution
     summary: Execute configured verification runners and produce canonical receipts.
-    status: planned
-    bindings: []
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: verification
+        responsibility: Execute configured exact verification targets and receipts.
+        targets:
+          - id: execute-verification
+            adapter: rust
+            path: crates/syu-validation/src/lib.rs
+            selector: { kind: symbol, name: execute_verification }
+            claims:
+              - kind: satisfies
+                criterion: REQ-PUBLIC-001#criterion.entrypoint
+
   - id: FEAT-PLAN-VALIDATION-001
     title: Plan validation
     summary: Validate a canonical work plan before execution.
-    status: planned
-    bindings: []
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: plan-validation
+        responsibility: Replan and validate an execution plan before running commands.
+        targets:
+          - id: canonical-plan-validation
+            adapter: rust
+            path: crates/syu-validation/src/lib.rs
+            selector: { kind: symbol, name: canonical_plan_for_execution }
+            claims:
+              - kind: satisfies
+                criterion: REQ-PUBLIC-001#criterion.entrypoint
+
   - id: FEAT-RESULT-VALIDATION-001
     title: Result validation
     summary: Validate verification receipts and post-state against a plan.
-    status: planned
-    bindings: []
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: result-validation
+        responsibility: Validate canonical receipts and post-state closure.
+        targets:
+          - id: receipt-validation
+            adapter: rust
+            path: crates/syu-validation/src/lib.rs
+            selector: { kind: symbol, name: validate_verification_receipt }
+            claims:
+              - kind: satisfies
+                criterion: REQ-PUBLIC-001#criterion.entrypoint
+
   - id: FEAT-CLI-001
     title: CLI orchestration
     summary: Orchestrate workspace, work, readiness, and validation commands.
-    status: planned
-    bindings: []
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: cli
+        responsibility: Orchestrate canonical validation and work commands.
+        targets:
+          - id: cli-run
+            adapter: rust
+            path: src/lib.rs
+            selector: { kind: symbol, name: run }
+            claims:
+              - kind: satisfies
+                criterion: REQ-PUBLIC-001#criterion.entrypoint
+
   - id: FEAT-LSP-001
     title: LSP
     summary: Serve canonical specification navigation and hover information.
-    status: planned
-    bindings: []
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: lsp
+        responsibility: Serve canonical specification language-server state.
+        targets:
+          - { id: lsp-server, adapter: rust, path: src/lsp/mod.rs, selector: { kind: symbol, name: run_lsp_server } }
+
   - id: FEAT-DOCS-001
     title: Documentation generation
     summary: Keep checked-in guides and generated specification documentation aligned.
-    status: planned
-    bindings: []
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: documentation
+        responsibility: Maintain the generated specification documentation entrypoint.
+        targets:
+          - { id: generated-index, adapter: declared, path: docs/generated/site-spec/index.md, selector: { kind: file } }

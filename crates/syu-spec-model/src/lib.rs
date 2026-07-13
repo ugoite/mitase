@@ -244,6 +244,7 @@ pub enum OwnershipSelector {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum ExactSelector {
+    File,
     Symbol { name: String },
     Operation { method: String, path: String },
     Heading { value: String },

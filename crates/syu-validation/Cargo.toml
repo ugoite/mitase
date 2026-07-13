@@ -16,4 +16,5 @@ syu-work-model = { path = "../syu-work-model" }
 syu-workspace = { path = "../syu-workspace" }
 serde_yaml = "0.9"
 serde_json.workspace = true
+sha2.workspace = true
 tempfile.workspace = true

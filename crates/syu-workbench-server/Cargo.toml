@@ -18,7 +18,7 @@ syu-spec-model = { path = "../syu-spec-model" }
 syu-validation = { path = "../syu-validation" }
 syu-work-model = { path = "../syu-work-model" }
 syu-workspace = { path = "../syu-workspace" }
-tokio = { version = "1.52.3", features = ["net", "rt-multi-thread", "signal", "sync"] }
+tokio = { version = "1.52.3", features = ["io-util", "net", "rt-multi-thread", "signal", "sync"] }
 
 [dev-dependencies]
 http-body-util = "0.1.3"

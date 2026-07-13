@@ -13,21 +13,6 @@ requirements:
         kind: behavior
         statement: Projection data is read from the Workbench server without client-side semantic inference.
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
-    bindings:
-      - id: projection-check
-        role: verification
-        facet: verification
-        responsibility: Verify canonical projection behavior.
-        targets:
-          - id: projection-test
-            adapter: rust
-            path: crates/syu-workbench-server/src/lib.rs
-            selector: { kind: symbol, name: tests::workbench_server_flow_smoke }
-            claims:
-              - kind: verifies
-                criterion: REQ-WORKBENCH-001#criterion.canonical-projection
-                covers: [FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project]
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: workbench_server_flow_smoke } }
   - id: REQ-WORKBENCH-002
     title: Work session
     description: A Workbench session carries a WorkRequest, canonical WorkPlan, context, verification, and result state.
@@ -47,12 +32,12 @@ requirements:
           - id: work-test
             adapter: rust
             path: crates/syu-workbench-server/src/lib.rs
-            selector: { kind: symbol, name: tests::workbench_server_flow_smoke }
+            selector: { kind: symbol, name: tests::workbench_work_session_flow }
             claims:
               - kind: verifies
                 criterion: REQ-WORKBENCH-002#criterion.work-session
-                covers: [FEAT-WORKBENCH-WORK-UI-001#binding.work/target.verify]
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: workbench_server_flow_smoke } }
+                covers: [FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan]
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_work_session_flow } }
   - id: REQ-WORKBENCH-003
     title: Transactional specification edit
     description: Structured specification edits are previewed and atomically applied only after canonical validation.
@@ -72,12 +57,12 @@ requirements:
           - id: spec-edit-test
             adapter: rust
             path: crates/syu-workbench-server/src/lib.rs
-            selector: { kind: symbol, name: tests::workbench_server_flow_smoke }
+            selector: { kind: symbol, name: tests::workbench_spec_edit_transaction }
             claims:
               - kind: verifies
                 criterion: REQ-WORKBENCH-003#criterion.transactional-spec-edit
-                covers: [FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.atomic-edit]
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: workbench_server_flow_smoke } }
+                covers: [FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-apply]
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_spec_edit_transaction } }
   - id: REQ-WORKBENCH-004
     title: Transactional configuration edit
     description: Structured configuration edits use the same preview, basis, and atomic apply flow.
@@ -97,12 +82,12 @@ requirements:
           - id: config-edit-test
             adapter: rust
             path: crates/syu-workbench-server/src/lib.rs
-            selector: { kind: symbol, name: tests::workbench_server_flow_smoke }
+            selector: { kind: symbol, name: tests::workbench_config_edit_transaction }
             claims:
               - kind: verifies
                 criterion: REQ-WORKBENCH-004#criterion.transactional-config-edit
-                covers: [FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.atomic-edit]
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: workbench_server_flow_smoke } }
+                covers: [FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.config-apply]
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_config_edit_transaction } }
   - id: REQ-WORKBENCH-005
     title: Secure local server
     description: The Workbench server is loopback-first and protects mutation endpoints.
@@ -122,12 +107,12 @@ requirements:
           - id: security-test
             adapter: rust
             path: crates/syu-workbench-server/src/lib.rs
-            selector: { kind: symbol, name: tests::workbench_server_flow_smoke }
+            selector: { kind: symbol, name: tests::workbench_security_flow }
             claims:
               - kind: verifies
                 criterion: REQ-WORKBENCH-005#criterion.secure-local-server
-                covers: [FEAT-WORKBENCH-READINESS-UI-001#binding.readiness/target.readiness]
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: workbench_server_flow_smoke } }
+                covers: [FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard]
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_security_flow } }
   - id: REQ-WORKBENCH-006
     title: Accessible navigation
     description: Workbench primary pages and actions are keyboard navigable and localized.
@@ -147,9 +132,13 @@ requirements:
           - id: navigation-test
             adapter: rust
             path: crates/syu-workbench-server/src/lib.rs
-            selector: { kind: symbol, name: tests::workbench_server_flow_smoke }
+            selector: { kind: symbol, name: tests::workbench_accessible_navigation }
             claims:
               - kind: verifies
                 criterion: REQ-WORKBENCH-006#criterion.accessible-navigation
-                covers: [FEAT-WORKBENCH-SERVER-001#binding.server/target.project]
-                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: workbench_server_flow_smoke } }
+                covers:
+                  - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.html-navigation
+                  - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
+                  - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.keyboard-navigation
+                  - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.accessibility-attributes
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_accessible_navigation } }

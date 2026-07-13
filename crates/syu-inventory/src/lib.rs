@@ -5,12 +5,15 @@ use quote::ToTokens;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
 };
+use syn::parse::Parser;
+use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::visit::Visit;
+use syn::{Meta, Token};
 use syu_project_model::InventoryProfile;
 use syu_spec_model::RepoPath;
 
@@ -20,6 +23,10 @@ pub struct InventoryContext {
     pub profile: String,
     pub settings: serde_yaml::Value,
     pub excludes: Vec<String>,
+    /// Candidate file contents keyed by absolute or repository-relative path.
+    /// Providers must read through this map so an overlay cannot be mixed with
+    /// stale bytes from disk.
+    pub overlays: BTreeMap<PathBuf, Vec<u8>>,
 }
 
 pub trait InventoryProvider: Send + Sync {
@@ -47,6 +54,7 @@ pub struct ArtifactUnit {
 pub enum ArtifactUnitKind {
     File,
     Symbol,
+    Marker,
     Operation,
     Heading,
     Generated,
@@ -97,21 +105,23 @@ impl InventoryProvider for FileInventoryProvider {
         files.dedup();
         let mut units = Vec::new();
         for path in files {
-            units.push(unit(&context.workspace_root, &self.adapter, path.clone())?);
+            units.push(unit(context, &self.adapter, path.clone())?);
             if self.adapter == "markdown" {
-                units.extend(markdown_headings(&context.workspace_root, path)?);
+                units.extend(markdown_headings(context, path)?);
             }
         }
         Ok(InventoryFragment { units })
     }
 }
 
-fn openapi_operations(root: &Path, path: PathBuf) -> Result<Vec<ArtifactUnit>> {
+fn openapi_operations(context: &InventoryContext, path: PathBuf) -> Result<Vec<ArtifactUnit>> {
+    let root = &context.workspace_root;
     let relative = path
         .strip_prefix(root)
         .context("OpenAPI path escaped workspace")?;
-    let repo_path = RepoPath::new(relative).map_err(anyhow::Error::msg)?;
-    let document: serde_yaml::Value = serde_yaml::from_str(&fs::read_to_string(&path)?)?;
+    let repo_path = RepoPath::new(relative)
+        .map_err(|error| anyhow::anyhow!("OpenAPI path {:?}: {error}", path))?;
+    let document: serde_yaml::Value = serde_yaml::from_slice(&read_bytes(context, &path)?)?;
     let mut units = Vec::new();
     if let Some(paths) = document
         .get("paths")
@@ -160,12 +170,14 @@ fn openapi_operations(root: &Path, path: PathBuf) -> Result<Vec<ArtifactUnit>> {
     Ok(units)
 }
 
-fn markdown_headings(root: &Path, path: PathBuf) -> Result<Vec<ArtifactUnit>> {
+fn markdown_headings(context: &InventoryContext, path: PathBuf) -> Result<Vec<ArtifactUnit>> {
+    let root = &context.workspace_root;
     let relative = path
         .strip_prefix(root)
         .context("markdown path escaped workspace")?;
-    let repo_path = RepoPath::new(relative).map_err(anyhow::Error::msg)?;
-    let source = fs::read_to_string(&path)?;
+    let repo_path = RepoPath::new(relative)
+        .map_err(|error| anyhow::anyhow!("Markdown path {:?}: {error}", path))?;
+    let source = String::from_utf8(read_bytes(context, &path)?)?;
     let mut units = Vec::new();
     for (line_index, line) in source.lines().enumerate() {
         let trimmed = line.trim_start();
@@ -235,12 +247,14 @@ fn collect(
     }
     Ok(())
 }
-fn unit(root: &Path, adapter: &str, path: PathBuf) -> Result<ArtifactUnit> {
+fn unit(context: &InventoryContext, adapter: &str, path: PathBuf) -> Result<ArtifactUnit> {
+    let root = &context.workspace_root;
     let relative = path
         .strip_prefix(root)
         .context("inventory path escaped workspace")?;
-    let path = RepoPath::new(relative).map_err(anyhow::Error::msg)?;
-    let bytes = fs::read(root.join(path.as_path()))?;
+    let path = RepoPath::new(relative)
+        .map_err(|error| anyhow::anyhow!("file inventory path {:?}: {error}", path))?;
+    let bytes = read_bytes(context, &root.join(path.as_path()))?;
     let text = String::from_utf8_lossy(&bytes);
     let mut hash = Sha256::new();
     hash.update(&bytes);
@@ -261,6 +275,23 @@ fn unit(root: &Path, adapter: &str, path: PathBuf) -> Result<ArtifactUnit> {
     })
 }
 
+pub fn read_bytes(context: &InventoryContext, path: &Path) -> Result<Vec<u8>> {
+    let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let relative = canonical
+        .strip_prefix(&context.workspace_root)
+        .ok()
+        .map(Path::to_path_buf);
+    if let Some(bytes) = context.overlays.get(&canonical) {
+        return Ok(bytes.clone());
+    }
+    if let Some(relative) = relative
+        && let Some(bytes) = context.overlays.get(&relative)
+    {
+        return Ok(bytes.clone());
+    }
+    Ok(fs::read(path)?)
+}
+
 pub fn union(
     context: &InventoryContext,
     providers: &[Box<dyn InventoryProvider>],
@@ -272,9 +303,6 @@ pub fn union(
     units.sort_by(|a, b| {
         (a.path.to_string_lossy(), a.identity.as_str())
             .cmp(&(b.path.to_string_lossy(), b.identity.as_str()))
-    });
-    units.dedup_by(|a, b| {
-        a.path == b.path && a.kind == b.kind && matches!(a.kind, ArtifactUnitKind::File)
     });
     if units.is_empty() {
         bail!("active inventory is empty");
@@ -292,6 +320,27 @@ pub fn union(
             "inventory contains duplicate identities: {}",
             duplicates.join(", ")
         );
+    }
+    // A provider's file unit is a container for its semantic units. Once a
+    // language provider exposed symbols/operations from the same file, keep
+    // that container as support metadata instead of allowing a broad file
+    // ownership scope to mask a changed symbol. Files without semantic
+    // children remain ordinary active file subjects (for example YAML and
+    // CI metadata).
+    let semantic_paths = units
+        .iter()
+        .filter(|unit| {
+            !matches!(unit.kind, ArtifactUnitKind::File)
+                && unit.exposure != ArtifactExposure::Support
+        })
+        .map(|unit| (unit.adapter.clone(), unit.path.clone()))
+        .collect::<BTreeSet<_>>();
+    for unit in &mut units {
+        if matches!(unit.kind, ArtifactUnitKind::File)
+            && semantic_paths.contains(&(unit.adapter.clone(), unit.path.clone()))
+        {
+            unit.exposure = ArtifactExposure::Support;
+        }
     }
     Ok(units)
 }
@@ -364,6 +413,7 @@ fn provider_for(adapter: &str, settings: serde_yaml::Value) -> Result<Box<dyn In
         "shell" => &["sh", "bash", "zsh"],
         "openapi" => &["yaml", "yml", "json"],
         "documentation" | "markdown" => &["md", "mdx"],
+        "html" => &["html"],
         // Declared artifacts are explicitly configured in the profile. The
         // current v1 model intentionally does not treat a broad declaration
         // as a fallback inventory denominator.
@@ -424,156 +474,339 @@ impl InventoryProvider for ExtensionInventoryProvider {
         files.sort();
         let mut units = Vec::new();
         for path in files {
-            units.push(unit(&context.workspace_root, &self.adapter, path.clone())?);
+            units.push(unit(context, &self.adapter, path.clone())?);
             if self.adapter == "markdown" {
-                units.extend(markdown_headings(&context.workspace_root, path)?);
+                units.extend(markdown_headings(context, path)?);
             } else if self.adapter == "openapi" {
-                units.extend(openapi_operations(&context.workspace_root, path)?);
+                units.extend(openapi_operations(context, path)?);
             } else if matches!(self.adapter.as_str(), "javascript" | "typescript") {
-                units.extend(source_symbol_units(
-                    &context.workspace_root,
-                    path,
-                    &self.adapter,
-                )?);
+                units.extend(source_symbol_units(context, path, &self.adapter)?);
+            } else if self.adapter == "html" {
+                units.extend(html_marker_units(context, path)?);
             }
         }
         Ok(InventoryFragment { units })
     }
 }
 
-fn source_symbol_units(root: &Path, path: PathBuf, adapter: &str) -> Result<Vec<ArtifactUnit>> {
+fn html_marker_units(context: &InventoryContext, path: PathBuf) -> Result<Vec<ArtifactUnit>> {
+    let root = &context.workspace_root;
     let relative = path
         .strip_prefix(root)
-        .context("source path escaped workspace")?;
-    let repo_path = RepoPath::new(relative).map_err(anyhow::Error::msg)?;
-    let source = fs::read_to_string(&path)?;
+        .context("HTML path escaped workspace")?;
+    let repo_path = RepoPath::new(relative)
+        .map_err(|error| anyhow::anyhow!("HTML marker path {:?}: {error}", path))?;
+    let source = String::from_utf8(read_bytes(context, &path)?)?;
+    let mut occurrences = BTreeMap::<String, usize>::new();
     let mut units = Vec::new();
-    let mut identities = BTreeSet::new();
-    let mut depth = 0usize;
-    let mut class: Option<(String, usize)> = None;
-    for (line_index, line) in source.lines().enumerate() {
-        let leading = line.trim_start();
-        let code = leading
-            .split_once("//")
-            .map_or(leading, |(code, _)| code)
-            .trim();
-        let before_depth = depth;
-        let exported = code.starts_with("export ");
-        let declaration = code
-            .strip_prefix("export ")
-            .unwrap_or(code)
-            .strip_prefix("default ")
-            .unwrap_or_else(|| code.strip_prefix("export ").unwrap_or(code))
-            .strip_prefix("async ")
-            .unwrap_or_else(|| {
-                code.strip_prefix("export ")
-                    .unwrap_or(code)
-                    .strip_prefix("default ")
-                    .unwrap_or(code)
-            });
-        let mut name = None;
-        let mut qualified = None;
-        if let Some((class_name, class_depth)) = &class
-            && before_depth == *class_depth
-            && let Some(method) = method_name(declaration)
-        {
-            qualified = Some(format!("{class_name}::{method}"));
-        } else if before_depth == 0 {
-            for prefix in [
-                "function ",
-                "class ",
-                "const ",
-                "let ",
-                "var ",
-                "interface ",
-                "type ",
-                "enum ",
-            ] {
-                if let Some(rest) = declaration.strip_prefix(prefix) {
-                    name = identifier(rest);
-                    break;
-                }
-            }
+
+    // Marker selectors are semantic HTML attributes, not whole-file fallbacks.
+    // Keep the exact attribute span so two targets in one document can still
+    // own distinct artifacts and changed-marker planning remains precise.
+    for (start, _) in source.match_indices("data-") {
+        let name_end = source[start..]
+            .find(|character: char| {
+                character.is_ascii_whitespace() || matches!(character, '=' | '>' | '/')
+            })
+            .map(|offset| start + offset)
+            .unwrap_or(source.len());
+        let equals_start = name_end
+            + source[name_end..]
+                .find(|character: char| !character.is_ascii_whitespace())
+                .unwrap_or(0);
+        if source.as_bytes().get(equals_start) != Some(&b'=') {
+            continue;
         }
-        if let Some(class_name) = name
-            && declaration.starts_with("class ")
-        {
-            class = Some((class_name.to_owned(), before_depth + 1));
+        let value_start = equals_start + 1;
+        let value_start = value_start
+            + source[value_start..]
+                .find(|character: char| !character.is_ascii_whitespace())
+                .unwrap_or(0);
+        let Some(quote) = source.as_bytes().get(value_start).copied() else {
+            continue;
+        };
+        if quote != b'"' && quote != b'\'' {
+            continue;
         }
-        if let Some(export_block) = declaration.strip_prefix('{')
-            && let Some(export_block) = export_block.split('}').next()
-        {
-            for item in export_block.split(',') {
-                let mut parts = item.split_whitespace();
-                let original = parts.next().filter(|value| !value.is_empty());
-                let alias = parts
-                    .next()
-                    .filter(|value| *value == "as")
-                    .and_then(|_| parts.next())
-                    .or(original);
-                if let Some(alias) = alias {
-                    name = Some(alias);
-                    qualified = None;
-                }
-            }
-        }
-        if let Some(symbol) = qualified.or_else(|| name.map(str::to_owned)) {
-            let identity = format!("{adapter}:{}::{symbol}", repo_path.to_string_lossy());
-            if identities.insert(identity.clone()) {
-                units.push(ArtifactUnit {
-                    adapter: adapter.into(),
-                    path: repo_path.clone(),
-                    identity,
-                    kind: ArtifactUnitKind::Symbol,
-                    exposure: if exported {
-                        ArtifactExposure::Public
-                    } else {
-                        ArtifactExposure::Workspace
-                    },
-                    reachability: ArtifactReachability::Active,
-                    span: SourceSpan {
-                        byte_start: source
-                            .lines()
-                            .take(line_index)
-                            .map(|value| value.len() + 1)
-                            .sum(),
-                        byte_end: source
-                            .lines()
-                            .take(line_index + 1)
-                            .map(|value| value.len() + 1)
-                            .sum(),
-                        line_start: line_index + 1,
-                        line_end: line_index + 1,
-                    },
-                    digest: digest(line.as_bytes()),
-                });
-            }
-        }
-        depth = depth
-            .saturating_add(code.matches('{').count())
-            .saturating_sub(code.matches('}').count());
-        if class
-            .as_ref()
-            .is_some_and(|(_, class_depth)| depth < *class_depth)
-        {
-            class = None;
-        }
+        let content_start = value_start + 1;
+        let Some(content_end_offset) = source.as_bytes()[content_start..]
+            .iter()
+            .position(|byte| *byte == quote)
+        else {
+            continue;
+        };
+        let end = content_start + content_end_offset + 1;
+        let marker = source[start..end].to_owned();
+        let occurrence = occurrences.entry(marker.clone()).or_insert(0);
+        let identity = format!(
+            "html:{}::marker::{}@{}",
+            repo_path.to_string_lossy(),
+            marker,
+            *occurrence
+        );
+        *occurrence += 1;
+        let line_start = source[..start]
+            .bytes()
+            .filter(|byte| *byte == b'\n')
+            .count()
+            + 1;
+        let line_end = source[..end].bytes().filter(|byte| *byte == b'\n').count() + 1;
+        units.push(ArtifactUnit {
+            adapter: "html".into(),
+            path: repo_path.clone(),
+            identity,
+            kind: ArtifactUnitKind::Marker,
+            exposure: ArtifactExposure::Support,
+            reachability: ArtifactReachability::Active,
+            span: SourceSpan {
+                byte_start: start,
+                byte_end: end,
+                line_start,
+                line_end,
+            },
+            digest: digest(marker.as_bytes()),
+        });
     }
     Ok(units)
 }
 
-fn identifier(value: &str) -> Option<&str> {
-    let value = value.trim_start();
-    let end = value
-        .find(|character: char| !character.is_ascii_alphanumeric() && character != '_')
-        .unwrap_or(value.len());
-    (end > 0).then_some(&value[..end])
+fn source_symbol_units(
+    context: &InventoryContext,
+    path: PathBuf,
+    adapter: &str,
+) -> Result<Vec<ArtifactUnit>> {
+    let root = &context.workspace_root;
+    let relative = path
+        .strip_prefix(root)
+        .context("source path escaped workspace")?;
+    let repo_path = RepoPath::new(relative)
+        .map_err(|error| anyhow::anyhow!("source symbol path {:?}: {error}", path))?;
+    let source = String::from_utf8(read_bytes(context, &path)?)?;
+    let mut units = Vec::new();
+    let mut identities = BTreeSet::new();
+    let tokens = javascript_tokens(&source);
+    let mut depth = 0usize;
+
+    let mut add_symbol = |name: &str, exported: bool, start: usize, end: usize| {
+        if name.is_empty() || name.starts_with('#') {
+            return;
+        }
+        let identity = format!("{adapter}:{}::{name}", repo_path.to_string_lossy());
+        if !identities.insert(identity.clone()) {
+            return;
+        }
+        let line_start = source[..start]
+            .bytes()
+            .filter(|byte| *byte == b'\n')
+            .count()
+            + 1;
+        let line_end = source[..end].bytes().filter(|byte| *byte == b'\n').count() + 1;
+        units.push(ArtifactUnit {
+            adapter: adapter.into(),
+            path: repo_path.clone(),
+            identity,
+            kind: ArtifactUnitKind::Symbol,
+            exposure: if exported {
+                ArtifactExposure::Public
+            } else {
+                ArtifactExposure::Workspace
+            },
+            reachability: ArtifactReachability::Active,
+            span: SourceSpan {
+                byte_start: start,
+                byte_end: end.max(start + 1),
+                line_start,
+                line_end,
+            },
+            digest: digest(&source.as_bytes()[start..end.max(start + 1)]),
+        });
+    };
+
+    let mut index = 0usize;
+    while index < tokens.len() {
+        let before_depth = depth;
+        if before_depth == 0 {
+            let mut cursor = index;
+            let mut exported = false;
+            if tokens[cursor].text == "export" {
+                exported = true;
+                cursor += 1;
+                if tokens
+                    .get(cursor)
+                    .is_some_and(|token| token.text == "default")
+                {
+                    cursor += 1;
+                }
+                if tokens.get(cursor).is_some_and(|token| token.text == "{") {
+                    cursor += 1;
+                    while let Some(token) = tokens.get(cursor) {
+                        if token.text == "}" {
+                            break;
+                        }
+                        if token.text != "," && token.text != "as" {
+                            add_symbol(&token.text, true, token.start, token.end);
+                        }
+                        cursor += 1;
+                    }
+                    index = cursor;
+                }
+            }
+            while tokens
+                .get(cursor)
+                .is_some_and(|token| matches!(token.text.as_str(), "async" | "declare"))
+            {
+                cursor += 1;
+            }
+            if let Some(keyword) = tokens.get(cursor).map(|token| token.text.as_str()) {
+                if matches!(
+                    keyword,
+                    "function" | "class" | "interface" | "type" | "enum"
+                ) {
+                    let mut name_cursor = cursor + 1;
+                    if tokens
+                        .get(name_cursor)
+                        .is_some_and(|token| token.text == "*")
+                    {
+                        name_cursor += 1;
+                    }
+                    if let Some(name) = tokens.get(name_cursor) {
+                        add_symbol(
+                            &name.text,
+                            exported,
+                            tokens[index].start,
+                            javascript_declaration_end(&source, &tokens, index),
+                        );
+                    }
+                } else if matches!(keyword, "const" | "let" | "var")
+                    && let Some(name) = tokens.get(cursor + 1)
+                {
+                    add_symbol(
+                        &name.text,
+                        exported,
+                        tokens[index].start,
+                        javascript_declaration_end(&source, &tokens, index),
+                    );
+                }
+            }
+        }
+        if tokens[index].text == "{" {
+            depth += 1;
+        } else if tokens[index].text == "}" {
+            depth = depth.saturating_sub(1);
+        }
+        index += 1;
+    }
+    Ok(units)
 }
 
-fn method_name(value: &str) -> Option<&str> {
-    let value = value.trim_start_matches("static ").trim_start();
-    let end = value.find('(')?;
-    identifier(&value[..end])
+#[derive(Debug, Clone)]
+struct JavascriptToken {
+    text: String,
+    start: usize,
+    end: usize,
+}
+
+fn javascript_declaration_end(
+    source: &str,
+    tokens: &[JavascriptToken],
+    start_index: usize,
+) -> usize {
+    let start = tokens
+        .get(start_index)
+        .map(|token| token.start)
+        .unwrap_or(source.len());
+    let mut depth = 0usize;
+    let mut saw_brace = false;
+    let mut last_end = start;
+    for token in tokens.iter().skip(start_index) {
+        last_end = token.end;
+        match token.text.as_str() {
+            "{" => {
+                depth += 1;
+                saw_brace = true;
+            }
+            "}" if depth > 0 => {
+                depth -= 1;
+                if saw_brace && depth == 0 {
+                    return token.end;
+                }
+            }
+            ";" if depth == 0 => return token.end,
+            _ => {}
+        }
+    }
+    source[start..]
+        .find('\n')
+        .map(|offset| start + offset)
+        .unwrap_or(last_end.max(start + 1))
+}
+
+/// Tokenize JavaScript/TypeScript declarations without treating braces inside
+/// strings, template literals, or comments as syntax. The old line scanner
+/// misclassified later exports whenever an earlier function contained a
+/// template expression or object literal.
+fn javascript_tokens(source: &str) -> Vec<JavascriptToken> {
+    let bytes = source.as_bytes();
+    let mut tokens = Vec::new();
+    let mut index = 0usize;
+    while index < bytes.len() {
+        if bytes[index].is_ascii_whitespace() {
+            index += 1;
+            continue;
+        }
+        if bytes[index] == b'/' && bytes.get(index + 1) == Some(&b'/') {
+            index += 2;
+            while index < bytes.len() && bytes[index] != b'\n' {
+                index += 1;
+            }
+            continue;
+        }
+        if bytes[index] == b'/' && bytes.get(index + 1) == Some(&b'*') {
+            index += 2;
+            while index + 1 < bytes.len() && !(bytes[index] == b'*' && bytes[index + 1] == b'/') {
+                index += 1;
+            }
+            index = (index + 2).min(bytes.len());
+            continue;
+        }
+        if matches!(bytes[index], b'\'' | b'"' | b'`') {
+            let quote = bytes[index];
+            index += 1;
+            while index < bytes.len() {
+                if bytes[index] == b'\\' {
+                    index = (index + 2).min(bytes.len());
+                } else if bytes[index] == quote {
+                    index += 1;
+                    break;
+                } else {
+                    index += 1;
+                }
+            }
+            continue;
+        }
+        if bytes[index].is_ascii_alphanumeric() || matches!(bytes[index], b'_' | b'$') {
+            let start = index;
+            index += 1;
+            while index < bytes.len()
+                && (bytes[index].is_ascii_alphanumeric() || matches!(bytes[index], b'_' | b'$'))
+            {
+                index += 1;
+            }
+            tokens.push(JavascriptToken {
+                text: source[start..index].into(),
+                start,
+                end: index,
+            });
+            continue;
+        }
+        tokens.push(JavascriptToken {
+            text: source[index..index + 1].into(),
+            start: index,
+            end: index + 1,
+        });
+        index += 1;
+    }
+    tokens
 }
 
 /// Rust inventory uses the syntax tree rather than line-oriented symbol
@@ -604,9 +837,18 @@ fn discover_rust(
     configured_roots: &[RepoPath],
     settings: &serde_yaml::Value,
 ) -> Result<InventoryFragment> {
+    let mode = settings
+        .get("mode")
+        .and_then(serde_yaml::Value::as_str)
+        .unwrap_or("production");
+    let test_mode = mode == "test";
+    // Test and production inventories use separate cfg evaluation. Root
+    // discovery still honors the independent `include_tests` setting below.
+    let cfg = cfg_context(settings, test_mode);
     let mut files = Vec::new();
     let mut support_files = Vec::new();
-    let roots = if configured_roots.is_empty() {
+    let mut file_visibility = BTreeMap::new();
+    let mut roots = if configured_roots.is_empty() {
         cargo_roots(&context.workspace_root, settings)?
     } else {
         configured_roots
@@ -614,6 +856,20 @@ fn discover_rust(
             .map(|root| context.workspace_root.join(root.as_path()))
             .collect()
     };
+    if let Some(additional) = settings
+        .get("additional_roots")
+        .and_then(serde_yaml::Value::as_sequence)
+    {
+        roots.extend(
+            additional
+                .iter()
+                .filter_map(serde_yaml::Value::as_str)
+                .filter_map(|path| RepoPath::new(path).ok())
+                .map(|path| context.workspace_root.join(path.as_path())),
+        );
+    }
+    roots.sort();
+    roots.dedup();
     if roots.is_empty() {
         collect_matching(
             &context.workspace_root,
@@ -623,30 +879,32 @@ fn discover_rust(
             &mut files,
         )?;
     } else {
+        let mut reachability = RustReachability {
+            context,
+            excludes: &context.excludes,
+            out: &mut files,
+            support: &mut support_files,
+            file_visibility: &mut file_visibility,
+            cfg: &cfg,
+        };
         for root in roots {
-            files.push(root.clone());
-            collect_reachable_rust(
-                &context.workspace_root,
-                &root,
-                &context.excludes,
-                &mut files,
-                &mut support_files,
-            )?;
+            collect_reachable_rust(&mut reachability, &root, true)?;
         }
     }
     files.sort();
     files.dedup();
     let mut units = Vec::new();
     for path in files {
-        let source = fs::read_to_string(&path)
+        let source = String::from_utf8(read_bytes(context, &path)?)
             .with_context(|| format!("read Rust source {}", path.display()))?;
         let syntax = syn::parse_file(&source)
             .with_context(|| format!("parse Rust source {}", path.display()))?;
         let relative = path
             .strip_prefix(&context.workspace_root)
             .context("Rust inventory path escaped workspace")?;
-        let repo_path = RepoPath::new(relative).map_err(anyhow::Error::msg)?;
-        units.push(unit(&context.workspace_root, "rust", path.clone())?);
+        let repo_path = RepoPath::new(relative)
+            .map_err(|error| anyhow::anyhow!("Rust path {:?}: {error}", path))?;
+        units.push(unit(context, "rust", path.clone())?);
         let is_test_file = relative.components().any(|component| {
             component.as_os_str() == "tests" || component.as_os_str() == "benches"
         });
@@ -660,6 +918,8 @@ fn discover_rust(
             impl_type: None,
             attributes: Vec::new(),
             test_file: is_test_file,
+            cfg: &cfg,
+            public_module: file_visibility.get(&path).copied().unwrap_or(true),
         };
         visitor.visit_file(&syntax);
         units.extend(visitor.units);
@@ -667,17 +927,19 @@ fn discover_rust(
     support_files.sort();
     support_files.dedup();
     for path in support_files {
-        units.push(support_unit(&context.workspace_root, path)?);
+        units.push(support_unit(context, path)?);
     }
     Ok(InventoryFragment { units })
 }
 
-fn support_unit(root: &Path, path: PathBuf) -> Result<ArtifactUnit> {
+fn support_unit(context: &InventoryContext, path: PathBuf) -> Result<ArtifactUnit> {
+    let root = &context.workspace_root;
     let relative = path
         .strip_prefix(root)
         .context("included support path escaped workspace")?;
-    let repo_path = RepoPath::new(relative).map_err(anyhow::Error::msg)?;
-    let bytes = fs::read(&path)?;
+    let repo_path = RepoPath::new(relative)
+        .map_err(|error| anyhow::anyhow!("support path {:?}: {error}", path))?;
+    let bytes = read_bytes(context, &path)?;
     Ok(ArtifactUnit {
         adapter: "rust".into(),
         path: repo_path.clone(),
@@ -705,31 +967,45 @@ struct RustVisitor<'a> {
     impl_type: Option<String>,
     attributes: Vec<String>,
     test_file: bool,
+    cfg: &'a CfgContext,
+    public_module: bool,
 }
 
 impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
     fn visit_item_fn(&mut self, item: &'ast syn::ItemFn) {
+        if !cfg_active(&item.attrs, self.cfg) {
+            return;
+        }
         let previous = self.attributes.clone();
         self.attributes = attribute_keys(&item.attrs);
-        self.add(&item.sig.ident.to_string(), &item.vis, item.span());
+        self.add(&item.sig.ident.to_string(), &item.vis, item.span(), true);
         syn::visit::visit_item_fn(self, item);
         self.attributes = previous;
     }
 
     fn visit_item_struct(&mut self, item: &'ast syn::ItemStruct) {
-        self.add(&item.ident.to_string(), &item.vis, item.span());
+        if !cfg_active(&item.attrs, self.cfg) {
+            return;
+        }
+        self.add(&item.ident.to_string(), &item.vis, item.span(), false);
         syn::visit::visit_item_struct(self, item);
     }
 
     fn visit_item_enum(&mut self, item: &'ast syn::ItemEnum) {
-        self.add(&item.ident.to_string(), &item.vis, item.span());
+        if !cfg_active(&item.attrs, self.cfg) {
+            return;
+        }
+        self.add(&item.ident.to_string(), &item.vis, item.span(), false);
         syn::visit::visit_item_enum(self, item);
     }
 
     fn visit_item_trait(&mut self, item: &'ast syn::ItemTrait) {
+        if !cfg_active(&item.attrs, self.cfg) {
+            return;
+        }
         let previous_attributes = self.attributes.clone();
         self.attributes = attribute_keys(&item.attrs);
-        self.add(&item.ident.to_string(), &item.vis, item.span());
+        self.add(&item.ident.to_string(), &item.vis, item.span(), false);
         let previous = self.impl_type.replace(format!("trait({})", item.ident));
         syn::visit::visit_item_trait(self, item);
         self.impl_type = previous;
@@ -737,7 +1013,11 @@ impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
     }
 
     fn visit_item_impl(&mut self, item: &'ast syn::ItemImpl) {
+        if !cfg_active(&item.attrs, self.cfg) {
+            return;
+        }
         let type_name = item.self_ty.to_token_stream().to_string().replace(' ', "");
+        let type_name = type_name.split('<').next().unwrap_or(&type_name).to_owned();
         let trait_name = item
             .trait_
             .as_ref()
@@ -754,36 +1034,83 @@ impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
     }
 
     fn visit_item_mod(&mut self, item: &'ast syn::ItemMod) {
-        self.add(&item.ident.to_string(), &item.vis, item.span());
+        if !cfg_active(&item.attrs, self.cfg) {
+            return;
+        }
+        self.add(&item.ident.to_string(), &item.vis, item.span(), false);
         let previous_len = self.module_path.len();
+        let previous_public = self.public_module;
         self.module_path.push(item.ident.to_string());
+        self.public_module = self.public_module && matches!(item.vis, syn::Visibility::Public(_));
         syn::visit::visit_item_mod(self, item);
         self.module_path.truncate(previous_len);
+        self.public_module = previous_public;
     }
 
     fn visit_impl_item_fn(&mut self, item: &'ast syn::ImplItemFn) {
+        if !cfg_active(&item.attrs, self.cfg) {
+            return;
+        }
         let previous = self.attributes.clone();
         self.attributes = attribute_keys(&item.attrs);
-        self.add(&item.sig.ident.to_string(), &item.vis, item.span());
+        self.add(&item.sig.ident.to_string(), &item.vis, item.span(), true);
         syn::visit::visit_impl_item_fn(self, item);
         self.attributes = previous;
     }
 
     fn visit_trait_item_fn(&mut self, item: &'ast syn::TraitItemFn) {
+        if !cfg_active(&item.attrs, self.cfg) {
+            return;
+        }
         let previous = self.attributes.clone();
         self.attributes = attribute_keys(&item.attrs);
         self.add(
             &item.sig.ident.to_string(),
             &syn::Visibility::Inherited,
             item.span(),
+            false,
         );
         syn::visit::visit_trait_item_fn(self, item);
         self.attributes = previous;
     }
+
+    fn visit_item_use(&mut self, item: &'ast syn::ItemUse) {
+        if !self.public_module
+            || !matches!(item.vis, syn::Visibility::Public(_))
+            || !cfg_active(&item.attrs, self.cfg)
+        {
+            return;
+        }
+        let mut names = Vec::new();
+        collect_use_names(&item.tree, &mut names);
+        for name in names {
+            self.add(&name, &item.vis, item.span(), true);
+        }
+    }
+}
+
+fn collect_use_names(tree: &syn::UseTree, names: &mut Vec<String>) {
+    match tree {
+        syn::UseTree::Path(path) => collect_use_names(&path.tree, names),
+        syn::UseTree::Name(name) => names.push(name.ident.to_string()),
+        syn::UseTree::Rename(rename) => names.push(rename.rename.to_string()),
+        syn::UseTree::Glob(_) => {}
+        syn::UseTree::Group(group) => {
+            for item in &group.items {
+                collect_use_names(item, names);
+            }
+        }
+    }
 }
 
 impl RustVisitor<'_> {
-    fn add(&mut self, name: &str, visibility: &syn::Visibility, span: proc_macro2::Span) {
+    fn add(
+        &mut self,
+        name: &str,
+        visibility: &syn::Visibility,
+        span: proc_macro2::Span,
+        public_entrypoint: bool,
+    ) {
         let start = span.start();
         let end = span.end();
         let line_start = start.line.max(1);
@@ -813,7 +1140,10 @@ impl RustVisitor<'_> {
                     .any(|attribute| attribute.contains("cfg(test)"))
             {
                 ArtifactExposure::Test
-            } else if matches!(visibility, syn::Visibility::Public(_)) {
+            } else if public_entrypoint
+                && self.public_module
+                && matches!(visibility, syn::Visibility::Public(_))
+            {
                 ArtifactExposure::Public
             } else {
                 ArtifactExposure::Private
@@ -844,6 +1174,126 @@ impl RustVisitor<'_> {
             path.push(']');
         }
         path
+    }
+}
+
+fn cfg_active(attributes: &[syn::Attribute], cfg: &CfgContext) -> bool {
+    attributes
+        .iter()
+        .filter(|attribute| attribute.path().is_ident("cfg"))
+        .all(|attribute| match &attribute.meta {
+            Meta::List(list) => {
+                let nested = Punctuated::<Meta, Token![,]>::parse_terminated
+                    .parse2(list.tokens.clone())
+                    .unwrap_or_default();
+                cfg_eval_list(
+                    list.path.to_token_stream().to_string().as_str(),
+                    &nested,
+                    cfg,
+                )
+            }
+            Meta::Path(path) => cfg.values.contains(&path.to_token_stream().to_string()),
+            Meta::NameValue(_) => true,
+        })
+}
+
+#[derive(Debug, Clone)]
+struct CfgContext {
+    values: BTreeSet<String>,
+}
+
+fn cfg_context(settings: &serde_yaml::Value, test_mode: bool) -> CfgContext {
+    let mut values = BTreeSet::new();
+    if test_mode {
+        values.insert("test".into());
+    } else {
+        values.insert("not(test)".into());
+    }
+    if cfg!(debug_assertions) {
+        values.insert("debug_assertions".into());
+    }
+    let target = settings
+        .get("target")
+        .and_then(serde_yaml::Value::as_str)
+        .map(str::to_owned)
+        .or_else(|| std::env::var("TARGET").ok())
+        .unwrap_or_else(|| std::env::consts::ARCH.into())
+        .to_ascii_lowercase();
+    let arch = target.split('-').next().unwrap_or(std::env::consts::ARCH);
+    values.insert(format!("target_arch={arch}"));
+    let os = if target.contains("windows") {
+        "windows"
+    } else if target.contains("darwin") || target.contains("apple") {
+        "macos"
+    } else if target.contains("linux") {
+        "linux"
+    } else if target.contains("freebsd") {
+        "freebsd"
+    } else if target.contains("openbsd") {
+        "openbsd"
+    } else if target.contains("netbsd") {
+        "netbsd"
+    } else if target.contains("wasm") {
+        "unknown"
+    } else {
+        std::env::consts::OS
+    };
+    values.insert(format!("target_os={os}"));
+    if os == "windows" {
+        values.insert("windows".into());
+        values.insert("target_family=windows".into());
+    } else {
+        values.insert("unix".into());
+        values.insert("target_family=unix".into());
+    }
+    for feature in settings
+        .get("features")
+        .and_then(serde_yaml::Value::as_sequence)
+        .into_iter()
+        .flatten()
+        .filter_map(serde_yaml::Value::as_str)
+    {
+        values.insert(format!("feature={feature}"));
+    }
+    CfgContext { values }
+}
+
+fn cfg_eval_list<'a>(
+    name: &str,
+    nested: impl IntoIterator<Item = &'a Meta>,
+    cfg: &CfgContext,
+) -> bool {
+    let nested = nested.into_iter().collect::<Vec<_>>();
+    match name {
+        "all" => nested.iter().all(|meta| cfg_eval(meta, cfg)),
+        "any" => nested.iter().any(|meta| cfg_eval(meta, cfg)),
+        "not" => nested.first().is_some_and(|meta| !cfg_eval(meta, cfg)),
+        _ => nested.iter().all(|meta| cfg_eval(meta, cfg)),
+    }
+}
+
+fn cfg_eval(meta: &Meta, cfg: &CfgContext) -> bool {
+    match meta {
+        Meta::Path(path) => cfg.values.contains(&path.to_token_stream().to_string()),
+        Meta::NameValue(value) => {
+            let key = value.path.to_token_stream().to_string();
+            let value = match &value.value {
+                syn::Expr::Lit(expression) => expression.lit.to_token_stream().to_string(),
+                expression => expression.to_token_stream().to_string(),
+            };
+            cfg.values
+                .contains(&format!("{key}={}", value.trim_matches('"')))
+        }
+        Meta::List(list) => {
+            let nested = Punctuated::<Meta, Token![,]>::parse_terminated
+                .parse2(list.tokens.clone())
+                .unwrap_or_default();
+            cfg_eval_list(
+                list.path.to_token_stream().to_string().as_str(),
+                &nested,
+                cfg,
+            )
+        }
     }
 }
 
@@ -881,6 +1331,19 @@ fn collect_matching(
     out: &mut Vec<PathBuf>,
 ) -> Result<()> {
     if !directory.exists() {
+        return Ok(());
+    }
+    if directory.is_file() {
+        let relative = directory.strip_prefix(root).unwrap_or(directory);
+        if !excludes.iter().any(|pattern| glob_match(pattern, relative))
+            && directory
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extensions.iter().any(|candidate| candidate == extension))
+            && directory.starts_with(root)
+        {
+            out.push(directory.to_path_buf());
+        }
         return Ok(());
     }
     for entry in fs::read_dir(directory)? {
@@ -921,6 +1384,12 @@ fn glob_match(pattern: &str, path: &Path) -> bool {
 }
 
 fn cargo_roots(root: &Path, settings: &serde_yaml::Value) -> Result<Vec<PathBuf>> {
+    let include_tests = settings
+        .get("include_tests")
+        .and_then(serde_yaml::Value::as_bool)
+        .unwrap_or_else(|| {
+            settings.get("mode").and_then(serde_yaml::Value::as_str) == Some("test")
+        });
     if root.join("Cargo.toml").is_file()
         && let Ok(output) = cargo_metadata(root, settings)
         && output.status.success()
@@ -944,10 +1413,6 @@ fn cargo_roots(root: &Path, settings: &serde_yaml::Value) -> Result<Vec<PathBuf>
         let mut roots = BTreeSet::new();
         for package in metadata.packages {
             for target in package.targets {
-                let include_tests = settings
-                    .get("include_tests")
-                    .and_then(serde_yaml::Value::as_bool)
-                    .unwrap_or(true);
                 if !target.kind.is_empty()
                     && (include_tests
                         || !target
@@ -977,7 +1442,11 @@ fn cargo_roots(root: &Path, settings: &serde_yaml::Value) -> Result<Vec<PathBuf>
                 roots.insert(candidate);
             }
         }
-        for directory in [dir.join("src/bin"), dir.join("tests"), dir.join("examples")] {
+        let mut directories = vec![dir.join("src/bin"), dir.join("examples")];
+        if include_tests {
+            directories.push(dir.join("tests"));
+        }
+        for directory in directories {
             if directory.is_dir() {
                 collect_rust_files(&directory, &mut roots)?;
             }
@@ -1063,33 +1532,67 @@ fn collect_rust_files(directory: &Path, out: &mut BTreeSet<PathBuf>) -> Result<(
     Ok(())
 }
 
+struct RustReachability<'a> {
+    context: &'a InventoryContext,
+    excludes: &'a [String],
+    out: &'a mut Vec<PathBuf>,
+    support: &'a mut Vec<PathBuf>,
+    file_visibility: &'a mut BTreeMap<PathBuf, bool>,
+    cfg: &'a CfgContext,
+}
+
 fn collect_reachable_rust(
-    root: &Path,
+    reachability: &mut RustReachability<'_>,
     file: &Path,
-    excludes: &[String],
-    out: &mut Vec<PathBuf>,
-    support: &mut Vec<PathBuf>,
+    public_module: bool,
 ) -> Result<()> {
+    let root = &reachability.context.workspace_root;
     if !file.is_file() {
         return Ok(());
     }
     let relative = file
         .strip_prefix(root)
         .context("Rust inventory path escaped workspace")?;
-    if excludes.iter().any(|pattern| glob_match(pattern, relative)) {
+    if reachability
+        .excludes
+        .iter()
+        .any(|pattern| glob_match(pattern, relative))
+    {
         return Ok(());
     }
-    if out.iter().any(|existing| existing == file) {
+    if !reachability.cfg.values.contains("test")
+        && relative
+            .components()
+            .any(|component| matches!(component.as_os_str().to_str(), Some("tests" | "benches")))
+    {
         return Ok(());
     }
-    out.push(file.to_path_buf());
-    let source = fs::read_to_string(file)?;
+    let was_public = reachability
+        .file_visibility
+        .get(file)
+        .copied()
+        .unwrap_or(false);
+    let previous_visibility = reachability
+        .file_visibility
+        .insert(file.to_path_buf(), was_public || public_module);
+    if reachability.out.iter().any(|existing| existing == file)
+        && previous_visibility.is_some_and(|was_public| was_public || !public_module)
+    {
+        return Ok(());
+    }
+    if !reachability.out.iter().any(|existing| existing == file) {
+        reachability.out.push(file.to_path_buf());
+    }
+    let source = String::from_utf8(read_bytes(reachability.context, file)?)?;
     let syntax = syn::parse_file(&source)
         .with_context(|| format!("parse Rust source {}", file.display()))?;
     for item in syntax.items {
         let syn::Item::Mod(module) = item else {
             continue;
         };
+        if !cfg_active(&module.attrs, reachability.cfg) {
+            continue;
+        }
         if module.content.is_some() {
             continue;
         }
@@ -1119,7 +1622,11 @@ fn collect_reachable_rust(
                 .or_else(|| nested.is_file().then_some(nested));
         }
         if let Some(candidate) = candidate {
-            collect_reachable_rust(root, &candidate, excludes, out, support)?;
+            collect_reachable_rust(
+                reachability,
+                &candidate,
+                public_module && matches!(module.vis, syn::Visibility::Public(_)),
+            )?;
         }
     }
     for macro_name in ["include!", "include_str!", "include_bytes!"] {
@@ -1136,14 +1643,20 @@ fn collect_reachable_rust(
             let candidate = file
                 .parent()
                 .unwrap_or(root)
-                .join(&after_quote[..quote_end]);
+                .join(&after_quote[..quote_end])
+                .canonicalize()
+                .unwrap_or_else(|_| {
+                    file.parent()
+                        .unwrap_or(root)
+                        .join(&after_quote[..quote_end])
+                });
             if candidate.is_file() {
                 if macro_name == "include!" {
-                    collect_reachable_rust(root, &candidate, excludes, out, support)?;
-                } else if !excludes.iter().any(|pattern| {
+                    collect_reachable_rust(reachability, &candidate, public_module)?;
+                } else if !reachability.excludes.iter().any(|pattern| {
                     glob_match(pattern, candidate.strip_prefix(root).unwrap_or(&candidate))
                 }) {
-                    support.push(candidate);
+                    reachability.support.push(candidate);
                 }
             }
             remainder = &after_quote[quote_end + 1..];
@@ -1184,6 +1697,7 @@ mod tests {
                 profile: "default".into(),
                 settings: serde_yaml::Value::Null,
                 excludes: vec![],
+                overlays: BTreeMap::new(),
             },
             &profile,
         )
@@ -1191,9 +1705,70 @@ mod tests {
         assert!(units.iter().any(|unit| unit.adapter == "rust"));
         assert!(units.iter().any(|unit| unit.adapter == "javascript"));
         assert!(units.iter().any(|unit| {
+            unit.identity == "rust:src/lib.rs"
+                && unit.kind == ArtifactUnitKind::File
+                && unit.exposure == ArtifactExposure::Support
+        }));
+        assert!(units.iter().any(|unit| {
             unit.identity == "rust:src/lib.rs::lib::api"
                 && unit.kind == ArtifactUnitKind::Symbol
                 && unit.exposure == ArtifactExposure::Public
         }));
+    }
+
+    #[test]
+    fn javascript_symbol_span_covers_the_changed_declaration_body() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("model.js");
+        fs::write(
+            &path,
+            "function helper() {\n  return true;\n}\n\nconst value = helper();\n",
+        )
+        .unwrap();
+        let context = InventoryContext {
+            workspace_root: temp.path().into(),
+            profile: "default".into(),
+            settings: serde_yaml::Value::Null,
+            excludes: vec![],
+            overlays: BTreeMap::new(),
+        };
+        let units = source_symbol_units(&context, path, "javascript").unwrap();
+        let helper = units
+            .iter()
+            .find(|unit| unit.identity.ends_with("::helper"))
+            .unwrap();
+        assert!(helper.span.line_start == 1);
+        assert!(helper.span.line_end >= 3);
+    }
+
+    #[test]
+    fn html_marker_inventory_keeps_attributes_as_distinct_units() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("workbench.html");
+        fs::write(
+            &path,
+            r#"<aside data-page="work" data-i18n-aria="a11y.main_pages"></aside>"#,
+        )
+        .unwrap();
+        let context = InventoryContext {
+            workspace_root: temp.path().into(),
+            profile: "default".into(),
+            settings: serde_yaml::Value::Null,
+            excludes: vec![],
+            overlays: BTreeMap::new(),
+        };
+        let units = html_marker_units(&context, path).unwrap();
+        assert_eq!(units.len(), 2);
+        assert!(units.iter().all(|unit| {
+            unit.kind == ArtifactUnitKind::Marker
+                && unit.exposure == ArtifactExposure::Support
+                && unit.identity.contains("::marker::")
+        }));
+        assert_ne!(units[0].identity, units[1].identity);
+        assert!(
+            units
+                .iter()
+                .all(|unit| unit.span.byte_end > unit.span.byte_start)
+        );
     }
 }

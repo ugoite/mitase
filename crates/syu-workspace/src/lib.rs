@@ -6,6 +6,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
+    sync::{Arc, OnceLock},
 };
 use syu_code_intel::resolve_symbol;
 use syu_inventory::{ArtifactUnit, ArtifactUnitKind, InventoryContext, InventoryRegistry};
@@ -22,7 +23,10 @@ pub struct SpecWorkspace {
     pub root: PathBuf,
     pub config: ProjectConfig,
     pub documents: Vec<LoadedDocument>,
+    /// Candidate bytes used by every overlay-aware reader.
+    pub overlays: BTreeMap<PathBuf, Vec<u8>>,
     matcher: WorkspaceMatcher,
+    fingerprint_cache: Arc<OnceLock<Result<String, String>>>,
 }
 #[derive(Debug, Clone)]
 struct WorkspaceMatcher {
@@ -72,6 +76,7 @@ pub enum AnchorValue {
 impl SpecWorkspace {
     pub fn overlay_document(&self, path: &Path, document: SpecDocument) -> Result<Self> {
         let mut overlay = self.clone();
+        overlay.fingerprint_cache = Arc::new(OnceLock::new());
         let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
         let loaded = overlay
             .documents
@@ -79,13 +84,24 @@ impl SpecWorkspace {
             .find(|loaded| loaded.path == canonical)
             .ok_or_else(|| anyhow::anyhow!("overlay path is not a loaded specification"))?;
         loaded.document = document;
+        let bytes = serde_yaml::to_string(&loaded.document)?.into_bytes();
+        overlay.overlays.insert(canonical.clone(), bytes.clone());
+        if let Ok(relative) = canonical.strip_prefix(&overlay.root) {
+            overlay.overlays.insert(relative.to_path_buf(), bytes);
+        }
         Ok(overlay)
     }
 
     pub fn overlay_config(&self, config: ProjectConfig) -> Result<Self> {
         let mut overlay = self.clone();
+        overlay.fingerprint_cache = Arc::new(OnceLock::new());
         overlay.matcher = WorkspaceMatcher::build(&config)?;
         overlay.config = config;
+        let bytes = serde_yaml::to_string(&overlay.config)?.into_bytes();
+        let path = overlay.root.join("syu.yaml");
+        let canonical = path.canonicalize().unwrap_or(path);
+        overlay.overlays.insert(canonical, bytes.clone());
+        overlay.overlays.insert(PathBuf::from("syu.yaml"), bytes);
         Ok(overlay)
     }
 
@@ -131,22 +147,32 @@ impl SpecWorkspace {
             root,
             config,
             documents,
+            overlays: BTreeMap::new(),
             matcher,
+            fingerprint_cache: Arc::new(OnceLock::new()),
         })
     }
     pub fn index(&self) -> Result<SpecIndex> {
         SpecIndex::build(self)
     }
-    pub fn fingerprint(&self) -> String {
+    pub fn try_fingerprint(&self) -> Result<String> {
+        self.fingerprint_cache
+            .get_or_init(|| {
+                self.compute_fingerprint()
+                    .map_err(|error| error.to_string())
+            })
+            .clone()
+            .map_err(anyhow::Error::msg)
+    }
+
+    fn compute_fingerprint(&self) -> Result<String> {
         let mut hash = Sha256::new();
-        if let Ok(config) = serde_yaml::to_string(&self.config) {
-            hash.update(config.as_bytes());
-        }
+        hash.update(serde_yaml::to_string(&self.config)?.as_bytes());
         for doc in &self.documents {
             if let Ok(relative) = doc.path.strip_prefix(&self.root) {
                 hash.update(relative.to_string_lossy().as_bytes());
             }
-            hash.update(fs::read(&doc.path).unwrap_or_default());
+            hash.update(self.read_bytes(&doc.path)?);
         }
         if let Some(profile) = self
             .config
@@ -160,7 +186,7 @@ impl SpecWorkspace {
             if let Ok(value) = serde_yaml::to_string(profile) {
                 hash.update(value.as_bytes());
             }
-            match InventoryRegistry::discover(
+            let units = InventoryRegistry::discover(
                 &InventoryContext {
                     workspace_root: self.root.clone(),
                     profile: profile.id.clone(),
@@ -172,19 +198,13 @@ impl SpecWorkspace {
                         .iter()
                         .map(|p| p.0.clone())
                         .collect(),
+                    overlays: self.overlays.clone(),
                 },
                 profile,
-            ) {
-                Ok(units) => {
-                    for unit in units {
-                        hash.update(unit.identity.as_bytes());
-                        hash.update(unit.digest.as_bytes());
-                    }
-                }
-                Err(error) => {
-                    hash.update(b"inventory-error:v1");
-                    hash.update(error.to_string().as_bytes());
-                }
+            )?;
+            for unit in units {
+                hash.update(unit.identity.as_bytes());
+                hash.update(unit.digest.as_bytes());
             }
         }
         for (runner, definition) in &self.config.verification.runners {
@@ -194,7 +214,33 @@ impl SpecWorkspace {
                 hash.update(argument.as_bytes());
             }
         }
-        format!("sha256:{:x}", hash.finalize())
+        Ok(format!("sha256:{:x}", hash.finalize()))
+    }
+
+    /// Snapshots may still be rendered for an invalid workspace. Execution
+    /// bases use `try_fingerprint` and therefore reject inventory failures.
+    /// Fingerprints are unavailable when any enabled inventory provider
+    /// fails. Callers must propagate this error instead of manufacturing an
+    /// invalid-but-plausible execution basis.
+    pub fn fingerprint(&self) -> Result<String> {
+        self.try_fingerprint()
+    }
+
+    pub fn read_bytes(&self, path: &Path) -> Result<Vec<u8>> {
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        if let Some(bytes) = self.overlays.get(&canonical) {
+            return Ok(bytes.clone());
+        }
+        if let Ok(relative) = canonical.strip_prefix(&self.root)
+            && let Some(bytes) = self.overlays.get(relative)
+        {
+            return Ok(bytes.clone());
+        }
+        Ok(fs::read(path)?)
+    }
+
+    pub fn read_to_string(&self, path: &Path) -> Result<String> {
+        Ok(String::from_utf8(self.read_bytes(path)?)?)
     }
     pub fn path_is_spec(&self, path: &Path) -> bool {
         self.matcher.contains(&self.matcher.spec_roots, path)
@@ -388,6 +434,7 @@ impl SpecIndex {
                     .iter()
                     .map(|p| p.0.clone())
                     .collect(),
+                overlays: workspace.overlays.clone(),
             },
             profile,
         ) {
@@ -414,12 +461,7 @@ impl SpecIndex {
                 if let Some(identity) = identities.first()
                     && matches!(
                         binding.role,
-                        BindingRole::Implementation
-                            | BindingRole::Documentation
-                            | BindingRole::Enforcement
-                            | BindingRole::Configuration
-                            | BindingRole::Migration
-                            | BindingRole::Operation
+                        BindingRole::Implementation | BindingRole::Verification
                     )
                 {
                     out.artifact_owners
@@ -563,7 +605,8 @@ fn artifact_identities_for_target(units: &[ArtifactUnit], target: &ArtifactTarge
     units
         .iter()
         .filter(|unit| {
-            if unit.path != target.path
+            if unit.adapter != target.adapter
+                || unit.path != target.path
                 || !matches!(
                     unit.reachability,
                     syu_inventory::ArtifactReachability::Active
@@ -584,9 +627,21 @@ fn artifact_identities_for_target(units: &[ArtifactUnit], target: &ArtifactTarge
                             path
                         ))
                 }
-                Selector::Heading { .. } => unit.kind == ArtifactUnitKind::Heading,
-                Selector::JsonPointer { .. } | Selector::Marker { .. } => {
+                Selector::Heading { value } => {
+                    unit.kind == ArtifactUnitKind::Heading
+                        && unit.identity.ends_with(&format!("::heading::{value}"))
+                }
+                Selector::File | Selector::JsonPointer { .. } => {
                     unit.kind == ArtifactUnitKind::File
+                }
+                Selector::Marker { value } => {
+                    unit.kind == ArtifactUnitKind::Marker
+                        && unit.identity.starts_with(&format!(
+                            "{}:{}::marker::{}@",
+                            target.adapter,
+                            target.path.to_string_lossy(),
+                            value
+                        ))
                 }
             }
         })
@@ -611,7 +666,8 @@ fn scope_matches(scope: &OwnershipScope, unit: &ArtifactUnit) -> bool {
         OwnershipSelector::File => scope.path == unit.path && unit.kind == ArtifactUnitKind::File,
         OwnershipSelector::Module { name } => {
             scope.path == unit.path
-                && (unit.identity.contains(&format!("::{name}::"))
+                && (name == "*"
+                    || unit.identity.contains(&format!("::{name}::"))
                     || unit.identity.ends_with(&format!("::{name}")))
         }
         OwnershipSelector::PathPrefix { value } => unit.path.as_path().starts_with(value.as_path()),
@@ -728,6 +784,107 @@ pub struct ResolvedTarget {
 pub fn resolve_target(root: &Path, target: &ArtifactTarget) -> Result<ResolvedTarget> {
     resolve_target_with_adapters(root, target, std::slice::from_ref(&target.adapter))
 }
+
+pub fn resolve_target_in_workspace(
+    workspace: &SpecWorkspace,
+    target: &ArtifactTarget,
+) -> Result<ResolvedTarget> {
+    const KNOWN: &[&str] = &[
+        "rust",
+        "typescript",
+        "javascript",
+        "shell",
+        "python",
+        "go",
+        "java",
+        "ruby",
+        "csharp",
+        "markdown",
+        "openapi",
+        "yaml",
+        "json",
+        "html",
+        "declared",
+    ];
+    if !KNOWN.contains(&target.adapter.as_str()) {
+        bail!("unknown adapter {}", target.adapter);
+    }
+    if !workspace
+        .config
+        .inventory
+        .profiles
+        .iter()
+        .find(|profile| profile.id == workspace.config.inventory.active_profile)
+        .is_some_and(|profile| profile.providers.contains_key(&target.adapter))
+    {
+        bail!("adapter {} is disabled", target.adapter);
+    }
+    let canonical_root = workspace.root.canonicalize()?;
+    let path = workspace.root.join(target.path.as_path());
+    let canonical_path = path
+        .canonicalize()
+        .with_context(|| format!("target path does not exist: {}", target.path.display()))?;
+    if !canonical_path.starts_with(&canonical_root) {
+        bail!("target path escapes workspace through a symlink");
+    }
+    let content = workspace.read_bytes(&canonical_path)?;
+    resolve_target_from_content(&workspace.root, target, content)
+}
+
+/// Resolve a target from the exact semantic span already produced by the
+/// active inventory. This is used by planning and post-state validation so a
+/// canonical plan and its later validation share the same candidate-overlay
+/// source of truth without reparsing every source file.
+pub fn resolve_indexed_target(
+    workspace: &SpecWorkspace,
+    target: &ArtifactTarget,
+    unit: &ArtifactUnit,
+) -> Result<Option<ResolvedTarget>> {
+    if unit.adapter != target.adapter
+        || unit.path != target.path
+        || !matches!(
+            unit.reachability,
+            syu_inventory::ArtifactReachability::Active
+        )
+        || unit.span.byte_end <= unit.span.byte_start
+    {
+        return Ok(None);
+    }
+    match (&target.selector, &unit.kind) {
+        (ExactSelector::Symbol { .. }, ArtifactUnitKind::Symbol)
+        | (ExactSelector::Heading { .. }, ArtifactUnitKind::Heading)
+        | (ExactSelector::Marker { .. }, ArtifactUnitKind::Marker)
+        | (ExactSelector::File, ArtifactUnitKind::File) => {}
+        _ => return Ok(None),
+    }
+    let content = workspace.read_bytes(&workspace.root.join(unit.path.as_path()))?;
+    let text = std::str::from_utf8(&content)
+        .map_err(|error| anyhow::anyhow!("inventory target source is not UTF-8: {error}"))?;
+    let Some(excerpt) = text.get(unit.span.byte_start..unit.span.byte_end) else {
+        return Ok(None);
+    };
+    let (description, symbols) = match &target.selector {
+        ExactSelector::File => ("file".into(), vec![]),
+        ExactSelector::Symbol { name } => (format!("symbol {name}"), vec![name.clone()]),
+        ExactSelector::Heading { value } => (format!("heading {value}"), vec![]),
+        ExactSelector::Marker { value } => (format!("marker {value}"), vec![]),
+        _ => return Ok(None),
+    };
+    Ok(Some(ResolvedTarget {
+        path: unit.path.as_path().to_path_buf(),
+        description,
+        symbols,
+        content_hash: hash_bytes(&content),
+        bytes: content.len(),
+        byte_start: unit.span.byte_start,
+        byte_end: unit.span.byte_end,
+        line_start: unit.span.line_start,
+        line_end: unit.span.line_end,
+        excerpt: excerpt.to_owned(),
+        excerpt_hash: hash_bytes(excerpt.as_bytes()),
+    }))
+}
+
 pub fn resolve_target_with_adapters(
     root: &Path,
     target: &ArtifactTarget,
@@ -747,6 +904,8 @@ pub fn resolve_target_with_adapters(
         "openapi",
         "yaml",
         "json",
+        "html",
+        "declared",
     ];
     if !KNOWN.contains(&target.adapter.as_str()) {
         bail!("unknown adapter {}", target.adapter);
@@ -763,9 +922,30 @@ pub fn resolve_target_with_adapters(
         bail!("target path escapes workspace through a symlink");
     }
     let content = fs::read(&canonical_path)?;
+    resolve_target_from_content(root, target, content)
+}
+
+fn resolve_target_from_content(
+    _root: &Path,
+    target: &ArtifactTarget,
+    content: Vec<u8>,
+) -> Result<ResolvedTarget> {
     let text = String::from_utf8_lossy(&content);
     let (description, symbols, byte_start, byte_end, line_start, line_end, excerpt, excerpt_hash) =
         match &target.selector {
+            Selector::File => {
+                let excerpt = text.to_string();
+                (
+                    "file".into(),
+                    vec![],
+                    0,
+                    content.len(),
+                    1,
+                    text.lines().count().max(1),
+                    excerpt.clone(),
+                    hash_bytes(excerpt.as_bytes()),
+                )
+            }
             Selector::Symbol { name } => {
                 if name.trim().is_empty() {
                     bail!("symbol selector must not be empty");
@@ -925,7 +1105,10 @@ pub fn resolve_target_with_adapters(
 pub fn selector_supports_editable(selector: &Selector) -> bool {
     matches!(
         selector,
-        Selector::Symbol { .. } | Selector::Heading { .. } | Selector::Marker { .. }
+        Selector::File
+            | Selector::Symbol { .. }
+            | Selector::Heading { .. }
+            | Selector::Marker { .. }
     )
 }
 fn hash_bytes(value: &[u8]) -> String {

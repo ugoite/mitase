@@ -1,1 +1,3 @@
-export function renderSettings(projection) { return projection.snapshot; }
+export function renderSettings(projection) {
+  return projection?.snapshot || {};
+}

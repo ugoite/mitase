@@ -228,6 +228,7 @@ fn run_readiness(args: ReadinessArgs) -> Result<i32> {
                 .iter()
                 .map(|pattern| pattern.0.clone())
                 .collect(),
+            overlays: std::collections::BTreeMap::new(),
         },
         profile,
     );
@@ -256,29 +257,34 @@ fn run_readiness(args: ReadinessArgs) -> Result<i32> {
     )
 }
 fn run_validate(args: ValidateArgs) -> Result<i32> {
+    let mut force_post_state = false;
     let args = match args.command {
         ValidateCommand::Workspace(args)
         | ValidateCommand::Change(args)
         | ValidateCommand::Plan(args) => args,
         ValidateCommand::Result(args) => {
+            force_post_state = true;
             let receipt: syu_work_model::VerificationReceipt = read_yaml(&args.receipt)?;
             let plan_path = args
                 .validate
                 .plan
-                .as_ref()
+                .clone()
                 .context("validate result requires --plan")?;
-            let plan: WorkPlan = read_yaml(plan_path)?;
+            let plan: WorkPlan = read_yaml(&plan_path)?;
             let workspace = SpecWorkspace::load(&args.validate.workspace)?;
             let index = workspace.index()?;
-            syu_workbench_server::validate_verification_receipt(
+            syu_validation::validate_verification_receipt(
                 &workspace,
                 &index,
                 &plan,
                 &receipt.slice_id,
                 &receipt,
-                &revision(&workspace.root)?,
+                &plan.basis.revision,
             )?;
-            args.validate
+            let mut validate = args.validate;
+            validate.slice = Some(receipt.slice_id);
+            validate.plan = Some(plan_path);
+            validate
         }
     };
     let workspace = SpecWorkspace::load(&args.workspace)?;
@@ -288,13 +294,10 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
         .as_ref()
         .map(|path| read_yaml::<WorkPlan>(path))
         .transpose()?;
-    let needs_revision = args.range.is_some()
-        || args.baseline.is_some()
-        || workspace.config.validation.changed.baseline.is_some()
-        || plan.is_some();
-    let revision = needs_revision
-        .then(|| revision(&workspace.root))
-        .transpose()?;
+    // Every validation invocation gets one explicit revision. Changed-unit
+    // probes use the same resolved baseline plus staged, working-tree, and
+    // untracked changes below.
+    let revision = Some(revision(&workspace.root)?);
     let selected = match (&plan, &args.slice) {
         (Some(p), Some(id)) => Some(
             p.slices
@@ -305,7 +308,20 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
         (None, Some(_)) => bail!("--slice requires --plan"),
         _ => None,
     };
-    let validation_inputs = validation_inputs_for_cli(&workspace, &args, plan.as_ref())?;
+    let mut validation_inputs = validation_inputs_for_cli(&workspace, &args, plan.as_ref())?;
+    if force_post_state {
+        if plan.as_ref().is_some_and(|plan| plan.slices.len() > 1) && args.slice.is_none() {
+            bail!("validate result requires the receipt-selected slice for a multi-slice plan");
+        }
+        validation_inputs.plan_mode = PlanValidationMode::PostState;
+        // Result validation is the selected receipt slice's post-state
+        // closure. The branch/change probe belongs to plan validation and
+        // must not silently widen a result invocation back to the whole
+        // working tree.
+        validation_inputs.changed_files = Some(Vec::new());
+        validation_inputs.reported_changed_files = None;
+        validation_inputs.change_base_revision = None;
+    }
     let result = validate(&ValidationContext {
         config: &workspace.config,
         workspace: &workspace,
@@ -393,7 +409,7 @@ fn run_work(args: WorkArgs) -> Result<i32> {
             let workspace = SpecWorkspace::load(workspace)?;
             let index = workspace.index()?;
             let plan: WorkPlan = read_yaml(&plan_path)?;
-            let receipt = syu_workbench_server::execute_verification(
+            let receipt = syu_validation::execute_verification(
                 &workspace,
                 &index,
                 &plan,
@@ -535,7 +551,15 @@ fn changed_files_for_validation(
             &range_from_baseline(&workspace.root, baseline)?,
         )?));
     }
-    Ok(None)
+    let baseline = default_change_baseline(workspace)?;
+    Ok(Some(changed_files(&workspace.root, &baseline)?))
+}
+
+fn default_change_baseline(workspace: &SpecWorkspace) -> Result<String> {
+    if let Some(baseline) = &workspace.config.validation.changed.baseline {
+        return base_revision_from_baseline(workspace, baseline);
+    }
+    merge_base(&workspace.root, "origin/main").or_else(|_| revision_parent(&workspace.root))
 }
 
 fn validation_inputs_for_cli(
@@ -571,7 +595,7 @@ fn validation_inputs_for_cli(
     } else if let Some(baseline) = &workspace.config.validation.changed.baseline {
         Some(base_revision_from_baseline(workspace, baseline)?)
     } else {
-        None
+        Some(default_change_baseline(workspace)?)
     };
     Ok(ValidationInputs {
         changed_files: reported_changed_files,

@@ -1,25 +1,29 @@
 #![forbid(unsafe_code)]
 mod readiness;
+use anyhow::{Context, Result, bail};
 pub use readiness::{
     ReadinessAxis, ReadinessAxisId, ReadinessReport, evaluate as evaluate_readiness, required_axes,
 };
-use std::collections::BTreeSet;
+use sha2::{Digest, Sha256};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
 use syu_diagnostics::{Diagnostic, ValidationPhase, ValidationResult};
 use syu_planner::plan as canonical_plan;
 use syu_project_model::{ProjectConfig, ReadinessLevel, ValidationPreset};
 use syu_spec_model::{
-    BindingRole, BoundTargetRef, ItemStatus, LocalAnchorKind, RepoPath, RuleLevel, Selector,
-    SpecAnchor, SpecDocument, TargetClaim,
+    BindingRole, BoundTargetRef, ItemStatus, LocalAnchorKind, OwnershipSelector, RepoPath,
+    RuleLevel, Selector, SpecAnchor, SpecDocument, TargetClaim,
 };
 use syu_work_model::{
-    ExecutionSlice, PlanConfidence, PlanExecution, TargetLifecycle, WORK_PLAN_SCHEMA, WorkPlan,
-    work_plan_digest,
+    ExecutionSlice, PlanConfidence, PlanExecution, TargetLifecycle, VERIFICATION_RECEIPT_SCHEMA,
+    VerificationExecution, VerificationReceipt, WORK_PLAN_SCHEMA, WorkPlan, work_plan_digest,
 };
 use syu_workspace::{
-    AnchorValue, ResolvedTarget, SpecIndex, SpecWorkspace, resolve_target_with_adapters,
+    AnchorValue, ResolvedTarget, SpecIndex, SpecWorkspace, resolve_indexed_target,
+    resolve_target_in_workspace, selector_supports_editable,
 };
 use tempfile::TempDir;
 
@@ -220,26 +224,366 @@ pub struct ValidationContext<'a> {
     pub change_base_revision: Option<&'a str>,
 }
 
-fn enabled_adapters(config: &ProjectConfig) -> Vec<String> {
-    config
-        .inventory
-        .profiles
-        .iter()
-        .find(|profile| profile.id == config.inventory.active_profile)
-        .map(|profile| profile.providers.keys().cloned().collect())
-        .unwrap_or_default()
-}
 pub trait ValidationRule {
     fn metadata(&self) -> &'static RuleMetadata;
     fn evaluate(&self, ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>);
 }
 
 pub fn validate(ctx: &ValidationContext<'_>) -> ValidationResult {
-    validate_inner(ctx, true)
+    // Workspace validation is a structural operation. External verification
+    // is an explicit POST/readiness action and must never be reached through
+    // preview, overlay, or ordinary plan validation.
+    validate_inner(ctx, false)
 }
 
 pub fn validate_without_readiness(ctx: &ValidationContext<'_>) -> ValidationResult {
     validate_inner(ctx, false)
+}
+
+/// Rebuild and validate a submitted plan immediately before any verification
+/// command is allowed to run. Callers must provide the plan they received
+/// from the canonical planner; a serialized `status: ready` is never trusted.
+pub fn canonical_plan_for_execution(
+    workspace: &SpecWorkspace,
+    index: &SpecIndex,
+    submitted: &WorkPlan,
+    revision: &str,
+) -> Result<WorkPlan> {
+    if index.inventory_error.is_some() {
+        bail!("verification is blocked because inventory failed");
+    }
+    if submitted.schema != WORK_PLAN_SCHEMA {
+        bail!("plan schema must be {WORK_PLAN_SCHEMA}");
+    }
+    if submitted.basis.revision != revision {
+        bail!("plan basis revision is stale");
+    }
+    if submitted.basis.workspace_fingerprint != workspace.try_fingerprint()? {
+        bail!("plan workspace fingerprint is stale");
+    }
+    if submitted.canonical_digest != work_plan_digest(submitted) {
+        bail!("plan canonical digest is tampered");
+    }
+    let canonical = canonical_plan(&submitted.request, workspace, index, revision)?;
+    if canonical != *submitted {
+        bail!("submitted plan does not match deterministic canonical planner output");
+    }
+    if !matches!(canonical.status, syu_work_model::PlanStatus::Ready) {
+        bail!("verification requires a ready canonical plan");
+    }
+    if canonical.slices.is_empty() {
+        bail!("verification requires at least one canonical slice");
+    }
+    Ok(canonical)
+}
+
+/// Execute exactly the verification targets selected by a canonical slice.
+/// Runner executable and arguments come only from the workspace registry and
+/// target claim; no planner or caller guesses a command.
+pub fn execute_verification(
+    workspace: &SpecWorkspace,
+    index: &SpecIndex,
+    submitted: &WorkPlan,
+    slice_id: &str,
+    revision: &str,
+) -> Result<VerificationReceipt> {
+    let plan = canonical_plan_for_execution(workspace, index, submitted, revision)?;
+    let slice = plan
+        .slices
+        .iter()
+        .find(|slice| slice.id == slice_id)
+        .ok_or_else(|| anyhow::anyhow!("slice {slice_id} not found"))?;
+    if slice.verification_targets.is_empty() {
+        bail!("selected slice has no verification targets");
+    }
+    let pre_state = validate_without_readiness(&ValidationContext {
+        config: &workspace.config,
+        workspace,
+        index,
+        changed_files: None,
+        reported_changed_files: None,
+        work_plan: Some(&plan),
+        selected_slice: Some(slice),
+        plan_mode: PlanValidationMode::PreState,
+        preset: workspace.config.validation.preset,
+        revision: Some(revision),
+        change_base_revision: None,
+    });
+    if pre_state
+        .diagnostics
+        .iter()
+        .any(|diagnostic| matches!(diagnostic.severity, syu_diagnostics::Severity::Error))
+    {
+        bail!(
+            "canonical plan validation failed before verification: {}",
+            pre_state
+                .diagnostics
+                .iter()
+                .map(|diagnostic| diagnostic.message.clone())
+                .collect::<Vec<_>>()
+                .join("; ")
+        );
+    }
+
+    let started_at = epoch_seconds();
+    let mut executions = Vec::with_capacity(slice.verification_targets.len());
+    for planned in &slice.verification_targets {
+        let target = index.target(&planned.reference).ok_or_else(|| {
+            anyhow::anyhow!("verification target {} is unresolved", planned.reference)
+        })?;
+        let claims = target
+            .claims
+            .iter()
+            .filter_map(|claim| match claim {
+                TargetClaim::Verifies {
+                    criterion,
+                    covers,
+                    runner,
+                } => Some((criterion, covers, runner)),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        if claims.len() != 1 {
+            bail!(
+                "verification target {} must have exactly one verification claim",
+                planned.reference
+            );
+        }
+        let (_, covers, runner_ref) = claims[0];
+        if covers.is_empty() {
+            bail!("verification target {} has no covers", planned.reference);
+        }
+        let configured = workspace
+            .config
+            .verification
+            .runners
+            .get(&runner_ref.runner)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "verification runner {} is not configured",
+                    runner_ref.runner
+                )
+            })?;
+        let arguments = configured
+            .arguments
+            .iter()
+            .map(|argument| expand_runner_argument(argument, &runner_ref.arguments))
+            .collect::<Vec<_>>();
+        if arguments.iter().any(|argument| argument.contains('{')) {
+            bail!(
+                "verification runner {} has unresolved arguments",
+                runner_ref.runner
+            );
+        }
+        let mut command = Command::new(&configured.executable);
+        command.args(&arguments).current_dir(&workspace.root);
+        if configured.executable == "cargo" {
+            // Reuse one ignored target directory for all exact verification
+            // jobs in this workspace. A fresh target per test is isolated but
+            // needlessly consumes gigabytes and makes a readiness report fail
+            // before the actual tests can run.
+            command.env(
+                "CARGO_TARGET_DIR",
+                workspace.root.join("target").join("syu-verification"),
+            );
+        }
+        let output = command
+            .output()
+            .with_context(|| format!("execute verification runner {}", runner_ref.runner))?;
+        if !output.status.success() {
+            bail!(
+                "verification runner {} failed with exit code {}\nstdout:\n{}\nstderr:\n{}",
+                runner_ref.runner,
+                output.status.code().unwrap_or(-1),
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr),
+            );
+        }
+        ensure_exact_test_executed(
+            &configured.executable,
+            target,
+            &runner_ref.arguments,
+            &output.stdout,
+        )?;
+        let mut implementation_digests = BTreeMap::new();
+        for covered in covers {
+            let covered_target = index
+                .target(covered)
+                .ok_or_else(|| anyhow::anyhow!("covered target {covered} is unresolved"))?;
+            let resolved = syu_workspace::resolve_target_in_workspace(workspace, covered_target)?;
+            implementation_digests.insert(covered.clone(), resolved.content_hash);
+        }
+        let verification = syu_workspace::resolve_target_in_workspace(workspace, target)?;
+        executions.push(VerificationExecution {
+            target: planned.reference.clone(),
+            runner: runner_ref.runner.clone(),
+            command: std::iter::once(configured.executable.clone())
+                .chain(arguments)
+                .collect(),
+            exit_code: output.status.code().unwrap_or(-1),
+            stdout_digest: digest(&output.stdout),
+            stderr_digest: digest(&output.stderr),
+            implementation_digests,
+            verification_digest: verification.content_hash,
+        });
+    }
+    let receipt = VerificationReceipt {
+        schema: VERIFICATION_RECEIPT_SCHEMA.into(),
+        plan_digest: plan.canonical_digest.clone(),
+        slice_id: slice_id.into(),
+        revision: revision.into(),
+        workspace_fingerprint: workspace.try_fingerprint()?,
+        started_at,
+        completed_at: epoch_seconds(),
+        executions,
+    };
+    validate_verification_receipt(workspace, index, &plan, slice_id, &receipt, revision)?;
+    Ok(receipt)
+}
+
+pub fn validate_verification_receipt(
+    workspace: &SpecWorkspace,
+    index: &SpecIndex,
+    plan: &WorkPlan,
+    slice_id: &str,
+    receipt: &VerificationReceipt,
+    revision: &str,
+) -> Result<()> {
+    let canonical = canonical_plan_for_execution(workspace, index, plan, revision)?;
+    let slice = canonical
+        .slices
+        .iter()
+        .find(|slice| slice.id == slice_id)
+        .ok_or_else(|| anyhow::anyhow!("slice {slice_id} not found"))?;
+    if receipt.schema != VERIFICATION_RECEIPT_SCHEMA
+        || receipt.plan_digest != canonical.canonical_digest
+        || receipt.slice_id != slice_id
+        || receipt.revision != revision
+        || receipt.workspace_fingerprint != workspace.try_fingerprint()?
+    {
+        bail!("verification receipt basis is stale or does not match the selected slice");
+    }
+    let expected = slice
+        .verification_targets
+        .iter()
+        .map(|target| target.reference.clone())
+        .collect::<BTreeSet<_>>();
+    let actual = receipt
+        .executions
+        .iter()
+        .map(|execution| execution.target.clone())
+        .collect::<Vec<_>>();
+    if actual.len() != expected.len() || actual.into_iter().collect::<BTreeSet<_>>() != expected {
+        bail!("verification receipt execution set is not exact");
+    }
+    for execution in &receipt.executions {
+        if execution.exit_code != 0 {
+            bail!("verification receipt contains failed executions");
+        }
+        let target = index.target(&execution.target).ok_or_else(|| {
+            anyhow::anyhow!("verification target {} is unresolved", execution.target)
+        })?;
+        let (runner_ref, covers) = target
+            .claims
+            .iter()
+            .find_map(|claim| match claim {
+                TargetClaim::Verifies { runner, covers, .. } => Some((runner, covers)),
+                _ => None,
+            })
+            .ok_or_else(|| anyhow::anyhow!("{} is not a verification target", execution.target))?;
+        let configured = workspace
+            .config
+            .verification
+            .runners
+            .get(&runner_ref.runner)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "verification runner {} is not configured",
+                    runner_ref.runner
+                )
+            })?;
+        let arguments = configured
+            .arguments
+            .iter()
+            .map(|argument| expand_runner_argument(argument, &runner_ref.arguments))
+            .collect::<Vec<_>>();
+        let expected_command = std::iter::once(configured.executable.clone())
+            .chain(arguments)
+            .collect::<Vec<_>>();
+        if execution.runner != runner_ref.runner
+            || execution.command != expected_command
+            || execution.command.is_empty()
+        {
+            bail!("verification receipt command does not match the configured runner");
+        }
+        let verification = syu_workspace::resolve_target_in_workspace(workspace, target)?;
+        if execution.verification_digest != verification.content_hash {
+            bail!("verification target digest is stale");
+        }
+        for covered in covers {
+            let covered_target = index
+                .target(covered)
+                .ok_or_else(|| anyhow::anyhow!("covered target {covered} is unresolved"))?;
+            let resolved = syu_workspace::resolve_target_in_workspace(workspace, covered_target)?;
+            if execution.implementation_digests.get(covered) != Some(&resolved.content_hash) {
+                bail!("verification implementation digest is stale");
+            }
+        }
+        if execution.implementation_digests.len() != covers.len() {
+            bail!("receipt implementation digest set is not exact");
+        }
+    }
+    Ok(())
+}
+
+fn ensure_exact_test_executed(
+    executable: &str,
+    target: &syu_spec_model::ArtifactTarget,
+    claim_arguments: &BTreeMap<String, String>,
+    stdout: &[u8],
+) -> Result<()> {
+    if executable != "cargo" {
+        return Ok(());
+    }
+    let Some(Selector::Symbol { name }) = Some(&target.selector) else {
+        bail!("cargo verification targets must use an exact symbol selector");
+    };
+    let Some(test_identity) = claim_arguments.get("test") else {
+        bail!("cargo verification claim must name the exact test identity");
+    };
+    if test_identity != name && !test_identity.ends_with(&format!("::{name}")) {
+        bail!("cargo verification argument {test_identity} does not identify selector {name}");
+    }
+    let output = String::from_utf8_lossy(stdout);
+    let marker = format!("test {test_identity} ");
+    if !output
+        .lines()
+        .any(|line| line.trim_start().starts_with(&marker))
+    {
+        bail!("configured verification command ran zero exact tests for {name}");
+    }
+    Ok(())
+}
+
+fn expand_runner_argument(template: &str, values: &BTreeMap<String, String>) -> String {
+    values
+        .iter()
+        .fold(template.to_owned(), |value, (key, replacement)| {
+            value.replace(&format!("{{{key}}}"), replacement)
+        })
+}
+
+fn digest(bytes: &[u8]) -> String {
+    let mut hash = Sha256::new();
+    hash.update(bytes);
+    format!("sha256:{:x}", hash.finalize())
+}
+
+fn epoch_seconds() -> String {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs().to_string())
+        .unwrap_or_else(|_| "0".into())
 }
 
 fn validate_inner(ctx: &ValidationContext<'_>, include_readiness: bool) -> ValidationResult {
@@ -371,6 +715,10 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
     let Some(files) = ctx.changed_files else {
         return;
     };
+    let baseline = ctx
+        .change_base_revision
+        .or(ctx.revision)
+        .and_then(|revision| load_workspace_at_revision(&ctx.workspace.root, revision));
     let changed_spec_documents = files
         .iter()
         .flat_map(|file| file.old_path.iter().chain(file.new_path.iter()))
@@ -381,19 +729,25 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
         let Some(path) = file.new_path.as_ref().or(file.old_path.as_ref()) else {
             continue;
         };
-        if path.as_path() == std::path::Path::new("syu.yaml") {
-            continue;
-        }
+        let rendered = path.to_string_lossy();
         if ctx.workspace.path_is_spec(path.as_path()) {
             continue;
         }
         if !ctx.workspace.path_is_artifact(path.as_path())
             || ctx.workspace.path_is_excluded(path.as_path())
         {
+            if ctx.config.validation.changed.require_owned_changes {
+                push(
+                    out,
+                    "SYU-CHANGE-001",
+                    format!("changed file is outside the active inventory: {rendered}"),
+                    rendered.to_string(),
+                    None,
+                );
+            }
             continue;
         }
-        let rendered = path.to_string_lossy();
-        let units = ctx
+        let current_units = ctx
             .index
             .artifact_units
             .iter()
@@ -401,35 +755,154 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
             .filter(|unit| {
                 file.hunks.is_empty()
                     || file.hunks.iter().any(|hunk| {
-                        hunk.new_start < unit.span.line_end
-                            && hunk.new_end.max(hunk.new_start + 1) > unit.span.line_start
+                        changed_side_overlaps(
+                            hunk.new_start,
+                            hunk.new_end,
+                            (unit.span.line_start, unit.span.line_end),
+                        ) || changed_side_overlaps(
+                            hunk.old_start,
+                            hunk.old_end,
+                            (unit.span.line_start, unit.span.line_end),
+                        )
                     })
             })
+            .cloned()
             .collect::<Vec<_>>();
-        // A changed repository file is not automatically an artifact. Files
-        // outside every enabled inventory provider (Cargo metadata, CI
-        // metadata, and similar repository controls) are validated by their
-        // own tooling and must not be misclassified as unowned source units.
+        let baseline_units = baseline
+            .as_ref()
+            .map(|baseline| {
+                baseline
+                    .index
+                    .artifact_units
+                    .iter()
+                    .filter(|unit| unit.path.to_string_lossy() == rendered)
+                    .filter(|unit| {
+                        file.hunks.is_empty()
+                            || file.hunks.iter().any(|hunk| {
+                                changed_side_overlaps(
+                                    hunk.old_start,
+                                    hunk.old_end,
+                                    (unit.span.line_start, unit.span.line_end),
+                                )
+                            })
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        let mut units = current_units
+            .into_iter()
+            .map(|unit| (unit, false))
+            .chain(baseline_units.into_iter().map(|unit| (unit, true)))
+            .collect::<Vec<_>>();
+        let semantic_units = units
+            .iter()
+            .filter(|(unit, _)| {
+                !matches!(unit.kind, syu_inventory::ArtifactUnitKind::File)
+                    && unit.exposure != syu_inventory::ArtifactExposure::Support
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        if !semantic_units.is_empty() {
+            units = semantic_units;
+        } else if file
+            .hunks
+            .iter()
+            .any(|hunk| hunk.new_end > hunk.new_start || hunk.old_end > hunk.old_start)
+            && units
+                .iter()
+                .any(|(unit, _)| semantic_change_adapter(&unit.adapter))
+        {
+            // A source-file unit is only a file-level inventory fact. It must
+            // never stand in for a changed symbol when a language provider is
+            // enabled. Keeping it here would let a broad file owner hide a
+            // hunk that has no exact semantic identity in the current or
+            // baseline inventory.
+            units.clear();
+        }
+        if units.is_empty()
+            && matches!(file.status, ChangeStatus::Deleted)
+            && let Some(old_path) = file.old_path.clone()
+        {
+            let end = file
+                .hunks
+                .iter()
+                .map(|hunk| hunk.old_end)
+                .max()
+                .unwrap_or(1);
+            units.push((
+                syu_inventory::ArtifactUnit {
+                    adapter: "declared".into(),
+                    identity: format!("declared:{}", old_path.to_string_lossy()),
+                    path: old_path,
+                    kind: syu_inventory::ArtifactUnitKind::File,
+                    exposure: syu_inventory::ArtifactExposure::Workspace,
+                    reachability: syu_inventory::ArtifactReachability::Active,
+                    span: syu_inventory::SourceSpan {
+                        byte_start: 0,
+                        byte_end: 0,
+                        line_start: 1,
+                        line_end: end.max(1),
+                    },
+                    digest: "deleted".into(),
+                },
+                false,
+            ));
+        }
         if units.is_empty() {
-            continue;
-        }
-        if ctx.config.validation.changed.require_owned_changes && units.is_empty() {
-            push(
-                out,
-                "SYU-CHANGE-001",
-                format!("changed hunk has no active artifact identity: {rendered}"),
-                rendered.to_string(),
-                None,
-            );
-            continue;
-        }
-        for unit in units {
-            let owners = ctx.index.artifact_owners.get(&unit.identity);
-            if ctx.config.validation.changed.require_owned_changes && owners.is_none() {
+            if ctx.config.validation.changed.require_owned_changes {
                 push(
                     out,
                     "SYU-CHANGE-001",
-                    format!("changed artifact has no ownership scope: {}", unit.identity),
+                    format!("changed hunk has no active semantic artifact identity: {rendered}"),
+                    rendered.to_string(),
+                    None,
+                );
+            }
+            continue;
+        }
+        for (unit, from_baseline) in units {
+            let index = from_baseline
+                .then(|| baseline.as_ref().map(|baseline| &baseline.index))
+                .flatten()
+                .unwrap_or(ctx.index);
+            let owned = index
+                .artifact_owners
+                .get(&unit.identity)
+                .cloned()
+                .unwrap_or_else(|| {
+                    index
+                        .bindings
+                        .iter()
+                        .flat_map(|(binding_anchor, binding)| {
+                            binding.owns.iter().filter_map(|scope| {
+                                let matches = scope.adapter == unit.adapter
+                                    && scope.path == unit.path
+                                    && match &scope.selector {
+                                        OwnershipSelector::File => true,
+                                        OwnershipSelector::Module { name } => name == "*",
+                                        OwnershipSelector::PathPrefix { .. } => false,
+                                    };
+                                matches.then(|| syu_workspace::OwnershipRef {
+                                    binding: binding_anchor.clone(),
+                                    scope_id: scope.id.clone(),
+                                    target_id: None,
+                                })
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                });
+            let owners = Some(owned.as_slice());
+            if ctx.config.validation.changed.require_owned_changes
+                && owners.is_none_or(|owners| owners.is_empty())
+            {
+                push(
+                    out,
+                    "SYU-CHANGE-001",
+                    format!(
+                        "changed semantic artifact has no ownership binding: {}",
+                        unit.identity
+                    ),
                     rendered.to_string(),
                     None,
                 );
@@ -438,6 +911,7 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
             for owner in owners.into_iter().flatten() {
                 if let Some(binding) = ctx.index.bindings.get(&owner.binding)
                     && binding.role == BindingRole::Implementation
+                    && !is_capability_binding(ctx, &owner.binding)
                     && !binding.targets.iter().any(|target| {
                         target.claims.iter().any(|claim| {
                             matches!(claim, syu_spec_model::TargetClaim::Satisfies { .. })
@@ -456,6 +930,13 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
         }
     }
     validate_changed_spec_impact(ctx, &changed_spec_documents, files, out);
+}
+
+fn semantic_change_adapter(adapter: &str) -> bool {
+    matches!(
+        adapter,
+        "rust" | "javascript" | "typescript" | "python" | "go" | "shell"
+    )
 }
 
 fn validate_changed_spec_impact(
@@ -914,22 +1395,18 @@ fn target_changed_by_files(
     let baseline_hit = baseline_workspace
         .zip(baseline_index.and_then(|index| index.target(reference)))
         .and_then(|(workspace, target)| {
-            resolve_target_with_adapters(
-                &workspace.root,
-                target,
-                &enabled_adapters(&workspace.config),
-            )
-            .ok()
-            .map(|resolved| {
-                changed_files.iter().any(|file| {
-                    changed_file_impacts_target(
-                        TargetRangeSide::Old,
-                        &resolved.path.to_string_lossy(),
-                        Some(&resolved),
-                        file,
-                    )
+            resolve_target_in_workspace(workspace, target)
+                .ok()
+                .map(|resolved| {
+                    changed_files.iter().any(|file| {
+                        changed_file_impacts_target(
+                            TargetRangeSide::Old,
+                            &resolved.path.to_string_lossy(),
+                            Some(&resolved),
+                            file,
+                        )
+                    })
                 })
-            })
         })
         .unwrap_or(false);
     if baseline_hit {
@@ -938,22 +1415,18 @@ fn target_changed_by_files(
     current_index
         .target(reference)
         .and_then(|target| {
-            resolve_target_with_adapters(
-                &current_workspace.root,
-                target,
-                &enabled_adapters(&current_workspace.config),
-            )
-            .ok()
-            .map(|resolved| {
-                changed_files.iter().any(|file| {
-                    changed_file_impacts_target(
-                        TargetRangeSide::New,
-                        &resolved.path.to_string_lossy(),
-                        Some(&resolved),
-                        file,
-                    )
+            resolve_target_in_workspace(current_workspace, target)
+                .ok()
+                .map(|resolved| {
+                    changed_files.iter().any(|file| {
+                        changed_file_impacts_target(
+                            TargetRangeSide::New,
+                            &resolved.path.to_string_lossy(),
+                            Some(&resolved),
+                            file,
+                        )
+                    })
                 })
-            })
         })
         .unwrap_or(false)
 }
@@ -1129,6 +1602,22 @@ fn validate_document_shapes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnosti
         }
     }
 }
+fn is_capability_binding(ctx: &ValidationContext<'_>, anchor: &SpecAnchor) -> bool {
+    let Some(path) = ctx.index.item_paths.get(&anchor.item) else {
+        return false;
+    };
+    ctx.workspace
+        .documents
+        .iter()
+        .find(|loaded| &loaded.path == path)
+        .is_some_and(|loaded| {
+            matches!(
+                &loaded.document,
+                SpecDocument::Features { namespace, .. } if namespace == "capabilities"
+            )
+        })
+}
+
 fn push(
     out: &mut Vec<Diagnostic>,
     rule: &str,
@@ -1256,6 +1745,7 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         | BindingRole::Enforcement
                         | BindingRole::Evidence
                 ) && relation.is_empty()
+                    && !is_capability_binding(ctx, anchor)
                 {
                     push(
                         out,
@@ -1609,6 +2099,7 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 );
             }
             match &target.selector {
+                Selector::File => {}
                 Selector::Symbol { name } => {
                     if name.trim().is_empty() {
                         push(
@@ -1661,10 +2152,11 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 _ => {}
             }
             let expected = match &target.selector {
+                Selector::File => true,
                 Selector::Symbol { .. } => {
                     matches!(
                         target.adapter.as_str(),
-                        "rust" | "typescript" | "shell" | "python" | "go"
+                        "rust" | "typescript" | "javascript" | "shell" | "python" | "go"
                     )
                 }
                 Selector::Operation { .. } => target.adapter == "openapi",
@@ -1684,7 +2176,7 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 );
             }
             if binding.role == BindingRole::Implementation
-                && !matches!(target.selector, Selector::Symbol { .. })
+                && !selector_supports_editable(&target.selector)
                 && ctx.preset == ValidationPreset::AgentReady
             {
                 push(
@@ -1711,11 +2203,8 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                     Some(anchor.clone()),
                 );
             }
-            if let Err(e) = resolve_target_with_adapters(
-                &ctx.workspace.root,
-                target,
-                &enabled_adapters(ctx.config),
-            ) && !allowed_absent_targets.contains(&target_ref)
+            if let Err(e) = resolve_target_in_workspace(ctx.workspace, target)
+                && !allowed_absent_targets.contains(&target_ref)
             {
                 push(
                     out,
@@ -1810,6 +2299,9 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
         }
     }
     for (criterion, implementations) in &ctx.index.criteria_to_implementation_targets {
+        if ctx.index.criterion_status.get(criterion) != Some(&ItemStatus::Implemented) {
+            continue;
+        }
         for implementation in implementations {
             if !ctx.index.criteria_to_verification_targets.get(criterion).into_iter().flatten().any(|verification| {
                 ctx.index.target(verification).is_some_and(|target| target.claims.iter().any(|claim| matches!(claim, TargetClaim::Verifies { criterion: actual, covers, .. } if actual == criterion && covers.contains(implementation))))
@@ -1822,6 +2314,9 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
 
 fn validate_contracts(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
     for (criterion, implementations) in &ctx.index.criteria_to_implementations {
+        if ctx.index.criterion_status.get(criterion) != Some(&ItemStatus::Implemented) {
+            continue;
+        }
         let facets = implementations
             .iter()
             .filter_map(|anchor| ctx.index.bindings.get(anchor))
@@ -1874,12 +2369,12 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
         );
     }
     let basis_workspace = load_workspace_at_revision(&ctx.workspace.root, &plan.basis.revision);
-    // A Workbench plan can be created against the current uncommitted
-    // workspace.  In that case the revision is real, but its spec files may
-    // not exist in the commit yet; the fingerprint still proves that the
-    // loaded workspace is exactly the plan basis.
-    let current_workspace_is_basis = basis_workspace.is_none()
-        && plan.basis.workspace_fingerprint == ctx.workspace.fingerprint();
+    // A Workbench plan may be created against the current working tree while
+    // its revision still names HEAD.  Prefer the live indexed workspace when
+    // its fingerprint is the submitted basis; reconstructing HEAD here would
+    // incorrectly compare a valid dirty-tree plan with an older filesystem.
+    let current_workspace_is_basis =
+        plan.basis.workspace_fingerprint == ctx.workspace.try_fingerprint().unwrap_or_default();
     if basis_workspace.is_none() && !current_workspace_is_basis {
         push(
             out,
@@ -1898,11 +2393,18 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
             None,
         );
     }
-    if let Some(basis) = basis_workspace.as_ref() {
+    let canonical_basis = if current_workspace_is_basis {
+        Some((ctx.workspace, ctx.index))
+    } else {
+        basis_workspace
+            .as_ref()
+            .map(|basis| (&basis.workspace, &basis.index))
+    };
+    if let Some((basis_workspace, basis_index)) = canonical_basis {
         match canonical_plan(
             &plan.request,
-            &basis.workspace,
-            &basis.index,
+            basis_workspace,
+            basis_index,
             &plan.basis.revision,
         ) {
             Ok(mut canonical) => {
@@ -2049,31 +2551,13 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
             .chain(&slice.verification_targets)
             .chain(&slice.readonly_context)
         {
-            match ctx.index.target(&target.reference).and_then(|declared| {
-                resolve_target_with_adapters(
-                    &ctx.workspace.root,
-                    declared,
-                    &enabled_adapters(ctx.config),
-                )
-                .ok()
-            }) {
+            match resolve_planned_target(ctx, target) {
                 Some(resolved)
                     if target.lifecycle == TargetLifecycle::EnsurePresent
                         && resolved.path.to_string_lossy() == target.resolved_path
                         && resolved.description == target.resolved_selector.description
                         && resolved.symbols == target.resolved_selector.symbols
-                        && ctx
-                            .index
-                            .bindings
-                            .get(&target.reference.binding)
-                            .is_some_and(|binding| {
-                                binding.facet == target.facet
-                                    && binding.role == target.role
-                                    && ctx
-                                        .index
-                                        .target(&target.reference)
-                                        .is_some_and(|declared| declared.adapter == target.adapter)
-                            }) =>
+                        && planned_target_metadata_matches(ctx, target) =>
                 {
                     if ensure_present_target_exceeds_budget(target, &resolved) {
                         push(
@@ -2096,18 +2580,7 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                         && resolved.path.to_string_lossy() == target.resolved_path
                         && resolved.description == target.resolved_selector.description
                         && resolved.symbols == target.resolved_selector.symbols
-                        && ctx
-                            .index
-                            .bindings
-                            .get(&target.reference.binding)
-                            .is_some_and(|binding| {
-                                binding.facet == target.facet
-                                    && binding.role == target.role
-                                    && ctx
-                                        .index
-                                        .target(&target.reference)
-                                        .is_some_and(|declared| declared.adapter == target.adapter)
-                            }) => {}
+                        && planned_target_metadata_matches(ctx, target) => {}
                 Some(resolved)
                     if resolved.content_hash == target.content_hash
                         && resolved.excerpt_hash == target.excerpt_hash
@@ -2118,18 +2591,7 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                         && resolved.byte_end == target.byte_end
                         && resolved.line_start == target.line_start
                         && resolved.line_end == target.line_end
-                        && ctx
-                            .index
-                            .bindings
-                            .get(&target.reference.binding)
-                            .is_some_and(|binding| {
-                                binding.facet == target.facet
-                                    && binding.role == target.role
-                                    && ctx
-                                        .index
-                                        .target(&target.reference)
-                                        .is_some_and(|declared| declared.adapter == target.adapter)
-                            }) => {}
+                        && planned_target_metadata_matches(ctx, target) => {}
                 _ => push(
                     out,
                     "SYU-WORK-009",
@@ -2146,12 +2608,7 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                         .index
                         .target(target)
                         .and_then(|declared| {
-                            resolve_target_with_adapters(
-                                &ctx.workspace.root,
-                                declared,
-                                &enabled_adapters(ctx.config),
-                            )
-                            .ok()
+                            resolve_target_in_workspace(ctx.workspace, declared).ok()
                         })
                         .is_none()
                     {
@@ -2177,12 +2634,7 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                         .index
                         .target(target)
                         .and_then(|declared| {
-                            resolve_target_with_adapters(
-                                &ctx.workspace.root,
-                                declared,
-                                &enabled_adapters(ctx.config),
-                            )
-                            .ok()
+                            resolve_target_in_workspace(ctx.workspace, declared).ok()
                         })
                         .is_some()
                     {
@@ -2224,6 +2676,10 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                     if !slice.anchors.contains(&participant.target.binding)
                         && !slice
                             .readonly_context
+                            .iter()
+                            .any(|target| target.reference == participant.target)
+                        && !slice
+                            .verification_targets
                             .iter()
                             .any(|target| target.reference == participant.target)
                     {
@@ -2459,18 +2915,24 @@ fn target_line_range(
     side: TargetRangeSide,
     changed_path: &RepoPath,
 ) -> Option<(usize, usize)> {
+    if let Some(identity) = &target.artifact_identity {
+        let unit = ctx
+            .index
+            .artifact_units
+            .iter()
+            .find(|unit| &unit.identity == identity)?;
+        if unit.path.to_string_lossy() != changed_path.to_string_lossy() {
+            return None;
+        }
+        return Some((unit.span.line_start, unit.span.line_end));
+    }
     let current = if matches!(
         target.lifecycle,
         TargetLifecycle::Stable | TargetLifecycle::EnsurePresent
     ) {
-        ctx.index.target(&target.reference).and_then(|declared| {
-            resolve_target_with_adapters(
-                &ctx.workspace.root,
-                declared,
-                &enabled_adapters(ctx.config),
-            )
-            .ok()
-        })
+        ctx.index
+            .target(&target.reference)
+            .and_then(|declared| resolve_target_in_workspace(ctx.workspace, declared).ok())
     } else {
         None
     };
@@ -2500,6 +2962,86 @@ fn target_line_range(
             .as_ref()
             .map(|resolved| (resolved.line_start, resolved.line_end))
             .unwrap_or((target.line_start, target.line_end)),
+    })
+}
+
+fn resolve_planned_target(
+    ctx: &ValidationContext<'_>,
+    target: &syu_work_model::PlannedTarget,
+) -> Option<ResolvedTarget> {
+    if let Some(identity) = &target.artifact_identity {
+        let unit = ctx
+            .index
+            .artifact_units
+            .iter()
+            .find(|unit| &unit.identity == identity)?;
+        if !matches!(
+            unit.reachability,
+            syu_inventory::ArtifactReachability::Active
+        ) {
+            return None;
+        }
+        let bytes = ctx.workspace.read_bytes(unit.path.as_path()).ok()?;
+        let byte_start = unit.span.byte_start.min(bytes.len());
+        let byte_end = unit.span.byte_end.min(bytes.len()).max(byte_start);
+        let symbol = identity.rsplit("::").next().unwrap_or(identity).to_owned();
+        return Some(ResolvedTarget {
+            path: unit.path.as_path().to_path_buf(),
+            description: format!("changed semantic artifact {identity}"),
+            symbols: if matches!(unit.kind, syu_inventory::ArtifactUnitKind::File) {
+                vec![]
+            } else {
+                vec![symbol]
+            },
+            content_hash: unit.digest.clone(),
+            bytes: bytes.len(),
+            byte_start,
+            byte_end,
+            line_start: unit.span.line_start,
+            line_end: unit.span.line_end,
+            excerpt: String::from_utf8_lossy(&bytes[byte_start..byte_end]).into_owned(),
+            excerpt_hash: unit.digest.clone(),
+        });
+    }
+    let declared = ctx.index.target(&target.reference)?;
+    if let Some(identity) = ctx.index.target_to_artifact.get(&target.reference)
+        && let Some(unit) = ctx
+            .index
+            .artifact_units
+            .iter()
+            .find(|unit| &unit.identity == identity)
+        && let Ok(Some(resolved)) = resolve_indexed_target(ctx.workspace, declared, unit)
+    {
+        return Some(resolved);
+    }
+    resolve_target_in_workspace(ctx.workspace, declared).ok()
+}
+
+fn planned_target_metadata_matches(
+    ctx: &ValidationContext<'_>,
+    target: &syu_work_model::PlannedTarget,
+) -> bool {
+    let Some(binding) = ctx.index.bindings.get(&target.reference.binding) else {
+        return false;
+    };
+    let Some(declared) = ctx.index.target(&target.reference) else {
+        return false;
+    };
+    if binding.facet != target.facet
+        || binding.role != target.role
+        || declared.adapter != target.adapter
+    {
+        return false;
+    }
+    target.artifact_identity.as_ref().is_none_or(|identity| {
+        ctx.index
+            .artifact_owners
+            .get(identity)
+            .is_some_and(|owners| {
+                owners
+                    .iter()
+                    .any(|owner| owner.binding == target.reference.binding)
+            })
     })
 }
 
@@ -2718,6 +3260,7 @@ mod tests {
     ) -> syu_work_model::PlannedTarget {
         syu_work_model::PlannedTarget {
             reference: "FEAT-AUTH-001#binding.ui/target.requested".parse().unwrap(),
+            artifact_identity: None,
             transition: TargetTransition::Add,
             lifecycle: TargetLifecycle::EnsurePresent,
             access: syu_work_model::TargetAccessMode::Editable,

@@ -46,7 +46,7 @@ pathlib.Path(sys.argv[3]).write_text(
     """window.fetch=async(url,options={})=>{\n"""
     """  const body=(value,status=200)=>Promise.resolve({ok:status>=200&&status<300,status,text:async()=>typeof value==='string'?value:JSON.stringify(value)});\n"""
     """  if(String(url).includes('/api/source?path=syu.yaml')) return body({content:'schema: syu/config/v1\\nworkspace:\\n  spec_roots: [docs/syu]\\n',hash:'visual-test-hash'});\n"""
-    """  if(String(url).includes('/api/config')) return body({config:JSON.parse(document.querySelector('#syu-projection').textContent).config,hash:'visual-test-hash'});\n"""
+    """  if(String(url).includes('/api/config')) return body({});\n"""
     """  if(String(url).includes('/api/validate')) return body(JSON.parse(document.querySelector('#syu-projection').textContent).validation);\n"""
     """  if(String(url).includes('/api/context/')) return body('schema: syu/context/v1\\n');\n"""
     """  return body({error:`unhandled fetch ${url}`},404);\n"""
@@ -60,12 +60,6 @@ import sys
 
 repo_root = pathlib.Path(sys.argv[1])
 tmp = pathlib.Path(sys.argv[2])
-
-state_script = (
-    (tmp / "state.html").read_text()
-    + f'<script src="file://{tmp}/api-mock.js"></script>'
-    + f'<script src="file://{repo_root}/crates/syu-app-ui/assets/projection.js"></script>'
-)
 
 html = (repo_root / "crates/syu-app-ui/assets/workbench.html").read_text()
 
@@ -82,12 +76,13 @@ html = html.replace(
     f"file://{repo_root}/crates/syu-app-ui/assets/i18n.js",
 )
 html = html.replace(
-    "/assets/app.js",
-    f"file://{repo_root}/crates/syu-app-ui/assets/app.js",
+    "/assets/js/main.js",
+    f"file://{repo_root}/crates/syu-app-ui/assets/js/main.js",
 )
 html = html.replace(
-    '<script src="/assets/projection.js"></script>',
-    state_script,
+    '<script type="application/json" id="syu-projection"></script>',
+    (tmp / "state.html").read_text()
+    + f'<script src="file://{tmp}/api-mock.js"></script>',
 )
 
 (tmp / "workbench.html").write_text(html)
@@ -116,9 +111,9 @@ setTimeout(()=>{
   if(!visible('[data-settings-page-panel="validation"]')) failures.push('settings validation page did not open');
   if(visible('[data-settings-page-panel="general"]')) failures.push('settings general page still visible');
 
-  click('[data-route="items"]');
-  click('[data-page="items"] [data-tab="policy"]');
-  if(!document.querySelector('[data-items-detail]')) failures.push('items detail missing');
+  click('[data-route="specifications"]');
+  click('[data-page="specifications"] [data-tab="policy"]');
+  if(!document.querySelector('[data-specifications-detail]')) failures.push('specifications detail missing');
 
   if(window.__SYU_VISUAL_ERRORS__.length) failures.push(`js errors: ${window.__SYU_VISUAL_ERRORS__.join(', ')}`);
   const result = document.createElement('div');
