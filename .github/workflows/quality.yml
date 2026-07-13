@@ -19,7 +19,23 @@ jobs:
       - run: cargo run -- validate workspace .
       - name: Prove closed-loop readiness
         run: |
+          set +e
           cargo run -- readiness report . --format json > readiness.json
+          readiness_status=$?
+          python3 - <<'PY'
+          import json
+          report = json.load(open("readiness.json"))
+          for axis in ("inventory", "ownership", "seedability", "workability", "verification", "closed_loop"):
+              value = report[axis]
+              print(f"{axis}: {value['ready']}/{value['required']}")
+              for subject in value.get("subjects", []):
+                  if not subject["ready"]:
+                      print(f"  NOT READY {subject['id']}: {'; '.join(subject['blockers'])}")
+          print(f"execution_state: {report['execution_state']}")
+          PY
+          if [ "$readiness_status" -ne 0 ]; then
+              exit "$readiness_status"
+          fi
           python3 - <<'PY'
           import json
           report = json.load(open("readiness.json"))
