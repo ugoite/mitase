@@ -135,13 +135,22 @@ pub fn plan(
                     .map(|(target, _)| target)
                     .collect::<Vec<_>>();
                 if targets.is_empty() {
-                    return Ok(blocked_plan(
-                        request,
-                        workspace,
-                        revision,
-                        "SYU-WORK-001",
-                        format!("artifact identity {artifact_identity} does not resolve"),
-                    ));
+                    if let Some(owners) = index.artifact_owners.get(artifact_identity) {
+                        for owner in owners {
+                            if let Some(binding) = index.bindings.get(&owner.binding) {
+                                criteria.extend(binding_criteria(binding));
+                            }
+                        }
+                    }
+                    if criteria.is_empty() {
+                        return Ok(blocked_plan(
+                            request,
+                            workspace,
+                            revision,
+                            "SYU-WORK-001",
+                            format!("artifact identity {artifact_identity} does not resolve"),
+                        ));
+                    }
                 }
                 for target in targets {
                     if let Some(declared) = index.target(target) {
@@ -167,11 +176,14 @@ pub fn plan(
     let mut slices = Vec::new();
     if request.requested_targets.is_empty() {
         for criterion in criteria {
-            for implementation in primary_bindings(request, index, &criterion) {
+            for implementation in primary_targets(request, index, &criterion) {
                 if !request.constraints.include_facets.is_empty()
-                    && index.bindings.get(&implementation).is_some_and(|binding| {
-                        !request.constraints.include_facets.contains(&binding.facet)
-                    })
+                    && index
+                        .bindings
+                        .get(&implementation.binding)
+                        .is_some_and(|binding| {
+                            !request.constraints.include_facets.contains(&binding.facet)
+                        })
                 {
                     continue;
                 }
@@ -180,8 +192,8 @@ pub fn plan(
                     workspace,
                     index,
                     &criterion,
-                    &implementation,
-                    None,
+                    &implementation.binding,
+                    Some(&implementation),
                     target_policy(default_transition(request.operation)),
                     exclude_matcher.as_ref(),
                 )?);
@@ -421,30 +433,40 @@ fn requested_target_criterion(binding: &ArtifactBinding) -> Result<Option<SpecAn
     }
 }
 
-fn primary_bindings(
+fn primary_targets(
     request: &WorkRequest,
     index: &SpecIndex,
     criterion: &SpecAnchor,
-) -> Vec<SpecAnchor> {
-    let mut bindings = match request.operation {
+) -> Vec<BoundTargetRef> {
+    let mut targets = match request.operation {
         WorkOperation::Document => index
             .bindings
             .iter()
-            .filter(|(_, binding)| {
-                binding.role == syu_spec_model::BindingRole::Documentation
-                    && binding.targets.iter().any(|target| target.claims.iter().any(|claim| matches!(claim, syu_spec_model::TargetClaim::Documents { anchor } if anchor == criterion)))
+            .flat_map(|(anchor, binding)| {
+                binding
+                    .targets
+                    .iter()
+                    .filter(move |target| {
+                        binding.role == syu_spec_model::BindingRole::Documentation
+                            && target.claims.iter().any(|claim| {
+                                matches!(claim, syu_spec_model::TargetClaim::Documents { anchor: actual } if actual == criterion)
+                            })
+                    })
+                    .map(move |target| BoundTargetRef {
+                        binding: anchor.clone(),
+                        target_id: target.id.clone(),
+                    })
             })
-            .map(|(anchor, _)| anchor.clone())
             .collect::<Vec<_>>(),
         _ => index
-            .criteria_to_implementations
+            .criteria_to_implementation_targets
             .get(criterion)
             .cloned()
             .unwrap_or_default(),
     };
-    bindings.sort();
-    bindings.dedup();
-    bindings
+    targets.sort();
+    targets.dedup();
+    targets
 }
 
 fn requested_target_slice_id(prefix: &str, requested: &[RequestedTarget]) -> String {
@@ -577,10 +599,10 @@ fn build_implementation_slice(
         })
     })
     .collect();
-    let (mut readonly, contracts) = contract_readonly_context(
+    let (mut readonly, contracts) = contract_readonly_context_for_target(
         workspace,
         index,
-        implementation,
+        exact_target.expect("implementation target is exact"),
         exclude_matcher,
         &mut blockers,
     );
@@ -652,26 +674,31 @@ fn build_documentation_slice(
     let mut readonly = Vec::new();
     let mut contracts = Vec::new();
     let implementations = index
-        .criteria_to_implementations
+        .criteria_to_implementation_targets
         .get(criterion)
         .cloned()
         .unwrap_or_default();
     for implementation in implementations {
-        if let Some(other) = index.bindings.get(&implementation) {
-            readonly.extend(targets(
+        if let Some(other) = index.bindings.get(&implementation.binding)
+            && let Some(target) = index.target(&implementation)
+        {
+            readonly.extend(one_target(
                 workspace,
                 &implementation,
                 other,
-                target_policy(TargetTransition::Readonly),
-                "Implementation context referenced by the selected documentation target.",
-                WorkOperation::Modify,
-                None,
-                None,
+                target,
+                TargetPlanOptions {
+                    policy: target_policy(TargetTransition::Readonly),
+                    reason: "Exact implementation context referenced by the selected documentation target.",
+                    operation: WorkOperation::Modify,
+                    add_budget_bytes: None,
+                    add_budget_lines: None,
+                },
                 exclude_matcher,
                 &mut blockers,
             ));
         }
-        let (more_readonly, more_contracts) = contract_readonly_context(
+        let (more_readonly, more_contracts) = contract_readonly_context_for_target(
             workspace,
             index,
             &implementation,
@@ -761,10 +788,10 @@ fn build_requested_target_slice(
             exclude_matcher,
             &mut blockers,
         ));
-        let (more_readonly, more_contracts) = contract_readonly_context(
+        let (more_readonly, more_contracts) = contract_readonly_context_for_target(
             workspace,
             index,
-            &reference.binding,
+            reference,
             exclude_matcher,
             &mut blockers,
         );
@@ -846,10 +873,10 @@ fn build_requested_criterion_slice(
                 TargetAccessMode::Readonly => readonly.push(target),
             }
         }
-        let (more_readonly, more_contracts) = contract_readonly_context(
+        let (more_readonly, more_contracts) = contract_readonly_context_for_target(
             workspace,
             index,
-            &reference.binding,
+            reference,
             exclude_matcher,
             &mut blockers,
         );
@@ -871,32 +898,38 @@ fn build_requested_criterion_slice(
         &mut blockers,
     ));
     let implementations = index
-        .criteria_to_implementations
+        .criteria_to_implementation_targets
         .get(criterion)
         .cloned()
         .unwrap_or_default();
     for implementation in implementations {
         if requested_targets
             .iter()
-            .any(|requested| requested.reference().binding == implementation)
+            .any(|requested| requested.reference() == &implementation)
         {
             continue;
         }
-        if let Some(other) = index.bindings.get(&implementation) {
-            readonly.extend(targets(
+        anchors.push(implementation.binding.clone());
+        if let Some(other) = index.bindings.get(&implementation.binding)
+            && let Some(target) = index.target(&implementation)
+        {
+            readonly.extend(one_target(
                 workspace,
                 &implementation,
                 other,
-                target_policy(TargetTransition::Readonly),
-                "Implementation context referenced by the selected criterion.",
-                WorkOperation::Modify,
-                None,
-                None,
+                target,
+                TargetPlanOptions {
+                    policy: target_policy(TargetTransition::Readonly),
+                    reason: "Exact implementation context referenced by the selected criterion.",
+                    operation: WorkOperation::Modify,
+                    add_budget_bytes: None,
+                    add_budget_lines: None,
+                },
                 exclude_matcher,
                 &mut blockers,
             ));
         }
-        let (more_readonly, more_contracts) = contract_readonly_context(
+        let (more_readonly, more_contracts) = contract_readonly_context_for_target(
             workspace,
             index,
             &implementation,
@@ -1041,28 +1074,33 @@ fn build_verification_slice(
     let mut readonly = Vec::new();
     let mut anchors = vec![criterion.clone(), requested_ref.binding.clone()];
     let implementations = index
-        .criteria_to_implementations
+        .criteria_to_implementation_targets
         .get(criterion)
         .cloned()
         .unwrap_or_default();
     let mut contracts = Vec::new();
     for implementation in implementations {
-        anchors.push(implementation.clone());
-        if let Some(other) = index.bindings.get(&implementation) {
-            readonly.extend(targets(
+        anchors.push(implementation.binding.clone());
+        if let Some(other) = index.bindings.get(&implementation.binding)
+            && let Some(target) = index.target(&implementation)
+        {
+            readonly.extend(one_target(
                 workspace,
                 &implementation,
                 other,
-                target_policy(TargetTransition::Readonly),
-                "Implementation context for the selected verification target.",
-                WorkOperation::Modify,
-                None,
-                None,
+                target,
+                TargetPlanOptions {
+                    policy: target_policy(TargetTransition::Readonly),
+                    reason: "Exact implementation context for the selected verification target.",
+                    operation: WorkOperation::Modify,
+                    add_budget_bytes: None,
+                    add_budget_lines: None,
+                },
                 exclude_matcher,
                 &mut blockers,
             ));
         }
-        let (more_readonly, more_contracts) = contract_readonly_context(
+        let (more_readonly, more_contracts) = contract_readonly_context_for_target(
             workspace,
             index,
             &implementation,
@@ -1429,43 +1467,59 @@ fn exact_target_plan(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn contract_readonly_context(
+fn contract_readonly_context_for_target(
     workspace: &SpecWorkspace,
     index: &SpecIndex,
-    implementation: &SpecAnchor,
+    implementation: &BoundTargetRef,
     exclude_matcher: Option<&GlobSet>,
     blockers: &mut Vec<Diagnostic>,
 ) -> (Vec<PlannedTarget>, Vec<SpecAnchor>) {
-    let mut readonly = vec![];
-    let mut contracts = vec![];
-    let contract_anchors = index
-        .bindings
+    let mut readonly = Vec::new();
+    let mut contracts = Vec::new();
+    for contract_anchor in index
+        .contracts_by_target
         .get(implementation)
-        .into_iter()
-        .flat_map(|binding| {
-            binding.targets.iter().map(|target| BoundTargetRef {
-                binding: implementation.clone(),
-                target_id: target.id.clone(),
-            })
-        })
-        .filter_map(|target| index.contracts_by_target.get(&target))
-        .flatten()
         .cloned()
-        .collect::<BTreeSet<_>>();
-    for contract_anchor in contract_anchors {
+        .unwrap_or_default()
+    {
         contracts.push(contract_anchor.clone());
-        if let Some(contract) = index.contracts.get(&contract_anchor) {
-            if let Some(target) = index.target(&contract.source)
-                && let Some(source_binding) = index.bindings.get(&contract.source.binding)
+        let Some(contract) = index.contracts.get(&contract_anchor) else {
+            continue;
+        };
+        if let Some(target) = index.target(&contract.source)
+            && let Some(binding) = index.bindings.get(&contract.source.binding)
+        {
+            readonly.extend(one_target(
+                workspace,
+                &contract.source,
+                binding,
+                target,
+                TargetPlanOptions {
+                    policy: target_policy(TargetTransition::Readonly),
+                    reason: "Contract source constraining this implementation target.",
+                    operation: WorkOperation::Modify,
+                    add_budget_bytes: None,
+                    add_budget_lines: None,
+                },
+                exclude_matcher,
+                blockers,
+            ));
+        }
+        for participant in &contract.participants {
+            if participant.target == *implementation {
+                continue;
+            }
+            if let Some(binding) = index.bindings.get(&participant.target.binding)
+                && let Some(target) = index.target(&participant.target)
             {
                 readonly.extend(one_target(
                     workspace,
-                    &contract.source,
-                    source_binding,
+                    &participant.target,
+                    binding,
                     target,
                     TargetPlanOptions {
                         policy: target_policy(TargetTransition::Readonly),
-                        reason: "Contract source constraining this implementation.",
+                        reason: "Contract counterpart; readonly in this slice.",
                         operation: WorkOperation::Modify,
                         add_budget_bytes: None,
                         add_budget_lines: None,
@@ -1473,28 +1527,6 @@ fn contract_readonly_context(
                     exclude_matcher,
                     blockers,
                 ));
-            }
-            for participant in &contract.participants {
-                if &participant.target.binding != implementation
-                    && let Some(other) = index.bindings.get(&participant.target.binding)
-                    && let Some(target) = index.target(&participant.target)
-                {
-                    readonly.extend(one_target(
-                        workspace,
-                        &participant.target,
-                        other,
-                        target,
-                        TargetPlanOptions {
-                            policy: target_policy(TargetTransition::Readonly),
-                            reason: "Contract counterpart; readonly in this slice.",
-                            operation: WorkOperation::Modify,
-                            add_budget_bytes: None,
-                            add_budget_lines: None,
-                        },
-                        exclude_matcher,
-                        blockers,
-                    ));
-                }
             }
         }
     }

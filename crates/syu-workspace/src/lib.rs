@@ -45,13 +45,20 @@ pub struct SpecIndex {
     pub path_to_targets: BTreeMap<String, Vec<BoundTargetRef>>,
     pub criterion_status: BTreeMap<SpecAnchor, ItemStatus>,
     pub artifact_units: Vec<ArtifactUnit>,
-    pub artifact_owners: BTreeMap<String, Vec<BoundTargetRef>>,
+    pub artifact_owners: BTreeMap<String, Vec<OwnershipRef>>,
     pub target_to_artifact: BTreeMap<BoundTargetRef, String>,
     pub criteria_to_implementation_targets: BTreeMap<SpecAnchor, Vec<BoundTargetRef>>,
     pub criteria_to_verification_targets: BTreeMap<SpecAnchor, Vec<BoundTargetRef>>,
     pub contracts_by_target: BTreeMap<BoundTargetRef, Vec<SpecAnchor>>,
     pub verification_by_target: BTreeMap<BoundTargetRef, Vec<BoundTargetRef>>,
     pub inventory_error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct OwnershipRef {
+    pub binding: SpecAnchor,
+    pub scope_id: LocalId,
+    pub target_id: Option<LocalId>,
 }
 #[derive(Debug, Clone)]
 pub enum AnchorValue {
@@ -153,7 +160,7 @@ impl SpecWorkspace {
             if let Ok(value) = serde_yaml::to_string(profile) {
                 hash.update(value.as_bytes());
             }
-            if let Ok(units) = InventoryRegistry::discover(
+            match InventoryRegistry::discover(
                 &InventoryContext {
                     workspace_root: self.root.clone(),
                     profile: profile.id.clone(),
@@ -168,9 +175,15 @@ impl SpecWorkspace {
                 },
                 profile,
             ) {
-                for unit in units {
-                    hash.update(unit.identity.as_bytes());
-                    hash.update(unit.digest.as_bytes());
+                Ok(units) => {
+                    for unit in units {
+                        hash.update(unit.identity.as_bytes());
+                        hash.update(unit.digest.as_bytes());
+                    }
+                }
+                Err(error) => {
+                    hash.update(b"inventory-error:v1");
+                    hash.update(error.to_string().as_bytes());
                 }
             }
         }
@@ -412,7 +425,11 @@ impl SpecIndex {
                     out.artifact_owners
                         .entry(identity.clone())
                         .or_default()
-                        .push(target_ref.clone());
+                        .push(OwnershipRef {
+                            binding: binding_anchor.clone(),
+                            scope_id: target.id.clone(),
+                            target_id: Some(target.id.clone()),
+                        });
                 }
                 for claim in &target.claims {
                     match claim {
@@ -440,24 +457,30 @@ impl SpecIndex {
                 }
             }
         }
-        // Exact target ownership wins. Scopes then fill only units that are
-        // not already claimed, which prevents a helper from acquiring two
-        // effective owners through an enclosing scope and an exact target.
         for (binding_anchor, binding) in &out.bindings {
-            let owner = binding.targets.first().map(|target| BoundTargetRef {
-                binding: binding_anchor.clone(),
-                target_id: target.id.clone(),
-            });
-            let Some(owner) = owner else { continue };
             for scope in &binding.owns {
                 for unit in &out.artifact_units {
-                    if scope_matches(scope, unit)
-                        && !out.artifact_owners.contains_key(&unit.identity)
-                    {
+                    if scope_matches(scope, unit) {
+                        let exact_owner_exists = out
+                            .artifact_owners
+                            .get(&unit.identity)
+                            .is_some_and(|owners| {
+                                owners.iter().any(|owner| owner.target_id.is_some())
+                            });
+                        // Exact target ownership has an explicit precedence rule.
+                        // Overlapping scopes belonging to different bindings remain
+                        // visible as multiple OwnershipRefs and are ambiguous.
+                        if exact_owner_exists {
+                            continue;
+                        }
                         out.artifact_owners
                             .entry(unit.identity.clone())
                             .or_default()
-                            .push(owner.clone());
+                            .push(OwnershipRef {
+                                binding: binding_anchor.clone(),
+                                scope_id: scope.id.clone(),
+                                target_id: None,
+                            });
                     }
                 }
             }
@@ -470,10 +493,13 @@ impl SpecIndex {
                     .push(contract_anchor.clone());
             }
         }
+        for values in out.artifact_owners.values_mut() {
+            values.sort();
+            values.dedup();
+        }
         for values in out
-            .artifact_owners
+            .criteria_to_implementation_targets
             .values_mut()
-            .chain(out.criteria_to_implementation_targets.values_mut())
             .chain(out.criteria_to_verification_targets.values_mut())
             .chain(out.verification_by_target.values_mut())
         {

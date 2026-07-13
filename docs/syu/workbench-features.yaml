@@ -13,7 +13,9 @@ features:
         facet: server
         responsibility: Serve canonical Workbench read and mutation routes.
         owns:
-          - { id: rust-crates, adapter: rust, path: crates, selector: { kind: path-prefix, value: crates } }
+          - { id: rust-workbench-server, adapter: rust, path: crates/syu-workbench-server, selector: { kind: path-prefix, value: crates/syu-workbench-server } }
+          - { id: rust-desktop, adapter: rust, path: crates/syu-desktop, selector: { kind: path-prefix, value: crates/syu-desktop } }
+          - { id: rust-code-intel, adapter: rust, path: crates/syu-code-intel, selector: { kind: path-prefix, value: crates/syu-code-intel } }
           - { id: rust-src, adapter: rust, path: src, selector: { kind: path-prefix, value: src } }
           - { id: rust-tests, adapter: rust, path: tests, selector: { kind: path-prefix, value: tests } }
           - { id: markdown-docs, adapter: markdown, path: docs, selector: { kind: path-prefix, value: docs } }
@@ -24,9 +26,9 @@ features:
           - { id: markdown-editors, adapter: markdown, path: editors, selector: { kind: path-prefix, value: editors } }
           - { id: markdown-readme, adapter: markdown, path: README.md, selector: { kind: path-prefix, value: README.md } }
           - { id: markdown-contributing, adapter: markdown, path: CONTRIBUTING.md, selector: { kind: path-prefix, value: CONTRIBUTING.md } }
-          - { id: javascript-assets, adapter: javascript, path: crates/syu-app-ui/assets, selector: { kind: path-prefix, value: crates/syu-app-ui/assets } }
           - { id: javascript-editors, adapter: javascript, path: editors, selector: { kind: path-prefix, value: editors } }
           - { id: javascript-website, adapter: javascript, path: website, selector: { kind: path-prefix, value: website } }
+          - { id: root-build-script, adapter: rust, path: build.rs, selector: { kind: path-prefix, value: build.rs } }
         targets:
           - id: project
             adapter: rust
@@ -52,6 +54,11 @@ features:
             claims:
               - kind: satisfies
                 criterion: REQ-WORKBENCH-001#criterion.canonical-projection
+        owns:
+          - { id: rust-workspace, adapter: rust, path: crates/syu-workspace, selector: { kind: path-prefix, value: crates/syu-workspace } }
+          - { id: rust-inventory, adapter: rust, path: crates/syu-inventory, selector: { kind: path-prefix, value: crates/syu-inventory } }
+          - { id: rust-validation, adapter: rust, path: crates/syu-validation, selector: { kind: path-prefix, value: crates/syu-validation } }
+          - { id: rust-diagnostics, adapter: rust, path: crates/syu-diagnostics, selector: { kind: path-prefix, value: crates/syu-diagnostics } }
   - id: FEAT-WORKBENCH-WORK-UI-001
     title: Workbench work UI
     summary: Drive the WorkRequest to result-validation journey from the Work page.
@@ -69,6 +76,9 @@ features:
             claims:
               - kind: satisfies
                 criterion: REQ-WORKBENCH-002#criterion.work-session
+        owns:
+          - { id: rust-planner, adapter: rust, path: crates/syu-planner, selector: { kind: path-prefix, value: crates/syu-planner } }
+          - { id: rust-work-model, adapter: rust, path: crates/syu-work-model, selector: { kind: path-prefix, value: crates/syu-work-model } }
   - id: FEAT-WORKBENCH-READINESS-UI-001
     title: Workbench readiness UI
     summary: Display readiness blockers and exact target context from the server projection.
@@ -86,6 +96,9 @@ features:
             claims:
               - kind: satisfies
                 criterion: REQ-WORKBENCH-005#criterion.secure-local-server
+        owns:
+          - { id: rust-project-model, adapter: rust, path: crates/syu-project-model, selector: { kind: path-prefix, value: crates/syu-project-model } }
+          - { id: rust-domain, adapter: rust, path: crates/syu-domain, selector: { kind: path-prefix, value: crates/syu-domain } }
   - id: FEAT-WORKBENCH-SPEC-EDITOR-001
     title: Workbench specification editor
     summary: Preview and apply structured specification and configuration edits transactionally.
@@ -105,3 +118,7 @@ features:
                 criterion: REQ-WORKBENCH-003#criterion.transactional-spec-edit
               - kind: satisfies
                 criterion: REQ-WORKBENCH-004#criterion.transactional-config-edit
+        owns:
+          - { id: rust-spec-model, adapter: rust, path: crates/syu-spec-model, selector: { kind: path-prefix, value: crates/syu-spec-model } }
+          - { id: rust-app-ui, adapter: rust, path: crates/syu-app-ui, selector: { kind: path-prefix, value: crates/syu-app-ui } }
+          - { id: javascript-app-ui, adapter: javascript, path: crates/syu-app-ui/assets, selector: { kind: path-prefix, value: crates/syu-app-ui/assets } }

@@ -141,9 +141,13 @@
     } else if (requestUrl.startsWith('/api/specifications/')) {
       const anchor = requestUrl.split('/').slice(3).join('/');
       requestUrl = `/api/specifications/${anchor}`;
-      requestOptions = { ...requestOptions, body: JSON.stringify({ basis: mutationBasis(), content: payload?.content || JSON.stringify(payload) }) };
+      const fields = payload?.fields || Object.fromEntries(Object.entries(payload || {}).filter(([key]) => !['id', 'kind', 'path', 'source_hash', 'title', 'summary', 'description', 'status', 'priority', 'principles', 'rules', 'criteria', 'bindings', 'contracts', 'anchors', 'preview_token'].includes(key)));
+      for (const key of ['title', 'summary', 'description', 'status', 'priority']) {
+        if (payload && Object.prototype.hasOwnProperty.call(payload, key)) fields[key] = payload[key];
+      }
+      requestOptions = { ...requestOptions, body: JSON.stringify({ basis: mutationBasis(), patch: { kind: 'specification', item_id: payload?.id || anchor.split('#')[0], fields }, preview_token: payload?.preview_token || null }) };
     } else if (requestUrl.startsWith('/api/config/')) {
-      requestOptions = { ...requestOptions, body: JSON.stringify({ basis: mutationBasis(), content: JSON.stringify(payload?.config || payload) }) };
+      requestOptions = { ...requestOptions, body: JSON.stringify({ basis: mutationBasis(), patch: { kind: 'config', config: payload?.config || payload }, preview_token: payload?.preview_token || null }) };
     }
     const mutating = ['POST', 'PUT', 'DELETE'].includes((requestOptions.method || 'GET').toUpperCase());
     if (mutating && !csrfToken) {
@@ -1197,7 +1201,7 @@
     let previewToken = null;
     const apply = actionButton(t('common.apply'), 'common.apply', async () => {
       try {
-        const result = await api(`/api/specifications/${encodeURIComponent(draft.id)}/apply`, { method: 'PUT', body: JSON.stringify({ ...draft }) });
+        const result = await api(`/api/specifications/${encodeURIComponent(draft.id)}/apply`, { method: 'PUT', body: JSON.stringify({ ...draft, preview_token: previewToken }) });
         toast(`${t('common.apply')} · ${result.changed_lines}`);
         location.reload();
       } catch (error) {
@@ -1987,7 +1991,7 @@
     one('[data-settings-apply]', page)?.addEventListener('click', async () => {
       if (!previewToken) return;
       try {
-        const result = await api('/api/config/apply', { method: 'PUT', body: JSON.stringify({ config: collect() }) });
+        const result = await api('/api/config/apply', { method: 'PUT', body: JSON.stringify({ config: collect(), preview_token: previewToken }) });
         configHash = result.new_hash;
         previewToken = null;
         if (applyButton) applyButton.disabled = true;
@@ -2064,7 +2068,7 @@
     const button = one('[data-readiness-run]');
     button.disabled = true;
     try {
-      projection.readiness = await api('/api/readiness');
+      projection.readiness = await api('/api/readiness/run', { method: 'POST', body: JSON.stringify({}) });
       renderReadiness();
     } catch (error) {
       toast(error.message);

@@ -5,7 +5,7 @@ use syu_project_model::ReadinessLevel;
 use syu_spec_model::{BindingRole, ItemStatus, OwnershipSelector, TargetClaim};
 use syu_workspace::{SpecIndex, SpecWorkspace};
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct ReadinessAxis {
     pub required: usize,
     pub ready: usize,
@@ -21,6 +21,17 @@ pub struct ReadinessReport {
     pub workability: ReadinessAxis,
     pub verification: ReadinessAxis,
     pub closed_loop: ReadinessAxis,
+    pub receipts: Vec<ReadinessReceipt>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ReadinessReceipt {
+    pub criterion: String,
+    pub plan_slice: Option<String>,
+    pub runner: String,
+    pub command_succeeded: bool,
+    pub validation_passed: bool,
+    pub poststate_fingerprint: String,
 }
 
 impl ReadinessAxis {
@@ -34,6 +45,19 @@ impl ReadinessAxis {
 
     pub fn is_ready(&self) -> bool {
         self.ready == self.required && self.blockers.is_empty()
+    }
+}
+
+impl ReadinessReport {
+    pub fn meets(&self, level: ReadinessLevel) -> bool {
+        required_axes(level).iter().all(|axis| match axis {
+            ReadinessAxisId::Inventory => self.inventory.is_ready(),
+            ReadinessAxisId::Ownership => self.ownership.is_ready(),
+            ReadinessAxisId::Seedability => self.seedability.is_ready(),
+            ReadinessAxisId::Workability => self.workability.is_ready(),
+            ReadinessAxisId::Verification => self.verification.is_ready(),
+            ReadinessAxisId::ClosedLoop => self.closed_loop.is_ready(),
+        })
     }
 }
 
@@ -181,11 +205,73 @@ pub fn evaluate(
                 })
         })
         .map(|(anchor, _)| anchor.clone())
-        .filter(|criterion| scope_level(workspace, criterion, index) >= ReadinessLevel::Seedable)
         .collect::<Vec<_>>();
     let mut seed_blockers = Vec::new();
     let mut work_blockers = Vec::new();
+    if workspace
+        .config
+        .validation
+        .readiness
+        .probes
+        .public_entrypoints
+        .as_deref()
+        .is_some_and(|selection| selection == "all")
+    {
+        for unit in active
+            .iter()
+            .filter(|unit| unit.exposure == syu_inventory::ArtifactExposure::Public)
+        {
+            if !index.artifact_owners.contains_key(&unit.identity) {
+                seed_blockers.push(format!(
+                    "{}: public entrypoint has no canonical owner",
+                    unit.identity
+                ));
+            }
+        }
+    }
+    if workspace
+        .config
+        .validation
+        .readiness
+        .probes
+        .contracts
+        .as_deref()
+        .is_some_and(|selection| selection == "all")
+    {
+        for (anchor, contract) in &index.contracts {
+            let mut participants = std::iter::once(&contract.source).chain(
+                contract
+                    .participants
+                    .iter()
+                    .map(|participant| &participant.target),
+            );
+            if participants.any(|target| !index.target_to_artifact.contains_key(target)) {
+                work_blockers.push(format!(
+                    "{anchor}: contract target is not exact and seedable"
+                ));
+            }
+        }
+    }
+    if workspace.config.validation.readiness.probes.changed_units {
+        for path in changed_artifact_paths(&workspace.root, revision)? {
+            let changed_units = active
+                .iter()
+                .filter(|unit| unit.path.to_string_lossy() == path)
+                .filter(|unit| !index.artifact_owners.contains_key(&unit.identity));
+            for unit in changed_units {
+                seed_blockers.push(format!(
+                    "{}: changed unit has no canonical owner",
+                    unit.identity
+                ));
+            }
+        }
+    }
     for criterion in &criteria {
+        let level = scope_level(workspace, criterion, index);
+        if level < ReadinessLevel::Seedable {
+            continue;
+        }
+        let work_required = level >= ReadinessLevel::WorkReady;
         let request = syu_work_model::WorkRequest {
             schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
             id: format!("readiness-{}", criterion.local_id),
@@ -217,17 +303,22 @@ pub fn evaluate(
                         .readiness
                         .limits
                         .max_slices_per_seed
+                    && work_required
                 {
                     work_blockers.push(format!("{criterion} exceeds max_slices_per_seed"));
                 }
             }
             Ok(plan) => {
                 seed_blockers.push(format!("{criterion}: {:?}", plan.status));
-                work_blockers.push(format!("{criterion}: no canonical work slice"));
+                if work_required {
+                    work_blockers.push(format!("{criterion}: no canonical work slice"));
+                }
             }
             Err(error) => {
                 seed_blockers.push(format!("{criterion}: {error}"));
-                work_blockers.push(format!("{criterion}: {error}"));
+                if work_required {
+                    work_blockers.push(format!("{criterion}: {error}"));
+                }
             }
         }
         let implementation_facets = index
@@ -257,20 +348,34 @@ pub fn evaluate(
                 .into_iter()
                 .flatten()
                 .any(|target| !index.contracts_by_target.contains_key(target))
+            && work_required
         {
             work_blockers.push(format!(
                 "{criterion}: implementation target is not closed by a contract"
             ));
         }
     }
-    let seedability = axis_for(criteria.len(), seed_blockers);
-    let workability = axis_for(criteria.len(), work_blockers);
+    let seed_required = criteria
+        .iter()
+        .filter(|criterion| scope_level(workspace, criterion, index) >= ReadinessLevel::Seedable)
+        .count();
+    let work_required = criteria
+        .iter()
+        .filter(|criterion| scope_level(workspace, criterion, index) >= ReadinessLevel::WorkReady)
+        .count();
+    let seedability = axis_for(seed_required, seed_blockers);
+    let workability = axis_for(work_required, work_blockers);
 
     let mut verification_blockers = Vec::new();
     let mut closed_loop_blockers = Vec::new();
+    let mut receipts = Vec::new();
     let mut verification_ready = 0;
     let mut closed_loop_ready = 0;
     for criterion in &criteria {
+        let level = scope_level(workspace, criterion, index);
+        if level < ReadinessLevel::Verifiable {
+            continue;
+        }
         let implementations = index
             .criteria_to_implementation_targets
             .get(criterion)
@@ -283,6 +388,22 @@ pub fn evaluate(
             .unwrap_or_default();
         let mut criterion_ready = !implementations.is_empty() && !verifications.is_empty();
         let mut criterion_executed = criterion_ready;
+        let plan_slice = syu_planner::plan(
+            &syu_work_model::WorkRequest {
+                schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
+                id: format!("readiness-receipt-{}", criterion.local_id),
+                summary: "canonical readiness receipt probe".into(),
+                operation: syu_work_model::WorkOperation::Modify,
+                seeds: vec![syu_work_model::WorkSeed::Anchor(criterion.clone())],
+                constraints: Default::default(),
+                requested_targets: vec![],
+            },
+            workspace,
+            index,
+            revision,
+        )
+        .ok()
+        .and_then(|plan| plan.slices.first().map(|slice| slice.id.clone()));
         if !criterion_ready {
             verification_blockers.push(format!(
                 "{criterion}: missing implementation or verification target"
@@ -324,7 +445,10 @@ pub fn evaluate(
                         "{criterion}: runner {} is not configured",
                         claim.runner
                     ));
-                } else if execute_verification && let Some(runner) = runner {
+                } else if execute_verification
+                    && level >= ReadinessLevel::ClosedLoop
+                    && let Some(runner) = runner
+                {
                     let args = runner
                         .arguments
                         .iter()
@@ -339,10 +463,38 @@ pub fn evaluate(
                         continue;
                     }
                     let output = probe_runner(&runner.executable, &args, &workspace.root);
-                    if !output.is_ok_and(|output| output.status.success()) {
+                    let command_succeeded =
+                        output.as_ref().is_ok_and(|output| output.status.success());
+                    let validation = crate::validate_without_readiness(&crate::ValidationContext {
+                        config: &workspace.config,
+                        workspace,
+                        index,
+                        changed_files: None,
+                        reported_changed_files: None,
+                        work_plan: None,
+                        selected_slice: None,
+                        plan_mode: crate::PlanValidationMode::PostState,
+                        preset: workspace.config.validation.preset,
+                        revision: Some(revision),
+                        change_base_revision: None,
+                    });
+                    let validation_passed = command_succeeded
+                        && index.inventory_error.is_none()
+                        && validation.diagnostics.iter().all(|diagnostic| {
+                            !matches!(diagnostic.severity, syu_diagnostics::Severity::Error)
+                        });
+                    receipts.push(ReadinessReceipt {
+                        criterion: criterion.to_string(),
+                        plan_slice: plan_slice.clone(),
+                        runner: claim.runner.clone(),
+                        command_succeeded,
+                        validation_passed,
+                        poststate_fingerprint: workspace.fingerprint(),
+                    });
+                    if !validation_passed {
                         criterion_executed = false;
                         closed_loop_blockers.push(format!(
-                            "{criterion}: verification runner {} failed",
+                            "{criterion}: closed-loop receipt for {} did not pass command, validation, and post-state checks",
                             claim.runner
                         ));
                     }
@@ -352,12 +504,20 @@ pub fn evaluate(
         if criterion_ready {
             verification_ready += 1;
         }
-        if criterion_ready && criterion_executed {
+        if level >= ReadinessLevel::ClosedLoop && criterion_ready && criterion_executed {
             closed_loop_ready += 1;
         }
     }
-    let verification = axis_for(criteria.len(), verification_blockers);
-    let closed_loop = axis_for(criteria.len(), closed_loop_blockers);
+    let verification_required = criteria
+        .iter()
+        .filter(|criterion| scope_level(workspace, criterion, index) >= ReadinessLevel::Verifiable)
+        .count();
+    let closed_loop_required = criteria
+        .iter()
+        .filter(|criterion| scope_level(workspace, criterion, index) >= ReadinessLevel::ClosedLoop)
+        .count();
+    let verification = axis_for(verification_required, verification_blockers);
+    let closed_loop = axis_for(closed_loop_required, closed_loop_blockers);
     Ok(ReadinessReport {
         target: readiness_label(workspace.config.validation.readiness.target).into(),
         inventory,
@@ -372,6 +532,7 @@ pub fn evaluate(
             ready: closed_loop_ready,
             ..closed_loop
         },
+        receipts,
     })
 }
 
@@ -414,7 +575,32 @@ fn probe_runner(
     command.output()
 }
 
+fn changed_artifact_paths(
+    root: &std::path::Path,
+    revision: &str,
+) -> Result<std::collections::BTreeSet<String>> {
+    let output = Command::new("git")
+        .args(["-C"])
+        .arg(root)
+        .args(["diff", "--name-only", revision])
+        .output()?;
+    if !output.status.success() {
+        return Ok(std::collections::BTreeSet::new());
+    }
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|path| !path.is_empty())
+        .map(str::to_owned)
+        .collect())
+}
+
 fn axis_for(required: usize, blockers: Vec<String>) -> ReadinessAxis {
+    let blockers = if required == 0 && blockers.is_empty() {
+        vec!["SYU-READINESS-EMPTY-SUBJECT: no subjects require this readiness axis".into()]
+    } else {
+        blockers
+    };
     ReadinessAxis {
         required,
         ready: required.saturating_sub(blockers.len()),
@@ -438,23 +624,27 @@ fn scope_level(
     criterion: &syu_spec_model::SpecAnchor,
     index: &SpecIndex,
 ) -> ReadinessLevel {
-    let facet = index
+    let default = workspace.config.validation.readiness.target;
+    let levels = index
         .criteria_to_implementation_targets
         .get(criterion)
-        .and_then(|targets| targets.first())
-        .and_then(|target| index.bindings.get(&target.binding))
-        .map(|binding| binding.facet.as_str());
-    facet
-        .and_then(|facet| {
-            workspace
-                .config
-                .validation
-                .readiness
-                .scopes
-                .get(facet)
-                .copied()
+        .into_iter()
+        .flatten()
+        .filter_map(|target| {
+            let facet = index.bindings.get(&target.binding)?.facet.as_str();
+            Some(
+                workspace
+                    .config
+                    .validation
+                    .readiness
+                    .scopes
+                    .get(facet)
+                    .copied()
+                    .unwrap_or(default),
+            )
         })
-        .unwrap_or(workspace.config.validation.readiness.target)
+        .collect::<Vec<_>>();
+    levels.into_iter().min().unwrap_or(default)
 }
 
 fn expand(template: &str, values: &std::collections::BTreeMap<String, String>) -> String {

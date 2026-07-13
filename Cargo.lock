@@ -1075,6 +1075,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
+ "http",
+ "http-body-util",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -1087,6 +1089,7 @@ dependencies = [
  "syu-work-model",
  "syu-workspace",
  "tokio",
+ "tower",
 ]
 
 [[package]]

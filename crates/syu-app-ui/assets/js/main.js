@@ -1,5 +1,6 @@
 import { createState } from './state.js';
 import { navigate } from './router.js';
+import './projection.js';
 
 export async function startWorkbench() {
   const node = document.querySelector('#syu-projection');

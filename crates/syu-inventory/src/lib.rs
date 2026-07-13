@@ -350,9 +350,12 @@ fn provider_for(adapter: &str, settings: serde_yaml::Value) -> Result<Box<dyn In
     let extensions: &[&str] = match adapter {
         "rust" => {
             if roots.is_empty() {
-                return Ok(Box::new(RustInventoryProvider));
+                return Ok(Box::new(RustInventoryProvider { settings }));
             }
-            return Ok(Box::new(ConfiguredRustInventoryProvider { roots }));
+            return Ok(Box::new(ConfiguredRustInventoryProvider {
+                roots,
+                settings,
+            }));
         }
         "javascript" => &["js", "jsx", "mjs", "cjs"],
         "typescript" => &["ts", "tsx", "mts", "cts"],
@@ -445,82 +448,166 @@ fn source_symbol_units(root: &Path, path: PathBuf, adapter: &str) -> Result<Vec<
     let repo_path = RepoPath::new(relative).map_err(anyhow::Error::msg)?;
     let source = fs::read_to_string(&path)?;
     let mut units = Vec::new();
+    let mut identities = BTreeSet::new();
+    let mut depth = 0usize;
+    let mut class: Option<(String, usize)> = None;
     for (line_index, line) in source.lines().enumerate() {
-        let trimmed = line
-            .trim_start()
+        let leading = line.trim_start();
+        let code = leading
+            .split_once("//")
+            .map_or(leading, |(code, _)| code)
+            .trim();
+        let before_depth = depth;
+        let exported = code.starts_with("export ");
+        let declaration = code
             .strip_prefix("export ")
-            .unwrap_or(line.trim_start())
+            .unwrap_or(code)
             .strip_prefix("default ")
-            .unwrap_or(
-                line.trim_start()
-                    .strip_prefix("export ")
-                    .unwrap_or(line.trim_start()),
-            );
-        let trimmed = trimmed.strip_prefix("async ").unwrap_or(trimmed);
-        let name = ["function ", "class ", "const ", "let ", "var "]
-            .iter()
-            .find_map(|prefix| trimmed.strip_prefix(prefix))
-            .and_then(|rest| {
-                rest.split(|character: char| !character.is_ascii_alphanumeric() && character != '_')
+            .unwrap_or_else(|| code.strip_prefix("export ").unwrap_or(code))
+            .strip_prefix("async ")
+            .unwrap_or_else(|| {
+                code.strip_prefix("export ")
+                    .unwrap_or(code)
+                    .strip_prefix("default ")
+                    .unwrap_or(code)
+            });
+        let mut name = None;
+        let mut qualified = None;
+        if let Some((class_name, class_depth)) = &class
+            && before_depth == *class_depth
+            && let Some(method) = method_name(declaration)
+        {
+            qualified = Some(format!("{class_name}::{method}"));
+        } else if before_depth == 0 {
+            for prefix in [
+                "function ",
+                "class ",
+                "const ",
+                "let ",
+                "var ",
+                "interface ",
+                "type ",
+                "enum ",
+            ] {
+                if let Some(rest) = declaration.strip_prefix(prefix) {
+                    name = identifier(rest);
+                    break;
+                }
+            }
+        }
+        if let Some(class_name) = name
+            && declaration.starts_with("class ")
+        {
+            class = Some((class_name.to_owned(), before_depth + 1));
+        }
+        if let Some(export_block) = declaration.strip_prefix('{')
+            && let Some(export_block) = export_block.split('}').next()
+        {
+            for item in export_block.split(',') {
+                let mut parts = item.split_whitespace();
+                let original = parts.next().filter(|value| !value.is_empty());
+                let alias = parts
                     .next()
-            })
-            .filter(|name| !name.is_empty());
-        let Some(name) = name else { continue };
-        units.push(ArtifactUnit {
-            adapter: adapter.into(),
-            path: repo_path.clone(),
-            identity: format!(
-                "{adapter}:{}::{}@{}",
-                repo_path.to_string_lossy(),
-                name,
-                line_index + 1
-            ),
-            kind: ArtifactUnitKind::Symbol,
-            exposure: if line.trim_start().starts_with("export ") {
-                ArtifactExposure::Public
-            } else {
-                ArtifactExposure::Workspace
-            },
-            reachability: ArtifactReachability::Active,
-            span: SourceSpan {
-                byte_start: 0,
-                byte_end: 0,
-                line_start: line_index + 1,
-                line_end: line_index + 1,
-            },
-            digest: digest(line.as_bytes()),
-        });
+                    .filter(|value| *value == "as")
+                    .and_then(|_| parts.next())
+                    .or(original);
+                if let Some(alias) = alias {
+                    name = Some(alias);
+                    qualified = None;
+                }
+            }
+        }
+        if let Some(symbol) = qualified.or_else(|| name.map(str::to_owned)) {
+            let identity = format!("{adapter}:{}::{symbol}", repo_path.to_string_lossy());
+            if identities.insert(identity.clone()) {
+                units.push(ArtifactUnit {
+                    adapter: adapter.into(),
+                    path: repo_path.clone(),
+                    identity,
+                    kind: ArtifactUnitKind::Symbol,
+                    exposure: if exported {
+                        ArtifactExposure::Public
+                    } else {
+                        ArtifactExposure::Workspace
+                    },
+                    reachability: ArtifactReachability::Active,
+                    span: SourceSpan {
+                        byte_start: source
+                            .lines()
+                            .take(line_index)
+                            .map(|value| value.len() + 1)
+                            .sum(),
+                        byte_end: source
+                            .lines()
+                            .take(line_index + 1)
+                            .map(|value| value.len() + 1)
+                            .sum(),
+                        line_start: line_index + 1,
+                        line_end: line_index + 1,
+                    },
+                    digest: digest(line.as_bytes()),
+                });
+            }
+        }
+        depth = depth
+            .saturating_add(code.matches('{').count())
+            .saturating_sub(code.matches('}').count());
+        if class
+            .as_ref()
+            .is_some_and(|(_, class_depth)| depth < *class_depth)
+        {
+            class = None;
+        }
     }
     Ok(units)
 }
 
+fn identifier(value: &str) -> Option<&str> {
+    let value = value.trim_start();
+    let end = value
+        .find(|character: char| !character.is_ascii_alphanumeric() && character != '_')
+        .unwrap_or(value.len());
+    (end > 0).then_some(&value[..end])
+}
+
+fn method_name(value: &str) -> Option<&str> {
+    let value = value.trim_start_matches("static ").trim_start();
+    let end = value.find('(')?;
+    identifier(&value[..end])
+}
+
 /// Rust inventory uses the syntax tree rather than line-oriented symbol
 /// searches. Every declared item receives an exact identity and source span.
-pub struct RustInventoryProvider;
+pub struct RustInventoryProvider {
+    settings: serde_yaml::Value,
+}
 
 struct ConfiguredRustInventoryProvider {
     roots: Vec<RepoPath>,
+    settings: serde_yaml::Value,
 }
 
 impl InventoryProvider for RustInventoryProvider {
     fn discover(&self, context: &InventoryContext) -> Result<InventoryFragment> {
-        discover_rust(context, &[])
+        discover_rust(context, &[], &self.settings)
     }
 }
 
 impl InventoryProvider for ConfiguredRustInventoryProvider {
     fn discover(&self, context: &InventoryContext) -> Result<InventoryFragment> {
-        discover_rust(context, &self.roots)
+        discover_rust(context, &self.roots, &self.settings)
     }
 }
 
 fn discover_rust(
     context: &InventoryContext,
     configured_roots: &[RepoPath],
+    settings: &serde_yaml::Value,
 ) -> Result<InventoryFragment> {
     let mut files = Vec::new();
+    let mut support_files = Vec::new();
     let roots = if configured_roots.is_empty() {
-        cargo_roots(&context.workspace_root)?
+        cargo_roots(&context.workspace_root, settings)?
     } else {
         configured_roots
             .iter()
@@ -543,6 +630,7 @@ fn discover_rust(
                 &root,
                 &context.excludes,
                 &mut files,
+                &mut support_files,
             )?;
         }
     }
@@ -558,6 +646,7 @@ fn discover_rust(
             .strip_prefix(&context.workspace_root)
             .context("Rust inventory path escaped workspace")?;
         let repo_path = RepoPath::new(relative).map_err(anyhow::Error::msg)?;
+        units.push(unit(&context.workspace_root, "rust", path.clone())?);
         let is_test_file = relative.components().any(|component| {
             component.as_os_str() == "tests" || component.as_os_str() == "benches"
         });
@@ -575,7 +664,35 @@ fn discover_rust(
         visitor.visit_file(&syntax);
         units.extend(visitor.units);
     }
+    support_files.sort();
+    support_files.dedup();
+    for path in support_files {
+        units.push(support_unit(&context.workspace_root, path)?);
+    }
     Ok(InventoryFragment { units })
+}
+
+fn support_unit(root: &Path, path: PathBuf) -> Result<ArtifactUnit> {
+    let relative = path
+        .strip_prefix(root)
+        .context("included support path escaped workspace")?;
+    let repo_path = RepoPath::new(relative).map_err(anyhow::Error::msg)?;
+    let bytes = fs::read(&path)?;
+    Ok(ArtifactUnit {
+        adapter: "rust".into(),
+        path: repo_path.clone(),
+        identity: format!("rust:{}::support", repo_path.to_string_lossy()),
+        kind: ArtifactUnitKind::Generated,
+        exposure: ArtifactExposure::Support,
+        reachability: ArtifactReachability::Active,
+        span: SourceSpan {
+            byte_start: 0,
+            byte_end: bytes.len(),
+            line_start: 1,
+            line_end: 1,
+        },
+        digest: digest(&bytes),
+    })
 }
 
 struct RustVisitor<'a> {
@@ -803,19 +920,9 @@ fn glob_match(pattern: &str, path: &Path) -> bool {
     }
 }
 
-fn cargo_roots(root: &Path) -> Result<Vec<PathBuf>> {
+fn cargo_roots(root: &Path, settings: &serde_yaml::Value) -> Result<Vec<PathBuf>> {
     if root.join("Cargo.toml").is_file()
-        && let Ok(output) = std::process::Command::new("cargo")
-            .args([
-                "metadata",
-                "--no-deps",
-                "--format-version",
-                "1",
-                "--manifest-path",
-            ])
-            .arg(root.join("Cargo.toml"))
-            .current_dir(root)
-            .output()
+        && let Ok(output) = cargo_metadata(root, settings)
         && output.status.success()
     {
         #[derive(Deserialize)]
@@ -837,9 +944,17 @@ fn cargo_roots(root: &Path) -> Result<Vec<PathBuf>> {
         let mut roots = BTreeSet::new();
         for package in metadata.packages {
             for target in package.targets {
-                if target.kind.iter().any(|kind| {
-                    matches!(kind.as_str(), "lib" | "bin" | "example" | "test" | "bench")
-                }) {
+                let include_tests = settings
+                    .get("include_tests")
+                    .and_then(serde_yaml::Value::as_bool)
+                    .unwrap_or(true);
+                if !target.kind.is_empty()
+                    && (include_tests
+                        || !target
+                            .kind
+                            .iter()
+                            .any(|kind| matches!(kind.as_str(), "test" | "bench")))
+                {
                     roots.insert(target.src_path);
                 }
             }
@@ -869,6 +984,51 @@ fn cargo_roots(root: &Path) -> Result<Vec<PathBuf>> {
         }
     }
     Ok(roots.into_iter().collect())
+}
+
+fn cargo_metadata(
+    root: &Path,
+    settings: &serde_yaml::Value,
+) -> std::io::Result<std::process::Output> {
+    let mut command = std::process::Command::new("cargo");
+    command
+        .args([
+            "metadata",
+            "--no-deps",
+            "--format-version",
+            "1",
+            "--manifest-path",
+        ])
+        .arg(root.join("Cargo.toml"));
+    if settings
+        .get("all_features")
+        .and_then(serde_yaml::Value::as_bool)
+        .unwrap_or(false)
+    {
+        command.arg("--all-features");
+    } else if let Some(features) = settings
+        .get("features")
+        .and_then(serde_yaml::Value::as_sequence)
+    {
+        let features = features
+            .iter()
+            .filter_map(serde_yaml::Value::as_str)
+            .collect::<Vec<_>>();
+        if !features.is_empty() {
+            command.args(["--features", &features.join(",")]);
+        }
+    }
+    if settings
+        .get("no_default_features")
+        .and_then(serde_yaml::Value::as_bool)
+        .unwrap_or(false)
+    {
+        command.arg("--no-default-features");
+    }
+    if let Some(target) = settings.get("target").and_then(serde_yaml::Value::as_str) {
+        command.args(["--filter-platform", target]);
+    }
+    command.current_dir(root).output()
 }
 
 fn collect_manifests(root: &Path, directory: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
@@ -908,6 +1068,7 @@ fn collect_reachable_rust(
     file: &Path,
     excludes: &[String],
     out: &mut Vec<PathBuf>,
+    support: &mut Vec<PathBuf>,
 ) -> Result<()> {
     if !file.is_file() {
         return Ok(());
@@ -958,7 +1119,7 @@ fn collect_reachable_rust(
                 .or_else(|| nested.is_file().then_some(nested));
         }
         if let Some(candidate) = candidate {
-            collect_reachable_rust(root, &candidate, excludes, out)?;
+            collect_reachable_rust(root, &candidate, excludes, out, support)?;
         }
     }
     for macro_name in ["include!", "include_str!", "include_bytes!"] {
@@ -977,7 +1138,13 @@ fn collect_reachable_rust(
                 .unwrap_or(root)
                 .join(&after_quote[..quote_end]);
             if candidate.is_file() {
-                collect_reachable_rust(root, &candidate, excludes, out)?;
+                if macro_name == "include!" {
+                    collect_reachable_rust(root, &candidate, excludes, out, support)?;
+                } else if !excludes.iter().any(|pattern| {
+                    glob_match(pattern, candidate.strip_prefix(root).unwrap_or(&candidate))
+                }) {
+                    support.push(candidate);
+                }
             }
             remainder = &after_quote[quote_end + 1..];
         }

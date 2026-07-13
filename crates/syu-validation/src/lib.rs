@@ -134,6 +134,8 @@ pub static RULES: &[RuleMetadata] = &[
     fixed_metadata!("SYU-WORK-011"),
     fixed_metadata!("SYU-WORK-012"),
     fixed_metadata!("SYU-READINESS-001"),
+    fixed_metadata!("SYU-VERIFICATION-001"),
+    fixed_metadata!("SYU-VERIFICATION-002"),
 ];
 
 /// Canonical rule-to-phase classification for presentation clients.  This is
@@ -150,6 +152,7 @@ pub fn phase_for_rule(rule: &str) -> ValidationPhase {
         "SYU-CONTRACT-",
         "SYU-FACET-",
         "SYU-GENERATED-",
+        "SYU-VERIFICATION-",
     ]
     .iter()
     .any(|prefix| rule.starts_with(prefix))
@@ -232,6 +235,14 @@ pub trait ValidationRule {
 }
 
 pub fn validate(ctx: &ValidationContext<'_>) -> ValidationResult {
+    validate_inner(ctx, true)
+}
+
+pub fn validate_without_readiness(ctx: &ValidationContext<'_>) -> ValidationResult {
+    validate_inner(ctx, false)
+}
+
+fn validate_inner(ctx: &ValidationContext<'_>, include_readiness: bool) -> ValidationResult {
     let mut diagnostics = Vec::new();
     let start = diagnostics.len();
     validate_config(ctx, &mut diagnostics);
@@ -268,13 +279,15 @@ pub fn validate(ctx: &ValidationContext<'_>) -> ValidationResult {
     diagnostics.sort_by(|a, b| {
         (&a.rule_id, &a.primary.path, &a.message).cmp(&(&b.rule_id, &b.primary.path, &b.message))
     });
-    let readiness = crate::evaluate_readiness(
-        ctx.workspace,
-        ctx.index,
-        ctx.revision.unwrap_or("working-tree"),
-        true,
-    );
-    if let Ok(report) = &readiness {
+    let readiness = include_readiness.then(|| {
+        crate::evaluate_readiness(
+            ctx.workspace,
+            ctx.index,
+            ctx.revision.unwrap_or("working-tree"),
+            true,
+        )
+    });
+    if let Some(Ok(report)) = &readiness {
         let unmet = required_axes(ctx.config.validation.readiness.target)
             .iter()
             .any(|axis| match axis {
@@ -292,12 +305,17 @@ pub fn validate(ctx: &ValidationContext<'_>) -> ValidationResult {
                 "syu.yaml",
             ));
         }
-    } else if readiness_required(ctx.config.validation.readiness.target) {
+    } else if readiness.as_ref().is_some_and(Result::is_err)
+        && readiness_required(ctx.config.validation.readiness.target)
+    {
         diagnostics.push(syu_diagnostics::Diagnostic::error(
             "SYU-READINESS-001",
             format!(
                 "readiness evaluation failed: {}",
-                readiness.as_ref().unwrap_err()
+                readiness
+                    .as_ref()
+                    .and_then(|result| result.as_ref().err())
+                    .expect("readiness error exists")
             ),
             "workspace",
         ));
@@ -305,7 +323,7 @@ pub fn validate(ctx: &ValidationContext<'_>) -> ValidationResult {
     ValidationResult {
         diagnostics,
         readiness: readiness
-            .ok()
+            .and_then(Result::ok)
             .and_then(|report| serde_json::to_value(report).ok()),
     }
 }
@@ -375,34 +393,65 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
             continue;
         }
         let rendered = path.to_string_lossy();
-        let owners = ctx.index.path_to_targets.get(rendered.as_ref());
-        if ctx.config.validation.changed.require_owned_changes && owners.is_none() {
+        let units = ctx
+            .index
+            .artifact_units
+            .iter()
+            .filter(|unit| unit.path.to_string_lossy() == rendered)
+            .filter(|unit| {
+                file.hunks.is_empty()
+                    || file.hunks.iter().any(|hunk| {
+                        hunk.new_start < unit.span.line_end
+                            && hunk.new_end.max(hunk.new_start + 1) > unit.span.line_start
+                    })
+            })
+            .collect::<Vec<_>>();
+        // A changed repository file is not automatically an artifact. Files
+        // outside every enabled inventory provider (Cargo metadata, CI
+        // metadata, and similar repository controls) are validated by their
+        // own tooling and must not be misclassified as unowned source units.
+        if units.is_empty() {
+            continue;
+        }
+        if ctx.config.validation.changed.require_owned_changes && units.is_empty() {
             push(
                 out,
                 "SYU-CHANGE-001",
-                format!("changed path has no Binding target owner: {rendered}"),
+                format!("changed hunk has no active artifact identity: {rendered}"),
                 rendered.to_string(),
                 None,
             );
             continue;
         }
-        for owner in owners.into_iter().flatten() {
-            if let Some(binding) = ctx.index.bindings.get(&owner.binding)
-                && binding.role == BindingRole::Implementation
-                && !binding.targets.iter().any(|target| {
-                    target
-                        .claims
-                        .iter()
-                        .any(|claim| matches!(claim, syu_spec_model::TargetClaim::Satisfies { .. }))
-                })
-            {
+        for unit in units {
+            let owners = ctx.index.artifact_owners.get(&unit.identity);
+            if ctx.config.validation.changed.require_owned_changes && owners.is_none() {
                 push(
                     out,
-                    "SYU-CHANGE-002",
-                    "changed implementation has no Criterion",
+                    "SYU-CHANGE-001",
+                    format!("changed artifact has no ownership scope: {}", unit.identity),
                     rendered.to_string(),
-                    Some(owner.binding.clone()),
+                    None,
                 );
+                continue;
+            }
+            for owner in owners.into_iter().flatten() {
+                if let Some(binding) = ctx.index.bindings.get(&owner.binding)
+                    && binding.role == BindingRole::Implementation
+                    && !binding.targets.iter().any(|target| {
+                        target.claims.iter().any(|claim| {
+                            matches!(claim, syu_spec_model::TargetClaim::Satisfies { .. })
+                        })
+                    })
+                {
+                    push(
+                        out,
+                        "SYU-CHANGE-002",
+                        "changed implementation has no Criterion",
+                        rendered.to_string(),
+                        Some(owner.binding.clone()),
+                    );
+                }
             }
         }
     }
@@ -561,6 +610,10 @@ fn validate_changed_spec_impact(
             ctx.workspace,
             &anchor,
             changed_files,
+        ) && !binding_definition_changed(
+            baseline.as_ref().map(|baseline| &baseline.index),
+            ctx.index,
+            &anchor,
         ) {
             push(
                 out,
@@ -577,6 +630,14 @@ fn validate_changed_spec_impact(
             );
         }
     }
+}
+
+fn binding_definition_changed(
+    baseline: Option<&SpecIndex>,
+    current: &SpecIndex,
+    binding: &SpecAnchor,
+) -> bool {
+    baseline.and_then(|index| index.bindings.get(binding)) != current.bindings.get(binding)
 }
 
 fn binding_targets_changed_across_indexes(
@@ -1723,17 +1784,22 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                     continue;
                 };
                 for argument in &configured.arguments {
-                    if argument.contains('{')
-                        && runner
-                            .arguments
-                            .keys()
-                            .all(|key| !argument.contains(&format!("{{{key}}}")))
+                    let placeholders = argument
+                        .match_indices('{')
+                        .filter_map(|(start, _)| {
+                            let end = argument[start + 1..].find('}')? + start + 1;
+                            Some(&argument[start + 1..end])
+                        })
+                        .collect::<Vec<_>>();
+                    if placeholders
+                        .iter()
+                        .any(|key| runner.arguments.get(*key).is_none_or(String::is_empty))
                     {
                         push(
                             out,
                             "SYU-VERIFICATION-002",
                             format!(
-                                "verification runner argument has an unresolved placeholder: {argument}"
+                                "verification runner argument is not exactly configured: {argument}"
                             ),
                             target.path.to_string_lossy(),
                             Some(anchor.clone()),

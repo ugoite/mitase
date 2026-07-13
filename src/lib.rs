@@ -248,13 +248,7 @@ fn run_readiness(args: ReadinessArgs) -> Result<i32> {
         ),
     }
     Ok(
-        if report.inventory.ready == report.inventory.required
-            && report.ownership.ready == report.ownership.required
-            && report.seedability.ready == report.seedability.required
-            && report.workability.ready == report.workability.required
-            && report.verification.ready == report.verification.required
-            && report.closed_loop.ready == report.closed_loop.required
-        {
+        if report.meets(workspace.config.validation.readiness.target) {
             0
         } else {
             1
