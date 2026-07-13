@@ -20,11 +20,13 @@ jobs:
       - name: Prove closed-loop readiness
         run: |
           set +e
-          cargo run -- readiness report . --format json > readiness.json
+          export READINESS_FILE="$RUNNER_TEMP/syu-readiness.json"
+          cargo run -- readiness report . --format json > "$READINESS_FILE"
           readiness_status=$?
           python3 - <<'PY'
           import json
-          report = json.load(open("readiness.json"))
+          import os
+          report = json.load(open(os.environ["READINESS_FILE"]))
           for axis in ("inventory", "ownership", "seedability", "workability", "verification", "closed_loop"):
               value = report[axis]
               print(f"{axis}: {value['ready']}/{value['required']}")
@@ -38,7 +40,8 @@ jobs:
           fi
           python3 - <<'PY'
           import json
-          report = json.load(open("readiness.json"))
+          import os
+          report = json.load(open(os.environ["READINESS_FILE"]))
           for axis in ("inventory", "ownership", "seedability", "workability", "verification", "closed_loop"):
               value = report[axis]
               assert value["required"] == value["ready"], (axis, value)
