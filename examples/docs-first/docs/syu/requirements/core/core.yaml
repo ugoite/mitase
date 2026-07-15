@@ -24,11 +24,18 @@ requirements:
       adapter: shell
       path: scripts/publish-docs.sh
       selector:
-        kind: file
+        kind: marker
+        value: "#!/usr/bin/env bash"
+      claims:
+      - kind: verifies
+        criterion: REQ-DOCSFIRST-001#criterion.owned-delivery
+        covers:
+        - FEAT-DOCSFIRST-001#binding.implementation/target.target-1
+        runner:
+          runner: cargo-test
     - id: target-2
-      adapter: yaml
+      adapter: shell
       path: config/navigation.yaml
       selector:
-        kind: file
-    verifies:
-    - REQ-DOCSFIRST-001#criterion.owned-delivery
+        kind: marker
+        value: "sections:"

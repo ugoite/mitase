@@ -27,9 +27,11 @@ policies:
     responsibility: Keep the example rule connected to an active owned artifact.
     targets:
     - id: policy-target
-      adapter: typescript
+      adapter: shell
       path: frontend/feature.ts
       selector:
-        kind: file
-    enforces:
-    - POL-POLYGLOT-001#rule.traceable-delivery
+        kind: marker
+        value: "export function typescriptFeature() {"
+      claims:
+      - kind: enforces
+        rule: POL-POLYGLOT-001#rule.traceable-delivery

@@ -11,7 +11,6 @@ version: 0.0.1-alpha.8
 schema: syu/config/v1
 workspace:
   spec_roots: [docs/syu]
-  artifact_roots: [src, tests]
   excludes: []
 profiles: { active: [], custom: {} }
 validation:

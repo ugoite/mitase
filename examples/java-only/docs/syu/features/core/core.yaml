@@ -14,9 +14,11 @@ features:
     responsibility: Implement the owned behavior for this example workspace.
     targets:
     - id: target-1
-      adapter: java
+      adapter: shell
       path: src/main/java/example/app/OrderSummary.java
       selector:
-        kind: file
-    satisfies:
-    - REQ-JAVAONLY-001#criterion.owned-delivery
+        kind: marker
+        value: "public final class OrderSummary {"
+      claims:
+      - kind: satisfies
+        criterion: REQ-JAVAONLY-001#criterion.owned-delivery

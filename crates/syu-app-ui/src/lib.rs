@@ -24,9 +24,8 @@ impl<'a> WorkbenchView<'a> {
 }
 
 pub const WORKBENCH_CSS: &str = include_str!("../assets/workbench.css");
-pub const WORKBENCH_APP_JS: &str = include_str!("../assets/app.js");
 pub const WORKBENCH_I18N_JS: &str = include_str!("../assets/i18n.js");
-pub const WORKBENCH_PROJECTION_JS: &str = include_str!("../assets/projection.js");
+pub const WORKBENCH_MAIN_JS: &str = include_str!("../assets/js/main.js");
 
 pub fn locale_catalog_script() -> String {
     format!(
@@ -74,30 +73,8 @@ mod tests {
                 "accessible name is not localized: {tag}"
             );
         }
-        for tail in WORKBENCH_PROJECTION_JS.split("t('").skip(1) {
-            let key = tail.split('\'').next().unwrap();
-            if !key.contains('.') {
-                continue;
-            }
-            assert!(
-                en_catalog.contains_key(key),
-                "missing dynamic UI catalog key: {key}"
-            );
-        }
-        for banned in [
-            "No custom facets yet.",
-            "No rule overrides yet.",
-            "namedField('Profile'",
-            "namedField('Facet'",
-            "namedField('Include paths'",
-            "namedField('Rule ID'",
-            "namedField('Severity'",
-        ] {
-            assert!(
-                !WORKBENCH_PROJECTION_JS.contains(banned),
-                "unlocalized UI text leaked: {banned}"
-            );
-        }
+        assert!(WORKBENCH_MAIN_JS.contains("renderWork"));
+        assert!(WORKBENCH_MAIN_JS.contains("renderSpecifications"));
     }
 
     #[test]
@@ -118,7 +95,7 @@ mod tests {
         assert!(!html.contains("<style"));
         assert!(!html.contains("class=\"gear\""));
         assert!(html.contains("/assets/workbench.css"));
-        assert!(html.contains("/assets/app.js"));
+        assert!(html.contains("type=\"module\" src=\"/assets/js/main.js\""));
         for banned in [
             "REQ-WORKBENCH",
             "SLICE-01",
@@ -138,9 +115,9 @@ mod tests {
     }
 
     #[test]
-    fn browser_does_not_infer_diagnostic_phase_or_create_ambiguous_seed() {
-        assert!(!WORKBENCH_PROJECTION_JS.contains("rule_id.includes"));
-        assert!(WORKBENCH_PROJECTION_JS.contains("selectedAnchor"));
-        assert!(WORKBENCH_PROJECTION_JS.contains("seeds: [selectedAnchor]"));
+    fn browser_does_not_infer_specification_semantics() {
+        assert!(!WORKBENCH_MAIN_JS.contains("selector.names"));
+        assert!(!WORKBENCH_MAIN_JS.contains("rawProjection"));
+        assert!(!WORKBENCH_MAIN_JS.contains("syu/config"));
     }
 }

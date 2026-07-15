@@ -22,7 +22,7 @@ Use this skill when you need to make or review changes in a repository that uses
 ## Workflow
 
 1. Inspect the current layered model before editing.
-   - Run `syu validate .` or `syu workbench project --workspace . --format json`
+   - Run `syu validate workspace .` or `syu workbench project --workspace . --format json`
      to see current validation state and active projection output.
    - Read the relevant files under `docs/syu/`.
 2. When changing intent, update adjacent layers together.
@@ -32,7 +32,7 @@ Use this skill when you need to make or review changes in a repository that uses
    - Features should trace to code, tests, docs, scripts, or workflows that
      actually implement the behavior.
 3. Keep validation rules in mind.
-   - `syu validate .` should stay green unless you are intentionally working
+   - `syu validate workspace .` should stay green unless you are intentionally working
      through a broken intermediate state.
    - If rule-backed errors appear, read the rule code, title, summary, and
      description before changing files.
@@ -46,7 +46,7 @@ Use this skill when you need to make or review changes in a repository that uses
 
 ```bash
 syu
-syu validate .
+syu validate workspace .
 syu workbench project --workspace . --format json
 scripts/ci/check-generated-docs-freshness.sh
 scripts/ci/quality-gates.sh

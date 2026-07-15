@@ -24,7 +24,7 @@ fn workbench_rendered_dom_uses_projection_driven_placeholders() {
         "data-work-slices-rail",
         "data-work-context-rail",
         "data-work-validation-rail",
-        "data-items-rail",
+        "data-specifications-rail",
         "data-diagnostic-result",
         "data-settings-layer-panel=\"application\"",
         "data-settings-layer-panel=\"workspace\"",

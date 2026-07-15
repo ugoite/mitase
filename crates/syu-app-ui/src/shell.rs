@@ -4,7 +4,7 @@ pub(crate) fn render(template: &str, projection: &WorkspaceProjection) -> String
     template
         .replace(
             "ugoite / syu",
-            &super::components::escape(&projection.workspace.root),
+            &super::components::escape(&projection.snapshot.root),
         )
         .replace(
             "issue-762 · 8954b70",
@@ -12,7 +12,7 @@ pub(crate) fn render(template: &str, projection: &WorkspaceProjection) -> String
                 "{} · {}",
                 super::components::escape(
                     &projection
-                        .workspace
+                        .snapshot
                         .revision
                         .chars()
                         .take(9)
@@ -20,7 +20,7 @@ pub(crate) fn render(template: &str, projection: &WorkspaceProjection) -> String
                 ),
                 super::components::escape(
                     &projection
-                        .workspace
+                        .snapshot
                         .fingerprint
                         .chars()
                         .take(9)

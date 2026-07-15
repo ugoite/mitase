@@ -8,10 +8,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt,clippy
       - run: cargo fmt --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
-      - run: cargo run -- validate .
+      - run: cargo run -- validate workspace .
+      - name: Prove configured readiness
+        run: |
+          set +e
+          export READINESS_FILE="$RUNNER_TEMP/syu-readiness.json"
+          cargo run -- readiness report . --format json > "$READINESS_FILE"
+          readiness_status=$?
+          python3 - <<'PY'
+          import json
+          import os
+          report = json.load(open(os.environ["READINESS_FILE"]))
+          for axis in ("inventory", "ownership", "seedability", "workability", "verification", "closed_loop"):
+              value = report[axis]
+              print(f"{axis}: {value['ready']}/{value['required']}")
+              for subject in value.get("subjects", []):
+                  if not subject["ready"]:
+                      print(f"  NOT READY {subject['id']}: {'; '.join(subject['blockers'])}")
+          print(f"execution_state: {report['execution_state']}")
+          PY
+          if [ "$readiness_status" -ne 0 ]; then
+              exit "$readiness_status"
+          fi

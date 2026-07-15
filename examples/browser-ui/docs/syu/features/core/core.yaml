@@ -14,9 +14,11 @@ features:
     responsibility: Implement the owned behavior for this example workspace.
     targets:
     - id: target-1
-      adapter: typescript
+      adapter: shell
       path: src/components/Counter.tsx
       selector:
-        kind: file
-    satisfies:
-    - REQ-BROWSERUI-001#criterion.owned-delivery
+        kind: marker
+        value: "export function Counter() {"
+      claims:
+      - kind: satisfies
+        criterion: REQ-BROWSERUI-001#criterion.owned-delivery

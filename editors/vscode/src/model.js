@@ -168,8 +168,8 @@ function selectorSymbols(selector) {
     return []
   }
 
-  if (selector.kind === 'symbol' && Array.isArray(selector.names)) {
-    return selector.names.filter((value) => typeof value === 'string' && value.trim())
+  if (selector.kind === 'symbol' && typeof selector.name === 'string' && selector.name.trim()) {
+    return [selector.name.trim()]
   }
 
   return []
@@ -279,6 +279,15 @@ function collectV1DocumentEntries(kind, items, documentPath, byId, byKind) {
           }
 
           for (const target of Array.isArray(binding.targets) ? binding.targets : []) {
+            for (const claim of Array.isArray(target?.claims) ? target.claims : []) {
+              if (claim?.kind !== 'satisfies') {
+                continue
+              }
+              const requirementId = anchorItemId(claim.criterion)
+              if (requirementId) {
+                entry._requirementIds.add(requirementId)
+              }
+            }
             appendGroupedReference(
               entry.implementationTargets,
               target?.adapter,
@@ -617,7 +626,24 @@ function collectInlineNavigationTargets(documentText) {
       continue
     }
 
-    if (/^\s*(?:symbols|names):\s*$/u.test(text) && indent > traceFileIndent) {
+    const symbolMatch = /^(\s*)name:\s*["']?([^"'#]+?)["']?\s*$/u.exec(text)
+    if (symbolMatch && indent > traceFileIndent) {
+      const symbolValue = symbolMatch[2].trim()
+      if (symbolValue) {
+        const startCharacter = text.indexOf(symbolValue)
+        targets.push({
+          kind: 'traceSymbol',
+          file: activeTraceFile,
+          symbol: symbolValue,
+          line,
+          startCharacter,
+          endCharacter: startCharacter + symbolValue.length
+        })
+      }
+      continue
+    }
+
+    if (/^\s*symbols:\s*$/u.test(text) && indent > traceFileIndent) {
       inSymbols = true
       symbolsIndent = indent
       continue

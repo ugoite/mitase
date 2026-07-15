@@ -8,6 +8,7 @@ use syu_spec_model::{
 
 pub const WORK_REQUEST_SCHEMA: &str = "syu/work-request/v1";
 pub const WORK_PLAN_SCHEMA: &str = "syu/work-plan/v1";
+pub const VERIFICATION_RECEIPT_SCHEMA: &str = "syu/verification-receipt/v1";
 pub const CONTEXT_PACK_SCHEMA: &str = "syu/context-pack/v1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -25,6 +26,8 @@ pub enum WorkOperation {
 pub enum WorkSeed {
     Anchor(SpecAnchor),
     Item(SpecItemRef),
+    ArtifactIdentity { artifact_identity: String },
+    ChangedUnit { changed_unit: String },
 }
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -92,7 +95,19 @@ pub enum TargetTransition {
 #[serde(deny_unknown_fields)]
 pub struct PlanBasis {
     pub revision: String,
+    /// Complete pre-state fingerprint retained for UI freshness checks and
+    /// exact pre-state validation. Post-state execution must not reject an
+    /// editable artifact merely because this value changed.
     pub workspace_fingerprint: String,
+    /// Specification and configuration inputs that must remain stable while a
+    /// plan is being executed.
+    pub spec_fingerprint: String,
+    /// Binding, target, and ownership relationships that define the plan's
+    /// current ownership basis.
+    pub ownership_fingerprint: String,
+    /// Content and identity snapshot for every readonly or run-only target.
+    /// Editable target content is intentionally excluded from this digest.
+    pub readonly_fingerprint: String,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -120,6 +135,11 @@ pub struct ResolvedSelector {
 pub struct PlannedTarget {
     #[serde(rename = "ref")]
     pub reference: BoundTargetRef,
+    /// When a request originates from a changed semantic unit, retain that
+    /// exact identity even when its owner binding also declares a broader
+    /// entrypoint target.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact_identity: Option<String>,
     pub transition: TargetTransition,
     #[serde(default)]
     pub lifecycle: TargetLifecycle,
@@ -271,7 +291,7 @@ pub enum SpecContextEntry {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ContractParticipantContext {
-    pub binding: SpecAnchor,
+    pub target: BoundTargetRef,
     pub role: String,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -364,6 +384,64 @@ pub struct ContextPack {
     pub spec_context: Vec<SpecContextEntry>,
     pub artifact_context: Vec<ArtifactContextEntry>,
     pub completion: Vec<CompletionCheck>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VerificationReceipt {
+    pub schema: String,
+    pub plan_digest: String,
+    pub slice_id: String,
+    pub revision: String,
+    pub workspace_fingerprint: String,
+    pub started_at: String,
+    pub completed_at: String,
+    pub executions: Vec<VerificationExecution>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VerificationExecution {
+    pub target: BoundTargetRef,
+    pub runner: String,
+    pub command: Vec<String>,
+    pub exit_code: i32,
+    pub stdout_digest: String,
+    pub stderr_digest: String,
+    pub implementation_digests: std::collections::BTreeMap<BoundTargetRef, String>,
+    pub verification_digest: String,
+}
+
+/// Return a stable digest of the targets that are not editable by a work
+/// slice. This is the immutable execution boundary used by post-state plan
+/// validation; editable target content is deliberately omitted.
+pub fn readonly_targets_fingerprint(slices: &[ExecutionSlice]) -> String {
+    let mut hash = Sha256::new();
+    for slice in slices {
+        hash.update(slice.id.as_bytes());
+        for target in slice
+            .verification_targets
+            .iter()
+            .chain(slice.readonly_context.iter())
+            .filter(|target| target.access != TargetAccessMode::Editable)
+        {
+            hash.update(target.reference.to_string().as_bytes());
+            hash.update(format!("{:?}", target.transition).as_bytes());
+            hash.update(format!("{:?}", target.lifecycle).as_bytes());
+            hash.update(format!("{:?}", target.access).as_bytes());
+            hash.update(target.resolved_path.as_bytes());
+            hash.update(target.resolved_selector.description.as_bytes());
+            for symbol in &target.resolved_selector.symbols {
+                hash.update(symbol.as_bytes());
+            }
+            hash.update(target.content_hash.as_bytes());
+            hash.update(target.excerpt_hash.as_bytes());
+            hash.update(target.adapter.as_bytes());
+            hash.update(target.facet.as_bytes());
+            hash.update(format!("{:?}", target.role).as_bytes());
+        }
+    }
+    format!("sha256:{:x}", hash.finalize())
 }
 
 pub fn work_plan_digest(plan: &WorkPlan) -> String {

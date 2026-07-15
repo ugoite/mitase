@@ -19,5 +19,14 @@ requirements:
         facet: verification
         responsibility: Prove invalid credentials create no session.
         targets:
-          - { id: case, adapter: rust, path: tests/login.rs, selector: { kind: symbol, names: [invalid_credentials] } }
-        verifies: [REQ-AUTH-001#criterion.invalid-credentials]
+          - id: case
+            adapter: rust
+            path: tests/login.rs
+            selector: { kind: symbol, name: invalid_credentials }
+            claims:
+              - kind: verifies
+                criterion: REQ-AUTH-001#criterion.invalid-credentials
+                covers:
+                  - FEAT-AUTH-001#binding.backend/target.handler
+                  - FEAT-AUTH-001#binding.ui/target.submit
+                runner: { runner: cargo-test, arguments: { package: app, test: invalid_credentials } }

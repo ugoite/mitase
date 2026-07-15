@@ -15,7 +15,7 @@ editor:
 
 This first cut stays deliberately small:
 
-- diagnostics come from `syu validate . --format json`
+- diagnostics come from `syu validate workspace . --format json`
 - navigation reads the checked-in spec YAML directly from the workspace
 
 That means the extension works with today's CLI while leaving room for a shared
@@ -32,7 +32,7 @@ The repository now also ships `syu lsp`, but the VS Code extension is still
 Current split:
 
 - **Still uses the CLI directly**: validation diagnostics come from
-  `syu validate . --format json`
+  `syu validate workspace . --format json`
 - **Still reads checked-in YAML directly**: the tree view, spec-ID lookups, and
   related-file navigation read the workspace files without a language server in
   the middle

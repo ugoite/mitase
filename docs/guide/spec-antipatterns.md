@@ -2,7 +2,7 @@
 
 <!-- FEAT-DOCS-001 -->
 
-Passing `syu validate .` is the floor, not the finish line. A workspace can
+Passing `syu validate workspace .` is the floor, not the finish line. A workspace can
 stay green while the four-layer design still drifts toward churn,
 duplication, or vague ownership. This guide calls out common
 **bad-but-valid** shapes and the refactors that usually help.
