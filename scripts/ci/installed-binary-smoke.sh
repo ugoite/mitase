@@ -70,11 +70,11 @@ main() {
   git -C "$workspace" commit --quiet -m "fixture snapshot"
   git -C "$workspace" update-ref refs/remotes/origin/main HEAD
 
-  "${installed_binary}" validate workspace "$workspace" >/dev/null
+  "${installed_binary}" validate workspace "$workspace"
   "${installed_binary}" work plan \
     --request "${workspace}/work.yaml" \
     --out "$plan" \
-    --workspace "$workspace" >/dev/null
+    --workspace "$workspace"
   test -f "$plan"
 
   "${installed_binary}" workbench project \
