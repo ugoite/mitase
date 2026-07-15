@@ -434,5 +434,12 @@
   "items.field.id": "ID",
   "items.field.criterion_id": "Criterion ID",
   "items.field.criterion_kind": "Criterion種類",
-  "items.field.criterion_statement": "Criterion記述"
+  "items.field.criterion_statement": "Criterion記述",
+  "items.suggestions.title": "実装・検証対象の候補",
+  "items.suggestions.review": "対象候補を確認",
+  "items.suggestions.advisory": "候補は提案に留まります。承認した正確な対象だけが作業依頼の下書きになります。",
+  "items.suggestions.select": "選択",
+  "items.suggestions.reject": "却下",
+  "items.suggestions.approve": "選択した対象を承認",
+  "items.suggestions.empty": "現在の根拠で再提示できる候補はありません。"
 }
