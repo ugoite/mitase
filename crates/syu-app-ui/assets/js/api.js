@@ -50,6 +50,28 @@ export const applySpecificationCandidate = (projection, patch, previewToken) => 
   },
 );
 
+export const readTargetSuggestions = criterion => request(
+  `/api/specifications/${encodeURIComponent(criterion)}/target-suggestions`,
+);
+
+export const rejectTargetSuggestion = (projection, criterion, suggestionToken, suggestionId) => post(
+  `/api/specifications/${encodeURIComponent(criterion)}/target-suggestions/reject`,
+  {
+    basis: mutationBasis(projection),
+    suggestion_token: suggestionToken,
+    suggestion_id: suggestionId,
+  },
+);
+
+export const approveTargetSuggestions = (projection, criterion, suggestionToken, suggestionIds) => post(
+  `/api/specifications/${encodeURIComponent(criterion)}/target-suggestions/approve`,
+  {
+    basis: mutationBasis(projection),
+    suggestion_token: suggestionToken,
+    suggestion_ids: suggestionIds,
+  },
+);
+
 export function mutationBasis(projection) {
   const snapshot = projection?.snapshot || {};
   return {

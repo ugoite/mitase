@@ -173,12 +173,125 @@ function renderImpact(root, preview) {
   addEntries(t('items.preview.ownership'), impact.affected_ownership);
   addEntries(t('items.preview.targets'), impact.implementation_targets);
   addEntries(t('items.preview.tests'), impact.verification_targets);
+  const suggested = (impact.target_suggestions || []).flatMap(set => set.suggestions || []);
+  addEntries(t('items.suggestions.title'), suggested.map(candidate => `${candidate.ref} (${candidate.confidence})`));
   if (impact.work?.reason) {
     const row = document.createElement('li');
     row.textContent = impact.work.reason;
     list.append(row);
   }
   card.append(list);
+  root.append(card);
+}
+
+function renderTargetSuggestions(root, state) {
+  const set = state.targetSuggestions;
+  if (!set) return;
+  const card = document.createElement('section');
+  card.className = 'card target-suggestions';
+  const head = document.createElement('div');
+  head.className = 'canvas-head';
+  const heading = document.createElement('h3');
+  heading.textContent = t('items.suggestions.title');
+  head.append(heading);
+  head.append(button(t('common.close'), '×', () => {
+    state.targetSuggestions = null;
+    state.targetSuggestionSelection = [];
+    state.render();
+  }, 'btn small ghost'));
+  card.append(head);
+  const explanation = document.createElement('p');
+  explanation.textContent = t('items.suggestions.advisory');
+  card.append(explanation);
+  if (state.specificationError) {
+    const error = document.createElement('p');
+    error.className = 'status-message status-error';
+    error.textContent = state.specificationError;
+    card.append(error);
+  }
+  if (set.split_recommendation) {
+    const split = document.createElement('p');
+    split.className = 'status-message status-warning';
+    split.textContent = set.split_recommendation.reason;
+    card.append(split);
+  }
+  (set.suggestions || []).forEach(candidate => {
+    const row = document.createElement('div');
+    row.className = 'specification-row target-suggestion';
+    const selection = document.createElement('input');
+    selection.type = 'checkbox';
+    selection.checked = state.targetSuggestionSelection.includes(candidate.id);
+    selection.setAttribute('aria-label', `${t('items.suggestions.select')} ${candidate.ref}`);
+    selection.addEventListener('change', () => {
+      const values = new Set(state.targetSuggestionSelection);
+      if (selection.checked) values.add(candidate.id); else values.delete(candidate.id);
+      state.targetSuggestionSelection = [...values];
+      state.render();
+    });
+    const detail = document.createElement('div');
+    const title = document.createElement('strong');
+    title.textContent = `#${candidate.rank} ${candidate.ref}`;
+    const meta = document.createElement('div');
+    meta.className = 'meta-line';
+    meta.append(status(candidate.confidence), status(candidate.role));
+    const evidence = document.createElement('ul');
+    evidence.className = 'compact-list';
+    (candidate.evidence || []).forEach(value => {
+      const item = document.createElement('li');
+      item.textContent = value;
+      evidence.append(item);
+    });
+    detail.append(title, meta, evidence);
+    const reject = button(t('items.suggestions.reject'), '×', async () => {
+      try {
+        state.targetSuggestions = await state.api.rejectTargetSuggestion(
+          state.projection,
+          set.criterion,
+          set.suggestion_token,
+          candidate.id,
+        );
+        state.targetSuggestionSelection = state.targetSuggestionSelection.filter(id => id !== candidate.id);
+        state.specificationError = null;
+      } catch (error) {
+        state.specificationError = error.message;
+      }
+      state.render();
+    }, 'btn small ghost');
+    row.append(selection, detail, reject);
+    card.append(row);
+  });
+  if (!(set.suggestions || []).length) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-state';
+    empty.textContent = t('items.suggestions.empty');
+    card.append(empty);
+  } else {
+    const approve = button(t('items.suggestions.approve'), '✓', async () => {
+      try {
+        const result = await state.api.approveTargetSuggestions(
+          state.projection,
+          set.criterion,
+          set.suggestion_token,
+          state.targetSuggestionSelection,
+        );
+        if (result.request) {
+          state.projection = await state.api.readProjection();
+          state.targetSuggestions = null;
+          state.targetSuggestionSelection = [];
+          state.selectedSlice = null;
+          state.go('work');
+          return;
+        }
+        state.targetSuggestions = { ...set, split_recommendation: result.split_recommendation };
+        state.specificationError = null;
+      } catch (error) {
+        state.specificationError = error.message;
+      }
+      state.render();
+    }, 'btn primary');
+    approve.disabled = !state.targetSuggestionSelection.length;
+    card.append(approve);
+  }
   root.append(card);
 }
 
@@ -363,6 +476,8 @@ function renderDetail(root, state, selected) {
   actions.append(button(t('common.edit'), '✎', () => {
     state.specificationEditor = { mode: 'edit', itemId: selected.id };
     state.specificationPreview = null;
+    state.targetSuggestions = null;
+    state.targetSuggestionSelection = [];
     state.render();
   }, 'btn small'));
   head.append(actions);
@@ -400,6 +515,19 @@ function renderDetail(root, state, selected) {
           () => { state.selectedSlice = null; state.go('work'); },
         ), 'btn small'));
       }
+      if (kind === 'criterion') {
+        row.append(button(t('items.suggestions.review'), '◎', async () => {
+          try {
+            const suggestions = await state.api.readTargetSuggestions(value.anchor);
+            state.targetSuggestions = suggestions;
+            state.targetSuggestionSelection = suggestions.suggestions.map(candidate => candidate.id);
+            state.specificationError = null;
+          } catch (error) {
+            state.specificationError = error.message;
+          }
+          state.render();
+        }, 'btn small'));
+      }
       row.append(button(t('common.edit'), '✎', () => {
         state.specificationEditor = {
           mode: 'edit',
@@ -410,6 +538,8 @@ function renderDetail(root, state, selected) {
           appliesTo: (value.applies_to || []).join(', '),
         };
         state.specificationPreview = null;
+        state.targetSuggestions = null;
+        state.targetSuggestionSelection = [];
         state.render();
       }, 'btn small ghost'));
       card.append(row);
@@ -422,6 +552,7 @@ function renderDetail(root, state, selected) {
     empty.textContent = t('items.empty.description');
     root.append(empty);
   }
+  renderTargetSuggestions(root, state);
   const advanced = document.createElement('details');
   const summary = document.createElement('summary');
   summary.textContent = t('common.advanced');
@@ -469,6 +600,8 @@ export function initSpecifications(state) {
   newButton?.addEventListener('click', () => {
     state.specificationEditor = { mode: 'create', createKind: 'requirement', governedBy: [] };
     state.specificationPreview = null;
+    state.targetSuggestions = null;
+    state.targetSuggestionSelection = [];
     state.render();
   });
   document.addEventListener('syu:locale', () => state.render());
@@ -503,6 +636,8 @@ export function renderSpecifications(specifications, stateOrRoot = document.quer
         state.selectedSpecification = item.id;
         state.specificationEditor = null;
         state.specificationPreview = null;
+        state.targetSuggestions = null;
+        state.targetSuggestionSelection = [];
         state.render();
       });
       rail.append(buttonNode);
