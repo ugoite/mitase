@@ -1853,7 +1853,7 @@ fn normalize_workspace_path(path: &Path) -> PathBuf {
 }
 
 fn workspace_relative_repo_path(path: &Path, root: &Path) -> Option<RepoPath> {
-    workspace_relative_display(path, root).and_then(|relative| RepoPath::new(relative).ok())
+    workspace_relative_display(path, root).and_then(|relative| RepoPath::from_path(relative).ok())
 }
 
 fn workspace_relative_display(path: &Path, root: &Path) -> Option<PathBuf> {

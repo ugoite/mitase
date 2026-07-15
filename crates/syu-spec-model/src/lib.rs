@@ -79,6 +79,17 @@ impl RepoPath {
         }
         Ok(Self(value))
     }
+
+    /// Build a repository path from a filesystem-relative path.
+    ///
+    /// Repository paths are serialized with forward slashes on every
+    /// platform, while `Path::strip_prefix` uses the host platform's native
+    /// separator. Normalize only at this filesystem boundary so the model's
+    /// strict serialized-path invariant remains unchanged.
+    pub fn from_path(value: impl AsRef<Path>) -> Result<Self, String> {
+        let normalized = value.as_ref().to_string_lossy().replace('\\', "/");
+        Self::new(normalized)
+    }
     pub fn as_path(&self) -> &Path {
         &self.0
     }
@@ -562,6 +573,12 @@ mod tests {
         assert!(serde_yaml::from_str::<LocalId>("Bad_ID").is_err());
         assert!(serde_yaml::from_str::<RepoPath>("../outside").is_err());
         assert!(serde_yaml::from_str::<RepoPath>("/absolute").is_err());
+    }
+
+    #[test]
+    fn filesystem_paths_are_normalized_to_repository_paths() {
+        let path = RepoPath::from_path(Path::new(r"api\login.rs")).unwrap();
+        assert_eq!(path.to_string_lossy(), "api/login.rs");
     }
 
     #[test]

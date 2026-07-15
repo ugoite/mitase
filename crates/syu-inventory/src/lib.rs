@@ -119,7 +119,7 @@ fn openapi_operations(context: &InventoryContext, path: PathBuf) -> Result<Vec<A
     let relative = path
         .strip_prefix(root)
         .context("OpenAPI path escaped workspace")?;
-    let repo_path = RepoPath::new(relative)
+    let repo_path = RepoPath::from_path(relative)
         .map_err(|error| anyhow::anyhow!("OpenAPI path {:?}: {error}", path))?;
     let document: serde_yaml::Value = serde_yaml::from_slice(&read_bytes(context, &path)?)?;
     let mut units = Vec::new();
@@ -175,7 +175,7 @@ fn markdown_headings(context: &InventoryContext, path: PathBuf) -> Result<Vec<Ar
     let relative = path
         .strip_prefix(root)
         .context("markdown path escaped workspace")?;
-    let repo_path = RepoPath::new(relative)
+    let repo_path = RepoPath::from_path(relative)
         .map_err(|error| anyhow::anyhow!("Markdown path {:?}: {error}", path))?;
     let source = String::from_utf8(read_bytes(context, &path)?)?;
     let mut units = Vec::new();
@@ -252,7 +252,7 @@ fn unit(context: &InventoryContext, adapter: &str, path: PathBuf) -> Result<Arti
     let relative = path
         .strip_prefix(root)
         .context("inventory path escaped workspace")?;
-    let path = RepoPath::new(relative)
+    let path = RepoPath::from_path(relative)
         .map_err(|error| anyhow::anyhow!("file inventory path {:?}: {error}", path))?;
     let bytes = read_bytes(context, &root.join(path.as_path()))?;
     let text = String::from_utf8_lossy(&bytes);
@@ -494,7 +494,7 @@ fn html_marker_units(context: &InventoryContext, path: PathBuf) -> Result<Vec<Ar
     let relative = path
         .strip_prefix(root)
         .context("HTML path escaped workspace")?;
-    let repo_path = RepoPath::new(relative)
+    let repo_path = RepoPath::from_path(relative)
         .map_err(|error| anyhow::anyhow!("HTML marker path {:?}: {error}", path))?;
     let source = String::from_utf8(read_bytes(context, &path)?)?;
     let mut occurrences = BTreeMap::<String, usize>::new();
@@ -579,7 +579,7 @@ fn source_symbol_units(
     let relative = path
         .strip_prefix(root)
         .context("source path escaped workspace")?;
-    let repo_path = RepoPath::new(relative)
+    let repo_path = RepoPath::from_path(relative)
         .map_err(|error| anyhow::anyhow!("source symbol path {:?}: {error}", path))?;
     let source = String::from_utf8(read_bytes(context, &path)?)?;
     let mut units = Vec::new();
@@ -902,7 +902,7 @@ fn discover_rust(
         let relative = path
             .strip_prefix(&context.workspace_root)
             .context("Rust inventory path escaped workspace")?;
-        let repo_path = RepoPath::new(relative)
+        let repo_path = RepoPath::from_path(relative)
             .map_err(|error| anyhow::anyhow!("Rust path {:?}: {error}", path))?;
         units.push(unit(context, "rust", path.clone())?);
         let is_test_file = relative.components().any(|component| {
@@ -937,7 +937,7 @@ fn support_unit(context: &InventoryContext, path: PathBuf) -> Result<ArtifactUni
     let relative = path
         .strip_prefix(root)
         .context("included support path escaped workspace")?;
-    let repo_path = RepoPath::new(relative)
+    let repo_path = RepoPath::from_path(relative)
         .map_err(|error| anyhow::anyhow!("support path {:?}: {error}", path))?;
     let bytes = read_bytes(context, &path)?;
     Ok(ArtifactUnit {
