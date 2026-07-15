@@ -4,7 +4,7 @@ import * as api from './api.js';
 import { renderWork } from './pages/work.js';
 import { renderReadinessPage } from './pages/readiness.js';
 import { renderScope } from './pages/scope.js';
-import { renderSpecifications } from './pages/specifications.js';
+import { initSpecifications, renderSpecifications } from './pages/specifications.js';
 import { renderDiagnostics } from './pages/diagnostics.js';
 import { renderSettings } from './pages/settings.js';
 
@@ -38,6 +38,7 @@ export async function startWorkbench() {
   const state = createState(projection);
   state.api = api;
   state.render = () => render(state);
+  initSpecifications(state);
   state.go = (page) => {
     state.selectedPage = navigate(page, false);
     state.render();

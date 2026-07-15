@@ -418,5 +418,21 @@
   "work.request.target_ref": "対象参照",
   "work.request.target_criterion": "Criterion",
   "work.request.target_transition": "遷移",
-  "work.request.seed_target_exclusive": "Seedアンカーと要求対象は同時に使えません。"
+  "work.request.seed_target_exclusive": "Seedアンカーと要求対象は同時に使えません。",
+  "common.close": "閉じる",
+  "items.new.title": "仕様を作成",
+  "items.preview.impact": "影響",
+  "items.preview.before": "変更前",
+  "items.preview.after": "変更後",
+  "items.preview.anchors": "アンカー",
+  "items.preview.targets": "対象",
+  "items.preview.tests": "テスト",
+  "items.preview.ownership": "所有権",
+  "items.preview.stale": "プレビュー後にフォームが変更されました。現在の値を再度プレビューしてください。",
+  "items.advanced.preserved": "編集しない高度なリンクはそのまま保持されます。",
+  "items.field.document": "領域",
+  "items.field.id": "ID",
+  "items.field.criterion_id": "Criterion ID",
+  "items.field.criterion_kind": "Criterion種類",
+  "items.field.criterion_statement": "Criterion記述"
 }

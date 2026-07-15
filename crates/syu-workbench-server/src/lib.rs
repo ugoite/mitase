@@ -21,9 +21,9 @@ use syu_diagnostics::{Severity, ValidationPhase, ValidationResult};
 use syu_planner::plan;
 use syu_project_model::{ChangeBaseline, ValidationPreset};
 use syu_spec_model::{
-    ArtifactBinding, BindingRole, BoundTargetRef, Contract, ContractKind, Criterion, ItemStatus,
-    LocalAnchorKind, OwnershipScope, Philosophy, Policy, Priority, Requirement, Rule, RuleLevel,
-    Selector, SpecAnchor, SpecDocument, TargetClaim,
+    ArtifactBinding, BindingRole, BoundTargetRef, Contract, ContractKind, Criterion, CriterionKind,
+    ItemStatus, LocalAnchorKind, LocalId, OwnershipScope, Philosophy, Policy, Priority,
+    Requirement, Rule, RuleLevel, Selector, SpecAnchor, SpecDocument, SpecId, TargetClaim,
 };
 use syu_validation::{PlanValidationMode, ValidationContext, validate};
 use syu_work_model::{VerificationReceipt, WorkPlan, WorkRequest};
@@ -131,6 +131,18 @@ impl WorkbenchServer {
             .route("/api/readiness", get(api_readiness))
             .route("/api/readiness/run", post(api_readiness_run))
             .route("/api/specifications", get(api_specifications))
+            .route(
+                "/api/specifications/candidates",
+                get(api_specification_candidates),
+            )
+            .route(
+                "/api/specifications/candidates/preview",
+                post(api_specification_candidate_preview),
+            )
+            .route(
+                "/api/specifications/candidates/apply",
+                put(api_specification_candidate_apply),
+            )
             .route("/api/specifications/{anchor}", get(api_specification))
             .route(
                 "/api/specifications/{anchor}/preview",
@@ -304,9 +316,59 @@ pub enum EditPatch {
         item_id: String,
         fields: SpecificationPatchFields,
     },
+    Anchor {
+        anchor: String,
+        fields: AnchorPatchFields,
+    },
+    CreateRequirement {
+        document: String,
+        id: SpecId,
+        title: String,
+        description: String,
+        priority: Priority,
+        #[serde(default)]
+        status: Option<ItemStatus>,
+        criteria: Vec<NewCriterion>,
+    },
+    CreateFeature {
+        document: String,
+        id: SpecId,
+        title: String,
+        summary: String,
+        #[serde(default)]
+        status: Option<ItemStatus>,
+    },
     Config {
         config: Box<syu_project_model::ProjectConfig>,
     },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "anchor_kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum AnchorPatchFields {
+    Principle {
+        statement: Option<String>,
+        applies_to: Option<Vec<String>>,
+    },
+    Rule {
+        statement: Option<String>,
+        level: Option<RuleLevel>,
+    },
+    Criterion {
+        statement: Option<String>,
+        kind: Option<CriterionKind>,
+        governed_by: Option<Vec<SpecAnchor>>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct NewCriterion {
+    pub id: LocalId,
+    pub kind: CriterionKind,
+    pub statement: String,
+    #[serde(default)]
+    pub governed_by: Vec<SpecAnchor>,
 }
 
 /// Typed edit payloads keep item-kind/schema semantics on the server. The
@@ -345,6 +407,33 @@ pub struct EditPreview {
     pub candidate_digest: String,
     pub workspace_fingerprint: String,
     pub changed_lines: usize,
+    #[serde(default)]
+    pub impact: Option<SpecificationImpact>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpecificationImpact {
+    pub affected_items: Vec<String>,
+    pub changed_anchors: Vec<String>,
+    pub affected_ownership: Vec<String>,
+    pub implementation_targets: Vec<String>,
+    pub verification_targets: Vec<String>,
+    pub readiness_before: ReadinessImpact,
+    pub readiness_after: ReadinessImpact,
+    pub work: WorkImpact,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReadinessImpact {
+    pub status: String,
+    pub blocking_subjects: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkImpact {
+    pub seedable: bool,
+    pub requires_replan: bool,
+    pub reason: String,
 }
 
 struct ApiError(StatusCode, anyhow::Error);
@@ -579,6 +668,140 @@ async fn api_specifications(
     Ok(Json(project(&workspace, None, &revision)?.specifications))
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct SpecificationCandidateQuery {
+    #[serde(default)]
+    pub q: Option<String>,
+    #[serde(default)]
+    pub kind: Option<String>,
+    #[serde(default)]
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpecificationCandidateView {
+    pub item: ItemSummary,
+    pub matches: Vec<CandidateMatch>,
+    pub relevance: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CandidateMatch {
+    pub anchor: String,
+    pub kind: String,
+    pub text: String,
+}
+
+async fn api_specification_candidates(
+    State(service): State<Arc<WorkbenchService>>,
+    Query(query): Query<SpecificationCandidateQuery>,
+) -> Result<Json<Vec<SpecificationCandidateView>>, ApiError> {
+    let workspace = SpecWorkspace::load(&service.workspace_root)?;
+    let revision = current_revision(&workspace.root)?;
+    let entries = project(&workspace, None, &revision)?
+        .specifications
+        .specifications;
+    let query_text = query.q.unwrap_or_default().trim().to_ascii_lowercase();
+    let kind_filter = query.kind.as_deref().filter(|kind| !kind.is_empty());
+    let mut candidates = entries
+        .into_iter()
+        .filter_map(|item| {
+            if kind_filter.is_some_and(|kind| kind != item.kind) {
+                return None;
+            }
+            let mut fields = vec![
+                (item.id.clone(), "item".to_string(), item.id.clone()),
+                (item.id.clone(), "title".to_string(), item.title.clone()),
+                (item.id.clone(), "summary".to_string(), item.summary.clone()),
+            ];
+            if let Some(description) = &item.description {
+                fields.push((item.id.clone(), "description".into(), description.clone()));
+            }
+            for principle in &item.principles {
+                fields.push((
+                    principle.anchor.clone(),
+                    "principle".into(),
+                    principle.statement.clone(),
+                ));
+            }
+            for rule in &item.rules {
+                fields.push((rule.anchor.clone(), "rule".into(), rule.statement.clone()));
+            }
+            for criterion in &item.criteria {
+                fields.push((
+                    criterion.anchor.clone(),
+                    "criterion".into(),
+                    criterion.statement.clone(),
+                ));
+            }
+            let matches = if query_text.is_empty() {
+                vec![CandidateMatch {
+                    anchor: item.id.clone(),
+                    kind: "item".into(),
+                    text: item.title.clone(),
+                }]
+            } else {
+                fields
+                    .into_iter()
+                    .filter_map(|(anchor, kind, text)| {
+                        text.to_ascii_lowercase()
+                            .contains(&query_text)
+                            .then_some(CandidateMatch { anchor, kind, text })
+                    })
+                    .collect::<Vec<_>>()
+            };
+            if matches.is_empty() {
+                return None;
+            }
+            let mut relevance = Vec::new();
+            if query_text.is_empty() {
+                relevance.push("available specification".into());
+            } else {
+                if item.id.to_ascii_lowercase() == query_text {
+                    relevance.push("exact item id".into());
+                } else if item.id.to_ascii_lowercase().contains(&query_text) {
+                    relevance.push("item id match".into());
+                }
+                if item.title.to_ascii_lowercase().contains(&query_text) {
+                    relevance.push("title match".into());
+                }
+                if matches.iter().any(|entry| entry.kind == "criterion") {
+                    relevance.push("criterion match".into());
+                }
+                if matches.iter().any(|entry| entry.kind == "rule") {
+                    relevance.push("rule match".into());
+                }
+                if matches.iter().any(|entry| entry.kind == "principle") {
+                    relevance.push("principle match".into());
+                }
+            }
+            let score = relevance.len();
+            Some((
+                score,
+                SpecificationCandidateView {
+                    item,
+                    matches,
+                    relevance,
+                },
+            ))
+        })
+        .collect::<Vec<_>>();
+    candidates.sort_by(|left, right| {
+        right
+            .0
+            .cmp(&left.0)
+            .then_with(|| left.1.item.id.cmp(&right.1.item.id))
+    });
+    let limit = query.limit.unwrap_or(100).clamp(1, 500);
+    Ok(Json(
+        candidates
+            .into_iter()
+            .take(limit)
+            .map(|(_, candidate)| candidate)
+            .collect(),
+    ))
+}
+
 async fn api_specification(
     State(service): State<Arc<WorkbenchService>>,
     AxumPath(anchor): AxumPath<String>,
@@ -609,6 +832,45 @@ fn specification_path(workspace: &SpecWorkspace, anchor: &str) -> Result<PathBuf
         .find(|item| item.id == item_id)
         .ok_or_else(|| anyhow::anyhow!("specification {item_id} not found"))?;
     Ok(workspace.root.join(item.path))
+}
+
+fn specification_document_path(workspace: &SpecWorkspace, document: &str) -> Result<PathBuf> {
+    let requested = PathBuf::from(document);
+    if requested.is_absolute()
+        || requested
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        anyhow::bail!("candidate document must be a workspace-relative specification path");
+    }
+    let requested_path = workspace.root.join(&requested);
+    let canonical = requested_path
+        .canonicalize()
+        .map_err(|_| anyhow::anyhow!("candidate document does not exist"))?;
+    workspace
+        .documents
+        .iter()
+        .find(|loaded| loaded.path.canonicalize().ok().as_ref() == Some(&canonical))
+        .map(|loaded| loaded.path.clone())
+        .ok_or_else(|| anyhow::anyhow!("candidate document is not a loaded specification"))
+}
+
+fn patch_path(workspace: &SpecWorkspace, patch: &EditPatch) -> Result<PathBuf> {
+    match patch {
+        EditPatch::Specification { item_id, .. } => specification_path(workspace, item_id),
+        EditPatch::Anchor { anchor, .. } => {
+            let item = anchor
+                .split('#')
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("anchor is missing an item id"))?;
+            specification_path(workspace, item)
+        }
+        EditPatch::CreateRequirement { document, .. }
+        | EditPatch::CreateFeature { document, .. } => {
+            specification_document_path(workspace, document)
+        }
+        EditPatch::Config { .. } => anyhow::bail!("configuration is not a candidate patch"),
+    }
 }
 
 fn edit_preview(
@@ -642,7 +904,176 @@ fn edit_preview(
         candidate_digest: new_hash.clone(),
         workspace_fingerprint,
         changed_lines,
+        impact: None,
     })
+}
+
+fn edit_preview_for_patch(
+    base: &SpecWorkspace,
+    candidate: &SpecWorkspace,
+    path: &Path,
+    content: &str,
+    patch: &EditPatch,
+    requires_replan: bool,
+) -> Result<EditPreview> {
+    let mut preview = edit_preview(base, candidate, path, content)?;
+    preview.impact = Some(specification_impact(
+        base,
+        candidate,
+        Some(patch),
+        requires_replan,
+    )?);
+    Ok(preview)
+}
+
+fn specification_impact(
+    base: &SpecWorkspace,
+    candidate: &SpecWorkspace,
+    patch: Option<&EditPatch>,
+    requires_replan: bool,
+) -> Result<SpecificationImpact> {
+    let base_index = base.index()?;
+    let candidate_index = candidate.index()?;
+    let changed_anchors = changed_specification_anchors(&candidate_index, patch);
+    let mut affected_items = changed_anchors
+        .iter()
+        .filter_map(|anchor| anchor.split('#').next())
+        .map(str::to_string)
+        .collect::<BTreeSet<_>>();
+    if let Some(EditPatch::Specification { item_id, .. }) = patch {
+        affected_items.insert(item_id.clone());
+    }
+    if let Some(EditPatch::CreateRequirement { id, .. } | EditPatch::CreateFeature { id, .. }) =
+        patch
+    {
+        affected_items.insert(id.to_string());
+    }
+    let mut implementation_targets: BTreeSet<BoundTargetRef> = BTreeSet::new();
+    let mut verification_targets: BTreeSet<BoundTargetRef> = BTreeSet::new();
+    for anchor_text in &changed_anchors {
+        if let Ok(anchor) = anchor_text.parse::<SpecAnchor>() {
+            for target in candidate_index
+                .criteria_to_implementation_targets
+                .get(&anchor)
+                .into_iter()
+                .flatten()
+            {
+                implementation_targets.insert(target.clone());
+            }
+            for target in candidate_index
+                .criteria_to_verification_targets
+                .get(&anchor)
+                .into_iter()
+                .flatten()
+            {
+                verification_targets.insert(target.clone());
+            }
+        }
+    }
+    let affected_targets = implementation_targets
+        .iter()
+        .chain(verification_targets.iter())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let affected_ownership = ownership_for_targets(&candidate_index, &affected_targets);
+    let revision = current_revision(&base.root)?;
+    let before = syu_validation::evaluate_readiness(base, &base_index, &revision, false)?;
+    let after = syu_validation::evaluate_readiness(candidate, &candidate_index, &revision, false)?;
+    let has_implementation_targets = !implementation_targets.is_empty();
+    Ok(SpecificationImpact {
+        affected_items: affected_items.into_iter().collect(),
+        changed_anchors,
+        affected_ownership,
+        implementation_targets: implementation_targets
+            .into_iter()
+            .map(|target| target.to_string())
+            .collect(),
+        verification_targets: verification_targets
+            .into_iter()
+            .map(|target| target.to_string())
+            .collect(),
+        readiness_before: readiness_impact(&before),
+        readiness_after: readiness_impact(&after),
+        work: WorkImpact {
+            seedable: has_implementation_targets,
+            requires_replan,
+            reason: if requires_replan {
+                "Existing work plan must be reviewed after a specification change.".into()
+            } else if !has_implementation_targets {
+                "No explicit implementation target is attached to this candidate yet.".into()
+            } else {
+                "Explicit implementation targets are available for review.".into()
+            },
+        },
+    })
+}
+
+fn ownership_for_targets(
+    index: &syu_workspace::SpecIndex,
+    targets: &BTreeSet<syu_spec_model::BoundTargetRef>,
+) -> Vec<String> {
+    let mut ownership = BTreeSet::new();
+    for target in targets {
+        let Some(artifact) = index.target_to_artifact.get(target) else {
+            continue;
+        };
+        for owner in index.artifact_owners.get(artifact).into_iter().flatten() {
+            ownership.insert(format!("{}#{}", owner.binding, owner.scope_id));
+        }
+    }
+    ownership.into_iter().collect()
+}
+
+fn readiness_impact(report: &syu_validation::ReadinessReport) -> ReadinessImpact {
+    let blockers = [
+        &report.inventory,
+        &report.ownership,
+        &report.seedability,
+        &report.workability,
+        &report.verification,
+        &report.closed_loop,
+    ]
+    .iter()
+    .map(|axis| axis.blockers.len())
+    .sum();
+    ReadinessImpact {
+        status: if blockers == 0 { "ready" } else { "blocked" }.into(),
+        blocking_subjects: blockers,
+    }
+}
+
+fn changed_specification_anchors(
+    index: &syu_workspace::SpecIndex,
+    patch: Option<&EditPatch>,
+) -> Vec<String> {
+    let mut anchors = BTreeSet::new();
+    match patch {
+        Some(EditPatch::Anchor { anchor, .. }) => {
+            anchors.insert(anchor.clone());
+        }
+        Some(EditPatch::Specification { item_id, .. }) => {
+            let _ = (index, item_id);
+        }
+        Some(EditPatch::CreateRequirement { id, .. })
+        | Some(EditPatch::CreateFeature { id, .. }) => {
+            if let Some(item) = index
+                .item_anchors
+                .keys()
+                .find(|item| item.to_string() == id.to_string())
+            {
+                anchors.extend(
+                    index
+                        .item_anchors
+                        .get(item)
+                        .into_iter()
+                        .flatten()
+                        .map(ToString::to_string),
+                );
+            }
+        }
+        _ => {}
+    }
+    anchors.into_iter().collect()
 }
 
 fn specification_patch_content(
@@ -650,34 +1081,127 @@ fn specification_patch_content(
     path: &Path,
     patch: &EditPatch,
 ) -> Result<String> {
-    let EditPatch::Specification { item_id, fields } = patch else {
-        anyhow::bail!("specification endpoint requires a specification patch");
-    };
     let old = workspace.read_to_string(path)?;
-    let document: SpecDocument = serde_yaml::from_str(&old)?;
-    let collection = match document {
-        SpecDocument::Philosophies { .. } => "philosophies",
-        SpecDocument::Policies { .. } => "policies",
-        SpecDocument::Requirements { .. } => "requirements",
-        SpecDocument::Features { .. } => "features",
-    };
     let mut value: serde_yaml::Value = serde_yaml::from_str(&old)?;
-    let sequence = value
-        .get_mut(collection)
-        .and_then(serde_yaml::Value::as_sequence_mut)
-        .ok_or_else(|| anyhow::anyhow!("specification collection is missing"))?;
-    let item = sequence
-        .iter_mut()
-        .find(|item| item.get("id").and_then(serde_yaml::Value::as_str) == Some(item_id))
-        .ok_or_else(|| anyhow::anyhow!("specification item {item_id} not found"))?;
-    let mapping = item
-        .as_mapping_mut()
-        .ok_or_else(|| anyhow::anyhow!("specification item is not a mapping"))?;
-    for (key, field) in patch_fields(fields)? {
-        let key = serde_yaml::Value::String(key);
-        if !matches!(key.as_str(), Some("id" | "bindings" | "contracts")) {
-            mapping.insert(key, field);
+    match patch {
+        EditPatch::Specification { item_id, fields } => {
+            let collection = collection_for_value(&value)?;
+            let sequence = specification_sequence(&mut value, collection)?;
+            let item = sequence
+                .iter_mut()
+                .find(|item| item.get("id").and_then(serde_yaml::Value::as_str) == Some(item_id))
+                .ok_or_else(|| anyhow::anyhow!("specification item {item_id} not found"))?;
+            let mapping = item
+                .as_mapping_mut()
+                .ok_or_else(|| anyhow::anyhow!("specification item is not a mapping"))?;
+            for (key, field) in patch_fields(fields)? {
+                let key = serde_yaml::Value::String(key);
+                if !matches!(key.as_str(), Some("id" | "bindings" | "contracts")) {
+                    mapping.insert(key, field);
+                }
+            }
         }
+        EditPatch::Anchor { anchor, fields } => {
+            let parsed = anchor
+                .parse::<SpecAnchor>()
+                .map_err(|error| anyhow::anyhow!("invalid specification anchor: {error}"))?;
+            let collection = collection_for_value(&value)?;
+            let sequence = specification_sequence(&mut value, collection)?;
+            let item = sequence
+                .iter_mut()
+                .find(|item| {
+                    item.get("id")
+                        .and_then(serde_yaml::Value::as_str)
+                        .is_some_and(|id| id == parsed.item.to_string())
+                })
+                .ok_or_else(|| anyhow::anyhow!("specification item {} not found", parsed.item))?;
+            let mapping = item
+                .as_mapping_mut()
+                .ok_or_else(|| anyhow::anyhow!("specification item is not a mapping"))?;
+            let collection = match parsed.kind {
+                LocalAnchorKind::Principle => "principles",
+                LocalAnchorKind::Rule => "rules",
+                LocalAnchorKind::Criterion => "criteria",
+                LocalAnchorKind::Binding | LocalAnchorKind::Contract => {
+                    anyhow::bail!("anchor kind is not human-editable")
+                }
+            };
+            let nested = mapping
+                .get_mut(serde_yaml::Value::String(collection.into()))
+                .and_then(serde_yaml::Value::as_sequence_mut)
+                .ok_or_else(|| anyhow::anyhow!("anchor collection is missing"))?;
+            let entry = nested
+                .iter_mut()
+                .find(|entry| {
+                    entry
+                        .get("id")
+                        .and_then(serde_yaml::Value::as_str)
+                        .is_some_and(|id| id == parsed.local_id.to_string())
+                })
+                .ok_or_else(|| anyhow::anyhow!("anchor {} not found", anchor))?;
+            let entry = entry
+                .as_mapping_mut()
+                .ok_or_else(|| anyhow::anyhow!("anchor is not a mapping"))?;
+            for (key, field) in anchor_patch_fields(fields)? {
+                entry.insert(serde_yaml::Value::String(key), field);
+            }
+        }
+        EditPatch::CreateRequirement {
+            id,
+            title,
+            description,
+            priority,
+            status,
+            criteria,
+            ..
+        } => {
+            if collection_for_value(&value)? != "requirements" {
+                anyhow::bail!("candidate destination is not a requirements document");
+            }
+            if criteria.is_empty() {
+                anyhow::bail!("a requirement requires at least one criterion");
+            }
+            let requirement = Requirement {
+                id: id.clone(),
+                title: title.clone(),
+                description: description.clone(),
+                priority: *priority,
+                status: status.unwrap_or(ItemStatus::Planned),
+                criteria: criteria
+                    .iter()
+                    .map(|criterion| Criterion {
+                        id: criterion.id.clone(),
+                        kind: criterion.kind,
+                        statement: criterion.statement.clone(),
+                        governed_by: criterion.governed_by.clone(),
+                    })
+                    .collect(),
+                bindings: vec![],
+            };
+            specification_sequence(&mut value, "requirements")?
+                .push(serde_yaml::to_value(requirement)?);
+        }
+        EditPatch::CreateFeature {
+            id,
+            title,
+            summary,
+            status,
+            ..
+        } => {
+            if collection_for_value(&value)? != "features" {
+                anyhow::bail!("candidate destination is not a features document");
+            }
+            let feature = syu_spec_model::Feature {
+                id: id.clone(),
+                title: title.clone(),
+                summary: summary.clone(),
+                status: status.unwrap_or(ItemStatus::Planned),
+                bindings: vec![],
+                contracts: vec![],
+            };
+            specification_sequence(&mut value, "features")?.push(serde_yaml::to_value(feature)?);
+        }
+        EditPatch::Config { .. } => anyhow::bail!("configuration is not a specification patch"),
     }
     let content = serde_yaml::to_string(&value)?;
     let candidate: SpecDocument = serde_yaml::from_str(&content)?;
@@ -685,6 +1209,57 @@ fn specification_patch_content(
         anyhow::bail!("specification schema must be syu/spec/v1");
     }
     Ok(content)
+}
+
+fn collection_for_value(value: &serde_yaml::Value) -> Result<&'static str> {
+    let kind = value
+        .get("kind")
+        .and_then(serde_yaml::Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("specification kind is missing"))?;
+    match kind {
+        "philosophies" => Ok("philosophies"),
+        "policies" => Ok("policies"),
+        "requirements" => Ok("requirements"),
+        "features" => Ok("features"),
+        _ => anyhow::bail!("unsupported specification kind {kind}"),
+    }
+}
+
+fn specification_sequence<'a>(
+    value: &'a mut serde_yaml::Value,
+    collection: &str,
+) -> Result<&'a mut Vec<serde_yaml::Value>> {
+    value
+        .get_mut(collection)
+        .and_then(serde_yaml::Value::as_sequence_mut)
+        .ok_or_else(|| anyhow::anyhow!("specification collection {collection} is missing"))
+}
+
+fn anchor_patch_fields(fields: &AnchorPatchFields) -> Result<BTreeMap<String, serde_yaml::Value>> {
+    let mut output = BTreeMap::new();
+    match fields {
+        AnchorPatchFields::Principle {
+            statement,
+            applies_to,
+        } => {
+            insert_optional(&mut output, "statement", statement)?;
+            insert_optional(&mut output, "applies_to", applies_to)?;
+        }
+        AnchorPatchFields::Rule { statement, level } => {
+            insert_optional(&mut output, "statement", statement)?;
+            insert_optional(&mut output, "level", level)?;
+        }
+        AnchorPatchFields::Criterion {
+            statement,
+            kind,
+            governed_by,
+        } => {
+            insert_optional(&mut output, "statement", statement)?;
+            insert_optional(&mut output, "kind", kind)?;
+            insert_optional(&mut output, "governed_by", governed_by)?;
+        }
+    }
+    Ok(output)
 }
 
 fn patch_fields(fields: &SpecificationPatchFields) -> Result<BTreeMap<String, serde_yaml::Value>> {
@@ -732,7 +1307,10 @@ fn insert_optional<T: serde::Serialize>(
 
 fn edit_content(workspace: &SpecWorkspace, path: &Path, patch: &EditPatch) -> Result<String> {
     match patch {
-        EditPatch::Specification { .. } => specification_patch_content(workspace, path, patch),
+        EditPatch::Specification { .. }
+        | EditPatch::Anchor { .. }
+        | EditPatch::CreateRequirement { .. }
+        | EditPatch::CreateFeature { .. } => specification_patch_content(workspace, path, patch),
         EditPatch::Config { config } => Ok(serde_yaml::to_string(config)?),
     }
 }
@@ -838,6 +1416,89 @@ async fn api_specification_apply(
     {
         atomic_replace(&path, &old)?;
         return Err(error.into());
+    }
+    Ok(Json(preview))
+}
+
+async fn api_specification_candidate_preview(
+    State(service): State<Arc<WorkbenchService>>,
+    Json(command): Json<StructuredEditCommand>,
+) -> Result<Json<EditPreview>, ApiError> {
+    let workspace = basis(&service, &command.basis)?;
+    let path = patch_path(&workspace, &command.patch)?;
+    let content = edit_content(&workspace, &path, &command.patch)?;
+    let document: SpecDocument = serde_yaml::from_str(&content)
+        .map_err(|error| anyhow::anyhow!("strict specification parse failed: {error}"))?;
+    let overlay = workspace.overlay_document(&path, document)?;
+    let overlay_index = overlay.index()?;
+    validate_overlay(&overlay, &overlay_index)?;
+    let requires_replan = service
+        .session
+        .read()
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))?
+        .plan
+        .is_some();
+    Ok(Json(edit_preview_for_patch(
+        &workspace,
+        &overlay,
+        &path,
+        &content,
+        &command.patch,
+        requires_replan,
+    )?))
+}
+
+async fn api_specification_candidate_apply(
+    State(service): State<Arc<WorkbenchService>>,
+    Json(command): Json<StructuredEditCommand>,
+) -> Result<Json<EditPreview>, ApiError> {
+    let workspace = basis(&service, &command.basis)?;
+    let path = patch_path(&workspace, &command.patch)?;
+    let content = edit_content(&workspace, &path, &command.patch)?;
+    let document: SpecDocument = serde_yaml::from_str(&content)
+        .map_err(|error| anyhow::anyhow!("strict specification parse failed: {error}"))?;
+    let overlay = workspace.overlay_document(&path, document)?;
+    let overlay_index = overlay.index()?;
+    validate_overlay(&overlay, &overlay_index)?;
+    let old = workspace.read_to_string(&path)?;
+    let requires_replan = service
+        .session
+        .read()
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))?
+        .plan
+        .is_some();
+    let preview = edit_preview_for_patch(
+        &workspace,
+        &overlay,
+        &path,
+        &content,
+        &command.patch,
+        requires_replan,
+    )?;
+    if command.preview_token.as_deref() != Some(preview.preview_token.as_str()) {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!(
+                "apply requires the exact preview token for this candidate; preview the patch again"
+            ),
+        ));
+    }
+    atomic_replace(&path, &content)?;
+    if let Err(error) = SpecWorkspace::load(&workspace.root).and_then(|candidate| candidate.index())
+    {
+        atomic_replace(&path, &old)?;
+        return Err(error.into());
+    }
+    if requires_replan {
+        let mut session = service
+            .session
+            .write()
+            .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+        session.plan = None;
+        session.context_pack = None;
+        session.verification_receipt = None;
+        session.last_validation = None;
+        session.selected_slice = None;
     }
     Ok(Json(preview))
 }
@@ -1519,6 +2180,13 @@ pub struct ScopeView {
 #[derive(Debug, Clone, Serialize)]
 pub struct SpecificationCatalogView {
     pub specifications: Vec<ItemSummary>,
+    pub documents: Vec<SpecificationDocumentView>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SpecificationDocumentView {
+    pub kind: String,
+    pub path: String,
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct DiagnosticsView {
@@ -1800,7 +2468,7 @@ pub struct WorkspaceSummary {
     pub source_hash: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ItemSummary {
     pub id: String,
     pub kind: String,
@@ -2037,7 +2705,28 @@ pub fn project(
         },
         readiness,
         scope: ScopeView::default(),
-        specifications: SpecificationCatalogView { specifications },
+        specifications: SpecificationCatalogView {
+            specifications,
+            documents: workspace
+                .documents
+                .iter()
+                .map(|document| SpecificationDocumentView {
+                    kind: match &document.document {
+                        syu_spec_model::SpecDocument::Philosophies { .. } => "philosophy",
+                        syu_spec_model::SpecDocument::Policies { .. } => "policy",
+                        syu_spec_model::SpecDocument::Requirements { .. } => "requirement",
+                        syu_spec_model::SpecDocument::Features { .. } => "feature",
+                    }
+                    .into(),
+                    path: document
+                        .path
+                        .strip_prefix(&workspace.root)
+                        .unwrap_or(&document.path)
+                        .to_string_lossy()
+                        .into_owned(),
+                })
+                .collect(),
+        },
         diagnostics: DiagnosticsView { validation },
     })
 }
@@ -2930,6 +3619,226 @@ mod tests {
         assert_eq!(
             run_fixture_post_state_flow(true).await,
             StatusCode::CONFLICT
+        );
+    }
+
+    #[tokio::test]
+    async fn workbench_specification_candidates_support_search_edit_and_create() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("fixture tempdir");
+        copy_fixture_tree(&fixture, temp.path());
+        initialize_fixture_git(temp.path());
+        let app = WorkbenchServer::new(temp.path().to_path_buf()).router();
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/specifications/candidates?q=behavior&kind=requirement")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let candidates: Vec<SpecificationCandidateView> =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("candidate response");
+        assert_eq!(candidates.len(), 1);
+        assert!(
+            candidates[0]
+                .matches
+                .iter()
+                .any(|candidate| candidate.kind == "criterion")
+        );
+
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let item_update = StructuredEditCommand {
+            basis: basis.clone(),
+            patch: EditPatch::Specification {
+                item_id: "REQ-FIXTURE-001".into(),
+                fields: SpecificationPatchFields::Requirement {
+                    title: Some("Renamed fixture requirement".into()),
+                    description: None,
+                    priority: None,
+                    status: None,
+                },
+            },
+            preview_token: None,
+        };
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/specifications/candidates/preview",
+            &csrf,
+            &item_update,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let item_preview: EditPreview =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("item preview");
+        let impact = item_preview.impact.expect("item impact");
+        assert!(impact.changed_anchors.is_empty());
+        assert_eq!(impact.affected_items, vec!["REQ-FIXTURE-001"]);
+
+        let update = StructuredEditCommand {
+            basis: basis.clone(),
+            patch: EditPatch::Anchor {
+                anchor: "REQ-FIXTURE-001#criterion.behavior".into(),
+                fields: AnchorPatchFields::Criterion {
+                    statement: Some("The fixture behavior remains true.".into()),
+                    kind: None,
+                    governed_by: None,
+                },
+            },
+            preview_token: None,
+        };
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/specifications/candidates/preview",
+            &csrf,
+            &update,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let preview: EditPreview =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("candidate preview");
+        assert!(preview.impact.as_ref().is_some_and(|impact| {
+            impact
+                .changed_anchors
+                .iter()
+                .any(|anchor| anchor == "REQ-FIXTURE-001#criterion.behavior")
+        }));
+        let response = json_mutation(
+            &app,
+            Method::PUT,
+            "/api/specifications/candidates/apply",
+            &csrf,
+            &update,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let response = json_mutation(
+            &app,
+            Method::PUT,
+            "/api/specifications/candidates/apply",
+            &csrf,
+            &StructuredEditCommand {
+                preview_token: Some(preview.preview_token),
+                ..update
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let updated = fs::read_to_string(temp.path().join("spec/requirement.yaml"))
+            .expect("updated requirement");
+        assert!(updated.contains("The fixture behavior remains true."));
+
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let create = StructuredEditCommand {
+            basis,
+            patch: EditPatch::CreateRequirement {
+                document: "spec/requirement.yaml".into(),
+                id: "REQ-FIXTURE-002".into(),
+                title: "A guided requirement".into(),
+                description: "Created through the typed Workbench wizard.".into(),
+                priority: Priority::Medium,
+                status: None,
+                criteria: vec![NewCriterion {
+                    id: "guided".into(),
+                    kind: CriterionKind::Behavior,
+                    statement: "The wizard preserves exact specification structure.".into(),
+                    governed_by: vec!["POL-FIXTURE-001#rule.behavior".parse().unwrap()],
+                }],
+            },
+            preview_token: None,
+        };
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/specifications/candidates/preview",
+            &csrf,
+            &create,
+        )
+        .await;
+        let response_status = response.status();
+        let response_body = response.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(
+            response_status,
+            StatusCode::OK,
+            "{}",
+            String::from_utf8_lossy(&response_body)
+        );
+        let preview: EditPreview = serde_json::from_slice(&response_body).expect("create preview");
+        assert_eq!(
+            preview.old_hash,
+            content_hash(&fs::read_to_string(temp.path().join("spec/requirement.yaml")).unwrap())
+        );
+        let response = json_mutation(
+            &app,
+            Method::PUT,
+            "/api/specifications/candidates/apply",
+            &csrf,
+            &StructuredEditCommand {
+                preview_token: Some(preview.preview_token),
+                ..create
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let created = fs::read_to_string(temp.path().join("spec/requirement.yaml"))
+            .expect("created requirement");
+        assert!(created.contains("REQ-FIXTURE-002"));
+        assert!(created.contains("guided"));
+
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let feature = StructuredEditCommand {
+            basis,
+            patch: EditPatch::CreateFeature {
+                document: "spec/feature.yaml".into(),
+                id: "FEAT-FIXTURE-002".into(),
+                title: "A guided feature".into(),
+                summary: "Created through the same typed wizard.".into(),
+                status: None,
+            },
+            preview_token: None,
+        };
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/specifications/candidates/preview",
+            &csrf,
+            &feature,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let preview: EditPreview =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("feature preview");
+        let response = json_mutation(
+            &app,
+            Method::PUT,
+            "/api/specifications/candidates/apply",
+            &csrf,
+            &StructuredEditCommand {
+                preview_token: Some(preview.preview_token),
+                ..feature
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(
+            fs::read_to_string(temp.path().join("spec/feature.yaml"))
+                .expect("created feature")
+                .contains("FEAT-FIXTURE-002")
         );
     }
 
