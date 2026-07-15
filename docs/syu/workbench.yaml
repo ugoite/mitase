@@ -1,0 +1,144 @@
+schema: syu/spec/v1
+kind: requirements
+namespace: workbench
+category: Workbench behavior
+requirements:
+  - id: REQ-WORKBENCH-001
+    title: Canonical projection
+    description: The Workbench renders server-owned canonical projection state.
+    priority: critical
+    status: implemented
+    criteria:
+      - id: canonical-projection
+        kind: behavior
+        statement: Projection data is read from the Workbench server without client-side semantic inference.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+  - id: REQ-WORKBENCH-002
+    title: Work session
+    description: A Workbench session carries a WorkRequest, canonical WorkPlan, context, verification, and result state.
+    priority: critical
+    status: implemented
+    criteria:
+      - id: work-session
+        kind: behavior
+        statement: A selected work origin can be planned and validated through the canonical session API.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+    bindings:
+      - id: work-check
+        role: verification
+        facet: verification
+        responsibility: Verify the Workbench session execution path.
+        targets:
+          - id: work-test
+            adapter: rust
+            path: crates/syu-workbench-server/src/lib.rs
+            selector: { kind: symbol, name: tests::workbench_work_session_flow }
+            claims:
+              - kind: verifies
+                criterion: REQ-WORKBENCH-002#criterion.work-session
+                covers: [FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan]
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_work_session_flow } }
+  - id: REQ-WORKBENCH-003
+    title: Transactional specification edit
+    description: Structured specification edits are previewed and atomically applied only after canonical validation.
+    priority: high
+    status: implemented
+    criteria:
+      - id: transactional-spec-edit
+        kind: behavior
+        statement: A stale or invalid specification edit is rejected without changing the canonical source.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+    bindings:
+      - id: spec-edit-check
+        role: verification
+        facet: verification
+        responsibility: Verify transactional specification editing.
+        targets:
+          - id: spec-edit-test
+            adapter: rust
+            path: crates/syu-workbench-server/src/lib.rs
+            selector: { kind: symbol, name: tests::workbench_spec_edit_transaction }
+            claims:
+              - kind: verifies
+                criterion: REQ-WORKBENCH-003#criterion.transactional-spec-edit
+                covers: [FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-apply]
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_spec_edit_transaction } }
+  - id: REQ-WORKBENCH-004
+    title: Transactional configuration edit
+    description: Structured configuration edits use the same preview, basis, and atomic apply flow.
+    priority: high
+    status: implemented
+    criteria:
+      - id: transactional-config-edit
+        kind: behavior
+        statement: A configuration candidate is applied only after overlay validation succeeds.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+    bindings:
+      - id: config-edit-check
+        role: verification
+        facet: verification
+        responsibility: Verify transactional configuration editing.
+        targets:
+          - id: config-edit-test
+            adapter: rust
+            path: crates/syu-workbench-server/src/lib.rs
+            selector: { kind: symbol, name: tests::workbench_config_edit_transaction }
+            claims:
+              - kind: verifies
+                criterion: REQ-WORKBENCH-004#criterion.transactional-config-edit
+                covers: [FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.config-apply]
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_config_edit_transaction } }
+  - id: REQ-WORKBENCH-005
+    title: Secure local server
+    description: The Workbench server is loopback-first and protects mutation endpoints.
+    priority: critical
+    status: implemented
+    criteria:
+      - id: secure-local-server
+        kind: security
+        statement: Remote bind requires a session token and mutations require CSRF and origin checks.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+    bindings:
+      - id: security-check
+        role: verification
+        facet: verification
+        responsibility: Verify secure Workbench server launch and mutation guards.
+        targets:
+          - id: security-test
+            adapter: rust
+            path: crates/syu-workbench-server/src/lib.rs
+            selector: { kind: symbol, name: tests::workbench_security_flow }
+            claims:
+              - kind: verifies
+                criterion: REQ-WORKBENCH-005#criterion.secure-local-server
+                covers: [FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard]
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_security_flow } }
+  - id: REQ-WORKBENCH-006
+    title: Accessible navigation
+    description: Workbench primary pages and actions are keyboard navigable and localized.
+    priority: medium
+    status: implemented
+    criteria:
+      - id: accessible-navigation
+        kind: quality
+        statement: The primary Workbench pages expose semantic controls and matching Japanese and English catalogs.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+    bindings:
+      - id: navigation-check
+        role: verification
+        facet: verification
+        responsibility: Verify accessible Workbench navigation and localization.
+        targets:
+          - id: navigation-test
+            adapter: rust
+            path: crates/syu-workbench-server/src/lib.rs
+            selector: { kind: symbol, name: tests::workbench_accessible_navigation }
+            claims:
+              - kind: verifies
+                criterion: REQ-WORKBENCH-006#criterion.accessible-navigation
+                covers:
+                  - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.html-navigation
+                  - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
+                  - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.keyboard-navigation
+                  - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.accessibility-attributes
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_accessible_navigation } }

@@ -64,8 +64,8 @@ body:
       description: Share the exact commands, files, or repo layout needed to reproduce the issue.
       placeholder: |
         1. Edit `docs/syu/requirements/core/core.yaml`
-        2. Run `syu validate .`
-        3. If relevant, run `syu validate . --range origin/main...HEAD`
+        2. Run `syu validate workspace .`
+        3. If relevant, run `syu validate change . --range origin/main...HEAD`
     validations:
       required: true
 

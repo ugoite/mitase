@@ -17,6 +17,8 @@ features:
       adapter: shell
       path: scripts/bootstrap-generic.sh
       selector:
-        kind: file
-    satisfies:
-    - REQ-GENERIC-001#criterion.owned-delivery
+        kind: marker
+        value: "#!/usr/bin/env bash"
+      claims:
+      - kind: satisfies
+        criterion: REQ-GENERIC-001#criterion.owned-delivery

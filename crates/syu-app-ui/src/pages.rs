@@ -6,8 +6,8 @@ pub(crate) fn attach_projection(mut html: String, projection: &WorkspaceProjecti
         .replace('<', "\\u003c");
     let state = format!("<script type=\"application/json\" id=\"syu-projection\">{json}</script>");
     html = html.replace(
-        "<script src=\"/assets/projection.js\"></script>",
-        &format!("{state}<script src=\"/assets/projection.js\"></script>"),
+        "<script type=\"application/json\" id=\"syu-projection\"></script>",
+        &state,
     );
     html
 }

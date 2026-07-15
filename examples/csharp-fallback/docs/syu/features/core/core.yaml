@@ -15,14 +15,17 @@ features:
     responsibility: Implement the owned behavior for this example workspace.
     targets:
     - id: target-1
-      adapter: csharp
+      adapter: shell
       path: src/OrderSummary.cs
       selector:
-        kind: file
+        kind: marker
+        value: "public sealed class OrderSummary"
+      claims:
+      - kind: satisfies
+        criterion: REQ-CSHARPFALLBACK-001#criterion.owned-delivery
     - id: target-2
       adapter: shell
       path: scripts/check-workspace.sh
       selector:
-        kind: file
-    satisfies:
-    - REQ-CSHARPFALLBACK-001#criterion.owned-delivery
+        kind: marker
+        value: "#!/usr/bin/env bash"

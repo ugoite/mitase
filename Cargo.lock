@@ -948,6 +948,7 @@ dependencies = [
  "syu-app-ui",
  "syu-code-intel",
  "syu-diagnostics",
+ "syu-inventory",
  "syu-planner",
  "syu-project-model",
  "syu-spec-model",
@@ -985,7 +986,25 @@ name = "syu-diagnostics"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_json",
  "syu-spec-model",
+]
+
+[[package]]
+name = "syu-inventory"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "proc-macro2",
+ "quote",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2",
+ "syn",
+ "syu-project-model",
+ "syu-spec-model",
+ "tempfile",
 ]
 
 [[package]]
@@ -997,6 +1016,7 @@ dependencies = [
  "serde_yaml",
  "sha2",
  "syu-diagnostics",
+ "syu-inventory",
  "syu-project-model",
  "syu-spec-model",
  "syu-work-model",
@@ -1009,6 +1029,7 @@ name = "syu-project-model"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_yaml",
  "syu-spec-model",
 ]
 
@@ -1024,8 +1045,13 @@ dependencies = [
 name = "syu-validation"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
  "serde_yaml",
+ "sha2",
  "syu-diagnostics",
+ "syu-inventory",
  "syu-planner",
  "syu-project-model",
  "syu-spec-model",
@@ -1050,7 +1076,11 @@ name = "syu-workbench-server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum",
+ "http",
+ "http-body-util",
  "serde",
+ "serde_json",
  "serde_yaml",
  "sha2",
  "syu-diagnostics",
@@ -1060,6 +1090,9 @@ dependencies = [
  "syu-validation",
  "syu-work-model",
  "syu-workspace",
+ "tempfile",
+ "tokio",
+ "tower",
 ]
 
 [[package]]
@@ -1072,6 +1105,7 @@ dependencies = [
  "serde_yaml",
  "sha2",
  "syu-code-intel",
+ "syu-inventory",
  "syu-project-model",
  "syu-spec-model",
  "tempfile",
@@ -1112,6 +1146,7 @@ version = "1.52.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fc7f01b389ac15039e4dc9531aa973a135d7a4135281b12d7c1bc79fd57fffe"
 dependencies = [
+ "bytes",
  "libc",
  "mio",
  "pin-project-lite",

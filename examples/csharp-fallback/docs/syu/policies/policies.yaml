@@ -28,9 +28,11 @@ policies:
     responsibility: Keep the example rule connected to an active owned artifact.
     targets:
     - id: policy-target
-      adapter: csharp
+      adapter: shell
       path: src/OrderSummary.cs
       selector:
-        kind: file
-    enforces:
-    - POL-CSHARPFALLBACK-001#rule.traceable-delivery
+        kind: marker
+        value: "public sealed class OrderSummary"
+      claims:
+      - kind: enforces
+        rule: POL-CSHARPFALLBACK-001#rule.traceable-delivery

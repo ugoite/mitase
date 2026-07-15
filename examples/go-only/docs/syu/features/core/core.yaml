@@ -14,9 +14,11 @@ features:
     responsibility: Implement the owned behavior for this example workspace.
     targets:
     - id: target-1
-      adapter: go
+      adapter: shell
       path: go/app.go
       selector:
-        kind: file
-    satisfies:
-    - REQ-GOONLY-001#criterion.owned-delivery
+        kind: marker
+        value: "func GoFeatureImpl() string {"
+      claims:
+      - kind: satisfies
+        criterion: REQ-GOONLY-001#criterion.owned-delivery

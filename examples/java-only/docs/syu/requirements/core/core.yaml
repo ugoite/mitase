@@ -21,9 +21,15 @@ requirements:
     responsibility: Verify the owned example behavior through checked-in evidence.
     targets:
     - id: target-1
-      adapter: java
+      adapter: shell
       path: src/test/java/example/app/OrderSummaryTest.java
       selector:
-        kind: file
-    verifies:
-    - REQ-JAVAONLY-001#criterion.owned-delivery
+        kind: marker
+        value: "class OrderSummaryTest {"
+      claims:
+      - kind: verifies
+        criterion: REQ-JAVAONLY-001#criterion.owned-delivery
+        covers:
+        - FEAT-JAVAONLY-001#binding.implementation/target.target-1
+        runner:
+          runner: cargo-test

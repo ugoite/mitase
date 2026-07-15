@@ -23,19 +23,27 @@ requirements:
     responsibility: Verify the owned example behavior through checked-in evidence.
     targets:
     - id: target-1
-      adapter: rust
+      adapter: shell
       path: tests/auth_login.rs
       selector:
-        kind: file
+        kind: marker
+        value: "pub fn login_traceability_test() {}"
+      claims:
+      - kind: verifies
+        criterion: REQ-TEAMSCALE-001#criterion.owned-delivery
+        covers:
+        - FEAT-TEAMSCALE-001#binding.implementation/target.target-1
+        runner:
+          runner: cargo-test
     - id: target-2
-      adapter: rust
+      adapter: shell
       path: tests/audit_visibility.rs
       selector:
-        kind: file
+        kind: marker
+        value: "pub fn audit_visibility_test() {}"
     - id: target-3
-      adapter: rust
+      adapter: shell
       path: tests/report_exports.rs
       selector:
-        kind: file
-    verifies:
-    - REQ-TEAMSCALE-001#criterion.owned-delivery
+        kind: marker
+        value: "pub fn report_exports_test() {}"

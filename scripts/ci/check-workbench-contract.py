@@ -47,7 +47,7 @@ class ContractParser(HTMLParser):
 
 parser = ContractParser()
 parser.feed(HTML)
-assert parser.routes[:5] == ["work", "scope", "items", "diagnostics", "settings"], parser.routes[:5]
+assert parser.routes[:6] == ["work", "readiness", "scope", "specifications", "diagnostics", "settings"], parser.routes[:6]
 assert set(EN) == set(JA), "English and Japanese catalogs differ"
 assert not (parser.keys - set(EN)), f"missing catalog keys: {sorted(parser.keys - set(EN))}"
 assert not parser.unlocalized_names, f"unlocalized accessible names: {parser.unlocalized_names}"
@@ -60,9 +60,11 @@ assert 'class="gear"' not in HTML
 assert '<style' not in HTML
 assert 'HEAD...HEAD' not in HTML and 'HEAD…HEAD' not in HTML
 assert set(re.findall(r'data-settings-layer="([^"]+)"', HTML)) == {"application", "workspace"}
-assert 'data-items-search=""' in HTML
+assert 'data-specifications-search=""' in HTML
 assert 'data-i18n-placeholder="items.search.placeholder"' in HTML
-assert 'data-items-new=""' in HTML
+assert 'data-specifications-new=""' in HTML
+assert 'data-route="items"' not in HTML
+assert 'data-page="items"' not in HTML
 assert re.search(r'data-settings-toolbar="workspace" hidden=""', HTML)
 assert re.search(r'data-settings-layer-panel="workspace" hidden=""', HTML)
 assert set(re.findall(r'data-settings-page="([^"]+)"', HTML)) == {
@@ -70,8 +72,16 @@ assert set(re.findall(r'data-settings-page="([^"]+)"', HTML)) == {
 }
 for banned in ("REQ-WORKBENCH", "SLICE-01", "PLAN-WORKBENCH", "UI-VISUAL-CONTRACT", "just now", "No issues found"):
     assert banned not in HTML, f"static demo content leaked into HTML: {banned}"
-for asset in ("workbench.css", "catalog.js", "i18n.js", "app.js", "projection.js"):
+for asset in ("workbench.css", "catalog.js", "i18n.js", "js/main.js"):
     assert f'/assets/{asset}' in HTML
+assert '/assets/projection.js' not in HTML
+assert 'type="module" src="/assets/js/main.js"' in HTML
+for module in (
+    "./api.js", "./state.js", "./router.js", "./pages/work.js",
+    "./pages/readiness.js", "./pages/scope.js", "./pages/specifications.js",
+    "./pages/diagnostics.js", "./pages/settings.js",
+):
+    assert module in (ROOT / "crates/syu-app-ui/assets/js/main.js").read_text(), module
 CSS_COMPACT = re.sub(r"\s+", "", CSS)
 for token in ("--bg:#f6f7f8", "--paper:#fff", "--ink:#15171a", "--sidebar:246px", "--topbar:98px", "--rail:310px"):
     assert token in CSS_COMPACT, f"missing normative CSS token {token}"

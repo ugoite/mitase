@@ -28,9 +28,11 @@ policies:
     responsibility: Keep the example rule connected to an active owned artifact.
     targets:
     - id: policy-target
-      adapter: ruby
+      adapter: shell
       path: lib/order_summary.rb
       selector:
-        kind: file
-    enforces:
-    - POL-RUBYONLY-001#rule.traceable-delivery
+        kind: marker
+        value: "class OrderSummary"
+      claims:
+      - kind: enforces
+        rule: POL-RUBYONLY-001#rule.traceable-delivery

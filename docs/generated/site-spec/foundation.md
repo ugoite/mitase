@@ -47,8 +47,9 @@ description: "Generated reference for docs/syu/foundation.yaml"
           - **selector**:
             - **kind**: heading
             - **value**: Syu v1 architecture
-      - **documents**:
-        - PHIL-001#principle.exact-intent
+          - **claims**:
+            - **kind**: documents
+              - **anchor**: PHIL-001#principle.exact-intent
 
 ## Source YAML
 
@@ -75,5 +76,7 @@ philosophies:
             adapter: markdown
             path: docs/guide/v1-architecture.md
             selector: { kind: heading, value: Syu v1 architecture }
-        documents: [PHIL-001#principle.exact-intent]
+            claims:
+              - kind: documents
+                anchor: PHIL-001#principle.exact-intent
 ```
