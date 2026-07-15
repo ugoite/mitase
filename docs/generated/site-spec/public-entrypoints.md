@@ -1178,6 +1178,20 @@ description: "Generated reference for docs/syu/public-entrypoints.yaml"
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-PUBLIC-001#criterion.entrypoint
+    - **id**: public-api-083
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **targets**:
+        - **id**: entrypoint-083-rust-crates-syu-validation-src-lib-rs-evaluate-com
+          - **adapter**: rust
+          - **path**: crates/syu-validation/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: evaluate_completion
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-PUBLIC-001#criterion.entrypoint
     - **id**: public-api-resolve-indexed-target
       - **role**: implementation
       - **facet**: public
@@ -2351,6 +2365,20 @@ features:
       selector:
         kind: symbol
         name: required_axes
+      claims:
+      - kind: satisfies
+        criterion: REQ-PUBLIC-001#criterion.entrypoint
+  - id: public-api-083
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint addressable by an exact target.
+    targets:
+    - id: entrypoint-083-rust-crates-syu-validation-src-lib-rs-evaluate-com
+      adapter: rust
+      path: crates/syu-validation/src/lib.rs
+      selector:
+        kind: symbol
+        name: evaluate_completion
       claims:
       - kind: satisfies
         criterion: REQ-PUBLIC-001#criterion.entrypoint

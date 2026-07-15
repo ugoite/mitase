@@ -16,7 +16,7 @@ use syu_spec_model::RepoPath;
 use syu_validation::{
     ChangeStatus, ChangedFile, ChangedRange, PlanValidationMode, ValidationContext, validate,
 };
-use syu_work_model::{WorkPlan, WorkRequest};
+use syu_work_model::{CompletionStatus, WorkPlan, WorkRequest};
 use syu_workbench_server::project as project_workbench;
 use syu_workspace::SpecWorkspace;
 
@@ -255,32 +255,13 @@ fn run_readiness(args: ReadinessArgs) -> Result<i32> {
     })
 }
 fn run_validate(args: ValidateArgs) -> Result<i32> {
+    if let ValidateCommand::Result(result) = args.command {
+        return run_validate_result(result);
+    }
     let (force_post_state, enforce_readiness, args) = match args.command {
         ValidateCommand::Workspace(args) => (false, true, args),
         ValidateCommand::Change(args) | ValidateCommand::Plan(args) => (false, false, args),
-        ValidateCommand::Result(args) => {
-            let receipt: syu_work_model::VerificationReceipt = read_yaml(&args.receipt)?;
-            let plan_path = args
-                .validate
-                .plan
-                .clone()
-                .context("validate result requires --plan")?;
-            let plan: WorkPlan = read_yaml(&plan_path)?;
-            let workspace = SpecWorkspace::load(&args.validate.workspace)?;
-            let index = workspace.index()?;
-            syu_validation::validate_verification_receipt(
-                &workspace,
-                &index,
-                &plan,
-                &receipt.slice_id,
-                &receipt,
-                &plan.basis.revision,
-            )?;
-            let mut validate = args.validate;
-            validate.slice = Some(receipt.slice_id);
-            validate.plan = Some(plan_path);
-            (true, false, validate)
-        }
+        ValidateCommand::Result(_) => unreachable!("result validation handled above"),
     };
     let workspace = SpecWorkspace::load(&args.workspace)?;
     let index = workspace.index()?;
@@ -360,6 +341,48 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
         }
     }
     Ok(if result.is_valid() { 0 } else { 1 })
+}
+
+fn run_validate_result(args: ValidateResultOptions) -> Result<i32> {
+    let plan_path = args
+        .validate
+        .plan
+        .as_ref()
+        .context("validate result requires --plan")?;
+    let plan: WorkPlan = read_yaml(plan_path)?;
+    let receipt: syu_work_model::VerificationReceipt = read_yaml(&args.receipt)?;
+    let workspace = SpecWorkspace::load(&args.validate.workspace)?;
+    let index = workspace.index()?;
+    let report = syu_validation::evaluate_completion(&workspace, &index, &plan, &receipt)?;
+    match args.validate.format {
+        Format::Json => println!("{}", serde_json::to_string_pretty(&report)?),
+        Format::Text => {
+            println!(
+                "Completion: {:?}\nPlan: {}\nSlice: {}",
+                report.status, report.plan_digest, report.slice_id
+            );
+            if report.demonstrated.is_empty() {
+                println!("Demonstrated criteria: none");
+            } else {
+                println!("Demonstrated criteria:");
+                for criterion in &report.demonstrated {
+                    println!("- {}: {}", criterion.anchor, criterion.statement);
+                }
+            }
+            println!("Completion checks: {}", report.checks.len());
+            for blocker in &report.blockers {
+                println!(
+                    "BLOCKED {}: {}\n  Next action: {}",
+                    blocker.code, blocker.message, blocker.next_action
+                );
+            }
+        }
+    }
+    Ok(if report.status == CompletionStatus::Complete {
+        0
+    } else {
+        1
+    })
 }
 fn run_work(args: WorkArgs) -> Result<i32> {
     match args.command {
