@@ -13,6 +13,7 @@ sha2.workspace = true
 syu-project-model = { path = "../syu-project-model" }
 syu-code-intel = { path = "../syu-code-intel" }
 syu-spec-model = { path = "../syu-spec-model" }
+syu-inventory = { path = "../syu-inventory" }
 
 [dev-dependencies]
 tempfile.workspace = true

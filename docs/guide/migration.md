@@ -2,7 +2,7 @@
 
 Start here when you are upgrading an existing `syu` workspace between alpha
 releases. This page documents breaking changes and release-specific upgrade
-steps. When `syu validate .` starts failing after an upgrade, check the section
+steps. When `syu validate workspace .` starts failing after an upgrade, check the section
 for the version you just installed.
 
 > **Note:** This page is historical guidance for pre-v1 alpha workspaces. The
@@ -122,7 +122,7 @@ instructions for those versions. If you are upgrading from one of those early
 alphas, treat `alpha.5` as the first supported landing point: compare your
 workspace against a freshly generated scaffold from the version you are
 upgrading to, make the required `spec.root` and validation-config updates, then
-run `syu validate .` until the workspace is green.
+run `syu validate workspace .` until the workspace is green.
 
 | syu version | `spec.root` default | `require_reciprocal_links` |
 |---|---|---|

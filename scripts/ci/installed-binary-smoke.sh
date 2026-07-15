@@ -43,7 +43,7 @@ PY
 }
 
 main() {
-  local install_root binary_name installed_binary expected_version actual_version workspace fixture plan projection
+  local install_root binary_name installed_binary expected_version actual_version workspace fixture plan projection validation_report
 
   trap cleanup EXIT
   cd "$repo_root"
@@ -70,11 +70,15 @@ main() {
   git -C "$workspace" commit --quiet -m "fixture snapshot"
   git -C "$workspace" update-ref refs/remotes/origin/main HEAD
 
-  "${installed_binary}" validate "$workspace" >/dev/null
+  validation_report="${temp_root}/validation.json"
+  if ! "${installed_binary}" validate workspace "$workspace" --format json >"$validation_report"; then
+    cat "$validation_report" >&2
+    exit 1
+  fi
   "${installed_binary}" work plan \
     --request "${workspace}/work.yaml" \
     --out "$plan" \
-    --workspace "$workspace" >/dev/null
+    --workspace "$workspace"
   test -f "$plan"
 
   "${installed_binary}" workbench project \
@@ -88,8 +92,9 @@ import sys
 from pathlib import Path
 
 projection = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-assert projection["plan"]["schema"] == "syu/work-plan/v1"
-assert "validation" in projection
+assert projection["work"]["request"]["summary"] == "Keep login failures generic."
+assert projection["work"]["plan"] is None
+assert projection["diagnostics"]["validation"]["state"] == "not_run"
 PY
 }
 

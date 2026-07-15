@@ -14,9 +14,11 @@ features:
     responsibility: Implement the owned behavior for this example workspace.
     targets:
     - id: target-1
-      adapter: python
+      adapter: shell
       path: python/app.py
       selector:
-        kind: file
-    satisfies:
-    - REQ-PYTHONONLY-001#criterion.owned-delivery
+        kind: marker
+        value: "def python_feature_impl():"
+      claims:
+      - kind: satisfies
+        criterion: REQ-PYTHONONLY-001#criterion.owned-delivery

@@ -14,9 +14,11 @@ features:
     responsibility: Implement the owned behavior for this example workspace.
     targets:
     - id: target-1
-      adapter: typescript
+      adapter: shell
       path: src/app.ts
       selector:
-        kind: file
-    satisfies:
-    - REQ-TYPESCRIPTONLY-001#criterion.owned-delivery
+        kind: marker
+        value: "export function typescriptFeature(): string {"
+      claims:
+      - kind: satisfies
+        criterion: REQ-TYPESCRIPTONLY-001#criterion.owned-delivery

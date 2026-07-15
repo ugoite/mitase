@@ -17,7 +17,7 @@ through a terminal:
 
 The first cut keeps the integration intentionally small:
 
-- diagnostics come from the checked-in `syu` CLI via `syu validate . --format json`
+- diagnostics come from the checked-in `syu` CLI via `syu validate workspace . --format json`
 - navigation reads the same `docs/syu` workspace files directly so the extension
   can link source files back to requirements and features without requiring a
   second server process

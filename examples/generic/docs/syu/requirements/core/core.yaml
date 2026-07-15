@@ -26,6 +26,12 @@ requirements:
       adapter: shell
       path: scripts/bootstrap-generic.sh
       selector:
-        kind: file
-    verifies:
-    - REQ-GENERIC-001#criterion.owned-delivery
+        kind: marker
+        value: "#!/usr/bin/env bash"
+      claims:
+      - kind: verifies
+        criterion: REQ-GENERIC-001#criterion.owned-delivery
+        covers:
+        - FEAT-GENERIC-001#binding.implementation/target.target-1
+        runner:
+          runner: cargo-test

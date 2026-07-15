@@ -21,9 +21,15 @@ requirements:
     responsibility: Verify the owned example behavior through checked-in evidence.
     targets:
     - id: target-1
-      adapter: python
+      adapter: shell
       path: python/test_traceability.py
       selector:
-        kind: file
-    verifies:
-    - REQ-PYTHONONLY-001#criterion.owned-delivery
+        kind: marker
+        value: "def test_python_requirement():"
+      claims:
+      - kind: verifies
+        criterion: REQ-PYTHONONLY-001#criterion.owned-delivery
+        covers:
+        - FEAT-PYTHONONLY-001#binding.implementation/target.target-1
+        runner:
+          runner: cargo-test

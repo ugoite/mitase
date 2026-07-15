@@ -9,7 +9,6 @@ version: 0.0.1-alpha.8
 schema: syu/config/v1
 workspace:
   spec_roots: [docs/syu]
-  artifact_roots: [src, tests]
   excludes: []
 profiles: { active: [], custom: {} }
 validation:
@@ -34,7 +33,7 @@ adapters: { enabled: [rust, typescript, javascript, shell, python, go, java, rub
 Key fields:
 
 - `workspace.spec_roots`: v1 spec document roots
-- `workspace.artifact_roots`: code and evidence roots that changed-file validation treats as owned artifacts
+- `workspace.excludes`: paths excluded from specification and inventory discovery
 - `validation.changed.baseline`: optional changed-file baseline
 - `work.slicing.*`: limits used by planning and context export
 - `adapters.enabled`: adapters allowed for target resolution

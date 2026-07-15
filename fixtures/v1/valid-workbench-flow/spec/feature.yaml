@@ -1,0 +1,22 @@
+schema: syu/spec/v1
+kind: features
+namespace: fixture
+category: Workbench flow
+features:
+  - id: FEAT-FIXTURE-001
+    title: Bounded fixture behavior
+    summary: A single exact implementation target with one exact verification target.
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: work
+        responsibility: Implement the fixture behavior.
+        targets:
+          - id: behavior
+            adapter: rust
+            path: src/lib.rs
+            selector: { kind: symbol, name: behavior }
+            claims:
+              - kind: satisfies
+                criterion: REQ-FIXTURE-001#criterion.behavior

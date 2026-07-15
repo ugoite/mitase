@@ -1,32 +1,217 @@
 schema: syu/config/v1
 workspace:
   spec_roots: [docs/syu]
-  artifact_roots: [src, crates, docs, fixtures]
-  excludes: [target/**, node_modules/**, docs/generated/**]
-profiles:
-  active: [agent-ready]
-  custom:
-    agent-ready:
-      facets:
-        architecture: { include: [docs/**] }
-        tooling: { include: [crates/**, src/**] }
-        verification: { include: [crates/**, tests/**] }
-      contract_rules: []
+  excludes: [target/**, node_modules/**, fixtures/v1/valid-workbench-flow/**]
+inventory:
+  active_profile: default
+  profiles:
+    - id: default
+      providers:
+        rust:
+          mode: test
+          include_tests: true
+        javascript:
+          roots:
+            - crates/syu-app-ui/assets
+            - editors/vscode/src/model.js
+            - editors/vscode/test/model.test.js
+            - website/src/pages/index.js
+        markdown: { roots: [docs/syu] }
+        html: { roots: [crates/syu-app-ui/assets] }
+        declared:
+          roots:
+            - CONTRIBUTING.md
+            - Cargo.toml
+            - Cargo.lock
+            - README.md
+            - .github/ISSUE_TEMPLATE/bug_report.yml
+            - .github/pull_request_template.md
+            - .github/workflows/branch-push.yml
+            - .github/workflows/ci.yml
+            - .github/workflows/quality.yml
+            - CONTRIBUTING.md
+            - Cargo.lock
+            - Cargo.toml
+            - README.md
+            - crates/syu-app-ui/assets/js/api.js
+            - crates/syu-app-ui/assets/js/components/action.js
+            - crates/syu-app-ui/assets/js/components/diagnostic.js
+            - crates/syu-app-ui/assets/js/components/editor.js
+            - crates/syu-app-ui/assets/js/components/readiness.js
+            - crates/syu-app-ui/assets/js/components/target.js
+            - crates/syu-app-ui/assets/js/i18n.js
+            - crates/syu-app-ui/assets/js/main.js
+            - crates/syu-app-ui/assets/js/pages/diagnostics.js
+            - crates/syu-app-ui/assets/js/pages/readiness.js
+            - crates/syu-app-ui/assets/js/pages/scope.js
+            - crates/syu-app-ui/assets/js/pages/settings.js
+            - crates/syu-app-ui/assets/js/pages/specifications.js
+            - crates/syu-app-ui/assets/js/pages/work.js
+            - crates/syu-app-ui/assets/js/router.js
+            - crates/syu-app-ui/assets/js/state.js
+            - crates/syu-app-ui/assets/locales/en.json
+            - crates/syu-app-ui/assets/locales/ja.json
+            - crates/syu-app-ui/assets/workbench.html
+            - crates/syu-app-ui/src/lib.rs
+            - crates/syu-app-ui/src/pages.rs
+            - crates/syu-app-ui/src/shell.rs
+            - crates/syu-code-intel/src/lib.rs
+            - crates/syu-diagnostics/Cargo.toml
+            - crates/syu-diagnostics/src/lib.rs
+            - crates/syu-inventory/Cargo.toml
+            - crates/syu-inventory/src/lib.rs
+            - crates/syu-planner/Cargo.toml
+            - crates/syu-planner/src/lib.rs
+            - crates/syu-project-model/Cargo.toml
+            - crates/syu-project-model/src/lib.rs
+            - crates/syu-spec-model/src/lib.rs
+            - crates/syu-validation/Cargo.toml
+            - crates/syu-validation/src/lib.rs
+            - crates/syu-validation/src/readiness.rs
+            - crates/syu-work-model/src/lib.rs
+            - crates/syu-workbench-server/Cargo.toml
+            - crates/syu-workbench-server/src/lib.rs
+            - crates/syu-workspace/Cargo.toml
+            - crates/syu-workspace/src/lib.rs
+            - docs/generated/site-spec/capabilities.md
+            - docs/generated/site-spec/delivery.md
+            - docs/generated/site-spec/foundation.md
+            - docs/generated/site-spec/index.md
+            - docs/generated/site-spec/planner.md
+            - docs/generated/site-spec/public-entrypoints.md
+            - docs/generated/site-spec/work.md
+            - docs/generated/site-spec/workbench.md
+            - docs/generated/site-spec/workbench-features.md
+            - docs/guide/command-card.md
+            - docs/guide/configuration.md
+            - docs/guide/examples-and-templates.md
+            - docs/guide/existing-repository.md
+            - docs/guide/migration.md
+            - docs/guide/spec-antipatterns.md
+            - docs/guide/vscode-extension.md
+            - docs/syu/capabilities.yaml
+            - docs/syu/delivery.yaml
+            - docs/syu/foundation.yaml
+            - docs/syu/planner.yaml
+            - docs/syu/public-entrypoints.yaml
+            - docs/syu/work.yaml
+            - docs/syu/workbench-features.yaml
+            - docs/syu/workbench.yaml
+            - editors/vscode/README.md
+            - editors/vscode/src/model.js
+            - editors/vscode/test/model.test.js
+            - examples/browser-ui/docs/syu/features/core/core.yaml
+            - examples/browser-ui/docs/syu/policies/policies.yaml
+            - examples/browser-ui/docs/syu/requirements/core/core.yaml
+            - examples/browser-ui/syu.yaml
+            - examples/csharp-fallback/docs/syu/features/core/core.yaml
+            - examples/csharp-fallback/docs/syu/policies/policies.yaml
+            - examples/csharp-fallback/docs/syu/requirements/core/core.yaml
+            - examples/csharp-fallback/syu.yaml
+            - examples/docs-first/docs/syu/features/core/core.yaml
+            - examples/docs-first/docs/syu/policies/policies.yaml
+            - examples/docs-first/docs/syu/requirements/core/core.yaml
+            - examples/docs-first/syu.yaml
+            - examples/generic/docs/syu/features/core/core.yaml
+            - examples/generic/docs/syu/policies/policies.yaml
+            - examples/generic/docs/syu/requirements/core/core.yaml
+            - examples/generic/syu.yaml
+            - examples/go-only/docs/syu/features/core/core.yaml
+            - examples/go-only/docs/syu/policies/policies.yaml
+            - examples/go-only/docs/syu/requirements/core/core.yaml
+            - examples/go-only/syu.yaml
+            - examples/java-only/docs/syu/features/core/core.yaml
+            - examples/java-only/docs/syu/policies/policies.yaml
+            - examples/java-only/docs/syu/requirements/core/core.yaml
+            - examples/java-only/syu.yaml
+            - examples/polyglot/docs/syu/features/core/core.yaml
+            - examples/polyglot/docs/syu/policies/policies.yaml
+            - examples/polyglot/docs/syu/requirements/core/core.yaml
+            - examples/polyglot/syu.yaml
+            - examples/python-only/docs/syu/features/core/core.yaml
+            - examples/python-only/docs/syu/policies/policies.yaml
+            - examples/python-only/docs/syu/requirements/core/core.yaml
+            - examples/python-only/syu.yaml
+            - examples/ruby-only/docs/syu/features/core/core.yaml
+            - examples/ruby-only/docs/syu/policies/policies.yaml
+            - examples/ruby-only/docs/syu/requirements/core/core.yaml
+            - examples/ruby-only/syu.yaml
+            - examples/rust-only/docs/syu/features/core/core.yaml
+            - examples/rust-only/docs/syu/policies/policies.yaml
+            - examples/rust-only/docs/syu/requirements/core/core.yaml
+            - examples/rust-only/syu.yaml
+            - examples/team-scale/docs/syu/features/core/core.yaml
+            - examples/team-scale/docs/syu/policies/policies.yaml
+            - examples/team-scale/docs/syu/requirements/core/core.yaml
+            - examples/team-scale/syu.yaml
+            - examples/typescript-only/docs/syu/features/core/core.yaml
+            - examples/typescript-only/docs/syu/policies/policies.yaml
+            - examples/typescript-only/docs/syu/requirements/core/core.yaml
+            - examples/typescript-only/syu.yaml
+            - fixtures/rejected/obsolete-pre-release-v1/spec.yaml
+            - fixtures/rejected/obsolete-pre-release-v1/syu.yaml
+            - fixtures/v1/invalid-unknown-field/syu.yaml
+            - fixtures/v1/valid-web-app/Cargo.toml
+            - fixtures/v1/valid-web-app/spec/feature.yaml
+            - fixtures/v1/valid-web-app/spec/requirement.yaml
+            - fixtures/v1/valid-web-app/syu.yaml
+            - scripts/ci/check-workbench-contract.py
+            - scripts/ci/installed-binary-smoke.sh
+            - scripts/ci/quality-gates.sh
+            - scripts/ci/workbench-visual.sh
+            - scripts/dev/validate-changed.sh
+            - skills/syu-maintainer/SKILL.md
+            - src/command/add.rs
+            - src/command/audit.rs
+            - src/command/browse.rs
+            - src/command/check.rs
+            - src/command/completion.rs
+            - src/command/doctor.rs
+            - src/command/explain.rs
+            - src/command/init.rs
+            - src/command/issue_text.rs
+            - src/command/list.rs
+            - src/command/log.rs
+            - src/command/lookup.rs
+            - src/command/mod.rs
+            - src/command/prompt.rs
+            - src/command/relate.rs
+            - src/command/report.rs
+            - src/command/search.rs
+            - src/command/show.rs
+            - src/command/task.rs
+            - src/command/templates.rs
+            - src/command/trace.rs
+            - src/command/workbench.rs
+            - src/lib.rs
+            - tests/v1_cli.rs
+            - tests/workbench_smoke.rs
+            - tests/workbench_visual.rs
+            - website/src/pages/index.js
+            - syu.yaml
 validation:
   preset: agent-ready
-  deny_warnings: false
-  rules: {}
+  readiness:
+    target: traceable
+    scopes: { planner: work-ready, work: work-ready }
+    probes: { implemented_criteria: "REQ-WORK-001#criterion.exact-slice,REQ-WORKBENCH-002#criterion.work-session", changed_units: false }
+    limits: { max_ownership_scope_units: 160, max_targets_per_binding: 12, max_slices_per_seed: 4 }
   changed:
+    baseline: { strategy: merge-base, against: origin/main }
     require_owned_changes: true
+    require_plan: true
+verification:
+  runners:
+    cargo-test:
+      executable: cargo
+      arguments: [test, -p, "{package}", "{test}", --, --exact]
+    cargo-test-integration:
+      executable: cargo
+      arguments: [test, -p, "{package}", --test, "{harness}", "{test}", --, --exact]
 work:
   slicing:
     max_editable_files: 4
     max_editable_symbols: 8
-    max_verification_targets: 6
+    max_verification_targets: 8
     max_readonly_targets: 12
     max_total_bytes: 120000
-  context:
-    include_parent_principles: true
-    include_parent_rules: true
-adapters:
-  enabled: [rust, typescript, markdown, openapi, yaml, json]

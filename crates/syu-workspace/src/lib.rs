@@ -6,8 +6,10 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
+    sync::{Arc, OnceLock},
 };
 use syu_code_intel::resolve_symbol;
+use syu_inventory::{ArtifactUnit, ArtifactUnitKind, InventoryContext, InventoryRegistry};
 use syu_project_model::{CONFIG_SCHEMA, ProjectConfig};
 use syu_spec_model::*;
 
@@ -16,16 +18,19 @@ pub struct LoadedDocument {
     pub path: PathBuf,
     pub document: SpecDocument,
 }
+#[derive(Clone)]
 pub struct SpecWorkspace {
     pub root: PathBuf,
     pub config: ProjectConfig,
     pub documents: Vec<LoadedDocument>,
+    /// Candidate bytes used by every overlay-aware reader.
+    pub overlays: BTreeMap<PathBuf, Vec<u8>>,
     matcher: WorkspaceMatcher,
+    fingerprint_cache: Arc<OnceLock<Result<String, String>>>,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct WorkspaceMatcher {
     spec_roots: Vec<RepoPath>,
-    artifact_roots: Vec<RepoPath>,
     excludes: Option<GlobSet>,
 }
 
@@ -33,6 +38,10 @@ struct WorkspaceMatcher {
 pub struct SpecIndex {
     pub anchors: BTreeMap<SpecAnchor, AnchorValue>,
     pub bindings: BTreeMap<SpecAnchor, ArtifactBinding>,
+    /// Status for status-bearing specification items. Planned items are kept
+    /// in the graph for discovery, but their ownership must not govern the
+    /// current workspace.
+    pub item_status: BTreeMap<SpecId, ItemStatus>,
     pub contracts: BTreeMap<SpecAnchor, Contract>,
     pub criteria_to_implementations: BTreeMap<SpecAnchor, Vec<SpecAnchor>>,
     pub criteria_to_verifications: BTreeMap<SpecAnchor, Vec<SpecAnchor>>,
@@ -43,6 +52,21 @@ pub struct SpecIndex {
     pub item_paths: BTreeMap<SpecId, PathBuf>,
     pub path_to_targets: BTreeMap<String, Vec<BoundTargetRef>>,
     pub criterion_status: BTreeMap<SpecAnchor, ItemStatus>,
+    pub artifact_units: Vec<ArtifactUnit>,
+    pub artifact_owners: BTreeMap<String, Vec<OwnershipRef>>,
+    pub target_to_artifact: BTreeMap<BoundTargetRef, String>,
+    pub criteria_to_implementation_targets: BTreeMap<SpecAnchor, Vec<BoundTargetRef>>,
+    pub criteria_to_verification_targets: BTreeMap<SpecAnchor, Vec<BoundTargetRef>>,
+    pub contracts_by_target: BTreeMap<BoundTargetRef, Vec<SpecAnchor>>,
+    pub verification_by_target: BTreeMap<BoundTargetRef, Vec<BoundTargetRef>>,
+    pub inventory_error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct OwnershipRef {
+    pub binding: SpecAnchor,
+    pub scope_id: LocalId,
+    pub target_id: Option<LocalId>,
 }
 #[derive(Debug, Clone)]
 pub enum AnchorValue {
@@ -54,14 +78,49 @@ pub enum AnchorValue {
 }
 
 impl SpecWorkspace {
+    pub fn overlay_document(&self, path: &Path, document: SpecDocument) -> Result<Self> {
+        let mut overlay = self.clone();
+        overlay.fingerprint_cache = Arc::new(OnceLock::new());
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        let loaded = overlay
+            .documents
+            .iter_mut()
+            .find(|loaded| loaded.path == canonical)
+            .ok_or_else(|| anyhow::anyhow!("overlay path is not a loaded specification"))?;
+        loaded.document = document;
+        let bytes = serde_yaml::to_string(&loaded.document)?.into_bytes();
+        overlay.overlays.insert(canonical.clone(), bytes.clone());
+        if let Ok(relative) = canonical.strip_prefix(&overlay.root) {
+            overlay.overlays.insert(relative.to_path_buf(), bytes);
+        }
+        Ok(overlay)
+    }
+
+    pub fn overlay_config(&self, config: ProjectConfig) -> Result<Self> {
+        let mut overlay = self.clone();
+        overlay.fingerprint_cache = Arc::new(OnceLock::new());
+        overlay.matcher = WorkspaceMatcher::build(&config)?;
+        overlay.config = config;
+        let bytes = serde_yaml::to_string(&overlay.config)?.into_bytes();
+        let path = overlay.root.join("syu.yaml");
+        let canonical = path.canonicalize().unwrap_or(path);
+        overlay.overlays.insert(canonical, bytes.clone());
+        overlay.overlays.insert(PathBuf::from("syu.yaml"), bytes);
+        Ok(overlay)
+    }
+
     pub fn load(start: impl AsRef<Path>) -> Result<Self> {
         let root = find_root(start.as_ref())?;
         let config_path = root.join("syu.yaml");
-        let config: ProjectConfig = serde_yaml::from_str(
-            &fs::read_to_string(&config_path)
-                .with_context(|| format!("read {}", config_path.display()))?,
-        )
-        .context("parse syu/config/v1")?;
+        let config_source = fs::read_to_string(&config_path)
+            .with_context(|| format!("read {}", config_path.display()))?;
+        let config: ProjectConfig = match serde_yaml::from_str(&config_source) {
+            Ok(config) => config,
+            Err(_) if is_obsolete_pre_release_config(&config_source) => bail!(
+                "The document uses an obsolete pre-release syu/config/v1 shape.\nRewrite it using the current syu/config/v1 model."
+            ),
+            Err(error) => return Err(error).context("parse syu/config/v1"),
+        };
         if config.schema != CONFIG_SCHEMA {
             bail!("config schema must be {CONFIG_SCHEMA}");
         }
@@ -73,8 +132,16 @@ impl SpecWorkspace {
         paths.sort();
         let mut documents = Vec::new();
         for path in paths {
-            let document: SpecDocument = serde_yaml::from_str(&fs::read_to_string(&path)?)
-                .with_context(|| format!("strict parse {}", path.display()))?;
+            let source = fs::read_to_string(&path)?;
+            let document: SpecDocument = match serde_yaml::from_str(&source) {
+                Ok(document) => document,
+                Err(_error) if is_obsolete_pre_release_spec(&source) => bail!(
+                    "The document uses an obsolete pre-release syu/spec/v1 shape.\nRewrite it using the current syu/spec/v1 model."
+                ),
+                Err(error) => {
+                    return Err(error).with_context(|| format!("strict parse {}", path.display()));
+                }
+            };
             if document.schema() != SPEC_SCHEMA {
                 bail!("{}: schema must be {SPEC_SCHEMA}", path.display());
             }
@@ -84,34 +151,150 @@ impl SpecWorkspace {
             root,
             config,
             documents,
+            overlays: BTreeMap::new(),
             matcher,
+            fingerprint_cache: Arc::new(OnceLock::new()),
         })
     }
     pub fn index(&self) -> Result<SpecIndex> {
         SpecIndex::build(self)
     }
-    pub fn fingerprint(&self) -> String {
+    pub fn try_fingerprint(&self) -> Result<String> {
+        self.fingerprint_cache
+            .get_or_init(|| {
+                self.compute_fingerprint()
+                    .map_err(|error| error.to_string())
+            })
+            .clone()
+            .map_err(anyhow::Error::msg)
+    }
+
+    fn compute_fingerprint(&self) -> Result<String> {
         let mut hash = Sha256::new();
-        if let Ok(config) = serde_yaml::to_string(&self.config) {
-            hash.update(config.as_bytes());
-        }
+        hash.update(serde_yaml::to_string(&self.config)?.as_bytes());
         for doc in &self.documents {
             if let Ok(relative) = doc.path.strip_prefix(&self.root) {
                 hash.update(relative.to_string_lossy().as_bytes());
             }
-            hash.update(fs::read(&doc.path).unwrap_or_default());
+            hash.update(self.read_bytes(&doc.path)?);
         }
-        format!("sha256:{:x}", hash.finalize())
+        if let Some(profile) = self
+            .config
+            .inventory
+            .profiles
+            .iter()
+            .find(|profile| profile.id == self.config.inventory.active_profile)
+        {
+            hash.update(b"inventory-profile:v1");
+            hash.update(profile.id.as_bytes());
+            if let Ok(value) = serde_yaml::to_string(profile) {
+                hash.update(value.as_bytes());
+            }
+            let units = InventoryRegistry::discover(
+                &InventoryContext {
+                    workspace_root: self.root.clone(),
+                    profile: profile.id.clone(),
+                    settings: serde_yaml::Value::Null,
+                    excludes: self
+                        .config
+                        .workspace
+                        .excludes
+                        .iter()
+                        .map(|p| p.0.clone())
+                        .collect(),
+                    overlays: self.overlays.clone(),
+                },
+                profile,
+            )?;
+            for unit in units {
+                hash.update(unit.identity.as_bytes());
+                hash.update(unit.digest.as_bytes());
+            }
+        }
+        for (runner, definition) in &self.config.verification.runners {
+            hash.update(runner.as_bytes());
+            hash.update(definition.executable.as_bytes());
+            for argument in &definition.arguments {
+                hash.update(argument.as_bytes());
+            }
+        }
+        Ok(format!("sha256:{:x}", hash.finalize()))
+    }
+
+    /// Snapshots may still be rendered for an invalid workspace. Execution
+    /// bases use `try_fingerprint` and therefore reject inventory failures.
+    /// Fingerprints are unavailable when any enabled inventory provider
+    /// fails. Callers must propagate this error instead of manufacturing an
+    /// invalid-but-plausible execution basis.
+    pub fn fingerprint(&self) -> Result<String> {
+        self.try_fingerprint()
+    }
+
+    /// Fingerprint only the specification/configuration inputs. Inventory
+    /// artifact bytes are intentionally excluded so an editable source change
+    /// does not make an otherwise valid work plan stale.
+    pub fn spec_fingerprint(&self) -> Result<String> {
+        let mut hash = Sha256::new();
+        hash.update(serde_yaml::to_string(&self.config)?.as_bytes());
+        for document in &self.documents {
+            if let Ok(relative) = document.path.strip_prefix(&self.root) {
+                hash.update(relative.to_string_lossy().as_bytes());
+            }
+            hash.update(self.read_bytes(&document.path)?);
+        }
+        Ok(format!("sha256:{:x}", hash.finalize()))
+    }
+
+    pub fn read_bytes(&self, path: &Path) -> Result<Vec<u8>> {
+        let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+        if let Some(bytes) = self.overlays.get(&canonical) {
+            return Ok(bytes.clone());
+        }
+        if let Ok(relative) = canonical.strip_prefix(&self.root)
+            && let Some(bytes) = self.overlays.get(relative)
+        {
+            return Ok(bytes.clone());
+        }
+        Ok(fs::read(path)?)
+    }
+
+    pub fn read_to_string(&self, path: &Path) -> Result<String> {
+        Ok(String::from_utf8(self.read_bytes(path)?)?)
     }
     pub fn path_is_spec(&self, path: &Path) -> bool {
         self.matcher.contains(&self.matcher.spec_roots, path)
     }
     pub fn path_is_artifact(&self, path: &Path) -> bool {
-        self.matcher.contains(&self.matcher.artifact_roots, path)
+        !path.is_absolute() && !self.path_is_excluded(path)
     }
     pub fn path_is_excluded(&self, path: &Path) -> bool {
         self.matcher.is_excluded(path)
     }
+}
+
+fn is_obsolete_pre_release_spec(source: &str) -> bool {
+    [
+        "satisfies:",
+        "verifies:",
+        "documents:",
+        "enforces:",
+        "generated_from:",
+        "evidences:",
+        "names:",
+        "binding:",
+    ]
+    .iter()
+    .any(|field| {
+        source
+            .lines()
+            .any(|line| line.trim_start().starts_with(field))
+    })
+}
+
+fn is_obsolete_pre_release_config(source: &str) -> bool {
+    ["version:", "spec:", "validate:"]
+        .iter()
+        .any(|field| source.lines().any(|line| line.starts_with(field)))
 }
 
 impl SpecIndex {
@@ -159,6 +342,7 @@ impl SpecIndex {
                 SpecDocument::Requirements { requirements, .. } => {
                     for item in requirements {
                         unique_item(&mut ids, &item.id)?;
+                        out.item_status.insert(item.id.clone(), item.status);
                         out.item_paths.insert(item.id.clone(), loaded.path.clone());
                         for criterion in &item.criteria {
                             let anchor = out.insert(
@@ -179,6 +363,7 @@ impl SpecIndex {
                 SpecDocument::Features { features, .. } => {
                     for item in features {
                         unique_item(&mut ids, &item.id)?;
+                        out.item_status.insert(item.id.clone(), item.status);
                         out.item_paths.insert(item.id.clone(), loaded.path.clone());
                         for b in &item.bindings {
                             out.insert_binding(&item.id, b)?;
@@ -193,7 +378,7 @@ impl SpecIndex {
                             out.contracts.insert(anchor.clone(), contract.clone());
                             for p in &contract.participants {
                                 out.binding_to_contracts
-                                    .entry(p.binding.clone())
+                                    .entry(p.target.binding.clone())
                                     .or_default()
                                     .push(anchor.clone());
                             }
@@ -204,12 +389,9 @@ impl SpecIndex {
         }
         for (anchor, binding) in &out.bindings {
             for target in &binding.targets {
-                if workspace.config.workspace.artifact_roots.is_empty() {
-                    bail!("workspace.artifact_roots cannot be empty when bindings exist");
-                }
                 if !workspace.path_is_artifact(target.path.as_path()) {
                     bail!(
-                        "target path {} is outside workspace.artifact_roots",
+                        "target path {} is excluded from inventory",
                         target.path.display()
                     );
                 }
@@ -227,17 +409,22 @@ impl SpecIndex {
                         target_id: target.id.clone(),
                     });
             }
-            for criterion in &binding.satisfies {
-                out.criteria_to_implementations
-                    .entry(criterion.clone())
-                    .or_default()
-                    .push(anchor.clone());
-            }
-            for criterion in &binding.verifies {
-                out.criteria_to_verifications
-                    .entry(criterion.clone())
-                    .or_default()
-                    .push(anchor.clone());
+            for target in &binding.targets {
+                for claim in &target.claims {
+                    match claim {
+                        TargetClaim::Satisfies { criterion } => out
+                            .criteria_to_implementations
+                            .entry(criterion.clone())
+                            .or_default()
+                            .push(anchor.clone()),
+                        TargetClaim::Verifies { criterion, .. } => out
+                            .criteria_to_verifications
+                            .entry(criterion.clone())
+                            .or_default()
+                            .push(anchor.clone()),
+                        _ => {}
+                    }
+                }
             }
         }
         for values in out
@@ -249,11 +436,187 @@ impl SpecIndex {
             values.sort();
             values.dedup();
         }
+        let profile = workspace
+            .config
+            .inventory
+            .profiles
+            .iter()
+            .find(|profile| profile.id == workspace.config.inventory.active_profile)
+            .ok_or_else(|| anyhow::anyhow!("active inventory profile is not defined"))?;
+        match InventoryRegistry::discover(
+            &InventoryContext {
+                workspace_root: workspace.root.clone(),
+                profile: profile.id.clone(),
+                settings: serde_yaml::Value::Null,
+                excludes: workspace
+                    .config
+                    .workspace
+                    .excludes
+                    .iter()
+                    .map(|p| p.0.clone())
+                    .collect(),
+                overlays: workspace.overlays.clone(),
+            },
+            profile,
+        ) {
+            Ok(units) => out.artifact_units = units,
+            Err(error) => out.inventory_error = Some(error.to_string()),
+        }
+        for (binding_anchor, binding) in &out.bindings {
+            for target in &binding.targets {
+                let target_ref = BoundTargetRef {
+                    binding: binding_anchor.clone(),
+                    target_id: target.id.clone(),
+                };
+                let identities = artifact_identities_for_target(&out.artifact_units, target);
+                if identities.len() > 1 {
+                    bail!(
+                        "target {target_ref} resolves to {} active artifact identities; exact selectors must resolve exactly one",
+                        identities.len()
+                    );
+                }
+                if let Some(identity) = identities.first() {
+                    out.target_to_artifact
+                        .insert(target_ref.clone(), identity.clone());
+                }
+                if let Some(identity) = identities.first()
+                    && matches!(
+                        binding.role,
+                        BindingRole::Implementation | BindingRole::Verification
+                    )
+                    && !matches!(
+                        out.item_status.get(&binding_anchor.item),
+                        Some(ItemStatus::Planned)
+                    )
+                {
+                    out.artifact_owners
+                        .entry(identity.clone())
+                        .or_default()
+                        .push(OwnershipRef {
+                            binding: binding_anchor.clone(),
+                            scope_id: target.id.clone(),
+                            target_id: Some(target.id.clone()),
+                        });
+                }
+                for claim in &target.claims {
+                    match claim {
+                        TargetClaim::Satisfies { criterion } => out
+                            .criteria_to_implementation_targets
+                            .entry(criterion.clone())
+                            .or_default()
+                            .push(target_ref.clone()),
+                        TargetClaim::Verifies {
+                            criterion, covers, ..
+                        } => {
+                            out.criteria_to_verification_targets
+                                .entry(criterion.clone())
+                                .or_default()
+                                .push(target_ref.clone());
+                            for covered in covers {
+                                out.verification_by_target
+                                    .entry(covered.clone())
+                                    .or_default()
+                                    .push(target_ref.clone());
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        for (binding_anchor, binding) in &out.bindings {
+            if matches!(
+                out.item_status.get(&binding_anchor.item),
+                Some(ItemStatus::Planned)
+            ) {
+                continue;
+            }
+            for scope in &binding.owns {
+                for unit in &out.artifact_units {
+                    if scope_matches(scope, unit) {
+                        let exact_owner_exists = out
+                            .artifact_owners
+                            .get(&unit.identity)
+                            .is_some_and(|owners| {
+                                owners.iter().any(|owner| owner.target_id.is_some())
+                            });
+                        // Exact target ownership has an explicit precedence rule.
+                        // Overlapping scopes belonging to different bindings remain
+                        // visible as multiple OwnershipRefs and are ambiguous.
+                        if exact_owner_exists {
+                            continue;
+                        }
+                        out.artifact_owners
+                            .entry(unit.identity.clone())
+                            .or_default()
+                            .push(OwnershipRef {
+                                binding: binding_anchor.clone(),
+                                scope_id: scope.id.clone(),
+                                target_id: None,
+                            });
+                    }
+                }
+            }
+        }
+        for (contract_anchor, contract) in &out.contracts {
+            for participant in &contract.participants {
+                out.contracts_by_target
+                    .entry(participant.target.clone())
+                    .or_default()
+                    .push(contract_anchor.clone());
+            }
+        }
+        for values in out.artifact_owners.values_mut() {
+            values.sort();
+            values.dedup();
+        }
+        for values in out
+            .criteria_to_implementation_targets
+            .values_mut()
+            .chain(out.criteria_to_verification_targets.values_mut())
+            .chain(out.verification_by_target.values_mut())
+        {
+            values.sort();
+            values.dedup();
+        }
+        for values in out.contracts_by_target.values_mut() {
+            values.sort();
+            values.dedup();
+        }
         for values in out.path_to_targets.values_mut() {
             values.sort();
             values.dedup();
         }
         Ok(out)
+    }
+
+    /// Fingerprint graph ownership without including mutable artifact bytes.
+    /// This detects changes to bindings, exact targets, and reverse ownership
+    /// relationships while allowing an editable target's implementation body
+    /// to change after planning.
+    pub fn ownership_fingerprint(&self) -> String {
+        let mut hash = Sha256::new();
+        for (anchor, binding) in &self.bindings {
+            hash.update(anchor.to_string().as_bytes());
+            hash.update(
+                serde_json::to_vec(binding).expect("artifact binding serializes for fingerprint"),
+            );
+        }
+        for (target, identity) in &self.target_to_artifact {
+            hash.update(target.to_string().as_bytes());
+            hash.update(identity.as_bytes());
+        }
+        for (identity, owners) in &self.artifact_owners {
+            hash.update(identity.as_bytes());
+            for owner in owners {
+                hash.update(owner.binding.to_string().as_bytes());
+                hash.update(owner.scope_id.to_string().as_bytes());
+                if let Some(target_id) = &owner.target_id {
+                    hash.update(target_id.to_string().as_bytes());
+                }
+            }
+        }
+        format!("sha256:{:x}", hash.finalize())
     }
     fn insert(
         &mut self,
@@ -295,6 +658,79 @@ impl SpecIndex {
     }
     pub fn anchor(&self, anchor: &SpecAnchor) -> Option<&AnchorValue> {
         self.anchors.get(anchor)
+    }
+}
+
+fn artifact_identities_for_target(units: &[ArtifactUnit], target: &ArtifactTarget) -> Vec<String> {
+    units
+        .iter()
+        .filter(|unit| {
+            if unit.adapter != target.adapter
+                || unit.path != target.path
+                || !matches!(
+                    unit.reachability,
+                    syu_inventory::ArtifactReachability::Active
+                )
+            {
+                return false;
+            }
+            match &target.selector {
+                Selector::Symbol { name } => {
+                    unit.kind == ArtifactUnitKind::Symbol
+                        && symbol_identity_matches(&unit.identity, name)
+                }
+                Selector::Operation { method, path } => {
+                    unit.kind == ArtifactUnitKind::Operation
+                        && unit.identity.ends_with(&format!(
+                            "::{} {}",
+                            method.to_ascii_uppercase(),
+                            path
+                        ))
+                }
+                Selector::Heading { value } => {
+                    unit.kind == ArtifactUnitKind::Heading
+                        && unit.identity.ends_with(&format!("::heading::{value}"))
+                }
+                Selector::File | Selector::JsonPointer { .. } => {
+                    unit.kind == ArtifactUnitKind::File
+                }
+                Selector::Marker { value } => {
+                    unit.kind == ArtifactUnitKind::Marker
+                        && unit.identity.starts_with(&format!(
+                            "{}:{}::marker::{}@",
+                            target.adapter,
+                            target.path.to_string_lossy(),
+                            value
+                        ))
+                }
+            }
+        })
+        .map(|unit| unit.identity.clone())
+        .collect()
+}
+
+fn symbol_identity_matches(identity: &str, name: &str) -> bool {
+    identity.ends_with(&format!("::{name}"))
+        || identity.contains(&format!("::{name}@"))
+        || identity.ends_with(&format!("::{name})"))
+        || name.rsplit_once("::").is_some_and(|(container, leaf)| {
+            identity.ends_with(&format!("::impl({container})::{leaf}"))
+        })
+}
+
+fn scope_matches(scope: &OwnershipScope, unit: &ArtifactUnit) -> bool {
+    if scope.adapter != unit.adapter {
+        return false;
+    }
+    match &scope.selector {
+        OwnershipSelector::File => scope.path == unit.path && unit.kind == ArtifactUnitKind::File,
+        OwnershipSelector::Module { name } => {
+            scope.path == unit.path
+                && (name == "*"
+                    || unit.identity.contains(&format!("::{name}::"))
+                    || unit.identity.ends_with(&format!("::{name}")))
+        }
+        OwnershipSelector::PathPrefix { value } => unit.path.as_path().starts_with(value.as_path()),
     }
 }
 
@@ -364,7 +800,6 @@ impl WorkspaceMatcher {
         let excludes = compile_excludes(&config.workspace.excludes)?;
         Ok(Self {
             spec_roots: config.workspace.spec_roots.clone(),
-            artifact_roots: config.workspace.artifact_roots.clone(),
             excludes,
         })
     }
@@ -409,6 +844,107 @@ pub struct ResolvedTarget {
 pub fn resolve_target(root: &Path, target: &ArtifactTarget) -> Result<ResolvedTarget> {
     resolve_target_with_adapters(root, target, std::slice::from_ref(&target.adapter))
 }
+
+pub fn resolve_target_in_workspace(
+    workspace: &SpecWorkspace,
+    target: &ArtifactTarget,
+) -> Result<ResolvedTarget> {
+    const KNOWN: &[&str] = &[
+        "rust",
+        "typescript",
+        "javascript",
+        "shell",
+        "python",
+        "go",
+        "java",
+        "ruby",
+        "csharp",
+        "markdown",
+        "openapi",
+        "yaml",
+        "json",
+        "html",
+        "declared",
+    ];
+    if !KNOWN.contains(&target.adapter.as_str()) {
+        bail!("unknown adapter {}", target.adapter);
+    }
+    if !workspace
+        .config
+        .inventory
+        .profiles
+        .iter()
+        .find(|profile| profile.id == workspace.config.inventory.active_profile)
+        .is_some_and(|profile| profile.providers.contains_key(&target.adapter))
+    {
+        bail!("adapter {} is disabled", target.adapter);
+    }
+    let canonical_root = workspace.root.canonicalize()?;
+    let path = workspace.root.join(target.path.as_path());
+    let canonical_path = path
+        .canonicalize()
+        .with_context(|| format!("target path does not exist: {}", target.path.display()))?;
+    if !canonical_path.starts_with(&canonical_root) {
+        bail!("target path escapes workspace through a symlink");
+    }
+    let content = workspace.read_bytes(&canonical_path)?;
+    resolve_target_from_content(&workspace.root, target, content)
+}
+
+/// Resolve a target from the exact semantic span already produced by the
+/// active inventory. This is used by planning and post-state validation so a
+/// canonical plan and its later validation share the same candidate-overlay
+/// source of truth without reparsing every source file.
+pub fn resolve_indexed_target(
+    workspace: &SpecWorkspace,
+    target: &ArtifactTarget,
+    unit: &ArtifactUnit,
+) -> Result<Option<ResolvedTarget>> {
+    if unit.adapter != target.adapter
+        || unit.path != target.path
+        || !matches!(
+            unit.reachability,
+            syu_inventory::ArtifactReachability::Active
+        )
+        || unit.span.byte_end <= unit.span.byte_start
+    {
+        return Ok(None);
+    }
+    match (&target.selector, &unit.kind) {
+        (ExactSelector::Symbol { .. }, ArtifactUnitKind::Symbol)
+        | (ExactSelector::Heading { .. }, ArtifactUnitKind::Heading)
+        | (ExactSelector::Marker { .. }, ArtifactUnitKind::Marker)
+        | (ExactSelector::File, ArtifactUnitKind::File) => {}
+        _ => return Ok(None),
+    }
+    let content = workspace.read_bytes(&workspace.root.join(unit.path.as_path()))?;
+    let text = std::str::from_utf8(&content)
+        .map_err(|error| anyhow::anyhow!("inventory target source is not UTF-8: {error}"))?;
+    let Some(excerpt) = text.get(unit.span.byte_start..unit.span.byte_end) else {
+        return Ok(None);
+    };
+    let (description, symbols) = match &target.selector {
+        ExactSelector::File => ("file".into(), vec![]),
+        ExactSelector::Symbol { name } => (format!("symbol {name}"), vec![name.clone()]),
+        ExactSelector::Heading { value } => (format!("heading {value}"), vec![]),
+        ExactSelector::Marker { value } => (format!("marker {value}"), vec![]),
+        _ => return Ok(None),
+    };
+    Ok(Some(ResolvedTarget {
+        path: unit.path.as_path().to_path_buf(),
+        description,
+        symbols,
+        content_hash: hash_bytes(&content),
+        bytes: content.len(),
+        byte_start: unit.span.byte_start,
+        byte_end: unit.span.byte_end,
+        line_start: unit.span.line_start,
+        line_end: unit.span.line_end,
+        excerpt: excerpt.to_owned(),
+        excerpt_hash: hash_bytes(excerpt.as_bytes()),
+    }))
+}
+
 pub fn resolve_target_with_adapters(
     root: &Path,
     target: &ArtifactTarget,
@@ -428,6 +964,8 @@ pub fn resolve_target_with_adapters(
         "openapi",
         "yaml",
         "json",
+        "html",
+        "declared",
     ];
     if !KNOWN.contains(&target.adapter.as_str()) {
         bail!("unknown adapter {}", target.adapter);
@@ -444,43 +982,45 @@ pub fn resolve_target_with_adapters(
         bail!("target path escapes workspace through a symlink");
     }
     let content = fs::read(&canonical_path)?;
+    resolve_target_from_content(root, target, content)
+}
+
+fn resolve_target_from_content(
+    _root: &Path,
+    target: &ArtifactTarget,
+    content: Vec<u8>,
+) -> Result<ResolvedTarget> {
     let text = String::from_utf8_lossy(&content);
     let (description, symbols, byte_start, byte_end, line_start, line_end, excerpt, excerpt_hash) =
         match &target.selector {
-            Selector::File => (
-                "file".into(),
-                vec![],
-                0,
-                content.len(),
-                1,
-                text.lines().count(),
-                text.to_string(),
-                hash_bytes(&content),
-            ),
-            Selector::Symbol { names } => {
-                if names.is_empty() {
-                    bail!("symbol selector must contain at least one symbol");
+            Selector::File => {
+                let excerpt = text.to_string();
+                (
+                    "file".into(),
+                    vec![],
+                    0,
+                    content.len(),
+                    1,
+                    text.lines().count().max(1),
+                    excerpt.clone(),
+                    hash_bytes(excerpt.as_bytes()),
+                )
+            }
+            Selector::Symbol { name } => {
+                if name.trim().is_empty() {
+                    bail!("symbol selector must not be empty");
                 }
-                let mut unique = names.clone();
-                unique.sort();
-                unique.dedup();
-                if unique.len() != names.len() {
-                    bail!("symbol selector must not contain duplicate symbol names");
-                }
-                let resolved = names
-                    .iter()
-                    .map(|name| resolve_symbol(&target.adapter, &text, name))
-                    .collect::<Result<Vec<_>>>()?;
-                let start = resolved.iter().map(|r| r.byte_start).min().unwrap_or(0);
-                let end = resolved.iter().map(|r| r.byte_end).max().unwrap_or(0);
+                let resolved = resolve_symbol(&target.adapter, &text, name)?;
+                let start = resolved.byte_start;
+                let end = resolved.byte_end;
                 let excerpt = text[start..end].to_string();
                 (
-                    format!("symbols {}", names.join(", ")),
-                    names.clone(),
+                    format!("symbol {name}"),
+                    vec![name.clone()],
                     start,
                     end,
-                    resolved.iter().map(|r| r.line_start).min().unwrap_or(1),
-                    resolved.iter().map(|r| r.line_end).max().unwrap_or(1),
+                    resolved.line_start,
+                    resolved.line_end,
                     excerpt.clone(),
                     hash_bytes(excerpt.as_bytes()),
                 )
@@ -755,6 +1295,7 @@ mod tests {
             adapter: "rust".into(),
             path: RepoPath::new("src/doc.md").expect("path"),
             selector,
+            claims: vec![],
         }
     }
 
@@ -808,22 +1349,26 @@ mod tests {
                 "schema: syu/config/v1\n",
                 "workspace:\n",
                 "  spec_roots: [spec]\n",
-                "  artifact_roots: [src]\n",
                 "  excludes: []\n",
-                "profiles: { active: [], custom: {} }\n",
+                "inventory:\n",
+                "  active_profile: default\n",
+                "  profiles:\n",
+                "    - id: default\n",
+                "      providers: { rust: {} }\n",
                 "validation:\n",
                 "  preset: agent-ready\n",
-                "  deny_warnings: false\n",
-                "  rules: {}\n",
+                "  readiness:\n",
+                "    target: closed-loop\n",
+                "    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_seed: 4 }\n",
                 "  changed:\n",
                 "    baseline:\n",
                 "      strategy: merge-base\n",
                 "      against: origin/main\n",
                 "    require_owned_changes: true\n",
+                "    require_plan: true\n",
+                "verification: { runners: {} }\n",
                 "work:\n",
                 "  slicing: { max_editable_files: 4, max_editable_symbols: 8, max_verification_targets: 6, max_readonly_targets: 12, max_total_bytes: 120000 }\n",
-                "  context: { include_parent_principles: true, include_parent_rules: true }\n",
-                "adapters: { enabled: [rust] }\n",
             ),
         )
         .expect("config");

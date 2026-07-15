@@ -7,7 +7,7 @@ Use the checked-in `examples/` directories as the source of truth for starter la
 Recommended flow:
 
 - copy the closest example into your repository structure
-- update `syu.yaml` with your real `workspace.spec_roots` and `workspace.artifact_roots`
+- update `syu.yaml` with your real `workspace.spec_roots` and `workspace.excludes`
 - rewrite the four spec layers in `docs/syu`
 - run `cargo run --quiet -- validate <workspace>` until clean
 

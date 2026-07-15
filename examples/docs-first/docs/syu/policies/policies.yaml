@@ -31,6 +31,8 @@ policies:
       adapter: shell
       path: scripts/publish-docs.sh
       selector:
-        kind: file
-    enforces:
-    - POL-DOCSFIRST-001#rule.traceable-delivery
+        kind: marker
+        value: "#!/usr/bin/env bash"
+      claims:
+      - kind: enforces
+        rule: POL-DOCSFIRST-001#rule.traceable-delivery

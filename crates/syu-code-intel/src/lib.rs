@@ -32,7 +32,7 @@ enum BraceScanMode {
 pub fn resolve_symbol(adapter: &str, source: &str, name: &str) -> Result<SymbolResolution> {
     match adapter {
         "rust" => resolve_rust(source, name),
-        "typescript" => resolve_typescript(source, name),
+        "typescript" | "javascript" => resolve_typescript(source, name),
         "shell" => resolve_shell(source, name),
         "python" => resolve_python(source, name),
         "go" => resolve_go(source, name),
@@ -51,6 +51,7 @@ fn resolve_typescript(source: &str, name: &str) -> Result<SymbolResolution> {
 
 fn resolve_rust(source: &str, name: &str) -> Result<SymbolResolution> {
     let file = syn::parse_file(source)?;
+    let (qualifier, leaf) = name.rsplit_once("::").unwrap_or(("", name));
 
     struct Finder<'a> {
         name: &'a str,
@@ -139,20 +140,67 @@ fn resolve_rust(source: &str, name: &str) -> Result<SymbolResolution> {
                 });
             }
         }
+
+        fn visit_item_use(&mut self, value: &'ast syn::ItemUse) {
+            if !matches!(value.vis, syn::Visibility::Public(_)) {
+                return;
+            }
+            let mut names = Vec::new();
+            collect_use_names(&value.tree, &mut names);
+            for name in names {
+                if name == self.name {
+                    self.candidates.push(Candidate {
+                        kind: "re-export",
+                        identity: self.scoped_identity(&name),
+                        span: value.span(),
+                    });
+                }
+            }
+        }
     }
 
     let mut finder = Finder {
-        name,
+        name: leaf,
         candidates: Vec::new(),
         module_path: Vec::new(),
         impl_path: Vec::new(),
     };
     syn::visit::Visit::visit_file(&mut finder, &file);
 
-    match finder.candidates.as_slice() {
+    let candidates = finder
+        .candidates
+        .into_iter()
+        .filter(|candidate| {
+            qualifier.is_empty()
+                || candidate
+                    .identity
+                    .ends_with(&format!("{qualifier}::{leaf}"))
+                || candidate
+                    .identity
+                    .ends_with(&format!("::{qualifier}::{leaf}"))
+                || candidate
+                    .identity
+                    .ends_with(&format!("::impl({qualifier})::{leaf}"))
+        })
+        .collect::<Vec<_>>();
+    match candidates.as_slice() {
         [] => bail!("symbol {name} has no Rust definition"),
         [candidate] => resolution_from_span(source, candidate),
         _ => bail!("symbol {name} is ambiguous in Rust source"),
+    }
+}
+
+fn collect_use_names(tree: &syn::UseTree, names: &mut Vec<String>) {
+    match tree {
+        syn::UseTree::Path(path) => collect_use_names(&path.tree, names),
+        syn::UseTree::Name(name) => names.push(name.ident.to_string()),
+        syn::UseTree::Rename(rename) => names.push(rename.rename.to_string()),
+        syn::UseTree::Glob(_) => {}
+        syn::UseTree::Group(group) => {
+            for item in &group.items {
+                collect_use_names(item, names);
+            }
+        }
     }
 }
 
@@ -226,7 +274,11 @@ fn resolve_keyword_definition(source: &str, name: &str, prefix: &str) -> Result<
         let Some(keyword_index) = trimmed.find(prefix) else {
             continue;
         };
-        if keyword_index > 0 && !trimmed[..keyword_index].ends_with("export ") {
+        if keyword_index > 0
+            && !trimmed[..keyword_index]
+                .split_whitespace()
+                .all(|word| matches!(word, "export" | "default" | "async" | "declare"))
+        {
             continue;
         }
         let remainder = &trimmed[keyword_index + prefix.len()..];
@@ -269,11 +321,15 @@ fn resolve_assignment_block(
         if is_comment_line(trimmed) {
             continue;
         }
+        let declaration = trimmed
+            .strip_prefix("export ")
+            .or_else(|| trimmed.strip_prefix("default "))
+            .unwrap_or(trimmed);
         for prefix in prefixes {
-            if !trimmed.starts_with(prefix) {
+            if !declaration.starts_with(prefix) {
                 continue;
             }
-            let remainder = &trimmed[prefix.len()..];
+            let remainder = &declaration[prefix.len()..];
             if !starts_with_symbol(remainder, name) {
                 continue;
             }
@@ -669,6 +725,13 @@ mod tests {
         .unwrap_err()
         .to_string();
         assert!(error.contains("ambiguous"));
+    }
+
+    #[test]
+    fn rust_qualified_method_selector_resolves_exact_impl() {
+        let source = "struct Service; impl Service { fn new() {} } fn new() {}";
+        let resolved = resolve_symbol("rust", source, "Service::new").unwrap();
+        assert!(resolved.identity.ends_with("Service::new"));
     }
 
     #[test]

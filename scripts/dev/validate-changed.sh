@@ -33,7 +33,7 @@ validate_changed() {
 
   for path in "${files[@]}"; do
     if is_relevant_path "$path"; then
-      cargo run -- validate .
+      cargo run -- validate workspace .
       return 0
     fi
   done

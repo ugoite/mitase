@@ -28,9 +28,11 @@ policies:
     responsibility: Keep the example rule connected to an active owned artifact.
     targets:
     - id: policy-target
-      adapter: java
+      adapter: shell
       path: src/main/java/example/app/OrderSummary.java
       selector:
-        kind: file
-    enforces:
-    - POL-JAVAONLY-001#rule.traceable-delivery
+        kind: marker
+        value: "public final class OrderSummary {"
+      claims:
+      - kind: enforces
+        rule: POL-JAVAONLY-001#rule.traceable-delivery

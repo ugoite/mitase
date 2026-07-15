@@ -1,7 +1,6 @@
 schema: syu/config/v1
 workspace:
   spec_roots: [spec]
-  artifact_roots: []
   excludes: []
   unexpected: true
 profiles: { active: [], custom: {} }

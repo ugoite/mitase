@@ -18,11 +18,14 @@ features:
       adapter: shell
       path: scripts/publish-docs.sh
       selector:
-        kind: file
+        kind: marker
+        value: "#!/usr/bin/env bash"
+      claims:
+      - kind: satisfies
+        criterion: REQ-DOCSFIRST-001#criterion.owned-delivery
     - id: target-2
-      adapter: yaml
+      adapter: shell
       path: config/navigation.yaml
       selector:
-        kind: file
-    satisfies:
-    - REQ-DOCSFIRST-001#criterion.owned-delivery
+        kind: marker
+        value: "sections:"

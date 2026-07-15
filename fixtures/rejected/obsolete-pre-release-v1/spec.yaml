@@ -1,0 +1,13 @@
+schema: syu/spec/v1
+kind: requirements
+namespace: obsolete
+category: Obsolete pre-release fixture
+requirements:
+  - id: REQ-OBSOLETE-001
+    title: Obsolete shape
+    description: This fixture must be rejected rather than migrated.
+    priority: high
+    status: implemented
+    criteria: []
+    bindings: []
+    tests: {}

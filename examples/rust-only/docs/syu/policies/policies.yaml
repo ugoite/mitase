@@ -25,9 +25,11 @@ policies:
     responsibility: Keep the example rule connected to an active owned artifact.
     targets:
     - id: policy-target
-      adapter: rust
+      adapter: shell
       path: src/trace.rs
       selector:
-        kind: file
-    enforces:
-    - POL-RUSTONLY-001#rule.traceable-delivery
+        kind: marker
+        value: "pub fn rust_requirement_test() {}"
+      claims:
+      - kind: enforces
+        rule: POL-RUSTONLY-001#rule.traceable-delivery

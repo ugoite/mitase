@@ -25,9 +25,11 @@ policies:
     responsibility: Keep the example rule connected to an active owned artifact.
     targets:
     - id: policy-target
-      adapter: python
+      adapter: shell
       path: python/app.py
       selector:
-        kind: file
-    enforces:
-    - POL-PYTHONONLY-001#rule.traceable-delivery
+        kind: marker
+        value: "def python_feature_impl():"
+      claims:
+      - kind: enforces
+        rule: POL-PYTHONONLY-001#rule.traceable-delivery

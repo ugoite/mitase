@@ -23,9 +23,15 @@ requirements:
     responsibility: Verify the owned example behavior through checked-in evidence.
     targets:
     - id: target-1
-      adapter: csharp
+      adapter: shell
       path: tests/OrderSummaryTests.cs
       selector:
-        kind: file
-    verifies:
-    - REQ-CSHARPFALLBACK-001#criterion.owned-delivery
+        kind: marker
+        value: "public sealed class OrderSummaryTests"
+      claims:
+      - kind: verifies
+        criterion: REQ-CSHARPFALLBACK-001#criterion.owned-delivery
+        covers:
+        - FEAT-CSHARPFALLBACK-001#binding.implementation/target.target-1
+        runner:
+          runner: cargo-test

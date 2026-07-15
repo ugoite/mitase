@@ -1,0 +1,7 @@
+schema: syu/work-request/v1
+id: WORK-FIXTURE-CLI
+summary: Modify the fixture behavior through the CLI work flow.
+operation: modify
+seeds: [REQ-FIXTURE-001#criterion.behavior]
+constraints: {}
+requested_targets: []

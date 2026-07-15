@@ -6,7 +6,9 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
+axum = "0.8.9"
 serde.workspace = true
+serde_json.workspace = true
 serde_yaml.workspace = true
 sha2.workspace = true
 syu-diagnostics = { path = "../syu-diagnostics" }
@@ -16,3 +18,10 @@ syu-spec-model = { path = "../syu-spec-model" }
 syu-validation = { path = "../syu-validation" }
 syu-work-model = { path = "../syu-work-model" }
 syu-workspace = { path = "../syu-workspace" }
+tokio = { version = "1.52.3", features = ["io-util", "net", "rt-multi-thread", "signal", "sync"] }
+
+[dev-dependencies]
+http-body-util = "0.1.3"
+http = "1.3.1"
+tower = { version = "0.5.2", features = ["util"] }
+tempfile.workspace = true
