@@ -95,7 +95,19 @@ pub enum TargetTransition {
 #[serde(deny_unknown_fields)]
 pub struct PlanBasis {
     pub revision: String,
+    /// Complete pre-state fingerprint retained for UI freshness checks and
+    /// exact pre-state validation. Post-state execution must not reject an
+    /// editable artifact merely because this value changed.
     pub workspace_fingerprint: String,
+    /// Specification and configuration inputs that must remain stable while a
+    /// plan is being executed.
+    pub spec_fingerprint: String,
+    /// Binding, target, and ownership relationships that define the plan's
+    /// current ownership basis.
+    pub ownership_fingerprint: String,
+    /// Content and identity snapshot for every readonly or run-only target.
+    /// Editable target content is intentionally excluded from this digest.
+    pub readonly_fingerprint: String,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -398,6 +410,38 @@ pub struct VerificationExecution {
     pub stderr_digest: String,
     pub implementation_digests: std::collections::BTreeMap<BoundTargetRef, String>,
     pub verification_digest: String,
+}
+
+/// Return a stable digest of the targets that are not editable by a work
+/// slice. This is the immutable execution boundary used by post-state plan
+/// validation; editable target content is deliberately omitted.
+pub fn readonly_targets_fingerprint(slices: &[ExecutionSlice]) -> String {
+    let mut hash = Sha256::new();
+    for slice in slices {
+        hash.update(slice.id.as_bytes());
+        for target in slice
+            .verification_targets
+            .iter()
+            .chain(slice.readonly_context.iter())
+            .filter(|target| target.access != TargetAccessMode::Editable)
+        {
+            hash.update(target.reference.to_string().as_bytes());
+            hash.update(format!("{:?}", target.transition).as_bytes());
+            hash.update(format!("{:?}", target.lifecycle).as_bytes());
+            hash.update(format!("{:?}", target.access).as_bytes());
+            hash.update(target.resolved_path.as_bytes());
+            hash.update(target.resolved_selector.description.as_bytes());
+            for symbol in &target.resolved_selector.symbols {
+                hash.update(symbol.as_bytes());
+            }
+            hash.update(target.content_hash.as_bytes());
+            hash.update(target.excerpt_hash.as_bytes());
+            hash.update(target.adapter.as_bytes());
+            hash.update(target.facet.as_bytes());
+            hash.update(format!("{:?}", target.role).as_bytes());
+        }
+    }
+    format!("sha256:{:x}", hash.finalize())
 }
 
 pub fn work_plan_digest(plan: &WorkPlan) -> String {

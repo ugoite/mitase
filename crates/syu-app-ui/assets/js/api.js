@@ -27,4 +27,36 @@ export const post = (url, payload) => request(url, {
   body: JSON.stringify(payload),
 });
 
+export function createModifyWork(projection, criterion) {
+  return post('/api/work/request', {
+    basis: mutationBasis(projection),
+    request: {
+      schema: 'syu/work-request/v1',
+      id: `WORK-WORKBENCH-${Date.now()}`,
+      summary: `Modify ${criterion}`,
+      operation: 'modify',
+      seeds: [criterion],
+      constraints: {},
+      requested_targets: [],
+    },
+  });
+}
+
+export const planWork = (projection) => post('/api/work/plan', mutationBasis(projection));
+
+export const exportContext = (projection, sliceId) => post('/api/work/context', {
+  basis: mutationBasis(projection),
+  slice_id: sliceId,
+});
+
 export const validateWork = (projection) => post('/api/work/validate', mutationBasis(projection));
+
+export const verifyWork = (projection, sliceId) => post('/api/work/verify', {
+  basis: mutationBasis(projection),
+  slice_id: sliceId,
+});
+
+export const validateResult = (projection, receipt) => post('/api/work/result', {
+  basis: mutationBasis(projection),
+  receipt,
+});

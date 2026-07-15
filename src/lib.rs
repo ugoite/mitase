@@ -248,22 +248,17 @@ fn run_readiness(args: ReadinessArgs) -> Result<i32> {
             report.workability.required
         ),
     }
-    Ok(
-        if report.meets(workspace.config.validation.readiness.target) {
-            0
-        } else {
-            1
-        },
-    )
+    Ok(if report.meets_configured(&workspace.config) {
+        0
+    } else {
+        1
+    })
 }
 fn run_validate(args: ValidateArgs) -> Result<i32> {
-    let mut force_post_state = false;
-    let args = match args.command {
-        ValidateCommand::Workspace(args)
-        | ValidateCommand::Change(args)
-        | ValidateCommand::Plan(args) => args,
+    let (force_post_state, enforce_readiness, args) = match args.command {
+        ValidateCommand::Workspace(args) => (false, true, args),
+        ValidateCommand::Change(args) | ValidateCommand::Plan(args) => (false, false, args),
         ValidateCommand::Result(args) => {
-            force_post_state = true;
             let receipt: syu_work_model::VerificationReceipt = read_yaml(&args.receipt)?;
             let plan_path = args
                 .validate
@@ -284,7 +279,7 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
             let mut validate = args.validate;
             validate.slice = Some(receipt.slice_id);
             validate.plan = Some(plan_path);
-            validate
+            (true, false, validate)
         }
     };
     let workspace = SpecWorkspace::load(&args.workspace)?;
@@ -315,14 +310,26 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
         }
         validation_inputs.plan_mode = PlanValidationMode::PostState;
         // Result validation is the selected receipt slice's post-state
-        // closure. The branch/change probe belongs to plan validation and
-        // must not silently widen a result invocation back to the whole
-        // working tree.
-        validation_inputs.changed_files = Some(Vec::new());
+        // closure. Always inspect the real diff from the plan basis so an
+        // omitted file cannot bypass scope validation.
+        validation_inputs.changed_files = Some(changed_files_against_revision(
+            &workspace.root,
+            &plan
+                .as_ref()
+                .expect("result validation requires a plan")
+                .basis
+                .revision,
+        )?);
         validation_inputs.reported_changed_files = None;
-        validation_inputs.change_base_revision = None;
+        validation_inputs.change_base_revision = Some(
+            plan.as_ref()
+                .expect("result validation requires a plan")
+                .basis
+                .revision
+                .clone(),
+        );
     }
-    let result = validate(&ValidationContext {
+    let context = ValidationContext {
         config: &workspace.config,
         workspace: &workspace,
         index: &index,
@@ -334,7 +341,12 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
         preset: workspace.config.validation.preset,
         revision: revision.as_deref(),
         change_base_revision: validation_inputs.change_base_revision.as_deref(),
-    });
+    };
+    let result = if enforce_readiness {
+        syu_validation::validate_workspace(&context)
+    } else {
+        validate(&context)
+    };
     match args.format {
         Format::Json => println!("{}", serde_json::to_string_pretty(&result)?),
         Format::Text => {

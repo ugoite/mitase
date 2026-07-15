@@ -57,6 +57,7 @@ pub fn plan(
         return Ok(blocked_plan(
             request,
             workspace,
+            index,
             revision,
             "SYU-WORK-001",
             "add budgets must be greater than zero",
@@ -66,6 +67,7 @@ pub fn plan(
         return Ok(blocked_plan(
             request,
             workspace,
+            index,
             revision,
             "SYU-WORK-001",
             "request cannot combine seeds and requested targets",
@@ -75,6 +77,7 @@ pub fn plan(
         return Ok(blocked_plan(
             request,
             workspace,
+            index,
             revision,
             "SYU-WORK-001",
             "an exact seed is required",
@@ -89,6 +92,7 @@ pub fn plan(
             return Ok(blocked_plan(
                 request,
                 workspace,
+                index,
                 revision,
                 "SYU-WORK-001",
                 format!("requested target {reference} does not resolve"),
@@ -103,6 +107,7 @@ pub fn plan(
             return Ok(blocked_plan(
                 request,
                 workspace,
+                index,
                 revision,
                 "SYU-WORK-001",
                 "investigate requests only permit run-only or readonly requested targets",
@@ -116,6 +121,7 @@ pub fn plan(
                     return Ok(blocked_plan(
                         request,
                         workspace,
+                        index,
                         revision,
                         "SYU-WORK-001",
                         format!("seed {a} does not resolve"),
@@ -154,6 +160,7 @@ pub fn plan(
                         return Ok(blocked_plan(
                             request,
                             workspace,
+                            index,
                             revision,
                             "SYU-WORK-001",
                             format!("artifact identity {artifact_identity} does not resolve"),
@@ -176,6 +183,7 @@ pub fn plan(
         return Ok(blocked_plan(
             request,
             workspace,
+            index,
             revision,
             "SYU-WORK-001",
             "seed does not select a criterion",
@@ -233,6 +241,7 @@ pub fn plan(
                 return Ok(blocked_plan(
                     request,
                     workspace,
+                    index,
                     revision,
                     "SYU-WORK-001",
                     error.to_string(),
@@ -310,7 +319,7 @@ pub fn plan(
         return Ok(finalize_plan(WorkPlan {
             schema: WORK_PLAN_SCHEMA.into(),
             id: plan_id(request, revision),
-            basis: basis(workspace, revision),
+            basis: basis(workspace, index, revision, &slices),
             execution: PlanExecution::IsolatedSlices,
             request: request.clone(),
             canonical_digest: String::new(),
@@ -320,7 +329,7 @@ pub fn plan(
         }));
     }
     let plan_id = plan_id(request, revision);
-    let plan_basis = basis(workspace, revision);
+    let plan_basis = basis(workspace, index, revision, &slices);
     for slice in &mut slices {
         if slice.blockers.is_empty()
             && let Err(error) =
@@ -337,6 +346,7 @@ pub fn plan(
         return Ok(blocked_plan(
             request,
             workspace,
+            index,
             revision,
             "SYU-WORK-002",
             "request produced no execution slices",
@@ -2056,12 +2066,22 @@ fn drop_readonly_overlaps(
     readonly.retain(|target| !active.contains(&target.reference));
 }
 
-fn basis(workspace: &SpecWorkspace, revision: &str) -> PlanBasis {
+fn basis(
+    workspace: &SpecWorkspace,
+    index: &SpecIndex,
+    revision: &str,
+    slices: &[ExecutionSlice],
+) -> PlanBasis {
     PlanBasis {
         revision: revision.into(),
         workspace_fingerprint: workspace
             .try_fingerprint()
             .expect("plan refuses inventory failures before creating a basis"),
+        spec_fingerprint: workspace
+            .spec_fingerprint()
+            .expect("plan basis requires readable specification inputs"),
+        ownership_fingerprint: index.ownership_fingerprint(),
+        readonly_fingerprint: readonly_targets_fingerprint(slices),
     }
 }
 fn plan_id(r: &WorkRequest, revision: &str) -> String {
@@ -2074,6 +2094,7 @@ fn plan_id(r: &WorkRequest, revision: &str) -> String {
 fn blocked_plan(
     request: &WorkRequest,
     workspace: &SpecWorkspace,
+    index: &SpecIndex,
     revision: &str,
     rule: &str,
     message: impl Into<String>,
@@ -2081,7 +2102,7 @@ fn blocked_plan(
     finalize_plan(WorkPlan {
         schema: WORK_PLAN_SCHEMA.into(),
         id: plan_id(request, revision),
-        basis: basis(workspace, revision),
+        basis: basis(workspace, index, revision, &[]),
         execution: PlanExecution::IsolatedSlices,
         request: request.clone(),
         canonical_digest: String::new(),

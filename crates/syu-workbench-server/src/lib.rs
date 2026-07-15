@@ -398,6 +398,22 @@ fn basis(service: &WorkbenchService, expected: &MutationBasis) -> Result<SpecWor
     Ok(workspace)
 }
 
+/// Execution is intentionally based on the plan's immutable revision rather
+/// than the pre-edit workspace fingerprint. Editable source changes are the
+/// expected transition between validation and verification/result; the
+/// canonical plan and readonly basis checks in the validation crate still
+/// reject specification, ownership, and guarded-target changes.
+fn execution_basis(service: &WorkbenchService, expected: &MutationBasis) -> Result<SpecWorkspace> {
+    let workspace = SpecWorkspace::load(&service.workspace_root)?;
+    let revision = current_revision(&workspace.root)?;
+    if expected.expected_revision.is_empty() || revision != expected.expected_revision {
+        anyhow::bail!(
+            "Workspace revision changed since this work plan was created. Refresh the projection and replan."
+        );
+    }
+    Ok(workspace)
+}
+
 fn workspace_source_hash(workspace: &SpecWorkspace) -> String {
     let mut source = String::new();
     for document in &workspace.documents {
@@ -753,45 +769,6 @@ fn validate_overlay(workspace: &SpecWorkspace, index: &syu_workspace::SpecIndex)
                 .map(|diagnostic| diagnostic.message.clone())
                 .collect::<Vec<_>>()
                 .join("; ")
-        );
-    }
-    let readiness = syu_validation::evaluate_readiness(workspace, index, &revision, false)?;
-    let static_target = match workspace.config.validation.readiness.target {
-        syu_project_model::ReadinessLevel::ClosedLoop => {
-            syu_project_model::ReadinessLevel::Verifiable
-        }
-        target => target,
-    };
-    if !readiness.meets(static_target) {
-        let blockers = syu_validation::required_axes(static_target)
-            .iter()
-            .filter_map(|axis| {
-                let (label, value) = match axis {
-                    syu_validation::ReadinessAxisId::Inventory => {
-                        ("inventory", &readiness.inventory)
-                    }
-                    syu_validation::ReadinessAxisId::Ownership => {
-                        ("ownership", &readiness.ownership)
-                    }
-                    syu_validation::ReadinessAxisId::Seedability => {
-                        ("seedability", &readiness.seedability)
-                    }
-                    syu_validation::ReadinessAxisId::Workability => {
-                        ("workability", &readiness.workability)
-                    }
-                    syu_validation::ReadinessAxisId::Verification => {
-                        ("verification", &readiness.verification)
-                    }
-                    syu_validation::ReadinessAxisId::ClosedLoop => {
-                        ("closed-loop", &readiness.closed_loop)
-                    }
-                };
-                (!value.is_ready()).then(|| format!("{label}: {}", value.blockers.join("; ")))
-            })
-            .collect::<Vec<_>>();
-        anyhow::bail!(
-            "candidate overlay does not meet the configured readiness target: {}",
-            blockers.join(" | ")
         );
     }
     Ok(())
@@ -1229,15 +1206,13 @@ async fn api_request(
     Json(command): Json<WorkRequestCommand>,
 ) -> Result<Json<WorkspaceProjection>, ApiError> {
     let workspace = basis(&service, &command.basis)?;
-    let index = workspace.index()?;
     let revision = current_revision(&workspace.root)?;
-    let plan = plan(&command.request, &workspace, &index, &revision)?;
     let mut session = service
         .session
         .write()
         .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
     session.draft_request = Some(command.request);
-    session.plan = Some(plan);
+    session.plan = None;
     session.selected_slice = None;
     session.context_pack = None;
     session.verification_receipt = None;
@@ -1340,7 +1315,7 @@ async fn api_verify(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<SliceCommand>,
 ) -> Result<Json<VerificationReceipt>, ApiError> {
-    let workspace = basis(&service, &command.basis)?;
+    let workspace = execution_basis(&service, &command.basis)?;
     let index = workspace.index()?;
     let revision = current_revision(&workspace.root)?;
     let mut session = service
@@ -1373,7 +1348,7 @@ async fn api_result(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<ResultCommand>,
 ) -> Result<StatusCode, ApiError> {
-    let workspace = basis(&service, &command.basis)?;
+    let workspace = execution_basis(&service, &command.basis)?;
     let (plan, canonical) = service
         .session
         .read()
@@ -1395,15 +1370,17 @@ async fn api_result(
             anyhow::anyhow!("verification receipt does not close the selected plan"),
         ));
     }
+    let index = workspace.index()?;
     validate_verification_receipt(
         &workspace,
-        &workspace.index()?,
+        &index,
         &plan,
         &canonical.slice_id,
         &canonical,
         &plan.basis.revision,
     )?;
-    let index = workspace.index()?;
+    let changed_files =
+        syu_validation::changed_files_against_revision(&workspace.root, &plan.basis.revision)?;
     let slice = plan
         .slices
         .iter()
@@ -1418,19 +1395,17 @@ async fn api_result(
         config: &workspace.config,
         workspace: &workspace,
         index: &index,
-        // Branch scope is validated when the plan is created and before the
-        // receipt is issued. Result validation is the selected-slice
-        // post-state check; re-running the whole branch diff here would make
-        // an otherwise valid receipt fail merely because unrelated edits are
-        // present in the same working tree.
-        changed_files: None,
+        // Result validation must inspect the real diff from the plan basis.
+        // This is what rejects unrelated files and readonly changes even when
+        // verification itself succeeded.
+        changed_files: Some(&changed_files),
         reported_changed_files: None,
         work_plan: Some(&plan),
         selected_slice: slice,
         plan_mode: PlanValidationMode::PostState,
         preset: workspace.config.validation.preset,
         revision: Some(&current_revision(&workspace.root)?),
-        change_base_revision: None,
+        change_base_revision: Some(&plan.basis.revision),
     });
     let view = ValidationRunView::completed(
         "work-result",
@@ -2004,10 +1979,10 @@ pub fn project(
             }
         }
     }
-    let plan = requested_work
-        .as_ref()
-        .map(|r| plan(r, workspace, &index, revision))
-        .transpose()?;
+    // A WorkRequest is a draft until the explicit Plan action. Keeping the
+    // projection side-effect free also makes the browser flow observable:
+    // request creation and canonical planning are separate transitions.
+    let plan: Option<WorkPlan> = None;
     let validation = ValidationRunView::not_run();
     let readiness = readiness_not_run(&workspace.config);
     Ok(WorkspaceProjection {
@@ -2784,15 +2759,58 @@ mod tests {
             .unwrap()
     }
 
-    async fn run_closed_loop_flow(app: Router) {
-        let (basis, csrf, _projection) = projection_and_basis(&app).await;
+    fn copy_fixture_tree(source: &Path, destination: &Path) {
+        fs::create_dir_all(destination).expect("fixture destination");
+        for entry in fs::read_dir(source).expect("fixture directory") {
+            let entry = entry.expect("fixture entry");
+            let source_path = entry.path();
+            let destination_path = destination.join(entry.file_name());
+            if source_path.is_dir() {
+                copy_fixture_tree(&source_path, &destination_path);
+            } else {
+                fs::copy(source_path, destination_path).expect("copy fixture file");
+            }
+        }
+    }
+
+    fn initialize_fixture_git(root: &Path) {
+        for args in [
+            vec!["init", "-q"],
+            vec!["config", "user.email", "syu-tests@example.invalid"],
+            vec!["config", "user.name", "Syu Tests"],
+            vec!["add", "."],
+            vec!["commit", "-qm", "fixture baseline"],
+        ] {
+            assert!(
+                Command::new("git")
+                    .args(args)
+                    .current_dir(root)
+                    .status()
+                    .expect("run fixture git command")
+                    .success()
+            );
+        }
+    }
+
+    async fn run_fixture_post_state_flow(out_of_scope: bool) -> StatusCode {
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("fixture tempdir");
+        copy_fixture_tree(&fixture, temp.path());
+        initialize_fixture_git(temp.path());
+
+        let app = WorkbenchServer::new(temp.path().to_path_buf()).router();
+        let (basis, csrf, _) = projection_and_basis(&app).await;
         let request = WorkRequest {
             schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
-            id: "WORK-WORKBENCH-E2E".into(),
-            summary: "exercise the Workbench closed loop".into(),
+            id: "WORK-FIXTURE-POST-STATE".into(),
+            summary: "modify the fixture behavior".into(),
             operation: syu_work_model::WorkOperation::Modify,
             seeds: vec![syu_work_model::WorkSeed::Anchor(
-                "REQ-WORKBENCH-002#criterion.work-session".parse().unwrap(),
+                "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
             )],
             constraints: Default::default(),
             requested_targets: vec![],
@@ -2809,19 +2827,23 @@ mod tests {
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
+        let response_body = response.into_body().collect().await.unwrap().to_bytes();
+        let request_projection: serde_json::Value =
+            serde_json::from_slice(&response_body).expect("request projection");
+        assert!(request_projection["work"]["request"].is_object());
+        assert!(request_projection["work"]["plan"].is_null());
+
         let response = json_mutation(&app, Method::POST, "/api/work/plan", &csrf, &basis).await;
         assert_eq!(response.status(), StatusCode::OK);
-        let body = response.into_body().collect().await.unwrap().to_bytes();
-        let plan: WorkPlan = serde_json::from_slice(&body).unwrap();
-        assert!(
-            matches!(plan.status, syu_work_model::PlanStatus::Ready),
-            "{plan:?}"
-        );
+        let plan: WorkPlan =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("fixture plan");
+        assert_eq!(plan.status, syu_work_model::PlanStatus::Ready, "{plan:?}");
         let slice = plan
             .slices
             .iter()
             .find(|slice| !slice.verification_targets.is_empty())
-            .expect("canonical plan verification slice")
+            .expect("fixture verification slice")
             .id
             .clone();
         let response = json_mutation(
@@ -2838,12 +2860,26 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let response = json_mutation(&app, Method::POST, "/api/work/validate", &csrf, &basis).await;
         assert_eq!(response.status(), StatusCode::OK);
-        let body = response.into_body().collect().await.unwrap().to_bytes();
-        let validation: ValidationRunView = serde_json::from_slice(&body).unwrap();
+        let validation: ValidationRunView =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("fixture pre-state validation");
         assert!(
             matches!(validation.state, ValidationRunState::Passed),
             "{validation:?}"
         );
+
+        let source = temp.path().join("src/lib.rs");
+        if out_of_scope {
+            fs::write(
+                temp.path().join("src/unrelated.rs"),
+                "pub const UNRELATED: bool = true;\n",
+            )
+            .expect("modify unrelated fixture source");
+        } else {
+            fs::write(&source, "pub fn behavior() -> bool {\n    1 == 1\n}\n")
+                .expect("modify editable fixture source");
+        }
+
         let response = json_mutation(
             &app,
             Method::POST,
@@ -2855,47 +2891,46 @@ mod tests {
             },
         )
         .await;
-        let response_status = response.status();
-        let body = response.into_body().collect().await.unwrap().to_bytes();
-        assert_eq!(
-            response_status,
-            StatusCode::OK,
-            "verify response: {}",
-            String::from_utf8_lossy(&body)
-        );
-        let receipt: VerificationReceipt = serde_json::from_slice(&body).unwrap();
-        assert!(!receipt.executions.is_empty());
+        assert_eq!(response.status(), StatusCode::OK);
+        let receipt: VerificationReceipt =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("fixture verification receipt");
         assert!(
             receipt
                 .executions
                 .iter()
                 .all(|execution| execution.exit_code == 0)
         );
+
         let response = json_mutation(
             &app,
             Method::POST,
             "/api/work/result",
             &csrf,
-            &ResultCommand {
-                basis: basis.clone(),
-                receipt,
-            },
+            &ResultCommand { basis, receipt },
         )
         .await;
-        let result_status = response.status();
-        let result_body = response.into_body().collect().await.unwrap().to_bytes();
+        let status = response.status();
+        let _ = response.into_body().collect().await.unwrap().to_bytes();
+        status
+    }
+
+    #[tokio::test]
+    async fn workbench_http_post_state_allows_editable_change() {
+        let _workspace_lock = workspace_test_lock().await;
         assert_eq!(
-            result_status,
-            StatusCode::NO_CONTENT,
-            "result response: {}",
-            String::from_utf8_lossy(&result_body)
+            run_fixture_post_state_flow(false).await,
+            StatusCode::NO_CONTENT
         );
-        let stale = MutationBasis {
-            expected_source_hash: "stale".into(),
-            ..basis
-        };
-        let response = json_mutation(&app, Method::POST, "/api/work/plan", &csrf, &stale).await;
-        assert_eq!(response.status(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn workbench_http_result_rejects_out_of_scope_change() {
+        let _workspace_lock = workspace_test_lock().await;
+        assert_eq!(
+            run_fixture_post_state_flow(true).await,
+            StatusCode::CONFLICT
+        );
     }
 
     async fn raw_http(
@@ -2928,7 +2963,10 @@ mod tests {
     #[tokio::test]
     async fn workbench_http_closed_loop_flow() {
         let _workspace_lock = workspace_test_lock().await;
-        run_closed_loop_flow(WorkbenchServer::new(workspace_root()).router()).await;
+        assert_eq!(
+            run_fixture_post_state_flow(false).await,
+            StatusCode::NO_CONTENT
+        );
     }
 
     #[tokio::test]

@@ -38,6 +38,10 @@ struct WorkspaceMatcher {
 pub struct SpecIndex {
     pub anchors: BTreeMap<SpecAnchor, AnchorValue>,
     pub bindings: BTreeMap<SpecAnchor, ArtifactBinding>,
+    /// Status for status-bearing specification items. Planned items are kept
+    /// in the graph for discovery, but their ownership must not govern the
+    /// current workspace.
+    pub item_status: BTreeMap<SpecId, ItemStatus>,
     pub contracts: BTreeMap<SpecAnchor, Contract>,
     pub criteria_to_implementations: BTreeMap<SpecAnchor, Vec<SpecAnchor>>,
     pub criteria_to_verifications: BTreeMap<SpecAnchor, Vec<SpecAnchor>>,
@@ -226,6 +230,21 @@ impl SpecWorkspace {
         self.try_fingerprint()
     }
 
+    /// Fingerprint only the specification/configuration inputs. Inventory
+    /// artifact bytes are intentionally excluded so an editable source change
+    /// does not make an otherwise valid work plan stale.
+    pub fn spec_fingerprint(&self) -> Result<String> {
+        let mut hash = Sha256::new();
+        hash.update(serde_yaml::to_string(&self.config)?.as_bytes());
+        for document in &self.documents {
+            if let Ok(relative) = document.path.strip_prefix(&self.root) {
+                hash.update(relative.to_string_lossy().as_bytes());
+            }
+            hash.update(self.read_bytes(&document.path)?);
+        }
+        Ok(format!("sha256:{:x}", hash.finalize()))
+    }
+
     pub fn read_bytes(&self, path: &Path) -> Result<Vec<u8>> {
         let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
         if let Some(bytes) = self.overlays.get(&canonical) {
@@ -323,6 +342,7 @@ impl SpecIndex {
                 SpecDocument::Requirements { requirements, .. } => {
                     for item in requirements {
                         unique_item(&mut ids, &item.id)?;
+                        out.item_status.insert(item.id.clone(), item.status);
                         out.item_paths.insert(item.id.clone(), loaded.path.clone());
                         for criterion in &item.criteria {
                             let anchor = out.insert(
@@ -343,6 +363,7 @@ impl SpecIndex {
                 SpecDocument::Features { features, .. } => {
                     for item in features {
                         unique_item(&mut ids, &item.id)?;
+                        out.item_status.insert(item.id.clone(), item.status);
                         out.item_paths.insert(item.id.clone(), loaded.path.clone());
                         for b in &item.bindings {
                             out.insert_binding(&item.id, b)?;
@@ -463,6 +484,10 @@ impl SpecIndex {
                         binding.role,
                         BindingRole::Implementation | BindingRole::Verification
                     )
+                    && !matches!(
+                        out.item_status.get(&binding_anchor.item),
+                        Some(ItemStatus::Planned)
+                    )
                 {
                     out.artifact_owners
                         .entry(identity.clone())
@@ -500,6 +525,12 @@ impl SpecIndex {
             }
         }
         for (binding_anchor, binding) in &out.bindings {
+            if matches!(
+                out.item_status.get(&binding_anchor.item),
+                Some(ItemStatus::Planned)
+            ) {
+                continue;
+            }
             for scope in &binding.owns {
                 for unit in &out.artifact_units {
                     if scope_matches(scope, unit) {
@@ -557,6 +588,35 @@ impl SpecIndex {
             values.dedup();
         }
         Ok(out)
+    }
+
+    /// Fingerprint graph ownership without including mutable artifact bytes.
+    /// This detects changes to bindings, exact targets, and reverse ownership
+    /// relationships while allowing an editable target's implementation body
+    /// to change after planning.
+    pub fn ownership_fingerprint(&self) -> String {
+        let mut hash = Sha256::new();
+        for (anchor, binding) in &self.bindings {
+            hash.update(anchor.to_string().as_bytes());
+            hash.update(
+                serde_json::to_vec(binding).expect("artifact binding serializes for fingerprint"),
+            );
+        }
+        for (target, identity) in &self.target_to_artifact {
+            hash.update(target.to_string().as_bytes());
+            hash.update(identity.as_bytes());
+        }
+        for (identity, owners) in &self.artifact_owners {
+            hash.update(identity.as_bytes());
+            for owner in owners {
+                hash.update(owner.binding.to_string().as_bytes());
+                hash.update(owner.scope_id.to_string().as_bytes());
+                if let Some(target_id) = &owner.target_id {
+                    hash.update(target_id.to_string().as_bytes());
+                }
+            }
+        }
+        format!("sha256:{:x}", hash.finalize())
     }
     fn insert(
         &mut self,

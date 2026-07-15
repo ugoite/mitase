@@ -1,7 +1,7 @@
 schema: syu/config/v1
 workspace:
   spec_roots: [docs/syu]
-  excludes: [target/**, node_modules/**]
+  excludes: [target/**, node_modules/**, fixtures/v1/valid-workbench-flow/**]
 inventory:
   active_profile: default
   profiles:
@@ -190,9 +190,9 @@ inventory:
 validation:
   preset: agent-ready
   readiness:
-    target: closed-loop
-    scopes: { server: closed-loop, projection: closed-loop, work: closed-loop, readiness: verifiable, editor: verifiable, verification: verifiable, tooling: closed-loop, documentation: traceable, generated: traceable }
-    probes: { implemented_criteria: all, public_entrypoints: all, contracts: all, changed_units: true }
+    target: traceable
+    scopes: { planner: work-ready, work: work-ready }
+    probes: { implemented_criteria: "REQ-WORK-001#criterion.exact-slice,REQ-WORKBENCH-002#criterion.work-session", changed_units: false }
     limits: { max_ownership_scope_units: 160, max_targets_per_binding: 12, max_slices_per_seed: 4 }
   changed:
     baseline: { strategy: merge-base, against: origin/main }

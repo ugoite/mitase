@@ -43,12 +43,22 @@ pathlib.Path(sys.argv[2]).write_text(
     f'<script type="application/json" id="syu-projection">{projection}</script>'
 )
 pathlib.Path(sys.argv[3]).write_text(
+    """let projection=JSON.parse(document.querySelector('#syu-projection').textContent);\n"""
+    """let receipt=null;\n"""
+    """window.__SYU_FLOW__=[];\n"""
+    """const body=(value,status=200)=>Promise.resolve({ok:status>=200&&status<300,status,text:async()=>value==null?'':typeof value==='string'?value:JSON.stringify(value)});\n"""
     """window.fetch=async(url,options={})=>{\n"""
-    """  const body=(value,status=200)=>Promise.resolve({ok:status>=200&&status<300,status,text:async()=>typeof value==='string'?value:JSON.stringify(value)});\n"""
-    """  if(String(url).includes('/api/source?path=syu.yaml')) return body({content:'schema: syu/config/v1\\nworkspace:\\n  spec_roots: [docs/syu]\\n',hash:'visual-test-hash'});\n"""
-    """  if(String(url).includes('/api/config')) return body({});\n"""
-    """  if(String(url).includes('/api/validate')) return body(JSON.parse(document.querySelector('#syu-projection').textContent).validation);\n"""
-    """  if(String(url).includes('/api/context/')) return body('schema: syu/context/v1\\n');\n"""
+    """  const path=String(url);\n"""
+    """  const payload=options.body?JSON.parse(options.body):{};\n"""
+    """  if(path.includes('/api/projection')) return body(projection);\n"""
+    """  if(path.includes('/api/source?path=syu.yaml')) return body({content:'schema: syu/config/v1\\nworkspace:\\n  spec_roots: [docs/syu]\\n',hash:'visual-test-hash'});\n"""
+    """  if(path.includes('/api/config')) return body({});\n"""
+    """  if(path.includes('/api/work/request')) { window.__SYU_FLOW__.push('request'); projection.work.request={summary:payload.request.summary,operation:'modify',seed_count:1,requested_target_count:0}; projection.work.plan=null; return body(projection); }\n"""
+    """  if(path.includes('/api/work/plan')) { window.__SYU_FLOW__.push('plan'); projection.work.plan={id:'PLAN-VISUAL-FLOW',status:'ready',slices:[{id:'slice-visual-flow',editable_targets:[{reference:'FEAT-VISUAL#binding.work/target.code',access:'editable',path:'src/lib.rs'}]}]}; return body(projection.work.plan); }\n"""
+    """  if(path.includes('/api/work/context')) { window.__SYU_FLOW__.push('context'); projection.work.selected_slice='slice-visual-flow'; projection.work.context_pack={slice_id:'slice-visual-flow',entry_count:2}; return body({schema:'syu/context-pack/v1',slice:'slice-visual-flow',artifact_context:[]}); }\n"""
+    """  if(path.includes('/api/work/validate')) { window.__SYU_FLOW__.push('validate'); projection.work.validation={state:'passed',context:'work-plan'}; return body(projection.work.validation); }\n"""
+    """  if(path.includes('/api/work/verify')) { window.__SYU_FLOW__.push('verify'); receipt={schema:'syu/verification-receipt/v1',plan_digest:'visual-plan',slice_id:'slice-visual-flow',revision:'visual-revision',workspace_fingerprint:'visual-fingerprint',started_at:'1',completed_at:'2',executions:[{target:'REQ-VISUAL#binding.test/target.exact',runner:'mock',command:['mock'],exit_code:0,stdout_digest:'stdout',stderr_digest:'stderr',implementation_digests:{},verification_digest:'verification'}]}; projection.work.verification_receipt={slice_id:'slice-visual-flow'}; return body(receipt); }\n"""
+    """  if(path.includes('/api/work/result')) { window.__SYU_FLOW__.push('result'); projection.work.validation={state:'passed',context:'work-result'}; return body(null,204); }\n"""
     """  return body({error:`unhandled fetch ${url}`},404);\n"""
     """};\n"""
 )
@@ -95,8 +105,21 @@ window.addEventListener('error',event=>window.__SYU_VISUAL_ERRORS__.push(event.m
 window.addEventListener('unhandledrejection',event=>window.__SYU_VISUAL_ERRORS__.push(String(event.reason||'rejection')));
 setTimeout(()=>{
   const failures=[];
-  const click=s=>document.querySelector(s)?.click();
+  const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+  const click=async s=>{const node=document.querySelector(s);if(!node){failures.push(`missing ${s}`);return;}node.click();await wait(80);};
   const visible=s=>{const node=document.querySelector(s);return !!node&&!node.hidden;};
+
+  (async()=>{
+  await click('[data-route="specifications"]');
+  await click('[data-page="specifications"] .specification-criterion button');
+  if(!visible('[data-page="work"]')) failures.push('criterion did not open Work page');
+  await click('[data-work-plan]');
+  if(!document.querySelector('[data-work-slices-rail] .rail-item')) failures.push('Plan did not create a slice');
+  await click('[data-work-context]');
+  await click('[data-work-validate]');
+  await click('[data-work-verify]');
+  await click('[data-work-result]');
+  if(JSON.stringify(window.__SYU_FLOW__)!=='["request","plan","context","validate","verify","result"]') failures.push(`unexpected work flow: ${JSON.stringify(window.__SYU_FLOW__)}`);
 
   click('[data-page="work"] [data-tab="slices"]');
   if(!visible('[data-page="work"] [data-panel="slices"]')) failures.push('work slices panel did not open');
@@ -121,6 +144,7 @@ setTimeout(()=>{
   result.dataset.status = failures.length ? 'fail' : 'pass';
   result.textContent = failures.join('; ');
   document.body.append(result);
+  })();
 }, 800);
 </script>
 HTML

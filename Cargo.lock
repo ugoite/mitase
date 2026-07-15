@@ -1090,6 +1090,7 @@ dependencies = [
  "syu-validation",
  "syu-work-model",
  "syu-workspace",
+ "tempfile",
  "tokio",
  "tower",
 ]

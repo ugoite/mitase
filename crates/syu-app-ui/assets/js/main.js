@@ -1,5 +1,5 @@
 import { createState } from './state.js';
-import { bindRouter } from './router.js';
+import { bindRouter, navigate } from './router.js';
 import * as api from './api.js';
 import { renderWork } from './pages/work.js';
 import { renderReadinessPage } from './pages/readiness.js';
@@ -13,9 +13,21 @@ function render(state) {
   renderWork(projection.work, state);
   renderReadinessPage(projection.readiness);
   renderScope(projection.scope);
-  renderSpecifications(projection.specifications);
+  renderSpecifications(projection.specifications, state);
   renderDiagnostics(projection.diagnostics);
   renderSettings(projection);
+}
+
+async function refreshAfterAction(state, action, onResult) {
+  state.error = null;
+  try {
+    const result = await action();
+    onResult?.(result);
+    state.projection = await api.readProjection();
+  } catch (error) {
+    state.error = error;
+  }
+  state.render();
 }
 
 export async function startWorkbench() {
@@ -23,6 +35,12 @@ export async function startWorkbench() {
   if (!node) throw new Error('canonical Workbench projection is missing');
   const state = createState(JSON.parse(node.textContent));
   state.api = api;
+  state.render = () => render(state);
+  state.go = (page) => {
+    state.selectedPage = navigate(page, false);
+    state.render();
+  };
+  state.runAction = (action, onResult) => refreshAfterAction(state, action, onResult);
   bindRouter(state, () => render(state));
   render(state);
   return state;

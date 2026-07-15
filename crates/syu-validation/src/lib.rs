@@ -18,8 +18,9 @@ use syu_spec_model::{
     RuleLevel, Selector, SpecAnchor, SpecDocument, TargetClaim,
 };
 use syu_work_model::{
-    ExecutionSlice, PlanConfidence, PlanExecution, TargetLifecycle, VERIFICATION_RECEIPT_SCHEMA,
-    VerificationExecution, VerificationReceipt, WORK_PLAN_SCHEMA, WorkPlan, work_plan_digest,
+    ExecutionSlice, PlanConfidence, PlanExecution, TargetAccessMode, TargetLifecycle,
+    VERIFICATION_RECEIPT_SCHEMA, VerificationExecution, VerificationReceipt, WORK_PLAN_SCHEMA,
+    WorkPlan, readonly_targets_fingerprint, work_plan_digest,
 };
 use syu_workspace::{
     AnchorValue, ResolvedTarget, SpecIndex, SpecWorkspace, resolve_indexed_target,
@@ -204,6 +205,236 @@ pub struct ChangedFile {
     pub hunks: Vec<ChangedRange>,
 }
 
+/// Return the complete working-tree diff against a plan basis revision,
+/// including staged, unstaged, and untracked files. Result validation uses
+/// this canonical representation so callers cannot omit a changed artifact
+/// by reporting only a hand-picked file list.
+pub fn changed_files_against_revision(root: &Path, revision: &str) -> Result<Vec<ChangedFile>> {
+    let status_output = Command::new("git")
+        .args(["-C"])
+        .arg(root)
+        .args(["diff", "--name-status", "-z", "-M", "--relative", revision])
+        .output()?;
+    if !status_output.status.success() {
+        bail!("git diff --name-status {revision} failed");
+    }
+    let untracked_output = Command::new("git")
+        .args(["-C"])
+        .arg(root)
+        .args(["ls-files", "--others", "--exclude-standard", "-z"])
+        .output()?;
+    if !untracked_output.status.success() {
+        bail!("git ls-files --others failed");
+    }
+    let patch_output = Command::new("git")
+        .args(["-C"])
+        .arg(root)
+        .args([
+            "diff",
+            "-M",
+            "--relative",
+            "--unified=0",
+            "--no-color",
+            revision,
+        ])
+        .output()?;
+    if !patch_output.status.success() {
+        bail!("git diff --unified=0 {revision} failed");
+    }
+    let mut files = parse_changed_files(
+        &status_output.stdout,
+        &untracked_output.stdout,
+        &String::from_utf8(patch_output.stdout)?,
+    )?;
+    synthesize_untracked_ranges(root, &mut files)?;
+    Ok(files)
+}
+
+fn parse_changed_files(status: &[u8], untracked: &[u8], patch: &str) -> Result<Vec<ChangedFile>> {
+    let mut files = Vec::new();
+    let mut entries = status
+        .split(|byte| *byte == 0)
+        .filter(|entry| !entry.is_empty());
+    while let Some(kind) = entries.next() {
+        let kind = String::from_utf8(kind.to_vec())?;
+        let (status, old_path, new_path) = match kind.chars().next().unwrap_or('M') {
+            'A' => (
+                ChangeStatus::Added,
+                None,
+                Some(String::from_utf8(
+                    entries.next().context("missing added path")?.to_vec(),
+                )?),
+            ),
+            'M' => {
+                let path =
+                    String::from_utf8(entries.next().context("missing modified path")?.to_vec())?;
+                (ChangeStatus::Modified, Some(path.clone()), Some(path))
+            }
+            'D' => (
+                ChangeStatus::Deleted,
+                Some(String::from_utf8(
+                    entries.next().context("missing deleted path")?.to_vec(),
+                )?),
+                None,
+            ),
+            'R' => (
+                ChangeStatus::Renamed,
+                Some(String::from_utf8(
+                    entries.next().context("missing rename source")?.to_vec(),
+                )?),
+                Some(String::from_utf8(
+                    entries.next().context("missing rename target")?.to_vec(),
+                )?),
+            ),
+            _ => {
+                let path = entries
+                    .next()
+                    .map(|value| String::from_utf8(value.to_vec()))
+                    .transpose()?;
+                (ChangeStatus::Modified, path.clone(), path)
+            }
+        };
+        files.push(ChangedFile {
+            status,
+            old_path: old_path
+                .map(RepoPath::new)
+                .transpose()
+                .map_err(anyhow::Error::msg)?,
+            new_path: new_path
+                .map(RepoPath::new)
+                .transpose()
+                .map_err(anyhow::Error::msg)?,
+            hunks: Vec::new(),
+        });
+    }
+    for path in untracked
+        .split(|byte| *byte == 0)
+        .filter(|entry| !entry.is_empty())
+    {
+        files.push(ChangedFile {
+            status: ChangeStatus::Untracked,
+            old_path: None,
+            new_path: Some(
+                RepoPath::new(String::from_utf8(path.to_vec())?).map_err(anyhow::Error::msg)?,
+            ),
+            hunks: Vec::new(),
+        });
+    }
+    let mut current: Option<usize> = None;
+    for line in patch.lines() {
+        if line.starts_with("diff --git ") {
+            current = None;
+            continue;
+        }
+        if let Some(path) = line.strip_prefix("+++ b/") {
+            current = files.iter().position(|file| {
+                file.new_path
+                    .as_ref()
+                    .is_some_and(|value| value.to_string_lossy() == path)
+            });
+            continue;
+        }
+        if line == "+++ /dev/null" {
+            continue;
+        }
+        if let Some(path) = line.strip_prefix("--- a/") {
+            current = files.iter().position(|file| {
+                file.old_path
+                    .as_ref()
+                    .is_some_and(|value| value.to_string_lossy() == path)
+            });
+            continue;
+        }
+        if let Some((old_path, new_path)) = parse_binary_patch_paths(line) {
+            if let Some(index) = files.iter().position(|file| {
+                file.old_path
+                    .as_ref()
+                    .is_some_and(|value| value.to_string_lossy() == old_path)
+                    || file
+                        .new_path
+                        .as_ref()
+                        .is_some_and(|value| value.to_string_lossy() == new_path)
+            }) {
+                files[index].status = ChangeStatus::Binary;
+            }
+            current = None;
+            continue;
+        }
+        if let Some(hunk) = line.strip_prefix("@@ ")
+            && let Some(index) = current
+        {
+            files[index].hunks.push(parse_hunk_header(hunk)?);
+        }
+    }
+    Ok(files)
+}
+
+fn synthesize_untracked_ranges(root: &Path, files: &mut [ChangedFile]) -> Result<()> {
+    for file in files {
+        if file.status != ChangeStatus::Untracked || !file.hunks.is_empty() {
+            continue;
+        }
+        let Some(path) = file.new_path.as_ref() else {
+            continue;
+        };
+        let contents = match fs::read(root.join(path.as_path())) {
+            Ok(contents) => contents,
+            Err(_) => continue,
+        };
+        if std::str::from_utf8(&contents).is_err() {
+            continue;
+        }
+        let line_count = contents.iter().filter(|byte| **byte == b'\n').count()
+            + usize::from(!contents.is_empty() && *contents.last().unwrap_or(&b'\n') != b'\n');
+        file.hunks.push(ChangedRange {
+            old_start: 0,
+            old_end: 0,
+            new_start: 1,
+            new_end: line_count.max(1),
+        });
+    }
+    Ok(())
+}
+
+fn parse_binary_patch_paths(line: &str) -> Option<(&str, &str)> {
+    let paths = line.strip_prefix("Binary files ")?;
+    let (old_path, remainder) = paths.split_once(" and ")?;
+    let new_path = remainder.strip_suffix(" differ")?;
+    let old_path = old_path.strip_prefix("a/").unwrap_or(old_path);
+    let new_path = new_path.strip_prefix("b/").unwrap_or(new_path);
+    Some((old_path, new_path))
+}
+
+fn parse_hunk_header(header: &str) -> Result<ChangedRange> {
+    let range = header
+        .split(" @@")
+        .next()
+        .context("malformed hunk header")?;
+    let mut parts = range.split_whitespace();
+    let old = parts.next().context("missing old hunk range")?;
+    let new = parts.next().context("missing new hunk range")?;
+    let (old_start, old_end) = parse_diff_span(old.trim_start_matches('-'))?;
+    let (new_start, new_end) = parse_diff_span(new.trim_start_matches('+'))?;
+    Ok(ChangedRange {
+        old_start,
+        old_end,
+        new_start,
+        new_end,
+    })
+}
+
+fn parse_diff_span(span: &str) -> Result<(usize, usize)> {
+    let (start, len) = span
+        .split_once(',')
+        .map_or((span, "1"), |(start, len)| (start, len));
+    let start = start.parse::<usize>()?;
+    let len = len.parse::<usize>()?;
+    if len == 0 {
+        return Ok((0, 0));
+    }
+    Ok((start, start + len - 1))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlanValidationMode {
     PreState,
@@ -236,6 +467,13 @@ pub fn validate(ctx: &ValidationContext<'_>) -> ValidationResult {
     validate_inner(ctx, false)
 }
 
+/// Validate a canonical workspace and enforce its configured readiness target.
+/// This is the explicit CLI workspace command; Workbench previews continue to
+/// use `validate_without_readiness` so previews never execute external tests.
+pub fn validate_workspace(ctx: &ValidationContext<'_>) -> ValidationResult {
+    validate_inner(ctx, true)
+}
+
 pub fn validate_without_readiness(ctx: &ValidationContext<'_>) -> ValidationResult {
     validate_inner(ctx, false)
 }
@@ -258,23 +496,136 @@ pub fn canonical_plan_for_execution(
     if submitted.basis.revision != revision {
         bail!("plan basis revision is stale");
     }
-    if submitted.basis.workspace_fingerprint != workspace.try_fingerprint()? {
-        bail!("plan workspace fingerprint is stale");
+    if submitted.basis.spec_fingerprint != workspace.spec_fingerprint()? {
+        bail!("plan specification basis is stale");
+    }
+    if submitted.basis.ownership_fingerprint != index.ownership_fingerprint() {
+        bail!("plan ownership basis is stale");
+    }
+    if submitted.basis.readonly_fingerprint
+        != current_readonly_fingerprint(workspace, index, submitted)
+    {
+        bail!("plan readonly or run-only target basis is stale");
     }
     if submitted.canonical_digest != work_plan_digest(submitted) {
         bail!("plan canonical digest is tampered");
     }
-    let canonical = canonical_plan(&submitted.request, workspace, index, revision)?;
-    if canonical != *submitted {
-        bail!("submitted plan does not match deterministic canonical planner output");
+    let current_fingerprint = workspace.try_fingerprint()?;
+    if submitted.basis.workspace_fingerprint == current_fingerprint {
+        let mut canonical = canonical_plan(&submitted.request, workspace, index, revision)?;
+        canonical.basis = submitted.basis.clone();
+        canonical.canonical_digest = work_plan_digest(&canonical);
+        if canonical != *submitted {
+            bail!("submitted plan does not match deterministic canonical planner output");
+        }
+    } else if let Some(baseline) =
+        load_workspace_at_revision(&workspace.root, &submitted.basis.revision)
+    {
+        let mut canonical = canonical_plan(
+            &submitted.request,
+            &baseline.workspace,
+            &baseline.index,
+            revision,
+        )?;
+        canonical.basis = submitted.basis.clone();
+        canonical.canonical_digest = work_plan_digest(&canonical);
+        if canonical != *submitted {
+            bail!("submitted plan does not match deterministic canonical planner output");
+        }
     }
-    if !matches!(canonical.status, syu_work_model::PlanStatus::Ready) {
+    if !matches!(submitted.status, syu_work_model::PlanStatus::Ready) {
         bail!("verification requires a ready canonical plan");
     }
-    if canonical.slices.is_empty() {
+    if submitted.slices.is_empty() {
         bail!("verification requires at least one canonical slice");
     }
-    Ok(canonical)
+    Ok(submitted.clone())
+}
+
+fn current_readonly_fingerprint(
+    workspace: &SpecWorkspace,
+    index: &SpecIndex,
+    plan: &WorkPlan,
+) -> String {
+    let mut slices = plan.slices.clone();
+    for slice in &mut slices {
+        for target in slice
+            .verification_targets
+            .iter_mut()
+            .chain(slice.readonly_context.iter_mut())
+            .filter(|target| target.access != TargetAccessMode::Editable)
+        {
+            match resolve_planned_target_for_workspace(workspace, index, target) {
+                Some(resolved) => {
+                    target.resolved_path = resolved.path.to_string_lossy().into_owned();
+                    target.resolved_selector.description = resolved.description;
+                    target.resolved_selector.symbols = resolved.symbols;
+                    target.content_hash = resolved.content_hash;
+                    target.excerpt_hash = resolved.excerpt_hash;
+                }
+                None if target.lifecycle == TargetLifecycle::EnsureAbsent => {}
+                None => {
+                    // Preserve a deterministic mismatch for a missing stable
+                    // readonly/run-only target. Ensure-absent transitions are
+                    // the only missing target state that is valid here.
+                    target.content_hash = "missing".into();
+                    target.excerpt_hash = "missing".into();
+                }
+            }
+        }
+    }
+    readonly_targets_fingerprint(&slices)
+}
+
+fn resolve_planned_target_for_workspace(
+    workspace: &SpecWorkspace,
+    index: &SpecIndex,
+    target: &syu_work_model::PlannedTarget,
+) -> Option<ResolvedTarget> {
+    if let Some(identity) = &target.artifact_identity {
+        let unit = index
+            .artifact_units
+            .iter()
+            .find(|unit| &unit.identity == identity)?;
+        if !matches!(
+            unit.reachability,
+            syu_inventory::ArtifactReachability::Active
+        ) {
+            return None;
+        }
+        let bytes = workspace.read_bytes(unit.path.as_path()).ok()?;
+        let byte_start = unit.span.byte_start.min(bytes.len());
+        let byte_end = unit.span.byte_end.min(bytes.len()).max(byte_start);
+        let symbol = identity.rsplit("::").next().unwrap_or(identity).to_owned();
+        return Some(ResolvedTarget {
+            path: unit.path.as_path().to_path_buf(),
+            description: format!("changed semantic artifact {identity}"),
+            symbols: if matches!(unit.kind, syu_inventory::ArtifactUnitKind::File) {
+                vec![]
+            } else {
+                vec![symbol]
+            },
+            content_hash: unit.digest.clone(),
+            bytes: bytes.len(),
+            byte_start,
+            byte_end,
+            line_start: unit.span.line_start,
+            line_end: unit.span.line_end,
+            excerpt: String::from_utf8_lossy(&bytes[byte_start..byte_end]).into_owned(),
+            excerpt_hash: unit.digest.clone(),
+        });
+    }
+    let declared = index.target(&target.reference)?;
+    if let Some(identity) = index.target_to_artifact.get(&target.reference)
+        && let Some(unit) = index
+            .artifact_units
+            .iter()
+            .find(|unit| &unit.identity == identity)
+        && let Ok(Some(resolved)) = resolve_indexed_target(workspace, declared, unit)
+    {
+        return Some(resolved);
+    }
+    resolve_target_in_workspace(workspace, declared).ok()
 }
 
 /// Execute exactly the verification targets selected by a canonical slice.
@@ -296,6 +647,11 @@ pub fn execute_verification(
     if slice.verification_targets.is_empty() {
         bail!("selected slice has no verification targets");
     }
+    let plan_mode = if plan.basis.workspace_fingerprint == workspace.try_fingerprint()? {
+        PlanValidationMode::PreState
+    } else {
+        PlanValidationMode::PostState
+    };
     let pre_state = validate_without_readiness(&ValidationContext {
         config: &workspace.config,
         workspace,
@@ -304,7 +660,7 @@ pub fn execute_verification(
         reported_changed_files: None,
         work_plan: Some(&plan),
         selected_slice: Some(slice),
-        plan_mode: PlanValidationMode::PreState,
+        plan_mode,
         preset: workspace.config.validation.preset,
         revision: Some(revision),
         change_base_revision: None,
@@ -632,17 +988,9 @@ fn validate_inner(ctx: &ValidationContext<'_>, include_readiness: bool) -> Valid
         )
     });
     if let Some(Ok(report)) = &readiness {
-        let unmet = required_axes(ctx.config.validation.readiness.target)
-            .iter()
-            .any(|axis| match axis {
-                ReadinessAxisId::Inventory => !report.inventory.is_ready(),
-                ReadinessAxisId::Ownership => !report.ownership.is_ready(),
-                ReadinessAxisId::Seedability => !report.seedability.is_ready(),
-                ReadinessAxisId::Workability => !report.workability.is_ready(),
-                ReadinessAxisId::Verification => !report.verification.is_ready(),
-                ReadinessAxisId::ClosedLoop => !report.closed_loop.is_ready(),
-            });
-        if readiness_required(ctx.config.validation.readiness.target) && unmet {
+        if readiness_required(ctx.config.validation.readiness.target)
+            && !report.meets_configured(ctx.config)
+        {
             diagnostics.push(syu_diagnostics::Diagnostic::error(
                 "SYU-READINESS-001",
                 "workspace does not meet the configured readiness target",
@@ -733,9 +1081,10 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
         if ctx.workspace.path_is_spec(path.as_path()) {
             continue;
         }
-        if !ctx.workspace.path_is_artifact(path.as_path())
-            || ctx.workspace.path_is_excluded(path.as_path())
-        {
+        if ctx.workspace.path_is_excluded(path.as_path()) {
+            continue;
+        }
+        if !ctx.workspace.path_is_artifact(path.as_path()) {
             if ctx.config.validation.changed.require_owned_changes {
                 push(
                     out,
@@ -2369,13 +2718,42 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
         );
     }
     let basis_workspace = load_workspace_at_revision(&ctx.workspace.root, &plan.basis.revision);
+    if plan.basis.spec_fingerprint != ctx.workspace.spec_fingerprint().unwrap_or_default() {
+        push(
+            out,
+            "SYU-WORK-009",
+            "plan specification basis is stale",
+            "work-plan",
+            None,
+        );
+    }
+    if plan.basis.ownership_fingerprint != ctx.index.ownership_fingerprint() {
+        push(
+            out,
+            "SYU-WORK-009",
+            "plan ownership basis is stale",
+            "work-plan",
+            None,
+        );
+    }
+    if plan.basis.readonly_fingerprint
+        != current_readonly_fingerprint(ctx.workspace, ctx.index, plan)
+    {
+        push(
+            out,
+            "SYU-WORK-009",
+            "plan readonly or run-only target basis is stale",
+            "work-plan",
+            None,
+        );
+    }
     // A Workbench plan may be created against the current working tree while
     // its revision still names HEAD.  Prefer the live indexed workspace when
     // its fingerprint is the submitted basis; reconstructing HEAD here would
     // incorrectly compare a valid dirty-tree plan with an older filesystem.
     let current_workspace_is_basis =
         plan.basis.workspace_fingerprint == ctx.workspace.try_fingerprint().unwrap_or_default();
-    if basis_workspace.is_none() && !current_workspace_is_basis {
+    if basis_workspace.is_none() && !current_workspace_is_basis && !allow_post_state {
         push(
             out,
             "SYU-WORK-009",

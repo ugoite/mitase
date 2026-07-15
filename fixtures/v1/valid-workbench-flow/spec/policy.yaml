@@ -1,0 +1,15 @@
+schema: syu/spec/v1
+kind: policies
+namespace: fixture
+category: Workbench flow
+policies:
+  - id: POL-FIXTURE-001
+    title: Exact behavior verification
+    summary: The fixture behavior must remain covered by its exact test.
+    rules:
+      - id: behavior
+        level: must
+        statement: The fixture behavior must remain covered by an exact verification target.
+        governed_by: [PHIL-FIXTURE-001#principle.bounded-evidence]
+        applies_to: { roles: [implementation, verification] }
+        enforcement: external

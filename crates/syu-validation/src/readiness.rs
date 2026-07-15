@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use serde::Serialize;
 use std::collections::BTreeSet;
 use std::process::Command;
-use syu_project_model::ReadinessLevel;
+use syu_project_model::{ProjectConfig, ReadinessLevel};
 use syu_spec_model::{BoundTargetRef, ItemStatus, OwnershipSelector, SpecAnchor, TargetClaim};
 use syu_work_model::{
     PlanStatus, RequestedTarget, TargetTransition, VerificationReceipt, WORK_REQUEST_SCHEMA,
@@ -68,6 +68,46 @@ impl ReadinessReport {
             ReadinessAxisId::ClosedLoop => self.closed_loop.is_ready(),
         })
     }
+
+    /// Evaluate both the workspace-wide readiness target and every explicitly
+    /// configured facet scope. A repository can therefore remain traceable
+    /// overall while requiring a bounded Workbench facet to be closed-loop.
+    pub fn meets_configured(&self, config: &ProjectConfig) -> bool {
+        if !self.meets(config.validation.readiness.target) {
+            return false;
+        }
+        config
+            .validation
+            .readiness
+            .scopes
+            .values()
+            .copied()
+            .filter(|level| *level != ReadinessLevel::Off)
+            .all(|level| {
+                required_axes(level).iter().all(|axis| match axis {
+                    ReadinessAxisId::Inventory => self.inventory.is_ready(),
+                    ReadinessAxisId::Ownership => self.ownership.is_ready(),
+                    ReadinessAxisId::Seedability => scoped_axis_is_ready(&self.seedability, level),
+                    ReadinessAxisId::Workability => scoped_axis_is_ready(&self.workability, level),
+                    ReadinessAxisId::Verification => {
+                        scoped_axis_is_ready(&self.verification, level)
+                    }
+                    ReadinessAxisId::ClosedLoop => scoped_axis_is_ready(&self.closed_loop, level),
+                })
+            })
+    }
+}
+
+fn scoped_axis_is_ready(axis: &ReadinessAxis, level: ReadinessLevel) -> bool {
+    let subjects = axis
+        .subjects
+        .iter()
+        .filter(|subject| subject.required_level == level)
+        .collect::<Vec<_>>();
+    !subjects.is_empty()
+        && subjects
+            .iter()
+            .all(|subject| subject.ready && subject.blockers.is_empty())
 }
 
 pub fn required_axes(level: ReadinessLevel) -> &'static [ReadinessAxisId] {
@@ -138,8 +178,48 @@ pub fn evaluate(
     };
     let inventory = axis_from_subjects(inventory_subjects);
 
+    // When readiness is configured for a bounded criterion set, ownership is
+    // evaluated for the exact implementation/verification artifacts selected
+    // by those criteria. This keeps a repository-wide planned self-hosting
+    // catalog from becoming an artificial ownership denominator.
+    let criteria = implemented_criteria(workspace, index);
+    let ownership_focus = workspace
+        .config
+        .validation
+        .readiness
+        .probes
+        .implemented_criteria
+        .as_deref()
+        .filter(|selection| *selection != "all")
+        .map(|_| {
+            criteria
+                .iter()
+                .flat_map(|criterion| {
+                    index
+                        .criteria_to_implementation_targets
+                        .get(criterion)
+                        .into_iter()
+                        .flatten()
+                        .chain(
+                            index
+                                .criteria_to_verification_targets
+                                .get(criterion)
+                                .into_iter()
+                                .flatten(),
+                        )
+                })
+                .filter_map(|target| index.target_to_artifact.get(target))
+                .cloned()
+                .collect::<BTreeSet<_>>()
+        });
+
     let ownership_subjects = active
         .iter()
+        .filter(|unit| {
+            ownership_focus
+                .as_ref()
+                .is_none_or(|focused| focused.contains(&unit.identity))
+        })
         .map(|unit| {
             let owners = index
                 .artifact_owners
@@ -178,9 +258,20 @@ pub fn evaluate(
         .collect::<Vec<_>>();
     let mut ownership_subjects = ownership_subjects;
     for (binding_anchor, binding) in &index.bindings {
+        if matches!(
+            index.item_status.get(&binding_anchor.item),
+            Some(ItemStatus::Planned)
+        ) {
+            continue;
+        }
         for scope in &binding.owns {
             let matched = active
                 .iter()
+                .filter(|unit| {
+                    ownership_focus
+                        .as_ref()
+                        .is_none_or(|focused| focused.contains(&unit.identity))
+                })
                 .filter(|unit| scope_matches(scope, unit))
                 .count();
             if matched
@@ -210,7 +301,6 @@ pub fn evaluate(
     }
     let ownership = axis_from_subjects(ownership_subjects);
 
-    let criteria = implemented_criteria(workspace, index);
     let public_probe = workspace
         .config
         .validation
