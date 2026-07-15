@@ -32,6 +32,11 @@ features:
         role: contract-source
         facet: api
         responsibility: Define the login operation.
+        owns:
+          - id: openapi-source
+            adapter: openapi
+            path: openapi.yaml
+            selector: { kind: path-prefix, value: openapi.yaml }
         targets:
           - { id: operation, adapter: openapi, path: openapi.yaml, selector: { kind: operation, method: post, path: /sessions } }
     contracts:

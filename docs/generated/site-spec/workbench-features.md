@@ -85,6 +85,11 @@ description: "Generated reference for docs/syu/workbench-features.yaml"
           - **path**: scripts/ci/check-workbench-contract.py
           - **selector**:
             - **kind**: file
+        - **id**: selfhost-scripts-ci-installed-binary-smoke-sh
+          - **adapter**: declared
+          - **path**: scripts/ci/installed-binary-smoke.sh
+          - **selector**:
+            - **kind**: file
         - **id**: selfhost-scripts-ci-quality-gates-sh
           - **adapter**: declared
           - **path**: scripts/ci/quality-gates.sh
@@ -926,6 +931,11 @@ description: "Generated reference for docs/syu/workbench-features.yaml"
           - **path**: fixtures/v1/invalid-unknown-field/syu.yaml
           - **selector**:
             - **kind**: file
+        - **id**: selfhost-fixtures-v1-valid-web-app-cargo-toml
+          - **adapter**: declared
+          - **path**: fixtures/v1/valid-web-app/Cargo.toml
+          - **selector**:
+            - **kind**: file
         - **id**: selfhost-fixtures-v1-valid-web-app-spec-feature-yaml
           - **adapter**: declared
           - **path**: fixtures/v1/valid-web-app/spec/feature.yaml
@@ -1683,6 +1693,11 @@ features:
     - id: selfhost-scripts-ci-check-workbench-contract-py
       adapter: declared
       path: scripts/ci/check-workbench-contract.py
+      selector:
+        kind: file
+    - id: selfhost-scripts-ci-installed-binary-smoke-sh
+      adapter: declared
+      path: scripts/ci/installed-binary-smoke.sh
       selector:
         kind: file
     - id: selfhost-scripts-ci-quality-gates-sh
@@ -2521,6 +2536,11 @@ features:
     - id: selfhost-fixtures-v1-invalid-unknown-field-syu-yaml
       adapter: declared
       path: fixtures/v1/invalid-unknown-field/syu.yaml
+      selector:
+        kind: file
+    - id: selfhost-fixtures-v1-valid-web-app-cargo-toml
+      adapter: declared
+      path: fixtures/v1/valid-web-app/Cargo.toml
       selector:
         kind: file
     - id: selfhost-fixtures-v1-valid-web-app-spec-feature-yaml

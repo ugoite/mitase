@@ -151,10 +151,12 @@ inventory:
             - fixtures/rejected/obsolete-pre-release-v1/spec.yaml
             - fixtures/rejected/obsolete-pre-release-v1/syu.yaml
             - fixtures/v1/invalid-unknown-field/syu.yaml
+            - fixtures/v1/valid-web-app/Cargo.toml
             - fixtures/v1/valid-web-app/spec/feature.yaml
             - fixtures/v1/valid-web-app/spec/requirement.yaml
             - fixtures/v1/valid-web-app/syu.yaml
             - scripts/ci/check-workbench-contract.py
+            - scripts/ci/installed-binary-smoke.sh
             - scripts/ci/quality-gates.sh
             - scripts/ci/workbench-visual.sh
             - scripts/dev/validate-changed.sh

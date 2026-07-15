@@ -70,7 +70,7 @@ main() {
   git -C "$workspace" commit --quiet -m "fixture snapshot"
   git -C "$workspace" update-ref refs/remotes/origin/main HEAD
 
-  "${installed_binary}" validate "$workspace" >/dev/null
+  "${installed_binary}" validate workspace "$workspace" >/dev/null
   "${installed_binary}" work plan \
     --request "${workspace}/work.yaml" \
     --out "$plan" \
@@ -88,8 +88,9 @@ import sys
 from pathlib import Path
 
 projection = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-assert projection["plan"]["schema"] == "syu/work-plan/v1"
-assert "validation" in projection
+assert projection["work"]["request"]["summary"] == "Keep login failures generic."
+assert projection["work"]["plan"] is None
+assert projection["diagnostics"]["validation"]["state"] == "not_run"
 PY
 }
 

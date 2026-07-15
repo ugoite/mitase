@@ -63,6 +63,11 @@ features:
       path: scripts/ci/check-workbench-contract.py
       selector:
         kind: file
+    - id: selfhost-scripts-ci-installed-binary-smoke-sh
+      adapter: declared
+      path: scripts/ci/installed-binary-smoke.sh
+      selector:
+        kind: file
     - id: selfhost-scripts-ci-quality-gates-sh
       adapter: declared
       path: scripts/ci/quality-gates.sh
@@ -899,6 +904,11 @@ features:
     - id: selfhost-fixtures-v1-invalid-unknown-field-syu-yaml
       adapter: declared
       path: fixtures/v1/invalid-unknown-field/syu.yaml
+      selector:
+        kind: file
+    - id: selfhost-fixtures-v1-valid-web-app-cargo-toml
+      adapter: declared
+      path: fixtures/v1/valid-web-app/Cargo.toml
       selector:
         kind: file
     - id: selfhost-fixtures-v1-valid-web-app-spec-feature-yaml
