@@ -9,6 +9,8 @@ export function createState(projection) {
     specificationEditor: null,
     specificationPreview: null,
     specificationError: null,
+    targetSuggestions: null,
+    targetSuggestionSelection: [],
     selectedSlice: projection.work.plan?.slices?.[0]?.id || null,
     verificationReceipt: null,
     error: null,

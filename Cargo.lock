@@ -1013,6 +1013,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "globset",
+ "serde",
  "serde_yaml",
  "sha2",
  "syu-diagnostics",

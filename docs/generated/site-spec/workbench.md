@@ -169,6 +169,41 @@ description: "Generated reference for docs/syu/workbench.yaml"
                 - **arguments**:
                   - **package**: syu-workbench-server
                   - **test**: tests::workbench_config_edit_transaction
+- **id**: REQ-WORKBENCH-008
+  - **title**: Reviewed target suggestions
+  - **description**: The Workbench ranks exact implementation and verification candidates with human-readable evidence before any executable scope is created.
+  - **priority**: high
+  - **status**: implemented
+  - **criteria**:
+    - **id**: reviewed-target-suggestions
+      - **kind**: behavior
+      - **statement**: Suggestions remain advisory until explicit approval, rejected evidence stays suppressed, approved candidates become exact WorkRequest targets, and budget overflow recommends split work.
+      - **governed_by**:
+        - POL-DELIVERY-001#rule.exact-ownership
+  - **bindings**:
+    - **id**: target-suggestion-check
+      - **role**: verification
+      - **facet**: verification
+      - **responsibility**: Verify advisory suggestions, evidence-bound rejection, and exact approval.
+      - **targets**:
+        - **id**: target-suggestion-test
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::target_suggestions_require_review_before_exact_work_request
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-WORKBENCH-008#criterion.reviewed-target-suggestions
+              - **covers**:
+                - FEAT-WORKBENCH-TARGET-SUGGESTIONS-001#binding.suggestions/target.rank-candidates
+                - FEAT-WORKBENCH-TARGET-SUGGESTIONS-001#binding.suggestions/target.approve-candidates
+                - FEAT-WORKBENCH-TARGET-SUGGESTIONS-001#binding.suggestions/target.suggestion-review-ui
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-workbench-server
+                  - **test**: tests::target_suggestions_require_review_before_exact_work_request
 - **id**: REQ-WORKBENCH-005
   - **title**: Secure local server
   - **description**: The Workbench server is loopback-first and protects mutation endpoints.
@@ -360,6 +395,34 @@ requirements:
                 criterion: REQ-WORKBENCH-004#criterion.transactional-config-edit
                 covers: [FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.config-apply]
                 runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_config_edit_transaction } }
+  - id: REQ-WORKBENCH-008
+    title: Reviewed target suggestions
+    description: The Workbench ranks exact implementation and verification candidates with human-readable evidence before any executable scope is created.
+    priority: high
+    status: implemented
+    criteria:
+      - id: reviewed-target-suggestions
+        kind: behavior
+        statement: Suggestions remain advisory until explicit approval, rejected evidence stays suppressed, approved candidates become exact WorkRequest targets, and budget overflow recommends split work.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+    bindings:
+      - id: target-suggestion-check
+        role: verification
+        facet: verification
+        responsibility: Verify advisory suggestions, evidence-bound rejection, and exact approval.
+        targets:
+          - id: target-suggestion-test
+            adapter: rust
+            path: crates/syu-workbench-server/src/lib.rs
+            selector: { kind: symbol, name: tests::target_suggestions_require_review_before_exact_work_request }
+            claims:
+              - kind: verifies
+                criterion: REQ-WORKBENCH-008#criterion.reviewed-target-suggestions
+                covers:
+                  - FEAT-WORKBENCH-TARGET-SUGGESTIONS-001#binding.suggestions/target.rank-candidates
+                  - FEAT-WORKBENCH-TARGET-SUGGESTIONS-001#binding.suggestions/target.approve-candidates
+                  - FEAT-WORKBENCH-TARGET-SUGGESTIONS-001#binding.suggestions/target.suggestion-review-ui
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::target_suggestions_require_review_before_exact_work_request } }
   - id: REQ-WORKBENCH-005
     title: Secure local server
     description: The Workbench server is loopback-first and protects mutation endpoints.
