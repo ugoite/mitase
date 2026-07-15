@@ -18,6 +18,8 @@ use syu_spec_model::{
     RuleLevel, Selector, SpecAnchor, SpecDocument, TargetClaim,
 };
 use syu_work_model::{
+    COMPLETION_REPORT_SCHEMA, CompletionBlocker, CompletionCheck, CompletionCheckEvidence,
+    CompletionCriterionEvidence, CompletionReport, CompletionStatus, ExactTestEvidence,
     ExecutionSlice, PlanConfidence, PlanExecution, TargetAccessMode, TargetLifecycle,
     VERIFICATION_RECEIPT_SCHEMA, VerificationExecution, VerificationReceipt, WORK_PLAN_SCHEMA,
     WorkPlan, readonly_targets_fingerprint, work_plan_digest,
@@ -755,7 +757,7 @@ pub fn execute_verification(
                 String::from_utf8_lossy(&output.stderr),
             );
         }
-        ensure_exact_test_executed(
+        let proof = ensure_exact_test_executed(
             &configured.executable,
             target,
             &runner_ref.arguments,
@@ -779,6 +781,7 @@ pub fn execute_verification(
             exit_code: output.status.code().unwrap_or(-1),
             stdout_digest: digest(&output.stdout),
             stderr_digest: digest(&output.stderr),
+            proof,
             implementation_digests,
             verification_digest: verification.content_hash,
         });
@@ -836,6 +839,9 @@ pub fn validate_verification_receipt(
         if execution.exit_code != 0 {
             bail!("verification receipt contains failed executions");
         }
+        if execution.proof.matched_count == 0 {
+            bail!("verification receipt proves zero exact tests");
+        }
         let target = index.target(&execution.target).ok_or_else(|| {
             anyhow::anyhow!("verification target {} is unresolved", execution.target)
         })?;
@@ -888,8 +894,360 @@ pub fn validate_verification_receipt(
         if execution.implementation_digests.len() != covers.len() {
             bail!("receipt implementation digest set is not exact");
         }
+        if execution.proof.identity
+            != runner_ref
+                .arguments
+                .get("test")
+                .cloned()
+                .unwrap_or_default()
+            || execution.proof.identity.is_empty()
+        {
+            bail!("verification receipt exact-test proof is stale");
+        }
     }
     Ok(())
+}
+
+/// Evaluate the complete post-change closure for one execution slice.
+///
+/// This is intentionally the shared completion contract used by CLI callers
+/// and future Workbench/agent callers. Expected user errors are represented in
+/// the report so callers can render a precise blocker and next action instead
+/// of losing the reason behind an anyhow error.
+pub fn evaluate_completion(
+    workspace: &SpecWorkspace,
+    index: &SpecIndex,
+    submitted: &WorkPlan,
+    receipt: &VerificationReceipt,
+) -> Result<CompletionReport> {
+    let current_revision = repository_revision(&workspace.root)?;
+    let blocked = |plan_digest: String, blockers: Vec<CompletionBlocker>| CompletionReport {
+        schema: COMPLETION_REPORT_SCHEMA.into(),
+        plan_digest,
+        slice_id: receipt.slice_id.clone(),
+        status: CompletionStatus::Blocked,
+        demonstrated: vec![],
+        checks: vec![],
+        blockers,
+    };
+
+    let canonical = match canonical_plan_for_execution(
+        workspace,
+        index,
+        submitted,
+        &current_revision,
+    ) {
+        Ok(plan) => plan,
+        Err(error) => {
+            return Ok(blocked(
+                submitted.canonical_digest.clone(),
+                vec![completion_blocker(
+                    "SYU-COMPLETION-PLAN",
+                    format!("cannot use the submitted work plan: {error}"),
+                    "Regenerate the work plan from the original request, then rerun verification.",
+                )],
+            ));
+        }
+    };
+    let Some(slice) = canonical
+        .slices
+        .iter()
+        .find(|slice| slice.id == receipt.slice_id)
+    else {
+        return Ok(blocked(
+            canonical.canonical_digest.clone(),
+            vec![completion_blocker(
+                "SYU-COMPLETION-SLICE",
+                format!(
+                    "receipt slice {} is absent from the canonical plan",
+                    receipt.slice_id
+                ),
+                "Select a slice from the current plan and rerun exact verification.",
+            )],
+        ));
+    };
+
+    let mut blockers = Vec::new();
+    let receipt_valid = if let Err(error) = validate_verification_receipt(
+        workspace,
+        index,
+        &canonical,
+        &receipt.slice_id,
+        receipt,
+        &current_revision,
+    ) {
+        blockers.push(completion_blocker(
+            "SYU-COMPLETION-RECEIPT",
+            format!("verification receipt is not a valid closure: {error}"),
+            "Rerun the exact verification command for this unchanged plan and slice.",
+        ));
+        false
+    } else {
+        true
+    };
+
+    let changed_files =
+        match changed_files_against_revision(&workspace.root, &canonical.basis.revision) {
+            Ok(files) => files,
+            Err(error) => {
+                blockers.push(completion_blocker(
+                "SYU-COMPLETION-DIFF",
+                format!("post-state diff could not be reconstructed: {error}"),
+                "Restore the plan basis revision or regenerate the plan before completing work.",
+            ));
+                vec![]
+            }
+        };
+    let post_state = validate(&ValidationContext {
+        config: &workspace.config,
+        workspace,
+        index,
+        changed_files: Some(&changed_files),
+        reported_changed_files: None,
+        work_plan: Some(&canonical),
+        selected_slice: Some(slice),
+        plan_mode: PlanValidationMode::PostState,
+        preset: workspace.config.validation.preset,
+        revision: Some(&current_revision),
+        change_base_revision: Some(&canonical.basis.revision),
+    });
+    for diagnostic in post_state
+        .diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.severity == syu_diagnostics::Severity::Error)
+    {
+        blockers.push(completion_blocker(
+            diagnostic.rule_id.clone(),
+            diagnostic.message.clone(),
+            next_action_for_rule(&diagnostic.rule_id),
+        ));
+    }
+    blockers.extend(readiness_regression_blockers(
+        workspace,
+        index,
+        &canonical,
+        &current_revision,
+    )?);
+
+    let mut checks = Vec::new();
+    for check in &slice.completion {
+        let (passed, evidence) = completion_check_result(check, workspace, index, &post_state);
+        if !passed {
+            blockers.push(completion_blocker(
+                "SYU-COMPLETION-CHECK",
+                format!("completion check is not satisfied: {check:?}"),
+                "Resolve the listed check, then rerun validation and exact verification.",
+            ));
+        }
+        checks.push(CompletionCheckEvidence {
+            check: check.clone(),
+            passed,
+            evidence,
+        });
+    }
+
+    let demonstrated = if receipt_valid {
+        acceptance_evidence(index, slice, receipt, &mut blockers)
+    } else {
+        vec![]
+    };
+    blockers.sort_by(|a, b| {
+        (&a.code, &a.message, &a.next_action).cmp(&(&b.code, &b.message, &b.next_action))
+    });
+    blockers.dedup();
+    checks.sort_by(|a, b| format!("{:?}", a.check).cmp(&format!("{:?}", b.check)));
+    let status = if blockers.is_empty() {
+        CompletionStatus::Complete
+    } else {
+        CompletionStatus::Blocked
+    };
+    Ok(CompletionReport {
+        schema: COMPLETION_REPORT_SCHEMA.into(),
+        plan_digest: canonical.canonical_digest,
+        slice_id: receipt.slice_id.clone(),
+        status,
+        demonstrated,
+        checks,
+        blockers,
+    })
+}
+
+fn completion_blocker(
+    code: impl Into<String>,
+    message: impl Into<String>,
+    next_action: impl Into<String>,
+) -> CompletionBlocker {
+    CompletionBlocker {
+        code: code.into(),
+        message: message.into(),
+        next_action: next_action.into(),
+    }
+}
+
+fn next_action_for_rule(rule: &str) -> &'static str {
+    match rule {
+        "SYU-WORK-005" => "Revert readonly or run-only changes, then rerun completion.",
+        "SYU-WORK-006" => "Revert out-of-scope changes or create a new explicitly approved plan.",
+        "SYU-WORK-009" => "Regenerate the plan and rerun exact verification.",
+        "SYU-WORK-011" => {
+            "Complete the expected target lifecycle transition, then rerun validation."
+        }
+        "SYU-READINESS-001" => "Restore the readiness baseline before completing the slice.",
+        _ => "Resolve the validation diagnostic, then rerun validation and exact verification.",
+    }
+}
+
+fn completion_check_result(
+    check: &CompletionCheck,
+    workspace: &SpecWorkspace,
+    index: &SpecIndex,
+    post_state: &ValidationResult,
+) -> (bool, Vec<String>) {
+    match check {
+        CompletionCheck::TargetExists { target } => {
+            let exists = index
+                .target(target)
+                .and_then(|declared| resolve_target_in_workspace(workspace, declared).ok())
+                .is_some();
+            (exists, vec![format!("target {target} exists: {exists}")])
+        }
+        CompletionCheck::TargetAbsent { target } => {
+            let absent = index
+                .target(target)
+                .and_then(|declared| resolve_target_in_workspace(workspace, declared).ok())
+                .is_none();
+            (absent, vec![format!("target {target} absent: {absent}")])
+        }
+        CompletionCheck::DiffWithinScope => {
+            let passed = !post_state.diagnostics.iter().any(|diagnostic| {
+                diagnostic.severity == syu_diagnostics::Severity::Error
+                    && matches!(diagnostic.rule_id.as_str(), "SYU-WORK-005" | "SYU-WORK-006")
+            });
+            (passed, vec![format!("scope diagnostics clear: {passed}")])
+        }
+        CompletionCheck::Validate { preset } => {
+            let passed = post_state.is_valid();
+            (
+                passed,
+                vec![format!("validation preset {preset} passed: {passed}")],
+            )
+        }
+        CompletionCheck::ContractConsistent { contract } => {
+            let passed = !post_state.diagnostics.iter().any(|diagnostic| {
+                diagnostic.severity == syu_diagnostics::Severity::Error
+                    && diagnostic.rule_id.starts_with("SYU-CONTRACT")
+                    && diagnostic.anchor.as_ref() == Some(contract)
+            });
+            (
+                passed,
+                vec![format!("contract {contract} consistent: {passed}")],
+            )
+        }
+        CompletionCheck::Command { .. } | CompletionCheck::RuleSet { .. } => (
+            false,
+            vec!["this completion check has no canonical execution adapter".into()],
+        ),
+    }
+}
+
+fn acceptance_evidence(
+    index: &SpecIndex,
+    slice: &ExecutionSlice,
+    receipt: &VerificationReceipt,
+    blockers: &mut Vec<CompletionBlocker>,
+) -> Vec<CompletionCriterionEvidence> {
+    let executed = receipt
+        .executions
+        .iter()
+        .map(|execution| execution.target.clone())
+        .collect::<BTreeSet<_>>();
+    let mut demonstrated = Vec::new();
+    for acceptance in &slice.acceptance {
+        let verification_targets = slice
+            .verification_targets
+            .iter()
+            .filter(|planned| {
+                executed.contains(&planned.reference)
+                    && index.target(&planned.reference).is_some_and(|target| {
+                        target.claims.iter().any(|claim| {
+                            matches!(claim, TargetClaim::Verifies { criterion, .. } if criterion == &acceptance.anchor)
+                        })
+                    })
+            })
+            .map(|planned| planned.reference.clone())
+            .collect::<Vec<_>>();
+        if verification_targets.is_empty() {
+            blockers.push(completion_blocker(
+                "SYU-COMPLETION-CRITERION",
+                format!(
+                    "acceptance criterion {} has no exact verification evidence",
+                    acceptance.anchor
+                ),
+                "Add or select the required verification target, then rerun exact verification.",
+            ));
+        } else {
+            demonstrated.push(CompletionCriterionEvidence {
+                anchor: acceptance.anchor.clone(),
+                statement: acceptance.statement.clone(),
+                verification_targets,
+            });
+        }
+    }
+    demonstrated
+}
+
+fn readiness_regression_blockers(
+    workspace: &SpecWorkspace,
+    index: &SpecIndex,
+    plan: &WorkPlan,
+    current_revision: &str,
+) -> Result<Vec<CompletionBlocker>> {
+    let Some(basis) = load_workspace_at_revision(&workspace.root, &plan.basis.revision) else {
+        if plan.basis.workspace_fingerprint == workspace.try_fingerprint()? {
+            return Ok(vec![]);
+        }
+        return Ok(vec![completion_blocker(
+            "SYU-READINESS-002",
+            "the plan readiness baseline cannot be reconstructed",
+            "Restore the plan basis revision or regenerate the plan before completing work.",
+        )]);
+    };
+    let before = evaluate_readiness(&basis.workspace, &basis.index, &plan.basis.revision, false)?;
+    let after = evaluate_readiness(workspace, index, current_revision, false)?;
+    let axes = [
+        ("inventory", &before.inventory, &after.inventory),
+        ("ownership", &before.ownership, &after.ownership),
+        ("seedability", &before.seedability, &after.seedability),
+        ("workability", &before.workability, &after.workability),
+        ("verification", &before.verification, &after.verification),
+    ];
+    let mut blockers = Vec::new();
+    for (name, before_axis, after_axis) in axes {
+        let before_ready = before_axis
+            .subjects
+            .iter()
+            .filter(|subject| subject.ready && subject.blockers.is_empty())
+            .map(|subject| subject.id.clone())
+            .collect::<BTreeSet<_>>();
+        let after_ready = after_axis
+            .subjects
+            .iter()
+            .filter(|subject| subject.ready && subject.blockers.is_empty())
+            .map(|subject| subject.id.clone())
+            .collect::<BTreeSet<_>>();
+        let regressed = before_ready
+            .difference(&after_ready)
+            .cloned()
+            .collect::<Vec<_>>();
+        if !regressed.is_empty() {
+            blockers.push(completion_blocker(
+                "SYU-READINESS-002",
+                format!("readiness axis {name} regressed for {}", regressed.join(", ")),
+                "Restore the regressed ownership, trace, or verification evidence before completing the slice.",
+            ));
+        }
+    }
+    Ok(blockers)
 }
 
 fn ensure_exact_test_executed(
@@ -897,9 +1255,9 @@ fn ensure_exact_test_executed(
     target: &syu_spec_model::ArtifactTarget,
     claim_arguments: &BTreeMap<String, String>,
     stdout: &[u8],
-) -> Result<()> {
+) -> Result<ExactTestEvidence> {
     if executable != "cargo" {
-        return Ok(());
+        bail!("cannot prove exact test execution for runner {executable}");
     }
     let Some(Selector::Symbol { name }) = Some(&target.selector) else {
         bail!("cargo verification targets must use an exact symbol selector");
@@ -912,13 +1270,17 @@ fn ensure_exact_test_executed(
     }
     let output = String::from_utf8_lossy(stdout);
     let marker = format!("test {test_identity} ");
-    if !output
+    let matched_count = output
         .lines()
-        .any(|line| line.trim_start().starts_with(&marker))
-    {
+        .filter(|line| line.trim_start().starts_with(&marker))
+        .count();
+    if matched_count == 0 {
         bail!("configured verification command ran zero exact tests for {name}");
     }
-    Ok(())
+    Ok(ExactTestEvidence {
+        identity: test_identity.clone(),
+        matched_count,
+    })
 }
 
 fn expand_runner_argument(template: &str, values: &BTreeMap<String, String>) -> String {
@@ -1537,6 +1899,20 @@ fn load_workspace_at_revision(root: &Path, revision: &str) -> Option<BaselineWor
         workspace,
         index,
     })
+}
+
+fn repository_revision(root: &Path) -> Result<String> {
+    let (repo_root, _) = git_workspace_context(root).map_err(anyhow::Error::msg)?;
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_root)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .context("resolve repository HEAD")?;
+    if !output.status.success() {
+        bail!("git rev-parse HEAD failed");
+    }
+    Ok(String::from_utf8(output.stdout)?.trim().into())
 }
 
 fn git_show(root: &Path, revision: &str, relative: &Path) -> Result<String, String> {
@@ -2979,6 +3355,26 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                 ),
             }
         }
+        if allow_post_state && let Some(changed_files) = ctx.changed_files {
+            for target in slice
+                .editable_targets
+                .iter()
+                .filter(|target| target.transition == syu_work_model::TargetTransition::Modify)
+            {
+                if !planned_target_changed(ctx, target, changed_files) {
+                    push(
+                        out,
+                        "SYU-WORK-011",
+                        format!(
+                            "expected modified target is unchanged: {}",
+                            target.reference
+                        ),
+                        &target.resolved_path,
+                        Some(target.reference.binding.clone()),
+                    );
+                }
+            }
+        }
         for completion in &slice.completion {
             match completion {
                 syu_work_model::CompletionCheck::TargetExists { target } => {
@@ -3191,6 +3587,22 @@ fn target_matches_changed_file_path(
             .as_ref()
             .and_then(|path| target_line_range(ctx, target, TargetRangeSide::New, path))
             .is_some()
+}
+
+fn planned_target_changed(
+    ctx: &ValidationContext<'_>,
+    target: &syu_work_model::PlannedTarget,
+    changed_files: &[ChangedFile],
+) -> bool {
+    changed_files.iter().any(|file| {
+        if file.hunks.is_empty() {
+            target_matches_changed_file_path(ctx, target, file)
+        } else {
+            file.hunks
+                .iter()
+                .any(|hunk| target_overlaps_change(ctx, target, file, hunk))
+        }
+    })
 }
 
 fn editable_target_matches_hunkless_change(
@@ -4030,5 +4442,139 @@ requirements:
             None,
             &changed,
         ));
+    }
+
+    #[test]
+    fn exact_test_execution_requires_match() {
+        let target = syu_spec_model::ArtifactTarget {
+            id: "exact-test".into(),
+            adapter: "rust".into(),
+            path: RepoPath::new("src/lib.rs").unwrap(),
+            selector: syu_spec_model::ExactSelector::Symbol {
+                name: "exact_test_execution_requires_match".into(),
+            },
+            claims: vec![],
+        };
+        let arguments = BTreeMap::from([(
+            "test".to_string(),
+            "tests::exact_test_execution_requires_match".to_string(),
+        )]);
+        let proof = ensure_exact_test_executed(
+            "cargo",
+            &target,
+            &arguments,
+            b"test tests::exact_test_execution_requires_match ... ok\n",
+        )
+        .expect("exact test marker");
+        assert_eq!(proof.identity, "tests::exact_test_execution_requires_match");
+        assert_eq!(proof.matched_count, 1);
+        assert!(ensure_exact_test_executed(
+            "cargo",
+            &target,
+            &arguments,
+            b"test tests::other ... ok\n",
+        )
+        .is_err());
+        assert!(ensure_exact_test_executed("python", &target, &arguments, b"ok").is_err());
+    }
+
+    #[test]
+    fn completion_report_explains_missing_receipt_execution() {
+        let tempdir = tempdir().expect("tempdir");
+        copy_dir(&workbench_fixture_root(), tempdir.path());
+        let revision = init_git_repo(tempdir.path());
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let plan = fixture_execution_plan(tempdir.path(), &revision);
+        let slice = plan
+            .slices
+            .iter()
+            .find(|slice| !slice.verification_targets.is_empty())
+            .expect("verification slice");
+        let receipt = VerificationReceipt {
+            schema: VERIFICATION_RECEIPT_SCHEMA.into(),
+            plan_digest: plan.canonical_digest.clone(),
+            slice_id: slice.id.clone(),
+            revision,
+            workspace_fingerprint: workspace.try_fingerprint().expect("fingerprint"),
+            started_at: "0".into(),
+            completed_at: "1".into(),
+            executions: vec![],
+        };
+        let report = evaluate_completion(&workspace, &index, &plan, &receipt).expect("report");
+        assert_eq!(report.status, CompletionStatus::Blocked);
+        assert!(
+            report
+                .blockers
+                .iter()
+                .any(|blocker| blocker.code == "SYU-COMPLETION-RECEIPT")
+        );
+        assert!(
+            report
+                .blockers
+                .iter()
+                .any(|blocker| blocker.next_action.contains("Rerun"))
+        );
+    }
+
+    #[test]
+    fn completion_report_rejects_unchanged_modify_target() {
+        let tempdir = tempdir().expect("tempdir");
+        copy_dir(&workbench_fixture_root(), tempdir.path());
+        let revision = init_git_repo(tempdir.path());
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let plan = fixture_execution_plan(tempdir.path(), &revision);
+        let slice = plan
+            .slices
+            .iter()
+            .find(|slice| !slice.verification_targets.is_empty())
+            .expect("verification slice");
+        let receipt = execute_verification(&workspace, &index, &plan, &slice.id, &revision)
+            .expect("exact verification");
+        let report = evaluate_completion(&workspace, &index, &plan, &receipt).expect("report");
+        assert_eq!(report.status, CompletionStatus::Blocked);
+        assert!(report.blockers.iter().any(|blocker| {
+            blocker.code == "SYU-WORK-011" && blocker.message.contains("unchanged")
+        }));
+    }
+
+    #[test]
+    fn completion_report_closes_verified_slice() {
+        let tempdir = tempdir().expect("tempdir");
+        copy_dir(&workbench_fixture_root(), tempdir.path());
+        let revision = init_git_repo(tempdir.path());
+        let plan = fixture_execution_plan(tempdir.path(), &revision);
+        let slice = plan
+            .slices
+            .iter()
+            .find(|slice| !slice.verification_targets.is_empty())
+            .expect("verification slice");
+        fs::write(
+            tempdir.path().join("src/lib.rs"),
+            "pub fn behavior() -> bool {\n    true && (1 == 1)\n}\n",
+        )
+        .expect("post-state edit");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let receipt = execute_verification(&workspace, &index, &plan, &slice.id, &revision)
+            .expect("exact verification");
+        let report = evaluate_completion(&workspace, &index, &plan, &receipt).expect("report");
+        assert_eq!(report.status, CompletionStatus::Complete, "{report:?}");
+        assert_eq!(report.demonstrated.len(), 1);
+        assert!(report.checks.iter().all(|check| check.passed));
+        assert!(report.checks.iter().any(|check| {
+            matches!(
+                &check.check,
+                CompletionCheck::Validate { preset } if preset == "standard"
+            )
+        }));
+
+        let mut invalid_receipt = receipt;
+        invalid_receipt.executions[0].proof.matched_count = 0;
+        let invalid_report =
+            evaluate_completion(&workspace, &index, &plan, &invalid_receipt).expect("report");
+        assert_eq!(invalid_report.status, CompletionStatus::Blocked);
+        assert!(invalid_report.demonstrated.is_empty());
     }
 }
