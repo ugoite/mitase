@@ -427,6 +427,8 @@
   "items.preview.anchors": "Anchors",
   "items.preview.targets": "Targets",
   "items.preview.tests": "Tests",
+  "items.preview.ownership": "Ownership",
+  "items.preview.stale": "The form changed after preview; preview the current values again.",
   "items.advanced.preserved": "Advanced links stay unchanged unless edited.",
   "items.field.document": "Area",
   "items.field.id": "ID",

@@ -415,6 +415,7 @@ pub struct EditPreview {
 pub struct SpecificationImpact {
     pub affected_items: Vec<String>,
     pub changed_anchors: Vec<String>,
+    pub affected_ownership: Vec<String>,
     pub implementation_targets: Vec<String>,
     pub verification_targets: Vec<String>,
     pub readiness_before: ReadinessImpact,
@@ -939,13 +940,16 @@ fn specification_impact(
         .filter_map(|anchor| anchor.split('#').next())
         .map(str::to_string)
         .collect::<BTreeSet<_>>();
+    if let Some(EditPatch::Specification { item_id, .. }) = patch {
+        affected_items.insert(item_id.clone());
+    }
     if let Some(EditPatch::CreateRequirement { id, .. } | EditPatch::CreateFeature { id, .. }) =
         patch
     {
         affected_items.insert(id.to_string());
     }
-    let mut implementation_targets = BTreeSet::new();
-    let mut verification_targets = BTreeSet::new();
+    let mut implementation_targets: BTreeSet<BoundTargetRef> = BTreeSet::new();
+    let mut verification_targets: BTreeSet<BoundTargetRef> = BTreeSet::new();
     for anchor_text in &changed_anchors {
         if let Ok(anchor) = anchor_text.parse::<SpecAnchor>() {
             for target in candidate_index
@@ -954,7 +958,7 @@ fn specification_impact(
                 .into_iter()
                 .flatten()
             {
-                implementation_targets.insert(target.to_string());
+                implementation_targets.insert(target.clone());
             }
             for target in candidate_index
                 .criteria_to_verification_targets
@@ -962,10 +966,16 @@ fn specification_impact(
                 .into_iter()
                 .flatten()
             {
-                verification_targets.insert(target.to_string());
+                verification_targets.insert(target.clone());
             }
         }
     }
+    let affected_targets = implementation_targets
+        .iter()
+        .chain(verification_targets.iter())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let affected_ownership = ownership_for_targets(&candidate_index, &affected_targets);
     let revision = current_revision(&base.root)?;
     let before = syu_validation::evaluate_readiness(base, &base_index, &revision, false)?;
     let after = syu_validation::evaluate_readiness(candidate, &candidate_index, &revision, false)?;
@@ -973,8 +983,15 @@ fn specification_impact(
     Ok(SpecificationImpact {
         affected_items: affected_items.into_iter().collect(),
         changed_anchors,
-        implementation_targets: implementation_targets.into_iter().collect(),
-        verification_targets: verification_targets.into_iter().collect(),
+        affected_ownership,
+        implementation_targets: implementation_targets
+            .into_iter()
+            .map(|target| target.to_string())
+            .collect(),
+        verification_targets: verification_targets
+            .into_iter()
+            .map(|target| target.to_string())
+            .collect(),
         readiness_before: readiness_impact(&before),
         readiness_after: readiness_impact(&after),
         work: WorkImpact {
@@ -989,6 +1006,22 @@ fn specification_impact(
             },
         },
     })
+}
+
+fn ownership_for_targets(
+    index: &syu_workspace::SpecIndex,
+    targets: &BTreeSet<syu_spec_model::BoundTargetRef>,
+) -> Vec<String> {
+    let mut ownership = BTreeSet::new();
+    for target in targets {
+        let Some(artifact) = index.target_to_artifact.get(target) else {
+            continue;
+        };
+        for owner in index.artifact_owners.get(artifact).into_iter().flatten() {
+            ownership.insert(format!("{}#{}", owner.binding, owner.scope_id));
+        }
+    }
+    ownership.into_iter().collect()
 }
 
 fn readiness_impact(report: &syu_validation::ReadinessReport) -> ReadinessImpact {
@@ -1019,20 +1052,7 @@ fn changed_specification_anchors(
             anchors.insert(anchor.clone());
         }
         Some(EditPatch::Specification { item_id, .. }) => {
-            if let Some(item) = index
-                .item_anchors
-                .keys()
-                .find(|item| item.to_string() == *item_id)
-            {
-                anchors.extend(
-                    index
-                        .item_anchors
-                        .get(item)
-                        .into_iter()
-                        .flatten()
-                        .map(ToString::to_string),
-                );
-            }
+            let _ = (index, item_id);
         }
         Some(EditPatch::CreateRequirement { id, .. })
         | Some(EditPatch::CreateFeature { id, .. }) => {
@@ -2160,6 +2180,13 @@ pub struct ScopeView {
 #[derive(Debug, Clone, Serialize)]
 pub struct SpecificationCatalogView {
     pub specifications: Vec<ItemSummary>,
+    pub documents: Vec<SpecificationDocumentView>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SpecificationDocumentView {
+    pub kind: String,
+    pub path: String,
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct DiagnosticsView {
@@ -2678,7 +2705,28 @@ pub fn project(
         },
         readiness,
         scope: ScopeView::default(),
-        specifications: SpecificationCatalogView { specifications },
+        specifications: SpecificationCatalogView {
+            specifications,
+            documents: workspace
+                .documents
+                .iter()
+                .map(|document| SpecificationDocumentView {
+                    kind: match &document.document {
+                        syu_spec_model::SpecDocument::Philosophies { .. } => "philosophy",
+                        syu_spec_model::SpecDocument::Policies { .. } => "policy",
+                        syu_spec_model::SpecDocument::Requirements { .. } => "requirement",
+                        syu_spec_model::SpecDocument::Features { .. } => "feature",
+                    }
+                    .into(),
+                    path: document
+                        .path
+                        .strip_prefix(&workspace.root)
+                        .unwrap_or(&document.path)
+                        .to_string_lossy()
+                        .into_owned(),
+                })
+                .collect(),
+        },
         diagnostics: DiagnosticsView { validation },
     })
 }
@@ -3610,6 +3658,35 @@ mod tests {
         );
 
         let (basis, csrf, _) = projection_and_basis(&app).await;
+        let item_update = StructuredEditCommand {
+            basis: basis.clone(),
+            patch: EditPatch::Specification {
+                item_id: "REQ-FIXTURE-001".into(),
+                fields: SpecificationPatchFields::Requirement {
+                    title: Some("Renamed fixture requirement".into()),
+                    description: None,
+                    priority: None,
+                    status: None,
+                },
+            },
+            preview_token: None,
+        };
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/specifications/candidates/preview",
+            &csrf,
+            &item_update,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let item_preview: EditPreview =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("item preview");
+        let impact = item_preview.impact.expect("item impact");
+        assert!(impact.changed_anchors.is_empty());
+        assert_eq!(impact.affected_items, vec!["REQ-FIXTURE-001"]);
+
         let update = StructuredEditCommand {
             basis: basis.clone(),
             patch: EditPatch::Anchor {

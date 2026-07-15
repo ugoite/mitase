@@ -427,6 +427,8 @@
   "items.preview.anchors": "アンカー",
   "items.preview.targets": "対象",
   "items.preview.tests": "テスト",
+  "items.preview.ownership": "所有権",
+  "items.preview.stale": "プレビュー後にフォームが変更されました。現在の値を再度プレビューしてください。",
   "items.advanced.preserved": "編集しない高度なリンクはそのまま保持されます。",
   "items.field.document": "領域",
   "items.field.id": "ID",
