@@ -22,5 +22,19 @@ requirements:
           - id: anchor-test
             adapter: rust
             path: crates/syu-spec-model/src/lib.rs
-            selector: { kind: symbol, names: [anchors_roundtrip, target_refs_do_not_use_array_positions] }
-        verifies: [REQ-WORK-001#criterion.exact-slice]
+            selector: { kind: symbol, name: anchors_roundtrip }
+            claims:
+              - kind: verifies
+                criterion: REQ-WORK-001#criterion.exact-slice
+                covers: [FEAT-PLANNER-001#binding.implementation/target.canonical-plan]
+                runner: { runner: cargo-test, arguments: { package: syu-spec-model, test: tests::anchors_roundtrip } }
+  - id: REQ-PUBLIC-001
+    title: Public entrypoint traceability
+    description: Every discovered public entrypoint has an exact target and bounded canonical work plan.
+    priority: low
+    status: planned
+    criteria:
+      - id: entrypoint
+        kind: quality
+        statement: A public entrypoint resolves through an exact target to a canonical plan.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]

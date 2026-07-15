@@ -14,9 +14,9 @@ page with [workbench](./workbench.md).
 | Task | Command | Choose it when |
 | --- | --- | --- |
 | Confirm the installed binary | `syu --version` | verify the binary on your `PATH` before touching a workspace |
-| Validate the current workspace | `syu validate .` | run the canonical v1 graph and work-plan validation pass |
-| Validate a changed range | `syu validate . --range origin/main...HEAD` | check changed-file ownership and impact against a git range |
-| Validate one work plan | `syu validate . --plan plan.yaml` | re-check a saved work plan against the current workspace |
+| Validate the current workspace | `syu validate workspace .` | run the canonical v1 graph and work-plan validation pass |
+| Validate a changed range | `syu validate change . --range origin/main...HEAD` | check changed-file ownership and impact against a git range |
+| Validate one work plan | `syu validate plan . --plan plan.yaml` | re-check a saved work plan against the current workspace |
 | Plan executable work | `syu work plan --request work.yaml --out plan.yaml --workspace .` | turn a v1 work request into canonical execution slices |
 | Inspect a saved work plan | `syu work show --plan plan.yaml` | read the exact YAML plan that the planner produced |
 | Export one slice context pack | `syu work export-context --plan plan.yaml --slice <slice-id> --workspace .` | materialize one validated slice into a portable context pack |
@@ -29,7 +29,7 @@ page with [workbench](./workbench.md).
 ### Validate the repository state
 
 ```bash
-syu validate .
+syu validate workspace .
 ```
 
 ### Validate a proposed work plan
@@ -37,7 +37,7 @@ syu validate .
 ```bash
 syu work plan --request work.yaml --out plan.yaml --workspace .
 syu work show --plan plan.yaml
-syu validate . --plan plan.yaml
+syu validate plan . --plan plan.yaml
 ```
 
 ### Export one execution slice

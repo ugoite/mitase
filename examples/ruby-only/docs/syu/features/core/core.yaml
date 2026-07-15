@@ -14,9 +14,11 @@ features:
     responsibility: Implement the owned behavior for this example workspace.
     targets:
     - id: target-1
-      adapter: ruby
+      adapter: shell
       path: lib/order_summary.rb
       selector:
-        kind: file
-    satisfies:
-    - REQ-RUBYONLY-001#criterion.owned-delivery
+        kind: marker
+        value: "class OrderSummary"
+      claims:
+      - kind: satisfies
+        criterion: REQ-RUBYONLY-001#criterion.owned-delivery

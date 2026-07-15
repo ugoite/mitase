@@ -14,19 +14,23 @@ features:
     responsibility: Implement the owned behavior for this example workspace.
     targets:
     - id: target-1
-      adapter: typescript
+      adapter: shell
       path: frontend/feature.ts
       selector:
-        kind: file
+        kind: marker
+        value: "export function typescriptFeature() {"
+      claims:
+      - kind: satisfies
+        criterion: REQ-POLYGLOT-001#criterion.owned-delivery
     - id: target-2
-      adapter: python
+      adapter: shell
       path: python/app.py
       selector:
-        kind: file
+        kind: marker
+        value: "def python_feature_impl():"
     - id: target-3
-      adapter: rust
+      adapter: shell
       path: src/trace.rs
       selector:
-        kind: file
-    satisfies:
-    - REQ-POLYGLOT-001#criterion.owned-delivery
+        kind: marker
+        value: "pub fn mixed_rust_requirement() {}"

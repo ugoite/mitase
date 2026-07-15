@@ -15,24 +15,29 @@ features:
     responsibility: Implement the owned behavior for this example workspace.
     targets:
     - id: target-1
-      adapter: rust
+      adapter: shell
       path: src/auth/login.rs
       selector:
-        kind: file
+        kind: marker
+        value: "pub fn legacy_login_flow() {}"
+      claims:
+      - kind: satisfies
+        criterion: REQ-TEAMSCALE-001#criterion.owned-delivery
     - id: target-2
-      adapter: rust
+      adapter: shell
       path: src/auth/session.rs
       selector:
-        kind: file
+        kind: marker
+        value: "pub fn session_rollout_guard() {}"
     - id: target-3
-      adapter: rust
+      adapter: shell
       path: src/operations/audit.rs
       selector:
-        kind: file
+        kind: marker
+        value: "pub fn emit_audit_event() {}"
     - id: target-4
-      adapter: rust
+      adapter: shell
       path: src/operations/reporting.rs
       selector:
-        kind: file
-    satisfies:
-    - REQ-TEAMSCALE-001#criterion.owned-delivery
+        kind: marker
+        value: "pub fn export_review_report() {}"

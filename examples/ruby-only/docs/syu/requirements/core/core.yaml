@@ -21,9 +21,15 @@ requirements:
     responsibility: Verify the owned example behavior through checked-in evidence.
     targets:
     - id: target-1
-      adapter: ruby
+      adapter: shell
       path: test/order_summary_test.rb
       selector:
-        kind: file
-    verifies:
-    - REQ-RUBYONLY-001#criterion.owned-delivery
+        kind: marker
+        value: "class OrderSummaryTest < Minitest::Test"
+      claims:
+      - kind: verifies
+        criterion: REQ-RUBYONLY-001#criterion.owned-delivery
+        covers:
+        - FEAT-RUBYONLY-001#binding.implementation/target.target-1
+        runner:
+          runner: cargo-test

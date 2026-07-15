@@ -21,9 +21,15 @@ requirements:
     responsibility: Verify the owned example behavior through checked-in evidence.
     targets:
     - id: target-1
-      adapter: rust
+      adapter: shell
       path: src/trace.rs
       selector:
-        kind: file
-    verifies:
-    - REQ-RUSTONLY-001#criterion.owned-delivery
+        kind: marker
+        value: "pub fn rust_requirement_test() {}"
+      claims:
+      - kind: verifies
+        criterion: REQ-RUSTONLY-001#criterion.owned-delivery
+        covers:
+        - FEAT-RUSTONLY-001#binding.implementation/target.target-1
+        runner:
+          runner: cargo-test
