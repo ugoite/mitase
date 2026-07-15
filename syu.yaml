@@ -49,6 +49,7 @@ inventory:
             - crates/syu-app-ui/assets/js/pages/work.js
             - crates/syu-app-ui/assets/js/router.js
             - crates/syu-app-ui/assets/js/state.js
+            - crates/syu-app-ui/assets/workbench.css
             - crates/syu-app-ui/assets/locales/en.json
             - crates/syu-app-ui/assets/locales/ja.json
             - crates/syu-app-ui/assets/workbench.html
@@ -89,6 +90,7 @@ inventory:
             - docs/guide/migration.md
             - docs/guide/spec-antipatterns.md
             - docs/guide/vscode-extension.md
+            - docs/guide/workbench.md
             - docs/syu/capabilities.yaml
             - docs/syu/delivery.yaml
             - docs/syu/foundation.yaml
