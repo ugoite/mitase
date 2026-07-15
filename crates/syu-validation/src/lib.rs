@@ -968,7 +968,7 @@ pub fn evaluate_completion(
     };
 
     let mut blockers = Vec::new();
-    if let Err(error) = validate_verification_receipt(
+    let receipt_valid = if let Err(error) = validate_verification_receipt(
         workspace,
         index,
         &canonical,
@@ -981,7 +981,10 @@ pub fn evaluate_completion(
             format!("verification receipt is not a valid closure: {error}"),
             "Rerun the exact verification command for this unchanged plan and slice.",
         ));
-    }
+        false
+    } else {
+        true
+    };
 
     let changed_files =
         match changed_files_against_revision(&workspace.root, &canonical.basis.revision) {
@@ -1043,7 +1046,11 @@ pub fn evaluate_completion(
         });
     }
 
-    let demonstrated = acceptance_evidence(index, slice, receipt, &mut blockers);
+    let demonstrated = if receipt_valid {
+        acceptance_evidence(index, slice, receipt, &mut blockers)
+    } else {
+        vec![]
+    };
     blockers.sort_by(|a, b| {
         (&a.code, &a.message, &a.next_action).cmp(&(&b.code, &b.message, &b.next_action))
     });
@@ -1082,7 +1089,9 @@ fn next_action_for_rule(rule: &str) -> &'static str {
         "SYU-WORK-005" => "Revert readonly or run-only changes, then rerun completion.",
         "SYU-WORK-006" => "Revert out-of-scope changes or create a new explicitly approved plan.",
         "SYU-WORK-009" => "Regenerate the plan and rerun exact verification.",
-        "SYU-WORK-011" => "Complete the expected add/remove transition, then rerun validation.",
+        "SYU-WORK-011" => {
+            "Complete the expected target lifecycle transition, then rerun validation."
+        }
         "SYU-READINESS-001" => "Restore the readiness baseline before completing the slice.",
         _ => "Resolve the validation diagnostic, then rerun validation and exact verification.",
     }
@@ -3346,6 +3355,26 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                 ),
             }
         }
+        if allow_post_state && let Some(changed_files) = ctx.changed_files {
+            for target in slice
+                .editable_targets
+                .iter()
+                .filter(|target| target.transition == syu_work_model::TargetTransition::Modify)
+            {
+                if !planned_target_changed(ctx, target, changed_files) {
+                    push(
+                        out,
+                        "SYU-WORK-011",
+                        format!(
+                            "expected modified target is unchanged: {}",
+                            target.reference
+                        ),
+                        &target.resolved_path,
+                        Some(target.reference.binding.clone()),
+                    );
+                }
+            }
+        }
         for completion in &slice.completion {
             match completion {
                 syu_work_model::CompletionCheck::TargetExists { target } => {
@@ -3558,6 +3587,22 @@ fn target_matches_changed_file_path(
             .as_ref()
             .and_then(|path| target_line_range(ctx, target, TargetRangeSide::New, path))
             .is_some()
+}
+
+fn planned_target_changed(
+    ctx: &ValidationContext<'_>,
+    target: &syu_work_model::PlannedTarget,
+    changed_files: &[ChangedFile],
+) -> bool {
+    changed_files.iter().any(|file| {
+        if file.hunks.is_empty() {
+            target_matches_changed_file_path(ctx, target, file)
+        } else {
+            file.hunks
+                .iter()
+                .any(|hunk| target_overlaps_change(ctx, target, file, hunk))
+        }
+    })
 }
 
 fn editable_target_matches_hunkless_change(
@@ -4473,6 +4518,28 @@ requirements:
     }
 
     #[test]
+    fn completion_report_rejects_unchanged_modify_target() {
+        let tempdir = tempdir().expect("tempdir");
+        copy_dir(&workbench_fixture_root(), tempdir.path());
+        let revision = init_git_repo(tempdir.path());
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let plan = fixture_execution_plan(tempdir.path(), &revision);
+        let slice = plan
+            .slices
+            .iter()
+            .find(|slice| !slice.verification_targets.is_empty())
+            .expect("verification slice");
+        let receipt = execute_verification(&workspace, &index, &plan, &slice.id, &revision)
+            .expect("exact verification");
+        let report = evaluate_completion(&workspace, &index, &plan, &receipt).expect("report");
+        assert_eq!(report.status, CompletionStatus::Blocked);
+        assert!(report.blockers.iter().any(|blocker| {
+            blocker.code == "SYU-WORK-011" && blocker.message.contains("unchanged")
+        }));
+    }
+
+    #[test]
     fn completion_report_closes_verified_slice() {
         let tempdir = tempdir().expect("tempdir");
         copy_dir(&workbench_fixture_root(), tempdir.path());
@@ -4496,5 +4563,18 @@ requirements:
         assert_eq!(report.status, CompletionStatus::Complete, "{report:?}");
         assert_eq!(report.demonstrated.len(), 1);
         assert!(report.checks.iter().all(|check| check.passed));
+        assert!(report.checks.iter().any(|check| {
+            matches!(
+                &check.check,
+                CompletionCheck::Validate { preset } if preset == "standard"
+            )
+        }));
+
+        let mut invalid_receipt = receipt;
+        invalid_receipt.executions[0].proof.matched_count = 0;
+        let invalid_report =
+            evaluate_completion(&workspace, &index, &plan, &invalid_receipt).expect("report");
+        assert_eq!(invalid_report.status, CompletionStatus::Blocked);
+        assert!(invalid_report.demonstrated.is_empty());
     }
 }
