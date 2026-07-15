@@ -333,6 +333,27 @@ svg { display: block; stroke: currentColor; fill: none; stroke-width: 1.8; strok
 .card p { margin: 0; color: #4e5662; line-height: 1.6; font-size: 12px; }
 .path { font-family: "SFMono-Regular", Consolas, monospace; color: #252a31; overflow-wrap: anywhere; }
 .selector { font-family: "SFMono-Regular", Consolas, monospace; font-size: 11px; color: #666f7a; margin-top: 6px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.specification-summary { margin: 0 0 14px; color: var(--muted); line-height: 1.55; }
+.specification-group { margin-top: 12px; }
+.specification-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line-2); }
+.specification-row:first-of-type { border-top: 0; }
+.specification-row strong { font: 11px "SFMono-Regular", Consolas, monospace; overflow-wrap: anywhere; }
+.specification-row p { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.specification-editor { display: grid; gap: 12px; }
+.specification-editor .canvas-head { margin: 0; }
+.specification-editor .canvas-head h2 { font-size: 16px; }
+.spec-field { display: grid; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 650; }
+.spec-field .input, .spec-field .textarea, .spec-field .native-select { width: 100%; }
+.specification-kind-chooser { width: max-content; max-width: 100%; }
+.status-component { gap: 5px; border-color: var(--line); background: var(--soft); color: var(--ink); }
+.status-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.status-ready, .status-implemented { color: var(--green); }
+.status-blocked, .status-deprecated, .status-error { color: var(--red); }
+.status-planned, .status-warning { color: var(--orange); }
+.status-message { margin: 0; font-size: 12px; }
+.compact-list { padding-left: 18px; margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.specification-impact { background: var(--soft); }
+.empty-state { color: var(--muted); line-height: 1.5; }
 .big-stat { font-size: 22px; font-weight: 750; }
 .list { margin: 0; padding: 0; list-style: none; }
 .list li { font-size: 12px; line-height: 1.45; padding: 7px 0; border-top: 1px solid #edf0f2; display: flex; gap: 8px; }
@@ -482,6 +503,9 @@ svg { display: block; stroke: currentColor; fill: none; stroke-width: 1.8; strok
   .tab { padding-inline: 9px; font-size: 12px; }
   .workspace, .settings-layout { display: block; padding: 10px 14px 14px; }
   .rail { margin-bottom: 10px; max-height: 230px; }
+  .specification-row { grid-template-columns: 1fr; }
+  .specification-row .btn { width: 100%; min-height: 40px; }
+  .specification-editor .actions .btn { flex: 1; min-height: 42px; }
   .canvas-head { display: block; }
   .actions { margin-top: 12px; }
   .settings-menu { overflow-x: auto; }

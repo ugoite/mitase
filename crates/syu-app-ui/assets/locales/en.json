@@ -418,5 +418,19 @@
   "work.request.target_ref": "Target reference",
   "work.request.target_criterion": "Criterion",
   "work.request.target_transition": "Transition",
-  "work.request.seed_target_exclusive": "Use either seed anchors or requested targets, not both."
+  "work.request.seed_target_exclusive": "Use either seed anchors or requested targets, not both.",
+  "common.close": "Close",
+  "items.new.title": "New specification",
+  "items.preview.impact": "Impact",
+  "items.preview.before": "Before",
+  "items.preview.after": "After",
+  "items.preview.anchors": "Anchors",
+  "items.preview.targets": "Targets",
+  "items.preview.tests": "Tests",
+  "items.advanced.preserved": "Advanced links stay unchanged unless edited.",
+  "items.field.document": "Area",
+  "items.field.id": "ID",
+  "items.field.criterion_id": "Criterion ID",
+  "items.field.criterion_kind": "Criterion kind",
+  "items.field.criterion_statement": "Criterion statement"
 }

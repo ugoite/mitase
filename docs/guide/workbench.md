@@ -43,6 +43,11 @@ Interactive operations are backed by local server endpoints:
 - Item and config writes require a preview, strict schema validation, and a
   matching source hash. Apply rolls back when the resulting workspace cannot
   be indexed.
+- Specifications can be found through typed candidate search across items and
+  nested principles, rules, and criteria. The editor can update human-facing
+  fields or create a planned Requirement/Feature in an existing specification
+  document. Preview reports graph, ownership, readiness, target, test, and
+  active-work impact before the exact token and source hash permit apply.
 - Item and Work editors show human-facing fields first. Exact anchors,
   bindings, contracts, selectors, and planning budgets remain editable under
   collapsed advanced settings and are preserved even when left collapsed.
