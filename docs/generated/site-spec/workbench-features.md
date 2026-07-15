@@ -607,6 +607,11 @@ description: "Generated reference for docs/syu/workbench-features.yaml"
           - **path**: docs/guide/existing-repository.md
           - **selector**:
             - **kind**: file
+        - **id**: selfhost-docs-guide-workbench-md
+          - **adapter**: declared
+          - **path**: docs/guide/workbench.md
+          - **selector**:
+            - **kind**: file
         - **id**: selfhost-docs-guide-migration-md
           - **adapter**: declared
           - **path**: docs/guide/migration.md
@@ -1225,6 +1230,24 @@ description: "Generated reference for docs/syu/workbench-features.yaml"
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-004#criterion.transactional-config-edit
+        - **id**: specification-candidates
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: api_specification_candidates
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-007#criterion.guided-specification-selection
+        - **id**: specification-candidate-preview
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: api_specification_candidate_preview
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-007#criterion.guided-specification-selection
       - **owns**:
         - **id**: spec-model-module
           - **adapter**: rust
@@ -1298,6 +1321,14 @@ description: "Generated reference for docs/syu/workbench-features.yaml"
           - **selector**:
             - **kind**: marker
             - **value**: data-page="work"
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-006#criterion.accessible-navigation
+        - **id**: workbench-css
+          - **adapter**: declared
+          - **path**: crates/syu-app-ui/assets/workbench.css
+          - **selector**:
+            - **kind**: file
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-006#criterion.accessible-navigation
@@ -2215,6 +2246,11 @@ features:
       path: docs/guide/existing-repository.md
       selector:
         kind: file
+    - id: selfhost-docs-guide-workbench-md
+      adapter: declared
+      path: docs/guide/workbench.md
+      selector:
+        kind: file
     - id: selfhost-docs-guide-migration-md
       adapter: declared
       path: docs/guide/migration.md
@@ -2831,6 +2867,24 @@ features:
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-004#criterion.transactional-config-edit
+    - id: specification-candidates
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: api_specification_candidates
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-007#criterion.guided-specification-selection
+    - id: specification-candidate-preview
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: api_specification_candidate_preview
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-007#criterion.guided-specification-selection
     owns:
     - id: spec-model-module
       adapter: rust
@@ -2904,6 +2958,14 @@ features:
       selector:
         kind: marker
         value: data-page="work"
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-006#criterion.accessible-navigation
+    - id: workbench-css
+      adapter: declared
+      path: crates/syu-app-ui/assets/workbench.css
+      selector:
+        kind: file
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-006#criterion.accessible-navigation
