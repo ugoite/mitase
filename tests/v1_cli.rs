@@ -197,20 +197,13 @@ fn run_cli_post_state_flow(out_of_scope: bool) -> bool {
                 String::from_utf8_lossy(&output.stderr)
             )
         });
-    let result_is_valid = report["diagnostics"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|diagnostic| diagnostic["severity"] != "error");
+    let result_is_valid = report["status"] == "complete";
     if out_of_scope {
         assert!(
             !output.status.success(),
             "out-of-scope result unexpectedly passed"
         );
-        assert!(
-            !result_is_valid,
-            "out-of-scope result had no error diagnostics"
-        );
+        assert!(!report["blockers"].as_array().unwrap().is_empty());
     } else {
         assert!(
             output.status.success(),

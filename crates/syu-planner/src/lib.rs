@@ -4,6 +4,7 @@ use globset::{Glob, GlobSet, GlobSetBuilder};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use syu_diagnostics::Diagnostic;
+use syu_project_model::ValidationPreset;
 use syu_spec_model::{
     ArtifactBinding, BoundTargetRef, ItemStatus, LocalAnchorKind, RepoPath, Selector, SpecAnchor,
     TargetClaim,
@@ -1089,7 +1090,13 @@ fn finalize_requested_slice(
     anchors.dedup();
     contracts.sort();
     contracts.dedup();
-    let completion = completion_checks(request, &editable, &verification, &contracts);
+    let completion = completion_checks(
+        request,
+        &editable,
+        &verification,
+        &contracts,
+        workspace.config.validation.preset,
+    );
     let budget = slice_budget(&editable, &verification, &readonly);
     if editable.is_empty()
         && verification.is_empty()
@@ -1358,6 +1365,7 @@ fn completion_checks(
     editable: &[PlannedTarget],
     verification: &[PlannedTarget],
     contracts: &[SpecAnchor],
+    preset: ValidationPreset,
 ) -> Vec<CompletionCheck> {
     let mut checks = Vec::new();
     for target in editable.iter().chain(verification.iter()) {
@@ -1402,7 +1410,12 @@ fn completion_checks(
         checks.push(CompletionCheck::DiffWithinScope);
     }
     checks.push(CompletionCheck::Validate {
-        preset: "agent-ready".into(),
+        preset: match preset {
+            ValidationPreset::Standard => "standard",
+            ValidationPreset::Strict => "strict",
+            ValidationPreset::AgentReady => "agent-ready",
+        }
+        .into(),
     });
     checks.sort_by(|a, b| format!("{a:?}").cmp(&format!("{b:?}")));
     checks.dedup();
@@ -1517,7 +1530,13 @@ fn finalize_slice(
             "work-plan",
         ));
     }
-    let completion = completion_checks(request, &editable, &verification, &contracts);
+    let completion = completion_checks(
+        request,
+        &editable,
+        &verification,
+        &contracts,
+        workspace.config.validation.preset,
+    );
     Ok(ExecutionSlice {
         id: id.into(),
         goal,
@@ -2233,6 +2252,7 @@ fn rebuild_split_slice(
         &editable_targets,
         &verification_targets,
         &contracts,
+        workspace.config.validation.preset,
     );
     let budget = slice_budget(&editable_targets, &verification_targets, &readonly_context);
     let mut blockers = blockers;
