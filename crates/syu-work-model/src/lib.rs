@@ -8,7 +8,8 @@ use syu_spec_model::{
 
 pub const WORK_REQUEST_SCHEMA: &str = "syu/work-request/v1";
 pub const WORK_PLAN_SCHEMA: &str = "syu/work-plan/v1";
-pub const VERIFICATION_RECEIPT_SCHEMA: &str = "syu/verification-receipt/v1";
+pub const VERIFICATION_RECEIPT_SCHEMA: &str = "syu/verification-receipt/v2";
+pub const COMPLETION_REPORT_SCHEMA: &str = "syu/completion-report/v1";
 pub const CONTEXT_PACK_SCHEMA: &str = "syu/context-pack/v1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -408,8 +409,60 @@ pub struct VerificationExecution {
     pub exit_code: i32,
     pub stdout_digest: String,
     pub stderr_digest: String,
+    pub proof: ExactTestEvidence,
     pub implementation_digests: std::collections::BTreeMap<BoundTargetRef, String>,
     pub verification_digest: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExactTestEvidence {
+    pub identity: String,
+    pub matched_count: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CompletionStatus {
+    Complete,
+    Blocked,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CompletionCriterionEvidence {
+    pub anchor: SpecAnchor,
+    pub statement: String,
+    pub verification_targets: Vec<BoundTargetRef>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CompletionCheckEvidence {
+    pub check: CompletionCheck,
+    pub passed: bool,
+    #[serde(default)]
+    pub evidence: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CompletionBlocker {
+    pub code: String,
+    pub message: String,
+    pub next_action: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CompletionReport {
+    pub schema: String,
+    pub plan_digest: String,
+    pub slice_id: String,
+    pub status: CompletionStatus,
+    pub demonstrated: Vec<CompletionCriterionEvidence>,
+    pub checks: Vec<CompletionCheckEvidence>,
+    pub blockers: Vec<CompletionBlocker>,
 }
 
 /// Return a stable digest of the targets that are not editable by a work
