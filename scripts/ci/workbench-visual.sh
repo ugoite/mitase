@@ -21,7 +21,15 @@ if [[ -z "$chrome" ]]; then
 fi
 
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
+cleanup_tmp() {
+  local attempt
+  for ((attempt = 0; attempt < 5; attempt++)); do
+    rm -rf "$tmp" 2>/dev/null || true
+    [[ ! -e "$tmp" ]] && return 0
+    sleep 0.2
+  done
+}
+trap cleanup_tmp EXIT
 
 {
   printf 'window.SYU_I18N={en:'
@@ -180,7 +188,7 @@ cleanup_browser() {
   if [[ -n "$server_pid" ]]; then kill "$server_pid" 2>/dev/null || true; fi
   wait "$chrome_pid" 2>/dev/null || true
   wait "$server_pid" 2>/dev/null || true
-  rm -rf "$tmp"
+  cleanup_tmp
 }
 trap cleanup_browser EXIT
 
