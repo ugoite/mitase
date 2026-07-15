@@ -518,9 +518,9 @@ pub fn canonical_plan_for_execution(
         if canonical != *submitted {
             bail!("submitted plan does not match deterministic canonical planner output");
         }
-    } else if let Some(baseline) =
-        load_workspace_at_revision(&workspace.root, &submitted.basis.revision)
-    {
+    } else {
+        let baseline = load_workspace_at_revision(&workspace.root, &submitted.basis.revision)
+            .ok_or_else(|| anyhow::anyhow!("cannot reconstruct the work-plan basis workspace"))?;
         let mut canonical = canonical_plan(
             &submitted.request,
             &baseline.workspace,
@@ -3527,6 +3527,13 @@ mod tests {
             .expect("fixture root")
     }
 
+    fn workbench_fixture_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/v1/valid-workbench-flow")
+            .canonicalize()
+            .expect("Workbench fixture root")
+    }
+
     fn copy_dir(from: &Path, to: &Path) {
         fs::create_dir_all(to).expect("create dir");
         for entry in fs::read_dir(from).expect("read dir") {
@@ -3631,6 +3638,43 @@ mod tests {
         String::from_utf8(output.stdout).unwrap().trim().to_string()
     }
 
+    fn git_commit(root: &Path, message: &str) -> String {
+        for args in [vec!["add", "."], vec!["commit", "-qm", message]] {
+            let status = Command::new("git")
+                .args(args)
+                .current_dir(root)
+                .status()
+                .unwrap();
+            assert!(status.success(), "git commit step failed");
+        }
+        let output = Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(root)
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        String::from_utf8(output.stdout).unwrap().trim().to_string()
+    }
+
+    fn fixture_execution_plan(root: &Path, revision: &str) -> WorkPlan {
+        let workspace = SpecWorkspace::load(root).unwrap();
+        let index = workspace.index().unwrap();
+        let request = syu_work_model::WorkRequest {
+            schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-VALIDATION-BASIS".into(),
+            summary: "modify the fixture behavior".into(),
+            operation: syu_work_model::WorkOperation::Modify,
+            seeds: vec![syu_work_model::WorkSeed::Anchor(
+                "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
+            )],
+            constraints: Default::default(),
+            requested_targets: vec![],
+        };
+        let plan = syu_planner::plan(&request, &workspace, &index, revision).unwrap();
+        assert_eq!(plan.status, syu_work_model::PlanStatus::Ready, "{plan:?}");
+        plan
+    }
+
     fn sample_target(
         path: &str,
         description: &str,
@@ -3707,6 +3751,105 @@ requirements:
                     .parse()
                     .unwrap()
             )
+        );
+    }
+
+    #[test]
+    fn canonical_execution_reconstructs_basis_after_editable_change() {
+        let tempdir = tempdir().unwrap();
+        copy_dir(&workbench_fixture_root(), tempdir.path());
+        let revision = init_git_repo(tempdir.path());
+        let plan = fixture_execution_plan(tempdir.path(), &revision);
+        fs::write(
+            tempdir.path().join("src/lib.rs"),
+            "pub fn behavior() -> bool {\n    1 == 1\n}\n",
+        )
+        .unwrap();
+
+        let workspace = SpecWorkspace::load(tempdir.path()).unwrap();
+        let index = workspace.index().unwrap();
+        let canonical = canonical_plan_for_execution(&workspace, &index, &plan, &revision)
+            .expect("a valid basis must be reconstructed after an editable change");
+        assert_eq!(canonical, plan);
+    }
+
+    #[test]
+    fn canonical_execution_rejects_missing_basis_revision() {
+        let tempdir = tempdir().unwrap();
+        copy_dir(&workbench_fixture_root(), tempdir.path());
+        let revision = init_git_repo(tempdir.path());
+        let mut plan = fixture_execution_plan(tempdir.path(), &revision);
+        fs::write(
+            tempdir.path().join("src/lib.rs"),
+            "pub fn behavior() -> bool {\n    1 == 1\n}\n",
+        )
+        .unwrap();
+        plan.basis.revision = "missing-basis-revision".into();
+        plan.canonical_digest = work_plan_digest(&plan);
+
+        let workspace = SpecWorkspace::load(tempdir.path()).unwrap();
+        let index = workspace.index().unwrap();
+        let error =
+            canonical_plan_for_execution(&workspace, &index, &plan, "missing-basis-revision")
+                .unwrap_err()
+                .to_string();
+        assert!(error.contains("cannot reconstruct the work-plan basis workspace"));
+    }
+
+    #[test]
+    fn canonical_execution_rejects_basis_with_unrestorable_config() {
+        let tempdir = tempdir().unwrap();
+        copy_dir(&workbench_fixture_root(), tempdir.path());
+        init_git_repo(tempdir.path());
+        let valid_config = fs::read_to_string(tempdir.path().join("syu.yaml")).unwrap();
+        fs::write(tempdir.path().join("syu.yaml"), "schema: syu/config/v1\n").unwrap();
+        let revision = git_commit(tempdir.path(), "invalid basis config");
+        fs::write(tempdir.path().join("syu.yaml"), valid_config).unwrap();
+        let plan = fixture_execution_plan(tempdir.path(), &revision);
+        fs::write(
+            tempdir.path().join("src/lib.rs"),
+            "pub fn behavior() -> bool {\n    1 == 1\n}\n",
+        )
+        .unwrap();
+
+        let workspace = SpecWorkspace::load(tempdir.path()).unwrap();
+        let index = workspace.index().unwrap();
+        let error = canonical_plan_for_execution(&workspace, &index, &plan, &revision)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("cannot reconstruct the work-plan basis workspace"));
+    }
+
+    #[test]
+    fn canonical_execution_rejects_basis_with_unbuildable_inventory() {
+        let tempdir = tempdir().unwrap();
+        copy_dir(&workbench_fixture_root(), tempdir.path());
+        init_git_repo(tempdir.path());
+        let valid_config = fs::read_to_string(tempdir.path().join("syu.yaml")).unwrap();
+        let broken_config = valid_config.replace(
+            "rust: { mode: test, include_tests: true }",
+            "unsupported: {}",
+        );
+        assert_ne!(broken_config, valid_config);
+        fs::write(tempdir.path().join("syu.yaml"), broken_config).unwrap();
+        let revision = git_commit(tempdir.path(), "unbuildable basis inventory");
+        fs::write(tempdir.path().join("syu.yaml"), valid_config).unwrap();
+        let plan = fixture_execution_plan(tempdir.path(), &revision);
+        fs::write(
+            tempdir.path().join("src/lib.rs"),
+            "pub fn behavior() -> bool {\n    1 == 1\n}\n",
+        )
+        .unwrap();
+
+        let workspace = SpecWorkspace::load(tempdir.path()).unwrap();
+        let index = workspace.index().unwrap();
+        let error = canonical_plan_for_execution(&workspace, &index, &plan, &revision)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("verification is blocked because inventory failed")
+                || error.contains("inventory failed; plan generation is refused"),
+            "unexpected inventory reconstruction error: {error}"
         );
     }
 

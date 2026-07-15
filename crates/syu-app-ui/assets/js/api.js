@@ -1,9 +1,21 @@
 /** The browser only transports server-owned DTOs and opaque mutation tokens. */
+let csrfToken = '';
+
 export async function request(url, options = {}) {
+  const method = (options.method || 'GET').toUpperCase();
   const response = await fetch(url, {
-    headers: { accept: 'application/json', 'content-type': 'application/json', ...(options.headers || {}) },
     ...options,
+    headers: {
+      accept: 'application/json',
+      'content-type': 'application/json',
+      ...(csrfToken && method !== 'GET'
+        ? { 'x-syu-csrf-token': csrfToken }
+        : {}),
+      ...(options.headers || {}),
+    },
   });
+  const receivedToken = response.headers?.get?.('x-syu-csrf-token');
+  if (receivedToken) csrfToken = receivedToken;
   const text = await response.text();
   let body;
   try { body = text ? JSON.parse(text) : null; } catch { body = text; }

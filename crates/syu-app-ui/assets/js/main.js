@@ -31,9 +31,11 @@ async function refreshAfterAction(state, action, onResult) {
 }
 
 export async function startWorkbench() {
-  const node = document.querySelector('#syu-projection');
-  if (!node) throw new Error('canonical Workbench projection is missing');
-  const state = createState(JSON.parse(node.textContent));
+  // The initial GET establishes the server-owned CSRF token. The inline
+  // projection remains useful for the first paint, but must not be the only
+  // source of browser state because mutations are guarded by the server.
+  const projection = await api.readProjection();
+  const state = createState(projection);
   state.api = api;
   state.render = () => render(state);
   state.go = (page) => {
