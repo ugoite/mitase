@@ -102,6 +102,40 @@ description: "Generated reference for docs/syu/workbench.yaml"
                 - **arguments**:
                   - **package**: syu-workbench-server
                   - **test**: tests::workbench_spec_edit_transaction
+- **id**: REQ-WORKBENCH-007
+  - **title**: Guided specification selection
+  - **description**: The Workbench searches typed specification candidates and previews safe human-facing edits with graph and work impact.
+  - **priority**: high
+  - **status**: implemented
+  - **criteria**:
+    - **id**: guided-specification-selection
+      - **kind**: behavior
+      - **statement**: A candidate search and typed specification edit preserves advanced links and requires validated preview evidence before apply.
+      - **governed_by**:
+        - POL-DELIVERY-001#rule.exact-ownership
+  - **bindings**:
+    - **id**: guided-specification-check
+      - **role**: verification
+      - **facet**: verification
+      - **responsibility**: Verify guided specification search, preview, and typed creation.
+      - **targets**:
+        - **id**: guided-specification-test
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::workbench_specification_candidates_support_search_edit_and_create
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-WORKBENCH-007#criterion.guided-specification-selection
+              - **covers**:
+                - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-candidates
+                - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-candidate-preview
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-workbench-server
+                  - **test**: tests::workbench_specification_candidates_support_search_edit_and_create
 - **id**: REQ-WORKBENCH-004
   - **title**: Transactional configuration edit
   - **description**: Structured configuration edits use the same preview, basis, and atomic apply flow.
@@ -199,6 +233,7 @@ description: "Generated reference for docs/syu/workbench.yaml"
                 - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
                 - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.keyboard-navigation
                 - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.accessibility-attributes
+                - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.workbench-css
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
@@ -273,6 +308,33 @@ requirements:
                 criterion: REQ-WORKBENCH-003#criterion.transactional-spec-edit
                 covers: [FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-apply]
                 runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_spec_edit_transaction } }
+  - id: REQ-WORKBENCH-007
+    title: Guided specification selection
+    description: The Workbench searches typed specification candidates and previews safe human-facing edits with graph and work impact.
+    priority: high
+    status: implemented
+    criteria:
+      - id: guided-specification-selection
+        kind: behavior
+        statement: A candidate search and typed specification edit preserves advanced links and requires validated preview evidence before apply.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+    bindings:
+      - id: guided-specification-check
+        role: verification
+        facet: verification
+        responsibility: Verify guided specification search, preview, and typed creation.
+        targets:
+          - id: guided-specification-test
+            adapter: rust
+            path: crates/syu-workbench-server/src/lib.rs
+            selector: { kind: symbol, name: tests::workbench_specification_candidates_support_search_edit_and_create }
+            claims:
+              - kind: verifies
+                criterion: REQ-WORKBENCH-007#criterion.guided-specification-selection
+                covers:
+                  - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-candidates
+                  - FEAT-WORKBENCH-SPEC-EDITOR-001#binding.editor/target.specification-candidate-preview
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_specification_candidates_support_search_edit_and_create } }
   - id: REQ-WORKBENCH-004
     title: Transactional configuration edit
     description: Structured configuration edits use the same preview, basis, and atomic apply flow.
@@ -351,5 +413,6 @@ requirements:
                   - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
                   - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.keyboard-navigation
                   - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.accessibility-attributes
+                  - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.workbench-css
                 runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_accessible_navigation } }
 ```

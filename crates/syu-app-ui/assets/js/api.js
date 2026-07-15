@@ -25,6 +25,31 @@ export async function request(url, options = {}) {
 
 export const readProjection = () => request('/api/projection');
 
+export const searchSpecificationCandidates = (query = '', kind = '') => {
+  const params = new URLSearchParams();
+  if (query.trim()) params.set('q', query.trim());
+  if (kind && kind !== 'all') params.set('kind', kind);
+  params.set('limit', '100');
+  return request(`/api/specifications/candidates?${params.toString()}`);
+};
+
+export const previewSpecificationCandidate = (projection, patch) => post(
+  '/api/specifications/candidates/preview',
+  { basis: mutationBasis(projection), patch, preview_token: null },
+);
+
+export const applySpecificationCandidate = (projection, patch, previewToken) => request(
+  '/api/specifications/candidates/apply',
+  {
+    method: 'PUT',
+    body: JSON.stringify({
+      basis: mutationBasis(projection),
+      patch,
+      preview_token: previewToken,
+    }),
+  },
+);
+
 export function mutationBasis(projection) {
   const snapshot = projection?.snapshot || {};
   return {
