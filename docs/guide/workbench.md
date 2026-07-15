@@ -48,6 +48,11 @@ Interactive operations are backed by local server endpoints:
   fields or create a planned Requirement/Feature in an existing specification
   document. Preview reports graph, ownership, readiness, target, test, and
   active-work impact before the exact token and source hash permit apply.
+- Each criterion can request ranked implementation, verification,
+  documentation, enforcement, and contract candidates. Every candidate shows
+  its exact target, confidence, and evidence. Suggestions stay advisory until
+  selected targets are approved; rejection is remembered for the reviewed
+  evidence, and configured budget overflow asks the user to split the work.
 - Item and Work editors show human-facing fields first. Exact anchors,
   bindings, contracts, selectors, and planning budgets remain editable under
   collapsed advanced settings and are preserved even when left collapsed.

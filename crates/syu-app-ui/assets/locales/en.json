@@ -434,5 +434,12 @@
   "items.field.id": "ID",
   "items.field.criterion_id": "Criterion ID",
   "items.field.criterion_kind": "Criterion kind",
-  "items.field.criterion_statement": "Criterion statement"
+  "items.field.criterion_statement": "Criterion statement",
+  "items.suggestions.title": "Suggested implementation and verification targets",
+  "items.suggestions.review": "Review targets",
+  "items.suggestions.advisory": "Suggestions are advisory. Only approved exact targets become a draft WorkRequest.",
+  "items.suggestions.select": "Select",
+  "items.suggestions.reject": "Reject",
+  "items.suggestions.approve": "Approve selected targets",
+  "items.suggestions.empty": "No candidates remain with current evidence."
 }

@@ -353,6 +353,9 @@ svg { display: block; stroke: currentColor; fill: none; stroke-width: 1.8; strok
 .status-message { margin: 0; font-size: 12px; }
 .compact-list { padding-left: 18px; margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .specification-impact { background: var(--soft); }
+.target-suggestions { display: grid; gap: 12px; }
+.target-suggestion { grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; }
+.target-suggestion > input { margin-top: 4px; }
 .empty-state { color: var(--muted); line-height: 1.5; }
 .big-stat { font-size: 22px; font-weight: 750; }
 .list { margin: 0; padding: 0; list-style: none; }
