@@ -1,18 +1,397 @@
 #![forbid(unsafe_code)]
 use anyhow::{Context, Result, bail};
 use globset::{Glob, GlobSet, GlobSetBuilder};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use syu_diagnostics::Diagnostic;
 use syu_spec_model::{
-    ArtifactBinding, BoundTargetRef, ItemStatus, LocalAnchorKind, RepoPath, Selector, SpecAnchor,
-    TargetClaim,
+    ArtifactBinding, BindingRole, BoundTargetRef, ItemStatus, LocalAnchorKind, RepoPath, Selector,
+    SpecAnchor, TargetClaim,
 };
 use syu_work_model::*;
 use syu_workspace::{
     AnchorValue, SpecIndex, SpecWorkspace, resolve_indexed_target, resolve_target_in_workspace,
     selector_supports_editable,
 };
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SuggestionConfidence {
+    High,
+    Medium,
+    Low,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TargetSuggestion {
+    pub id: String,
+    pub rank: usize,
+    #[serde(rename = "ref")]
+    pub reference: BoundTargetRef,
+    pub role: BindingRole,
+    pub transition: TargetTransition,
+    pub confidence: SuggestionConfidence,
+    pub evidence: Vec<String>,
+    pub evidence_fingerprint: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SplitWorkRecommendation {
+    pub reason: String,
+    pub suggested_groups: Vec<Vec<String>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TargetSuggestionSet {
+    pub criterion: SpecAnchor,
+    pub suggestions: Vec<TargetSuggestion>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub split_recommendation: Option<SplitWorkRecommendation>,
+    pub suggestion_token: String,
+}
+
+pub fn suggest_targets(
+    criterion: &SpecAnchor,
+    workspace: &SpecWorkspace,
+    index: &SpecIndex,
+) -> Result<TargetSuggestionSet> {
+    let statement = match index.anchor(criterion) {
+        Some(AnchorValue::Criterion(value)) => value.statement.as_str(),
+        _ => bail!("target suggestions require an exact criterion anchor"),
+    };
+    let criterion_terms = significant_terms(statement);
+    let governing_rules = index
+        .criteria_to_rules
+        .get(criterion)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let contract_targets = index
+        .contracts
+        .values()
+        .filter(|contract| contract.guarantees.iter().any(|anchor| anchor == criterion))
+        .flat_map(|contract| {
+            std::iter::once(contract.source.clone())
+                .chain(contract.participants.iter().map(|item| item.target.clone()))
+        })
+        .collect::<BTreeSet<_>>();
+    let mut ranked = Vec::new();
+    for (binding_anchor, binding) in &index.bindings {
+        if matches!(
+            index.item_status.get(&binding_anchor.item),
+            Some(ItemStatus::Deprecated)
+        ) {
+            continue;
+        }
+        for target in &binding.targets {
+            let reference = BoundTargetRef {
+                binding: binding_anchor.clone(),
+                target_id: target.id.clone(),
+            };
+            if !index.target_to_artifact.contains_key(&reference) {
+                continue;
+            }
+            let mut score = 0usize;
+            let mut evidence = Vec::new();
+            let directly_claims = target.claims.iter().any(|claim| match claim {
+                TargetClaim::Satisfies { criterion: actual }
+                | TargetClaim::Verifies {
+                    criterion: actual, ..
+                } => actual == criterion,
+                TargetClaim::Documents { anchor } | TargetClaim::Evidences { anchor } => {
+                    anchor == criterion
+                }
+                _ => false,
+            });
+            if directly_claims {
+                score += 100;
+                evidence.push("The target explicitly claims this criterion.".into());
+            }
+            if binding_anchor.item == criterion.item {
+                score += 40;
+                evidence.push("The target belongs to the same specification item.".into());
+            }
+            let enforces_governing_rule = target.claims.iter().any(
+                |claim| matches!(claim, TargetClaim::Enforces { rule } if governing_rules.contains(rule)),
+            );
+            if enforces_governing_rule {
+                score += 75;
+                evidence.push("The target enforces a rule governing this criterion.".into());
+            }
+            let supports_contract = contract_targets.contains(&reference);
+            if supports_contract {
+                score += 75;
+                evidence.push(
+                    "The target participates in a contract guaranteeing this criterion.".into(),
+                );
+            }
+            if target.claims.iter().any(|claim| {
+                claim_anchor(claim).is_some_and(|anchor| anchor.item == criterion.item)
+            }) && !directly_claims
+            {
+                score += 25;
+                evidence.push(
+                    "The target claims another anchor in the same specification item.".into(),
+                );
+            }
+            let searchable = format!(
+                "{} {} {} {} {}",
+                binding.facet,
+                binding.responsibility,
+                target.path.display(),
+                selector_text(&target.selector),
+                index
+                    .target_to_artifact
+                    .get(&reference)
+                    .map(String::as_str)
+                    .unwrap_or_default()
+            );
+            let matched_terms = significant_terms(&searchable)
+                .intersection(&criterion_terms)
+                .cloned()
+                .collect::<Vec<_>>();
+            if !matched_terms.is_empty() {
+                score += 10 + matched_terms.len().min(5) * 3;
+                evidence.push(format!(
+                    "Specification and target names share: {}.",
+                    matched_terms.join(", ")
+                ));
+            }
+            if !supports_contract && index.contracts_by_target.contains_key(&reference) {
+                score += 8;
+                evidence.push("The target participates in an explicit contract.".into());
+            }
+            if index.verification_by_target.contains_key(&reference) {
+                score += 8;
+                evidence.push("An exact verification target covers this target.".into());
+            }
+            if score == 0 {
+                continue;
+            }
+            let transition = transition_for_role(binding.role);
+            let confidence = if directly_claims || enforces_governing_rule || supports_contract {
+                SuggestionConfidence::High
+            } else if score >= 40 || matched_terms.len() >= 2 {
+                SuggestionConfidence::Medium
+            } else {
+                SuggestionConfidence::Low
+            };
+            let artifact_digest = index
+                .target_to_artifact
+                .get(&reference)
+                .and_then(|identity| {
+                    index
+                        .artifact_units
+                        .iter()
+                        .find(|unit| &unit.identity == identity)
+                })
+                .map(|unit| unit.digest.as_str())
+                .unwrap_or_default();
+            let evidence_fingerprint =
+                suggestion_digest(criterion, &reference, statement, artifact_digest, &evidence);
+            let id = suggestion_id(&reference);
+            ranked.push((
+                score,
+                id,
+                reference,
+                binding.role,
+                transition,
+                confidence,
+                evidence,
+                evidence_fingerprint,
+            ));
+        }
+    }
+    ranked.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| left.1.cmp(&right.1)));
+    let suggestions = ranked
+        .into_iter()
+        .enumerate()
+        .map(
+            |(
+                offset,
+                (_, id, reference, role, transition, confidence, evidence, evidence_fingerprint),
+            )| {
+                TargetSuggestion {
+                    id,
+                    rank: offset + 1,
+                    reference,
+                    role,
+                    transition,
+                    confidence,
+                    evidence,
+                    evidence_fingerprint,
+                }
+            },
+        )
+        .collect::<Vec<_>>();
+    let split_recommendation = split_work_recommendation(&suggestions, workspace, index);
+    let suggestion_token = suggestion_set_token(criterion, workspace, &suggestions)?;
+    Ok(TargetSuggestionSet {
+        criterion: criterion.clone(),
+        suggestions,
+        split_recommendation,
+        suggestion_token,
+    })
+}
+
+fn claim_anchor(claim: &TargetClaim) -> Option<&SpecAnchor> {
+    match claim {
+        TargetClaim::Satisfies { criterion } | TargetClaim::Verifies { criterion, .. } => {
+            Some(criterion)
+        }
+        TargetClaim::Documents { anchor } | TargetClaim::Evidences { anchor } => Some(anchor),
+        TargetClaim::Enforces { rule } => Some(rule),
+        TargetClaim::GeneratedFrom { .. } => None,
+    }
+}
+
+fn transition_for_role(role: BindingRole) -> TargetTransition {
+    match role {
+        BindingRole::Verification => TargetTransition::RunOnly,
+        BindingRole::Generated | BindingRole::Evidence => TargetTransition::Readonly,
+        _ => TargetTransition::Modify,
+    }
+}
+
+fn selector_text(selector: &Selector) -> String {
+    match selector {
+        Selector::File => "file".into(),
+        Selector::Symbol { name } => name.clone(),
+        Selector::Operation { method, path } => format!("{method} {path}"),
+        Selector::Heading { value }
+        | Selector::JsonPointer { value }
+        | Selector::Marker { value } => value.clone(),
+    }
+}
+
+fn significant_terms(value: &str) -> BTreeSet<String> {
+    const STOP: &[&str] = &[
+        "the", "a", "an", "and", "or", "to", "of", "for", "in", "on", "with", "is", "are", "be",
+        "this", "that", "target", "behavior",
+    ];
+    value
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .map(str::to_ascii_lowercase)
+        .filter(|term| term.len() >= 3 && !STOP.contains(&term.as_str()))
+        .collect()
+}
+
+fn suggestion_id(reference: &BoundTargetRef) -> String {
+    let digest = Sha256::digest(reference.to_string().as_bytes());
+    format!("target-{}", &hex_digest(&digest)[..16])
+}
+
+fn suggestion_digest(
+    criterion: &SpecAnchor,
+    reference: &BoundTargetRef,
+    criterion_statement: &str,
+    artifact_digest: &str,
+    evidence: &[String],
+) -> String {
+    let mut hash = Sha256::new();
+    hash.update(criterion.to_string().as_bytes());
+    hash.update(reference.to_string().as_bytes());
+    hash.update(criterion_statement.as_bytes());
+    hash.update(artifact_digest.as_bytes());
+    for item in evidence {
+        hash.update(item.as_bytes());
+    }
+    hex_digest(&hash.finalize())
+}
+
+fn suggestion_set_token(
+    criterion: &SpecAnchor,
+    workspace: &SpecWorkspace,
+    suggestions: &[TargetSuggestion],
+) -> Result<String> {
+    let mut hash = Sha256::new();
+    hash.update(criterion.to_string().as_bytes());
+    hash.update(workspace.try_fingerprint()?.as_bytes());
+    for suggestion in suggestions {
+        hash.update(suggestion.id.as_bytes());
+        hash.update(suggestion.evidence_fingerprint.as_bytes());
+    }
+    Ok(hex_digest(&hash.finalize()))
+}
+
+fn hex_digest(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+pub fn split_work_recommendation(
+    suggestions: &[TargetSuggestion],
+    workspace: &SpecWorkspace,
+    index: &SpecIndex,
+) -> Option<SplitWorkRecommendation> {
+    let limits = &workspace.config.work.slicing;
+    let editable = suggestions
+        .iter()
+        .filter(|candidate| candidate.transition == TargetTransition::Modify)
+        .collect::<Vec<_>>();
+    let editable_files = editable
+        .iter()
+        .filter_map(|candidate| index.target(&candidate.reference))
+        .map(|target| target.path.clone())
+        .collect::<BTreeSet<_>>()
+        .len();
+    let verification = suggestions
+        .iter()
+        .filter(|candidate| candidate.transition == TargetTransition::RunOnly)
+        .count();
+    let readonly = suggestions
+        .iter()
+        .filter(|candidate| candidate.transition == TargetTransition::Readonly)
+        .count();
+    let total_bytes = suggestions
+        .iter()
+        .filter_map(|candidate| index.target_to_artifact.get(&candidate.reference))
+        .filter_map(|identity| {
+            index
+                .artifact_units
+                .iter()
+                .find(|unit| &unit.identity == identity)
+        })
+        .map(|unit| unit.span.byte_end.saturating_sub(unit.span.byte_start))
+        .sum::<usize>();
+    if editable_files <= limits.max_editable_files
+        && editable.len() <= limits.max_editable_symbols
+        && verification <= limits.max_verification_targets
+        && readonly <= limits.max_readonly_targets
+        && total_bytes <= limits.max_total_bytes
+    {
+        return None;
+    }
+    let mut capacities = vec![suggestions.len().max(1)];
+    if !editable.is_empty() {
+        capacities.push(limits.max_editable_symbols.max(1));
+        capacities.push(limits.max_editable_files.max(1));
+    }
+    if verification > 0 {
+        capacities.push(limits.max_verification_targets.max(1));
+    }
+    if readonly > 0 {
+        capacities.push(limits.max_readonly_targets.max(1));
+    }
+    let group_size = capacities.into_iter().min().unwrap_or(1);
+    let suggested_groups = suggestions
+        .chunks(group_size)
+        .map(|group| group.iter().map(|candidate| candidate.id.clone()).collect())
+        .collect();
+    Some(SplitWorkRecommendation {
+        reason: format!(
+            "The candidate set exceeds configured slicing limits (editable files {editable_files}/{}, editable targets {}/{}, verification targets {verification}/{}, readonly targets {readonly}/{}, bytes {total_bytes}/{}). Review and approve smaller groups.",
+            limits.max_editable_files,
+            editable.len(),
+            limits.max_editable_symbols,
+            limits.max_verification_targets,
+            limits.max_readonly_targets,
+            limits.max_total_bytes,
+        ),
+        suggested_groups,
+    })
+}
 
 fn enabled_adapters(workspace: &SpecWorkspace) -> Vec<String> {
     workspace
@@ -2771,6 +3150,63 @@ mod tests {
             ),
         )
         .expect("requirement spec");
+    }
+
+    #[test]
+    fn target_suggestions_rank_exact_claims_with_reviewable_evidence() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        fs::write(
+            tempdir.path().join("src/handler.rs"),
+            "pub fn handler() {}\n",
+        )
+        .expect("handler file");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let criterion: SpecAnchor = "REQ-TEST-001#criterion.test".parse().unwrap();
+
+        let suggestions = suggest_targets(&criterion, &workspace, &index).expect("suggestions");
+
+        assert_eq!(suggestions.suggestions.len(), 1);
+        let candidate = &suggestions.suggestions[0];
+        assert_eq!(candidate.rank, 1);
+        assert_eq!(
+            candidate.reference.to_string(),
+            "FEAT-TEST-001#binding.impl/target.handler-present"
+        );
+        assert_eq!(candidate.confidence, SuggestionConfidence::High);
+        assert!(
+            candidate
+                .evidence
+                .iter()
+                .any(|item| item.contains("explicitly claims"))
+        );
+        assert!(!candidate.evidence_fingerprint.is_empty());
+        assert!(!suggestions.suggestion_token.is_empty());
+        assert!(suggestions.split_recommendation.is_none());
+    }
+
+    #[test]
+    fn target_suggestions_recommend_split_when_candidate_budget_overflows() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        fs::write(
+            tempdir.path().join("src/handler.rs"),
+            "pub fn handler() {}\n",
+        )
+        .expect("handler file");
+        let mut workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        workspace.config.work.slicing.max_editable_symbols = 0;
+        let index = workspace.index().expect("index");
+        let criterion: SpecAnchor = "REQ-TEST-001#criterion.test".parse().unwrap();
+
+        let suggestions = suggest_targets(&criterion, &workspace, &index).expect("suggestions");
+
+        let split = suggestions
+            .split_recommendation
+            .expect("split recommendation");
+        assert!(split.reason.contains("exceeds configured slicing limits"));
+        assert_eq!(split.suggested_groups.len(), 1);
     }
 
     #[test]
