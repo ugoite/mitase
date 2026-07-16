@@ -274,6 +274,17 @@ description: "Generated reference for docs/syu/workbench.yaml"
                 - **arguments**:
                   - **package**: syu-workbench-server
                   - **test**: tests::workbench_accessible_navigation
+- **id**: REQ-WORKBENCH-009
+  - **title**: Durable completion history
+  - **description**: Workbench renders the shared completion attempt history and finalization state from the server-owned store.
+  - **priority**: critical
+  - **status**: implemented
+  - **criteria**:
+    - **id**: completion-history
+      - **kind**: behavior
+      - **statement**: Current and previous attempts expose plan and slice identity, status, blockers, next action, demonstrated criteria, and finalized state.
+      - **governed_by**:
+        - POL-DELIVERY-001#rule.exact-ownership
 
 ## Source YAML
 
@@ -478,4 +489,14 @@ requirements:
                   - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.accessibility-attributes
                   - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.workbench-css
                 runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_accessible_navigation } }
+  - id: REQ-WORKBENCH-009
+    title: Durable completion history
+    description: Workbench renders the shared completion attempt history and finalization state from the server-owned store.
+    priority: critical
+    status: implemented
+    criteria:
+      - id: completion-history
+        kind: behavior
+        statement: Current and previous attempts expose plan and slice identity, status, blockers, next action, demonstrated criteria, and finalized state.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
 ```
