@@ -604,12 +604,6 @@ description: "Generated reference for docs/syu/workbench-features.yaml"
           - **path**: src/lib.rs
           - **selector**:
             - **kind**: file
-        - **id**: selfhost-root-build-module
-          - **adapter**: rust
-          - **path**: build.rs
-          - **selector**:
-            - **kind**: module
-            - **name**: build
         - **id**: selfhost-desktop-build-module
           - **adapter**: rust
           - **path**: crates/syu-desktop/build.rs
@@ -1836,24 +1830,6 @@ description: "Generated reference for docs/syu/workbench-features.yaml"
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-010#criterion.lifecycle-separation
-        - **id**: build-version-configuration
-          - **adapter**: rust
-          - **path**: build.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: emit_build_version
-          - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-WORKBENCH-010#criterion.lifecycle-separation
-        - **id**: build-entrypoint-configuration
-          - **adapter**: rust
-          - **path**: build.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: main
-          - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-WORKBENCH-010#criterion.lifecycle-separation
       - **owns**:
         - **id**: ci-workflow
           - **adapter**: declared
@@ -1940,8 +1916,6 @@ description: "Generated reference for docs/syu/workbench-features.yaml"
                 - FEAT-WORKBENCH-QUALITY-GATES-001#binding.quality-gates/target.release-artifacts-configuration
                 - FEAT-WORKBENCH-QUALITY-GATES-001#binding.quality-gates/target.pre-commit-configuration
                 - FEAT-WORKBENCH-QUALITY-GATES-001#binding.quality-gates/target.pre-commit-ci-configuration
-                - FEAT-WORKBENCH-QUALITY-GATES-001#binding.quality-gates/target.build-version-configuration
-                - FEAT-WORKBENCH-QUALITY-GATES-001#binding.quality-gates/target.build-entrypoint-configuration
               - **runner**:
                 - **runner**: cargo-test-integration
                 - **arguments**:
@@ -2535,12 +2509,6 @@ features:
       path: src/lib.rs
       selector:
         kind: file
-    - id: selfhost-root-build-module
-      adapter: rust
-      path: build.rs
-      selector:
-        kind: module
-        name: build
     - id: selfhost-desktop-build-module
       adapter: rust
       path: crates/syu-desktop/build.rs
@@ -3761,20 +3729,6 @@ features:
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-010#criterion.lifecycle-separation
-    - id: build-version-configuration
-      adapter: rust
-      path: build.rs
-      selector: { kind: symbol, name: emit_build_version }
-      claims:
-      - kind: satisfies
-        criterion: REQ-WORKBENCH-010#criterion.lifecycle-separation
-    - id: build-entrypoint-configuration
-      adapter: rust
-      path: build.rs
-      selector: { kind: symbol, name: main }
-      claims:
-      - kind: satisfies
-        criterion: REQ-WORKBENCH-010#criterion.lifecycle-separation
     owns:
     - id: ci-workflow
       adapter: declared
@@ -3847,8 +3801,6 @@ features:
         - FEAT-WORKBENCH-QUALITY-GATES-001#binding.quality-gates/target.release-artifacts-configuration
         - FEAT-WORKBENCH-QUALITY-GATES-001#binding.quality-gates/target.pre-commit-configuration
         - FEAT-WORKBENCH-QUALITY-GATES-001#binding.quality-gates/target.pre-commit-ci-configuration
-        - FEAT-WORKBENCH-QUALITY-GATES-001#binding.quality-gates/target.build-version-configuration
-        - FEAT-WORKBENCH-QUALITY-GATES-001#binding.quality-gates/target.build-entrypoint-configuration
         runner:
           runner: cargo-test-integration
           arguments:
