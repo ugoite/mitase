@@ -56,3 +56,17 @@ requirements:
         kind: quality
         statement: A public entrypoint resolves through an exact target to a canonical plan.
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+  - id: REQ-WORK-002
+    title: Durable completion delivery
+    description: Completion verification is preserved as immutable attempts and can be finalized only after explicit plan approval.
+    priority: critical
+    status: implemented
+    criteria:
+      - id: durable-attempt
+        kind: behavior
+        statement: Failed and successful verification attempts remain queryable without widening their approved scope.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+      - id: finalization-handoff
+        kind: behavior
+        statement: A complete attempt can promote only its exact planned specification items after a fresh overlay validation.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]

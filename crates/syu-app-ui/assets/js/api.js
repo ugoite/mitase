@@ -110,12 +110,20 @@ export const exportContext = (projection, sliceId) => post('/api/work/context', 
 
 export const validateWork = (projection) => post('/api/work/validate', mutationBasis(projection));
 
+export const approveWork = (projection) => post('/api/work/approve', mutationBasis(projection));
+
 export const verifyWork = (projection, sliceId) => post('/api/work/verify', {
   basis: mutationBasis(projection),
   slice_id: sliceId,
 });
 
-export const validateResult = (projection, receipt) => post('/api/work/result', {
+export const finalizePreview = (projection, attemptId) => post('/api/work/finalize/preview', {
   basis: mutationBasis(projection),
-  receipt,
+  attempt_id: attemptId,
+});
+
+export const finalizeApply = (projection, attemptId, previewToken) => post('/api/work/finalize/apply', {
+  basis: mutationBasis(projection),
+  attempt_id: attemptId,
+  preview_token: previewToken,
 });

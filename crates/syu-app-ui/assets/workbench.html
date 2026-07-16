@@ -96,9 +96,13 @@
                 <span class="btn-icon"><svg viewBox="0 0 24 24"><path d="M12 3v4M12 17v4M3 12h4M17 12h4"></path><circle cx="12" cy="12" r="5"></circle></svg></span>
                 <span class="btn-label" data-i18n="work.action.verify">Verify</span>
               </button>
-              <button class="btn primary compact" data-work-result aria-label="Validate result and finish work" data-i18n-aria="a11y.work_result" data-i18n-title="a11y.work_result" title="Validate result and finish work">
+              <button class="btn primary compact" data-work-approve aria-label="Approve selected work plan" data-i18n-aria="a11y.work_approve" data-i18n-title="a11y.work_approve" title="Approve selected work plan">
                 <span class="btn-icon"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"></path></svg></span>
-                <span class="btn-label" data-i18n="work.action.result">Result</span>
+                <span class="btn-label" data-i18n="work.action.approve">Approve</span>
+              </button>
+              <button class="btn compact" data-work-finalize aria-label="Finalize complete work" data-i18n-aria="a11y.work_finalize" data-i18n-title="a11y.work_finalize" title="Finalize complete work">
+                <span class="btn-icon"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"></path></svg></span>
+                <span class="btn-label" data-i18n="work.action.finalize">Finalize</span>
               </button>
             </div>
           </div>
@@ -122,7 +126,7 @@
               <span class="mini-count"></span>
             </button>
           </div>
-          <div class="workspace no-rail" data-panel="overview" data-panel-group="work"><div class="canvas" data-work-overview></div></div>
+          <div class="workspace no-rail" data-panel="overview" data-panel-group="work"><div class="canvas" data-work-overview><div data-work-overview-summary></div><section data-work-completion-history></section></div></div>
           <div class="workspace" data-panel="slices" data-panel-group="work" hidden><aside class="rail" data-work-slices-rail></aside><div class="canvas" data-work-slice-detail></div></div>
           <div class="workspace" data-panel="context" data-panel-group="work" hidden><aside class="rail" data-work-context-rail></aside><div class="canvas" data-work-context-detail></div></div>
           <div class="workspace" data-panel="validation" data-panel-group="work" hidden><aside class="rail" data-work-validation-rail></aside><div class="canvas" data-work-validation-detail></div></div>

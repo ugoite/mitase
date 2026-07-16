@@ -11,6 +11,9 @@ pub const WORK_PLAN_SCHEMA: &str = "syu/work-plan/v1";
 pub const VERIFICATION_RECEIPT_SCHEMA: &str = "syu/verification-receipt/v2";
 pub const COMPLETION_REPORT_SCHEMA: &str = "syu/completion-report/v1";
 pub const CONTEXT_PACK_SCHEMA: &str = "syu/context-pack/v1";
+pub const PLAN_APPROVAL_SCHEMA: &str = "syu/plan-approval/v1";
+pub const COMPLETION_ATTEMPT_SCHEMA: &str = "syu/completion-attempt/v1";
+pub const FINALIZATION_RECEIPT_SCHEMA: &str = "syu/finalization-receipt/v1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -457,12 +460,120 @@ pub struct CompletionBlocker {
 #[serde(deny_unknown_fields)]
 pub struct CompletionReport {
     pub schema: String,
+    #[serde(default)]
+    pub attempt_id: String,
     pub plan_digest: String,
     pub slice_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt_digest: Option<String>,
     pub status: CompletionStatus,
     pub demonstrated: Vec<CompletionCriterionEvidence>,
     pub checks: Vec<CompletionCheckEvidence>,
     pub blockers: Vec<CompletionBlocker>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum VerificationAttemptStatus {
+    Complete,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VerificationExecutionAttempt {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<BoundTargetRef>,
+    pub runner: String,
+    pub command: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stdout_digest: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stderr_digest: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proof: Option<ExactTestEvidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VerificationAttemptFailure {
+    pub code: String,
+    pub message: String,
+    pub next_action: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VerificationAttemptResult {
+    pub status: VerificationAttemptStatus,
+    pub executions: Vec<VerificationExecutionAttempt>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub failure: Option<VerificationAttemptFailure>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PlanApproval {
+    pub schema: String,
+    pub approval_id: String,
+    pub plan_digest: String,
+    pub workspace_fingerprint: String,
+    pub revision: String,
+    pub reviewed_at: String,
+    pub plan: WorkPlan,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CompletionAttempt {
+    pub schema: String,
+    pub attempt_id: String,
+    pub attempt_digest: String,
+    pub plan_digest: String,
+    pub slice_id: String,
+    pub approved_plan_digest: String,
+    pub started_at: String,
+    pub completed_at: String,
+    pub verification: VerificationAttemptResult,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt: Option<VerificationReceipt>,
+    pub report: CompletionReport,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FinalizationPreview {
+    pub schema: String,
+    pub attempt_id: String,
+    pub attempt_digest: String,
+    pub plan_digest: String,
+    pub slice_id: String,
+    pub preview_token: String,
+    pub status: CompletionStatus,
+    pub pre_workspace_fingerprint: String,
+    pub promoted_items: Vec<SpecItemRef>,
+    pub changed_files: Vec<String>,
+    pub blockers: Vec<CompletionBlocker>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FinalizationReceipt {
+    pub schema: String,
+    pub finalization_id: String,
+    pub attempt_id: String,
+    pub attempt_digest: String,
+    pub plan_digest: String,
+    pub slice_id: String,
+    pub pre_workspace_fingerprint: String,
+    pub post_workspace_fingerprint: String,
+    pub promoted_items: Vec<SpecItemRef>,
+    pub changed_files: Vec<String>,
+    pub completed_at: String,
 }
 
 /// Return a stable digest of the targets that are not editable by a work
