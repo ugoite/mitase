@@ -29,6 +29,10 @@ inventory:
             - .github/workflows/branch-push.yml
             - .github/workflows/ci.yml
             - .github/workflows/quality.yml
+            - .github/workflows/release-artifacts.yml
+            - .pre-commit-config.yaml
+            - .pre-commit-ci.yaml
+            - build.rs
             - CONTRIBUTING.md
             - Cargo.lock
             - Cargo.toml

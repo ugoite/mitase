@@ -7,7 +7,7 @@ is_relevant_path() {
   local path="$1"
 
   case "$path" in
-    syu.yaml|docs/syu/*|crates/*|src/*|tests/*|website/*)
+    syu.yaml|docs/syu/*)
       return 0
       ;;
     *)
@@ -33,7 +33,7 @@ validate_changed() {
 
   for path in "${files[@]}"; do
     if is_relevant_path "$path"; then
-      cargo run -- validate workspace .
+      cargo run -- validate change . --staged
       return 0
     fi
   done

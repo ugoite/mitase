@@ -97,4 +97,7 @@ jobs:
           components: rustfmt,clippy
 
       - name: Run fast quality gates
+        env:
+          PRE_COMMIT_FROM_REF: ${{ github.event.before }}
+          PRE_COMMIT_TO_REF: ${{ github.sha }}
         run: scripts/ci/quality-gates.sh fast

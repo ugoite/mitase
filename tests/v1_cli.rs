@@ -93,6 +93,90 @@ fn initialize_fixture_git(root: &Path) {
     }
 }
 
+fn staged_validation_fixture() -> tempfile::TempDir {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/v1/valid-web-app");
+    let temp = tempdir().unwrap();
+    copy_fixture_tree(&fixture, temp.path());
+    let config_path = temp.path().join("syu.yaml");
+    let config = fs::read_to_string(&config_path)
+        .unwrap()
+        .replace(
+            "require_owned_changes: true",
+            "require_owned_changes: false",
+        )
+        .replace("require_plan: true", "require_plan: false");
+    fs::write(config_path, config).unwrap();
+    initialize_fixture_git(temp.path());
+    temp
+}
+
+#[test]
+fn staged_change_validation_uses_the_index_snapshot() {
+    let temp = staged_validation_fixture();
+    let feature = temp.path().join("spec/feature.yaml");
+    fs::write(
+        &feature,
+        format!("{}\n", fs::read_to_string(&feature).unwrap()),
+    )
+    .unwrap();
+    assert!(
+        ProcessCommand::new("git")
+            .args(["add", "spec/feature.yaml"])
+            .current_dir(temp.path())
+            .status()
+            .unwrap()
+            .success()
+    );
+
+    fs::write(temp.path().join("syu.yaml"), "not: [valid\n").unwrap();
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["validate", "change"])
+        .arg(temp.path())
+        .arg("--staged")
+        .assert()
+        .success();
+}
+
+#[test]
+fn staged_change_validation_rejects_invalid_index_content_and_invalid_options() {
+    let temp = staged_validation_fixture();
+    let config_path = temp.path().join("syu.yaml");
+    let original = fs::read_to_string(&config_path).unwrap();
+    fs::write(&config_path, "not: [valid\n").unwrap();
+    assert!(
+        ProcessCommand::new("git")
+            .args(["add", "syu.yaml"])
+            .current_dir(temp.path())
+            .status()
+            .unwrap()
+            .success()
+    );
+    fs::write(&config_path, original).unwrap();
+
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["validate", "change"])
+        .arg(temp.path())
+        .arg("--staged")
+        .assert()
+        .failure();
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["validate", "workspace"])
+        .arg(temp.path())
+        .arg("--staged")
+        .assert()
+        .failure();
+    Command::cargo_bin("syu")
+        .unwrap()
+        .args(["validate", "change"])
+        .arg(temp.path())
+        .args(["--staged", "--baseline", "parent"])
+        .assert()
+        .failure();
+}
+
 fn run_cli_post_state_flow(out_of_scope: bool) -> bool {
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/v1/valid-workbench-flow");
     let temp = tempdir().unwrap();
