@@ -46,7 +46,7 @@ syu task approve --plan plan.yaml --workspace .
 syu task verify --plan plan.yaml --slice <slice-id> --workspace .
 syu task attempts list --workspace .
 syu task finalize preview --attempt <attempt-id> --workspace .
-syu task finalize apply --attempt <attempt-id> --workspace . --token <preview-token>
+syu task finalize apply --attempt <attempt-id> --workspace . --preview-token <preview-token>
 ```
 
 ### Export one execution slice

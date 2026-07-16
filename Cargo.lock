@@ -1016,6 +1016,7 @@ dependencies = [
  "serde_yaml",
  "sha2",
  "syu-spec-model",
+ "syu-validation",
  "syu-work-model",
  "syu-workspace",
  "tempfile",

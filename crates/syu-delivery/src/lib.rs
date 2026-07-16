@@ -227,9 +227,7 @@ impl DeliveryStore {
             return Ok(existing);
         }
         let old = apply_status_overlay(workspace, &preview.promoted_items)?;
-        let post_workspace_fingerprint = match SpecWorkspace::load(&workspace.root)
-            .and_then(|candidate| candidate.index().map(|_| candidate))
-        {
+        let post_workspace_fingerprint = match validate_finalized_workspace(&workspace.root) {
             Ok(candidate) => candidate.try_fingerprint()?,
             Err(error) => {
                 restore_files(&old)?;
@@ -405,6 +403,36 @@ fn changed_document_paths(workspace: &SpecWorkspace, items: &[SpecItemRef]) -> R
                 .into_owned()
         })
         .collect())
+}
+
+fn validate_finalized_workspace(root: &Path) -> Result<SpecWorkspace> {
+    let workspace = SpecWorkspace::load(root)?;
+    let index = workspace.index()?;
+    let result = syu_validation::validate(&syu_validation::ValidationContext {
+        config: &workspace.config,
+        workspace: &workspace,
+        index: &index,
+        changed_files: None,
+        reported_changed_files: None,
+        work_plan: None,
+        selected_slice: None,
+        plan_mode: syu_validation::PlanValidationMode::PostState,
+        preset: workspace.config.validation.preset,
+        revision: None,
+        change_base_revision: None,
+    });
+    if !result.is_valid() {
+        bail!(
+            "finalization overlay validation failed: {}",
+            result
+                .diagnostics
+                .iter()
+                .map(|diagnostic| diagnostic.message.as_str())
+                .collect::<Vec<_>>()
+                .join("; ")
+        );
+    }
+    Ok(workspace)
 }
 
 fn apply_status_overlay(
