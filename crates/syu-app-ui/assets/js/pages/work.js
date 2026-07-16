@@ -10,7 +10,7 @@ function replace(root, content) {
 export function renderWork(work, state) {
   const plan = work?.plan;
   replace(
-    document.querySelector('[data-work-overview]'),
+    document.querySelector('[data-work-overview-summary]'),
     state.error ? `Error: ${state.error.message}` : plan ? `${plan.id}: ${plan.status}` : work?.request ? 'Work request created. Press Plan to derive the safe slice.' : 'Choose an implemented criterion in Specifications to create a Modify Work request.',
   );
   const selectedPlan = plan?.slices || [];

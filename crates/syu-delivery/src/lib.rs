@@ -440,8 +440,27 @@ fn apply_status_overlay(
         }
         if changed {
             let path = loaded.path.clone();
-            old.push((path.clone(), fs::read(&path)?));
-            atomic_write(&path, &serde_yaml::to_string(&document)?)?;
+            let original = match fs::read(&path) {
+                Ok(value) => value,
+                Err(error) => {
+                    let _ = restore_files(&old);
+                    return Err(error.into());
+                }
+            };
+            let serialized = match serde_yaml::to_string(&document) {
+                Ok(value) => value,
+                Err(error) => {
+                    let _ = restore_files(&old);
+                    return Err(error.into());
+                }
+            };
+            old.push((path.clone(), original));
+            if let Err(error) = atomic_write(&path, serialized) {
+                // A previous document may already have been promoted. Restore
+                // it before exposing the error so finalization is all-or-none.
+                let _ = restore_files(&old);
+                return Err(error);
+            }
         }
     }
     Ok(old)
