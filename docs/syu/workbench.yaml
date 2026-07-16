@@ -207,6 +207,7 @@ requirements:
       - id: completion-history
         kind: behavior
         statement: Current and previous attempts expose plan and slice identity, status, blockers, next action, demonstrated criteria, and finalized state.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
   - id: REQ-WORKBENCH-010
     title: Layered quality gates
     description: Local hooks and CI apply proportional quality checks without weakening the complete release gate.

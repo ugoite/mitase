@@ -283,6 +283,8 @@ description: "Generated reference for docs/syu/workbench.yaml"
     - **id**: completion-history
       - **kind**: behavior
       - **statement**: Current and previous attempts expose plan and slice identity, status, blockers, next action, demonstrated criteria, and finalized state.
+      - **governed_by**:
+        - POL-DELIVERY-001#rule.exact-ownership
 - **id**: REQ-WORKBENCH-010
   - **title**: Layered quality gates
   - **description**: Local hooks and CI apply proportional quality checks without weakening the complete release gate.
@@ -498,7 +500,6 @@ requirements:
                   - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.accessibility-attributes
                   - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.workbench-css
                 runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_accessible_navigation } }
-<<<<<<< HEAD
   - id: REQ-WORKBENCH-009
     title: Durable completion history
     description: Workbench renders the shared completion attempt history and finalization state from the server-owned store.
@@ -508,7 +509,7 @@ requirements:
       - id: completion-history
         kind: behavior
         statement: Current and previous attempts expose plan and slice identity, status, blockers, next action, demonstrated criteria, and finalized state.
-=======
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
   - id: REQ-WORKBENCH-010
     title: Layered quality gates
     description: Local hooks and CI apply proportional quality checks without weakening the complete release gate.
@@ -518,6 +519,5 @@ requirements:
       - id: lifecycle-separation
         kind: quality
         statement: Pre-commit validates the staged snapshot, pre-push scopes fast Rust and specification checks to the push diff, and CI runs the complete workspace gate.
->>>>>>> 353ea99d (fix: separate pre-commit and quality gates)
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
 ```

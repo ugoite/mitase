@@ -1900,6 +1900,12 @@ description: "Generated reference for docs/syu/workbench-features.yaml"
           - **path**: build.rs
           - **selector**:
             - **kind**: file
+        - **id**: root-build-module
+          - **adapter**: rust
+          - **path**: build.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: build
         - **id**: changed-validation-hook
           - **adapter**: declared
           - **path**: scripts/dev/validate-changed.sh
@@ -3806,6 +3812,10 @@ features:
       adapter: declared
       path: build.rs
       selector: { kind: file }
+    - id: root-build-module
+      adapter: rust
+      path: build.rs
+      selector: { kind: module, name: build }
     - id: changed-validation-hook
       adapter: declared
       path: scripts/dev/validate-changed.sh
