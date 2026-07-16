@@ -849,7 +849,7 @@ pub fn execute_verification_attempt(
         Err(error) => {
             let failure = VerificationAttemptFailure {
                 code: "SYU-VERIFICATION-FAILED".into(),
-                message: error.to_string(),
+                message: durable_failure_message(&error),
                 next_action:
                     "Resolve the verification failure, then retry the same approved plan and slice."
                         .into(),
@@ -881,6 +881,22 @@ pub fn execute_verification_attempt(
         }
     };
     Ok(result)
+}
+
+fn durable_failure_message(error: &anyhow::Error) -> String {
+    let message = error.to_string();
+    let summary = message
+        .split_once("\nstdout:\n")
+        .map_or(message.as_str(), |(summary, _)| summary);
+    const MAX_CHARS: usize = 4_096;
+    let mut bounded = summary.chars().take(MAX_CHARS).collect::<String>();
+    if summary.chars().count() > MAX_CHARS {
+        bounded.push('…');
+    }
+    if summary.len() != message.len() {
+        bounded.push_str("; runner output omitted from durable evidence");
+    }
+    bounded
 }
 
 pub fn validate_verification_receipt(
@@ -4563,6 +4579,18 @@ requirements:
         )
         .is_err());
         assert!(ensure_exact_test_executed("python", &target, &arguments, b"ok").is_err());
+    }
+
+    #[test]
+    fn durable_failure_message_omits_runner_output() {
+        let error = anyhow::anyhow!(
+            "verification runner cargo-test failed with exit code 101\nstdout:\nsecret-token\nstderr:\nmore-secret-output"
+        );
+        let message = durable_failure_message(&error);
+        assert_eq!(
+            message,
+            "verification runner cargo-test failed with exit code 101; runner output omitted from durable evidence"
+        );
     }
 
     #[test]

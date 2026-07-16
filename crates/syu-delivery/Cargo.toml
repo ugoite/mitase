@@ -16,3 +16,6 @@ syu-work-model = { path = "../syu-work-model" }
 syu-spec-model = { path = "../syu-spec-model" }
 syu-workspace = { path = "../syu-workspace" }
 syu-validation = { path = "../syu-validation" }
+
+[dev-dependencies]
+syu-planner = { path = "../syu-planner" }

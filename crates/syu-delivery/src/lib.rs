@@ -160,6 +160,29 @@ impl DeliveryStore {
                 next_action: "Resolve blockers and create a new complete attempt.".into(),
             });
         }
+        if let Some(receipt) = &attempt.receipt {
+            let index = workspace.index()?;
+            if receipt.workspace_fingerprint != pre_workspace_fingerprint
+                || syu_validation::validate_verification_receipt(
+                    workspace,
+                    &index,
+                    &approval.plan,
+                    &attempt.slice_id,
+                    receipt,
+                    &receipt.revision,
+                )
+                .is_err()
+            {
+                blockers.push(CompletionBlocker {
+                    code: "SYU-FINALIZE-STALE-EVIDENCE".into(),
+                    message: "the completion attempt no longer matches the current workspace"
+                        .into(),
+                    next_action:
+                        "Re-run verification for the approved plan and slice before finalizing."
+                            .into(),
+                });
+            }
+        }
         let promoted_items = if blockers.is_empty() {
             let index = workspace.index()?;
             let slice = approval
@@ -515,7 +538,79 @@ fn atomic_write(path: &Path, content: impl AsRef<[u8]>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::process::Command;
+    use std::{fs, process::Command};
+    use syu_work_model::{
+        COMPLETION_ATTEMPT_SCHEMA, COMPLETION_REPORT_SCHEMA, CompletionReport,
+        PLAN_APPROVAL_SCHEMA, VERIFICATION_RECEIPT_SCHEMA, VerificationAttemptResult,
+        VerificationAttemptStatus, VerificationReceipt, WORK_REQUEST_SCHEMA, WorkOperation,
+        WorkRequest, WorkSeed,
+    };
+
+    fn workbench_fixture_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/v1/valid-workbench-flow")
+            .canonicalize()
+            .expect("Workbench fixture root")
+    }
+
+    fn copy_dir(from: &Path, to: &Path) {
+        fs::create_dir_all(to).expect("create dir");
+        for entry in fs::read_dir(from).expect("read dir") {
+            let entry = entry.expect("entry");
+            let path = entry.path();
+            let destination = to.join(entry.file_name());
+            if entry.file_type().expect("file type").is_dir() {
+                copy_dir(&path, &destination);
+            } else {
+                fs::copy(&path, &destination).expect("copy file");
+            }
+        }
+    }
+
+    fn init_git_repo(root: &Path) -> String {
+        for args in [
+            vec!["init", "-q"],
+            vec!["config", "user.name", "Codex"],
+            vec!["config", "user.email", "codex@example.com"],
+            vec!["add", "."],
+            vec!["commit", "-qm", "baseline"],
+        ] {
+            let status = Command::new("git")
+                .args(args)
+                .current_dir(root)
+                .status()
+                .unwrap();
+            assert!(status.success(), "git command failed");
+        }
+        let output = Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(root)
+            .output()
+            .unwrap();
+        String::from_utf8(output.stdout).unwrap().trim().to_owned()
+    }
+
+    fn fixture_plan(root: &Path, revision: &str) -> syu_work_model::WorkPlan {
+        let workspace = SpecWorkspace::load(root).unwrap();
+        let index = workspace.index().unwrap();
+        syu_planner::plan(
+            &WorkRequest {
+                schema: WORK_REQUEST_SCHEMA.into(),
+                id: "WORK-DELIVERY-TEST".into(),
+                summary: "modify fixture behavior".into(),
+                operation: WorkOperation::Modify,
+                seeds: vec![WorkSeed::Anchor(
+                    "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
+                )],
+                constraints: Default::default(),
+                requested_targets: vec![],
+            },
+            &workspace,
+            &index,
+            revision,
+        )
+        .unwrap()
+    }
 
     #[test]
     fn store_is_outside_worktree() {
@@ -532,9 +627,97 @@ mod tests {
 
     #[test]
     fn finalization_preview_requires_complete_attempt() {
-        assert_eq!(
-            syu_work_model::CompletionStatus::Blocked,
-            syu_work_model::CompletionStatus::Blocked
+        let temp = tempfile::tempdir().unwrap();
+        copy_dir(&workbench_fixture_root(), temp.path());
+        let revision = init_git_repo(temp.path());
+        let workspace = SpecWorkspace::load(temp.path()).unwrap();
+        let plan = fixture_plan(temp.path(), &revision);
+        let slice_id = plan.slices[0].id.clone();
+        let store = DeliveryStore::for_workspace(temp.path()).unwrap();
+        let approval = store
+            .approve(&PlanApproval {
+                schema: PLAN_APPROVAL_SCHEMA.into(),
+                approval_id: "approval-test".into(),
+                plan_digest: plan.canonical_digest.clone(),
+                workspace_fingerprint: workspace.try_fingerprint().unwrap(),
+                revision: revision.clone(),
+                reviewed_at: "0".into(),
+                plan: plan.clone(),
+            })
+            .unwrap();
+        let receipt = VerificationReceipt {
+            schema: VERIFICATION_RECEIPT_SCHEMA.into(),
+            plan_digest: plan.canonical_digest.clone(),
+            slice_id: slice_id.clone(),
+            revision,
+            workspace_fingerprint: "sha256:stale".into(),
+            started_at: "0".into(),
+            completed_at: "1".into(),
+            executions: vec![],
+        };
+        let mut attempt = CompletionAttempt {
+            schema: COMPLETION_ATTEMPT_SCHEMA.into(),
+            attempt_id: "attempt-test".into(),
+            attempt_digest: String::new(),
+            plan_digest: plan.canonical_digest.clone(),
+            slice_id,
+            approved_plan_digest: approval.plan_digest,
+            started_at: "0".into(),
+            completed_at: "1".into(),
+            verification: VerificationAttemptResult {
+                status: VerificationAttemptStatus::Complete,
+                executions: vec![],
+                failure: None,
+            },
+            receipt: Some(receipt),
+            report: CompletionReport {
+                schema: COMPLETION_REPORT_SCHEMA.into(),
+                attempt_id: "attempt-test".into(),
+                plan_digest: plan.canonical_digest.clone(),
+                slice_id: plan.slices[0].id.clone(),
+                receipt_digest: None,
+                status: CompletionStatus::Complete,
+                demonstrated: vec![],
+                checks: vec![],
+                blockers: vec![],
+            },
+        };
+        attempt.attempt_digest =
+            DeliveryStore::digest(&attempt_with_empty_digest(&attempt)).unwrap();
+        let attempt = store.append_attempt(&attempt).unwrap();
+
+        let preview = store.finalization_preview(&workspace, &attempt).unwrap();
+        assert_eq!(preview.status, CompletionStatus::Blocked);
+        assert!(
+            preview
+                .blockers
+                .iter()
+                .any(|blocker| blocker.code == "SYU-FINALIZE-STALE-EVIDENCE")
         );
+
+        let mut incomplete = attempt.clone();
+        incomplete.attempt_id = "attempt-incomplete".into();
+        incomplete.attempt_digest.clear();
+        incomplete.verification.status = syu_work_model::VerificationAttemptStatus::Failed;
+        incomplete.receipt = None;
+        incomplete.report.attempt_id = incomplete.attempt_id.clone();
+        incomplete.report.status = CompletionStatus::Blocked;
+        incomplete.attempt_digest =
+            DeliveryStore::digest(&attempt_with_empty_digest(&incomplete)).unwrap();
+        let incomplete = store.append_attempt(&incomplete).unwrap();
+        let preview = store.finalization_preview(&workspace, &incomplete).unwrap();
+        assert_eq!(preview.status, CompletionStatus::Blocked);
+        assert!(
+            preview
+                .blockers
+                .iter()
+                .any(|blocker| blocker.code == "SYU-FINALIZE-INCOMPLETE")
+        );
+    }
+
+    fn attempt_with_empty_digest(attempt: &CompletionAttempt) -> CompletionAttempt {
+        let mut copy = attempt.clone();
+        copy.attempt_digest.clear();
+        copy
     }
 }

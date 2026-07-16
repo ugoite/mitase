@@ -1015,6 +1015,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sha2",
+ "syu-planner",
  "syu-spec-model",
  "syu-validation",
  "syu-work-model",

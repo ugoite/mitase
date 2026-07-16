@@ -2295,6 +2295,7 @@ async fn api_verify(
         ));
     }
     let attempt_id = store.new_id("attempt");
+    let started_at = timestamp();
     let (verification, receipt, mut report) = syu_validation::execute_verification_attempt(
         &workspace,
         &index,
@@ -2311,7 +2312,7 @@ async fn api_verify(
         plan_digest: plan.canonical_digest.clone(),
         slice_id: command.slice_id,
         approved_plan_digest: approval.plan_digest,
-        started_at: timestamp(),
+        started_at,
         completed_at: timestamp(),
         verification,
         receipt,
