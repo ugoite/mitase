@@ -69,8 +69,10 @@ pathlib.Path(sys.argv[3]).write_text(
     """  if(path.includes('/api/work/plan')) { window.__SYU_FLOW__.push('plan'); projection.work.plan={id:'PLAN-VISUAL-FLOW',status:'ready',slices:[{id:'slice-visual-flow',editable_targets:[{reference:'FEAT-VISUAL#binding.work/target.code',access:'editable',path:'src/lib.rs'}]}]}; return body(projection.work.plan); }\n"""
     """  if(path.includes('/api/work/context')) { window.__SYU_FLOW__.push('context'); projection.work.selected_slice='slice-visual-flow'; projection.work.context_pack={slice_id:'slice-visual-flow',entry_count:2}; return body({schema:'syu/context-pack/v1',slice:'slice-visual-flow',artifact_context:[]}); }\n"""
     """  if(path.includes('/api/work/validate')) { window.__SYU_FLOW__.push('validate'); projection.work.validation={state:'passed',context:'work-plan'}; return body(projection.work.validation); }\n"""
-    """  if(path.includes('/api/work/verify')) { window.__SYU_FLOW__.push('verify'); receipt={schema:'syu/verification-receipt/v1',plan_digest:'visual-plan',slice_id:'slice-visual-flow',revision:'visual-revision',workspace_fingerprint:'visual-fingerprint',started_at:'1',completed_at:'2',executions:[{target:'REQ-VISUAL#binding.test/target.exact',runner:'mock',command:['mock'],exit_code:0,stdout_digest:'stdout',stderr_digest:'stderr',implementation_digests:{},verification_digest:'verification'}]}; projection.work.verification_receipt={slice_id:'slice-visual-flow'}; return body(receipt); }\n"""
-    """  if(path.includes('/api/work/result')) { window.__SYU_FLOW__.push('result'); projection.work.validation={state:'passed',context:'work-result'}; return body(null,204); }\n"""
+    """  if(path.includes('/api/work/approve')) { window.__SYU_FLOW__.push('approve'); return body({schema:'syu/plan-approval/v1',approval_id:'approval-visual-flow',plan_digest:'visual-plan'}); }\n"""
+    """  if(path.includes('/api/work/verify')) { window.__SYU_FLOW__.push('verify'); receipt={schema:'syu/verification-receipt/v1',plan_digest:'visual-plan',slice_id:'slice-visual-flow',revision:'visual-revision',workspace_fingerprint:'visual-fingerprint',started_at:'1',completed_at:'2',executions:[{target:'REQ-VISUAL#binding.test/target.exact',runner:'mock',command:['mock'],exit_code:0,stdout_digest:'stdout',stderr_digest:'stderr',implementation_digests:{},verification_digest:'verification'}]}; projection.work.verification_receipt={slice_id:'slice-visual-flow'}; projection.work.completion={current:{attempt_id:'attempt-visual-flow',status:'complete',plan_digest:'visual-plan',slice_id:'slice-visual-flow',finalized:false},previous:[]}; return body({receipt}); }\n"""
+    """  if(path.includes('/api/work/finalize/preview')) { window.__SYU_FLOW__.push('finalize-preview'); return body({preview_token:'visual-preview-token'}); }\n"""
+    """  if(path.includes('/api/work/finalize/apply')) { window.__SYU_FLOW__.push('finalize-apply'); projection.work.completion.current.finalized=true; return body({schema:'syu/finalization-receipt/v1'}); }\n"""
     """  return body({error:`unhandled fetch ${url}`},404);\n"""
     """};\n"""
 )
@@ -129,9 +131,10 @@ setTimeout(()=>{
   if(!document.querySelector('[data-work-slices-rail] .rail-item')) failures.push('Plan did not create a slice');
   await click('[data-work-context]');
   await click('[data-work-validate]');
+  await click('[data-work-approve]');
   await click('[data-work-verify]');
-  await click('[data-work-result]');
-  if(JSON.stringify(window.__SYU_FLOW__)!=='["request","plan","context","validate","verify","result"]') failures.push(`unexpected work flow: ${JSON.stringify(window.__SYU_FLOW__)}`);
+  await click('[data-work-finalize]');
+  if(JSON.stringify(window.__SYU_FLOW__)!=='["request","plan","context","validate","approve","verify","finalize-preview","finalize-apply"]') failures.push(`unexpected work flow: ${JSON.stringify(window.__SYU_FLOW__)}`);
 
   click('[data-page="work"] [data-tab="slices"]');
   if(!visible('[data-page="work"] [data-panel="slices"]')) failures.push('work slices panel did not open');
