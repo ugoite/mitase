@@ -17,6 +17,7 @@ use std::process::Command;
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{fs, path::Path};
+use syu_delivery::DeliveryStore;
 use syu_diagnostics::{Severity, ValidationPhase, ValidationResult};
 use syu_planner::{
     SplitWorkRecommendation, TargetSuggestionSet, plan, split_work_recommendation, suggest_targets,
@@ -29,8 +30,9 @@ use syu_spec_model::{
 };
 use syu_validation::{PlanValidationMode, ValidationContext, validate};
 use syu_work_model::{
-    RequestedTarget, VerificationReceipt, WORK_REQUEST_SCHEMA, WorkConstraints, WorkOperation,
-    WorkPlan, WorkRequest,
+    COMPLETION_ATTEMPT_SCHEMA, CompletionAttempt, FinalizationPreview, FinalizationReceipt,
+    PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus, RequestedTarget, VerificationReceipt,
+    WORK_REQUEST_SCHEMA, WorkConstraints, WorkOperation, WorkPlan, WorkRequest,
 };
 use syu_workspace::SpecWorkspace;
 
@@ -180,8 +182,11 @@ impl WorkbenchServer {
             .route("/api/work/request", post(api_request))
             .route("/api/work/plan", post(api_plan))
             .route("/api/work/validate", post(api_validate))
+            .route("/api/work/approve", post(api_approve))
             .route("/api/work/context", post(api_context))
             .route("/api/work/verify", post(api_verify))
+            .route("/api/work/finalize/preview", post(api_finalize_preview))
+            .route("/api/work/finalize/apply", post(api_finalize_apply))
             .route("/api/work/result", post(api_result))
             .route("/api/work/session", delete(api_discard))
             .layer(middleware::from_fn(mutation_guard))
@@ -318,6 +323,15 @@ pub struct SliceCommand {
 pub struct ResultCommand {
     pub basis: MutationBasis,
     pub receipt: VerificationReceipt,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FinalizeCommand {
+    pub basis: MutationBasis,
+    pub attempt_id: String,
+    #[serde(default)]
+    pub preview_token: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -515,6 +529,14 @@ fn current_revision(root: &std::path::Path) -> Result<String> {
         anyhow::bail!("resolve workspace revision");
     }
     Ok(String::from_utf8(output.stdout)?.trim().into())
+}
+
+fn timestamp() -> String {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .to_string()
 }
 fn basis(service: &WorkbenchService, expected: &MutationBasis) -> Result<SpecWorkspace> {
     if expected.expected_source_hash.is_empty() {
@@ -2146,6 +2168,42 @@ async fn api_context(
     session.selected_slice = Some(command.slice_id.clone());
     Ok(Json(context))
 }
+async fn api_approve(
+    State(service): State<Arc<WorkbenchService>>,
+    Json(command): Json<MutationBasis>,
+) -> Result<Json<PlanApproval>, ApiError> {
+    let workspace = basis(&service, &command)?;
+    let index = workspace.index()?;
+    let revision = current_revision(&workspace.root)?;
+    let session = service
+        .session
+        .write()
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+    let plan = session
+        .plan
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("no work plan"))?;
+    let canonical =
+        syu_validation::canonical_plan_for_execution(&workspace, &index, plan, &revision)
+            .map_err(|error| ApiError(StatusCode::CONFLICT, error))?;
+    if !matches!(canonical.status, PlanStatus::Ready) {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("only a ready plan can be approved"),
+        ));
+    }
+    let store = DeliveryStore::for_workspace(&workspace.root)?;
+    let approval = PlanApproval {
+        schema: PLAN_APPROVAL_SCHEMA.into(),
+        approval_id: store.new_id("approval"),
+        plan_digest: canonical.canonical_digest.clone(),
+        workspace_fingerprint: workspace.try_fingerprint()?,
+        revision,
+        reviewed_at: timestamp(),
+        plan: canonical,
+    };
+    Ok(Json(store.approve(&approval)?))
+}
 
 async fn api_validate(
     State(service): State<Arc<WorkbenchService>>,
@@ -2197,7 +2255,7 @@ async fn api_validate(
 async fn api_verify(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<SliceCommand>,
-) -> Result<Json<VerificationReceipt>, ApiError> {
+) -> Result<Json<CompletionAttempt>, ApiError> {
     let workspace = execution_basis(&service, &command.basis)?;
     let index = workspace.index()?;
     let revision = current_revision(&workspace.root)?;
@@ -2209,6 +2267,19 @@ async fn api_verify(
         .plan
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("no work plan"))?;
+    let store = DeliveryStore::for_workspace(&workspace.root)?;
+    let approval = store.approval(&plan.canonical_digest).map_err(|error| {
+        ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("plan approval required before verification: {error}"),
+        )
+    })?;
+    if approval.plan != *plan {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("session plan differs from approved plan"),
+        ));
+    }
     if session
         .selected_slice
         .as_deref()
@@ -2223,10 +2294,68 @@ async fn api_verify(
             anyhow::anyhow!("verification requires a validated selected slice"),
         ));
     }
-    let receipt = execute_verification(&workspace, &index, plan, &command.slice_id, &revision)?;
-    session.verification_receipt = Some(receipt.clone());
-    Ok(Json(receipt))
+    let attempt_id = store.new_id("attempt");
+    let (verification, receipt, mut report) = syu_validation::execute_verification_attempt(
+        &workspace,
+        &index,
+        plan,
+        &command.slice_id,
+        &revision,
+        &attempt_id,
+    )?;
+    report.attempt_id = attempt_id.clone();
+    let mut attempt = CompletionAttempt {
+        schema: COMPLETION_ATTEMPT_SCHEMA.into(),
+        attempt_id,
+        attempt_digest: String::new(),
+        plan_digest: plan.canonical_digest.clone(),
+        slice_id: command.slice_id,
+        approved_plan_digest: approval.plan_digest,
+        started_at: timestamp(),
+        completed_at: timestamp(),
+        verification,
+        receipt,
+        report,
+    };
+    attempt.attempt_digest = DeliveryStore::digest(&{
+        let mut copy = attempt.clone();
+        copy.attempt_digest.clear();
+        copy
+    })?;
+    let attempt = store.append_attempt(&attempt)?;
+    session.verification_receipt = attempt.receipt.clone();
+    Ok(Json(attempt))
 }
+
+async fn api_finalize_preview(
+    State(service): State<Arc<WorkbenchService>>,
+    Json(command): Json<FinalizeCommand>,
+) -> Result<Json<FinalizationPreview>, ApiError> {
+    let workspace = execution_basis(&service, &command.basis)?;
+    let store = DeliveryStore::for_workspace(&workspace.root)?;
+    let attempt = store.attempt(&command.attempt_id)?;
+    Ok(Json(store.finalization_preview(&workspace, &attempt)?))
+}
+
+async fn api_finalize_apply(
+    State(service): State<Arc<WorkbenchService>>,
+    Json(command): Json<FinalizeCommand>,
+) -> Result<Json<FinalizationReceipt>, ApiError> {
+    let token = command.preview_token.as_deref().ok_or_else(|| {
+        ApiError(
+            StatusCode::BAD_REQUEST,
+            anyhow::anyhow!("preview_token is required"),
+        )
+    })?;
+    let workspace = execution_basis(&service, &command.basis)?;
+    let store = DeliveryStore::for_workspace(&workspace.root)?;
+    let attempt = store.attempt(&command.attempt_id)?;
+    let preview = store.finalization_preview(&workspace, &attempt)?;
+    Ok(Json(store.apply_finalization(
+        &workspace, &attempt, &preview, token,
+    )?))
+}
+
 async fn api_result(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<ResultCommand>,
@@ -2349,9 +2478,26 @@ pub struct WorkSessionView {
     pub request: Option<WorkRequestView>,
     pub plan: Option<PlanView>,
     pub verification_receipt: Option<VerificationReceiptView>,
+    pub completion: CompletionHistoryView,
     pub context_pack: Option<ContextPackView>,
     pub selected_slice: Option<String>,
     pub validation: ValidationRunView,
+}
+#[derive(Debug, Clone, Serialize)]
+pub struct CompletionHistoryView {
+    pub current: Option<CompletionAttemptView>,
+    pub previous: Vec<CompletionAttemptView>,
+}
+#[derive(Debug, Clone, Serialize)]
+pub struct CompletionAttemptView {
+    pub attempt_id: String,
+    pub plan_digest: String,
+    pub slice_id: String,
+    pub status: String,
+    pub demonstrated: Vec<String>,
+    pub blockers: Vec<syu_work_model::CompletionBlocker>,
+    pub next_action: Option<String>,
+    pub finalized: bool,
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkRequestView {
@@ -2921,6 +3067,7 @@ pub fn project(
             request: requested_work.as_ref().map(request_view),
             plan: plan.as_ref().map(plan_view),
             verification_receipt: None,
+            completion: completion_history(workspace)?,
             context_pack: None,
             selected_slice: None,
             validation: validation.clone(),
@@ -2991,6 +3138,40 @@ fn verification_receipt_view(receipt: &VerificationReceipt) -> VerificationRecei
     }
 }
 
+fn completion_history(workspace: &SpecWorkspace) -> Result<CompletionHistoryView> {
+    let store = DeliveryStore::for_workspace(&workspace.root)?;
+    let attempts = store.attempts()?;
+    let mut views = Vec::with_capacity(attempts.len());
+    for attempt in attempts {
+        let next_action = attempt
+            .report
+            .blockers
+            .first()
+            .map(|blocker| blocker.next_action.clone());
+        let finalized = store.finalization(&attempt.attempt_id)?.is_some();
+        views.push(CompletionAttemptView {
+            attempt_id: attempt.attempt_id,
+            plan_digest: attempt.plan_digest,
+            slice_id: attempt.slice_id,
+            status: format!("{:?}", attempt.report.status).to_ascii_lowercase(),
+            demonstrated: attempt
+                .report
+                .demonstrated
+                .into_iter()
+                .map(|value| value.anchor.to_string())
+                .collect(),
+            blockers: attempt.report.blockers,
+            next_action,
+            finalized,
+        });
+    }
+    let mut iter = views.into_iter();
+    Ok(CompletionHistoryView {
+        current: iter.next(),
+        previous: iter.collect(),
+    })
+}
+
 fn context_pack_view(context: &syu_work_model::ContextPack) -> ContextPackView {
     ContextPackView {
         slice_id: context.slice.clone(),
@@ -3058,6 +3239,7 @@ fn project_session(
         .verification_receipt
         .as_ref()
         .map(verification_receipt_view);
+    projection.work.completion = completion_history(workspace)?;
     projection.work.context_pack = session.context_pack.as_ref().map(context_pack_view);
     projection.work.selected_slice = session.selected_slice.clone();
     projection.work.validation = session
@@ -3778,6 +3960,8 @@ mod tests {
             matches!(validation.state, ValidationRunState::Passed),
             "{validation:?}"
         );
+        let response = json_mutation(&app, Method::POST, "/api/work/approve", &csrf, &basis).await;
+        assert_eq!(response.status(), StatusCode::OK);
 
         let source = temp.path().join("src/lib.rs");
         if out_of_scope {
@@ -3803,9 +3987,10 @@ mod tests {
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
-        let receipt: VerificationReceipt =
+        let attempt: CompletionAttempt =
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
-                .expect("fixture verification receipt");
+                .expect("fixture completion attempt");
+        let receipt = attempt.receipt.clone().expect("successful receipt");
         assert!(
             receipt
                 .executions
@@ -4338,6 +4523,14 @@ mod tests {
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[test]
+    fn completion_history_projection_is_store_backed() {
+        let workspace = SpecWorkspace::load(workspace_root()).expect("workspace loads");
+        let history = completion_history(&workspace).expect("completion history loads");
+        assert!(history.current.is_none());
+        assert!(history.previous.is_empty());
     }
 
     async fn run_spec_transaction(app: Router) {

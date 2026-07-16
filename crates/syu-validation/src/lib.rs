@@ -21,8 +21,10 @@ use syu_work_model::{
     COMPLETION_REPORT_SCHEMA, CompletionBlocker, CompletionCheck, CompletionCheckEvidence,
     CompletionCriterionEvidence, CompletionReport, CompletionStatus, ExactTestEvidence,
     ExecutionSlice, PlanConfidence, PlanExecution, TargetAccessMode, TargetLifecycle,
-    VERIFICATION_RECEIPT_SCHEMA, VerificationExecution, VerificationReceipt, WORK_PLAN_SCHEMA,
-    WorkPlan, readonly_targets_fingerprint, work_plan_digest,
+    VERIFICATION_RECEIPT_SCHEMA, VerificationAttemptFailure, VerificationAttemptResult,
+    VerificationAttemptStatus, VerificationExecution, VerificationExecutionAttempt,
+    VerificationReceipt, WORK_PLAN_SCHEMA, WorkPlan, readonly_targets_fingerprint,
+    work_plan_digest,
 };
 use syu_workspace::{
     AnchorValue, ResolvedTarget, SpecIndex, SpecWorkspace, resolve_indexed_target,
@@ -800,6 +802,87 @@ pub fn execute_verification(
     Ok(receipt)
 }
 
+/// Execute verification while preserving every expected execution failure as
+/// a structured completion result. Callers persist the returned value as one
+/// immutable attempt instead of dropping runner errors through propagation.
+pub fn execute_verification_attempt(
+    workspace: &SpecWorkspace,
+    index: &SpecIndex,
+    submitted: &WorkPlan,
+    slice_id: &str,
+    revision: &str,
+    attempt_id: &str,
+) -> Result<(
+    VerificationAttemptResult,
+    Option<VerificationReceipt>,
+    CompletionReport,
+)> {
+    let result = match execute_verification(workspace, index, submitted, slice_id, revision) {
+        Ok(receipt) => {
+            let mut report = evaluate_completion(workspace, index, submitted, &receipt)?;
+            report.attempt_id = attempt_id.into();
+            report.receipt_digest = Some(digest(&serde_json::to_vec(&receipt)?));
+            let executions = receipt
+                .executions
+                .iter()
+                .map(|execution| VerificationExecutionAttempt {
+                    target: Some(execution.target.clone()),
+                    runner: execution.runner.clone(),
+                    command: execution.command.clone(),
+                    exit_code: Some(execution.exit_code),
+                    stdout_digest: Some(execution.stdout_digest.clone()),
+                    stderr_digest: Some(execution.stderr_digest.clone()),
+                    proof: Some(execution.proof.clone()),
+                    error: None,
+                })
+                .collect();
+            (
+                VerificationAttemptResult {
+                    status: VerificationAttemptStatus::Complete,
+                    executions,
+                    failure: None,
+                },
+                Some(receipt),
+                report,
+            )
+        }
+        Err(error) => {
+            let failure = VerificationAttemptFailure {
+                code: "SYU-VERIFICATION-FAILED".into(),
+                message: error.to_string(),
+                next_action:
+                    "Resolve the verification failure, then retry the same approved plan and slice."
+                        .into(),
+            };
+            let report = CompletionReport {
+                schema: COMPLETION_REPORT_SCHEMA.into(),
+                attempt_id: attempt_id.into(),
+                plan_digest: submitted.canonical_digest.clone(),
+                slice_id: slice_id.into(),
+                receipt_digest: None,
+                status: CompletionStatus::Blocked,
+                demonstrated: vec![],
+                checks: vec![],
+                blockers: vec![CompletionBlocker {
+                    code: failure.code.clone(),
+                    message: failure.message.clone(),
+                    next_action: failure.next_action.clone(),
+                }],
+            };
+            (
+                VerificationAttemptResult {
+                    status: VerificationAttemptStatus::Failed,
+                    executions: vec![],
+                    failure: Some(failure),
+                },
+                None,
+                report,
+            )
+        }
+    };
+    Ok(result)
+}
+
 pub fn validate_verification_receipt(
     workspace: &SpecWorkspace,
     index: &SpecIndex,
@@ -923,8 +1006,10 @@ pub fn evaluate_completion(
     let current_revision = repository_revision(&workspace.root)?;
     let blocked = |plan_digest: String, blockers: Vec<CompletionBlocker>| CompletionReport {
         schema: COMPLETION_REPORT_SCHEMA.into(),
+        attempt_id: String::new(),
         plan_digest,
         slice_id: receipt.slice_id.clone(),
+        receipt_digest: None,
         status: CompletionStatus::Blocked,
         demonstrated: vec![],
         checks: vec![],
@@ -1063,8 +1148,10 @@ pub fn evaluate_completion(
     };
     Ok(CompletionReport {
         schema: COMPLETION_REPORT_SCHEMA.into(),
+        attempt_id: String::new(),
         plan_digest: canonical.canonical_digest,
         slice_id: receipt.slice_id.clone(),
+        receipt_digest: Some(digest(&serde_json::to_vec(receipt)?)),
         status,
         demonstrated,
         checks,

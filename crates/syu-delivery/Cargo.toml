@@ -1,0 +1,17 @@
+[package]
+name = "syu-delivery"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+sha2.workspace = true
+tempfile.workspace = true
+uuid.workspace = true
+syu-work-model = { path = "../syu-work-model" }
+syu-spec-model = { path = "../syu-spec-model" }
+syu-workspace = { path = "../syu-workspace" }

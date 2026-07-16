@@ -9,6 +9,7 @@ use std::{
     path::{Path, PathBuf},
     process::Command,
 };
+use syu_delivery::DeliveryStore;
 use syu_inventory::{InventoryContext, InventoryRegistry};
 use syu_planner::{export_context, plan};
 use syu_project_model::{ChangeBaseline, GitRef};
@@ -16,7 +17,10 @@ use syu_spec_model::RepoPath;
 use syu_validation::{
     ChangeStatus, ChangedFile, ChangedRange, PlanValidationMode, ValidationContext, validate,
 };
-use syu_work_model::{CompletionStatus, WorkPlan, WorkRequest};
+use syu_work_model::{
+    CompletionAttempt, CompletionStatus, PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus,
+    VerificationAttemptStatus, WorkPlan, WorkRequest,
+};
 use syu_workbench_server::project as project_workbench;
 use syu_workspace::SpecWorkspace;
 
@@ -38,6 +42,7 @@ enum CommandKind {
     Validate(ValidateArgs),
     Readiness(ReadinessArgs),
     Work(WorkArgs),
+    Task(TaskArgs),
     Workbench(WorkbenchArgs),
     Lsp,
 }
@@ -93,6 +98,81 @@ struct ValidateResultOptions {
 struct WorkArgs {
     #[command(subcommand)]
     command: WorkCommand,
+}
+#[derive(Debug, Args)]
+struct TaskArgs {
+    #[command(subcommand)]
+    command: TaskCommand,
+}
+#[derive(Debug, Subcommand)]
+enum TaskCommand {
+    Approve {
+        #[arg(long)]
+        plan: PathBuf,
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+        #[arg(long, value_enum, default_value = "text")]
+        format: Format,
+    },
+    Verify {
+        #[arg(long)]
+        plan: PathBuf,
+        #[arg(long)]
+        slice: String,
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+        #[arg(long, value_enum, default_value = "text")]
+        format: Format,
+    },
+    Attempts {
+        #[command(subcommand)]
+        command: AttemptCommand,
+    },
+    Finalize {
+        #[command(subcommand)]
+        command: FinalizeCommand,
+    },
+}
+#[derive(Debug, Subcommand)]
+enum AttemptCommand {
+    List {
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+        #[arg(long)]
+        plan_digest: Option<String>,
+        #[arg(long)]
+        slice: Option<String>,
+        #[arg(long, value_enum, default_value = "text")]
+        format: Format,
+    },
+    Show {
+        attempt_id: String,
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+        #[arg(long, value_enum, default_value = "json")]
+        format: Format,
+    },
+}
+#[derive(Debug, Subcommand)]
+enum FinalizeCommand {
+    Preview {
+        #[arg(long)]
+        attempt: String,
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+        #[arg(long, value_enum, default_value = "json")]
+        format: Format,
+    },
+    Apply {
+        #[arg(long)]
+        attempt: String,
+        #[arg(long)]
+        preview_token: String,
+        #[arg(long, default_value = ".")]
+        workspace: PathBuf,
+        #[arg(long, value_enum, default_value = "json")]
+        format: Format,
+    },
 }
 #[derive(Debug, Args)]
 #[command(
@@ -198,6 +278,7 @@ pub fn run() -> Result<i32> {
         CommandKind::Validate(args) => run_validate(args),
         CommandKind::Readiness(args) => run_readiness(args),
         CommandKind::Work(args) => run_work(args),
+        CommandKind::Task(args) => run_task(args),
         CommandKind::Workbench(args) => run_workbench(args),
         CommandKind::Lsp => {
             lsp::run_lsp_server()?;
@@ -384,6 +465,197 @@ fn run_validate_result(args: ValidateResultOptions) -> Result<i32> {
         1
     })
 }
+
+fn run_task(args: TaskArgs) -> Result<i32> {
+    match args.command {
+        TaskCommand::Approve {
+            plan: plan_path,
+            workspace: root,
+            format,
+        } => {
+            let workspace = SpecWorkspace::load(&root)?;
+            let index = workspace.index()?;
+            let revision = revision(&workspace.root)?;
+            let submitted: WorkPlan = read_yaml(&plan_path)?;
+            let canonical = syu_validation::canonical_plan_for_execution(
+                &workspace, &index, &submitted, &revision,
+            )?;
+            if !matches!(canonical.status, PlanStatus::Ready) {
+                bail!("only a ready canonical plan can be approved");
+            }
+            let store = DeliveryStore::for_workspace(&workspace.root)?;
+            let approval = PlanApproval {
+                schema: PLAN_APPROVAL_SCHEMA.into(),
+                approval_id: store.new_id("approval"),
+                plan_digest: canonical.canonical_digest.clone(),
+                workspace_fingerprint: workspace.try_fingerprint()?,
+                revision,
+                reviewed_at: now_timestamp(),
+                plan: canonical,
+            };
+            let approval = store.approve(&approval)?;
+            emit_task_value(&approval, format, "approved plan")?;
+            Ok(0)
+        }
+        TaskCommand::Verify {
+            plan: plan_path,
+            slice,
+            workspace: root,
+            format,
+        } => {
+            let workspace = SpecWorkspace::load(&root)?;
+            let index = workspace.index()?;
+            let plan: WorkPlan = read_yaml(&plan_path)?;
+            let store = DeliveryStore::for_workspace(&workspace.root)?;
+            let approval = store
+                .approval(&plan.canonical_digest)
+                .context("plan has not been explicitly approved; run syu task approve first")?;
+            if approval.plan != plan {
+                bail!(
+                    "submitted plan differs from the approved plan; approve the exact plan again"
+                );
+            }
+            let slice_value = plan
+                .slices
+                .iter()
+                .find(|value| value.id == slice)
+                .with_context(|| format!("slice {slice} not found"))?;
+            if slice_value.verification_targets.is_empty() {
+                bail!("selected slice has no verification targets");
+            }
+            let attempt_id = store.new_id("attempt");
+            let started_at = now_timestamp();
+            let (verification, receipt, mut report) = syu_validation::execute_verification_attempt(
+                &workspace,
+                &index,
+                &plan,
+                &slice,
+                &revision(&workspace.root)?,
+                &attempt_id,
+            )?;
+            report.attempt_id = attempt_id.clone();
+            let mut attempt = CompletionAttempt {
+                schema: syu_work_model::COMPLETION_ATTEMPT_SCHEMA.into(),
+                attempt_id,
+                attempt_digest: String::new(),
+                plan_digest: plan.canonical_digest.clone(),
+                slice_id: slice,
+                approved_plan_digest: approval.plan_digest,
+                started_at,
+                completed_at: now_timestamp(),
+                verification,
+                receipt,
+                report,
+            };
+            attempt.attempt_digest = attempt_digest(&attempt)?;
+            let attempt = store.append_attempt(&attempt)?;
+            emit_task_value(&attempt, format, "completion attempt")?;
+            Ok(
+                if matches!(
+                    attempt.verification.status,
+                    VerificationAttemptStatus::Complete
+                ) && attempt.report.status == CompletionStatus::Complete
+                {
+                    0
+                } else {
+                    1
+                },
+            )
+        }
+        TaskCommand::Attempts { command } => {
+            let root = match &command {
+                AttemptCommand::List { workspace, .. } | AttemptCommand::Show { workspace, .. } => {
+                    workspace
+                }
+            };
+            let store = DeliveryStore::for_workspace(&SpecWorkspace::load(root)?.root)?;
+            match command {
+                AttemptCommand::List {
+                    plan_digest,
+                    slice,
+                    format,
+                    ..
+                } => {
+                    let attempts = store
+                        .attempts()?
+                        .into_iter()
+                        .filter(|attempt| {
+                            plan_digest
+                                .as_ref()
+                                .is_none_or(|digest| &attempt.plan_digest == digest)
+                                && slice.as_ref().is_none_or(|id| &attempt.slice_id == id)
+                        })
+                        .collect::<Vec<_>>();
+                    emit_task_value(&attempts, format, "completion attempts")?;
+                    Ok(0)
+                }
+                AttemptCommand::Show {
+                    attempt_id, format, ..
+                } => {
+                    let attempt = store.attempt(&attempt_id)?;
+                    emit_task_value(&attempt, format, "completion attempt")?;
+                    Ok(0)
+                }
+            }
+        }
+        TaskCommand::Finalize { command } => {
+            let (attempt_id, root, format, token) = match command {
+                FinalizeCommand::Preview {
+                    attempt,
+                    workspace,
+                    format,
+                } => (attempt, workspace, format, None),
+                FinalizeCommand::Apply {
+                    attempt,
+                    preview_token,
+                    workspace,
+                    format,
+                } => (attempt, workspace, format, Some(preview_token)),
+            };
+            let workspace = SpecWorkspace::load(&root)?;
+            let store = DeliveryStore::for_workspace(&workspace.root)?;
+            let attempt = store.attempt(&attempt_id)?;
+            let preview = store.finalization_preview(&workspace, &attempt)?;
+            if let Some(token) = token {
+                let receipt = store.apply_finalization(&workspace, &attempt, &preview, &token)?;
+                emit_task_value(&receipt, format, "finalization receipt")?;
+                Ok(0)
+            } else {
+                let status = preview.status;
+                emit_task_value(&preview, format, "finalization preview")?;
+                Ok(if status == CompletionStatus::Complete {
+                    0
+                } else {
+                    1
+                })
+            }
+        }
+    }
+}
+
+fn emit_task_value<T: serde::Serialize>(value: &T, format: Format, label: &str) -> Result<()> {
+    match format {
+        Format::Json => println!("{}", serde_json::to_string_pretty(value)?),
+        Format::Text => println!("{label}:\n{}", serde_yaml::to_string(value)?),
+    }
+    Ok(())
+}
+
+fn attempt_digest(attempt: &CompletionAttempt) -> Result<String> {
+    let mut copy = attempt.clone();
+    copy.attempt_digest.clear();
+    DeliveryStore::digest(&copy)
+}
+
+fn now_timestamp() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .to_string()
+}
+
 fn run_work(args: WorkArgs) -> Result<i32> {
     match args.command {
         WorkCommand::Plan {

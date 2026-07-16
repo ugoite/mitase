@@ -332,6 +332,412 @@ description: "Generated reference for docs/syu/capabilities.yaml"
           - **path**: docs/generated/site-spec/index.md
           - **selector**:
             - **kind**: file
+- **id**: FEAT-DELIVERY-001
+  - **title**: Durable completion delivery
+  - **summary**: Persist completion attempts, enforce reviewed plan scope, and finalize complete work safely.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: implementation
+      - **role**: implementation
+      - **facet**: delivery
+      - **responsibility**: Store immutable attempts and perform the planned-to-implemented handoff.
+      - **owns**:
+        - **id**: delivery-module
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib
+        - **id**: delivery-manifest-file
+          - **adapter**: declared
+          - **path**: crates/syu-delivery/Cargo.toml
+          - **selector**:
+            - **kind**: file
+      - **targets**:
+        - **id**: delivery-store
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: DeliveryStore
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-source
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: file
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-apply-status
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: apply_status_overlay
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-atomic-write
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: atomic_write
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-attempt-plan
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: attempt_plan
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-changed-paths
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: changed_document_paths
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-component
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: component
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-json-files
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: json_files
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-now-nanos
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: now_nanos
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-preview-token
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: preview_without_token
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-read-json
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: read_json
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-restore-files
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: restore_files
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-validate-digest
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: validate_attempt_digest
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-write-json
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: write_immutable_json
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-append-attempt
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: append_attempt
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-append-finalization
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: append_finalization
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.finalization-handoff
+        - **id**: delivery-apply-finalization
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: apply_finalization
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.finalization-handoff
+        - **id**: delivery-approval
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: approval
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-approve
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: approve
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-attempt
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: attempt
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-attempts
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: attempts
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-digest
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: digest
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-ensure
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: ensure
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-finalization
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: finalization
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.finalization-handoff
+        - **id**: delivery-finalization-preview
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: finalization_preview
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.finalization-handoff
+        - **id**: delivery-for-workspace
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: for_workspace
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-new-id
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: new_id
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-root
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: root
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-approval-path
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: approval_path
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-approvals-dir
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: approvals_dir
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-attempt-path
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: attempt_path
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-attempts-dir
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: attempts_dir
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+        - **id**: delivery-finalization-path
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: finalization_path
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.finalization-handoff
+        - **id**: delivery-finalizations-dir
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: finalizations_dir
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.finalization-handoff
+        - **id**: task-run
+          - **adapter**: rust
+          - **path**: src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: run_task
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-002#criterion.finalization-handoff
+    - **id**: verification
+      - **role**: verification
+      - **facet**: delivery
+      - **responsibility**: Verify immutable attempt storage and complete-attempt finalization gating.
+      - **targets**:
+        - **id**: delivery-store-test
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: store_is_outside_worktree
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **covers**:
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-store
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-source
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-apply-status
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-atomic-write
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempt-plan
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-changed-paths
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-component
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-json-files
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-now-nanos
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-preview-token
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-read-json
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-restore-files
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-validate-digest
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-write-json
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-append-attempt
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-approval
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-approve
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempt
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempts
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-digest
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-ensure
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-for-workspace
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-new-id
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-root
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-approval-path
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-approvals-dir
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempt-path
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempts-dir
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-delivery
+                  - **test**: tests::store_is_outside_worktree
+        - **id**: finalization-gate-test
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: finalization_preview_requires_complete_attempt
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-WORK-002#criterion.finalization-handoff
+              - **covers**:
+                - FEAT-DELIVERY-001#binding.implementation/target.task-run
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-append-finalization
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-apply-finalization
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-finalization
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-finalization-preview
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-finalization-path
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-finalizations-dir
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-delivery
+                  - **test**: tests::finalization_preview_requires_complete_attempt
 
 ## Source YAML
 
@@ -605,4 +1011,262 @@ features:
         responsibility: Maintain the generated specification documentation entrypoint.
         targets:
           - { id: generated-index, adapter: declared, path: docs/generated/site-spec/index.md, selector: { kind: file } }
+  - id: FEAT-DELIVERY-001
+    title: Durable completion delivery
+    summary: Persist completion attempts, enforce reviewed plan scope, and finalize complete work safely.
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: delivery
+        responsibility: Store immutable attempts and perform the planned-to-implemented handoff.
+        owns:
+          - id: delivery-module
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: module, name: lib }
+          - id: delivery-manifest-file
+            adapter: declared
+            path: crates/syu-delivery/Cargo.toml
+            selector: { kind: file }
+        targets:
+          - id: delivery-store
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: DeliveryStore }
+            claims:
+              - kind: satisfies
+                criterion: REQ-WORK-002#criterion.durable-attempt
+          - id: delivery-source
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: file }
+            claims:
+              - kind: satisfies
+                criterion: REQ-WORK-002#criterion.durable-attempt
+          - id: delivery-apply-status
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: apply_status_overlay }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-atomic-write
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: atomic_write }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-attempt-plan
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: attempt_plan }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-changed-paths
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: changed_document_paths }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-component
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: component }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-json-files
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: json_files }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-now-nanos
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: now_nanos }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-preview-token
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: preview_without_token }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-read-json
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: read_json }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-restore-files
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: restore_files }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-validate-digest
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: validate_attempt_digest }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-write-json
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: write_immutable_json }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-append-attempt
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: append_attempt }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-append-finalization
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: append_finalization }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.finalization-handoff }]
+          - id: delivery-apply-finalization
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: apply_finalization }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.finalization-handoff }]
+          - id: delivery-approval
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: approval }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-approve
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: approve }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-attempt
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: attempt }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-attempts
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: attempts }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-digest
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: digest }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-ensure
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: ensure }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-finalization
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: finalization }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.finalization-handoff }]
+          - id: delivery-finalization-preview
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: finalization_preview }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.finalization-handoff }]
+          - id: delivery-for-workspace
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: for_workspace }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-new-id
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: new_id }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-root
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: root }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-approval-path
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: approval_path }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-approvals-dir
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: approvals_dir }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-attempt-path
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: attempt_path }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-attempts-dir
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: attempts_dir }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+          - id: delivery-finalization-path
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: finalization_path }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.finalization-handoff }]
+          - id: delivery-finalizations-dir
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: finalizations_dir }
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.finalization-handoff }]
+          - id: task-run
+            adapter: rust
+            path: src/lib.rs
+            selector: { kind: symbol, name: run_task }
+            claims:
+              - kind: satisfies
+                criterion: REQ-WORK-002#criterion.finalization-handoff
+      - id: verification
+        role: verification
+        facet: delivery
+        responsibility: Verify immutable attempt storage and complete-attempt finalization gating.
+        targets:
+          - id: delivery-store-test
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: store_is_outside_worktree }
+            claims:
+              - kind: verifies
+                criterion: REQ-WORK-002#criterion.durable-attempt
+                covers:
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-store
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-source
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-apply-status
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-atomic-write
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempt-plan
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-changed-paths
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-component
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-json-files
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-now-nanos
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-preview-token
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-read-json
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-restore-files
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-validate-digest
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-write-json
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-append-attempt
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-approval
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-approve
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempt
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempts
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-digest
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-ensure
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-for-workspace
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-new-id
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-root
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-approval-path
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-approvals-dir
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempt-path
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempts-dir
+                runner: { runner: cargo-test, arguments: { package: syu-delivery, test: tests::store_is_outside_worktree } }
+          - id: finalization-gate-test
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: finalization_preview_requires_complete_attempt }
+            claims:
+              - kind: verifies
+                criterion: REQ-WORK-002#criterion.finalization-handoff
+                covers:
+                  - FEAT-DELIVERY-001#binding.implementation/target.task-run
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-append-finalization
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-apply-finalization
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-finalization
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-finalization-preview
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-finalization-path
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-finalizations-dir
+                runner: { runner: cargo-test, arguments: { package: syu-delivery, test: tests::finalization_preview_requires_complete_attempt } }
 ```

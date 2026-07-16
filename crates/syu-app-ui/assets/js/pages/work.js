@@ -23,7 +23,7 @@ export function renderWork(work, state) {
     planButton.disabled = !work?.request;
     planButton.onclick = () => state.runAction(
       () => state.api.planWork(state.projection),
-      () => { state.selectedSlice = null; },
+      () => { state.selectedSlice = null; state.planApproved = false; },
     );
   }
   const newButton = document.querySelector('[data-work-new]');
@@ -47,18 +47,55 @@ export function renderWork(work, state) {
   }
   const verifyButton = document.querySelector('[data-work-verify]');
   if (verifyButton) {
-    verifyButton.disabled = !selected || work?.validation?.state !== 'passed';
+    verifyButton.disabled = !selected || work?.validation?.state !== 'passed' || !state.planApproved;
     verifyButton.onclick = () => selected && state.runAction(
       () => state.api.verifyWork(state.projection, selected.id),
-      receipt => { state.verificationReceipt = receipt; state.selectedSlice = selected.id; },
+      attempt => { state.verificationReceipt = attempt.receipt; state.selectedSlice = selected.id; },
     );
   }
-  const resultButton = document.querySelector('[data-work-result]');
-  if (resultButton) {
-    resultButton.disabled = !state.verificationReceipt;
-    resultButton.onclick = () => state.verificationReceipt && state.runAction(
-      () => state.api.validateResult(state.projection, state.verificationReceipt),
+  const approveButton = document.querySelector('[data-work-approve]');
+  if (approveButton) {
+    approveButton.disabled = !plan || work?.validation?.state !== 'passed';
+    approveButton.onclick = () => plan && state.runAction(
+      () => state.api.approveWork(state.projection),
+      () => { state.planApproved = true; },
     );
+  }
+  const finalizeButton = document.querySelector('[data-work-finalize]');
+  const currentAttempt = work?.completion?.current;
+  if (finalizeButton) {
+    finalizeButton.disabled = !currentAttempt || currentAttempt.status !== 'complete' || currentAttempt.finalized;
+    finalizeButton.onclick = () => currentAttempt && state.runAction(
+      async () => {
+        const preview = await state.api.finalizePreview(state.projection, currentAttempt.attempt_id);
+        return state.api.finalizeApply(state.projection, currentAttempt.attempt_id, preview.preview_token);
+      },
+    );
+  }
+  const history = document.querySelector('[data-work-completion-history]');
+  if (history) {
+    history.replaceChildren();
+    const completion = work?.completion;
+    const attempts = [completion?.current, ...(completion?.previous || [])].filter(Boolean);
+    if (!attempts.length) history.textContent = 'No completion attempts yet.';
+    else attempts.forEach(attempt => {
+      const item = document.createElement('article');
+      const title = document.createElement('h3');
+      title.textContent = attempt.status + ': ' + attempt.attempt_id;
+      item.append(title);
+      const identity = document.createElement('p');
+      identity.textContent = attempt.plan_digest + ' / ' + attempt.slice_id;
+      item.append(identity);
+      (attempt.blockers || []).forEach(blocker => {
+        const blockerNode = document.createElement('p');
+        blockerNode.textContent = blocker.code + ': ' + blocker.message + ' Next: ' + blocker.next_action;
+        item.append(blockerNode);
+      });
+      const finalized = document.createElement('p');
+      finalized.textContent = attempt.finalized ? 'Finalized' : 'Not finalized';
+      item.append(finalized);
+      history.append(item);
+    });
   }
   const slices = plan?.slices || [];
   const rail = document.querySelector('[data-work-slices-rail]');

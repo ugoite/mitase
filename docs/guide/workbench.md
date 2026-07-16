@@ -2,7 +2,7 @@
 
 Syu Workbench is the browser projection of the canonical v1 flow:
 
-`WorkRequest -> WorkPlan -> ExecutionSlice -> ContextPack -> ValidationResult`
+`WorkRequest -> WorkPlan -> PlanApproval -> CompletionAttempt -> FinalizationReceipt`
 
 Start it with a request:
 
@@ -38,6 +38,12 @@ Interactive operations are backed by local server endpoints:
   planner.
 - Context export calls canonical `export_context` and refuses stale or
   non-ready plans.
+- Plan approval is explicit and persisted outside the worktree. Verification
+  appends immutable attempts to the shared store, so failed retries and history
+  survive server restarts and are shared with the CLI.
+- Finalization is a separate preview/apply handoff. It revalidates the attempt
+  against the current workspace and changes only the exact planned slice before
+  recording a `FinalizationReceipt`.
 - Workspace, Git range, Work plan, and Slice validation call the shared
   validator synchronously.
 - Item and config writes require a preview, strict schema validation, and a
