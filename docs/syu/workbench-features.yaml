@@ -1858,6 +1858,10 @@ features:
       adapter: declared
       path: build.rs
       selector: { kind: file }
+    - id: root-build-module
+      adapter: rust
+      path: build.rs
+      selector: { kind: module, name: build }
     - id: changed-validation-hook
       adapter: declared
       path: scripts/dev/validate-changed.sh
