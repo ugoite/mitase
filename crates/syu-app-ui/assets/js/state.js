@@ -13,6 +13,7 @@ export function createState(projection) {
     targetSuggestionSelection: [],
     selectedSlice: projection.work.plan?.slices?.[0]?.id || null,
     verificationReceipt: null,
+    planApproved: false,
     error: null,
     selectedDiagnosticPhase: 'all',
     selectedScopeMode: 'plan',
