@@ -738,6 +738,104 @@ description: "Generated reference for docs/syu/capabilities.yaml"
                 - **arguments**:
                   - **package**: syu-delivery
                   - **test**: tests::finalization_preview_requires_complete_attempt
+- **id**: FEAT-AGENT-001
+  - **title**: Scoped implementation agent
+  - **summary**: Provide provider-neutral context, preflight-checked target writes, and append-only agent evidence.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: implementation
+      - **role**: implementation
+      - **facet**: scoped-agent
+      - **responsibility**: Bind every agent write and expansion request to one approved plan slice.
+      - **owns**:
+        - **id**: agent-module
+          - **adapter**: rust
+          - **path**: crates/syu-agent/src/lib.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: lib
+        - **id**: agent-manifest
+          - **adapter**: declared
+          - **path**: crates/syu-agent/Cargo.toml
+          - **selector**:
+            - **kind**: file
+      - **targets**:
+        - **id**: agent-start
+          - **adapter**: rust
+          - **path**: crates/syu-agent/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: start_run
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-003#criterion.scoped-write
+        - **id**: agent-patch
+          - **adapter**: rust
+          - **path**: crates/syu-agent/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: apply_scoped_patch
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-003#criterion.scoped-write
+        - **id**: agent-expansion
+          - **adapter**: rust
+          - **path**: crates/syu-agent/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: request_scope_expansion
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-003#criterion.expansion-request
+        - **id**: agent-events
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: append_agent_event
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORK-003#criterion.agent-evidence
+    - **id**: verification
+      - **role**: verification
+      - **facet**: scoped-agent
+      - **responsibility**: Reject unrelated writes and retain blocker and expansion evidence.
+      - **targets**:
+        - **id**: agent-http-test
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::workbench_agent_rejects_unrelated_write_before_application
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-WORK-003#criterion.scoped-write
+              - **covers**:
+                - FEAT-AGENT-001#binding.implementation/target.agent-start
+                - FEAT-AGENT-001#binding.implementation/target.agent-patch
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-workbench-server
+                  - **test**: tests::workbench_agent_rejects_unrelated_write_before_application
+            - **kind**: verifies
+              - **criterion**: REQ-WORK-003#criterion.expansion-request
+              - **covers**:
+                - FEAT-AGENT-001#binding.implementation/target.agent-expansion
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-workbench-server
+                  - **test**: tests::workbench_agent_rejects_unrelated_write_before_application
+            - **kind**: verifies
+              - **criterion**: REQ-WORK-003#criterion.agent-evidence
+              - **covers**:
+                - FEAT-AGENT-001#binding.implementation/target.agent-events
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-workbench-server
+                  - **test**: tests::workbench_agent_rejects_unrelated_write_before_application
 
 ## Source YAML
 
@@ -1269,4 +1367,78 @@ features:
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-finalization-path
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-finalizations-dir
                 runner: { runner: cargo-test, arguments: { package: syu-delivery, test: tests::finalization_preview_requires_complete_attempt } }
+
+  - id: FEAT-AGENT-001
+    title: Scoped implementation agent
+    summary: Provide provider-neutral context, preflight-checked target writes, and append-only agent evidence.
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: scoped-agent
+        responsibility: Bind every agent write and expansion request to one approved plan slice.
+        owns:
+          - id: agent-module
+            adapter: rust
+            path: crates/syu-agent/src/lib.rs
+            selector: { kind: module, name: lib }
+          - id: agent-manifest
+            adapter: declared
+            path: crates/syu-agent/Cargo.toml
+            selector: { kind: file }
+        targets:
+          - id: agent-start
+            adapter: rust
+            path: crates/syu-agent/src/lib.rs
+            selector: { kind: symbol, name: start_run }
+            claims:
+              - kind: satisfies
+                criterion: REQ-WORK-003#criterion.scoped-write
+          - id: agent-patch
+            adapter: rust
+            path: crates/syu-agent/src/lib.rs
+            selector: { kind: symbol, name: apply_scoped_patch }
+            claims:
+              - kind: satisfies
+                criterion: REQ-WORK-003#criterion.scoped-write
+          - id: agent-expansion
+            adapter: rust
+            path: crates/syu-agent/src/lib.rs
+            selector: { kind: symbol, name: request_scope_expansion }
+            claims:
+              - kind: satisfies
+                criterion: REQ-WORK-003#criterion.expansion-request
+          - id: agent-events
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: append_agent_event }
+            claims:
+              - kind: satisfies
+                criterion: REQ-WORK-003#criterion.agent-evidence
+      - id: verification
+        role: verification
+        facet: scoped-agent
+        responsibility: Reject unrelated writes and retain blocker and expansion evidence.
+        targets:
+          - id: agent-http-test
+            adapter: rust
+            path: crates/syu-workbench-server/src/lib.rs
+            selector: { kind: symbol, name: tests::workbench_agent_rejects_unrelated_write_before_application }
+            claims:
+              - kind: verifies
+                criterion: REQ-WORK-003#criterion.scoped-write
+                covers:
+                  - FEAT-AGENT-001#binding.implementation/target.agent-start
+                  - FEAT-AGENT-001#binding.implementation/target.agent-patch
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_agent_rejects_unrelated_write_before_application } }
+              - kind: verifies
+                criterion: REQ-WORK-003#criterion.expansion-request
+                covers:
+                  - FEAT-AGENT-001#binding.implementation/target.agent-expansion
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_agent_rejects_unrelated_write_before_application } }
+              - kind: verifies
+                criterion: REQ-WORK-003#criterion.agent-evidence
+                covers:
+                  - FEAT-AGENT-001#binding.implementation/target.agent-events
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_agent_rejects_unrelated_write_before_application } }
 ```

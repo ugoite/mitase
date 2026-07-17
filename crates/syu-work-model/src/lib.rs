@@ -14,6 +14,9 @@ pub const CONTEXT_PACK_SCHEMA: &str = "syu/context-pack/v1";
 pub const PLAN_APPROVAL_SCHEMA: &str = "syu/plan-approval/v1";
 pub const COMPLETION_ATTEMPT_SCHEMA: &str = "syu/completion-attempt/v1";
 pub const FINALIZATION_RECEIPT_SCHEMA: &str = "syu/finalization-receipt/v1";
+pub const AGENT_RUN_SCHEMA: &str = "syu/agent-run/v1";
+pub const AGENT_PATCH_SCHEMA: &str = "syu/agent-patch/v1";
+pub const AGENT_EVENT_SCHEMA: &str = "syu/agent-event/v1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -388,6 +391,156 @@ pub struct ContextPack {
     pub spec_context: Vec<SpecContextEntry>,
     pub artifact_context: Vec<ArtifactContextEntry>,
     pub completion: Vec<CompletionCheck>,
+}
+
+/// The provider-neutral execution envelope handed to an implementation tool.
+/// It deliberately repeats the immutable plan identity so a tool cannot
+/// accidentally reuse a context pack for another approved slice.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentContextPack {
+    pub schema: String,
+    pub plan_digest: String,
+    pub slice_id: String,
+    pub context: ContextPack,
+    pub budget: SliceBudgetUsage,
+    pub editable_targets: Vec<AgentTargetDigest>,
+    pub verification_targets: Vec<AgentTargetDigest>,
+    pub readonly_targets: Vec<AgentTargetDigest>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentTargetDigest {
+    #[serde(rename = "ref")]
+    pub reference: BoundTargetRef,
+    pub path: String,
+    pub access: TargetAccessMode,
+    pub transition: TargetTransition,
+    pub content_hash: String,
+    pub excerpt_hash: String,
+    pub line_start: usize,
+    pub line_end: usize,
+    pub budget_bytes: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget_lines: Option<usize>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AgentRunStatus {
+    Active,
+    Blocked,
+    Completed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AgentPatchStatus {
+    Accepted,
+    Rejected,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind", deny_unknown_fields)]
+pub enum AgentTargetWrite {
+    Replace {
+        #[serde(rename = "ref")]
+        target: BoundTargetRef,
+        expected_excerpt_hash: String,
+        content: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentPatch {
+    pub schema: String,
+    pub run_id: String,
+    pub expected_workspace_fingerprint: String,
+    pub writes: Vec<AgentTargetWrite>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentBlocker {
+    pub code: String,
+    pub message: String,
+    pub next_action: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ScopeExpansionRequest {
+    pub request_id: String,
+    pub run_id: String,
+    pub plan_digest: String,
+    pub slice_id: String,
+    pub reason: String,
+    pub requested_targets: Vec<BoundTargetRef>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentRun {
+    pub schema: String,
+    pub run_id: String,
+    pub approval_id: String,
+    pub plan_digest: String,
+    pub slice_id: String,
+    pub status: AgentRunStatus,
+    pub context: AgentContextPack,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentPatchRecord {
+    pub schema: String,
+    pub patch_id: String,
+    pub run_id: String,
+    pub plan_digest: String,
+    pub slice_id: String,
+    pub status: AgentPatchStatus,
+    pub writes: Vec<AgentTargetWrite>,
+    pub changes: Vec<AgentTargetChange>,
+    pub before_workspace_fingerprint: String,
+    pub after_workspace_fingerprint: String,
+    pub blockers: Vec<AgentBlocker>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentTargetChange {
+    #[serde(rename = "ref")]
+    pub reference: BoundTargetRef,
+    pub before_excerpt_hash: String,
+    pub after_excerpt_hash: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum AgentEventKind {
+    RunStarted { run: Box<AgentRun> },
+    PatchRecorded { patch: AgentPatchRecord },
+    BlockerRecorded { blocker: AgentBlocker },
+    ScopeExpansionRequested { request: ScopeExpansionRequest },
+    VerificationRecorded { attempt_id: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentEvent {
+    pub schema: String,
+    pub event_id: String,
+    pub event_digest: String,
+    pub run_id: String,
+    pub plan_digest: String,
+    pub slice_id: String,
+    pub created_at: String,
+    pub event: AgentEventKind,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

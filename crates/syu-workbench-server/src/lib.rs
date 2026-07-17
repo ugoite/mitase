@@ -30,9 +30,10 @@ use syu_spec_model::{
 };
 use syu_validation::{PlanValidationMode, ValidationContext, validate};
 use syu_work_model::{
-    COMPLETION_ATTEMPT_SCHEMA, CompletionAttempt, FinalizationPreview, FinalizationReceipt,
-    PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus, RequestedTarget, VerificationReceipt,
-    WORK_REQUEST_SCHEMA, WorkConstraints, WorkOperation, WorkPlan, WorkRequest,
+    AgentBlocker, AgentEvent, AgentPatch, AgentRun, AgentRunStatus, COMPLETION_ATTEMPT_SCHEMA,
+    CompletionAttempt, FinalizationPreview, FinalizationReceipt, PLAN_APPROVAL_SCHEMA,
+    PlanApproval, PlanStatus, RequestedTarget, VerificationReceipt, WORK_REQUEST_SCHEMA,
+    WorkConstraints, WorkOperation, WorkPlan, WorkRequest,
 };
 use syu_workspace::SpecWorkspace;
 
@@ -57,6 +58,7 @@ pub struct WorkbenchSession {
     pub plan: Option<WorkPlan>,
     pub context_pack: Option<syu_work_model::ContextPack>,
     pub verification_receipt: Option<VerificationReceipt>,
+    pub agent_run: Option<AgentRun>,
     pub last_validation: Option<ValidationRunView>,
     pub readiness: Option<ReadinessView>,
     /// Rejections are tied to the evidence that was reviewed. A candidate is
@@ -183,6 +185,14 @@ impl WorkbenchServer {
             .route("/api/work/plan", post(api_plan))
             .route("/api/work/validate", post(api_validate))
             .route("/api/work/approve", post(api_approve))
+            .route("/api/work/agent/start", post(api_agent_start))
+            .route("/api/work/agent/patch", post(api_agent_patch))
+            .route("/api/work/agent/verify", post(api_agent_verify))
+            .route("/api/work/agent/blocker", post(api_agent_blocker))
+            .route(
+                "/api/work/agent/scope-expansion",
+                post(api_agent_scope_expansion),
+            )
             .route("/api/work/context", post(api_context))
             .route("/api/work/verify", post(api_verify))
             .route("/api/work/finalize/preview", post(api_finalize_preview))
@@ -323,6 +333,38 @@ pub struct SliceCommand {
 pub struct ResultCommand {
     pub basis: MutationBasis,
     pub receipt: VerificationReceipt,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentStartCommand {
+    pub basis: MutationBasis,
+    pub slice_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentPatchCommand {
+    pub basis: MutationBasis,
+    pub run_id: String,
+    pub patch: AgentPatch,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentBlockerCommand {
+    pub basis: MutationBasis,
+    pub run_id: String,
+    pub blocker: AgentBlocker,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentScopeExpansionCommand {
+    pub basis: MutationBasis,
+    pub run_id: String,
+    pub reason: String,
+    pub requested_targets: Vec<BoundTargetRef>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1045,6 +1087,7 @@ async fn api_target_suggestions_approve(
         session.plan = None;
         session.context_pack = None;
         session.verification_receipt = None;
+        session.agent_run = None;
         session.last_validation = None;
         session.selected_slice = None;
     }
@@ -2121,6 +2164,7 @@ async fn api_request(
     session.selected_slice = None;
     session.context_pack = None;
     session.verification_receipt = None;
+    session.agent_run = None;
     session.last_validation = None;
     Ok(Json(project_session(&workspace, &session, &revision)?))
 }
@@ -2144,6 +2188,7 @@ async fn api_plan(
     session.selected_slice = None;
     session.context_pack = None;
     session.verification_receipt = None;
+    session.agent_run = None;
     session.last_validation = None;
     Ok(Json(plan))
 }
@@ -2203,6 +2248,200 @@ async fn api_approve(
         plan: canonical,
     };
     Ok(Json(store.approve(&approval)?))
+}
+
+async fn api_agent_start(
+    State(service): State<Arc<WorkbenchService>>,
+    Json(command): Json<AgentStartCommand>,
+) -> Result<Json<AgentRun>, ApiError> {
+    let workspace = basis(&service, &command.basis)?;
+    let (plan, selected_slice) = {
+        let session = service
+            .session
+            .read()
+            .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+        (
+            session
+                .plan
+                .clone()
+                .ok_or_else(|| anyhow::anyhow!("no work plan"))?,
+            session.selected_slice.clone(),
+        )
+    };
+    if selected_slice.as_deref() != Some(command.slice_id.as_str()) {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("select the requested slice before starting the agent"),
+        ));
+    }
+    let store = DeliveryStore::for_workspace(&workspace.root)?;
+    let approval = store.approval(&plan.canonical_digest).map_err(|error| {
+        ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("agent start requires an approved plan: {error}"),
+        )
+    })?;
+    if approval.plan != plan {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("session plan differs from the approved plan"),
+        ));
+    }
+    let run = syu_agent::start_run(&workspace, &approval, &command.slice_id)?;
+    service
+        .session
+        .write()
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))?
+        .agent_run = Some(run.clone());
+    Ok(Json(run))
+}
+
+async fn api_agent_patch(
+    State(service): State<Arc<WorkbenchService>>,
+    Json(command): Json<AgentPatchCommand>,
+) -> Result<Json<syu_work_model::AgentPatchRecord>, ApiError> {
+    let workspace = execution_basis(&service, &command.basis)?;
+    let run = service
+        .session
+        .read()
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))?
+        .agent_run
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("no active agent run"))?;
+    let run = syu_agent::current_run(&workspace, &run)?;
+    if run.run_id != command.run_id {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("agent run does not match the active Workbench session"),
+        ));
+    }
+    match syu_agent::apply_scoped_patch(&workspace, &run, &command.patch) {
+        Ok(record) => Ok(Json(record)),
+        Err(error) => Err(ApiError(StatusCode::CONFLICT, error)),
+    }
+}
+
+async fn api_agent_blocker(
+    State(service): State<Arc<WorkbenchService>>,
+    Json(command): Json<AgentBlockerCommand>,
+) -> Result<Json<AgentEvent>, ApiError> {
+    let workspace = execution_basis(&service, &command.basis)?;
+    let run = service
+        .session
+        .read()
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))?
+        .agent_run
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("no active agent run"))?;
+    let run = syu_agent::current_run(&workspace, &run)?;
+    if run.run_id != command.run_id {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("agent run does not match the active Workbench session"),
+        ));
+    }
+    let event = syu_agent::record_blocker(&workspace, &run, command.blocker)?;
+    Ok(Json(event))
+}
+
+async fn api_agent_scope_expansion(
+    State(service): State<Arc<WorkbenchService>>,
+    Json(command): Json<AgentScopeExpansionCommand>,
+) -> Result<Json<AgentEvent>, ApiError> {
+    let workspace = execution_basis(&service, &command.basis)?;
+    let run = service
+        .session
+        .read()
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))?
+        .agent_run
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("no active agent run"))?;
+    let run = syu_agent::current_run(&workspace, &run)?;
+    if run.run_id != command.run_id {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("agent run does not match the active Workbench session"),
+        ));
+    }
+    Ok(Json(syu_agent::request_scope_expansion(
+        &workspace,
+        &run,
+        command.reason,
+        command.requested_targets,
+    )?))
+}
+
+async fn api_agent_verify(
+    State(service): State<Arc<WorkbenchService>>,
+    Json(command): Json<SliceCommand>,
+) -> Result<Json<CompletionAttempt>, ApiError> {
+    let workspace = execution_basis(&service, &command.basis)?;
+    let index = workspace.index()?;
+    let revision = current_revision(&workspace.root)?;
+    let run = service
+        .session
+        .read()
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))?
+        .agent_run
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("no active agent run"))?;
+    let run = syu_agent::current_run(&workspace, &run)?;
+    if run.slice_id != command.slice_id {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("verification slice does not match the active agent run"),
+        ));
+    }
+    if !matches!(run.status, AgentRunStatus::Active) {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("agent run is not active; resolve its blocker or start a new run"),
+        ));
+    }
+    let store = DeliveryStore::for_workspace(&workspace.root)?;
+    let approval = store.approval(&run.plan_digest).map_err(|error| {
+        ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!("agent verification requires an approved plan: {error}"),
+        )
+    })?;
+    let attempt_id = store.new_id("attempt");
+    let started_at = timestamp();
+    let (verification, receipt, mut report) = syu_validation::execute_verification_attempt(
+        &workspace,
+        &index,
+        &approval.plan,
+        &command.slice_id,
+        &revision,
+        &attempt_id,
+    )?;
+    report.attempt_id = attempt_id.clone();
+    let mut attempt = CompletionAttempt {
+        schema: COMPLETION_ATTEMPT_SCHEMA.into(),
+        attempt_id,
+        attempt_digest: String::new(),
+        plan_digest: approval.plan_digest.clone(),
+        slice_id: command.slice_id,
+        approved_plan_digest: approval.plan_digest,
+        started_at,
+        completed_at: timestamp(),
+        verification,
+        receipt,
+        report,
+    };
+    attempt.attempt_digest = DeliveryStore::digest(&{
+        let mut copy = attempt.clone();
+        copy.attempt_digest.clear();
+        copy
+    })?;
+    let attempt = store.append_attempt(&attempt)?;
+    syu_agent::record_verification(&workspace, &run, &attempt.attempt_id)?;
+    let mut session = service
+        .session
+        .write()
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+    session.verification_receipt = attempt.receipt.clone();
+    Ok(Json(attempt))
 }
 
 async fn api_validate(
@@ -2480,6 +2719,8 @@ pub struct WorkSessionView {
     pub plan: Option<PlanView>,
     pub verification_receipt: Option<VerificationReceiptView>,
     pub completion: CompletionHistoryView,
+    pub agent: Option<AgentRun>,
+    pub agent_events: Vec<AgentEvent>,
     pub context_pack: Option<ContextPackView>,
     pub selected_slice: Option<String>,
     pub validation: ValidationRunView,
@@ -3069,6 +3310,8 @@ pub fn project(
             plan: plan.as_ref().map(plan_view),
             verification_receipt: None,
             completion: completion_history(workspace)?,
+            agent: None,
+            agent_events: vec![],
             context_pack: None,
             selected_slice: None,
             validation: validation.clone(),
@@ -3241,6 +3484,28 @@ fn project_session(
         .as_ref()
         .map(verification_receipt_view);
     projection.work.completion = completion_history(workspace)?;
+    // A session-bound run controls Workbench actions. When no work request is
+    // loaded (including after a server restart), retain the latest run for evidence
+    // inspection only; it must not be mistaken for the current plan's agent.
+    projection.work.agent = match session
+        .agent_run
+        .as_ref()
+        .map(|run| syu_agent::current_run(workspace, run))
+        .transpose()?
+    {
+        Some(run) => Some(run),
+        None if session.draft_request.is_none() => {
+            DeliveryStore::for_workspace(&workspace.root)?.latest_agent_run()?
+        }
+        None => None,
+    };
+    projection.work.agent_events = projection
+        .work
+        .agent
+        .as_ref()
+        .map(|run| syu_agent::events(workspace, &run.run_id))
+        .transpose()?
+        .unwrap_or_default();
     projection.work.context_pack = session.context_pack.as_ref().map(context_pack_view);
     projection.work.selected_slice = session.selected_slice.clone();
     projection.work.validation = session
@@ -4028,6 +4293,282 @@ mod tests {
             run_fixture_post_state_flow(true).await,
             StatusCode::CONFLICT
         );
+    }
+
+    #[tokio::test]
+    async fn workbench_agent_rejects_unrelated_write_before_application() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("fixture tempdir");
+        copy_fixture_tree(&fixture, temp.path());
+        initialize_fixture_git(temp.path());
+        let app = WorkbenchServer::new(temp.path().to_path_buf()).router();
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let request = WorkRequest {
+            schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-FIXTURE-AGENT".into(),
+            summary: "scoped agent fixture change".into(),
+            operation: syu_work_model::WorkOperation::Modify,
+            seeds: vec![syu_work_model::WorkSeed::Anchor(
+                "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
+            )],
+            constraints: Default::default(),
+            requested_targets: vec![],
+        };
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/request",
+            &csrf,
+            &WorkRequestCommand {
+                basis: basis.clone(),
+                request,
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = json_mutation(&app, Method::POST, "/api/work/plan", &csrf, &basis).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let plan: WorkPlan =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("agent plan");
+        let slice = plan
+            .slices
+            .iter()
+            .find(|slice| !slice.verification_targets.is_empty())
+            .expect("agent slice")
+            .id
+            .clone();
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/context",
+            &csrf,
+            &SliceCommand {
+                basis: basis.clone(),
+                slice_id: slice.clone(),
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = json_mutation(&app, Method::POST, "/api/work/validate", &csrf, &basis).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = json_mutation(&app, Method::POST, "/api/work/approve", &csrf, &basis).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/agent/start",
+            &csrf,
+            &AgentStartCommand {
+                basis: basis.clone(),
+                slice_id: slice,
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let run: AgentRun =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("agent run");
+        let target = run
+            .context
+            .editable_targets
+            .first()
+            .expect("editable target");
+        let source = temp.path().join("src/lib.rs");
+        let original_source = fs::read_to_string(&source).unwrap();
+        for malicious in [
+            "pub fn behavior() -> bool {\n    false\n}\npub fn unapproved() {}\n",
+            "pub fn behavior(\n",
+        ] {
+            let response = json_mutation(
+                &app,
+                Method::POST,
+                "/api/work/agent/patch",
+                &csrf,
+                &AgentPatchCommand {
+                    basis: basis.clone(),
+                    run_id: run.run_id.clone(),
+                    patch: AgentPatch {
+                        schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
+                        run_id: run.run_id.clone(),
+                        expected_workspace_fingerprint: run
+                            .context
+                            .context
+                            .basis
+                            .workspace_fingerprint
+                            .clone(),
+                        writes: vec![syu_work_model::AgentTargetWrite::Replace {
+                            target: target.reference.clone(),
+                            expected_excerpt_hash: target.excerpt_hash.clone(),
+                            content: malicious.into(),
+                        }],
+                    },
+                },
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::CONFLICT);
+            assert_eq!(fs::read_to_string(&source).unwrap(), original_source);
+        }
+        let replacement = "pub fn behavior() -> bool {\n    false\n}\n".to_owned();
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/agent/patch",
+            &csrf,
+            &AgentPatchCommand {
+                basis: basis.clone(),
+                run_id: run.run_id.clone(),
+                patch: AgentPatch {
+                    schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
+                    run_id: run.run_id.clone(),
+                    expected_workspace_fingerprint: run
+                        .context
+                        .context
+                        .basis
+                        .workspace_fingerprint
+                        .clone(),
+                    writes: vec![syu_work_model::AgentTargetWrite::Replace {
+                        target: target.reference.clone(),
+                        expected_excerpt_hash: target.excerpt_hash.clone(),
+                        content: replacement,
+                    }],
+                },
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(fs::read_to_string(&source).unwrap().contains("false"));
+        let before_rejected = fs::read_to_string(&source).unwrap();
+        let unrelated = BoundTargetRef {
+            binding: target.reference.binding.clone(),
+            target_id: syu_spec_model::LocalId("unrelated".into()),
+        };
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/agent/patch",
+            &csrf,
+            &AgentPatchCommand {
+                basis,
+                run_id: run.run_id.clone(),
+                patch: AgentPatch {
+                    schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
+                    run_id: run.run_id.clone(),
+                    expected_workspace_fingerprint: run
+                        .context
+                        .context
+                        .basis
+                        .workspace_fingerprint
+                        .clone(),
+                    writes: vec![syu_work_model::AgentTargetWrite::Replace {
+                        target: unrelated,
+                        expected_excerpt_hash: target.excerpt_hash.clone(),
+                        content: "unrelated".into(),
+                    }],
+                },
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_eq!(fs::read_to_string(source).unwrap(), before_rejected);
+
+        let (basis, _, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/agent/blocker",
+            &csrf,
+            &AgentBlockerCommand {
+                basis: basis.clone(),
+                run_id: run.run_id.clone(),
+                blocker: AgentBlocker {
+                    code: "SYU-AGENT-TEST".into(),
+                    message: "test blocker".into(),
+                    next_action: "request review".into(),
+                },
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/agent/scope-expansion",
+            &csrf,
+            &AgentScopeExpansionCommand {
+                basis,
+                run_id: run.run_id,
+                reason: "the test needs a second target".into(),
+                requested_targets: vec![target.reference.clone()],
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let projection = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/projection")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let projection: serde_json::Value =
+            serde_json::from_slice(&projection.into_body().collect().await.unwrap().to_bytes())
+                .expect("agent projection");
+        assert!(projection["work"]["agent"].is_object());
+        assert_eq!(projection["work"]["agent"]["status"], "blocked");
+        assert!(projection["work"]["agent_events"].as_array().unwrap().len() >= 5);
+
+        let restarted = WorkbenchServer::new(temp.path().to_path_buf()).router();
+        let projection = restarted
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/projection")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let projection: serde_json::Value =
+            serde_json::from_slice(&projection.into_body().collect().await.unwrap().to_bytes())
+                .expect("restarted agent projection");
+        assert_eq!(projection["work"]["agent"]["status"], "blocked");
+
+        let (basis, csrf, _) = projection_and_basis(&restarted).await;
+        let response = json_mutation(
+            &restarted,
+            Method::POST,
+            "/api/work/request",
+            &csrf,
+            &WorkRequestCommand {
+                basis,
+                request: WorkRequest {
+                    schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
+                    id: "WORK-FIXTURE-NEXT".into(),
+                    summary: "a subsequent work request".into(),
+                    operation: syu_work_model::WorkOperation::Modify,
+                    seeds: vec![syu_work_model::WorkSeed::Anchor(
+                        "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
+                    )],
+                    constraints: Default::default(),
+                    requested_targets: vec![],
+                },
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("subsequent request projection");
+        assert!(projection["work"]["agent"].is_null());
     }
 
     #[tokio::test]

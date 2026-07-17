@@ -371,6 +371,8 @@
   "work.action.result": "結果",
   "work.action.approve": "承認",
   "work.action.finalize": "確定",
+  "work.action.agent_start": "Agent",
+  "a11y.work_agent_start": "スコープ付き実装 Agent を開始",
   "operation.add": "追加",
   "operation.modify": "変更",
   "operation.remove": "削除",

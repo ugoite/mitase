@@ -987,6 +987,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "syu-agent"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "sha2",
+ "syu-delivery",
+ "syu-inventory",
+ "syu-planner",
+ "syu-spec-model",
+ "syu-validation",
+ "syu-work-model",
+ "syu-workspace",
+ "tempfile",
+]
+
+[[package]]
 name = "syu-app-ui"
 version = "0.1.0"
 dependencies = [
@@ -1127,6 +1144,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sha2",
+ "syu-agent",
  "syu-delivery",
  "syu-diagnostics",
  "syu-planner",
