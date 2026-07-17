@@ -12,8 +12,8 @@ use std::{
 };
 use syu_spec_model::{ItemStatus, SpecDocument, SpecItemRef};
 use syu_work_model::{
-    CompletionAttempt, CompletionBlocker, CompletionStatus, FINALIZATION_RECEIPT_SCHEMA,
-    FinalizationPreview, FinalizationReceipt, PlanApproval,
+    AgentEvent, CompletionAttempt, CompletionBlocker, CompletionStatus,
+    FINALIZATION_RECEIPT_SCHEMA, FinalizationPreview, FinalizationReceipt, PlanApproval,
 };
 use syu_workspace::SpecWorkspace;
 use uuid::Uuid;
@@ -54,6 +54,7 @@ impl DeliveryStore {
             self.approvals_dir(),
             self.attempts_dir(),
             self.finalizations_dir(),
+            self.agent_events_dir(),
         ] {
             fs::create_dir_all(path)?;
         }
@@ -283,6 +284,42 @@ impl DeliveryStore {
         format!("{prefix}-{}-{}", now_nanos(), Uuid::new_v4())
     }
 
+    pub fn append_agent_event(&self, event: &AgentEvent) -> Result<AgentEvent> {
+        self.ensure()?;
+        let mut canonical = event.clone();
+        let supplied = canonical.event_digest.clone();
+        canonical.event_digest.clear();
+        let digest = Self::digest(&canonical)?;
+        if !supplied.is_empty() && supplied != digest {
+            bail!("agent event {} has an invalid digest", event.event_id);
+        }
+        canonical.event_digest = digest;
+        let path = self.agent_event_path(&canonical);
+        write_immutable_json(&path, &canonical)
+    }
+
+    pub fn agent_events(&self, run_id: &str) -> Result<Vec<AgentEvent>> {
+        let mut events = Vec::new();
+        for path in json_files(&self.agent_events_dir())? {
+            let event: AgentEvent = read_json(&path)?;
+            let mut canonical = event.clone();
+            let expected = canonical.event_digest.clone();
+            canonical.event_digest.clear();
+            if expected != Self::digest(&canonical)? {
+                bail!("agent event {} has an invalid digest", event.event_id);
+            }
+            if event.run_id == run_id {
+                events.push(event);
+            }
+        }
+        events.sort_by(|a, b| {
+            a.created_at
+                .cmp(&b.created_at)
+                .then_with(|| a.event_id.cmp(&b.event_id))
+        });
+        Ok(events)
+    }
+
     pub fn digest<T: Serialize>(value: &T) -> Result<String> {
         let bytes = serde_json::to_vec(value)?;
         let mut hash = Sha256::new();
@@ -299,6 +336,9 @@ impl DeliveryStore {
     fn finalizations_dir(&self) -> PathBuf {
         self.root.join("completion/v1/finalizations")
     }
+    fn agent_events_dir(&self) -> PathBuf {
+        self.root.join("agent/v1/events")
+    }
     fn approval_path(&self, digest: &str) -> PathBuf {
         self.approvals_dir()
             .join(component(digest))
@@ -313,6 +353,12 @@ impl DeliveryStore {
     fn finalization_path(&self, attempt_id: &str) -> PathBuf {
         self.finalizations_dir()
             .join(format!("{}.json", component(attempt_id)))
+    }
+    fn agent_event_path(&self, event: &AgentEvent) -> PathBuf {
+        self.agent_events_dir()
+            .join(component(&event.plan_digest))
+            .join(component(&event.slice_id))
+            .join(format!("{}.json", component(&event.event_id)))
     }
 }
 

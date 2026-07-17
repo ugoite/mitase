@@ -112,6 +112,16 @@ export const validateWork = (projection) => post('/api/work/validate', mutationB
 
 export const approveWork = (projection) => post('/api/work/approve', mutationBasis(projection));
 
+export const startAgent = (projection, sliceId) => post('/api/work/agent/start', {
+  basis: mutationBasis(projection),
+  slice_id: sliceId,
+});
+
+export const verifyAgent = (projection, sliceId) => post('/api/work/agent/verify', {
+  basis: mutationBasis(projection),
+  slice_id: sliceId,
+});
+
 export const verifyWork = (projection, sliceId) => post('/api/work/verify', {
   basis: mutationBasis(projection),
   slice_id: sliceId,

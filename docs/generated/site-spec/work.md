@@ -111,6 +111,27 @@ description: "Generated reference for docs/syu/work.yaml"
       - **statement**: A complete attempt can promote only its exact planned specification items after a fresh overlay validation.
       - **governed_by**:
         - POL-DELIVERY-001#rule.exact-ownership
+- **id**: REQ-WORK-003
+  - **title**: Scoped implementation agent
+  - **description**: An implementation tool can modify only the approved editable targets of one WorkPlan slice and must preserve inspectable evidence for every decision.
+  - **priority**: critical
+  - **status**: implemented
+  - **criteria**:
+    - **id**: scoped-write
+      - **kind**: security
+      - **statement**: A scoped agent write is checked against the approved plan, slice, target digest, access mode, and budget before application.
+      - **governed_by**:
+        - POL-DELIVERY-001#rule.exact-ownership
+    - **id**: expansion-request
+      - **kind**: behavior
+      - **statement**: A tool can request explicit scope expansion without changing its current write permissions.
+      - **governed_by**:
+        - POL-DELIVERY-001#rule.exact-ownership
+    - **id**: agent-evidence
+      - **kind**: behavior
+      - **statement**: Accepted, rejected, blocked, and scope-expansion agent events remain inspectable with a precise next action.
+      - **governed_by**:
+        - POL-DELIVERY-001#rule.exact-ownership
 
 ## Source YAML
 
@@ -186,5 +207,23 @@ requirements:
       - id: finalization-handoff
         kind: behavior
         statement: A complete attempt can promote only its exact planned specification items after a fresh overlay validation.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+  - id: REQ-WORK-003
+    title: Scoped implementation agent
+    description: An implementation tool can modify only the approved editable targets of one WorkPlan slice and must preserve inspectable evidence for every decision.
+    priority: critical
+    status: implemented
+    criteria:
+      - id: scoped-write
+        kind: security
+        statement: A scoped agent write is checked against the approved plan, slice, target digest, access mode, and budget before application.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+      - id: expansion-request
+        kind: behavior
+        statement: A tool can request explicit scope expansion without changing its current write permissions.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+      - id: agent-evidence
+        kind: behavior
+        statement: Accepted, rejected, blocked, and scope-expansion agent events remain inspectable with a precise next action.
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
 ```

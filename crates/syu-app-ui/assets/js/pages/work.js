@@ -61,6 +61,14 @@ export function renderWork(work, state) {
       () => { state.planApproved = true; },
     );
   }
+  const agentButton = document.querySelector('[data-work-agent-start]');
+  if (agentButton) {
+    agentButton.disabled = !selected || !state.planApproved || Boolean(work?.agent);
+    agentButton.onclick = () => selected && state.runAction(
+      () => state.api.startAgent(state.projection, selected.id),
+      () => { state.selectedSlice = selected.id; },
+    );
+  }
   const finalizeButton = document.querySelector('[data-work-finalize]');
   const currentAttempt = work?.completion?.current;
   if (finalizeButton) {
@@ -96,6 +104,25 @@ export function renderWork(work, state) {
       item.append(finalized);
       history.append(item);
     });
+  }
+  const agentHistory = document.querySelector('[data-work-agent-history]');
+  if (agentHistory) {
+    agentHistory.replaceChildren();
+    const agent = work?.agent;
+    if (!agent) agentHistory.textContent = 'No scoped agent run yet.';
+    else {
+      const heading = document.createElement('h2');
+      heading.textContent = `Agent ${agent.status}: ${agent.run_id}`;
+      agentHistory.append(heading);
+      const identity = document.createElement('p');
+      identity.textContent = `${agent.plan_digest} / ${agent.slice_id}`;
+      agentHistory.append(identity);
+      (work.agent_events || []).forEach(event => {
+        const item = document.createElement('p');
+        item.textContent = `${event.kind}: ${event.created_at}`;
+        agentHistory.append(item);
+      });
+    }
   }
   const slices = plan?.slices || [];
   const rail = document.querySelector('[data-work-slices-rail]');
