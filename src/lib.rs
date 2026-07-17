@@ -81,6 +81,8 @@ struct ValidateOptions {
     #[arg(long)]
     baseline: Option<String>,
     #[arg(long)]
+    staged: bool,
+    #[arg(long)]
     plan: Option<PathBuf>,
     #[arg(long)]
     slice: Option<String>,
@@ -339,12 +341,32 @@ fn run_validate(args: ValidateArgs) -> Result<i32> {
     if let ValidateCommand::Result(result) = args.command {
         return run_validate_result(result);
     }
-    let (force_post_state, enforce_readiness, args) = match args.command {
-        ValidateCommand::Workspace(args) => (false, true, args),
-        ValidateCommand::Change(args) | ValidateCommand::Plan(args) => (false, false, args),
+    let (is_change, force_post_state, enforce_readiness, args) = match args.command {
+        ValidateCommand::Workspace(args) => (false, false, true, args),
+        ValidateCommand::Change(args) => (true, false, false, args),
+        ValidateCommand::Plan(args) => (false, false, false, args),
         ValidateCommand::Result(_) => unreachable!("result validation handled above"),
     };
-    let workspace = SpecWorkspace::load(&args.workspace)?;
+    if args.staged {
+        if !is_change {
+            bail!("--staged is only supported by validate change");
+        }
+        if args.range.is_some() || args.baseline.is_some() {
+            bail!("--staged cannot be combined with --range or --baseline");
+        }
+        if args.plan.is_some() || args.slice.is_some() {
+            bail!("--staged cannot be combined with --plan or --slice");
+        }
+    }
+    let staged_snapshot = args
+        .staged
+        .then(|| staged_workspace_snapshot(&args.workspace))
+        .transpose()?;
+    let workspace_path = staged_snapshot
+        .as_ref()
+        .map(|(_, path)| path)
+        .unwrap_or(&args.workspace);
+    let workspace = SpecWorkspace::load(workspace_path)?;
     let index = workspace.index()?;
     let plan = args
         .plan
@@ -876,6 +898,18 @@ fn validation_inputs_for_cli(
     args: &ValidateOptions,
     plan: Option<&WorkPlan>,
 ) -> Result<ValidationInputs> {
+    if args.staged {
+        return Ok(ValidationInputs {
+            // Pre-commit needs to validate exactly what is staged without
+            // turning unrelated staged implementation changes into a change
+            // ownership review. The snapshot supplies the structural inputs;
+            // pre-push and CI retain the diff-aware validation paths.
+            changed_files: None,
+            reported_changed_files: None,
+            change_base_revision: None,
+            plan_mode: PlanValidationMode::PreState,
+        });
+    }
     let reported_changed_files = changed_files_for_validation(workspace, args)?;
     if let Some(plan) = plan {
         let actual_changes = changed_files_against_revision(&workspace.root, &plan.basis.revision)?
@@ -1044,6 +1078,51 @@ fn changed_files_against_revision(root: &Path, revision: &str) -> Result<Vec<Cha
     )?;
     synthesize_untracked_ranges(root, &mut files)?;
     Ok(files)
+}
+
+fn staged_workspace_snapshot(workspace: &Path) -> Result<(tempfile::TempDir, PathBuf)> {
+    let workspace = workspace
+        .canonicalize()
+        .with_context(|| format!("resolve workspace path {}", workspace.display()))?;
+    let repo_root_output = Command::new("git")
+        .args(["-C"])
+        .arg(&workspace)
+        .args(["rev-parse", "--show-toplevel"])
+        .output()?;
+    if !repo_root_output.status.success() {
+        bail!("git rev-parse --show-toplevel failed");
+    }
+    let repo_root = PathBuf::from(String::from_utf8(repo_root_output.stdout)?.trim());
+    let relative_workspace = workspace
+        .strip_prefix(&repo_root)
+        .with_context(|| format!("workspace {} is outside repository", workspace.display()))?;
+    let git_dir_output = Command::new("git")
+        .args(["-C"])
+        .arg(&repo_root)
+        .args(["rev-parse", "--absolute-git-dir"])
+        .output()?;
+    if !git_dir_output.status.success() {
+        bail!("git rev-parse --absolute-git-dir failed");
+    }
+    let snapshot = tempfile::tempdir()?;
+    let checkout_status = Command::new("git")
+        .args(["-C"])
+        .arg(&repo_root)
+        .args(["checkout-index", "--all", "--prefix"])
+        .arg(format!("{}/", snapshot.path().display()))
+        .status()?;
+    if !checkout_status.success() {
+        bail!("git checkout-index failed");
+    }
+    fs::write(
+        snapshot.path().join(".git"),
+        format!(
+            "gitdir: {}\n",
+            String::from_utf8(git_dir_output.stdout)?.trim()
+        ),
+    )?;
+    let snapshot_workspace = snapshot.path().join(relative_workspace);
+    Ok((snapshot, snapshot_workspace))
 }
 
 fn changed_files(root: &Path, range: &str) -> Result<Vec<ChangedFile>> {
