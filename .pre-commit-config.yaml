@@ -47,4 +47,5 @@ repos:
         entry: scripts/ci/quality-gates.sh fast
         language: system
         pass_filenames: false
+        always_run: true
         stages: [pre-push, manual]
