@@ -218,3 +218,13 @@ requirements:
         kind: quality
         statement: Pre-commit validates the staged snapshot, pre-push scopes fast Rust and specification checks to the push diff, and CI runs the complete workspace gate.
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+  - id: REQ-WORKBENCH-011
+    title: Scoped agent evidence
+    description: Workbench exposes the approved agent boundary and its server-owned execution evidence.
+    priority: critical
+    status: implemented
+    criteria:
+      - id: scoped-agent
+        kind: security
+        statement: Workbench can start a scoped agent only for an approved slice and shows accepted, rejected, blocked, and expansion events.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]

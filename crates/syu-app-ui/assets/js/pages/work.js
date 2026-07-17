@@ -49,7 +49,9 @@ export function renderWork(work, state) {
   if (verifyButton) {
     verifyButton.disabled = !selected || work?.validation?.state !== 'passed' || !state.planApproved;
     verifyButton.onclick = () => selected && state.runAction(
-      () => state.api.verifyWork(state.projection, selected.id),
+      () => work?.agent?.status === 'active'
+        ? state.api.verifyAgent(state.projection, selected.id)
+        : state.api.verifyWork(state.projection, selected.id),
       attempt => { state.verificationReceipt = attempt.receipt; state.selectedSlice = selected.id; },
     );
   }
@@ -59,6 +61,14 @@ export function renderWork(work, state) {
     approveButton.onclick = () => plan && state.runAction(
       () => state.api.approveWork(state.projection),
       () => { state.planApproved = true; },
+    );
+  }
+  const agentButton = document.querySelector('[data-work-agent-start]');
+  if (agentButton) {
+    agentButton.disabled = !selected || !state.planApproved || ['active', 'blocked'].includes(work?.agent?.status);
+    agentButton.onclick = () => selected && state.runAction(
+      () => state.api.startAgent(state.projection, selected.id),
+      () => { state.selectedSlice = selected.id; },
     );
   }
   const finalizeButton = document.querySelector('[data-work-finalize]');
@@ -96,6 +106,35 @@ export function renderWork(work, state) {
       item.append(finalized);
       history.append(item);
     });
+  }
+  const agentHistory = document.querySelector('[data-work-agent-history]');
+  if (agentHistory) {
+    agentHistory.replaceChildren();
+    const agent = work?.agent;
+    if (!agent) agentHistory.textContent = 'No scoped agent run yet.';
+    else {
+      const heading = document.createElement('h2');
+      heading.textContent = `Agent ${agent.status}: ${agent.run_id}`;
+      agentHistory.append(heading);
+      const identity = document.createElement('p');
+      identity.textContent = `${agent.plan_digest} / ${agent.slice_id}`;
+      agentHistory.append(identity);
+      (work.agent_events || []).forEach(event => {
+        const item = document.createElement('p');
+        const detail = event.event || {};
+        let text = `${detail.kind || 'unknown'}: ${event.created_at}`;
+        if (detail.kind === 'patch-recorded') {
+          const patch = detail.patch || {};
+          const blockers = (patch.blockers || []).map(blocker => ` Next: ${blocker.next_action}`).join('');
+          text += ` (${patch.status || 'unknown'})${blockers}`;
+        } else if (detail.kind === 'blocker-recorded') {
+          const blocker = detail.blocker || {};
+          text += ` (${blocker.code || 'blocker'}: ${blocker.message || ''} Next: ${blocker.next_action || ''})`;
+        }
+        item.textContent = text;
+        agentHistory.append(item);
+      });
+    }
   }
   const slices = plan?.slices || [];
   const rail = document.querySelector('[data-work-slices-rail]');
