@@ -4565,10 +4565,10 @@ mod tests {
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
-        let projection: WorkspaceProjection =
+        let projection: serde_json::Value =
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("subsequent request projection");
-        assert!(projection.work.agent.is_none());
+        assert!(projection["work"]["agent"].is_null());
     }
 
     #[tokio::test]
