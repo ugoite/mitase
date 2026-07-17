@@ -3484,8 +3484,8 @@ fn project_session(
         .as_ref()
         .map(verification_receipt_view);
     projection.work.completion = completion_history(workspace)?;
-    // A session-bound run controls Workbench actions.  When no plan is loaded
-    // (including after a server restart), retain the latest run for evidence
+    // A session-bound run controls Workbench actions. When no work request is
+    // loaded (including after a server restart), retain the latest run for evidence
     // inspection only; it must not be mistaken for the current plan's agent.
     projection.work.agent = match session
         .agent_run
@@ -3494,7 +3494,7 @@ fn project_session(
         .transpose()?
     {
         Some(run) => Some(run),
-        None if session.plan.is_none() => {
+        None if session.draft_request.is_none() => {
             DeliveryStore::for_workspace(&workspace.root)?.latest_agent_run()?
         }
         None => None,
