@@ -2308,6 +2308,7 @@ async fn api_agent_patch(
         .agent_run
         .clone()
         .ok_or_else(|| anyhow::anyhow!("no active agent run"))?;
+    let run = syu_agent::current_run(&workspace, &run)?;
     if run.run_id != command.run_id {
         return Err(ApiError(
             StatusCode::CONFLICT,
@@ -2316,14 +2317,7 @@ async fn api_agent_patch(
     }
     match syu_agent::apply_scoped_patch(&workspace, &run, &command.patch) {
         Ok(record) => Ok(Json(record)),
-        Err(error) => {
-            if let Ok(mut session) = service.session.write()
-                && let Some(active) = session.agent_run.as_mut()
-            {
-                active.status = AgentRunStatus::Blocked;
-            }
-            Err(ApiError(StatusCode::CONFLICT, error))
-        }
+        Err(error) => Err(ApiError(StatusCode::CONFLICT, error)),
     }
 }
 
@@ -2339,6 +2333,7 @@ async fn api_agent_blocker(
         .agent_run
         .clone()
         .ok_or_else(|| anyhow::anyhow!("no active agent run"))?;
+    let run = syu_agent::current_run(&workspace, &run)?;
     if run.run_id != command.run_id {
         return Err(ApiError(
             StatusCode::CONFLICT,
@@ -2346,11 +2341,6 @@ async fn api_agent_blocker(
         ));
     }
     let event = syu_agent::record_blocker(&workspace, &run, command.blocker)?;
-    if let Ok(mut session) = service.session.write()
-        && let Some(active) = session.agent_run.as_mut()
-    {
-        active.status = AgentRunStatus::Blocked;
-    }
     Ok(Json(event))
 }
 
@@ -2366,6 +2356,7 @@ async fn api_agent_scope_expansion(
         .agent_run
         .clone()
         .ok_or_else(|| anyhow::anyhow!("no active agent run"))?;
+    let run = syu_agent::current_run(&workspace, &run)?;
     if run.run_id != command.run_id {
         return Err(ApiError(
             StatusCode::CONFLICT,
@@ -2394,6 +2385,7 @@ async fn api_agent_verify(
         .agent_run
         .clone()
         .ok_or_else(|| anyhow::anyhow!("no active agent run"))?;
+    let run = syu_agent::current_run(&workspace, &run)?;
     if run.slice_id != command.slice_id {
         return Err(ApiError(
             StatusCode::CONFLICT,
@@ -2449,16 +2441,6 @@ async fn api_agent_verify(
         .write()
         .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
     session.verification_receipt = attempt.receipt.clone();
-    if let Some(active) = session.agent_run.as_mut() {
-        active.status = if matches!(
-            attempt.report.status,
-            syu_work_model::CompletionStatus::Complete
-        ) {
-            AgentRunStatus::Completed
-        } else {
-            AgentRunStatus::Blocked
-        };
-    }
     Ok(Json(attempt))
 }
 
@@ -3502,9 +3484,10 @@ fn project_session(
         .as_ref()
         .map(verification_receipt_view);
     projection.work.completion = completion_history(workspace)?;
-    projection.work.agent = session.agent_run.clone();
-    projection.work.agent_events = session
-        .agent_run
+    projection.work.agent = DeliveryStore::for_workspace(&workspace.root)?.latest_agent_run()?;
+    projection.work.agent_events = projection
+        .work
+        .agent
         .as_ref()
         .map(|run| syu_agent::events(workspace, &run.run_id))
         .transpose()?
@@ -4382,6 +4365,41 @@ mod tests {
             .editable_targets
             .first()
             .expect("editable target");
+        let source = temp.path().join("src/lib.rs");
+        let original_source = fs::read_to_string(&source).unwrap();
+        for malicious in [
+            "pub fn behavior() -> bool {\n    false\n}\npub fn unapproved() {}\n",
+            "pub fn behavior(\n",
+        ] {
+            let response = json_mutation(
+                &app,
+                Method::POST,
+                "/api/work/agent/patch",
+                &csrf,
+                &AgentPatchCommand {
+                    basis: basis.clone(),
+                    run_id: run.run_id.clone(),
+                    patch: AgentPatch {
+                        schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
+                        run_id: run.run_id.clone(),
+                        expected_workspace_fingerprint: run
+                            .context
+                            .context
+                            .basis
+                            .workspace_fingerprint
+                            .clone(),
+                        writes: vec![syu_work_model::AgentTargetWrite::Replace {
+                            target: target.reference.clone(),
+                            expected_excerpt_hash: target.excerpt_hash.clone(),
+                            content: malicious.into(),
+                        }],
+                    },
+                },
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::CONFLICT);
+            assert_eq!(fs::read_to_string(&source).unwrap(), original_source);
+        }
         let replacement = "pub fn behavior() -> bool {\n    false\n}\n".to_owned();
         let response = json_mutation(
             &app,
@@ -4410,7 +4428,6 @@ mod tests {
         )
         .await;
         assert_eq!(response.status(), StatusCode::OK);
-        let source = temp.path().join("src/lib.rs");
         assert!(fs::read_to_string(&source).unwrap().contains("false"));
         let before_rejected = fs::read_to_string(&source).unwrap();
         let unrelated = BoundTargetRef {
@@ -4492,7 +4509,23 @@ mod tests {
             serde_json::from_slice(&projection.into_body().collect().await.unwrap().to_bytes())
                 .expect("agent projection");
         assert!(projection["work"]["agent"].is_object());
+        assert_eq!(projection["work"]["agent"]["status"], "blocked");
         assert!(projection["work"]["agent_events"].as_array().unwrap().len() >= 5);
+
+        let restarted = WorkbenchServer::new(temp.path().to_path_buf()).router();
+        let projection = restarted
+            .oneshot(
+                Request::builder()
+                    .uri("/api/projection")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let projection: serde_json::Value =
+            serde_json::from_slice(&projection.into_body().collect().await.unwrap().to_bytes())
+                .expect("restarted agent projection");
+        assert_eq!(projection["work"]["agent"]["status"], "blocked");
     }
 
     #[tokio::test]

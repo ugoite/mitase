@@ -12,8 +12,9 @@ use std::{
 };
 use syu_spec_model::{ItemStatus, SpecDocument, SpecItemRef};
 use syu_work_model::{
-    AgentEvent, CompletionAttempt, CompletionBlocker, CompletionStatus,
-    FINALIZATION_RECEIPT_SCHEMA, FinalizationPreview, FinalizationReceipt, PlanApproval,
+    AgentEvent, AgentEventKind, AgentRun, AgentRunStatus, CompletionAttempt, CompletionBlocker,
+    CompletionStatus, FINALIZATION_RECEIPT_SCHEMA, FinalizationPreview, FinalizationReceipt,
+    PlanApproval,
 };
 use syu_workspace::SpecWorkspace;
 use uuid::Uuid;
@@ -317,6 +318,67 @@ impl DeliveryStore {
                 .cmp(&b.created_at)
                 .then_with(|| a.event_id.cmp(&b.event_id))
         });
+        Ok(events)
+    }
+
+    /// Reconstruct the authoritative state of an agent run from its immutable
+    /// event stream. Callers must not trust a process-local `AgentRun` after a
+    /// terminal event has been recorded.
+    pub fn agent_run(&self, run_id: &str) -> Result<AgentRun> {
+        let events = self.agent_events(run_id)?;
+        let started = events.iter().find_map(|event| match &event.event {
+            AgentEventKind::RunStarted { run } => Some((**run).clone()),
+            _ => None,
+        });
+        let mut run =
+            started.ok_or_else(|| anyhow::anyhow!("agent run {run_id} was not started"))?;
+        for event in events {
+            match event.event {
+                AgentEventKind::RunStarted { .. }
+                | AgentEventKind::PatchRecorded { .. }
+                | AgentEventKind::ScopeExpansionRequested { .. } => {}
+                AgentEventKind::BlockerRecorded { .. } => run.status = AgentRunStatus::Blocked,
+                AgentEventKind::VerificationRecorded { attempt_id } => {
+                    run.status = match self.attempt(&attempt_id)?.report.status {
+                        CompletionStatus::Complete => AgentRunStatus::Completed,
+                        CompletionStatus::Blocked => AgentRunStatus::Blocked,
+                    };
+                }
+            }
+        }
+        Ok(run)
+    }
+
+    pub fn latest_agent_run(&self) -> Result<Option<AgentRun>> {
+        let mut started = self
+            .agent_events_all()?
+            .into_iter()
+            .filter_map(|event| match event.event {
+                AgentEventKind::RunStarted { run } => {
+                    Some((event.created_at, event.event_id, run.run_id.clone()))
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        started.sort();
+        started
+            .last()
+            .map(|(_, _, run_id)| self.agent_run(run_id))
+            .transpose()
+    }
+
+    fn agent_events_all(&self) -> Result<Vec<AgentEvent>> {
+        let mut events = Vec::new();
+        for path in json_files(&self.agent_events_dir())? {
+            let event: AgentEvent = read_json(&path)?;
+            let mut canonical = event.clone();
+            let expected = canonical.event_digest.clone();
+            canonical.event_digest.clear();
+            if expected != Self::digest(&canonical)? {
+                bail!("agent event {} has an invalid digest", event.event_id);
+            }
+            events.push(event);
+        }
         Ok(events)
     }
 

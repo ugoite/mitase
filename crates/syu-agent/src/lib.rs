@@ -90,12 +90,12 @@ pub fn apply_scoped_patch(
     run: &AgentRun,
     patch: &AgentPatch,
 ) -> Result<AgentPatchRecord> {
-    validate_run(run)?;
+    let run = validate_run(workspace, run)?;
     let store = DeliveryStore::for_workspace(&workspace.root)?;
     let before_fingerprint = workspace.try_fingerprint()?;
     let now = timestamp();
     let patch_id = store.new_id("agent-patch");
-    let result = apply_patch_inner(workspace, run, patch);
+    let result = apply_patch_inner(workspace, &run, patch);
     match result {
         Ok(applied) => {
             let record = AgentPatchRecord {
@@ -112,7 +112,7 @@ pub fn apply_scoped_patch(
                 blockers: vec![],
                 created_at: now,
             };
-            match append_patch_event(&store, run, record.clone()) {
+            match append_patch_event(&store, &run, record.clone()) {
                 Ok(()) => Ok(record),
                 Err(error) => {
                     restore_files(&applied.old_files)?;
@@ -140,7 +140,7 @@ pub fn apply_scoped_patch(
                 blockers: vec![blocker.clone()],
                 created_at: now,
             };
-            append_patch_event(&store, run, record)?;
+            append_patch_event(&store, &run, record)?;
             Err(error)
         }
     }
@@ -151,14 +151,17 @@ pub fn record_blocker(
     run: &AgentRun,
     blocker: AgentBlocker,
 ) -> Result<AgentEvent> {
-    validate_run(run)?;
+    let run = validate_run(workspace, run)?;
+    if !matches!(run.status, AgentRunStatus::Active) {
+        bail!("agent run is not active; resolve its blocker or start a new run");
+    }
     if blocker.code.trim().is_empty()
         || blocker.message.trim().is_empty()
         || blocker.next_action.trim().is_empty()
     {
         bail!("agent blockers require a code, message, and next action");
     }
-    append_event(workspace, run, AgentEventKind::BlockerRecorded { blocker })
+    append_event(workspace, &run, AgentEventKind::BlockerRecorded { blocker })
 }
 
 pub fn request_scope_expansion(
@@ -167,7 +170,10 @@ pub fn request_scope_expansion(
     reason: String,
     requested_targets: Vec<BoundTargetRef>,
 ) -> Result<AgentEvent> {
-    validate_run(run)?;
+    let run = validate_run(workspace, run)?;
+    if !matches!(run.status, AgentRunStatus::Active | AgentRunStatus::Blocked) {
+        bail!("agent run is completed; start a new run to request scope expansion");
+    }
     if reason.trim().is_empty() || requested_targets.is_empty() {
         bail!("scope expansion requires a reason and at least one target");
     }
@@ -183,7 +189,7 @@ pub fn request_scope_expansion(
     };
     append_event(
         workspace,
-        run,
+        &run,
         AgentEventKind::ScopeExpansionRequested { request },
     )
 }
@@ -193,13 +199,16 @@ pub fn record_verification(
     run: &AgentRun,
     attempt_id: &str,
 ) -> Result<AgentEvent> {
-    validate_run(run)?;
+    let run = validate_run(workspace, run)?;
+    if !matches!(run.status, AgentRunStatus::Active) {
+        bail!("agent run is not active; resolve its blocker or start a new run");
+    }
     if attempt_id.trim().is_empty() {
         bail!("verification evidence requires an attempt id");
     }
     append_event(
         workspace,
-        run,
+        &run,
         AgentEventKind::VerificationRecorded {
             attempt_id: attempt_id.into(),
         },
@@ -208,6 +217,10 @@ pub fn record_verification(
 
 pub fn events(workspace: &SpecWorkspace, run_id: &str) -> Result<Vec<AgentEvent>> {
     DeliveryStore::for_workspace(&workspace.root)?.agent_events(run_id)
+}
+
+pub fn current_run(workspace: &SpecWorkspace, run: &AgentRun) -> Result<AgentRun> {
+    validate_run(workspace, run)
 }
 
 fn apply_patch_inner(
@@ -314,7 +327,19 @@ fn apply_patch_inner(
         files.push((path, original.into_bytes(), updated.into_bytes()));
     }
     let old_files = write_files_atomically(&files)?;
-    let after_fingerprint = SpecWorkspace::load(&workspace.root)?.try_fingerprint()?;
+    let post_write = (|| {
+        let candidate = SpecWorkspace::load(&workspace.root)?;
+        let candidate_index = candidate.index()?;
+        validate_post_patch(&index, &candidate, &candidate_index, slice, patch)?;
+        candidate.try_fingerprint()
+    })();
+    let after_fingerprint = match post_write {
+        Ok(fingerprint) => fingerprint,
+        Err(error) => {
+            restore_files(&old_files)?;
+            return Err(error);
+        }
+    };
     let changes = patch
         .writes
         .iter()
@@ -355,7 +380,7 @@ fn approved_plan(workspace: &SpecWorkspace, run: &AgentRun) -> Result<syu_work_m
     Ok(canonical)
 }
 
-fn validate_run(run: &AgentRun) -> Result<()> {
+fn validate_run(workspace: &SpecWorkspace, run: &AgentRun) -> Result<AgentRun> {
     if run.schema != AGENT_RUN_SCHEMA {
         bail!("agent run schema must be {AGENT_RUN_SCHEMA}");
     }
@@ -364,6 +389,85 @@ fn validate_run(run: &AgentRun) -> Result<()> {
         || run.context.slice_id != run.slice_id
     {
         bail!("agent run context does not match its plan and slice");
+    }
+    let stored = DeliveryStore::for_workspace(&workspace.root)?.agent_run(&run.run_id)?;
+    let mut expected = run.clone();
+    expected.status = stored.status.clone();
+    if stored != expected {
+        bail!("agent run does not match its persisted event history");
+    }
+    Ok(stored)
+}
+
+fn validate_post_patch(
+    before: &syu_workspace::SpecIndex,
+    candidate: &SpecWorkspace,
+    after: &syu_workspace::SpecIndex,
+    slice: &syu_work_model::ExecutionSlice,
+    patch: &AgentPatch,
+) -> Result<()> {
+    let mut allowed_identities = std::collections::BTreeSet::new();
+    for write in &patch.writes {
+        let AgentTargetWrite::Replace { target, .. } = write;
+        let planned = slice
+            .editable_targets
+            .iter()
+            .find(|planned| planned.reference == *target)
+            .ok_or_else(|| {
+                anyhow::anyhow!("target {target} is outside the selected editable slice")
+            })?;
+        let before_target = before
+            .target(target)
+            .ok_or_else(|| anyhow::anyhow!("target {target} disappeared from the inventory"))?;
+        let after_target = after
+            .target(target)
+            .ok_or_else(|| anyhow::anyhow!("target {target} is absent after applying the patch"))?;
+        let before_resolved = syu_workspace::resolve_target_in_workspace(candidate, after_target)?;
+        if before_resolved.content_hash == planned.content_hash {
+            bail!("target {target} was not modified by the patch");
+        }
+        let before_identity = before.target_to_artifact.get(target).ok_or_else(|| {
+            anyhow::anyhow!("target {target} has no inventory identity before the patch")
+        })?;
+        let after_identity = after.target_to_artifact.get(target).ok_or_else(|| {
+            anyhow::anyhow!("target {target} no longer resolves to an inventory identity")
+        })?;
+        if before_identity != after_identity {
+            bail!("target {target} no longer resolves to the same inventory identity");
+        }
+        allowed_identities.insert(before_identity.clone());
+        for unit in &before.artifact_units {
+            if unit.path == before_target.path
+                && matches!(unit.kind, syu_inventory::ArtifactUnitKind::File)
+            {
+                allowed_identities.insert(unit.identity.clone());
+            }
+        }
+        for unit in &after.artifact_units {
+            if unit.path == after_target.path
+                && matches!(unit.kind, syu_inventory::ArtifactUnitKind::File)
+            {
+                allowed_identities.insert(unit.identity.clone());
+            }
+        }
+    }
+    let before_units = before
+        .artifact_units
+        .iter()
+        .map(|unit| (unit.identity.clone(), unit))
+        .collect::<BTreeMap<_, _>>();
+    let after_units = after
+        .artifact_units
+        .iter()
+        .map(|unit| (unit.identity.clone(), unit))
+        .collect::<BTreeMap<_, _>>();
+    for identity in before_units.keys().chain(after_units.keys()) {
+        if allowed_identities.contains(identity) {
+            continue;
+        }
+        if before_units.get(identity) != after_units.get(identity) {
+            bail!("patch added, removed, or changed unapproved inventory unit {identity}");
+        }
     }
     Ok(())
 }

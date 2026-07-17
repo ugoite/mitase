@@ -994,6 +994,7 @@ dependencies = [
  "serde",
  "sha2",
  "syu-delivery",
+ "syu-inventory",
  "syu-planner",
  "syu-spec-model",
  "syu-validation",
