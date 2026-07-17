@@ -100,6 +100,10 @@
                 <span class="btn-icon"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"></path></svg></span>
                 <span class="btn-label" data-i18n="work.action.approve">Approve</span>
               </button>
+              <button class="btn compact" data-work-agent-start aria-label="Start scoped implementation agent" data-i18n-aria="a11y.work_agent_start" data-i18n-title="a11y.work_agent_start" title="Start scoped implementation agent">
+                <span class="btn-icon"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="3"></rect><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M19 9h3M2 15h3M19 15h3"></path><circle cx="9" cy="12" r="1"></circle><circle cx="15" cy="12" r="1"></circle></svg></span>
+                <span class="btn-label" data-i18n="work.action.agent_start">Agent</span>
+              </button>
               <button class="btn compact" data-work-finalize aria-label="Finalize complete work" data-i18n-aria="a11y.work_finalize" data-i18n-title="a11y.work_finalize" title="Finalize complete work">
                 <span class="btn-icon"><svg viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"></path></svg></span>
                 <span class="btn-label" data-i18n="work.action.finalize">Finalize</span>
@@ -126,7 +130,7 @@
               <span class="mini-count"></span>
             </button>
           </div>
-          <div class="workspace no-rail" data-panel="overview" data-panel-group="work"><div class="canvas" data-work-overview><div data-work-overview-summary></div><section data-work-completion-history></section></div></div>
+          <div class="workspace no-rail" data-panel="overview" data-panel-group="work"><div class="canvas" data-work-overview><div data-work-overview-summary></div><section data-work-agent-history></section><section data-work-completion-history></section></div></div>
           <div class="workspace" data-panel="slices" data-panel-group="work" hidden><aside class="rail" data-work-slices-rail></aside><div class="canvas" data-work-slice-detail></div></div>
           <div class="workspace" data-panel="context" data-panel-group="work" hidden><aside class="rail" data-work-context-rail></aside><div class="canvas" data-work-context-detail></div></div>
           <div class="workspace" data-panel="validation" data-panel-group="work" hidden><aside class="rail" data-work-validation-rail></aside><div class="canvas" data-work-validation-detail></div></div>
