@@ -2,6 +2,6 @@
 ci:
   autoupdate_schedule: monthly
   skip:
-    - syu-validate-self
+    - syu-validate-changed
+    - syu-rustfmt
     - syu-quality-gates
-    - syu-coverage-gate

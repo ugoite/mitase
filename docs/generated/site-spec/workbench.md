@@ -285,6 +285,17 @@ description: "Generated reference for docs/syu/workbench.yaml"
       - **statement**: Current and previous attempts expose plan and slice identity, status, blockers, next action, demonstrated criteria, and finalized state.
       - **governed_by**:
         - POL-DELIVERY-001#rule.exact-ownership
+- **id**: REQ-WORKBENCH-010
+  - **title**: Layered quality gates
+  - **description**: Local hooks and CI apply proportional quality checks without weakening the complete release gate.
+  - **priority**: high
+  - **status**: implemented
+  - **criteria**:
+    - **id**: lifecycle-separation
+      - **kind**: quality
+      - **statement**: Pre-commit validates the staged snapshot, pre-push scopes fast Rust and specification checks to the push diff, and CI runs the complete workspace gate.
+      - **governed_by**:
+        - POL-DELIVERY-001#rule.exact-ownership
 
 ## Source YAML
 
@@ -498,5 +509,15 @@ requirements:
       - id: completion-history
         kind: behavior
         statement: Current and previous attempts expose plan and slice identity, status, blockers, next action, demonstrated criteria, and finalized state.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+  - id: REQ-WORKBENCH-010
+    title: Layered quality gates
+    description: Local hooks and CI apply proportional quality checks without weakening the complete release gate.
+    priority: high
+    status: implemented
+    criteria:
+      - id: lifecycle-separation
+        kind: quality
+        statement: Pre-commit validates the staged snapshot, pre-push scopes fast Rust and specification checks to the push diff, and CI runs the complete workspace gate.
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
 ```

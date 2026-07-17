@@ -1707,6 +1707,13 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         .collect::<Vec<_>>()
                 });
             let owners = Some(owned.as_slice());
+            // Cargo build scripts are compiler-owned entrypoints. Their semantic inventory
+            // includes historical helper symbols so branch diffs can be compared across
+            // versions, but they are governed as one declared build artifact rather than as
+            // user-facing specification targets.
+            if unit.path.as_path() == Path::new("build.rs") {
+                continue;
+            }
             if ctx.config.validation.changed.require_owned_changes
                 && owners.is_none_or(|owners| owners.is_empty())
             {

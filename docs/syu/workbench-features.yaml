@@ -581,12 +581,6 @@ features:
       path: src/lib.rs
       selector:
         kind: file
-    - id: selfhost-root-build-module
-      adapter: rust
-      path: build.rs
-      selector:
-        kind: module
-        name: build
     - id: selfhost-desktop-build-module
       adapter: rust
       path: crates/syu-desktop/build.rs
@@ -1768,3 +1762,120 @@ features:
             package: syu
             harness: workbench_visual
             test: workbench_rendered_dom_uses_projection_driven_placeholders
+- id: FEAT-WORKBENCH-QUALITY-GATES-001
+  title: Layered quality gates
+  summary: Separate staged pre-commit checks, push-diff fast checks, and complete CI validation.
+  status: implemented
+  bindings:
+  - id: quality-gates
+    role: implementation
+    facet: repository-tooling
+    responsibility: Run only the quality checks appropriate to each Git lifecycle stage.
+    targets:
+    - id: quality-gate-script
+      adapter: declared
+      path: scripts/ci/quality-gates.sh
+      selector:
+        kind: file
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-010#criterion.lifecycle-separation
+    - id: release-artifacts-configuration
+      adapter: declared
+      path: .github/workflows/release-artifacts.yml
+      selector: { kind: file }
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-010#criterion.lifecycle-separation
+    - id: pre-commit-configuration
+      adapter: declared
+      path: .pre-commit-config.yaml
+      selector: { kind: file }
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-010#criterion.lifecycle-separation
+    - id: pre-commit-ci-configuration
+      adapter: declared
+      path: .pre-commit-ci.yaml
+      selector: { kind: file }
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-010#criterion.lifecycle-separation
+    owns:
+    - id: ci-workflow
+      adapter: declared
+      path: .github/workflows/ci.yml
+      selector: { kind: file }
+    - id: quality-workflow
+      adapter: declared
+      path: .github/workflows/quality.yml
+      selector: { kind: file }
+    - id: branch-push-workflow
+      adapter: declared
+      path: .github/workflows/branch-push.yml
+      selector: { kind: file }
+    - id: release-artifacts-workflow
+      adapter: declared
+      path: .github/workflows/release-artifacts.yml
+      selector: { kind: file }
+    - id: pre-commit-config
+      adapter: declared
+      path: .pre-commit-config.yaml
+      selector: { kind: file }
+    - id: pre-commit-ci-config
+      adapter: declared
+      path: .pre-commit-ci.yaml
+      selector: { kind: file }
+    - id: contributing-guide
+      adapter: declared
+      path: CONTRIBUTING.md
+      selector: { kind: file }
+    - id: cargo-manifest
+      adapter: declared
+      path: Cargo.toml
+      selector: { kind: file }
+    - id: root-build-script
+      adapter: declared
+      path: build.rs
+      selector: { kind: file }
+    - id: root-build-module
+      adapter: rust
+      path: build.rs
+      selector: { kind: module, name: "*" }
+    - id: changed-validation-hook
+      adapter: declared
+      path: scripts/dev/validate-changed.sh
+      selector: { kind: file }
+    - id: cli-validation
+      adapter: declared
+      path: src/lib.rs
+      selector: { kind: file }
+    - id: cli-validation-tests
+      adapter: declared
+      path: tests/v1_cli.rs
+      selector: { kind: file }
+  - id: quality-gates-verification
+    role: verification
+    facet: repository-tooling
+    responsibility: Verify that staged validation uses the Git index snapshot.
+    targets:
+    - id: staged-validation-test
+      adapter: rust
+      path: tests/v1_cli.rs
+      selector:
+        kind: symbol
+        name: staged_change_validation_uses_the_index_snapshot
+      claims:
+      - kind: verifies
+        criterion: REQ-WORKBENCH-010#criterion.lifecycle-separation
+        covers:
+        - FEAT-WORKBENCH-QUALITY-GATES-001#binding.quality-gates/target.quality-gate-script
+        - FEAT-WORKBENCH-QUALITY-GATES-001#binding.quality-gates/target.release-artifacts-configuration
+        - FEAT-WORKBENCH-QUALITY-GATES-001#binding.quality-gates/target.pre-commit-configuration
+        - FEAT-WORKBENCH-QUALITY-GATES-001#binding.quality-gates/target.pre-commit-ci-configuration
+        runner:
+          runner: cargo-test-integration
+          arguments:
+            package: syu
+            harness: v1_cli
+            test: staged_change_validation_uses_the_index_snapshot
