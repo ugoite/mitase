@@ -624,5 +624,11 @@ fn hash_bytes(value: &[u8]) -> String {
     use sha2::{Digest, Sha256};
     let mut hash = Sha256::new();
     hash.update(value);
-    format!("sha256:{:x}", hash.finalize())
+    format!(
+        "sha256:{}",
+        hash.finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    )
 }
