@@ -9,6 +9,7 @@ members = [
   "crates/syu-inventory",
   "crates/syu-validation",
   "crates/syu-delivery",
+  "crates/syu-agent",
   "crates/syu-planner",
   "crates/syu-workbench-server",
   "crates/syu-app-ui",

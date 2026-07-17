@@ -63,6 +63,7 @@ inventory:
             - crates/syu-code-intel/src/lib.rs
             - crates/syu-diagnostics/Cargo.toml
             - crates/syu-delivery/Cargo.toml
+            - crates/syu-agent/Cargo.toml
             - crates/syu-diagnostics/src/lib.rs
             - crates/syu-inventory/Cargo.toml
             - crates/syu-inventory/src/lib.rs

@@ -371,6 +371,8 @@
   "work.action.result": "Result",
   "work.action.approve": "Approve",
   "work.action.finalize": "Finalize",
+  "work.action.agent_start": "Agent",
+  "a11y.work_agent_start": "Start scoped implementation agent",
   "operation.add": "Add",
   "operation.modify": "Modify",
   "operation.remove": "Remove",
