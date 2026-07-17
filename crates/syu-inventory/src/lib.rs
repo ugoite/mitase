@@ -271,7 +271,13 @@ fn unit(context: &InventoryContext, adapter: &str, path: PathBuf) -> Result<Arti
             line_start: 1,
             line_end: text.lines().count().max(1),
         },
-        digest: format!("sha256:{:x}", hash.finalize()),
+        digest: format!(
+            "sha256:{}",
+            hash.finalize()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        ),
     })
 }
 
@@ -1320,7 +1326,13 @@ fn line_offsets(source: &str) -> Vec<usize> {
 fn digest(bytes: &[u8]) -> String {
     let mut hash = Sha256::new();
     hash.update(bytes);
-    format!("sha256:{:x}", hash.finalize())
+    format!(
+        "sha256:{}",
+        hash.finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    )
 }
 
 fn collect_matching(

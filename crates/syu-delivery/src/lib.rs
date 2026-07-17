@@ -386,7 +386,13 @@ impl DeliveryStore {
         let bytes = serde_json::to_vec(value)?;
         let mut hash = Sha256::new();
         hash.update(bytes);
-        Ok(format!("sha256:{:x}", hash.finalize()))
+        Ok(format!(
+            "sha256:{}",
+            hash.finalize()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        ))
     }
 
     fn approvals_dir(&self) -> PathBuf {
@@ -427,7 +433,10 @@ impl DeliveryStore {
 fn component(value: &str) -> String {
     let mut hash = Sha256::new();
     hash.update(value.as_bytes());
-    format!("{:x}", hash.finalize())
+    hash.finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 fn now_nanos() -> u128 {

@@ -265,7 +265,13 @@ fn security_token(root: &Path) -> String {
             .as_nanos()
             .to_le_bytes(),
     );
-    format!("sha256:{:x}", hash.finalize())
+    format!(
+        "sha256:{}",
+        hash.finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    )
 }
 
 async fn mutation_guard(
@@ -3800,7 +3806,14 @@ fn item_summary_from_feature(
 fn content_hash(content: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(content.as_bytes());
-    format!("sha256:{:x}", hasher.finalize())
+    format!(
+        "sha256:{}",
+        hasher
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    )
 }
 
 fn anchors_for(index: &syu_workspace::SpecIndex, item: &syu_spec_model::SpecId) -> Vec<String> {

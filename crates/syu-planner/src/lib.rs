@@ -3003,7 +3003,13 @@ fn build_context_pack(
                             let excerpt = String::from_utf8_lossy(&bytes).into_owned();
                             let mut hash = Sha256::new();
                             hash.update(&bytes);
-                            let digest = format!("sha256:{:x}", hash.finalize());
+                            let digest = format!(
+                                "sha256:{}",
+                                hash.finalize()
+                                    .iter()
+                                    .map(|byte| format!("{byte:02x}"))
+                                    .collect::<String>()
+                            );
                             let support_id = format!("support:{}", target.reference);
                             if included_supports.insert(support_id.clone()) {
                                 artifact_context.push(ArtifactContextEntry::Support(

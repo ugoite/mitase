@@ -1397,7 +1397,13 @@ fn expand_runner_argument(template: &str, values: &BTreeMap<String, String>) -> 
 fn digest(bytes: &[u8]) -> String {
     let mut hash = Sha256::new();
     hash.update(bytes);
-    format!("sha256:{:x}", hash.finalize())
+    format!(
+        "sha256:{}",
+        hash.finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    )
 }
 
 fn epoch_seconds() -> String {

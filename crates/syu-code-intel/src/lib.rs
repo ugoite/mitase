@@ -687,7 +687,13 @@ fn build(
         line_start,
         line_end,
         excerpt,
-        excerpt_hash: format!("sha256:{:x}", hash.finalize()),
+        excerpt_hash: format!(
+            "sha256:{}",
+            hash.finalize()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        ),
     }
 }
 

@@ -758,7 +758,13 @@ pub fn readonly_targets_fingerprint(slices: &[ExecutionSlice]) -> String {
             hash.update(format!("{:?}", target.role).as_bytes());
         }
     }
-    format!("sha256:{:x}", hash.finalize())
+    format!(
+        "sha256:{}",
+        hash.finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    )
 }
 
 pub fn work_plan_digest(plan: &WorkPlan) -> String {
@@ -767,5 +773,11 @@ pub fn work_plan_digest(plan: &WorkPlan) -> String {
     let bytes = serde_json::to_vec(&copy).expect("serialize work plan digest");
     let mut hash = Sha256::new();
     hash.update(bytes);
-    format!("sha256:{:x}", hash.finalize())
+    format!(
+        "sha256:{}",
+        hash.finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    )
 }
