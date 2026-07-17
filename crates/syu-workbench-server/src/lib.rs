@@ -3484,7 +3484,21 @@ fn project_session(
         .as_ref()
         .map(verification_receipt_view);
     projection.work.completion = completion_history(workspace)?;
-    projection.work.agent = DeliveryStore::for_workspace(&workspace.root)?.latest_agent_run()?;
+    // A session-bound run controls Workbench actions.  When no plan is loaded
+    // (including after a server restart), retain the latest run for evidence
+    // inspection only; it must not be mistaken for the current plan's agent.
+    projection.work.agent = match session
+        .agent_run
+        .as_ref()
+        .map(|run| syu_agent::current_run(workspace, run))
+        .transpose()?
+    {
+        Some(run) => Some(run),
+        None if session.plan.is_none() => {
+            DeliveryStore::for_workspace(&workspace.root)?.latest_agent_run()?
+        }
+        None => None,
+    };
     projection.work.agent_events = projection
         .work
         .agent
@@ -4514,6 +4528,7 @@ mod tests {
 
         let restarted = WorkbenchServer::new(temp.path().to_path_buf()).router();
         let projection = restarted
+            .clone()
             .oneshot(
                 Request::builder()
                     .uri("/api/projection")
@@ -4526,6 +4541,34 @@ mod tests {
             serde_json::from_slice(&projection.into_body().collect().await.unwrap().to_bytes())
                 .expect("restarted agent projection");
         assert_eq!(projection["work"]["agent"]["status"], "blocked");
+
+        let (basis, csrf, _) = projection_and_basis(&restarted).await;
+        let response = json_mutation(
+            &restarted,
+            Method::POST,
+            "/api/work/request",
+            &csrf,
+            &WorkRequestCommand {
+                basis,
+                request: WorkRequest {
+                    schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
+                    id: "WORK-FIXTURE-NEXT".into(),
+                    summary: "a subsequent work request".into(),
+                    operation: syu_work_model::WorkOperation::Modify,
+                    seeds: vec![syu_work_model::WorkSeed::Anchor(
+                        "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
+                    )],
+                    constraints: Default::default(),
+                    requested_targets: vec![],
+                },
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: WorkspaceProjection =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("subsequent request projection");
+        assert!(projection.work.agent.is_none());
     }
 
     #[tokio::test]

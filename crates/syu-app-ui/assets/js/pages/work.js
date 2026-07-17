@@ -49,7 +49,7 @@ export function renderWork(work, state) {
   if (verifyButton) {
     verifyButton.disabled = !selected || work?.validation?.state !== 'passed' || !state.planApproved;
     verifyButton.onclick = () => selected && state.runAction(
-      () => work?.agent
+      () => work?.agent?.status === 'active'
         ? state.api.verifyAgent(state.projection, selected.id)
         : state.api.verifyWork(state.projection, selected.id),
       attempt => { state.verificationReceipt = attempt.receipt; state.selectedSlice = selected.id; },
@@ -65,7 +65,7 @@ export function renderWork(work, state) {
   }
   const agentButton = document.querySelector('[data-work-agent-start]');
   if (agentButton) {
-    agentButton.disabled = !selected || !state.planApproved || Boolean(work?.agent);
+    agentButton.disabled = !selected || !state.planApproved || ['active', 'blocked'].includes(work?.agent?.status);
     agentButton.onclick = () => selected && state.runAction(
       () => state.api.startAgent(state.projection, selected.id),
       () => { state.selectedSlice = selected.id; },
