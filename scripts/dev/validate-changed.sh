@@ -7,7 +7,7 @@ is_relevant_path() {
   local path="$1"
 
   case "$path" in
-    syu.yaml|docs/syu/*|crates/*|src/*|tests/*|website/*)
+    syu.yaml|docs/syu/*)
       return 0
       ;;
     *)
@@ -26,14 +26,18 @@ validate_changed() {
   if (($# > 0)); then
     files=("$@")
   else
-    while IFS= read -r path; do
+    local files_file
+    files_file="$(mktemp)"
+    trap 'rm -f "$files_file"' RETURN
+    git diff --name-only --cached --diff-filter=ACMR -z >"$files_file"
+    while IFS= read -r -d '' path; do
       files+=("$path")
-    done < <(git diff --name-only --cached --diff-filter=ACMR)
+    done <"$files_file"
   fi
 
   for path in "${files[@]}"; do
     if is_relevant_path "$path"; then
-      cargo run -- validate workspace .
+      cargo run -- validate change . --staged
       return 0
     fi
   done

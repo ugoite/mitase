@@ -66,11 +66,11 @@ syu-validation = { path = "crates/syu-validation" }
 syu-work-model = { path = "crates/syu-work-model" }
 syu-workbench-server = { path = "crates/syu-workbench-server" }
 syu-workspace = { path = "crates/syu-workspace" }
+tempfile.workspace = true
 tokio = { version = "1.52.3", features = ["io-util", "net", "rt-multi-thread", "signal", "sync"] }
 
 [dev-dependencies]
 assert_cmd = "2.2.2"
-tempfile.workspace = true
 
 [build-dependencies]
 serde_json.workspace = true
