@@ -166,9 +166,8 @@ setTimeout(()=>{
 HTML
 
 behavior="$("$chrome" --headless --disable-gpu --no-sandbox --allow-file-access-from-files --virtual-time-budget=1800 --dump-dom "file://${tmp}/workbench.html?page=work&lang=en&theme=light")"
-echo "$behavior" | grep -q 'id="syu-visual-behavior-result" data-status="pass"'
-if echo "$behavior" | grep -q 'id="syu-visual-behavior-result" data-status="fail"'; then
-  echo "$behavior" | grep 'id="syu-visual-behavior-result"' >&2
+if ! echo "$behavior" | grep -q 'id="syu-visual-behavior-result" data-status="pass"'; then
+  echo "$behavior" | grep 'id="syu-visual-behavior-result"' >&2 || true
   exit 1
 fi
 
