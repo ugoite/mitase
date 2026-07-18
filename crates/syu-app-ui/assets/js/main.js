@@ -76,10 +76,16 @@ function renderBusyState(state) {
     });
   } else {
     document.querySelectorAll('[data-busy-disabled]').forEach(button => {
-      button.disabled = button.dataset.busyDisabled === 'true';
       delete button.dataset.busyDisabled;
     });
   }
+}
+
+function restoreBusyButtons() {
+  document.querySelectorAll('[data-busy-disabled]').forEach(button => {
+    button.disabled = button.dataset.busyDisabled === 'true';
+    delete button.dataset.busyDisabled;
+  });
 }
 
 export async function startWorkbench() {
@@ -95,21 +101,24 @@ export async function startWorkbench() {
   const projection = inlineProjection || await api.readProjection();
   const state = createState(projection);
   state.api = api;
-  state.render = () => render(state);
+  state.render = () => {
+    if (!state.busy) restoreBusyButtons();
+    render(state);
+  };
   initSpecifications(state);
   state.go = (page) => {
     state.selectedPage = navigate(page, false);
     state.render();
   };
   state.runAction = (action, onResult) => refreshAfterAction(state, action, onResult);
-  bindRouter(state, () => render(state));
+  bindRouter(state, () => state.render());
   state.busy = true;
   state.busyLabel = translate('common.starting');
-  render(state);
+  state.render();
   if (inlineProjection) await api.establishSession();
   state.busy = false;
   state.busyLabel = '';
-  render(state);
+  state.render();
   return state;
 }
 
