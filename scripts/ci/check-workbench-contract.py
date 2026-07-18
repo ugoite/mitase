@@ -89,7 +89,7 @@ SPECIFICATIONS_JS = (ROOT / "crates/syu-app-ui/assets/js/pages/specifications.js
 assert "readInlineProjection" in MAIN_JS
 assert "establishSession" in MAIN_JS
 assert "}[state.selectedPage]" in MAIN_JS
-assert "[data-page]:not([hidden]) button" in MAIN_JS
+assert "function disableBusyButtons()" in MAIN_JS
 assert "if (!state.specificationQuery.trim())" in SPECIFICATIONS_JS
 assert "async function runBusy" in SPECIFICATIONS_JS
 assert 'data-workbench-status role="status" aria-live="polite"' in HTML

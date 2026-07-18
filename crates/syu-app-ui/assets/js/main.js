@@ -60,6 +60,15 @@ function renderWorkspaceIdentity(projection) {
   document.querySelectorAll('[data-workspace-branch]').forEach(node => { node.textContent = `@ ${revision}`; });
 }
 
+function disableBusyButtons() {
+  document.querySelectorAll('button').forEach(button => {
+    if (!Object.prototype.hasOwnProperty.call(button.dataset, 'busyDisabled')) {
+      button.dataset.busyDisabled = String(button.disabled);
+    }
+    button.disabled = true;
+  });
+}
+
 function renderBusyState(state) {
   document.body.setAttribute('aria-busy', String(state.busy));
   const status = document.querySelector('[data-workbench-status]');
@@ -68,12 +77,7 @@ function renderBusyState(state) {
     status.textContent = state.busyLabel || translate('common.loading');
   }
   if (state.busy) {
-    document.querySelectorAll('[data-page]:not([hidden]) button').forEach(button => {
-      if (!Object.prototype.hasOwnProperty.call(button.dataset, 'busyDisabled')) {
-        button.dataset.busyDisabled = String(button.disabled);
-      }
-      button.disabled = true;
-    });
+    disableBusyButtons();
   } else {
     document.querySelectorAll('[data-busy-disabled]').forEach(button => {
       delete button.dataset.busyDisabled;
@@ -92,6 +96,7 @@ export async function startWorkbench() {
   const inlineProjection = readInlineProjection();
   if (!inlineProjection) {
     document.body.setAttribute('aria-busy', 'true');
+    disableBusyButtons();
     const startupStatus = document.querySelector('[data-workbench-status]');
     if (startupStatus) {
       startupStatus.hidden = false;
