@@ -326,7 +326,15 @@ async function main() {
             let value;
             try { value = predicate(); } catch {}
             if (value) return resolve(value);
-            if (Date.now() >= deadline) return reject(new Error('timeout waiting for ' + description));
+            if (Date.now() >= deadline) {
+              return reject(new Error(
+                'timeout waiting for ' + description
+                + '; page=' + (document.querySelector('[data-page]:not([hidden])')?.dataset.page || 'none')
+                + '; busy=' + document.body.getAttribute('aria-busy')
+                + '; buttons=' + [...document.querySelectorAll('[data-page="specifications"] button')]
+                  .map(node => `${node.textContent.trim()}:${node.disabled}`).join('|'),
+              ));
+            }
             setTimeout(check, 50);
           };
           check();
