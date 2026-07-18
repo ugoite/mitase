@@ -275,6 +275,30 @@ svg { display: block; stroke: currentColor; fill: none; stroke-width: 1.8; strok
   animation: workbench-spin .7s linear infinite;
 }
 @keyframes workbench-spin { to { transform: rotate(360deg); } }
+/* The guided journey is the primary Workbench surface. */
+[data-page="work"] [data-work-new], [data-page="work"] [data-work-seed],
+[data-page="work"] [data-work-plan], [data-page="work"] [data-work-context],
+[data-page="work"] [data-work-validate], [data-page="work"] [data-work-verify],
+[data-page="work"] [data-work-approve], [data-page="work"] [data-work-agent-start],
+[data-page="work"] [data-work-finalize], [data-page="work"] .tabs,
+[data-page="work"] [data-panel="slices"], [data-page="work"] [data-panel="context"],
+[data-page="work"] [data-panel="validation"] { display: none !important; }
+.journey { max-width: 780px; display: grid; gap: 16px; }
+.journey-header h2 { margin: 0; font-size: clamp(1.5rem, 3vw, 2.25rem); }
+.journey-copy { color: var(--muted, #5d6570); line-height: 1.55; }
+.journey-steps { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; padding: 0; margin: 0; list-style: none; }
+.journey-step { border-radius: 999px; padding: 7px 10px; text-align: center; font-size: .82rem; background: #e8ebef; color: #68707a; }
+.journey-step.complete { background: #d8efe1; color: #1f6c40; }
+.journey-step.current { background: #1c5d99; color: #fff; font-weight: 700; }
+.journey-card, .journey-intake { border: 1px solid #d9dfe6; border-radius: 12px; padding: 18px; background: var(--paper, #fff); display: grid; gap: 10px; }
+.journey-intake textarea { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #aeb8c3; border-radius: 8px; font: inherit; }
+.journey-section-title { margin: 8px 0 0; }
+.journey-meta { color: #68707a; font-size: .9rem; }
+.journey-blocker { border-left: 4px solid #b44936; padding-left: 12px; }
+.journey-advanced { border-top: 1px solid #d9dfe6; padding-top: 12px; color: #4e5660; }
+.journey-advanced p { white-space: pre-line; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; }
+@media (max-width: 760px) { .journey-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
 @media (prefers-reduced-motion: reduce) {
   .workbench-busy::before { animation: none; border-top-color: var(--line); }
 }

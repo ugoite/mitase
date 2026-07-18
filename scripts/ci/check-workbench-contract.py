@@ -85,11 +85,16 @@ for module in (
 ):
     assert module in (ROOT / "crates/syu-app-ui/assets/js/main.js").read_text(), module
 MAIN_JS = (ROOT / "crates/syu-app-ui/assets/js/main.js").read_text()
+WORK_JS = (ROOT / "crates/syu-app-ui/assets/js/pages/work.js").read_text()
+API_JS = (ROOT / "crates/syu-app-ui/assets/js/api.js").read_text()
 SPECIFICATIONS_JS = (ROOT / "crates/syu-app-ui/assets/js/pages/specifications.js").read_text()
 assert "readInlineProjection" in MAIN_JS
 assert "establishSession" in MAIN_JS
 assert "}[state.selectedPage]" in MAIN_JS
 assert "function disableBusyButtons()" in MAIN_JS
+assert "runJourneyAction" in API_JS
+assert "journey-advanced" in WORK_JS
+assert "journeyQuery" in WORK_JS
 assert "if (!state.specificationQuery.trim())" in SPECIFICATIONS_JS
 assert "async function runBusy" in SPECIFICATIONS_JS
 assert 'data-workbench-status role="status" aria-live="polite"' in HTML

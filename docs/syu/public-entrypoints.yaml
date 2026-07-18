@@ -69,12 +69,12 @@ features:
     facet: public
     responsibility: Keep this public entrypoint addressable by an exact target.
     targets:
-    - id: entrypoint-005-javascript-crates-syu-app-ui-assets-js-api-js-validatew
+    - id: entrypoint-005-javascript-crates-syu-app-ui-assets-js-api-js-runjourn
       adapter: javascript
       path: crates/syu-app-ui/assets/js/api.js
       selector:
         kind: symbol
-        name: validateWork
+        name: runJourneyAction
       claims:
       - kind: satisfies
         criterion: REQ-PUBLIC-001#criterion.entrypoint

@@ -357,6 +357,17 @@ description: "Generated reference for docs/syu/workbench.yaml"
       - **statement**: Workbench can start a scoped agent only for an approved slice and shows accepted, rejected, blocked, and expansion events.
       - **governed_by**:
         - POL-DELIVERY-001#rule.exact-ownership
+- **id**: REQ-WORKBENCH-013
+  - **title**: Guided non-programmer journey
+  - **description**: Workbench guides a person through a bounded change without requiring repository internals.
+  - **priority**: critical
+  - **status**: implemented
+  - **criteria**:
+    - **id**: guided-journey
+      - **kind**: behavior
+      - **statement**: Workbench exposes one explained next action, a friendly work identity, separately labeled advisory and approved scope, completion evidence, and a cancellable recovery path while technical identities remain under Advanced details.
+      - **governed_by**:
+        - POL-DELIVERY-001#rule.exact-ownership
 
 ## Source YAML
 
@@ -628,5 +639,15 @@ requirements:
       - id: scoped-agent
         kind: security
         statement: Workbench can start a scoped agent only for an approved slice and shows accepted, rejected, blocked, and expansion events.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+  - id: REQ-WORKBENCH-013
+    title: Guided non-programmer journey
+    description: Workbench guides a person through a bounded change without requiring repository internals.
+    priority: critical
+    status: implemented
+    criteria:
+      - id: guided-journey
+        kind: behavior
+        statement: Workbench exposes one explained next action, a friendly work identity, separately labeled advisory and approved scope, completion evidence, and a cancellable recovery path while technical identities remain under Advanced details.
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
 ```

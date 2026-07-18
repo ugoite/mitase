@@ -1,170 +1,129 @@
-import { renderTarget } from '../components/target.js';
+import { translate } from '../i18n.js';
+
+const t = key => translate(key);
 
 function replace(root, content) {
   if (!root) return;
   root.replaceChildren();
-  if (typeof content === 'string') root.textContent = content;
-  else if (content) root.append(content);
+  if (content) root.append(content);
+}
+
+function element(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text) node.textContent = text;
+  return node;
+}
+
+function button(label, onClick, primary = false) {
+  const node = element('button', `btn journey-action${primary ? ' primary' : ''}`, label);
+  node.type = 'button';
+  node.addEventListener('click', onClick);
+  return node;
+}
+
+function matchingCandidates(state) {
+  const query = String(state.journeyQuery || '').trim().toLowerCase();
+  const items = state.projection.specifications?.specifications || [];
+  return items.filter(item => item.anchors?.length && (!query || `${item.title} ${item.summary} ${item.description || ''}`.toLowerCase().includes(query))).slice(0, 6);
+}
+
+function run(state, action) {
+  return state.runAction(() => state.api.runJourneyAction(state.projection, action));
+}
+
+function renderStart(root, state) {
+  root.append(element('p', 'journey-copy', t('journey.intro')));
+  const form = element('form', 'journey-intake');
+  const label = element('label', null, t('journey.prompt'));
+  const input = document.createElement('textarea');
+  input.rows = 3;
+  input.value = state.journeyQuery || '';
+  input.placeholder = t('journey.placeholder');
+  label.append(input);
+  form.append(label);
+  form.append(button(t('journey.find'), event => {
+    event.preventDefault();
+    state.journeyQuery = input.value;
+    state.render();
+  }, true));
+  form.addEventListener('submit', event => event.preventDefault());
+  root.append(form);
+  if (!String(state.journeyQuery || '').trim()) return;
+  const candidates = matchingCandidates(state);
+  const heading = element('h2', 'journey-section-title', t('journey.choose'));
+  root.append(heading);
+  if (!candidates.length) {
+    root.append(element('p', 'empty-state', t('journey.no_match')));
+    return;
+  }
+  candidates.forEach(item => {
+    const card = element('article', 'journey-card');
+    card.append(element('h3', null, item.title));
+    card.append(element('p', null, item.summary || item.description || 'This behavior is available for review.'));
+    card.append(button(t('journey.review'), () => run(state, {
+      action: 'create',
+      anchor: item.anchors[0],
+      summary: state.journeyQuery,
+    }), true));
+    root.append(card);
+  });
+}
+
+function renderJourney(root, journey, state) {
+  const header = element('header', 'journey-header');
+  header.append(element('p', 'eyebrow', t('journey.eyebrow')));
+  header.append(element('h2', null, journey.title));
+  root.append(header);
+  const steps = element('ol', 'journey-steps');
+  (journey.steps || []).forEach(step => steps.append(element('li', `journey-step ${step.status}`, t(`journey.step.${step.id}`))));
+  root.append(steps);
+  root.append(element('p', 'journey-copy', journey.primary_action.explanation));
+  if (journey.approved_scope) {
+    const scope = element('section', 'journey-card');
+    scope.append(element('h3', null, t('journey.scope')));
+    scope.append(element('p', null, journey.approved_scope.summary));
+    scope.append(element('p', 'journey-meta', `${journey.approved_scope.editable_target_count} change area${journey.approved_scope.editable_target_count === 1 ? '' : 's'} in ${journey.approved_scope.slice_count} focused step${journey.approved_scope.slice_count === 1 ? '' : 's'}.`));
+    root.append(scope);
+  }
+  const evidence = journey.evidence || {};
+  const evidenceCard = element('section', 'journey-card');
+  evidenceCard.append(element('h3', null, t('journey.evidence')));
+  evidenceCard.append(element('p', null, evidence.summary || 'No evidence yet.'));
+  (evidence.blockers || []).forEach(blocker => {
+    const item = element('div', 'journey-blocker');
+    item.append(element('strong', null, blocker.message));
+    item.append(element('p', null, blocker.next_action));
+    evidenceCard.append(item);
+  });
+  root.append(evidenceCard);
+  const action = journey.primary_action;
+  root.append(button(t(`journey.action.${action.action}`), () => {
+    if (action.confirmation_required && !window.confirm(`${action.explanation}\n\n${t('journey.confirm')}`)) return;
+    run(state, { action: action.action });
+  }, true));
+  if (journey.recovery_action) {
+    const recovery = journey.recovery_action;
+    root.append(button(t(`journey.action.${recovery.action}`), () => {
+      if (recovery.confirmation_required && !window.confirm(recovery.explanation)) return;
+      run(state, { action: recovery.action });
+    }));
+  }
+  const advanced = element('details', 'journey-advanced');
+  advanced.append(element('summary', null, t('journey.advanced')));
+  const technical = journey.advanced || {};
+  advanced.append(element('p', null, `Request: ${technical.request_id || 'not created'}\nPlan: ${technical.plan_id || 'not prepared'}\nStep: ${technical.selected_slice_id || 'not selected'}\nAttempt: ${technical.attempt_id || 'not started'}`));
+  root.append(advanced);
 }
 
 export function renderWork(work, state) {
-  const plan = work?.plan;
-  replace(
-    document.querySelector('[data-work-overview-summary]'),
-    state.error ? `Error: ${state.error.message}` : plan ? `${plan.id}: ${plan.status}` : work?.request ? 'Work request created. Press Plan to derive the safe slice.' : 'Choose an implemented criterion in Specifications to create a Modify Work request.',
-  );
-  const selectedPlan = plan?.slices || [];
-  const selectedSliceId = work?.selected_slice
-    || (selectedPlan.some(slice => slice.id === state.selectedSlice) ? state.selectedSlice : selectedPlan[0]?.id || null);
-  if (selectedSliceId) state.selectedSlice = selectedSliceId;
-
-  const planButton = document.querySelector('[data-work-plan]');
-  if (planButton) {
-    planButton.disabled = !work?.request;
-    planButton.onclick = () => state.runAction(
-      () => state.api.planWork(state.projection),
-      () => { state.selectedSlice = null; state.planApproved = false; },
-    );
-  }
-  const newButton = document.querySelector('[data-work-new]');
-  if (newButton) newButton.onclick = () => state.go('specifications');
-  const seedButton = document.querySelector('[data-work-seed]');
-  if (seedButton) seedButton.disabled = true;
-
-  const selected = selectedPlan.find(slice => slice.id === state.selectedSlice) || selectedPlan[0];
-  const contextButton = document.querySelector('[data-work-context]');
-  if (contextButton) {
-    contextButton.disabled = !selected;
-    contextButton.onclick = () => selected && state.runAction(
-      () => state.api.exportContext(state.projection, selected.id),
-      () => { state.selectedSlice = selected.id; },
-    );
-  }
-  const validateButton = document.querySelector('[data-work-validate]');
-  if (validateButton) {
-    validateButton.disabled = !plan;
-    validateButton.onclick = () => plan && state.runAction(() => state.api.validateWork(state.projection));
-  }
-  const verifyButton = document.querySelector('[data-work-verify]');
-  if (verifyButton) {
-    verifyButton.disabled = !selected || work?.validation?.state !== 'passed' || !state.planApproved;
-    verifyButton.onclick = () => selected && state.runAction(
-      () => work?.agent?.status === 'active'
-        ? state.api.verifyAgent(state.projection, selected.id)
-        : state.api.verifyWork(state.projection, selected.id),
-      attempt => { state.verificationReceipt = attempt.receipt; state.selectedSlice = selected.id; },
-    );
-  }
-  const approveButton = document.querySelector('[data-work-approve]');
-  if (approveButton) {
-    approveButton.disabled = !plan || work?.validation?.state !== 'passed';
-    approveButton.onclick = () => plan && state.runAction(
-      () => state.api.approveWork(state.projection),
-      () => { state.planApproved = true; },
-    );
-  }
-  const agentButton = document.querySelector('[data-work-agent-start]');
-  if (agentButton) {
-    agentButton.disabled = !selected || !state.planApproved || ['active', 'blocked'].includes(work?.agent?.status);
-    agentButton.onclick = () => selected && state.runAction(
-      () => state.api.startAgent(state.projection, selected.id),
-      () => { state.selectedSlice = selected.id; },
-    );
-  }
-  const finalizeButton = document.querySelector('[data-work-finalize]');
-  const currentAttempt = work?.completion?.current;
-  if (finalizeButton) {
-    finalizeButton.disabled = !currentAttempt || currentAttempt.status !== 'complete' || currentAttempt.finalized;
-    finalizeButton.onclick = () => currentAttempt && state.runAction(
-      async () => {
-        const preview = await state.api.finalizePreview(state.projection, currentAttempt.attempt_id);
-        return state.api.finalizeApply(state.projection, currentAttempt.attempt_id, preview.preview_token);
-      },
-    );
-  }
-  const history = document.querySelector('[data-work-completion-history]');
-  if (history) {
-    history.replaceChildren();
-    const completion = work?.completion;
-    const attempts = [completion?.current, ...(completion?.previous || [])].filter(Boolean);
-    if (!attempts.length) history.textContent = 'No completion attempts yet.';
-    else attempts.forEach(attempt => {
-      const item = document.createElement('article');
-      const title = document.createElement('h3');
-      title.textContent = attempt.status + ': ' + attempt.attempt_id;
-      item.append(title);
-      const identity = document.createElement('p');
-      identity.textContent = attempt.plan_digest + ' / ' + attempt.slice_id;
-      item.append(identity);
-      (attempt.blockers || []).forEach(blocker => {
-        const blockerNode = document.createElement('p');
-        blockerNode.textContent = blocker.code + ': ' + blocker.message + ' Next: ' + blocker.next_action;
-        item.append(blockerNode);
-      });
-      const finalized = document.createElement('p');
-      finalized.textContent = attempt.finalized ? 'Finalized' : 'Not finalized';
-      item.append(finalized);
-      history.append(item);
-    });
-  }
-  const agentHistory = document.querySelector('[data-work-agent-history]');
-  if (agentHistory) {
-    agentHistory.replaceChildren();
-    const agent = work?.agent;
-    if (!agent) agentHistory.textContent = 'No scoped agent run yet.';
-    else {
-      const heading = document.createElement('h2');
-      heading.textContent = `Agent ${agent.status}: ${agent.run_id}`;
-      agentHistory.append(heading);
-      const identity = document.createElement('p');
-      identity.textContent = `${agent.plan_digest} / ${agent.slice_id}`;
-      agentHistory.append(identity);
-      (work.agent_events || []).forEach(event => {
-        const item = document.createElement('p');
-        const detail = event.event || {};
-        let text = `${detail.kind || 'unknown'}: ${event.created_at}`;
-        if (detail.kind === 'patch-recorded') {
-          const patch = detail.patch || {};
-          const blockers = (patch.blockers || []).map(blocker => ` Next: ${blocker.next_action}`).join('');
-          text += ` (${patch.status || 'unknown'})${blockers}`;
-        } else if (detail.kind === 'blocker-recorded') {
-          const blocker = detail.blocker || {};
-          text += ` (${blocker.code || 'blocker'}: ${blocker.message || ''} Next: ${blocker.next_action || ''})`;
-        }
-        item.textContent = text;
-        agentHistory.append(item);
-      });
-    }
-  }
-  const slices = plan?.slices || [];
-  const rail = document.querySelector('[data-work-slices-rail]');
-  if (rail) {
-    rail.replaceChildren();
-    slices.forEach(slice => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'rail-item';
-      button.textContent = slice.id;
-      button.addEventListener('click', () => {
-        state.selectedSlice = slice.id;
-        state.render();
-      });
-      rail.append(button);
-    });
-  }
-  const detail = document.querySelector('[data-work-slice-detail]');
-  if (detail) {
-    detail.replaceChildren();
-    if (!selected) detail.textContent = 'No selected slice.';
-    else {
-      const heading = document.createElement('h2');
-      heading.textContent = selected.id;
-      detail.append(heading);
-      const list = document.createElement('ul');
-      selected.editable_targets.map(renderTarget).forEach(item => list.append(item));
-      detail.append(list);
-    }
-  }
-  replace(document.querySelector('[data-work-context-detail]'), work?.context_pack ? `Context pack loaded for ${work.context_pack.slice_id}.` : 'Select a slice and export context.');
-  replace(document.querySelector('[data-work-validation-detail]'), work?.validation?.state || 'not_run');
+  const root = document.querySelector('[data-work-overview-summary]');
+  const journey = state.projection.journey;
+  if (!root) return;
+  const content = element('div', 'journey');
+  if (state.error) content.append(element('p', 'status-message status-error', state.error.message));
+  if (!journey || journey.current_step === 'describe') renderStart(content, state);
+  else renderJourney(content, journey, state);
+  replace(root, content);
+  document.querySelectorAll('[data-work-agent-history], [data-work-completion-history]').forEach(node => { node.hidden = true; });
 }

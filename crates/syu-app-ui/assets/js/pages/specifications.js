@@ -508,7 +508,11 @@ function renderDetail(root, state, selected) {
       row.append(text);
       if (kind === 'criterion' && selected.status === 'implemented') {
         row.append(button(t('items.create_work'), '→', () => state.runAction(
-          () => state.api.createModifyWork(state.projection, value.anchor),
+          () => state.api.runJourneyAction(state.projection, {
+            action: 'create',
+            anchor: value.anchor,
+            summary: `Change ${selected.title}`,
+          }),
           () => { state.selectedSlice = null; state.go('work'); },
         ), 'btn small'));
       }
