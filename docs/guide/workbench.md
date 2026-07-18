@@ -14,6 +14,8 @@ The default address is `http://127.0.0.1:7737`. Use `--bind` and `--port` to
 change the listener. `syu workbench project` remains available for JSON/YAML
 projection debugging.
 
+The server keeps one canonical workspace, inventory index, and static projection snapshot while repository content is unchanged. Warm reads and planning actions reuse that snapshot; tracked, staged, deleted, renamed, and untracked content changes invalidate it before the next operation. The server returns the browser shell immediately, the browser fetches the canonical projection once while showing startup progress, renders only the visible page, and shows an accessible busy state while actions are running.
+
 The persistent roles are Work, Scope, Items, and Diagnostics. Settings is a
 utility page. Work is the default page. The command palette navigates to the
 owning page and focuses its control; it does not create generic result pages.

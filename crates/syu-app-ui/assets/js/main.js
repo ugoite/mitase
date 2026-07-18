@@ -7,34 +7,92 @@ import { renderScope } from './pages/scope.js';
 import { initSpecifications, renderSpecifications } from './pages/specifications.js';
 import { renderDiagnostics } from './pages/diagnostics.js';
 import { renderSettings } from './pages/settings.js';
+import { translate } from './i18n.js';
 
 function render(state) {
   const projection = state.projection;
-  renderWork(projection.work, state);
-  renderReadinessPage(projection.readiness);
-  renderScope(projection.scope);
-  renderSpecifications(projection.specifications, state);
-  renderDiagnostics(projection.diagnostics);
-  renderSettings(projection);
+  const renderPage = {
+    work: () => renderWork(projection.work, state),
+    readiness: () => renderReadinessPage(projection.readiness),
+    scope: () => renderScope(projection.scope),
+    specifications: () => renderSpecifications(projection.specifications, state),
+    diagnostics: () => renderDiagnostics(projection.diagnostics),
+    settings: () => renderSettings(projection),
+  }[state.selectedPage] || (() => renderWork(projection.work, state));
+  renderPage();
+  renderWorkspaceIdentity(projection);
+  renderBusyState(state);
 }
 
 async function refreshAfterAction(state, action, onResult) {
+  if (state.busy) return;
   state.error = null;
+  state.busy = true;
+  state.busyLabel = translate('common.loading');
+  state.render();
   try {
     const result = await action();
+    state.projection = result?.snapshot && result?.work
+      ? result
+      : await api.readProjection();
     onResult?.(result);
-    state.projection = await api.readProjection();
   } catch (error) {
     state.error = error;
   }
+  state.busy = false;
+  state.busyLabel = '';
   state.render();
 }
 
+function readInlineProjection() {
+  const node = document.querySelector('#syu-projection');
+  if (!node?.textContent?.trim()) return null;
+  try { return JSON.parse(node.textContent); } catch { return null; }
+}
+
+function renderWorkspaceIdentity(projection) {
+  const snapshot = projection?.snapshot || {};
+  const parts = String(snapshot.root || '').split('/').filter(Boolean);
+  const workspace = parts.at(-1) || 'Syu';
+  const revision = String(snapshot.revision || '').slice(0, 8) || 'unknown';
+  document.querySelectorAll('[data-workspace-name]').forEach(node => { node.textContent = workspace; });
+  document.querySelectorAll('[data-workspace-revision]').forEach(node => { node.textContent = `revision ${revision}`; });
+  document.querySelectorAll('[data-workspace-branch]').forEach(node => { node.textContent = `@ ${revision}`; });
+}
+
+function renderBusyState(state) {
+  document.body.setAttribute('aria-busy', String(state.busy));
+  const status = document.querySelector('[data-workbench-status]');
+  if (status) {
+    status.hidden = !state.busy;
+    status.textContent = state.busyLabel || translate('common.loading');
+  }
+  if (state.busy) {
+    document.querySelectorAll('[data-page]:not([hidden]) button').forEach(button => {
+      if (!Object.prototype.hasOwnProperty.call(button.dataset, 'busyDisabled')) {
+        button.dataset.busyDisabled = String(button.disabled);
+      }
+      button.disabled = true;
+    });
+  } else {
+    document.querySelectorAll('[data-busy-disabled]').forEach(button => {
+      button.disabled = button.dataset.busyDisabled === 'true';
+      delete button.dataset.busyDisabled;
+    });
+  }
+}
+
 export async function startWorkbench() {
-  // The initial GET establishes the server-owned CSRF token. The inline
-  // projection remains useful for the first paint, but must not be the only
-  // source of browser state because mutations are guarded by the server.
-  const projection = await api.readProjection();
+  const inlineProjection = readInlineProjection();
+  if (!inlineProjection) {
+    document.body.setAttribute('aria-busy', 'true');
+    const startupStatus = document.querySelector('[data-workbench-status]');
+    if (startupStatus) {
+      startupStatus.hidden = false;
+      startupStatus.textContent = translate('common.starting');
+    }
+  }
+  const projection = inlineProjection || await api.readProjection();
   const state = createState(projection);
   state.api = api;
   state.render = () => render(state);
@@ -45,6 +103,12 @@ export async function startWorkbench() {
   };
   state.runAction = (action, onResult) => refreshAfterAction(state, action, onResult);
   bindRouter(state, () => render(state));
+  state.busy = true;
+  state.busyLabel = translate('common.starting');
+  render(state);
+  if (inlineProjection) await api.establishSession();
+  state.busy = false;
+  state.busyLabel = '';
   render(state);
   return state;
 }

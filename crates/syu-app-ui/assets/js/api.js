@@ -24,6 +24,7 @@ export async function request(url, options = {}) {
 }
 
 export const readProjection = () => request('/api/projection');
+export const establishSession = () => request('/api/work/session');
 
 export const searchSpecificationCandidates = (query = '', kind = '') => {
   const params = new URLSearchParams();

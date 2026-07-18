@@ -26,6 +26,8 @@
   "common.apply": "Apply",
   "common.reset": "Reset",
   "common.plan": "Plan",
+  "common.loading": "Working…",
+  "common.starting": "Starting Workbench…",
   "common.item": "Item",
   "common.items_count": "{count} item(s)",
   "common.request": "Request",

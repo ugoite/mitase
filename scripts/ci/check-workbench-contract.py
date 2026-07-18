@@ -72,6 +72,8 @@ assert set(re.findall(r'data-settings-page="([^"]+)"', HTML)) == {
 }
 for banned in ("REQ-WORKBENCH", "SLICE-01", "PLAN-WORKBENCH", "UI-VISUAL-CONTRACT", "just now", "No issues found"):
     assert banned not in HTML, f"static demo content leaked into HTML: {banned}"
+for banned in ("issue-762", "8954b70"):
+    assert banned not in HTML, f"static repository identity leaked into HTML: {banned}"
 for asset in ("workbench.css", "catalog.js", "i18n.js", "js/main.js"):
     assert f'/assets/{asset}' in HTML
 assert '/assets/projection.js' not in HTML
@@ -82,6 +84,15 @@ for module in (
     "./pages/diagnostics.js", "./pages/settings.js",
 ):
     assert module in (ROOT / "crates/syu-app-ui/assets/js/main.js").read_text(), module
+MAIN_JS = (ROOT / "crates/syu-app-ui/assets/js/main.js").read_text()
+SPECIFICATIONS_JS = (ROOT / "crates/syu-app-ui/assets/js/pages/specifications.js").read_text()
+assert "readInlineProjection" in MAIN_JS
+assert "establishSession" in MAIN_JS
+assert "}[state.selectedPage]" in MAIN_JS
+assert "[data-page]:not([hidden]) button" in MAIN_JS
+assert "if (!state.specificationQuery.trim())" in SPECIFICATIONS_JS
+assert "async function runBusy" in SPECIFICATIONS_JS
+assert 'data-workbench-status role="status" aria-live="polite"' in HTML
 CSS_COMPACT = re.sub(r"\s+", "", CSS)
 for token in ("--bg:#f6f7f8", "--paper:#fff", "--ink:#15171a", "--sidebar:246px", "--topbar:98px", "--rail:310px"):
     assert token in CSS_COMPACT, f"missing normative CSS token {token}"

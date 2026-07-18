@@ -26,6 +26,8 @@
   "common.apply": "適用",
   "common.reset": "初期化",
   "common.plan": "計画",
+  "common.loading": "処理中…",
+  "common.starting": "ワークベンチを準備中…",
   "common.item": "仕様",
   "common.items_count": "{count} 件",
   "common.request": "依頼",
