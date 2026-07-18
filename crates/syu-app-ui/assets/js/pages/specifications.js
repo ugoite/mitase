@@ -21,6 +21,21 @@ function status(text) {
   return node;
 }
 
+async function runBusy(state, task) {
+  if (state.busy) return;
+  state.busy = true;
+  state.busyLabel = t('common.loading');
+  state.render();
+  try {
+    await task();
+  } catch (error) {
+    state.specificationError = error.message;
+  }
+  state.busy = false;
+  state.busyLabel = '';
+  state.render();
+}
+
 function field(label, value, name, type = 'text', options = []) {
   const wrapper = document.createElement('label');
   wrapper.className = 'spec-field';
@@ -62,8 +77,10 @@ function itemFromCandidate(candidate) {
 }
 
 function candidatesFor(state) {
-  return state.specificationCandidates
+  const candidates = state.specificationCandidates
     || (state.projection.specifications?.specifications || []).map(item => ({ item, matches: [], relevance: [] }));
+  if (!state.specificationKind || state.specificationKind === 'all') return candidates;
+  return candidates.filter(candidate => itemFromCandidate(candidate).kind === state.specificationKind);
 }
 
 function itemById(state, id) {
@@ -242,8 +259,7 @@ function renderTargetSuggestions(root, state) {
       evidence.append(item);
     });
     detail.append(title, meta, evidence);
-    const reject = button(t('items.suggestions.reject'), '×', async () => {
-      try {
+    const reject = button(t('items.suggestions.reject'), '×', () => runBusy(state, async () => {
         state.targetSuggestions = await state.api.rejectTargetSuggestion(
           state.projection,
           set.criterion,
@@ -252,11 +268,7 @@ function renderTargetSuggestions(root, state) {
         );
         state.targetSuggestionSelection = state.targetSuggestionSelection.filter(id => id !== candidate.id);
         state.specificationError = null;
-      } catch (error) {
-        state.specificationError = error.message;
-      }
-      state.render();
-    }, 'btn small ghost');
+    }), 'btn small ghost');
     row.append(selection, detail, reject);
     card.append(row);
   });
@@ -266,8 +278,7 @@ function renderTargetSuggestions(root, state) {
     empty.textContent = t('items.suggestions.empty');
     card.append(empty);
   } else {
-    const approve = button(t('items.suggestions.approve'), '✓', async () => {
-      try {
+    const approve = button(t('items.suggestions.approve'), '✓', () => runBusy(state, async () => {
         const result = await state.api.approveTargetSuggestions(
           state.projection,
           set.criterion,
@@ -284,11 +295,7 @@ function renderTargetSuggestions(root, state) {
         }
         state.targetSuggestions = { ...set, split_recommendation: result.split_recommendation };
         state.specificationError = null;
-      } catch (error) {
-        state.specificationError = error.message;
-      }
-      state.render();
-    }, 'btn primary');
+    }), 'btn primary');
     approve.disabled = !state.targetSuggestionSelection.length;
     card.append(approve);
   }
@@ -405,18 +412,15 @@ function renderEditor(root, state) {
       form.querySelector('.specification-impact')?.remove();
     }
   });
-  form.addEventListener('submit', async event => {
+  form.addEventListener('submit', event => {
     event.preventDefault();
     const patch = patchFromForm(editor, state, form);
     state.specificationError = null;
     state.specificationPreview = null;
-    try {
+    runBusy(state, async () => {
       const result = await state.api.previewSpecificationCandidate(state.projection, patch);
       state.specificationPreview = { patch, result };
-    } catch (error) {
-      state.specificationError = error.message;
-    }
-    state.render();
+    });
   });
   if (state.specificationError) {
     const error = document.createElement('p');
@@ -426,10 +430,8 @@ function renderEditor(root, state) {
   }
   if (state.specificationPreview) {
     renderImpact(form, state.specificationPreview.result);
-    const apply = button(t('common.apply'), '✓', async () => {
-      apply.disabled = true;
+    const apply = button(t('common.apply'), '✓', () => runBusy(state, async () => {
       state.specificationError = null;
-      try {
         const currentPatch = patchFromForm(editor, state, form);
         if (JSON.stringify(currentPatch) !== JSON.stringify(state.specificationPreview.patch)) {
           throw new Error(t('items.preview.stale'));
@@ -444,12 +446,7 @@ function renderEditor(root, state) {
         state.specificationEditor = null;
         state.specificationPreview = null;
         state.selectedSpecification = null;
-      } catch (error) {
-        state.specificationError = error.message;
-        apply.disabled = false;
-      }
-      state.render();
-    }, 'btn primary specification-apply');
+    }), 'btn primary specification-apply');
     actions.append(apply);
   }
   root.append(form);
@@ -516,17 +513,12 @@ function renderDetail(root, state, selected) {
         ), 'btn small'));
       }
       if (kind === 'criterion') {
-        row.append(button(t('items.suggestions.review'), '◎', async () => {
-          try {
+        row.append(button(t('items.suggestions.review'), '◎', () => runBusy(state, async () => {
             const suggestions = await state.api.readTargetSuggestions(value.anchor);
             state.targetSuggestions = suggestions;
             state.targetSuggestionSelection = suggestions.suggestions.map(candidate => candidate.id);
             state.specificationError = null;
-          } catch (error) {
-            state.specificationError = error.message;
-          }
-          state.render();
-        }, 'btn small'));
+        }), 'btn small'));
       }
       row.append(button(t('common.edit'), '✎', () => {
         state.specificationEditor = {
@@ -574,6 +566,12 @@ export function initSpecifications(state) {
   let requestSequence = 0;
   const load = async () => {
     const sequence = ++requestSequence;
+    if (!state.specificationQuery.trim()) {
+      state.specificationCandidates = null;
+      state.specificationError = null;
+      state.render();
+      return;
+    }
     try {
       const candidates = await state.api.searchSpecificationCandidates(state.specificationQuery, state.specificationKind);
       if (sequence !== requestSequence) return;
@@ -595,7 +593,12 @@ export function initSpecifications(state) {
     state.specificationKind = tab.dataset.tab || 'all';
     requestSequence += 1;
     clearTimeout(timer);
-    timer = setTimeout(load, 0);
+    if (state.specificationQuery.trim()) timer = setTimeout(load, 0);
+    else {
+      state.specificationCandidates = null;
+      state.specificationError = null;
+      state.render();
+    }
   }));
   newButton?.addEventListener('click', () => {
     state.specificationEditor = { mode: 'create', createKind: 'requirement', governedBy: [] };

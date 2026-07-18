@@ -247,6 +247,37 @@ svg { display: block; stroke: currentColor; fill: none; stroke-width: 1.8; strok
 .branch { height: 36px; display: flex; align-items: center; border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 0 12px; color: #4a5360; font-size: 12px; }
 
 .content { height: calc(100vh - var(--topbar)); padding: 26px 34px 28px; overflow: auto; }
+.workbench-busy {
+  position: sticky;
+  top: 0;
+  z-index: 8;
+  width: fit-content;
+  margin: -14px 0 12px auto;
+  padding: 8px 12px 8px 32px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  box-shadow: var(--shadow);
+  color: var(--muted);
+  font-size: 12px;
+}
+.workbench-busy::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  border: 2px solid var(--line);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: workbench-spin .7s linear infinite;
+}
+@keyframes workbench-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .workbench-busy::before { animation: none; border-top-color: var(--line); }
+}
 .surface { min-height: calc(100vh - var(--topbar) - 54px); background: var(--paper); border: 1px solid #d5d9de; border-radius: var(--radius); box-shadow: var(--shadow); display: flex; flex-direction: column; min-width: 0; }
 .page-head { padding: 18px 18px 0; }
 .eyebrow { font-size: 10px; letter-spacing: .13em; text-transform: uppercase; color: #8a9099; margin-bottom: 4px; }

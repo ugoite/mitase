@@ -6,7 +6,7 @@ use axum::{
     http::{HeaderValue, Method, StatusCode},
     middleware::{self, Next},
     response::{Html, IntoResponse, Response},
-    routing::{delete, get, post, put},
+    routing::{get, post, put},
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -35,7 +35,7 @@ use syu_work_model::{
     PlanApproval, PlanStatus, RequestedTarget, VerificationReceipt, WORK_REQUEST_SCHEMA,
     WorkConstraints, WorkOperation, WorkPlan, WorkRequest,
 };
-use syu_workspace::SpecWorkspace;
+use syu_workspace::{SpecIndex, SpecWorkspace};
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -67,10 +67,18 @@ pub struct WorkbenchSession {
 }
 
 pub struct WorkbenchEngine;
+struct CachedWorkspaceSnapshot {
+    signature: String,
+    workspace: Arc<SpecWorkspace>,
+    index: Arc<SpecIndex>,
+    revision: String,
+    projection: Arc<WorkspaceProjection>,
+}
 pub struct WorkbenchService {
     pub workspace_root: PathBuf,
     pub session: RwLock<WorkbenchSession>,
     pub engine: WorkbenchEngine,
+    snapshot: RwLock<Option<Arc<CachedWorkspaceSnapshot>>>,
 }
 pub struct WorkbenchLaunchConfig {
     pub workspace_root: PathBuf,
@@ -98,6 +106,7 @@ impl WorkbenchServer {
                 workspace_root: workspace_root.clone(),
                 session: RwLock::new(WorkbenchSession::default()),
                 engine: WorkbenchEngine,
+                snapshot: RwLock::new(None),
             }),
             launch: WorkbenchLaunchConfig {
                 workspace_root,
@@ -119,9 +128,12 @@ impl WorkbenchServer {
         self
     }
     pub fn projection(&self, revision: &str) -> Result<WorkspaceProjection> {
-        let workspace = SpecWorkspace::load(&self.service.workspace_root)?;
+        let snapshot = self.service.snapshot()?;
+        if snapshot.revision != revision {
+            anyhow::bail!("workspace revision changed while loading the Workbench projection");
+        }
         let session = self.service.session.read().expect("workbench session lock");
-        project_session(&workspace, &session, revision)
+        project_session(&snapshot, &session)
     }
     pub fn router(&self) -> Router {
         let bind = self.launch.bind;
@@ -198,7 +210,7 @@ impl WorkbenchServer {
             .route("/api/work/finalize/preview", post(api_finalize_preview))
             .route("/api/work/finalize/apply", post(api_finalize_apply))
             .route("/api/work/result", post(api_result))
-            .route("/api/work/session", delete(api_discard))
+            .route("/api/work/session", get(api_session).delete(api_discard))
             .layer(middleware::from_fn(mutation_guard))
             .layer(Extension(security))
             .with_state(self.service.clone())
@@ -234,6 +246,91 @@ impl WorkbenchServer {
             Ok::<(), anyhow::Error>(())
         })
     }
+}
+
+impl WorkbenchService {
+    fn snapshot(&self) -> Result<Arc<CachedWorkspaceSnapshot>> {
+        // Projection construction may initialize a local delivery-store directory on
+        // its first access. Retry once more than the usual before/after check so
+        // that one-time repository-local setup cannot make the first projection
+        // fail as a concurrent source edit.
+        for _ in 0..3 {
+            let signature = workspace_signature(&self.workspace_root)?;
+            if let Some(cached) = self
+                .snapshot
+                .read()
+                .map_err(|_| anyhow::anyhow!("workbench snapshot lock"))?
+                .as_ref()
+                .filter(|cached| cached.signature == signature)
+            {
+                return Ok(cached.clone());
+            }
+
+            let workspace = Arc::new(SpecWorkspace::load(&self.workspace_root)?);
+            let revision = current_revision(&workspace.root)?;
+            let index = Arc::new(workspace.index()?);
+            let projection = Arc::new(project_with_index(&workspace, &index, None, &revision)?);
+            if workspace_signature(&self.workspace_root)? != signature {
+                continue;
+            }
+            let cached = Arc::new(CachedWorkspaceSnapshot {
+                signature,
+                workspace,
+                index,
+                revision,
+                projection,
+            });
+            *self
+                .snapshot
+                .write()
+                .map_err(|_| anyhow::anyhow!("workbench snapshot lock"))? = Some(cached.clone());
+            return Ok(cached);
+        }
+        anyhow::bail!("workspace changed while loading the Workbench snapshot")
+    }
+}
+
+fn workspace_signature(root: &Path) -> Result<String> {
+    let revision = current_revision(root)?;
+    let tracked = git_output(root, &["diff", "--name-only", "-z", "HEAD", "--"])?;
+    let untracked = git_output(root, &["ls-files", "--others", "--exclude-standard", "-z"])?;
+    let mut paths = BTreeSet::new();
+    for raw in tracked
+        .split(|byte| *byte == 0)
+        .chain(untracked.split(|byte| *byte == 0))
+    {
+        if raw.is_empty() {
+            continue;
+        }
+        let path = PathBuf::from(String::from_utf8(raw.to_vec())?);
+        if path.is_absolute()
+            || path
+                .components()
+                .any(|component| matches!(component, std::path::Component::ParentDir))
+        {
+            anyhow::bail!("git reported a workspace path outside the repository");
+        }
+        paths.insert(path);
+    }
+    let mut hash = Sha256::new();
+    hash.update(b"syu/workbench-snapshot/v1\0");
+    hash.update(revision.as_bytes());
+    for path in paths {
+        hash.update(b"\0path\0");
+        hash.update(path.to_string_lossy().as_bytes());
+        let absolute = root.join(&path);
+        match fs::read(&absolute) {
+            Ok(content) => {
+                hash.update(b"\0content\0");
+                hash.update(content);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                hash.update(b"\0deleted\0");
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(format!("sha256:{:x}", hash.finalize()))
 }
 
 fn open_browser(url: &str) -> Result<()> {
@@ -580,21 +677,23 @@ fn timestamp() -> String {
         .as_millis()
         .to_string()
 }
-fn basis(service: &WorkbenchService, expected: &MutationBasis) -> Result<SpecWorkspace> {
+fn basis(
+    service: &WorkbenchService,
+    expected: &MutationBasis,
+) -> Result<Arc<CachedWorkspaceSnapshot>> {
     if expected.expected_source_hash.is_empty() {
         anyhow::bail!("mutation requires expected_source_hash");
     }
-    let workspace = SpecWorkspace::load(&service.workspace_root)?;
-    let revision = current_revision(&workspace.root)?;
-    if revision != expected.expected_revision
-        || workspace.try_fingerprint()? != expected.expected_workspace_fingerprint
-        || workspace_source_hash(&workspace) != expected.expected_source_hash
+    let snapshot = service.snapshot()?;
+    if snapshot.revision != expected.expected_revision
+        || snapshot.projection.snapshot.fingerprint != expected.expected_workspace_fingerprint
+        || snapshot.projection.snapshot.source_hash != expected.expected_source_hash
     {
         anyhow::bail!(
             "Workspace changed since this view was loaded. Refresh the projection before applying the operation."
         );
     }
-    Ok(workspace)
+    Ok(snapshot)
 }
 
 /// Execution is intentionally based on the plan's immutable revision rather
@@ -602,15 +701,17 @@ fn basis(service: &WorkbenchService, expected: &MutationBasis) -> Result<SpecWor
 /// expected transition between validation and verification/result; the
 /// canonical plan and readonly basis checks in the validation crate still
 /// reject specification, ownership, and guarded-target changes.
-fn execution_basis(service: &WorkbenchService, expected: &MutationBasis) -> Result<SpecWorkspace> {
-    let workspace = SpecWorkspace::load(&service.workspace_root)?;
-    let revision = current_revision(&workspace.root)?;
-    if expected.expected_revision.is_empty() || revision != expected.expected_revision {
+fn execution_basis(
+    service: &WorkbenchService,
+    expected: &MutationBasis,
+) -> Result<Arc<CachedWorkspaceSnapshot>> {
+    let snapshot = service.snapshot()?;
+    if expected.expected_revision.is_empty() || snapshot.revision != expected.expected_revision {
         anyhow::bail!(
             "Workspace revision changed since this work plan was created. Refresh the projection and replan."
         );
     }
-    Ok(workspace)
+    Ok(snapshot)
 }
 
 fn workspace_source_hash(workspace: &SpecWorkspace) -> String {
@@ -622,35 +723,29 @@ fn workspace_source_hash(workspace: &SpecWorkspace) -> String {
     source.push_str(&serde_yaml::to_string(&workspace.config).unwrap_or_default());
     content_hash(&source)
 }
+
+#[derive(Serialize)]
+struct BrowserSessionView {
+    ready: bool,
+}
+
+async fn api_session() -> Json<BrowserSessionView> {
+    Json(BrowserSessionView { ready: true })
+}
+
 async fn api_projection(
     State(service): State<Arc<WorkbenchService>>,
 ) -> Result<Json<WorkspaceProjection>, ApiError> {
-    let workspace = SpecWorkspace::load(&service.workspace_root)?;
-    let revision = current_revision(&workspace.root)?;
+    let snapshot = service.snapshot()?;
     let session = service
         .session
         .read()
         .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
-    Ok(Json(project_session(&workspace, &session, &revision)?))
+    Ok(Json(project_session(&snapshot, &session)?))
 }
 
-async fn api_index(State(service): State<Arc<WorkbenchService>>) -> Result<Html<String>, ApiError> {
-    let workspace = SpecWorkspace::load(&service.workspace_root)?;
-    let revision = current_revision(&workspace.root)?;
-    let session = service
-        .session
-        .read()
-        .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
-    let projection = project_session(&workspace, &session, &revision)?;
-    let json = serde_json::to_string(&projection)
-        .map_err(anyhow::Error::from)?
-        .replace('<', "\\u003c");
-    let state = format!("<script type=\"application/json\" id=\"syu-projection\">{json}</script>");
-    let html = include_str!("../../syu-app-ui/assets/workbench.html").replace(
-        "<script type=\"application/json\" id=\"syu-projection\"></script>",
-        &state,
-    );
-    Ok(Html(html))
+async fn api_index() -> Html<&'static str> {
+    Html(include_str!("../../syu-app-ui/assets/workbench.html"))
 }
 
 async fn api_asset(AxumPath(asset): AxumPath<String>) -> Response {
@@ -757,10 +852,13 @@ async fn api_readiness(
 async fn api_readiness_run(
     State(service): State<Arc<WorkbenchService>>,
 ) -> Result<Json<ReadinessView>, ApiError> {
-    let workspace = SpecWorkspace::load(&service.workspace_root)?;
-    let revision = current_revision(&workspace.root)?;
-    let index = workspace.index()?;
-    let report = syu_validation::evaluate_readiness(&workspace, &index, &revision, true)?;
+    let snapshot = service.snapshot()?;
+    let report = syu_validation::evaluate_readiness(
+        &snapshot.workspace,
+        &snapshot.index,
+        &snapshot.revision,
+        true,
+    )?;
     let view = readiness_view(&report);
     service
         .session
@@ -773,9 +871,8 @@ async fn api_readiness_run(
 async fn api_specifications(
     State(service): State<Arc<WorkbenchService>>,
 ) -> Result<Json<SpecificationCatalogView>, ApiError> {
-    let workspace = SpecWorkspace::load(&service.workspace_root)?;
-    let revision = current_revision(&workspace.root)?;
-    Ok(Json(project(&workspace, None, &revision)?.specifications))
+    let snapshot = service.snapshot()?;
+    Ok(Json(snapshot.projection.specifications.clone()))
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -806,11 +903,8 @@ async fn api_specification_candidates(
     State(service): State<Arc<WorkbenchService>>,
     Query(query): Query<SpecificationCandidateQuery>,
 ) -> Result<Json<Vec<SpecificationCandidateView>>, ApiError> {
-    let workspace = SpecWorkspace::load(&service.workspace_root)?;
-    let revision = current_revision(&workspace.root)?;
-    let entries = project(&workspace, None, &revision)?
-        .specifications
-        .specifications;
+    let snapshot = service.snapshot()?;
+    let entries = snapshot.projection.specifications.specifications.clone();
     let query_text = query.q.unwrap_or_default().trim().to_ascii_lowercase();
     let kind_filter = query.kind.as_deref().filter(|kind| !kind.is_empty());
     let mut candidates = entries
@@ -916,13 +1010,14 @@ async fn api_specification(
     State(service): State<Arc<WorkbenchService>>,
     AxumPath(anchor): AxumPath<String>,
 ) -> Result<Json<ItemSummary>, ApiError> {
-    let workspace = SpecWorkspace::load(&service.workspace_root)?;
-    let revision = current_revision(&workspace.root)?;
-    let item = project(&workspace, None, &revision)?
+    let snapshot = service.snapshot()?;
+    let item = snapshot
+        .projection
         .specifications
         .specifications
-        .into_iter()
+        .iter()
         .find(|item| item.id == anchor)
+        .cloned()
         .ok_or_else(|| {
             ApiError(
                 StatusCode::NOT_FOUND,
@@ -958,8 +1053,7 @@ async fn api_target_suggestions(
     let criterion = anchor
         .parse::<SpecAnchor>()
         .map_err(|error| anyhow::anyhow!(error))?;
-    let workspace = SpecWorkspace::load(&service.workspace_root)?;
-    let index = workspace.index()?;
+    let snapshot = service.snapshot()?;
     let rejected = service
         .session
         .read()
@@ -967,7 +1061,10 @@ async fn api_target_suggestions(
         .rejected_target_suggestions
         .clone();
     Ok(Json(filtered_target_suggestions(
-        &workspace, &index, &criterion, &rejected,
+        &snapshot.workspace,
+        &snapshot.index,
+        &criterion,
+        &rejected,
     )?))
 }
 
@@ -979,9 +1076,10 @@ async fn api_target_suggestion_reject(
     let criterion = anchor
         .parse::<SpecAnchor>()
         .map_err(|error| anyhow::anyhow!(error))?;
-    let workspace = basis(&service, &command.basis)?;
-    let index = workspace.index()?;
-    let current = suggest_targets(&criterion, &workspace, &index)?;
+    let snapshot = basis(&service, &command.basis)?;
+    let workspace = &snapshot.workspace;
+    let index = &snapshot.index;
+    let current = suggest_targets(&criterion, workspace, index)?;
     if current.suggestion_token != command.suggestion_token {
         return Err(ApiError(
             StatusCode::CONFLICT,
@@ -1004,7 +1102,7 @@ async fn api_target_suggestion_reject(
         session.rejected_target_suggestions.clone()
     };
     Ok(Json(filtered_target_suggestions(
-        &workspace, &index, &criterion, &rejected,
+        workspace, index, &criterion, &rejected,
     )?))
 }
 
@@ -1016,15 +1114,16 @@ async fn api_target_suggestions_approve(
     let criterion = anchor
         .parse::<SpecAnchor>()
         .map_err(|error| anyhow::anyhow!(error))?;
-    let workspace = basis(&service, &command.basis)?;
-    let index = workspace.index()?;
+    let snapshot = basis(&service, &command.basis)?;
+    let workspace = &snapshot.workspace;
+    let index = &snapshot.index;
     let rejected = service
         .session
         .read()
         .map_err(|_| anyhow::anyhow!("workbench session lock"))?
         .rejected_target_suggestions
         .clone();
-    let current = filtered_target_suggestions(&workspace, &index, &criterion, &rejected)?;
+    let current = filtered_target_suggestions(workspace, index, &criterion, &rejected)?;
     if current.suggestion_token != command.suggestion_token {
         return Err(ApiError(
             StatusCode::CONFLICT,
@@ -1050,7 +1149,7 @@ async fn api_target_suggestions_approve(
             anyhow::anyhow!("approval includes a stale, rejected, or unknown suggestion").into(),
         );
     }
-    if let Some(split_recommendation) = split_work_recommendation(&approved, &workspace, &index) {
+    if let Some(split_recommendation) = split_work_recommendation(&approved, workspace, index) {
         return Ok(Json(TargetSuggestionApprovalView {
             request: None,
             split_recommendation: Some(split_recommendation),
@@ -1099,14 +1198,25 @@ async fn api_target_suggestions_approve(
 
 fn specification_path(workspace: &SpecWorkspace, anchor: &str) -> Result<PathBuf> {
     let item_id = anchor.split('#').next().unwrap_or(anchor);
-    let revision = current_revision(&workspace.root)?;
-    let item = project(workspace, None, &revision)?
-        .specifications
-        .specifications
-        .into_iter()
-        .find(|item| item.id == item_id)
-        .ok_or_else(|| anyhow::anyhow!("specification {item_id} not found"))?;
-    Ok(workspace.root.join(item.path))
+    workspace
+        .documents
+        .iter()
+        .find(|loaded| match &loaded.document {
+            SpecDocument::Philosophies { philosophies, .. } => philosophies
+                .iter()
+                .any(|item| item.id.to_string() == item_id),
+            SpecDocument::Policies { policies, .. } => {
+                policies.iter().any(|item| item.id.to_string() == item_id)
+            }
+            SpecDocument::Requirements { requirements, .. } => requirements
+                .iter()
+                .any(|item| item.id.to_string() == item_id),
+            SpecDocument::Features { features, .. } => {
+                features.iter().any(|item| item.id.to_string() == item_id)
+            }
+        })
+        .map(|loaded| loaded.path.clone())
+        .ok_or_else(|| anyhow::anyhow!("specification {item_id} not found"))
 }
 
 fn specification_document_path(workspace: &SpecWorkspace, document: &str) -> Result<PathBuf> {
@@ -1664,15 +1774,16 @@ async fn api_specification_preview(
     AxumPath(anchor): AxumPath<String>,
     Json(command): Json<StructuredEditCommand>,
 ) -> Result<Json<EditPreview>, ApiError> {
-    let workspace = basis(&service, &command.basis)?;
-    let path = specification_path(&workspace, &anchor)?;
-    let content = edit_content(&workspace, &path, &command.patch)?;
+    let snapshot = basis(&service, &command.basis)?;
+    let workspace = &snapshot.workspace;
+    let path = specification_path(workspace, &anchor)?;
+    let content = edit_content(workspace, &path, &command.patch)?;
     let document: SpecDocument = serde_yaml::from_str(&content)
         .map_err(|error| anyhow::anyhow!("strict specification parse failed: {error}"))?;
     let overlay = workspace.overlay_document(&path, document.clone())?;
     let overlay_index = overlay.index()?;
     validate_overlay(&overlay, &overlay_index)?;
-    Ok(Json(edit_preview(&workspace, &overlay, &path, &content)?))
+    Ok(Json(edit_preview(workspace, &overlay, &path, &content)?))
 }
 
 async fn api_specification_apply(
@@ -1680,16 +1791,17 @@ async fn api_specification_apply(
     AxumPath(anchor): AxumPath<String>,
     Json(command): Json<StructuredEditCommand>,
 ) -> Result<Json<EditPreview>, ApiError> {
-    let workspace = basis(&service, &command.basis)?;
-    let path = specification_path(&workspace, &anchor)?;
-    let content = edit_content(&workspace, &path, &command.patch)?;
+    let snapshot = basis(&service, &command.basis)?;
+    let workspace = &snapshot.workspace;
+    let path = specification_path(workspace, &anchor)?;
+    let content = edit_content(workspace, &path, &command.patch)?;
     let document: SpecDocument = serde_yaml::from_str(&content)
         .map_err(|error| anyhow::anyhow!("strict specification parse failed: {error}"))?;
     let overlay = workspace.overlay_document(&path, document.clone())?;
     let overlay_index = overlay.index()?;
     validate_overlay(&overlay, &overlay_index)?;
     let old = workspace.read_to_string(&path)?;
-    let preview = edit_preview(&workspace, &overlay, &path, &content)?;
+    let preview = edit_preview(workspace, &overlay, &path, &content)?;
     if command.preview_token.as_deref() != Some(preview.preview_token.as_str()) {
         return Err(ApiError(
             StatusCode::CONFLICT,
@@ -1711,9 +1823,10 @@ async fn api_specification_candidate_preview(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<StructuredEditCommand>,
 ) -> Result<Json<EditPreview>, ApiError> {
-    let workspace = basis(&service, &command.basis)?;
-    let path = patch_path(&workspace, &command.patch)?;
-    let content = edit_content(&workspace, &path, &command.patch)?;
+    let snapshot = basis(&service, &command.basis)?;
+    let workspace = &snapshot.workspace;
+    let path = patch_path(workspace, &command.patch)?;
+    let content = edit_content(workspace, &path, &command.patch)?;
     let document: SpecDocument = serde_yaml::from_str(&content)
         .map_err(|error| anyhow::anyhow!("strict specification parse failed: {error}"))?;
     let overlay = workspace.overlay_document(&path, document)?;
@@ -1726,7 +1839,7 @@ async fn api_specification_candidate_preview(
         .plan
         .is_some();
     Ok(Json(edit_preview_for_patch(
-        &workspace,
+        workspace,
         &overlay,
         &path,
         &content,
@@ -1739,9 +1852,10 @@ async fn api_specification_candidate_apply(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<StructuredEditCommand>,
 ) -> Result<Json<EditPreview>, ApiError> {
-    let workspace = basis(&service, &command.basis)?;
-    let path = patch_path(&workspace, &command.patch)?;
-    let content = edit_content(&workspace, &path, &command.patch)?;
+    let snapshot = basis(&service, &command.basis)?;
+    let workspace = &snapshot.workspace;
+    let path = patch_path(workspace, &command.patch)?;
+    let content = edit_content(workspace, &path, &command.patch)?;
     let document: SpecDocument = serde_yaml::from_str(&content)
         .map_err(|error| anyhow::anyhow!("strict specification parse failed: {error}"))?;
     let overlay = workspace.overlay_document(&path, document)?;
@@ -1755,7 +1869,7 @@ async fn api_specification_candidate_apply(
         .plan
         .is_some();
     let preview = edit_preview_for_patch(
-        &workspace,
+        workspace,
         &overlay,
         &path,
         &content,
@@ -1794,15 +1908,16 @@ async fn api_config_preview(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<StructuredEditCommand>,
 ) -> Result<Json<EditPreview>, ApiError> {
-    let workspace = basis(&service, &command.basis)?;
-    let content = edit_content(&workspace, &workspace.root.join("syu.yaml"), &command.patch)?;
+    let snapshot = basis(&service, &command.basis)?;
+    let workspace = &snapshot.workspace;
+    let content = edit_content(workspace, &workspace.root.join("syu.yaml"), &command.patch)?;
     let config: syu_project_model::ProjectConfig = serde_yaml::from_str(&content)
         .map_err(|error| anyhow::anyhow!("strict config parse failed: {error}"))?;
     let overlay = workspace.overlay_config(config)?;
     let overlay_index = overlay.index()?;
     validate_overlay(&overlay, &overlay_index)?;
     Ok(Json(edit_preview(
-        &workspace,
+        workspace,
         &overlay,
         &workspace.root.join("syu.yaml"),
         &content,
@@ -1819,8 +1934,9 @@ async fn api_config_apply(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<StructuredEditCommand>,
 ) -> Result<Json<EditPreview>, ApiError> {
-    let workspace = basis(&service, &command.basis)?;
-    let content = edit_content(&workspace, &workspace.root.join("syu.yaml"), &command.patch)?;
+    let snapshot = basis(&service, &command.basis)?;
+    let workspace = &snapshot.workspace;
+    let content = edit_content(workspace, &workspace.root.join("syu.yaml"), &command.patch)?;
     let config: syu_project_model::ProjectConfig = serde_yaml::from_str(&content)
         .map_err(|error| anyhow::anyhow!("strict config parse failed: {error}"))?;
     let overlay = workspace.overlay_config(config)?;
@@ -1828,7 +1944,7 @@ async fn api_config_apply(
     validate_overlay(&overlay, &overlay_index)?;
     let path = workspace.root.join("syu.yaml");
     let old = workspace.read_to_string(&path)?;
-    let preview = edit_preview(&workspace, &overlay, &path, &content)?;
+    let preview = edit_preview(workspace, &overlay, &path, &content)?;
     if command.preview_token.as_deref() != Some(preview.preview_token.as_str()) {
         return Err(ApiError(
             StatusCode::CONFLICT,
@@ -1850,19 +1966,21 @@ async fn api_branch_scope(
     State(service): State<Arc<WorkbenchService>>,
     Query(query): Query<BranchScopeQuery>,
 ) -> Result<Json<ScopeView>, ApiError> {
-    let workspace = SpecWorkspace::load(&service.workspace_root)?;
-    let revision = current_revision(&workspace.root)?;
-    let index = workspace.index()?;
-    let specifications = project(&workspace, None, &revision)?
-        .specifications
-        .specifications;
+    let snapshot = service.snapshot()?;
+    let workspace = &snapshot.workspace;
+    let specifications = snapshot.projection.specifications.specifications.clone();
     let range = match query.range {
         Some(range) => range,
-        None => configured_change_range(&workspace)?,
+        None => configured_change_range(workspace)?,
     };
     let changed = branch_changed_files(&workspace.root, &range)?;
     Ok(Json(ScopeView {
-        branch: Some(branch_scope_view(&index, &specifications, range, &changed)),
+        branch: Some(branch_scope_view(
+            &snapshot.index,
+            &specifications,
+            range,
+            &changed,
+        )),
     }))
 }
 
@@ -2153,8 +2271,7 @@ async fn api_request(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<WorkRequestCommand>,
 ) -> Result<Json<WorkspaceProjection>, ApiError> {
-    let workspace = basis(&service, &command.basis)?;
-    let revision = current_revision(&workspace.root)?;
+    let snapshot = basis(&service, &command.basis)?;
     let mut session = service
         .session
         .write()
@@ -2166,15 +2283,13 @@ async fn api_request(
     session.verification_receipt = None;
     session.agent_run = None;
     session.last_validation = None;
-    Ok(Json(project_session(&workspace, &session, &revision)?))
+    Ok(Json(project_session(&snapshot, &session)?))
 }
 async fn api_plan(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<MutationBasis>,
 ) -> Result<Json<WorkPlan>, ApiError> {
-    let workspace = basis(&service, &command)?;
-    let index = workspace.index()?;
-    let revision = current_revision(&workspace.root)?;
+    let snapshot = basis(&service, &command)?;
     let mut session = service
         .session
         .write()
@@ -2183,7 +2298,12 @@ async fn api_plan(
         .draft_request
         .clone()
         .ok_or_else(|| anyhow::anyhow!("no work request selected"))?;
-    let plan = plan(&request, &workspace, &index, &revision)?;
+    let plan = plan(
+        &request,
+        &snapshot.workspace,
+        &snapshot.index,
+        &snapshot.revision,
+    )?;
     session.plan = Some(plan.clone());
     session.selected_slice = None;
     session.context_pack = None;
@@ -2196,9 +2316,7 @@ async fn api_context(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<SliceCommand>,
 ) -> Result<Json<syu_work_model::ContextPack>, ApiError> {
-    let workspace = basis(&service, &command.basis)?;
-    let index = workspace.index()?;
-    let revision = current_revision(&workspace.root)?;
+    let snapshot = basis(&service, &command.basis)?;
     let mut session = service
         .session
         .write()
@@ -2207,8 +2325,13 @@ async fn api_context(
         .plan
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("no work plan"))?;
-    let context =
-        syu_planner::export_context(plan, &command.slice_id, &workspace, &index, &revision)?;
+    let context = syu_planner::export_context(
+        plan,
+        &command.slice_id,
+        &snapshot.workspace,
+        &snapshot.index,
+        &snapshot.revision,
+    )?;
     session.context_pack = Some(context.clone());
     session.selected_slice = Some(command.slice_id.clone());
     Ok(Json(context))
@@ -2217,9 +2340,7 @@ async fn api_approve(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<MutationBasis>,
 ) -> Result<Json<PlanApproval>, ApiError> {
-    let workspace = basis(&service, &command)?;
-    let index = workspace.index()?;
-    let revision = current_revision(&workspace.root)?;
+    let snapshot = basis(&service, &command)?;
     let session = service
         .session
         .write()
@@ -2228,22 +2349,26 @@ async fn api_approve(
         .plan
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("no work plan"))?;
-    let canonical =
-        syu_validation::canonical_plan_for_execution(&workspace, &index, plan, &revision)
-            .map_err(|error| ApiError(StatusCode::CONFLICT, error))?;
+    let canonical = syu_validation::canonical_plan_for_execution(
+        &snapshot.workspace,
+        &snapshot.index,
+        plan,
+        &snapshot.revision,
+    )
+    .map_err(|error| ApiError(StatusCode::CONFLICT, error))?;
     if !matches!(canonical.status, PlanStatus::Ready) {
         return Err(ApiError(
             StatusCode::CONFLICT,
             anyhow::anyhow!("only a ready plan can be approved"),
         ));
     }
-    let store = DeliveryStore::for_workspace(&workspace.root)?;
+    let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
     let approval = PlanApproval {
         schema: PLAN_APPROVAL_SCHEMA.into(),
         approval_id: store.new_id("approval"),
         plan_digest: canonical.canonical_digest.clone(),
-        workspace_fingerprint: workspace.try_fingerprint()?,
-        revision,
+        workspace_fingerprint: snapshot.projection.snapshot.fingerprint.clone(),
+        revision: snapshot.revision.clone(),
         reviewed_at: timestamp(),
         plan: canonical,
     };
@@ -2254,7 +2379,7 @@ async fn api_agent_start(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<AgentStartCommand>,
 ) -> Result<Json<AgentRun>, ApiError> {
-    let workspace = basis(&service, &command.basis)?;
+    let snapshot = basis(&service, &command.basis)?;
     let (plan, selected_slice) = {
         let session = service
             .session
@@ -2274,7 +2399,7 @@ async fn api_agent_start(
             anyhow::anyhow!("select the requested slice before starting the agent"),
         ));
     }
-    let store = DeliveryStore::for_workspace(&workspace.root)?;
+    let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
     let approval = store.approval(&plan.canonical_digest).map_err(|error| {
         ApiError(
             StatusCode::CONFLICT,
@@ -2287,7 +2412,7 @@ async fn api_agent_start(
             anyhow::anyhow!("session plan differs from the approved plan"),
         ));
     }
-    let run = syu_agent::start_run(&workspace, &approval, &command.slice_id)?;
+    let run = syu_agent::start_run(&snapshot.workspace, &approval, &command.slice_id)?;
     service
         .session
         .write()
@@ -2300,7 +2425,7 @@ async fn api_agent_patch(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<AgentPatchCommand>,
 ) -> Result<Json<syu_work_model::AgentPatchRecord>, ApiError> {
-    let workspace = execution_basis(&service, &command.basis)?;
+    let snapshot = execution_basis(&service, &command.basis)?;
     let run = service
         .session
         .read()
@@ -2308,14 +2433,14 @@ async fn api_agent_patch(
         .agent_run
         .clone()
         .ok_or_else(|| anyhow::anyhow!("no active agent run"))?;
-    let run = syu_agent::current_run(&workspace, &run)?;
+    let run = syu_agent::current_run(&snapshot.workspace, &run)?;
     if run.run_id != command.run_id {
         return Err(ApiError(
             StatusCode::CONFLICT,
             anyhow::anyhow!("agent run does not match the active Workbench session"),
         ));
     }
-    match syu_agent::apply_scoped_patch(&workspace, &run, &command.patch) {
+    match syu_agent::apply_scoped_patch(&snapshot.workspace, &run, &command.patch) {
         Ok(record) => Ok(Json(record)),
         Err(error) => Err(ApiError(StatusCode::CONFLICT, error)),
     }
@@ -2325,7 +2450,7 @@ async fn api_agent_blocker(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<AgentBlockerCommand>,
 ) -> Result<Json<AgentEvent>, ApiError> {
-    let workspace = execution_basis(&service, &command.basis)?;
+    let snapshot = execution_basis(&service, &command.basis)?;
     let run = service
         .session
         .read()
@@ -2333,14 +2458,14 @@ async fn api_agent_blocker(
         .agent_run
         .clone()
         .ok_or_else(|| anyhow::anyhow!("no active agent run"))?;
-    let run = syu_agent::current_run(&workspace, &run)?;
+    let run = syu_agent::current_run(&snapshot.workspace, &run)?;
     if run.run_id != command.run_id {
         return Err(ApiError(
             StatusCode::CONFLICT,
             anyhow::anyhow!("agent run does not match the active Workbench session"),
         ));
     }
-    let event = syu_agent::record_blocker(&workspace, &run, command.blocker)?;
+    let event = syu_agent::record_blocker(&snapshot.workspace, &run, command.blocker)?;
     Ok(Json(event))
 }
 
@@ -2348,7 +2473,7 @@ async fn api_agent_scope_expansion(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<AgentScopeExpansionCommand>,
 ) -> Result<Json<AgentEvent>, ApiError> {
-    let workspace = execution_basis(&service, &command.basis)?;
+    let snapshot = execution_basis(&service, &command.basis)?;
     let run = service
         .session
         .read()
@@ -2356,7 +2481,7 @@ async fn api_agent_scope_expansion(
         .agent_run
         .clone()
         .ok_or_else(|| anyhow::anyhow!("no active agent run"))?;
-    let run = syu_agent::current_run(&workspace, &run)?;
+    let run = syu_agent::current_run(&snapshot.workspace, &run)?;
     if run.run_id != command.run_id {
         return Err(ApiError(
             StatusCode::CONFLICT,
@@ -2364,7 +2489,7 @@ async fn api_agent_scope_expansion(
         ));
     }
     Ok(Json(syu_agent::request_scope_expansion(
-        &workspace,
+        &snapshot.workspace,
         &run,
         command.reason,
         command.requested_targets,
@@ -2375,9 +2500,7 @@ async fn api_agent_verify(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<SliceCommand>,
 ) -> Result<Json<CompletionAttempt>, ApiError> {
-    let workspace = execution_basis(&service, &command.basis)?;
-    let index = workspace.index()?;
-    let revision = current_revision(&workspace.root)?;
+    let snapshot = execution_basis(&service, &command.basis)?;
     let run = service
         .session
         .read()
@@ -2385,7 +2508,7 @@ async fn api_agent_verify(
         .agent_run
         .clone()
         .ok_or_else(|| anyhow::anyhow!("no active agent run"))?;
-    let run = syu_agent::current_run(&workspace, &run)?;
+    let run = syu_agent::current_run(&snapshot.workspace, &run)?;
     if run.slice_id != command.slice_id {
         return Err(ApiError(
             StatusCode::CONFLICT,
@@ -2398,7 +2521,7 @@ async fn api_agent_verify(
             anyhow::anyhow!("agent run is not active; resolve its blocker or start a new run"),
         ));
     }
-    let store = DeliveryStore::for_workspace(&workspace.root)?;
+    let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
     let approval = store.approval(&run.plan_digest).map_err(|error| {
         ApiError(
             StatusCode::CONFLICT,
@@ -2408,11 +2531,11 @@ async fn api_agent_verify(
     let attempt_id = store.new_id("attempt");
     let started_at = timestamp();
     let (verification, receipt, mut report) = syu_validation::execute_verification_attempt(
-        &workspace,
-        &index,
+        &snapshot.workspace,
+        &snapshot.index,
         &approval.plan,
         &command.slice_id,
-        &revision,
+        &snapshot.revision,
         &attempt_id,
     )?;
     report.attempt_id = attempt_id.clone();
@@ -2435,7 +2558,7 @@ async fn api_agent_verify(
         copy
     })?;
     let attempt = store.append_attempt(&attempt)?;
-    syu_agent::record_verification(&workspace, &run, &attempt.attempt_id)?;
+    syu_agent::record_verification(&snapshot.workspace, &run, &attempt.attempt_id)?;
     let mut session = service
         .session
         .write()
@@ -2448,9 +2571,7 @@ async fn api_validate(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<MutationBasis>,
 ) -> Result<Json<ValidationRunView>, ApiError> {
-    let workspace = basis(&service, &command)?;
-    let index = workspace.index()?;
-    let revision = current_revision(&workspace.root)?;
+    let snapshot = basis(&service, &command)?;
     let started = SystemTime::now();
     let mut session = service
         .session
@@ -2460,13 +2581,17 @@ async fn api_validate(
         .plan
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("no work plan"))?;
-    let canonical_plan =
-        syu_validation::canonical_plan_for_execution(&workspace, &index, plan, &revision)
-            .map_err(|error| ApiError(StatusCode::CONFLICT, error))?;
+    let canonical_plan = syu_validation::canonical_plan_for_execution(
+        &snapshot.workspace,
+        &snapshot.index,
+        plan,
+        &snapshot.revision,
+    )
+    .map_err(|error| ApiError(StatusCode::CONFLICT, error))?;
     let result = syu_validation::validate_without_readiness(&ValidationContext {
-        config: &workspace.config,
-        workspace: &workspace,
-        index: &index,
+        config: &snapshot.workspace.config,
+        workspace: &snapshot.workspace,
+        index: &snapshot.index,
         changed_files: None,
         reported_changed_files: None,
         work_plan: Some(&canonical_plan),
@@ -2475,8 +2600,8 @@ async fn api_validate(
             .as_ref()
             .and_then(|id| canonical_plan.slices.iter().find(|slice| &slice.id == id)),
         plan_mode: PlanValidationMode::PreState,
-        preset: workspace.config.validation.preset,
-        revision: Some(&revision),
+        preset: snapshot.workspace.config.validation.preset,
+        revision: Some(&snapshot.revision),
         change_base_revision: None,
     });
     let view = ValidationRunView::completed(
@@ -2485,7 +2610,7 @@ async fn api_validate(
         result,
         false,
         true,
-        workspace.config.validation.preset,
+        snapshot.workspace.config.validation.preset,
         started,
     );
     session.last_validation = Some(view.clone());
@@ -2495,9 +2620,7 @@ async fn api_verify(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<SliceCommand>,
 ) -> Result<Json<CompletionAttempt>, ApiError> {
-    let workspace = execution_basis(&service, &command.basis)?;
-    let index = workspace.index()?;
-    let revision = current_revision(&workspace.root)?;
+    let snapshot = execution_basis(&service, &command.basis)?;
     let mut session = service
         .session
         .write()
@@ -2506,7 +2629,7 @@ async fn api_verify(
         .plan
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("no work plan"))?;
-    let store = DeliveryStore::for_workspace(&workspace.root)?;
+    let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
     let approval = store.approval(&plan.canonical_digest).map_err(|error| {
         ApiError(
             StatusCode::CONFLICT,
@@ -2536,11 +2659,11 @@ async fn api_verify(
     let attempt_id = store.new_id("attempt");
     let started_at = timestamp();
     let (verification, receipt, mut report) = syu_validation::execute_verification_attempt(
-        &workspace,
-        &index,
+        &snapshot.workspace,
+        &snapshot.index,
         plan,
         &command.slice_id,
-        &revision,
+        &snapshot.revision,
         &attempt_id,
     )?;
     report.attempt_id = attempt_id.clone();
@@ -2571,10 +2694,12 @@ async fn api_finalize_preview(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<FinalizeCommand>,
 ) -> Result<Json<FinalizationPreview>, ApiError> {
-    let workspace = execution_basis(&service, &command.basis)?;
-    let store = DeliveryStore::for_workspace(&workspace.root)?;
+    let snapshot = execution_basis(&service, &command.basis)?;
+    let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
     let attempt = store.attempt(&command.attempt_id)?;
-    Ok(Json(store.finalization_preview(&workspace, &attempt)?))
+    Ok(Json(
+        store.finalization_preview(&snapshot.workspace, &attempt)?,
+    ))
 }
 
 async fn api_finalize_apply(
@@ -2587,12 +2712,15 @@ async fn api_finalize_apply(
             anyhow::anyhow!("preview_token is required"),
         )
     })?;
-    let workspace = execution_basis(&service, &command.basis)?;
-    let store = DeliveryStore::for_workspace(&workspace.root)?;
+    let snapshot = execution_basis(&service, &command.basis)?;
+    let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
     let attempt = store.attempt(&command.attempt_id)?;
-    let preview = store.finalization_preview(&workspace, &attempt)?;
+    let preview = store.finalization_preview(&snapshot.workspace, &attempt)?;
     Ok(Json(store.apply_finalization(
-        &workspace, &attempt, &preview, token,
+        &snapshot.workspace,
+        &attempt,
+        &preview,
+        token,
     )?))
 }
 
@@ -2600,7 +2728,7 @@ async fn api_result(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<ResultCommand>,
 ) -> Result<StatusCode, ApiError> {
-    let workspace = execution_basis(&service, &command.basis)?;
+    let snapshot = execution_basis(&service, &command.basis)?;
     let (plan, canonical) = service
         .session
         .read()
@@ -2622,17 +2750,18 @@ async fn api_result(
             anyhow::anyhow!("verification receipt does not close the selected plan"),
         ));
     }
-    let index = workspace.index()?;
     validate_verification_receipt(
-        &workspace,
-        &index,
+        &snapshot.workspace,
+        &snapshot.index,
         &plan,
         &canonical.slice_id,
         &canonical,
         &plan.basis.revision,
     )?;
-    let changed_files =
-        syu_validation::changed_files_against_revision(&workspace.root, &plan.basis.revision)?;
+    let changed_files = syu_validation::changed_files_against_revision(
+        &snapshot.workspace.root,
+        &plan.basis.revision,
+    )?;
     let slice = plan
         .slices
         .iter()
@@ -2644,9 +2773,9 @@ async fn api_result(
         ));
     }
     let result = validate(&ValidationContext {
-        config: &workspace.config,
-        workspace: &workspace,
-        index: &index,
+        config: &snapshot.workspace.config,
+        workspace: &snapshot.workspace,
+        index: &snapshot.index,
         // Result validation must inspect the real diff from the plan basis.
         // This is what rejects unrelated files and readonly changes even when
         // verification itself succeeded.
@@ -2655,8 +2784,8 @@ async fn api_result(
         work_plan: Some(&plan),
         selected_slice: slice,
         plan_mode: PlanValidationMode::PostState,
-        preset: workspace.config.validation.preset,
-        revision: Some(&current_revision(&workspace.root)?),
+        preset: snapshot.workspace.config.validation.preset,
+        revision: Some(&snapshot.revision),
         change_base_revision: Some(&plan.basis.revision),
     });
     let view = ValidationRunView::completed(
@@ -2665,7 +2794,7 @@ async fn api_result(
         result.clone(),
         false,
         true,
-        workspace.config.validation.preset,
+        snapshot.workspace.config.validation.preset,
         SystemTime::now(),
     );
     service
@@ -3202,6 +3331,15 @@ pub fn project(
     revision: &str,
 ) -> Result<WorkspaceProjection> {
     let index = workspace.index()?;
+    project_with_index(workspace, &index, request, revision)
+}
+
+fn project_with_index(
+    workspace: &SpecWorkspace,
+    index: &SpecIndex,
+    request: Option<&WorkRequest>,
+    revision: &str,
+) -> Result<WorkspaceProjection> {
     // Projection loading is intentionally side-effect free and lightweight.
     // In particular, a checked-in `work.yaml` is not an implicit Workbench
     // session and must not cause planning during the first GET.
@@ -3217,7 +3355,7 @@ pub fn project(
                         item,
                         &path,
                         &source_hash,
-                        &index,
+                        index,
                         &workspace.root,
                     ));
                 }
@@ -3228,7 +3366,7 @@ pub fn project(
                         item,
                         &path,
                         &source_hash,
-                        &index,
+                        index,
                         &workspace.root,
                     ));
                 }
@@ -3239,7 +3377,7 @@ pub fn project(
                         item,
                         &path,
                         &source_hash,
-                        &index,
+                        index,
                         &workspace.root,
                     ));
                 }
@@ -3250,7 +3388,7 @@ pub fn project(
                         item,
                         &path,
                         &source_hash,
-                        &index,
+                        index,
                         &workspace.root,
                     ));
                 }
@@ -3265,7 +3403,12 @@ pub fn project(
     let readiness = readiness_not_run(&workspace.config);
     Ok(WorkspaceProjection {
         snapshot: WorkspaceSummary {
-            root: workspace.root.display().to_string(),
+            root: workspace
+                .root
+                .canonicalize()
+                .unwrap_or_else(|_| workspace.root.clone())
+                .display()
+                .to_string(),
             revision: revision.to_string(),
             fingerprint: workspace.try_fingerprint()?,
             config_schema: workspace.config.schema.clone(),
@@ -3465,15 +3608,27 @@ fn readiness_not_run(config: &syu_project_model::ProjectConfig) -> ReadinessView
 }
 
 fn project_session(
-    workspace: &SpecWorkspace,
+    snapshot: &CachedWorkspaceSnapshot,
     session: &WorkbenchSession,
-    revision: &str,
 ) -> Result<WorkspaceProjection> {
-    let mut projection = project(workspace, session.draft_request.as_ref(), revision)?;
+    let workspace = &snapshot.workspace;
+    let mut projection = (*snapshot.projection).clone();
     if let Some(readiness) = &session.readiness {
         projection.readiness = readiness.clone();
     }
+    projection.navigation.selected_page = session.selected_page;
     projection.work.request = session.draft_request.as_ref().map(request_view);
+    if let Some(capability) = projection
+        .capabilities
+        .iter_mut()
+        .find(|capability| capability.id == "work.plan")
+    {
+        capability.enabled = session.draft_request.is_some();
+        capability.disabled_reason = session
+            .draft_request
+            .is_none()
+            .then(|| "Select a WorkRequest before planning.".into());
+    }
     projection.work.plan = session
         .plan
         .as_ref()
@@ -4149,6 +4304,38 @@ mod tests {
                     .success()
             );
         }
+    }
+
+    #[test]
+    fn workbench_snapshot_reuses_unchanged_state_and_invalidates_content_changes() {
+        let fixture = workspace_root().join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("snapshot fixture");
+        copy_fixture_tree(&fixture, temp.path());
+        initialize_fixture_git(temp.path());
+        let server = WorkbenchServer::new(temp.path().to_path_buf());
+
+        let first = server.service.snapshot().expect("initial snapshot");
+        let second = server.service.snapshot().expect("reused snapshot");
+        assert!(Arc::ptr_eq(&first, &second));
+
+        let source = temp.path().join("src/lib.rs");
+        let original = fs::read_to_string(&source).expect("fixture source");
+        fs::write(&source, format!("{original}\n// snapshot-one\n")).expect("first edit");
+        let third = server.service.snapshot().expect("changed snapshot");
+        assert!(!Arc::ptr_eq(&second, &third));
+        assert_ne!(
+            second.projection.snapshot.fingerprint,
+            third.projection.snapshot.fingerprint
+        );
+
+        fs::write(&source, format!("{original}\n// snapshot-two\n")).expect("second edit");
+        let fourth = server.service.snapshot().expect("same-path content change");
+        assert!(!Arc::ptr_eq(&third, &fourth));
+        assert_ne!(third.signature, fourth.signature);
+
+        fs::write(temp.path().join("src/new.rs"), "pub fn added() {}\n").expect("untracked edit");
+        let fifth = server.service.snapshot().expect("untracked snapshot");
+        assert!(!Arc::ptr_eq(&fourth, &fifth));
     }
 
     async fn run_fixture_post_state_flow(out_of_scope: bool) -> StatusCode {

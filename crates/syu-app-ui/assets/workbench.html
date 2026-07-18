@@ -38,8 +38,8 @@
       </nav>
       <div class="sidebar-bottom">
         <div class="workspace-mini">
-          <b>ugoite / syu</b>
-          <p data-i18n="workspace.ready">workspace ready</p>
+          <b data-workspace-name>Syu</b>
+          <p data-workspace-revision>workspace revision</p>
         </div>
       </div>
     </aside>
@@ -52,10 +52,11 @@
             <span data-i18n="command.placeholder">Search work, slices, items, targets, validation…</span>
           </button>
         </div>
-        <div class="utility"><div class="branch">⑂ issue-762</div></div>
+        <div class="utility"><div class="branch" data-workspace-branch>@ revision</div></div>
       </header>
 
       <div class="content content-viewport">
+        <div class="workbench-busy" data-workbench-status role="status" aria-live="polite" hidden></div>
         <section class="surface" data-page="readiness" hidden>
           <div class="page-head">
             <div class="eyebrow">READINESS</div>

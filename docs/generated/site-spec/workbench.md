@@ -285,6 +285,56 @@ description: "Generated reference for docs/syu/workbench.yaml"
       - **statement**: Current and previous attempts expose plan and slice identity, status, blockers, next action, demonstrated criteria, and finalized state.
       - **governed_by**:
         - POL-DELIVERY-001#rule.exact-ownership
+- **id**: REQ-WORKBENCH-012
+  - **title**: Responsive interaction foundation
+  - **description**: Workbench interactions reuse canonical workspace state and expose visible progress without weakening stale-view safety.
+  - **priority**: critical
+  - **status**: implemented
+  - **criteria**:
+    - **id**: exact-snapshot-reuse
+      - **kind**: quality
+      - **statement**: Unchanged repository state reuses one workspace, inventory index, and projection snapshot while changed tracked, staged, deleted, renamed, or untracked content invalidates it before the next operation.
+      - **governed_by**:
+        - POL-DELIVERY-001#rule.exact-ownership
+    - **id**: responsive-browser-interactions
+      - **kind**: quality
+      - **statement**: The browser bootstraps without a duplicate projection, renders only the active page, filters empty specification queries locally, reports canonical workspace identity, and prevents duplicate actions while busy.
+      - **governed_by**:
+        - POL-DELIVERY-001#rule.exact-ownership
+  - **bindings**:
+    - **id**: responsiveness-check
+      - **role**: verification
+      - **facet**: verification
+      - **responsibility**: Verify exact snapshot reuse and content-sensitive invalidation.
+      - **targets**:
+        - **id**: responsiveness-test
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::workbench_snapshot_reuses_unchanged_state_and_invalidates_content_changes
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-WORKBENCH-012#criterion.exact-snapshot-reuse
+              - **covers**:
+                - FEAT-WORKBENCH-SERVER-001#binding.server/target.workspace-snapshot
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-workbench-server
+                  - **test**: tests::workbench_snapshot_reuses_unchanged_state_and_invalidates_content_changes
+            - **kind**: verifies
+              - **criterion**: REQ-WORKBENCH-012#criterion.responsive-browser-interactions
+              - **covers**:
+                - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.projection-bootstrap
+                - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.active-page-render
+                - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.local-specification-filter
+                - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.busy-status
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-workbench-server
+                  - **test**: tests::workbench_snapshot_reuses_unchanged_state_and_invalidates_content_changes
 - **id**: REQ-WORKBENCH-010
   - **title**: Layered quality gates
   - **description**: Local hooks and CI apply proportional quality checks without weakening the complete release gate.
@@ -521,6 +571,44 @@ requirements:
         kind: behavior
         statement: Current and previous attempts expose plan and slice identity, status, blockers, next action, demonstrated criteria, and finalized state.
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+  - id: REQ-WORKBENCH-012
+    title: Responsive interaction foundation
+    description: Workbench interactions reuse canonical workspace state and expose visible progress without weakening stale-view safety.
+    priority: critical
+    status: implemented
+    criteria:
+      - id: exact-snapshot-reuse
+        kind: quality
+        statement: Unchanged repository state reuses one workspace, inventory index, and projection snapshot while changed tracked, staged, deleted, renamed, or untracked content invalidates it before the next operation.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+      - id: responsive-browser-interactions
+        kind: quality
+        statement: The browser bootstraps without a duplicate projection, renders only the active page, filters empty specification queries locally, reports canonical workspace identity, and prevents duplicate actions while busy.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+    bindings:
+      - id: responsiveness-check
+        role: verification
+        facet: verification
+        responsibility: Verify exact snapshot reuse and content-sensitive invalidation.
+        targets:
+          - id: responsiveness-test
+            adapter: rust
+            path: crates/syu-workbench-server/src/lib.rs
+            selector: { kind: symbol, name: tests::workbench_snapshot_reuses_unchanged_state_and_invalidates_content_changes }
+            claims:
+              - kind: verifies
+                criterion: REQ-WORKBENCH-012#criterion.exact-snapshot-reuse
+                covers:
+                  - FEAT-WORKBENCH-SERVER-001#binding.server/target.workspace-snapshot
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_snapshot_reuses_unchanged_state_and_invalidates_content_changes } }
+              - kind: verifies
+                criterion: REQ-WORKBENCH-012#criterion.responsive-browser-interactions
+                covers:
+                  - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.projection-bootstrap
+                  - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.active-page-render
+                  - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.local-specification-filter
+                  - FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.busy-status
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_snapshot_reuses_unchanged_state_and_invalidates_content_changes } }
   - id: REQ-WORKBENCH-010
     title: Layered quality gates
     description: Local hooks and CI apply proportional quality checks without weakening the complete release gate.
