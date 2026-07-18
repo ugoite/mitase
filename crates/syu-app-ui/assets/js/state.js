@@ -14,6 +14,8 @@ export function createState(projection) {
     selectedSlice: projection.work.plan?.slices?.[0]?.id || null,
     verificationReceipt: null,
     planApproved: false,
+    busy: false,
+    busyLabel: '',
     error: null,
     selectedDiagnosticPhase: 'all',
     selectedScopeMode: 'plan',
