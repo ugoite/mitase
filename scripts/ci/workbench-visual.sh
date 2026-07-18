@@ -332,7 +332,7 @@ async function main() {
                 + '; page=' + (document.querySelector('[data-page]:not([hidden])')?.dataset.page || 'none')
                 + '; busy=' + document.body.getAttribute('aria-busy')
                 + '; buttons=' + [...document.querySelectorAll('[data-page="specifications"] button')]
-                  .map(node => `${node.textContent.trim()}:${node.disabled}`).join('|'),
+                  .map(node => node.textContent.trim() + ':' + node.disabled).join('|'),
               ));
             }
             setTimeout(check, 50);
