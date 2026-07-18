@@ -63,6 +63,7 @@ pathlib.Path(sys.argv[3]).write_text(
     """  const suppliedCsrf=Object.entries(options.headers||{}).find(([key])=>key.toLowerCase()==='x-syu-csrf-token')?.[1];\n"""
     """  if(method!=='GET' && suppliedCsrf!==csrfToken) return body({error:'missing csrf token'},403);\n"""
     """  if(path.includes('/api/projection')) return body(projection,200,{'x-syu-csrf-token':csrfToken});\n"""
+    """  if(path.includes('/api/work/session')) return body({ready:true},200,{'x-syu-csrf-token':csrfToken});\n"""
     """  if(path.includes('/api/source?path=syu.yaml')) return body({content:'schema: syu/config/v1\\nworkspace:\\n  spec_roots: [docs/syu]\\n',hash:'visual-test-hash'});\n"""
     """  if(path.includes('/api/config')) return body({});\n"""
     """  if(path.includes('/api/work/request')) { window.__SYU_FLOW__.push('request'); projection.work.request={summary:payload.request.summary,operation:'modify',seed_count:1,requested_target_count:0}; projection.work.plan=null; return body(projection); }\n"""
