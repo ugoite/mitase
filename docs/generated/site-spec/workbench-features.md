@@ -1093,6 +1093,15 @@ description: "Generated reference for docs/syu/workbench-features.yaml"
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-005#criterion.secure-local-server
+        - **id**: workspace-snapshot
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: snapshot
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-012#criterion.exact-snapshot-reuse
       - **owns**:
         - **id**: workbench-server-module
           - **adapter**: rust
@@ -1490,6 +1499,42 @@ description: "Generated reference for docs/syu/workbench-features.yaml"
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-006#criterion.accessible-navigation
+        - **id**: projection-bootstrap
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/main.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: startWorkbench
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-012#criterion.responsive-browser-interactions
+        - **id**: active-page-render
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/main.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: render
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-012#criterion.responsive-browser-interactions
+        - **id**: local-specification-filter
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/pages/specifications.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: candidatesFor
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-012#criterion.responsive-browser-interactions
+        - **id**: busy-status
+          - **adapter**: html
+          - **path**: crates/syu-app-ui/assets/workbench.html
+          - **selector**:
+            - **kind**: marker
+            - **value**: data-workbench-status
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-012#criterion.responsive-browser-interactions
       - **owns**:
         - **id**: assets-i18n-module
           - **adapter**: javascript
@@ -3065,6 +3110,15 @@ features:
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-005#criterion.secure-local-server
+    - id: workspace-snapshot
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: snapshot
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-012#criterion.exact-snapshot-reuse
     owns:
     - id: workbench-server-module
       adapter: rust
@@ -3462,6 +3516,42 @@ features:
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-006#criterion.accessible-navigation
+    - id: projection-bootstrap
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/main.js
+      selector:
+        kind: symbol
+        name: startWorkbench
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-012#criterion.responsive-browser-interactions
+    - id: active-page-render
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/main.js
+      selector:
+        kind: symbol
+        name: render
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-012#criterion.responsive-browser-interactions
+    - id: local-specification-filter
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/specifications.js
+      selector:
+        kind: symbol
+        name: candidatesFor
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-012#criterion.responsive-browser-interactions
+    - id: busy-status
+      adapter: html
+      path: crates/syu-app-ui/assets/workbench.html
+      selector:
+        kind: marker
+        value: data-workbench-status
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-012#criterion.responsive-browser-interactions
     owns:
     - id: assets-i18n-module
       adapter: javascript

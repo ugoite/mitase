@@ -63,6 +63,7 @@ pathlib.Path(sys.argv[3]).write_text(
     """  const suppliedCsrf=Object.entries(options.headers||{}).find(([key])=>key.toLowerCase()==='x-syu-csrf-token')?.[1];\n"""
     """  if(method!=='GET' && suppliedCsrf!==csrfToken) return body({error:'missing csrf token'},403);\n"""
     """  if(path.includes('/api/projection')) return body(projection,200,{'x-syu-csrf-token':csrfToken});\n"""
+    """  if(path.includes('/api/work/session')) return body({ready:true},200,{'x-syu-csrf-token':csrfToken});\n"""
     """  if(path.includes('/api/source?path=syu.yaml')) return body({content:'schema: syu/config/v1\\nworkspace:\\n  spec_roots: [docs/syu]\\n',hash:'visual-test-hash'});\n"""
     """  if(path.includes('/api/config')) return body({});\n"""
     """  if(path.includes('/api/work/request')) { window.__SYU_FLOW__.push('request'); projection.work.request={summary:payload.request.summary,operation:'modify',seed_count:1,requested_target_count:0}; projection.work.plan=null; return body(projection); }\n"""
@@ -165,9 +166,8 @@ setTimeout(()=>{
 HTML
 
 behavior="$("$chrome" --headless --disable-gpu --no-sandbox --allow-file-access-from-files --virtual-time-budget=1800 --dump-dom "file://${tmp}/workbench.html?page=work&lang=en&theme=light")"
-echo "$behavior" | grep -q 'id="syu-visual-behavior-result" data-status="pass"'
-if echo "$behavior" | grep -q 'id="syu-visual-behavior-result" data-status="fail"'; then
-  echo "$behavior" | grep 'id="syu-visual-behavior-result"' >&2
+if ! echo "$behavior" | grep -q 'id="syu-visual-behavior-result" data-status="pass"'; then
+  echo "$behavior" | grep 'id="syu-visual-behavior-result"' >&2 || true
   exit 1
 fi
 
@@ -326,7 +326,15 @@ async function main() {
             let value;
             try { value = predicate(); } catch {}
             if (value) return resolve(value);
-            if (Date.now() >= deadline) return reject(new Error('timeout waiting for ' + description));
+            if (Date.now() >= deadline) {
+              return reject(new Error(
+                'timeout waiting for ' + description
+                + '; page=' + (document.querySelector('[data-page]:not([hidden])')?.dataset.page || 'none')
+                + '; busy=' + document.body.getAttribute('aria-busy')
+                + '; buttons=' + [...document.querySelectorAll('[data-page="specifications"] button')]
+                  .map(node => node.textContent.trim() + ':' + node.disabled).join('|'),
+              ));
+            }
             setTimeout(check, 50);
           };
           check();
@@ -376,6 +384,6 @@ async function main() {
 
 main().catch(error => {
   console.error(error.stack || error.message || String(error));
-  process.exitCode = 1;
+  process.exit(1);
 });
 NODE
