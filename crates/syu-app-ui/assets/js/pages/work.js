@@ -26,6 +26,12 @@ function button(label, onClick, primary = false) {
   return node;
 }
 
+function actionText(action, kind) {
+  const key = action?.[`${kind}_key`];
+  if (key) return t(key);
+  return t(`journey.${kind}.${action?.action || 'unknown'}`);
+}
+
 function matchingCandidates(state) {
   const query = String(state.journeyQuery || '').trim().toLowerCase();
   const items = state.projection.specifications?.specifications || [];
@@ -93,10 +99,10 @@ function renderJourney(root, journey, state, work) {
   const steps = element('ol', 'journey-steps');
   (journey.steps || []).forEach(step => steps.append(element('li', `journey-step ${step.status}`, t(`journey.step.${step.id}`))));
   root.append(steps);
-  root.append(element('p', 'journey-copy', t(`journey.explanation.${journey.primary_action.action}`)));
+  root.append(element('p', 'journey-copy', actionText(journey.primary_action, 'explanation')));
   if (journey.approved_scope) {
     const scope = element('section', 'journey-card');
-    scope.append(element('h3', null, t('journey.scope')));
+    scope.append(element('h3', null, t(`journey.scope.${journey.approved_scope.status || 'approved'}`)));
     scope.append(element('p', null, message('journey.scope_count', {
       targets: journey.approved_scope.editable_target_count,
       slices: journey.approved_scope.slice_count,
@@ -115,14 +121,14 @@ function renderJourney(root, journey, state, work) {
   });
   root.append(evidenceCard);
   const action = journey.primary_action;
-  root.append(button(t(`journey.action.${action.action}`), () => {
-    if (action.confirmation_required && !window.confirm(`${t(`journey.explanation.${action.action}`)}\n\n${t('journey.confirm')}`)) return;
+  root.append(button(actionText(action, 'label'), () => {
+    if (action.confirmation_required && !window.confirm(`${actionText(action, 'explanation')}\n\n${t('journey.confirm')}`)) return;
     run(state, { action: action.action });
   }, true));
   if (journey.recovery_action) {
     const recovery = journey.recovery_action;
-    root.append(button(t(`journey.action.${recovery.action}`), () => {
-      if (recovery.confirmation_required && !window.confirm(`${t(`journey.explanation.${recovery.action}`)}\n\n${t('journey.confirm')}`)) return;
+    root.append(button(actionText(recovery, 'label'), () => {
+      if (recovery.confirmation_required && !window.confirm(`${actionText(recovery, 'explanation')}\n\n${t('journey.confirm')}`)) return;
       run(state, { action: recovery.action });
     }));
   }

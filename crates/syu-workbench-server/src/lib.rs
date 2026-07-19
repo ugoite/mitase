@@ -444,6 +444,55 @@ pub struct JourneyActionCommand {
     #[serde(flatten)]
     pub action: JourneyAction,
 }
+
+fn journey_action_key(action: &JourneyAction) -> &'static str {
+    match action {
+        JourneyAction::Create { .. } => "create",
+        JourneyAction::Prepare => "prepare",
+        JourneyAction::Approve => "approve",
+        JourneyAction::Start => "start",
+        JourneyAction::Retry => "retry",
+        JourneyAction::Verify => "verify",
+        JourneyAction::Finalize => "finalize",
+        JourneyAction::Restart => "restart",
+        JourneyAction::Cancel => "cancel",
+    }
+}
+
+fn ensure_journey_transition(
+    service: &WorkbenchService,
+    basis_command: &MutationBasis,
+    action: &JourneyAction,
+) -> Result<(), ApiError> {
+    let snapshot = match action {
+        JourneyAction::Verify | JourneyAction::Finalize => {
+            execution_basis(service, basis_command).map_err(ApiError::from)?
+        }
+        _ => basis(service, basis_command).map_err(ApiError::from)?,
+    };
+    let session = service
+        .session
+        .read()
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+    let projection = project_session(&snapshot, &session).map_err(ApiError::from)?;
+    let requested = journey_action_key(action);
+    let expected = projection.journey.primary_action.action.as_str();
+    let recovery = projection
+        .journey
+        .recovery_action
+        .as_ref()
+        .map(|action| action.action.as_str());
+    if requested != expected && recovery != Some(requested) {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!(
+                "journey action {requested} is not available; the current next action is {expected}"
+            ),
+        ));
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SliceCommand {
@@ -2315,6 +2364,9 @@ async fn api_journey_action(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<JourneyActionCommand>,
 ) -> Result<Json<WorkspaceProjection>, ApiError> {
+    if !matches!(&command.action, JourneyAction::Create { .. }) {
+        ensure_journey_transition(&service, &command.basis, &command.action)?;
+    }
     match command.action {
         JourneyAction::Create { anchor, summary } => {
             let snapshot = basis(&service, &command.basis)?;
@@ -3044,7 +3096,9 @@ pub struct JourneyStepView {
 pub struct JourneyActionView {
     pub action: String,
     pub label: String,
+    pub label_key: String,
     pub explanation: String,
+    pub explanation_key: String,
     pub confirmation_required: bool,
     pub enabled: bool,
 }
@@ -3052,6 +3106,7 @@ pub struct JourneyActionView {
 #[derive(Debug, Clone, Serialize)]
 pub struct JourneyScopeView {
     pub summary: String,
+    pub status: String,
     pub editable_target_count: usize,
     pub slice_count: usize,
 }
@@ -3751,7 +3806,9 @@ fn empty_journey() -> WorkJourneyView {
         primary_action: JourneyActionView {
             action: "create".into(),
             label: "Choose a relevant requirement".into(),
+            label_key: "journey.action.create".into(),
             explanation: "Start with a plain-language description, then choose the behavior that should change.".into(),
+            explanation_key: "journey.explanation.create".into(),
             confirmation_required: false,
             enabled: true,
         },
@@ -4040,9 +4097,11 @@ fn journey_view(
             primary_action: JourneyActionView {
                 action: "prepare".into(),
                 label: "Prepare a safe plan".into(),
+                label_key: "journey.action.prepare".into(),
                 explanation:
                     "We will explain the proposed change and check it before asking for approval."
                         .into(),
+                explanation_key: "journey.explanation.prepare".into(),
                 confirmation_required: false,
                 enabled: true,
             },
@@ -4083,9 +4142,11 @@ fn journey_view(
             primary_action: JourneyActionView {
                 action: "restart".into(),
                 label: "Choose a smaller change".into(),
+                label_key: "journey.action.restart".into(),
                 explanation:
                     "This change needs separate focused work. Choose one behavior to change first."
                         .into(),
+                explanation_key: "journey.explanation.restart".into(),
                 confirmation_required: false,
                 enabled: true,
             },
@@ -4102,12 +4163,17 @@ fn journey_view(
             advanced,
         });
     }
+    let approved = DeliveryStore::for_workspace(&workspace.root)
+        .ok()
+        .and_then(|store| store.approval(&plan.digest).ok())
+        .is_some();
     let scope = JourneyScopeView {
         summary: format!(
             "{} focused change{} are proposed.",
             plan.slices.len(),
             if plan.slices.len() == 1 { "" } else { "s" }
         ),
+        status: if approved { "approved" } else { "proposed" }.into(),
         editable_target_count: plan
             .slices
             .iter()
@@ -4115,10 +4181,6 @@ fn journey_view(
             .sum(),
         slice_count: plan.slices.len(),
     };
-    let approved = DeliveryStore::for_workspace(&workspace.root)
-        .ok()
-        .and_then(|store| store.approval(&plan.digest).ok())
-        .is_some();
     let validation_passed = matches!(work.validation.state, ValidationRunState::Passed);
     let completed = work
         .selected_slice
@@ -4145,7 +4207,9 @@ fn journey_view(
             primary_action: JourneyActionView {
                 action: "cancel".into(),
                 label: "Start another change".into(),
+                label_key: "journey.action.start_another".into(),
                 explanation: "This work is complete. Start a new change when you are ready.".into(),
+                explanation_key: "journey.explanation.start_another".into(),
                 confirmation_required: false,
                 enabled: true,
             },
@@ -4167,8 +4231,10 @@ fn journey_view(
             primary_action: JourneyActionView {
                 action: "finalize".into(),
                 label: "Confirm completion".into(),
+                label_key: "journey.action.finalize".into(),
                 explanation: "Confirm the checked change after reviewing the completion evidence."
                     .into(),
+                explanation_key: "journey.explanation.finalize".into(),
                 confirmation_required: true,
                 enabled: true,
             },
@@ -4194,9 +4260,11 @@ fn journey_view(
             primary_action: JourneyActionView {
                 action: "retry".into(),
                 label: "Start a new implementation run".into(),
+                label_key: "journey.action.retry".into(),
                 explanation:
                     "Resolve the reported blocker, then start a new run in the approved scope."
                         .into(),
+                explanation_key: "journey.explanation.retry".into(),
                 confirmation_required: true,
                 enabled: true,
             },
@@ -4220,8 +4288,10 @@ fn journey_view(
             primary_action: JourneyActionView {
                 action: "prepare".into(),
                 label: "Review the plan again".into(),
+                label_key: "journey.action.prepare".into(),
                 explanation: "The plan needs a successful safety check before it can be approved."
                     .into(),
+                explanation_key: "journey.explanation.prepare".into(),
                 confirmation_required: false,
                 enabled: true,
             },
@@ -4243,8 +4313,10 @@ fn journey_view(
             primary_action: JourneyActionView {
                 action: "approve".into(),
                 label: "Approve this plan".into(),
+                label_key: "journey.action.approve".into(),
                 explanation: "Approval fixes the bounded change before implementation can begin."
                     .into(),
+                explanation_key: "journey.explanation.approve".into(),
                 confirmation_required: true,
                 enabled: true,
             },
@@ -4266,7 +4338,9 @@ fn journey_view(
             primary_action: JourneyActionView {
                 action: "start".into(),
                 label: "Start implementation".into(),
+                label_key: "journey.action.start".into(),
                 explanation: "Implementation is limited to the approved scope.".into(),
+                explanation_key: "journey.explanation.start".into(),
                 confirmation_required: true,
                 enabled: true,
             },
@@ -4287,7 +4361,9 @@ fn journey_view(
         primary_action: JourneyActionView {
             action: "verify".into(),
             label: "Check the completed change".into(),
+            label_key: "journey.action.verify".into(),
             explanation: "Run the approved completion checks and show the evidence.".into(),
+            explanation_key: "journey.explanation.verify".into(),
             confirmation_required: false,
             enabled: true,
         },
@@ -4306,9 +4382,11 @@ fn cancel_action() -> JourneyActionView {
     JourneyActionView {
         action: "cancel".into(),
         label: "Cancel this work".into(),
+        label_key: "journey.action.cancel".into(),
         explanation:
             "This stops the current journey. Changes already written to files are not undone."
                 .into(),
+        explanation_key: "journey.explanation.cancel".into(),
         confirmation_required: true,
         enabled: true,
     }
@@ -5838,6 +5916,10 @@ mod tests {
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("prepared projection");
         assert_eq!(projection["journey"]["current_step"], "approve");
+        assert_eq!(
+            projection["journey"]["approved_scope"]["status"],
+            "proposed"
+        );
         let basis: MutationBasis = serde_json::from_value(serde_json::json!({
             "expected_revision": projection["snapshot"]["revision"],
             "expected_workspace_fingerprint": projection["snapshot"]["fingerprint"],
@@ -5857,6 +5939,10 @@ mod tests {
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("approved projection");
         assert_eq!(projection["journey"]["current_step"], "implement");
+        assert_eq!(
+            projection["journey"]["approved_scope"]["status"],
+            "approved"
+        );
         let basis: MutationBasis = serde_json::from_value(serde_json::json!({
             "expected_revision": projection["snapshot"]["revision"],
             "expected_workspace_fingerprint": projection["snapshot"]["fingerprint"],
@@ -5876,6 +5962,10 @@ mod tests {
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("started projection");
         assert_eq!(projection["journey"]["current_step"], "verify");
+        assert_eq!(
+            projection["journey"]["recovery_action"]["label_key"],
+            "journey.action.cancel"
+        );
         let basis: MutationBasis = serde_json::from_value(serde_json::json!({
             "expected_revision": projection["snapshot"]["revision"],
             "expected_workspace_fingerprint": projection["snapshot"]["fingerprint"],
@@ -6000,6 +6090,18 @@ mod tests {
                 .expect("blocked journey projection");
         assert_eq!(projection["journey"]["evidence"]["status"], "blocked");
         assert_eq!(projection["journey"]["primary_action"]["action"], "restart");
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis_from_projection(&projection),
+                "action": "approve"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
     }
 
     #[tokio::test]
@@ -6096,6 +6198,26 @@ mod tests {
             "finalize"
         );
         assert_eq!(projection["work"]["agent"]["status"], "completed");
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis_from_projection(&projection),
+                "action": "finalize"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("finalized journey projection");
+        assert_eq!(projection["journey"]["current_step"], "complete");
+        assert_eq!(
+            projection["journey"]["primary_action"]["label_key"],
+            "journey.action.start_another"
+        );
     }
 
     async fn raw_http(
