@@ -2,6 +2,10 @@ import { translate } from '../i18n.js';
 
 const t = key => translate(key);
 
+function message(key, values = {}) {
+  return Object.entries(values).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), t(key));
+}
+
 function replace(root, content) {
   if (!root) return;
   root.replaceChildren();
@@ -70,7 +74,7 @@ function renderStart(root, state) {
   });
 }
 
-function renderJourney(root, journey, state) {
+function renderJourney(root, journey, state, work) {
   const header = element('header', 'journey-header');
   header.append(element('p', 'eyebrow', t('journey.eyebrow')));
   header.append(element('h2', null, journey.title));
@@ -78,18 +82,20 @@ function renderJourney(root, journey, state) {
   const steps = element('ol', 'journey-steps');
   (journey.steps || []).forEach(step => steps.append(element('li', `journey-step ${step.status}`, t(`journey.step.${step.id}`))));
   root.append(steps);
-  root.append(element('p', 'journey-copy', journey.primary_action.explanation));
+  root.append(element('p', 'journey-copy', t(`journey.explanation.${journey.primary_action.action}`)));
   if (journey.approved_scope) {
     const scope = element('section', 'journey-card');
     scope.append(element('h3', null, t('journey.scope')));
-    scope.append(element('p', null, journey.approved_scope.summary));
-    scope.append(element('p', 'journey-meta', `${journey.approved_scope.editable_target_count} change area${journey.approved_scope.editable_target_count === 1 ? '' : 's'} in ${journey.approved_scope.slice_count} focused step${journey.approved_scope.slice_count === 1 ? '' : 's'}.`));
+    scope.append(element('p', null, message('journey.scope_count', {
+      targets: journey.approved_scope.editable_target_count,
+      slices: journey.approved_scope.slice_count,
+    })));
     root.append(scope);
   }
   const evidence = journey.evidence || {};
   const evidenceCard = element('section', 'journey-card');
   evidenceCard.append(element('h3', null, t('journey.evidence')));
-  evidenceCard.append(element('p', null, evidence.summary || 'No evidence yet.'));
+  evidenceCard.append(element('p', null, t(`journey.evidence.${evidence.status || 'not_started'}`)));
   (evidence.blockers || []).forEach(blocker => {
     const item = element('div', 'journey-blocker');
     item.append(element('strong', null, blocker.message));
@@ -112,7 +118,24 @@ function renderJourney(root, journey, state) {
   const advanced = element('details', 'journey-advanced');
   advanced.append(element('summary', null, t('journey.advanced')));
   const technical = journey.advanced || {};
-  advanced.append(element('p', null, `Request: ${technical.request_id || 'not created'}\nPlan: ${technical.plan_id || 'not prepared'}\nStep: ${technical.selected_slice_id || 'not selected'}\nAttempt: ${technical.attempt_id || 'not started'}`));
+  advanced.append(element('p', null, `${t('journey.advanced.request')}: ${technical.request_id || t('journey.advanced.none')}\n${t('journey.advanced.plan')}: ${technical.plan_id || t('journey.advanced.none')}\n${t('journey.advanced.step')}: ${technical.selected_slice_id || t('journey.advanced.none')}\n${t('journey.advanced.attempt')}: ${technical.attempt_id || t('journey.advanced.none')}`));
+  const attempts = [work?.completion?.current, ...(work?.completion?.previous || [])].filter(attempt => attempt?.plan_digest === work?.plan?.digest);
+  if (attempts.length) {
+    advanced.append(element('h3', null, t('journey.advanced.completion')));
+    attempts.forEach(attempt => {
+      const item = element('p', null, `${t(`journey.status.${attempt.status}`)}: ${attempt.attempt_id}\n${t('journey.advanced.slice')}: ${attempt.slice_id}\n${t('journey.advanced.demonstrated')}: ${(attempt.demonstrated || []).join(', ') || t('journey.advanced.none')}`);
+      advanced.append(item);
+    });
+  }
+  const agent = work?.agent;
+  if (agent) {
+    advanced.append(element('h3', null, t('journey.advanced.agent')));
+    advanced.append(element('p', null, `${t(`journey.status.${agent.status}`)}: ${agent.run_id}`));
+    (work.agent_events || []).forEach(event => {
+      const detail = event.event || {};
+      advanced.append(element('p', null, `${detail.kind || 'event'}: ${event.created_at}`));
+    });
+  }
   root.append(advanced);
 }
 
@@ -123,7 +146,6 @@ export function renderWork(work, state) {
   const content = element('div', 'journey');
   if (state.error) content.append(element('p', 'status-message status-error', state.error.message));
   if (!journey || journey.current_step === 'describe') renderStart(content, state);
-  else renderJourney(content, journey, state);
+  else renderJourney(content, journey, state, work);
   replace(root, content);
-  document.querySelectorAll('[data-work-agent-history], [data-work-completion-history]').forEach(node => { node.hidden = true; });
 }

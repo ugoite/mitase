@@ -433,6 +433,7 @@ pub enum JourneyAction {
     Start,
     Verify,
     Finalize,
+    Restart,
     Cancel,
 }
 
@@ -2335,7 +2336,13 @@ async fn api_journey_action(
                 summary,
                 operation: WorkOperation::Modify,
                 seeds: vec![WorkSeed::Anchor(anchor)],
-                constraints: WorkConstraints::default(),
+                // A guided journey has one executable change boundary.  Plans
+                // with several isolated slices need separate worktrees, so do
+                // not silently pick and execute their first slice here.
+                constraints: WorkConstraints {
+                    max_slices: Some(1),
+                    ..WorkConstraints::default()
+                },
                 requested_targets: vec![],
             });
             session.plan = None;
@@ -2347,19 +2354,21 @@ async fn api_journey_action(
         }
         JourneyAction::Prepare => {
             let Json(plan) = api_plan(State(service.clone()), Json(command.basis.clone())).await?;
-            let slice_id = plan
-                .slices
-                .first()
-                .map(|slice| slice.id.clone())
-                .ok_or_else(|| anyhow::anyhow!("the plan has no executable slice"))?;
-            let _ = api_context(
-                State(service.clone()),
-                Json(SliceCommand {
-                    basis: command.basis.clone(),
-                    slice_id,
-                }),
-            )
-            .await?;
+            if matches!(plan.status, PlanStatus::Ready) {
+                let slice_id = plan
+                    .slices
+                    .first()
+                    .map(|slice| slice.id.clone())
+                    .ok_or_else(|| anyhow::anyhow!("the plan has no executable slice"))?;
+                let _ = api_context(
+                    State(service.clone()),
+                    Json(SliceCommand {
+                        basis: command.basis.clone(),
+                        slice_id,
+                    }),
+                )
+                .await?;
+            }
             let _ = api_validate(State(service.clone()), Json(command.basis.clone())).await?;
         }
         JourneyAction::Approve => {
@@ -2390,7 +2399,7 @@ async fn api_journey_action(
                 .selected_slice
                 .clone()
                 .ok_or_else(|| anyhow::anyhow!("select a prepared slice before verification"))?;
-            let _ = api_verify(
+            let _ = api_agent_verify(
                 State(service.clone()),
                 Json(SliceCommand {
                     basis: command.basis.clone(),
@@ -2401,10 +2410,27 @@ async fn api_journey_action(
         }
         JourneyAction::Finalize => {
             let snapshot = basis(&service, &command.basis)?;
+            let (plan_digest, slice_id) = {
+                let session = service
+                    .session
+                    .read()
+                    .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+                (
+                    session
+                        .plan
+                        .as_ref()
+                        .map(|plan| plan.canonical_digest.clone())
+                        .ok_or_else(|| anyhow::anyhow!("prepare a work plan before finalizing"))?,
+                    session
+                        .selected_slice
+                        .clone()
+                        .ok_or_else(|| anyhow::anyhow!("select a work slice before finalizing"))?,
+                )
+            };
             let attempt_id = completion_history(&snapshot.workspace)?
-                .current
+                .current_for(&plan_digest, &slice_id)
                 .filter(|attempt| attempt.status == "complete" && !attempt.finalized)
-                .map(|attempt| attempt.attempt_id)
+                .map(|attempt| attempt.attempt_id.clone())
                 .ok_or_else(|| anyhow::anyhow!("there is no completed work ready to finish"))?;
             let Json(preview) = api_finalize_preview(
                 State(service.clone()),
@@ -2425,7 +2451,7 @@ async fn api_journey_action(
             )
             .await?;
         }
-        JourneyAction::Cancel => {
+        JourneyAction::Restart | JourneyAction::Cancel => {
             let _ = api_discard(State(service.clone())).await?;
         }
     }
@@ -3069,6 +3095,15 @@ pub struct WorkSessionView {
 pub struct CompletionHistoryView {
     pub current: Option<CompletionAttemptView>,
     pub previous: Vec<CompletionAttemptView>,
+}
+
+impl CompletionHistoryView {
+    fn current_for(&self, plan_digest: &str, slice_id: &str) -> Option<&CompletionAttemptView> {
+        self.current
+            .iter()
+            .chain(self.previous.iter())
+            .find(|attempt| attempt.plan_digest == plan_digest && attempt.slice_id == slice_id)
+    }
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct CompletionAttemptView {
@@ -3977,34 +4012,15 @@ fn journey_view(
         .as_ref()
         .map(|request| request.summary.clone())
         .unwrap_or_else(|| "Describe the change you want to make".into());
-    let advanced = JourneyAdvancedView {
+    let mut advanced = JourneyAdvancedView {
         request_id: session
             .draft_request
             .as_ref()
             .map(|request| request.id.clone()),
         plan_id: work.plan.as_ref().map(|plan| plan.id.clone()),
         selected_slice_id: work.selected_slice.clone(),
-        attempt_id: work
-            .completion
-            .current
-            .as_ref()
-            .map(|attempt| attempt.attempt_id.clone()),
+        attempt_id: None,
     };
-    let blockers = work
-        .completion
-        .current
-        .as_ref()
-        .map(|attempt| {
-            attempt
-                .blockers
-                .iter()
-                .map(|blocker| JourneyBlockerView {
-                    message: blocker.message.clone(),
-                    next_action: blocker.next_action.clone(),
-                })
-                .collect()
-        })
-        .unwrap_or_default();
     if work.request.is_none() {
         return Ok(empty_journey());
     }
@@ -4027,11 +4043,38 @@ fn journey_view(
             evidence: JourneyEvidenceView {
                 status: "draft".into(),
                 summary: "A behavior has been selected; its scope has not been approved.".into(),
-                blockers,
+                blockers: vec![],
             },
             advanced,
         });
     };
+    if plan.status != "ready" {
+        return Ok(WorkJourneyView {
+            title,
+            current_step: "review".into(),
+            steps: journey_steps("review"),
+            primary_action: JourneyActionView {
+                action: "restart".into(),
+                label: "Choose a smaller change".into(),
+                explanation:
+                    "This change needs separate focused work. Choose one behavior to change first."
+                        .into(),
+                confirmation_required: false,
+                enabled: true,
+            },
+            recovery_action: Some(cancel_action()),
+            approved_scope: None,
+            evidence: JourneyEvidenceView {
+                status: "blocked".into(),
+                summary: "The proposed change has more than one isolated step.".into(),
+                blockers: vec![JourneyBlockerView {
+                    message: "This change needs separate focused steps.".into(),
+                    next_action: "Choose one behavior to change first.".into(),
+                }],
+            },
+            advanced,
+        });
+    }
     let scope = JourneyScopeView {
         summary: format!(
             "{} focused change{} are proposed.",
@@ -4050,7 +4093,23 @@ fn journey_view(
         .and_then(|store| store.approval(&plan.digest).ok())
         .is_some();
     let validation_passed = matches!(work.validation.state, ValidationRunState::Passed);
-    let completed = work.completion.current.as_ref();
+    let completed = work
+        .selected_slice
+        .as_deref()
+        .and_then(|slice_id| work.completion.current_for(&plan.digest, slice_id));
+    advanced.attempt_id = completed.map(|attempt| attempt.attempt_id.clone());
+    let blockers = completed
+        .map(|attempt| {
+            attempt
+                .blockers
+                .iter()
+                .map(|blocker| JourneyBlockerView {
+                    message: blocker.message.clone(),
+                    next_action: blocker.next_action.clone(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     if completed.is_some_and(|attempt| attempt.finalized) {
         return Ok(WorkJourneyView {
             title,
@@ -5652,7 +5711,9 @@ mod tests {
         let temp = tempfile::tempdir().expect("fixture tempdir");
         copy_fixture_tree(&fixture, temp.path());
         initialize_fixture_git(temp.path());
-        let app = WorkbenchServer::new(temp.path().to_path_buf()).router();
+        let server = WorkbenchServer::new(temp.path().to_path_buf());
+        let service = server.service.clone();
+        let app = server.router();
         let (basis, csrf, _) = projection_and_basis(&app).await;
         let response = json_mutation(
             &app,
@@ -5676,6 +5737,16 @@ mod tests {
             "Make the finished change understandable"
         );
         assert_eq!(projection["journey"]["primary_action"]["action"], "prepare");
+        assert_eq!(
+            service
+                .session
+                .read()
+                .expect("journey session")
+                .draft_request
+                .as_ref()
+                .and_then(|request| request.constraints.max_slices),
+            Some(1)
+        );
         assert!(
             projection["journey"]["advanced"]["request_id"]
                 .as_str()
@@ -5726,6 +5797,54 @@ mod tests {
             "expected_source_hash": projection["snapshot"]["source_hash"]
         }))
         .expect("approved basis");
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({ "basis": basis, "action": "start" }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("started projection");
+        assert_eq!(projection["journey"]["current_step"], "verify");
+        let basis: MutationBasis = serde_json::from_value(serde_json::json!({
+            "expected_revision": projection["snapshot"]["revision"],
+            "expected_workspace_fingerprint": projection["snapshot"]["fingerprint"],
+            "expected_source_hash": projection["snapshot"]["source_hash"]
+        }))
+        .expect("started basis");
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({ "basis": basis, "action": "verify" }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("verified projection");
+        assert_eq!(projection["journey"]["primary_action"]["action"], "verify");
+        assert_eq!(projection["work"]["agent"]["status"], "blocked");
+        assert!(
+            projection["work"]["agent_events"]
+                .as_array()
+                .is_some_and(|events| {
+                    events
+                        .iter()
+                        .any(|event| event["event"]["kind"] == "verification-recorded")
+                })
+        );
+        let basis: MutationBasis = serde_json::from_value(serde_json::json!({
+            "expected_revision": projection["snapshot"]["revision"],
+            "expected_workspace_fingerprint": projection["snapshot"]["fingerprint"],
+            "expected_source_hash": projection["snapshot"]["source_hash"]
+        }))
+        .expect("verified basis");
         let response = json_mutation(
             &app,
             Method::POST,
@@ -5856,6 +5975,31 @@ mod tests {
         let history = completion_history(&workspace).expect("completion history loads");
         assert!(history.current.is_none());
         assert!(history.previous.is_empty());
+    }
+
+    #[test]
+    fn completion_history_scopes_attempts_to_the_active_plan_and_slice() {
+        let attempt = |id: &str, plan_digest: &str, slice_id: &str| CompletionAttemptView {
+            attempt_id: id.into(),
+            plan_digest: plan_digest.into(),
+            slice_id: slice_id.into(),
+            status: "complete".into(),
+            demonstrated: vec![],
+            blockers: vec![],
+            next_action: None,
+            finalized: false,
+        };
+        let history = CompletionHistoryView {
+            current: Some(attempt("attempt-old", "plan-old", "slice-old")),
+            previous: vec![attempt("attempt-current", "plan-current", "slice-current")],
+        };
+        assert_eq!(
+            history
+                .current_for("plan-current", "slice-current")
+                .map(|attempt| attempt.attempt_id.as_str()),
+            Some("attempt-current")
+        );
+        assert!(history.current_for("plan-current", "slice-other").is_none());
     }
 
     async fn run_spec_transaction(app: Router) {

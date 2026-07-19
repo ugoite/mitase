@@ -66,14 +66,17 @@ pathlib.Path(sys.argv[3]).write_text(
     """  if(path.includes('/api/work/session')) return body({ready:true},200,{'x-syu-csrf-token':csrfToken});\n"""
     """  if(path.includes('/api/source?path=syu.yaml')) return body({content:'schema: syu/config/v1\\nworkspace:\\n  spec_roots: [docs/syu]\\n',hash:'visual-test-hash'});\n"""
     """  if(path.includes('/api/config')) return body({});\n"""
-    """  if(path.includes('/api/work/request')) { window.__SYU_FLOW__.push('request'); projection.work.request={summary:payload.request.summary,operation:'modify',seed_count:1,requested_target_count:0}; projection.work.plan=null; return body(projection); }\n"""
-    """  if(path.includes('/api/work/plan')) { window.__SYU_FLOW__.push('plan'); projection.work.plan={id:'PLAN-VISUAL-FLOW',status:'ready',slices:[{id:'slice-visual-flow',editable_targets:[{reference:'FEAT-VISUAL#binding.work/target.code',access:'editable',path:'src/lib.rs'}]}]}; return body(projection.work.plan); }\n"""
-    """  if(path.includes('/api/work/context')) { window.__SYU_FLOW__.push('context'); projection.work.selected_slice='slice-visual-flow'; projection.work.context_pack={slice_id:'slice-visual-flow',entry_count:2}; return body({schema:'syu/context-pack/v1',slice:'slice-visual-flow',artifact_context:[]}); }\n"""
-    """  if(path.includes('/api/work/validate')) { window.__SYU_FLOW__.push('validate'); projection.work.validation={state:'passed',context:'work-plan'}; return body(projection.work.validation); }\n"""
-    """  if(path.includes('/api/work/approve')) { window.__SYU_FLOW__.push('approve'); return body({schema:'syu/plan-approval/v1',approval_id:'approval-visual-flow',plan_digest:'visual-plan'}); }\n"""
-    """  if(path.includes('/api/work/verify')) { window.__SYU_FLOW__.push('verify'); receipt={schema:'syu/verification-receipt/v1',plan_digest:'visual-plan',slice_id:'slice-visual-flow',revision:'visual-revision',workspace_fingerprint:'visual-fingerprint',started_at:'1',completed_at:'2',executions:[{target:'REQ-VISUAL#binding.test/target.exact',runner:'mock',command:['mock'],exit_code:0,stdout_digest:'stdout',stderr_digest:'stderr',implementation_digests:{},verification_digest:'verification'}]}; projection.work.verification_receipt={slice_id:'slice-visual-flow'}; projection.work.completion={current:{attempt_id:'attempt-visual-flow',status:'complete',plan_digest:'visual-plan',slice_id:'slice-visual-flow',finalized:false},previous:[]}; return body({receipt}); }\n"""
-    """  if(path.includes('/api/work/finalize/preview')) { window.__SYU_FLOW__.push('finalize-preview'); return body({preview_token:'visual-preview-token'}); }\n"""
-    """  if(path.includes('/api/work/finalize/apply')) { window.__SYU_FLOW__.push('finalize-apply'); projection.work.completion.current.finalized=true; return body({schema:'syu/finalization-receipt/v1'}); }\n"""
+    """  if(path.includes('/api/work/action')) {\n"""
+    """    const action=payload.action; window.__SYU_FLOW__.push(action);\n"""
+    """    const journey=(step,primary,status)=>projection.journey={title:payload.summary||projection.work.request?.summary||'Make the behavior clear',current_step:step,steps:[],primary_action:{action:primary,confirmation_required:['approve','start','finalize'].includes(primary)},recovery_action:primary==='cancel'?null:{action:'cancel',confirmation_required:true},approved_scope:step==='review'?null:{editable_target_count:1,slice_count:1},evidence:{status,blockers:[]},advanced:{request_id:'work-visual',plan_id:projection.work.plan?.id||null,selected_slice_id:'slice-visual-flow',attempt_id:projection.work.completion?.current?.attempt_id||null}};\n"""
+    """    if(action==='create') { projection.work.request={summary:payload.summary,operation:'modify',seed_count:1,requested_target_count:0}; journey('review','prepare','draft'); }\n"""
+    """    else if(action==='prepare') { projection.work.plan={id:'PLAN-VISUAL-FLOW',digest:'visual-plan',status:'ready',slices:[{id:'slice-visual-flow',editable_targets:[{reference:'FEAT-VISUAL#binding.work/target.code',access:'editable',path:'src/lib.rs'}]}]}; projection.work.selected_slice='slice-visual-flow'; projection.work.validation={state:'passed',context:'work-plan'}; journey('approve','approve','reviewed'); }\n"""
+    """    else if(action==='approve') journey('implement','start','approved');\n"""
+    """    else if(action==='start') { projection.work.agent={run_id:'agent-visual-flow',status:'active'}; journey('verify','verify','in_progress'); }\n"""
+    """    else if(action==='verify') { projection.work.agent.status='completed'; projection.work.completion={current:{attempt_id:'attempt-visual-flow',status:'complete',plan_digest:'visual-plan',slice_id:'slice-visual-flow',demonstrated:['REQ-VISUAL#criterion.behavior'],finalized:false},previous:[]}; journey('complete','finalize','ready'); }\n"""
+    """    else if(action==='finalize') { projection.work.completion.current.finalized=true; journey('complete','cancel','complete'); }\n"""
+    """    return body(projection);\n"""
+    """  }\n"""
     """  return body({error:`unhandled fetch ${url}`},404);\n"""
     """};\n"""
 )
@@ -128,19 +131,14 @@ setTimeout(()=>{
   await click('[data-route="specifications"]');
   await click('[data-page="specifications"] .specification-criterion button');
   if(!visible('[data-page="work"]')) failures.push('criterion did not open Work page');
-  await click('[data-work-plan]');
-  if(!document.querySelector('[data-work-slices-rail] .rail-item')) failures.push('Plan did not create a slice');
-  await click('[data-work-context]');
-  await click('[data-work-validate]');
-  await click('[data-work-approve]');
-  await click('[data-work-verify]');
-  await click('[data-work-finalize]');
-  if(JSON.stringify(window.__SYU_FLOW__)!=='["request","plan","context","validate","approve","verify","finalize-preview","finalize-apply"]') failures.push(`unexpected work flow: ${JSON.stringify(window.__SYU_FLOW__)}`);
-
-  click('[data-page="work"] [data-tab="slices"]');
-  if(!visible('[data-page="work"] [data-panel="slices"]')) failures.push('work slices panel did not open');
-  click('[data-page="work"] [data-tab="context"]');
-  if(!visible('[data-page="work"] [data-panel="context"]')) failures.push('work context panel did not open');
+  window.confirm=()=>true;
+  await click('[data-page="work"] .journey-action.primary');
+  await click('[data-page="work"] .journey-action.primary');
+  await click('[data-page="work"] .journey-action.primary');
+  await click('[data-page="work"] .journey-action.primary');
+  await click('[data-page="work"] .journey-action.primary');
+  if(JSON.stringify(window.__SYU_FLOW__)!=='["create","prepare","approve","start","verify","finalize"]') failures.push(`unexpected work flow: ${JSON.stringify(window.__SYU_FLOW__)}`);
+  if(!document.querySelector('[data-page="work"] .journey-advanced')) failures.push('advanced completion evidence missing');
 
   click('[data-route="settings"]');
   click('[data-settings-layer="workspace"]');
@@ -350,17 +348,13 @@ async function main() {
         };
 
         await click('specifications', '[data-route="specifications"]');
-        await click('request', '[data-page="specifications"] .specification-criterion button');
-        await click('plan', '[data-work-plan]');
-        await wait('planned slice', () => document.querySelector('[data-work-slices-rail] .rail-item'));
-        await click('context', '[data-work-context]');
-        await wait('context pack', () => (document.querySelector('[data-work-context-detail]')?.textContent || '').includes('Context pack loaded'));
-        await click('validate', '[data-work-validate]');
-        await wait('passed validation', () => document.querySelector('[data-work-validation-detail]')?.textContent === 'passed');
+        await click('create', '[data-page="specifications"] .specification-criterion button');
+        await click('prepare', '[data-page="work"] .journey-action.primary');
+        await wait('approval step', () => document.querySelector('[data-page="work"] .journey-step.current')?.textContent === 'Approve');
 
         return {
           flow,
-          validation: document.querySelector('[data-work-validation-detail]')?.textContent || '',
+          currentStep: document.querySelector('[data-page="work"] .journey-step.current')?.textContent || '',
           errors: window.__SYU_BROWSER_ERRORS__ || [],
         };
       })()
@@ -368,14 +362,14 @@ async function main() {
   });
   if (evaluation.exceptionDetails) throw new Error(evaluation.exceptionDetails.text || 'browser flow failed');
   const result = { ...evaluation.result.value, mutationResponses };
-  const expectedFlow = ['specifications', 'request', 'plan', 'context', 'validate'];
+  const expectedFlow = ['specifications', 'create', 'prepare'];
   if (JSON.stringify(result.flow) !== JSON.stringify(expectedFlow)) {
     throw new Error(`unexpected Workbench browser flow: ${JSON.stringify(result)}`);
   }
-  if (result.errors.length || result.validation !== 'passed') {
+  if (result.errors.length || result.currentStep !== 'Approve') {
     throw new Error(`Workbench browser errors: ${JSON.stringify(result)}`);
   }
-  if (mutationResponses.length < 4 || mutationResponses.some(response => response.status < 200 || response.status >= 300)) {
+  if (mutationResponses.length < 2 || mutationResponses.some(response => response.status < 200 || response.status >= 300)) {
     throw new Error(`Workbench mutation responses were not successful: ${JSON.stringify(result)}`);
   }
   console.log(JSON.stringify(result));
