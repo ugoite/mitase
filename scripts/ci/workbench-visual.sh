@@ -309,7 +309,9 @@ async function main() {
     `,
   });
   const load = new Promise(resolve => devtools.on('Page.loadEventFired', resolve));
-  await devtools.send('Page.navigate', { url: targetUrl });
+  const pageUrl = new URL(targetUrl);
+  pageUrl.searchParams.set('lang', 'en');
+  await devtools.send('Page.navigate', { url: pageUrl.toString() });
   await load;
 
   const evaluation = await devtools.send('Runtime.evaluate', {

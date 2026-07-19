@@ -130,7 +130,7 @@ function renderJourney(root, journey, state, work) {
   advanced.append(element('summary', null, t('journey.advanced')));
   const technical = journey.advanced || {};
   advanced.append(element('p', null, `${t('journey.advanced.request')}: ${technical.request_id || t('journey.advanced.none')}\n${t('journey.advanced.plan')}: ${technical.plan_id || t('journey.advanced.none')}\n${t('journey.advanced.step')}: ${technical.selected_slice_id || t('journey.advanced.none')}\n${t('journey.advanced.attempt')}: ${technical.attempt_id || t('journey.advanced.none')}`));
-  const attempts = [work?.completion?.current, ...(work?.completion?.previous || [])].filter(attempt => attempt?.plan_digest === work?.plan?.digest);
+  const attempts = [work?.completion?.current, ...(work?.completion?.previous || [])].filter(attempt => attempt && attempt.plan_digest === work?.plan?.digest);
   if (attempts.length) {
     advanced.append(element('h3', null, t('journey.advanced.completion')));
     attempts.forEach(attempt => {
