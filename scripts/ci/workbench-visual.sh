@@ -120,7 +120,7 @@ cat >>"$tmp/workbench.html" <<'HTML'
 <script>
 window.__SYU_VISUAL_ERRORS__=[];
 window.addEventListener('error',event=>window.__SYU_VISUAL_ERRORS__.push(`${event.error?.stack||event.message||'error'} at ${event.filename}:${event.lineno}:${event.colno}`));
-window.addEventListener('unhandledrejection',event=>window.__SYU_VISUAL_ERRORS__.push(String(event.reason||'rejection')));
+window.addEventListener('unhandledrejection',event=>window.__SYU_VISUAL_ERRORS__.push(event.reason?.stack||String(event.reason||'rejection')));
 setTimeout(()=>{
   const failures=[];
   const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
