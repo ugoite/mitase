@@ -29,14 +29,18 @@ function button(label, onClick, primary = false) {
 function matchingCandidates(state) {
   const query = String(state.journeyQuery || '').trim().toLowerCase();
   const items = state.projection.specifications?.specifications || [];
-  return items.filter(item => {
-    if (item.kind !== 'requirement' || item.status !== 'implemented' || !item.criteria?.length) return false;
-    const searchable = [item.title, item.summary, item.description, ...item.criteria.map(criterion => criterion.statement)]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase();
-    return !query || searchable.includes(query);
-  }).slice(0, 6);
+  const candidates = [];
+  items.forEach(item => {
+    if (item.kind !== 'requirement' || item.status !== 'implemented' || !item.criteria?.length) return;
+    item.criteria.forEach(criterion => {
+      const searchable = [item.title, item.summary, item.description, criterion.statement]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      if (!query || searchable.includes(query)) candidates.push({ item, criterion });
+    });
+  });
+  return candidates.slice(0, 6);
 }
 
 function run(state, action) {
@@ -68,13 +72,13 @@ function renderStart(root, state) {
     root.append(element('p', 'empty-state', t('journey.no_match')));
     return;
   }
-  candidates.forEach(item => {
+  candidates.forEach(({ item, criterion }) => {
     const card = element('article', 'journey-card');
     card.append(element('h3', null, item.title));
-    card.append(element('p', null, item.summary || item.description || 'This behavior is available for review.'));
+    card.append(element('p', null, criterion.statement || item.summary || item.description || 'This behavior is available for review.'));
     card.append(button(t('journey.review'), () => run(state, {
       action: 'create',
-      anchor: item.criteria[0].anchor,
+      anchor: criterion.anchor,
       summary: state.journeyQuery,
     }), true));
     root.append(card);

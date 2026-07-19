@@ -2355,7 +2355,10 @@ async fn api_journey_action(
         }
         JourneyAction::Prepare => {
             let Json(plan) = api_plan(State(service.clone()), Json(command.basis.clone())).await?;
-            if matches!(plan.status, PlanStatus::Ready) {
+            // A guided journey owns one focused change boundary. Requests
+            // supplied by a CLI caller can legitimately plan multiple ready
+            // slices, so do not quietly pick the first one here.
+            if matches!(plan.status, PlanStatus::Ready) && plan.slices.len() == 1 {
                 let slice_id = plan
                     .slices
                     .first()
@@ -2369,8 +2372,8 @@ async fn api_journey_action(
                     }),
                 )
                 .await?;
+                let _ = api_validate(State(service.clone()), Json(command.basis.clone())).await?;
             }
-            let _ = api_validate(State(service.clone()), Json(command.basis.clone())).await?;
         }
         JourneyAction::Approve => {
             let _ = api_approve(State(service.clone()), Json(command.basis.clone())).await?;
@@ -2456,7 +2459,11 @@ async fn api_journey_action(
             let _ = api_discard(State(service.clone())).await?;
         }
     }
-    let snapshot = basis(&service, &command.basis)?;
+    // Verification and finalization are allowed to update editable source.
+    // The action's precondition has already been checked by its lower-level
+    // endpoint, so build the response from the fresh snapshot rather than
+    // rejecting a side effect that just succeeded against the old basis.
+    let snapshot = service.snapshot()?;
     let session = service
         .session
         .read()
@@ -4049,7 +4056,26 @@ fn journey_view(
             advanced,
         });
     };
-    if plan.status != "ready" {
+    if plan.status != "ready" || plan.slices.len() != 1 {
+        let (summary, message, next_action) = if plan.slices.len() > 1 {
+            (
+                "The proposed change needs separate focused steps.",
+                "This change needs separate focused steps.",
+                "Choose one behavior to change first.",
+            )
+        } else if plan.slices.is_empty() {
+            (
+                "We could not find a safe executable change for this behavior.",
+                "This behavior does not yet have a bounded implementation path.",
+                "Choose a related behavior or add its implementation guidance.",
+            )
+        } else {
+            (
+                "The proposed change cannot be prepared safely yet.",
+                "The change boundary needs attention before implementation can begin.",
+                "Choose a smaller related behavior and review it again.",
+            )
+        };
         return Ok(WorkJourneyView {
             title,
             current_step: "review".into(),
@@ -4067,10 +4093,10 @@ fn journey_view(
             approved_scope: None,
             evidence: JourneyEvidenceView {
                 status: "blocked".into(),
-                summary: "The proposed change has more than one isolated step.".into(),
+                summary: summary.into(),
                 blockers: vec![JourneyBlockerView {
-                    message: "This change needs separate focused steps.".into(),
-                    next_action: "Choose one behavior to change first.".into(),
+                    message: message.into(),
+                    next_action: next_action.into(),
                 }],
             },
             advanced,
@@ -4835,6 +4861,15 @@ mod tests {
                 .into(),
         };
         (basis, csrf, projection)
+    }
+
+    fn basis_from_projection(projection: &serde_json::Value) -> MutationBasis {
+        serde_json::from_value(serde_json::json!({
+            "expected_revision": projection["snapshot"]["revision"],
+            "expected_workspace_fingerprint": projection["snapshot"]["fingerprint"],
+            "expected_source_hash": projection["snapshot"]["source_hash"]
+        }))
+        .expect("projection mutation basis")
     }
 
     async fn json_mutation<T: Serialize>(
@@ -5909,6 +5944,158 @@ mod tests {
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("cancelled projection");
         assert_eq!(projection["journey"]["current_step"], "describe");
+    }
+
+    #[tokio::test]
+    async fn journey_prepare_returns_recovery_for_a_blocked_plan() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("fixture tempdir");
+        copy_fixture_tree(&fixture, temp.path());
+        initialize_fixture_git(temp.path());
+        let app = WorkbenchServer::new(temp.path().to_path_buf()).router();
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-BLOCKED-JOURNEY".into(),
+            summary: "keep the fixture behavior valid".into(),
+            operation: WorkOperation::Modify,
+            seeds: vec![WorkSeed::Anchor(
+                "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
+            )],
+            constraints: WorkConstraints {
+                max_slices: Some(0),
+                ..WorkConstraints::default()
+            },
+            requested_targets: vec![],
+        };
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/request",
+            &csrf,
+            &WorkRequestCommand {
+                basis: basis.clone(),
+                request,
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({ "basis": basis, "action": "prepare" }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("blocked journey projection");
+        assert_eq!(projection["journey"]["evidence"]["status"], "blocked");
+        assert_eq!(projection["journey"]["primary_action"]["action"], "restart");
+    }
+
+    #[tokio::test]
+    async fn journey_verify_returns_a_fresh_projection_after_editable_change() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("fixture tempdir");
+        copy_fixture_tree(&fixture, temp.path());
+        initialize_fixture_git(temp.path());
+        let app = WorkbenchServer::new(temp.path().to_path_buf()).router();
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "create",
+                "anchor": "REQ-FIXTURE-001#criterion.behavior",
+                "summary": "Make the fixture behavior pass"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("created journey projection");
+
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({ "basis": basis_from_projection(&projection), "action": "prepare" }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("prepared journey projection");
+
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({ "basis": basis_from_projection(&projection), "action": "approve" }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("approved journey projection");
+
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({ "basis": basis_from_projection(&projection), "action": "start" }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("started journey projection");
+        let stale_basis = basis_from_projection(&projection);
+
+        fs::write(
+            temp.path().join("src/lib.rs"),
+            "pub fn behavior() -> bool {\n    let result = true;\n    result\n}\n",
+        )
+        .expect("apply editable fixture change");
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({ "basis": stale_basis, "action": "verify" }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("verified journey projection");
+        assert_eq!(
+            projection["journey"]["primary_action"]["action"],
+            "finalize"
+        );
+        assert_eq!(projection["work"]["agent"]["status"], "completed");
     }
 
     async fn raw_http(

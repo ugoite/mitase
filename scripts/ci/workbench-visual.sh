@@ -52,7 +52,6 @@ pathlib.Path(sys.argv[2]).write_text(
 )
 pathlib.Path(sys.argv[3]).write_text(
     """let projection=JSON.parse(document.querySelector('#syu-projection').textContent);\n"""
-    """projection.work.completion ??= {current:null,previous:[]};\n"""
     """let receipt=null;\n"""
     """const csrfToken='visual-csrf-token';\n"""
     """window.__SYU_FLOW__=[];\n"""
@@ -69,12 +68,12 @@ pathlib.Path(sys.argv[3]).write_text(
     """  if(path.includes('/api/config')) return body({});\n"""
     """  if(path.includes('/api/work/action')) {\n"""
     """    const action=payload.action; window.__SYU_FLOW__.push(action);\n"""
-    """    const journey=(step,primary,status)=>{const ids=['describe','review','approve','implement','verify','complete'];const current=ids.indexOf(step);projection.journey={title:payload.summary||projection.work.request?.summary||'Make the behavior clear',current_step:step,steps:ids.map((id,index)=>({id,status:index<current?'complete':index===current?'current':'upcoming'})),primary_action:{action:primary,confirmation_required:['approve','start','retry','finalize'].includes(primary)},recovery_action:primary==='cancel'?null:{action:'cancel',confirmation_required:true},approved_scope:step==='review'?null:{editable_target_count:1,slice_count:1},evidence:{status,blockers:[]},advanced:{request_id:'work-visual',plan_id:projection.work.plan?.id||null,selected_slice_id:'slice-visual-flow',attempt_id:projection.work.completion?.current?.attempt_id||null}};};\n"""
+    """    const journey=(step,primary,status)=>projection.journey={title:payload.summary||projection.work.request?.summary||'Make the behavior clear',current_step:step,steps:[],primary_action:{action:primary,confirmation_required:['approve','start','finalize'].includes(primary)},recovery_action:primary==='cancel'?null:{action:'cancel',confirmation_required:true},approved_scope:step==='review'?null:{editable_target_count:1,slice_count:1},evidence:{status,blockers:[]},advanced:{request_id:'work-visual',plan_id:projection.work.plan?.id||null,selected_slice_id:'slice-visual-flow',attempt_id:projection.work.completion?.current?.attempt_id||null}};\n"""
     """    if(action==='create') { projection.work.request={summary:payload.summary,operation:'modify',seed_count:1,requested_target_count:0}; journey('review','prepare','draft'); }\n"""
     """    else if(action==='prepare') { projection.work.plan={id:'PLAN-VISUAL-FLOW',digest:'visual-plan',status:'ready',slices:[{id:'slice-visual-flow',editable_targets:[{reference:'FEAT-VISUAL#binding.work/target.code',access:'editable',path:'src/lib.rs'}]}]}; projection.work.selected_slice='slice-visual-flow'; projection.work.validation={state:'passed',context:'work-plan'}; journey('approve','approve','reviewed'); }\n"""
     """    else if(action==='approve') journey('implement','start','approved');\n"""
     """    else if(action==='start') { projection.work.agent={run_id:'agent-visual-flow',status:'active'}; journey('verify','verify','in_progress'); }\n"""
-    """    else if(action==='verify') { (projection.work.agent??={run_id:'agent-visual-flow',status:'active'}).status='completed'; projection.work.completion={current:{attempt_id:'attempt-visual-flow',status:'complete',plan_digest:'visual-plan',slice_id:'slice-visual-flow',demonstrated:['REQ-VISUAL#criterion.behavior'],finalized:false},previous:[]}; journey('complete','finalize','ready'); }\n"""
+    """    else if(action==='verify') { projection.work.agent.status='completed'; projection.work.completion={current:{attempt_id:'attempt-visual-flow',status:'complete',plan_digest:'visual-plan',slice_id:'slice-visual-flow',demonstrated:['REQ-VISUAL#criterion.behavior'],finalized:false},previous:[]}; journey('complete','finalize','ready'); }\n"""
     """    else if(action==='finalize') { projection.work.completion.current.finalized=true; journey('complete','cancel','complete'); }\n"""
     """    return body(projection);\n"""
     """  }\n"""
