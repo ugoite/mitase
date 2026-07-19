@@ -431,6 +431,7 @@ pub enum JourneyAction {
     Prepare,
     Approve,
     Start,
+    Retry,
     Verify,
     Finalize,
     Restart,
@@ -2374,7 +2375,7 @@ async fn api_journey_action(
         JourneyAction::Approve => {
             let _ = api_approve(State(service.clone()), Json(command.basis.clone())).await?;
         }
-        JourneyAction::Start => {
+        JourneyAction::Start | JourneyAction::Retry => {
             let slice_id = service
                 .session
                 .read()
@@ -4155,6 +4156,36 @@ fn journey_view(
             advanced,
         });
     }
+    if work
+        .agent
+        .as_ref()
+        .is_some_and(|agent| matches!(agent.status, AgentRunStatus::Blocked))
+    {
+        return Ok(WorkJourneyView {
+            title,
+            current_step: "implement".into(),
+            steps: journey_steps("implement"),
+            primary_action: JourneyActionView {
+                action: "retry".into(),
+                label: "Start a new implementation run".into(),
+                explanation:
+                    "Resolve the reported blocker, then start a new run in the approved scope."
+                        .into(),
+                confirmation_required: true,
+                enabled: true,
+            },
+            recovery_action: Some(cancel_action()),
+            approved_scope: Some(scope),
+            evidence: JourneyEvidenceView {
+                status: "implementation_blocked".into(),
+                summary:
+                    "Implementation could not be verified; resolve the blocker before retrying."
+                        .into(),
+                blockers,
+            },
+            advanced,
+        });
+    }
     if !validation_passed {
         return Ok(WorkJourneyView {
             title,
@@ -5828,7 +5859,7 @@ mod tests {
         let projection: serde_json::Value =
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("verified projection");
-        assert_eq!(projection["journey"]["primary_action"]["action"], "verify");
+        assert_eq!(projection["journey"]["primary_action"]["action"], "retry");
         assert_eq!(projection["work"]["agent"]["status"], "blocked");
         assert!(
             projection["work"]["agent_events"]
@@ -5845,6 +5876,26 @@ mod tests {
             "expected_source_hash": projection["snapshot"]["source_hash"]
         }))
         .expect("verified basis");
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({ "basis": basis, "action": "retry" }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("retried projection");
+        assert_eq!(projection["journey"]["primary_action"]["action"], "verify");
+        assert_eq!(projection["work"]["agent"]["status"], "active");
+        let basis: MutationBasis = serde_json::from_value(serde_json::json!({
+            "expected_revision": projection["snapshot"]["revision"],
+            "expected_workspace_fingerprint": projection["snapshot"]["fingerprint"],
+            "expected_source_hash": projection["snapshot"]["source_hash"]
+        }))
+        .expect("retried basis");
         let response = json_mutation(
             &app,
             Method::POST,

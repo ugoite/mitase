@@ -29,7 +29,14 @@ function button(label, onClick, primary = false) {
 function matchingCandidates(state) {
   const query = String(state.journeyQuery || '').trim().toLowerCase();
   const items = state.projection.specifications?.specifications || [];
-  return items.filter(item => item.anchors?.length && (!query || `${item.title} ${item.summary} ${item.description || ''}`.toLowerCase().includes(query))).slice(0, 6);
+  return items.filter(item => {
+    if (item.kind !== 'requirement' || item.status !== 'implemented' || !item.criteria?.length) return false;
+    const searchable = [item.title, item.summary, item.description, ...item.criteria.map(criterion => criterion.statement)]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return !query || searchable.includes(query);
+  }).slice(0, 6);
 }
 
 function run(state, action) {
@@ -67,7 +74,7 @@ function renderStart(root, state) {
     card.append(element('p', null, item.summary || item.description || 'This behavior is available for review.'));
     card.append(button(t('journey.review'), () => run(state, {
       action: 'create',
-      anchor: item.anchors[0],
+      anchor: item.criteria[0].anchor,
       summary: state.journeyQuery,
     }), true));
     root.append(card);
@@ -105,13 +112,13 @@ function renderJourney(root, journey, state, work) {
   root.append(evidenceCard);
   const action = journey.primary_action;
   root.append(button(t(`journey.action.${action.action}`), () => {
-    if (action.confirmation_required && !window.confirm(`${action.explanation}\n\n${t('journey.confirm')}`)) return;
+    if (action.confirmation_required && !window.confirm(`${t(`journey.explanation.${action.action}`)}\n\n${t('journey.confirm')}`)) return;
     run(state, { action: action.action });
   }, true));
   if (journey.recovery_action) {
     const recovery = journey.recovery_action;
     root.append(button(t(`journey.action.${recovery.action}`), () => {
-      if (recovery.confirmation_required && !window.confirm(recovery.explanation)) return;
+      if (recovery.confirmation_required && !window.confirm(`${t(`journey.explanation.${recovery.action}`)}\n\n${t('journey.confirm')}`)) return;
       run(state, { action: recovery.action });
     }));
   }
