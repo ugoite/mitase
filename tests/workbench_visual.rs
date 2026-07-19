@@ -2,9 +2,12 @@ use syu_app_ui::WorkbenchView;
 use syu_workbench_server::project;
 use syu_workspace::SpecWorkspace;
 
+mod support;
+
 #[test]
 fn workbench_rendered_dom_uses_projection_driven_placeholders() {
-    let workspace = SpecWorkspace::load("fixtures/v1/valid-web-app").expect("workspace");
+    let fixture = support::isolated_fixture("valid-web-app");
+    let workspace = SpecWorkspace::load(fixture.path()).expect("workspace");
     let projection = project(&workspace, None, "test-revision").expect("projection");
     let html = WorkbenchView::new(&projection).render_html();
 

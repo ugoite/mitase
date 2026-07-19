@@ -44,6 +44,8 @@ description: "Generated reference for docs/syu/workbench-features.yaml"
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-013#criterion.guided-journey
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-013#criterion.linked-specification-context
         - **id**: journey-action
           - **adapter**: rust
           - **path**: crates/syu-workbench-server/src/lib.rs
@@ -53,6 +55,16 @@ description: "Generated reference for docs/syu/workbench-features.yaml"
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-013#criterion.guided-journey
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-013#criterion.linked-specification-context
+        - **id**: journey-layout
+          - **adapter**: declared
+          - **path**: crates/syu-app-ui/assets/workbench.css
+          - **selector**:
+            - **kind**: file
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-013#criterion.linked-specification-context
         - **id**: journey-browser
           - **adapter**: declared
           - **path**: crates/syu-app-ui/assets/js/pages/work.js
@@ -61,6 +73,8 @@ description: "Generated reference for docs/syu/workbench-features.yaml"
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-013#criterion.guided-journey
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-013#criterion.linked-specification-context
     - **id**: journey-verification
       - **role**: verification
       - **facet**: workbench-journey
@@ -79,6 +93,18 @@ description: "Generated reference for docs/syu/workbench-features.yaml"
                 - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-projection
                 - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-action
                 - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-browser
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-workbench-server
+                  - **test**: tests::journey_action_exposes_one_friendly_next_step_and_can_cancel
+            - **kind**: verifies
+              - **criterion**: REQ-WORKBENCH-013#criterion.linked-specification-context
+              - **covers**:
+                - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-projection
+                - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-action
+                - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-browser
+                - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-layout
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
@@ -1114,6 +1140,12 @@ description: "Generated reference for docs/syu/workbench-features.yaml"
           - **path**: tests/v1_cli.rs
           - **selector**:
             - **kind**: file
+        - **id**: selfhost-tests-support-mod-rs
+          - **adapter**: rust
+          - **path**: tests/support/mod.rs
+          - **selector**:
+            - **kind**: module
+            - **name**: *
         - **id**: selfhost-tests-workbench-smoke-rs
           - **adapter**: declared
           - **path**: tests/workbench_smoke.rs
@@ -2122,6 +2154,8 @@ features:
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-013#criterion.guided-journey
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-013#criterion.linked-specification-context
     - id: journey-action
       adapter: rust
       path: crates/syu-workbench-server/src/lib.rs
@@ -2129,6 +2163,15 @@ features:
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-013#criterion.guided-journey
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-013#criterion.linked-specification-context
+    - id: journey-layout
+      adapter: declared
+      path: crates/syu-app-ui/assets/workbench.css
+      selector: { kind: file }
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-013#criterion.linked-specification-context
     - id: journey-browser
       adapter: declared
       path: crates/syu-app-ui/assets/js/pages/work.js
@@ -2136,6 +2179,8 @@ features:
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-013#criterion.guided-journey
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-013#criterion.linked-specification-context
   - id: journey-verification
     role: verification
     facet: workbench-journey
@@ -2152,6 +2197,14 @@ features:
         - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-projection
         - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-action
         - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-browser
+        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::journey_action_exposes_one_friendly_next_step_and_can_cancel } }
+      - kind: verifies
+        criterion: REQ-WORKBENCH-013#criterion.linked-specification-context
+        covers:
+        - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-projection
+        - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-action
+        - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-browser
+        - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-layout
         runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::journey_action_exposes_one_friendly_next_step_and_can_cancel } }
 - id: FEAT-WORKBENCH-COMPLETION-HISTORY-001
   title: Durable completion history
@@ -3180,6 +3233,12 @@ features:
       path: tests/v1_cli.rs
       selector:
         kind: file
+    - id: selfhost-tests-support-mod-rs
+      adapter: rust
+      path: tests/support/mod.rs
+      selector:
+        kind: module
+        name: "*"
     - id: selfhost-tests-workbench-smoke-rs
       adapter: declared
       path: tests/workbench_smoke.rs

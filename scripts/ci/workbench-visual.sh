@@ -68,8 +68,8 @@ pathlib.Path(sys.argv[3]).write_text(
     """  if(path.includes('/api/config')) return body({});\n"""
     """  if(path.includes('/api/work/action')) {\n"""
     """    const action=payload.action; window.__SYU_FLOW__.push(action);\n"""
-    """    const journey=(step,primary,status)=>projection.journey={title:payload.summary||projection.work.request?.summary||'Make the behavior clear',current_step:step,steps:[],primary_action:{action:primary,confirmation_required:['approve','start','finalize'].includes(primary)},recovery_action:primary==='cancel'?null:{action:'cancel',confirmation_required:true},approved_scope:step==='review'?null:{editable_target_count:1,slice_count:1},evidence:{status,blockers:[]},advanced:{request_id:'work-visual',plan_id:projection.work.plan?.id||null,selected_slice_id:'slice-visual-flow',attempt_id:projection.work.completion?.current?.attempt_id||null}};\n"""
-    """    if(action==='create') { projection.work.request={summary:payload.summary,operation:'modify',seed_count:1,requested_target_count:0}; journey('review','prepare','draft'); }\n"""
+    """    const journey=(step,primary,status)=>projection.journey={title:payload.summary||projection.work.request?.summary||'Make the behavior clear',current_step:step,steps:[],primary_action:{action:primary,confirmation_required:['approve','start','finalize'].includes(primary)},recovery_action:primary==='cancel'?null:{action:'cancel',confirmation_required:true},approved_scope:step==='review'?null:{editable_target_count:1,slice_count:1},evidence:{status,blockers:[]},related_specification:projection.journey.related_specification||null,advanced:{request_id:'work-visual',plan_id:projection.work.plan?.id||null,selected_slice_id:'slice-visual-flow',attempt_id:projection.work.completion?.current?.attempt_id||null,specification_anchor:projection.journey.advanced?.specification_anchor||null}};\n"""
+    """    if(action==='create') { const item=projection.specifications.specifications.find(candidate=>candidate.criteria?.some(criterion=>criterion.anchor===payload.anchor)); const criterion=item?.criteria.find(candidate=>candidate.anchor===payload.anchor); projection.journey.related_specification=item&&criterion?{title:item.title,overview:item.summary||item.description||'',status:item.status,criterion_statement:criterion.statement}:null; projection.journey.advanced={specification_anchor:criterion?.anchor||null}; projection.work.request={summary:payload.summary,operation:'modify',seed_count:1,requested_target_count:0}; journey('review','prepare','draft'); }\n"""
     """    else if(action==='prepare') { projection.work.plan={id:'PLAN-VISUAL-FLOW',digest:'visual-plan',status:'ready',slices:[{id:'slice-visual-flow',editable_targets:[{reference:'FEAT-VISUAL#binding.work/target.code',access:'editable',path:'src/lib.rs'}]}]}; projection.work.selected_slice='slice-visual-flow'; projection.work.validation={state:'passed',context:'work-plan'}; journey('approve','approve','reviewed'); }\n"""
     """    else if(action==='approve') journey('implement','start','approved');\n"""
     """    else if(action==='start') { projection.work.agent={run_id:'agent-visual-flow',status:'active'}; journey('verify','verify','in_progress'); }\n"""
@@ -131,6 +131,19 @@ setTimeout(()=>{
   await click('[data-route="specifications"]');
   await click('[data-page="specifications"] .specification-criterion button');
   if(!visible('[data-page="work"]')) failures.push('criterion did not open Work page');
+  if(document.querySelectorAll('[data-page="work"] [data-work-specification-title]').length!==1) failures.push('related specification title is missing or duplicated');
+  if(document.querySelectorAll('[data-page="work"] [data-work-specification-criterion]').length!==1) failures.push('related criterion is missing or duplicated');
+  if(document.querySelector('[data-work-overview] [data-work-specification-title], [data-work-overview] [data-work-specification-criterion]')) failures.push('specification content leaked into the Work pane');
+  const specificationBody=document.querySelector('[data-work-specification] .journey-specification-body');
+  const specificationToggle=document.querySelector('[data-work-specification] .journey-specification-toggle');
+  const columns=getComputedStyle(document.querySelector('[data-work-journey-workspace]')).gridTemplateColumns.split(' ').length;
+  if(window.innerWidth>=1200 && columns!==2) failures.push(`desktop Work layout did not split: ${columns} columns`);
+  if(window.innerWidth<1200 && getComputedStyle(specificationBody).display!=='none') failures.push('narrow related specification started expanded');
+  if(window.innerWidth<1200) {
+    specificationToggle.click();
+    await wait(40);
+    if(getComputedStyle(document.querySelector('[data-work-specification] .journey-specification-body')).display==='none') failures.push('narrow related specification did not expand');
+  }
   window.confirm=()=>true;
   await click('[data-page="work"] .journey-action.primary');
   await click('[data-page="work"] .journey-action.primary');
@@ -163,11 +176,13 @@ setTimeout(()=>{
 </script>
 HTML
 
-behavior="$("$chrome" --headless --disable-gpu --no-sandbox --allow-file-access-from-files --virtual-time-budget=1800 --dump-dom "file://${tmp}/workbench.html?page=work&lang=en&theme=light")"
-if ! echo "$behavior" | grep -q 'id="syu-visual-behavior-result" data-status="pass"'; then
-  echo "$behavior" | grep 'id="syu-visual-behavior-result"' >&2 || true
-  exit 1
-fi
+for viewport in 1280,900 760,900; do
+  behavior="$("$chrome" --headless --disable-gpu --no-sandbox --allow-file-access-from-files --window-size="$viewport" --virtual-time-budget=1800 --dump-dom "file://${tmp}/workbench.html?page=work&lang=en&theme=light")"
+  if ! echo "$behavior" | grep -q 'id="syu-visual-behavior-result" data-status="pass"'; then
+    echo "$behavior" | grep 'id="syu-visual-behavior-result"' >&2 || true
+    exit 1
+  fi
+done
 
 read -r server_port debug_port < <(python3 - <<'PY'
 import socket
@@ -300,6 +315,12 @@ async function main() {
   await devtools.send('Page.enable');
   await devtools.send('Runtime.enable');
   await devtools.send('Network.enable');
+  await devtools.send('Emulation.setDeviceMetricsOverride', {
+    width: 1280,
+    height: 900,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
   await devtools.send('Page.addScriptToEvaluateOnNewDocument', {
     source: `
       window.__SYU_BROWSER_ERRORS__ = [];
@@ -352,11 +373,15 @@ async function main() {
         await click('specifications', '[data-route="specifications"]');
         await click('create', '[data-page="specifications"] .specification-criterion button');
         await click('prepare', '[data-page="work"] .journey-action.primary');
-        await wait('approval step', () => document.querySelector('[data-page="work"] .journey-step.current')?.textContent === 'Approve');
+        await wait('approval step', () => document.querySelector('[data-page="work"] .journey-step.current')?.getAttribute('aria-label') === 'Approve');
 
         return {
           flow,
-          currentStep: document.querySelector('[data-page="work"] .journey-step.current')?.textContent || '',
+          currentStep: document.querySelector('[data-page="work"] .journey-step.current')?.getAttribute('aria-label') || '',
+          specificationTitleCount: document.querySelectorAll('[data-page="work"] [data-work-specification-title]').length,
+          specificationCriterionCount: document.querySelectorAll('[data-page="work"] [data-work-specification-criterion]').length,
+          workPaneSpecificationCount: document.querySelectorAll('[data-work-overview] [data-work-specification-title], [data-work-overview] [data-work-specification-criterion]').length,
+          layoutColumns: getComputedStyle(document.querySelector('[data-work-journey-workspace]')).gridTemplateColumns.split(' ').length,
           errors: window.__SYU_BROWSER_ERRORS__ || [],
         };
       })()
@@ -368,7 +393,14 @@ async function main() {
   if (JSON.stringify(result.flow) !== JSON.stringify(expectedFlow)) {
     throw new Error(`unexpected Workbench browser flow: ${JSON.stringify(result)}`);
   }
-  if (result.errors.length || result.currentStep !== 'Approve') {
+  if (
+    result.errors.length
+    || result.currentStep !== 'Approve'
+    || result.specificationTitleCount !== 1
+    || result.specificationCriterionCount !== 1
+    || result.workPaneSpecificationCount !== 0
+    || result.layoutColumns !== 2
+  ) {
     throw new Error(`Workbench browser errors: ${JSON.stringify(result)}`);
   }
   if (mutationResponses.length < 2 || mutationResponses.some(response => response.status < 200 || response.status >= 300)) {

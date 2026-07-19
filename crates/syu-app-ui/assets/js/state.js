@@ -12,6 +12,8 @@ export function createState(projection) {
     targetSuggestions: null,
     targetSuggestionSelection: [],
     journeyQuery: '',
+    journeySpecificationExpanded: false,
+    journeySpecificationAnchor: null,
     selectedSlice: projection.work.plan?.slices?.[0]?.id || null,
     verificationReceipt: null,
     busy: false,

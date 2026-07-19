@@ -276,3 +276,7 @@ requirements:
         kind: behavior
         statement: Workbench exposes one explained next action, a friendly work identity, separately labeled advisory and approved scope, completion evidence, and a cancellable recovery path while technical identities remain under Advanced details.
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+      - id: linked-specification-context
+        kind: behavior
+        statement: After one exact criterion is selected, Workbench shows its parent specification and selected criterion once in a read-only desktop split or a collapsed narrow-screen context while exact identifiers remain under Advanced details.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]

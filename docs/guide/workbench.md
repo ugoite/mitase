@@ -26,6 +26,9 @@ are available only from Advanced details. Settings remains a utility page.
 - Work starts from a plain-language description and a reviewed behavior. It
   separates advisory suggestions from the approved executable boundary and
   offers a concrete recovery action when work is blocked.
+- After a behavior is selected, Work keeps its parent specification and exact
+  criterion visible once in a read-only desktop split. Narrow layouts reduce
+  the same context to one collapsed heading until the user opens it.
 - Scope explains why a change is needed, which specification anchors support
   it, and only then the exact editable, verification, and readonly targets.
 - Items projects typed anchors, bindings, targets, and contracts from

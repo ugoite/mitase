@@ -3082,7 +3082,16 @@ pub struct WorkJourneyView {
     pub recovery_action: Option<JourneyActionView>,
     pub approved_scope: Option<JourneyScopeView>,
     pub evidence: JourneyEvidenceView,
+    pub related_specification: Option<JourneySpecificationView>,
     pub advanced: JourneyAdvancedView,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JourneySpecificationView {
+    pub title: String,
+    pub overview: String,
+    pub status: Option<String>,
+    pub criterion_statement: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -3130,6 +3139,7 @@ pub struct JourneyAdvancedView {
     pub plan_id: Option<String>,
     pub selected_slice_id: Option<String>,
     pub attempt_id: Option<String>,
+    pub specification_anchor: Option<String>,
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct NavigationView {
@@ -3819,6 +3829,7 @@ fn empty_journey() -> WorkJourneyView {
             summary: "No work has been started yet.".into(),
             blockers: vec![],
         },
+        related_specification: None,
         advanced: JourneyAdvancedView::default(),
     }
 }
@@ -4063,13 +4074,67 @@ fn project_session(
         capability.disabled_reason = (!verifiable)
             .then(|| "Validate a selected verifiable slice before verification.".into());
     }
-    projection.journey = journey_view(workspace, &projection.work, session)?;
+    projection.journey = journey_view(
+        workspace,
+        &projection.work,
+        &projection.specifications.specifications,
+        session,
+    )?;
     Ok(projection)
+}
+
+fn journey_specification_context(
+    items: &[ItemSummary],
+    request: Option<&WorkRequest>,
+) -> Option<(JourneySpecificationView, String)> {
+    let request = request?;
+    let mut criteria = request
+        .seeds
+        .iter()
+        .filter_map(|seed| match seed {
+            WorkSeed::Anchor(anchor) if anchor.kind == LocalAnchorKind::Criterion => {
+                Some(anchor.clone())
+            }
+            _ => None,
+        })
+        .chain(
+            request
+                .requested_targets
+                .iter()
+                .filter_map(|target| target.criterion.clone()),
+        )
+        .collect::<BTreeSet<_>>();
+    if criteria.len() != 1 {
+        return None;
+    }
+    let anchor = criteria.pop_first()?;
+    let anchor_text = anchor.to_string();
+    let item_id = anchor.item.to_string();
+    let item = items.iter().find(|item| item.id == item_id)?;
+    let criterion = item
+        .criteria
+        .iter()
+        .find(|criterion| criterion.anchor == anchor_text)?;
+    let overview = if item.summary.trim().is_empty() {
+        item.description.clone().unwrap_or_default()
+    } else {
+        item.summary.clone()
+    };
+    Some((
+        JourneySpecificationView {
+            title: item.title.clone(),
+            overview,
+            status: item.status.clone(),
+            criterion_statement: criterion.statement.clone(),
+        },
+        anchor_text,
+    ))
 }
 
 fn journey_view(
     workspace: &SpecWorkspace,
     work: &WorkSessionView,
+    items: &[ItemSummary],
     session: &WorkbenchSession,
 ) -> Result<WorkJourneyView> {
     let title = work
@@ -4077,6 +4142,8 @@ fn journey_view(
         .as_ref()
         .map(|request| request.summary.clone())
         .unwrap_or_else(|| "Describe the change you want to make".into());
+    let specification = journey_specification_context(items, session.draft_request.as_ref());
+    let related_specification = specification.as_ref().map(|(view, _)| view.clone());
     let mut advanced = JourneyAdvancedView {
         request_id: session
             .draft_request
@@ -4085,6 +4152,7 @@ fn journey_view(
         plan_id: work.plan.as_ref().map(|plan| plan.id.clone()),
         selected_slice_id: work.selected_slice.clone(),
         attempt_id: None,
+        specification_anchor: specification.as_ref().map(|(_, anchor)| anchor.clone()),
     };
     if work.request.is_none() {
         return Ok(empty_journey());
@@ -4112,6 +4180,7 @@ fn journey_view(
                 summary: "A behavior has been selected; its scope has not been approved.".into(),
                 blockers: vec![],
             },
+            related_specification,
             advanced,
         });
     };
@@ -4160,6 +4229,7 @@ fn journey_view(
                     next_action: next_action.into(),
                 }],
             },
+            related_specification,
             advanced,
         });
     }
@@ -4220,6 +4290,7 @@ fn journey_view(
                 summary: "The approved change and its completion evidence were recorded.".into(),
                 blockers,
             },
+            related_specification,
             advanced,
         });
     }
@@ -4245,6 +4316,7 @@ fn journey_view(
                 summary: "Verification evidence is ready for confirmation.".into(),
                 blockers,
             },
+            related_specification,
             advanced,
         });
     }
@@ -4277,6 +4349,7 @@ fn journey_view(
                         .into(),
                 blockers,
             },
+            related_specification,
             advanced,
         });
     }
@@ -4302,6 +4375,7 @@ fn journey_view(
                 summary: "Resolve the plan review findings before continuing.".into(),
                 blockers,
             },
+            related_specification,
             advanced,
         });
     }
@@ -4327,6 +4401,7 @@ fn journey_view(
                 summary: "The proposed scope passed its safety check.".into(),
                 blockers,
             },
+            related_specification,
             advanced,
         });
     }
@@ -4351,6 +4426,7 @@ fn journey_view(
                 summary: "The scope is approved and ready for implementation.".into(),
                 blockers,
             },
+            related_specification,
             advanced,
         });
     }
@@ -4374,6 +4450,7 @@ fn journey_view(
             summary: "Implementation is in progress inside the approved scope.".into(),
             blockers,
         },
+        related_specification,
         advanced,
     })
 }
@@ -5835,6 +5912,23 @@ mod tests {
             target.criterion.as_ref()
                 == Some(&"REQ-FIXTURE-001#criterion.behavior".parse().unwrap())
         }));
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/projection")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("approved target projection");
+        assert_eq!(
+            projection["journey"]["related_specification"]["criterion_statement"],
+            "The fixture behavior returns true."
+        );
         let response = json_mutation(&app, Method::POST, "/api/work/plan", &csrf, &basis).await;
         assert_eq!(response.status(), StatusCode::OK);
         let plan: WorkPlan =
@@ -5881,6 +5975,19 @@ mod tests {
             "Make the finished change understandable"
         );
         assert_eq!(projection["journey"]["primary_action"]["action"], "prepare");
+        assert_eq!(
+            projection["journey"]["related_specification"],
+            serde_json::json!({
+                "title": "Keep the fixture behavior valid",
+                "overview": "The fixture exposes one bounded behavior for Workbench post-state validation.",
+                "status": "implemented",
+                "criterion_statement": "The fixture behavior returns true."
+            })
+        );
+        assert_eq!(
+            projection["journey"]["advanced"]["specification_anchor"],
+            "REQ-FIXTURE-001#criterion.behavior"
+        );
         assert_eq!(
             service
                 .session
@@ -6034,6 +6141,41 @@ mod tests {
             serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
                 .expect("cancelled projection");
         assert_eq!(projection["journey"]["current_step"], "describe");
+        assert!(projection["journey"]["related_specification"].is_null());
+
+        let basis: MutationBasis = serde_json::from_value(serde_json::json!({
+            "expected_revision": projection["snapshot"]["revision"],
+            "expected_workspace_fingerprint": projection["snapshot"]["fingerprint"],
+            "expected_source_hash": projection["snapshot"]["source_hash"]
+        }))
+        .expect("cancelled basis");
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/request",
+            &csrf,
+            &WorkRequestCommand {
+                basis,
+                request: WorkRequest {
+                    schema: WORK_REQUEST_SCHEMA.into(),
+                    id: "WORK-MULTIPLE-CRITERIA".into(),
+                    summary: "Change several fixture criteria".into(),
+                    operation: WorkOperation::Modify,
+                    seeds: vec![
+                        WorkSeed::Anchor("REQ-FIXTURE-001#criterion.behavior".parse().unwrap()),
+                        WorkSeed::Anchor("REQ-FIXTURE-001#criterion.other".parse().unwrap()),
+                    ],
+                    constraints: WorkConstraints::default(),
+                    requested_targets: vec![],
+                },
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("multiple criteria projection");
+        assert!(projection["journey"]["related_specification"].is_null());
     }
 
     #[tokio::test]
@@ -6331,7 +6473,11 @@ mod tests {
 
     #[test]
     fn completion_history_projection_is_store_backed() {
-        let workspace = SpecWorkspace::load(workspace_root()).expect("workspace loads");
+        let fixture = workspace_root().join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("completion history fixture");
+        copy_fixture_tree(&fixture, temp.path());
+        initialize_fixture_git(temp.path());
+        let workspace = SpecWorkspace::load(temp.path()).expect("workspace loads");
         let history = completion_history(&workspace).expect("completion history loads");
         assert!(history.current.is_none());
         assert!(history.previous.is_empty());
