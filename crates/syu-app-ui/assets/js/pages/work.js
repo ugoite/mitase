@@ -29,7 +29,8 @@ function button(label, onClick, primary = false) {
 function actionText(action, kind) {
   const key = action?.[`${kind}_key`];
   if (key) return t(key);
-  return t(`journey.${kind}.${action?.action || 'unknown'}`);
+  const namespace = kind === 'label' ? 'action' : kind;
+  return t(`journey.${namespace}.${action?.action || 'unknown'}`);
 }
 
 function matchingCandidates(state) {
