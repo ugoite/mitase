@@ -119,7 +119,7 @@ PY
 cat >>"$tmp/workbench.html" <<'HTML'
 <script>
 window.__SYU_VISUAL_ERRORS__=[];
-window.addEventListener('error',event=>window.__SYU_VISUAL_ERRORS__.push(event.message||'error'));
+window.addEventListener('error',event=>window.__SYU_VISUAL_ERRORS__.push(event.error?.stack||event.message||'error'));
 window.addEventListener('unhandledrejection',event=>window.__SYU_VISUAL_ERRORS__.push(String(event.reason||'rejection')));
 setTimeout(()=>{
   const failures=[];
