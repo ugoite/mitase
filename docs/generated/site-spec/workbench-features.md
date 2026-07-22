@@ -57,6 +57,15 @@ description: "Generated reference for docs/syu/workbench-features.yaml"
               - **criterion**: REQ-WORKBENCH-013#criterion.guided-journey
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-013#criterion.linked-specification-context
+        - **id**: journey-source
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: api_source
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-WORKBENCH-013#criterion.linked-specification-context
         - **id**: journey-layout
           - **adapter**: declared
           - **path**: crates/syu-app-ui/assets/workbench.css
@@ -103,6 +112,7 @@ description: "Generated reference for docs/syu/workbench-features.yaml"
               - **covers**:
                 - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-projection
                 - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-action
+                - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-source
                 - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-browser
                 - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-layout
               - **runner**:
@@ -2165,6 +2175,13 @@ features:
         criterion: REQ-WORKBENCH-013#criterion.guided-journey
       - kind: satisfies
         criterion: REQ-WORKBENCH-013#criterion.linked-specification-context
+    - id: journey-source
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector: { kind: symbol, name: api_source }
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-013#criterion.linked-specification-context
     - id: journey-layout
       adapter: declared
       path: crates/syu-app-ui/assets/workbench.css
@@ -2203,6 +2220,7 @@ features:
         covers:
         - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-projection
         - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-action
+        - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-source
         - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-browser
         - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-layout
         runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::journey_action_exposes_one_friendly_next_step_and_can_cancel } }

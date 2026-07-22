@@ -1,4 +1,5 @@
 import { translate } from '../i18n.js';
+import { renderSourceDetail, renderSpecificationDetail } from './specifications.js';
 
 const t = key => translate(key);
 
@@ -234,22 +235,17 @@ function renderJourney(root, journey, state, work) {
   renderAdvanced(root, journey, work);
 }
 
-function specificationStatus(value) {
-  if (!value) return null;
-  const normalized = String(value).toLowerCase().replace(/\s+/g, '-');
-  const chip = element('span', `chip status-component status-${normalized}`);
-  const dot = element('span', 'status-dot');
-  dot.setAttribute('aria-hidden', 'true');
-  chip.append(dot, element('span', null, t(`items.status.${normalized}`)));
-  return chip;
-}
-
 function renderSpecification(root, workspace, journey, state) {
   const specification = journey?.related_specification;
   const specificationAnchor = journey?.advanced?.specification_anchor || null;
   if (state.journeySpecificationAnchor !== specificationAnchor) {
     state.journeySpecificationAnchor = specificationAnchor;
     state.journeySpecificationExpanded = false;
+    state.journeyContextItemId = specificationAnchor?.split('#')[0] || null;
+    state.journeyContextTarget = null;
+    state.journeyContextHistory = [];
+    state.specificationSourceTarget = null;
+    state.specificationSource = null;
   }
   root.hidden = !specification;
   workspace?.classList.toggle('has-specification', Boolean(specification));
@@ -257,12 +253,7 @@ function renderSpecification(root, workspace, journey, state) {
   if (!specification) return;
 
   const header = element('header', 'journey-specification-head');
-  const title = element('div');
-  title.append(element('p', 'eyebrow', t('journey.specification')));
-  const heading = element('h2', null, specification.title);
-  heading.dataset.workSpecificationTitle = '';
-  title.append(heading);
-  header.append(title);
+  header.append(element('p', 'eyebrow', t('journey.specification')));
   const toggle = element('button', 'journey-specification-toggle');
   toggle.type = 'button';
   toggle.setAttribute('aria-expanded', String(state.journeySpecificationExpanded));
@@ -279,26 +270,46 @@ function renderSpecification(root, workspace, journey, state) {
   root.append(header);
 
   const body = element('div', `journey-specification-body${state.journeySpecificationExpanded ? ' expanded' : ''}`);
-  const status = specificationStatus(specification.status);
-  if (status) body.append(status);
-  if (specification.overview) {
-    const overview = element('p', 'journey-specification-overview', specification.overview);
-    overview.dataset.workSpecificationOverview = '';
-    body.append(overview);
+  const items = state.projection.specifications?.specifications || [];
+  const selected = items.find(item => item.id === state.journeyContextItemId)
+    || items.find(item => item.id === specificationAnchor?.split('#')[0]);
+  if (!selected) return;
+  if (state.journeyContextHistory.length && !state.journeyContextTarget) {
+    body.append(button(t('items.back'), () => {
+      state.journeyContextItemId = state.journeyContextHistory.pop();
+      state.journeyContextTarget = null;
+      state.specificationSourceTarget = null;
+      state.specificationSource = null;
+      state.render();
+    }, false, '←'));
   }
-  const criterion = element('section', 'journey-specification-criterion');
-  criterion.append(element('h3', null, t('journey.specification.criterion')));
-  const statement = element('p', null, specification.criterion_statement);
-  statement.dataset.workSpecificationCriterion = '';
-  criterion.append(statement);
-  body.append(criterion);
-
-  const technical = journey.advanced || {};
-  if (technical.specification_anchor) {
-    const advanced = element('details', 'journey-specification-advanced');
-    advanced.append(element('summary', null, t('common.advanced')));
-    advanced.append(element('p', 'path', `${t('items.field.anchor')}: ${technical.specification_anchor}`));
-    body.append(advanced);
+  if (state.journeyContextTarget) {
+    state.specificationSourceTarget = state.journeyContextTarget;
+    renderSourceDetail(body, state, state.journeyContextTarget, () => {
+      state.journeyContextTarget = null;
+      state.specificationSourceTarget = null;
+      state.specificationSource = null;
+      state.render();
+    });
+  } else {
+    renderSpecificationDetail(body, state, selected, {
+      readOnly: true,
+      onItem: itemId => {
+        if (itemId === state.journeyContextItemId) return;
+        state.journeyContextHistory.push(state.journeyContextItemId);
+        state.journeyContextItemId = itemId;
+        state.render();
+      },
+      onTarget: target => {
+        state.journeyContextTarget = target;
+        state.specificationSourceTarget = target;
+        state.specificationSource = null;
+        state.specificationSourceFull = false;
+        state.render();
+      },
+    });
+    body.querySelector('.canvas-head h2')?.setAttribute('data-work-specification-title', '');
+    body.querySelector('.specification-criterion p')?.setAttribute('data-work-specification-criterion', '');
   }
   root.append(body);
 }

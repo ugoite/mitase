@@ -338,9 +338,22 @@ svg { display: block; stroke: currentColor; fill: none; stroke-width: 1.8; strok
 .journey-specification-criterion p { margin: 0; color: var(--ink); font-size: 13px; line-height: 1.55; }
 .journey-specification-advanced { border-top: 1px solid var(--line); padding-top: 10px; color: var(--muted); font-size: 11px; }
 .journey-specification-advanced p { margin: 8px 0 0; }
+.journey-specification .canvas-head { margin: 0; }
+.journey-specification .canvas-head h2 { font-size: 17px; }
+.journey-specification .specification-group { margin-top: 10px; }
+.journey-specification .specification-row { padding: 8px 0; }
+.specification-related { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-2); }
+.specification-related h3 { width: 100%; margin: 0 0 2px; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.related-item { border-color: var(--blue); }
+.related-target.implementation .btn-icon { color: var(--blue); }
+.related-target.verification .btn-icon { color: var(--green); }
+.source-head { gap: 8px; }
+.source-head > div { margin-right: auto; }
+.source-path { margin: 0; }
+.source-code { margin: 0; padding: 12px; overflow: auto; max-height: 54vh; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); color: var(--ink); font: 11px/1.55 "SFMono-Regular", Consolas, monospace; white-space: pre; }
 
 @media (min-width: 1200px) {
-  .workspace.no-rail.work-journey-workspace.has-specification { grid-template-columns: minmax(0, 1fr) minmax(280px, .52fr); }
+  .workspace.no-rail.work-journey-workspace.has-specification { grid-template-columns: minmax(360px, .8fr) minmax(430px, 1.2fr); }
   .work-journey-workspace.has-specification .journey { max-width: none; }
   .journey-specification-toggle { display: none; }
 }

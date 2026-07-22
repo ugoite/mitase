@@ -64,6 +64,7 @@ pathlib.Path(sys.argv[3]).write_text(
     """  if(method!=='GET' && suppliedCsrf!==csrfToken) return body({error:'missing csrf token'},403);\n"""
     """  if(path.includes('/api/projection')) return body(projection,200,{'x-syu-csrf-token':csrfToken});\n"""
     """  if(path.includes('/api/work/session')) return body({ready:true},200,{'x-syu-csrf-token':csrfToken});\n"""
+    """  if(path.includes('/api/source?target=')) return body({path:'tests/behavior.rs',content:'#[test]\\nfn behavior_stays_valid() {}',hash:'visual-test-hash',line_start:1,line_end:2,is_excerpt:true});\n"""
     """  if(path.includes('/api/source?path=syu.yaml')) return body({content:'schema: syu/config/v1\\nworkspace:\\n  spec_roots: [docs/syu]\\n',hash:'visual-test-hash'});\n"""
     """  if(path.includes('/api/config')) return body({});\n"""
     """  if(path.includes('/api/work/action')) {\n"""
@@ -143,6 +144,19 @@ setTimeout(()=>{
     specificationToggle.click();
     await wait(40);
     if(getComputedStyle(document.querySelector('[data-work-specification] .journey-specification-body')).display==='none') failures.push('narrow related specification did not expand');
+  }
+  const relatedFeature=document.querySelector('[data-work-specification] .related-item');
+  if(!relatedFeature) failures.push('related feature navigation is missing');
+  else {
+    relatedFeature.click();
+    await wait(40);
+    const relatedCode=document.querySelector('[data-work-specification] .related-target.implementation');
+    if(!relatedCode) failures.push('related implementation target is missing');
+    else {
+      relatedCode.click();
+      await wait(80);
+      if(!document.querySelector('[data-work-specification] .source-code')) failures.push('related source excerpt did not render');
+    }
   }
   window.confirm=()=>true;
   await click('[data-page="work"] .journey-action.primary');

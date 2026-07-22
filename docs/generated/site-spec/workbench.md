@@ -370,7 +370,7 @@ description: "Generated reference for docs/syu/workbench.yaml"
         - POL-DELIVERY-001#rule.exact-ownership
     - **id**: linked-specification-context
       - **kind**: behavior
-      - **statement**: After one exact criterion is selected, Workbench shows its parent specification and selected criterion once in a read-only desktop split or a collapsed narrow-screen context while exact identifiers remain under Advanced details.
+      - **statement**: After one exact criterion is selected, Workbench renders the linked specification detail in a read-only split or collapsed narrow-screen context and lets people move between the requirement, feature, exact implementation, and verification evidence without leaving the work journey.
       - **governed_by**:
         - POL-DELIVERY-001#rule.exact-ownership
 
@@ -657,6 +657,6 @@ requirements:
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
       - id: linked-specification-context
         kind: behavior
-        statement: After one exact criterion is selected, Workbench shows its parent specification and selected criterion once in a read-only desktop split or a collapsed narrow-screen context while exact identifiers remain under Advanced details.
+        statement: After one exact criterion is selected, Workbench renders the linked specification detail in a read-only split or collapsed narrow-screen context and lets people move between the requirement, feature, exact implementation, and verification evidence without leaving the work journey.
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
 ```

@@ -2308,7 +2308,8 @@ fn collect_branch_patch(
 
 #[derive(Debug, Deserialize)]
 struct SourceQuery {
-    path: String,
+    path: Option<String>,
+    target: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -2316,14 +2317,45 @@ struct SourceView {
     path: String,
     content: String,
     hash: String,
+    line_start: usize,
+    line_end: usize,
+    is_excerpt: bool,
 }
 
 async fn api_source(
     State(service): State<Arc<WorkbenchService>>,
     Query(query): Query<SourceQuery>,
 ) -> Result<Json<SourceView>, ApiError> {
+    if query.path.is_some() == query.target.is_some() {
+        return Err(ApiError(
+            StatusCode::BAD_REQUEST,
+            anyhow::anyhow!("source requests require exactly one of path or target"),
+        ));
+    }
+    if let Some(reference) = query.target {
+        let target = reference
+            .parse::<BoundTargetRef>()
+            .map_err(|error| ApiError(StatusCode::BAD_REQUEST, anyhow::anyhow!(error)))?;
+        let snapshot = service.snapshot()?;
+        let artifact = snapshot.index.target(&target).ok_or_else(|| {
+            ApiError(
+                StatusCode::NOT_FOUND,
+                anyhow::anyhow!("target {target} was not found"),
+            )
+        })?;
+        let resolved = syu_workspace::resolve_target_in_workspace(&snapshot.workspace, artifact)?;
+        return Ok(Json(SourceView {
+            path: artifact.path.to_string_lossy().into_owned(),
+            content: resolved.excerpt,
+            hash: resolved.content_hash,
+            line_start: resolved.line_start,
+            line_end: resolved.line_end,
+            is_excerpt: true,
+        }));
+    }
+    let source_path = query.path.expect("validated source path");
     let workspace = SpecWorkspace::load(&service.workspace_root)?;
-    let relative = syu_spec_model::RepoPath::new(&query.path)
+    let relative = syu_spec_model::RepoPath::new(&source_path)
         .map_err(|error| ApiError(StatusCode::BAD_REQUEST, anyhow::anyhow!(error)))?;
     let root = fs::canonicalize(&workspace.root).map_err(anyhow::Error::from)?;
     let path = fs::canonicalize(root.join(relative.as_path()))
@@ -2335,10 +2367,14 @@ async fn api_source(
         ));
     }
     let content = fs::read_to_string(&path).map_err(anyhow::Error::from)?;
+    let line_end = content.lines().count().max(1);
     Ok(Json(SourceView {
         path: relative.to_string_lossy().into_owned(),
         hash: content_hash(&content),
         content,
+        line_start: 1,
+        line_end,
+        is_excerpt: false,
     }))
 }
 async fn api_request(
@@ -4968,6 +5004,33 @@ mod tests {
         let body = readiness.into_body().collect().await.unwrap().to_bytes();
         let view: ReadinessView = serde_json::from_slice(&body).unwrap();
         assert_eq!(view.status, "Not run");
+    }
+
+    #[tokio::test]
+    async fn source_endpoint_returns_an_exact_target_excerpt() {
+        let _workspace_lock = workspace_test_lock().await;
+        let app = WorkbenchServer::new(workspace_root()).router();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/source?target=FEAT-WORKBENCH-GUIDED-JOURNEY-001%23binding.journey%2Ftarget.journey-action")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let source: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(source["path"], "crates/syu-workbench-server/src/lib.rs");
+        assert_eq!(source["is_excerpt"], true);
+        assert!(
+            source["content"]
+                .as_str()
+                .unwrap()
+                .contains("api_journey_action")
+        );
+        assert!(source["line_start"].as_u64().unwrap() > 0);
     }
 
     fn workspace_root() -> PathBuf {
