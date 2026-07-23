@@ -40,6 +40,7 @@ inventory:
             - crates/syu-app-ui/assets/js/api.js
             - crates/syu-app-ui/assets/js/components/action.js
             - crates/syu-app-ui/assets/js/components/diagnostic.js
+            - crates/syu-app-ui/assets/js/components/diff.js
             - crates/syu-app-ui/assets/js/components/editor.js
             - crates/syu-app-ui/assets/js/components/readiness.js
             - crates/syu-app-ui/assets/js/components/target.js
