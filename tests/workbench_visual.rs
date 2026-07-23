@@ -32,7 +32,7 @@ fn workbench_rendered_dom_uses_projection_driven_placeholders() {
         "data-settings-layer-panel=\"application\"",
         "data-settings-layer-panel=\"workspace\"",
         "data-tab=\"all\"",
-        "data-diagnostic-phase=\"all\"",
+        "data-diagnostics-filters",
         "data-scope-mode-button=\"branch\"",
     ] {
         assert!(html.contains(marker), "missing projection marker: {marker}");

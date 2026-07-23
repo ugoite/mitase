@@ -1,5 +1,7 @@
 import { translate } from '../i18n.js';
 import { renderSourceDetail, renderSpecificationDetail } from './specifications.js';
+import { renderReadinessPage } from './readiness.js';
+import { renderDiagnostics } from './diagnostics.js';
 
 const t = key => translate(key);
 
@@ -51,7 +53,17 @@ function matchingCandidates(state) {
 }
 
 function run(state, action) {
-  return state.runAction(() => state.api.runJourneyAction(state.projection, action));
+  return state.runAction(
+    () => state.api.runJourneyAction(state.projection, action),
+    () => {
+      if (action.action === 'verify') {
+        state.journeyContextTab = 'diagnostics';
+        state.journeySpecificationExpanded = true;
+      }
+      if (action.action === 'rename') state.workTitleEditing = false;
+    },
+    action.action === 'rename' ? t('work.title.saving') : actionText(action, 'label'),
+  );
 }
 
 function renderStart(root, state) {
@@ -177,18 +189,19 @@ function renderScope(journey, state) {
   return card;
 }
 
-function renderEvidence(journey) {
+function renderEvidence(journey, state) {
   const evidence = journey.evidence || {};
   const status = evidence.status || 'not_started';
   const blockers = evidence.blockers || [];
   const card = element('section', `journey-state journey-evidence ${toneFor(status)}${blockers.length ? ' has-blockers' : ''}`);
   card.append(stateHeader(t(`journey.evidence_label.${status}`), status));
-  blockers.forEach(blocker => {
-    const item = element('div', 'journey-blocker');
-    item.append(element('strong', null, blocker.message));
-    item.append(element('p', null, blocker.next_action));
-    card.append(item);
-  });
+  if (blockers.length) {
+    card.append(countChip(blockers.length, '!', t('journey.blockers'), () => {
+      state.journeyContextTab = 'diagnostics';
+      state.journeySpecificationExpanded = true;
+      state.render();
+    }));
+  }
   return card;
 }
 
@@ -226,7 +239,55 @@ function renderAdvanced(root, journey, work) {
 
 function renderJourney(root, journey, state, work) {
   const header = element('header', 'journey-header');
-  header.append(element('h2', null, journey.title));
+  if (state.workTitleEditing) {
+    const form = element('form', 'work-title-editor');
+    const input = document.createElement('input');
+    input.className = 'work-title-input';
+    input.value = journey.title;
+    input.maxLength = 120;
+    input.required = true;
+    input.setAttribute('aria-label', t('work.title.input'));
+    const save = element('button', 'icon-button success', '✓');
+    save.type = 'submit';
+    save.setAttribute('aria-label', t('common.save'));
+    save.title = t('common.save');
+    const cancel = element('button', 'icon-button', '×');
+    cancel.type = 'button';
+    cancel.setAttribute('aria-label', t('common.cancel'));
+    cancel.title = t('common.cancel');
+    cancel.addEventListener('click', () => {
+      state.workTitleEditing = false;
+      state.render();
+    });
+    form.append(input, save, cancel);
+    form.addEventListener('submit', event => {
+      event.preventDefault();
+      if (!input.reportValidity()) return;
+      run(state, { action: 'rename', title: input.value });
+    });
+    form.addEventListener('keydown', event => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      state.workTitleEditing = false;
+      state.render();
+    });
+    header.append(form);
+    queueMicrotask(() => {
+      input.focus();
+      input.select();
+    });
+  } else {
+    const title = element('h2', null, journey.title);
+    const edit = element('button', 'work-title-edit', '✎');
+    edit.type = 'button';
+    edit.setAttribute('aria-label', t('work.title.edit'));
+    edit.title = t('work.title.edit');
+    edit.addEventListener('click', () => {
+      state.workTitleEditing = true;
+      state.render();
+    });
+    header.append(title, edit);
+  }
   root.append(header);
   renderProgress(root, journey);
 
@@ -251,7 +312,7 @@ function renderJourney(root, journey, state, work) {
   const states = element('div', 'journey-state-grid');
   const scope = renderScope(journey, state);
   if (scope) states.append(scope);
-  states.append(renderEvidence(journey));
+  states.append(renderEvidence(journey, state));
   root.append(states);
   renderAdvanced(root, journey, work);
 }
@@ -263,7 +324,7 @@ function resetContextSource(state) {
   state.specificationSourceFull = false;
 }
 
-function renderContextTabs(root, state, hasScope) {
+function renderContextTabs(root, state, hasScope, hasWorkInsights) {
   const tabs = element('div', 'journey-context-tabs');
   const addTab = (id, label, icon) => {
     const tab = element('button', `journey-context-tab${state.journeyContextTab === id ? ' active' : ''}`);
@@ -279,6 +340,10 @@ function renderContextTabs(root, state, hasScope) {
   };
   addTab('specification', t('journey.panel.specification'), '◈');
   if (hasScope) addTab('scope', t('journey.panel.scope'), '↔');
+  if (hasWorkInsights) {
+    addTab('readiness', t('nav.readiness'), '◇');
+    addTab('diagnostics', t('nav.diagnostics'), '✓');
+  }
   root.append(tabs);
 }
 
@@ -364,11 +429,13 @@ function renderSpecification(root, workspace, journey, state, work) {
   }
   const hasContext = Boolean(specification || candidate);
   const hasScope = Boolean(journey?.approved_scope && work?.plan?.slices?.length);
+  const hasWorkInsights = Boolean(work?.request);
   if (!hasScope && state.journeyContextTab === 'scope') state.journeyContextTab = 'specification';
-  root.hidden = !hasContext;
-  workspace?.classList.toggle('has-specification', hasContext);
+  const hasPanel = hasContext || hasWorkInsights;
+  root.hidden = !hasPanel;
+  workspace?.classList.toggle('has-specification', hasPanel);
   root.replaceChildren();
-  if (!hasContext) return;
+  if (!hasPanel) return;
 
   const header = element('header', 'journey-specification-head');
   const heading = element('div');
@@ -389,10 +456,25 @@ function renderSpecification(root, workspace, journey, state, work) {
   });
   header.append(toggle);
   root.append(header);
-  if (specification) renderContextTabs(root, state, hasScope);
+  if (hasWorkInsights) renderContextTabs(root, state, hasScope, hasWorkInsights);
 
   const body = element('div', `journey-specification-body${state.journeySpecificationExpanded ? ' expanded' : ''}`);
   body.setAttribute('data-journey-panel', state.journeyContextTab);
+  if (state.journeyContextTab === 'readiness') {
+    renderReadinessPage(state.projection.readiness, body, { state, compact: true });
+    root.append(body);
+    return;
+  }
+  if (state.journeyContextTab === 'diagnostics') {
+    renderDiagnostics(
+      { validation: work?.validation },
+      body,
+      state,
+      { compact: true, completion: work?.completion, planDigest: work?.plan?.digest },
+    );
+    root.append(body);
+    return;
+  }
   if (state.journeyContextTarget) {
     state.specificationSourceTarget = state.journeyContextTarget;
     renderSourceDetail(body, state, state.journeyContextTarget, () => {
@@ -410,7 +492,11 @@ function renderSpecification(root, workspace, journey, state, work) {
   const items = state.projection.specifications?.specifications || [];
   const selected = items.find(item => item.id === state.journeyContextItemId)
     || items.find(item => item.id === contextAnchor?.split('#')[0]);
-  if (!selected) return;
+  if (!selected) {
+    body.append(element('p', 'context-empty', t('journey.specification.empty')));
+    root.append(body);
+    return;
+  }
   if (state.journeyContextHistory.length && !state.journeyContextTarget) {
     body.append(button(t('items.back'), () => {
       state.journeyContextItemId = state.journeyContextHistory.pop();

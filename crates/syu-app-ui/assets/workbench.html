@@ -53,10 +53,13 @@
           </button>
         </div>
         <div class="utility"><div class="branch" data-workspace-branch>@ revision</div></div>
+        <div class="workbench-progress" data-workbench-status role="progressbar" aria-live="polite" aria-label="Working" data-i18n-aria="common.loading" hidden>
+          <span class="workbench-progress-track" aria-hidden="true"><span></span></span>
+          <span class="workbench-progress-label" data-progress-label>Working…</span>
+        </div>
       </header>
 
       <div class="content content-viewport">
-        <div class="workbench-busy" data-workbench-status role="status" aria-live="polite" hidden></div>
         <section class="surface" data-page="readiness" hidden>
           <div class="page-head">
             <div class="eyebrow">READINESS</div>
@@ -254,44 +257,13 @@
                 </select>
               </div>
               <div class="search" data-diagnostics-range-wrap hidden><input class="input" data-validation-range placeholder="origin/main...HEAD" /></div>
-              <button class="btn primary compact" data-focus-id="validate-all" aria-label="Validate selected context" data-i18n-aria="a11y.validate_context" data-i18n-title="a11y.validate_context" title="Validate selected context">
+              <button class="btn primary compact" data-diagnostics-run data-focus-id="validate-all" type="button" aria-label="Validate selected context" data-i18n-aria="a11y.validate_context" data-i18n-title="a11y.validate_context" title="Validate selected context">
                 <span class="btn-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="m8 12 3 3 5-6"></path></svg></span>
                 <span class="btn-label" data-i18n="filter.validate">Validate</span>
               </button>
             </div>
           </div>
-          <div class="tabs" role="tablist" aria-label="Validation phases" data-i18n-aria="a11y.validation_phases">
-            <button class="tab active" role="tab" data-diagnostic-phase="all" aria-selected="true" aria-label="All" data-i18n-aria="diagnostics.phase.all" data-i18n-title="diagnostics.phase.all" title="All">
-              <span class="tabicon"><svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"></path></svg></span>
-              <span class="tab-label" data-i18n="diagnostics.phase.all">All</span>
-              <span class="status-circle gray tab-status" aria-label="Not run" data-i18n-aria="a11y.not_run"></span>
-            </button>
-            <button class="tab" role="tab" data-diagnostic-phase="config" aria-selected="false" aria-label="Config" data-i18n-aria="diagnostics.phase.config" data-i18n-title="diagnostics.phase.config" title="Config">
-              <span class="tabicon"><svg viewBox="0 0 24 24"><path d="M4 6h6M14 6h6M4 12h10M18 12h2M4 18h2M10 18h10"></path><circle cx="12" cy="6" r="2"></circle><circle cx="16" cy="12" r="2"></circle><circle cx="8" cy="18" r="2"></circle></svg></span>
-              <span class="tab-label" data-i18n="diagnostics.phase.config">Config</span>
-              <span class="status-circle gray tab-status" aria-label="Not run" data-i18n-aria="a11y.not_run"></span>
-            </button>
-            <button class="tab" role="tab" data-diagnostic-phase="graph" aria-selected="false" aria-label="Graph" data-i18n-aria="diagnostics.phase.graph" data-i18n-title="diagnostics.phase.graph" title="Graph">
-              <span class="tabicon"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2"></circle><circle cx="18" cy="6" r="2"></circle><circle cx="12" cy="18" r="2"></circle><path d="m8 7 3 9M16 7l-3 9M8 6h8"></path></svg></span>
-              <span class="tab-label" data-i18n="diagnostics.phase.graph">Graph</span>
-              <span class="status-circle gray tab-status" aria-label="Not run" data-i18n-aria="a11y.not_run"></span>
-            </button>
-            <button class="tab" role="tab" data-diagnostic-phase="targets" aria-selected="false" aria-label="Targets" data-i18n-aria="diagnostics.phase.targets" data-i18n-title="diagnostics.phase.targets" title="Targets">
-              <span class="tabicon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"></circle><circle cx="12" cy="12" r="3"></circle><path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path></svg></span>
-              <span class="tab-label" data-i18n="diagnostics.phase.targets">Targets</span>
-              <span class="status-circle gray tab-status" aria-label="Not run" data-i18n-aria="a11y.not_run"></span>
-            </button>
-            <button class="tab" role="tab" data-diagnostic-phase="scope" aria-selected="false" aria-label="Scope" data-i18n-aria="diagnostics.phase.scope" data-i18n-title="diagnostics.phase.scope" title="Scope">
-              <span class="tabicon"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"></path><circle cx="12" cy="12" r="3"></circle></svg></span>
-              <span class="tab-label" data-i18n="diagnostics.phase.scope">Scope</span>
-              <span class="status-circle gray tab-status" aria-label="Not run" data-i18n-aria="a11y.not_run"></span>
-            </button>
-            <button class="tab" role="tab" data-diagnostic-phase="plan" aria-selected="false" aria-label="Plan" data-i18n-aria="diagnostics.phase.plan" data-i18n-title="diagnostics.phase.plan" title="Plan">
-              <span class="tabicon"><svg viewBox="0 0 24 24"><path d="M9 4h6l1 2h3v15H5V6h3l1-2Z"></path><path d="M9 12h6M9 16h5"></path></svg></span>
-              <span class="tab-label" data-i18n="diagnostics.phase.plan">Plan</span>
-              <span class="status-circle gray tab-status" aria-label="Not run" data-i18n-aria="a11y.not_run"></span>
-            </button>
-          </div>
+          <div class="insight-filterbar" data-diagnostics-filters></div>
           <div class="workspace no-rail"><div class="canvas" data-diagnostic-result></div></div>
         </section>
 

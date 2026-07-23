@@ -23,6 +23,7 @@ export function createState(projection) {
     journeyContextTarget: null,
     journeyContextHistory: [],
     journeyScopeFocus: null,
+    workTitleEditing: false,
     relatedKind: 'specification',
     selectedSlice: projection.work.plan?.slices?.[0]?.id || null,
     verificationReceipt: null,
@@ -30,6 +31,12 @@ export function createState(projection) {
     busyLabel: '',
     error: null,
     selectedDiagnosticPhase: 'all',
+    selectedDiagnosticSeverity: 'all',
+    diagnosticSort: 'severity',
+    diagnosticContext: projection.diagnostics?.validation?.context || 'workspace',
+    diagnosticRange: '',
+    readinessFilter: 'all',
+    readinessSort: 'attention',
     selectedScopeMode: 'plan',
   };
 }

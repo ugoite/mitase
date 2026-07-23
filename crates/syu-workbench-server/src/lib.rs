@@ -55,6 +55,7 @@ pub struct WorkbenchSession {
     pub selected_page: WorkbenchPage,
     pub selected_item: Option<String>,
     pub selected_slice: Option<String>,
+    pub work_title: Option<String>,
     pub draft_request: Option<WorkRequest>,
     pub plan: Option<WorkPlan>,
     pub context_pack: Option<syu_work_model::ContextPack>,
@@ -155,6 +156,7 @@ impl WorkbenchServer {
             .route("/assets/{*asset}", get(api_asset))
             .route("/api/readiness", get(api_readiness))
             .route("/api/readiness/run", post(api_readiness_run))
+            .route("/api/diagnostics/run", post(api_diagnostics_run))
             .route("/api/specifications", get(api_specifications))
             .route(
                 "/api/specifications/candidates",
@@ -428,6 +430,7 @@ pub struct WorkRequestCommand {
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum JourneyAction {
     Create { anchor: String, summary: String },
+    Rename { title: String },
     Prepare,
     Approve,
     Start,
@@ -448,6 +451,7 @@ pub struct JourneyActionCommand {
 fn journey_action_key(action: &JourneyAction) -> &'static str {
     match action {
         JourneyAction::Create { .. } => "create",
+        JourneyAction::Rename { .. } => "rename",
         JourneyAction::Prepare => "prepare",
         JourneyAction::Approve => "approve",
         JourneyAction::Start => "start",
@@ -939,6 +943,150 @@ async fn api_readiness_run(
         .write()
         .map_err(|_| anyhow::anyhow!("workbench session lock"))?
         .readiness = Some(view.clone());
+    Ok(Json(view))
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DiagnosticsRunCommand {
+    basis: MutationBasis,
+    context: String,
+    #[serde(default)]
+    range: Option<String>,
+}
+
+async fn api_diagnostics_run(
+    State(service): State<Arc<WorkbenchService>>,
+    Json(command): Json<DiagnosticsRunCommand>,
+) -> Result<Json<ValidationRunView>, ApiError> {
+    let snapshot = basis(&service, &command.basis)?;
+    let started = SystemTime::now();
+    let context = command.context.as_str();
+    let view = match context {
+        "workspace" => {
+            let result = syu_validation::validate_without_readiness(&ValidationContext {
+                config: &snapshot.workspace.config,
+                workspace: &snapshot.workspace,
+                index: &snapshot.index,
+                changed_files: None,
+                reported_changed_files: None,
+                work_plan: None,
+                selected_slice: None,
+                plan_mode: PlanValidationMode::PreState,
+                preset: snapshot.workspace.config.validation.preset,
+                revision: Some(&snapshot.revision),
+                change_base_revision: None,
+            });
+            ValidationRunView::completed(
+                "workspace",
+                Some(snapshot.revision.clone()),
+                result,
+                false,
+                false,
+                snapshot.workspace.config.validation.preset,
+                started,
+            )
+        }
+        "git_range" => {
+            let range = command
+                .range
+                .filter(|range| !range.trim().is_empty())
+                .unwrap_or(configured_change_range(&snapshot.workspace)?);
+            let changed_files = branch_changed_files(&snapshot.workspace.root, &range)?;
+            let result = syu_validation::validate_without_readiness(&ValidationContext {
+                config: &snapshot.workspace.config,
+                workspace: &snapshot.workspace,
+                index: &snapshot.index,
+                changed_files: Some(&changed_files),
+                reported_changed_files: None,
+                work_plan: None,
+                selected_slice: None,
+                plan_mode: PlanValidationMode::PreState,
+                preset: snapshot.workspace.config.validation.preset,
+                revision: Some(&snapshot.revision),
+                change_base_revision: None,
+            });
+            ValidationRunView::completed(
+                "git_range",
+                Some(range),
+                result,
+                true,
+                false,
+                snapshot.workspace.config.validation.preset,
+                started,
+            )
+        }
+        "work-plan" | "work_plan" | "slice" => {
+            let (plan, selected_slice_id) = {
+                let session = service
+                    .session
+                    .read()
+                    .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+                (
+                    session.plan.clone().ok_or_else(|| {
+                        anyhow::anyhow!("prepare a work plan before diagnosing it")
+                    })?,
+                    session.selected_slice.clone(),
+                )
+            };
+            let canonical_plan = syu_validation::canonical_plan_for_execution(
+                &snapshot.workspace,
+                &snapshot.index,
+                &plan,
+                &snapshot.revision,
+            )
+            .map_err(|error| ApiError(StatusCode::CONFLICT, error))?;
+            let selected_slice = if context == "slice" {
+                let selected_slice_id = selected_slice_id
+                    .as_deref()
+                    .ok_or_else(|| anyhow::anyhow!("select a work slice before diagnosing it"))?;
+                Some(
+                    canonical_plan
+                        .slices
+                        .iter()
+                        .find(|slice| slice.id == selected_slice_id)
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("the selected slice is not in the work plan")
+                        })?,
+                )
+            } else {
+                None
+            };
+            let result = syu_validation::validate_without_readiness(&ValidationContext {
+                config: &snapshot.workspace.config,
+                workspace: &snapshot.workspace,
+                index: &snapshot.index,
+                changed_files: None,
+                reported_changed_files: None,
+                work_plan: Some(&canonical_plan),
+                selected_slice,
+                plan_mode: PlanValidationMode::PreState,
+                preset: snapshot.workspace.config.validation.preset,
+                revision: Some(&snapshot.revision),
+                change_base_revision: None,
+            });
+            ValidationRunView::completed(
+                context,
+                Some(canonical_plan.canonical_digest.clone()),
+                result,
+                false,
+                true,
+                snapshot.workspace.config.validation.preset,
+                started,
+            )
+        }
+        _ => {
+            return Err(ApiError(
+                StatusCode::BAD_REQUEST,
+                anyhow::anyhow!("unknown diagnostics context"),
+            ));
+        }
+    };
+    service
+        .session
+        .write()
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))?
+        .last_validation = Some(view.clone());
     Ok(Json(view))
 }
 
@@ -2386,6 +2534,7 @@ async fn api_request(
         .session
         .write()
         .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+    session.work_title = Some(command.request.summary.trim().to_owned());
     session.draft_request = Some(command.request);
     session.plan = None;
     session.selected_slice = None;
@@ -2400,7 +2549,10 @@ async fn api_journey_action(
     State(service): State<Arc<WorkbenchService>>,
     Json(command): Json<JourneyActionCommand>,
 ) -> Result<Json<WorkspaceProjection>, ApiError> {
-    if !matches!(&command.action, JourneyAction::Create { .. }) {
+    if !matches!(
+        &command.action,
+        JourneyAction::Create { .. } | JourneyAction::Rename { .. }
+    ) {
         ensure_journey_transition(&service, &command.basis, &command.action)?;
     }
     match command.action {
@@ -2419,6 +2571,8 @@ async fn api_journey_action(
                 .session
                 .write()
                 .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+            let summary = summary.trim().to_owned();
+            session.work_title = Some(summary.clone());
             session.draft_request = Some(WorkRequest {
                 schema: WORK_REQUEST_SCHEMA.into(),
                 id: store.new_id("work"),
@@ -2440,6 +2594,27 @@ async fn api_journey_action(
             session.verification_receipt = None;
             session.agent_run = None;
             session.last_validation = None;
+        }
+        JourneyAction::Rename { title } => {
+            let _ = basis(&service, &command.basis)?;
+            let title = title.trim();
+            if title.is_empty() || title.chars().count() > 120 {
+                return Err(ApiError(
+                    StatusCode::BAD_REQUEST,
+                    anyhow::anyhow!("work title must contain 1 to 120 characters"),
+                ));
+            }
+            let mut session = service
+                .session
+                .write()
+                .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+            if session.draft_request.is_none() {
+                return Err(ApiError(
+                    StatusCode::CONFLICT,
+                    anyhow::anyhow!("start work before changing its title"),
+                ));
+            }
+            session.work_title = Some(title.to_owned());
         }
         JourneyAction::Prepare => {
             let Json(plan) = api_plan(State(service.clone()), Json(command.basis.clone())).await?;
@@ -4078,6 +4253,7 @@ fn project_session(
         .last_validation
         .clone()
         .unwrap_or_else(ValidationRunView::not_run);
+    projection.diagnostics.validation = projection.work.validation.clone();
     let plan_validated = session
         .last_validation
         .as_ref()
@@ -4173,10 +4349,10 @@ fn journey_view(
     items: &[ItemSummary],
     session: &WorkbenchSession,
 ) -> Result<WorkJourneyView> {
-    let title = work
-        .request
-        .as_ref()
-        .map(|request| request.summary.clone())
+    let title = session
+        .work_title
+        .clone()
+        .or_else(|| work.request.as_ref().map(|request| request.summary.clone()))
         .unwrap_or_else(|| "Describe the change you want to make".into());
     let specification = journey_specification_context(items, session.draft_request.as_ref());
     let related_specification = specification.as_ref().map(|(view, _)| view.clone());
@@ -5004,6 +5180,48 @@ mod tests {
         let body = readiness.into_body().collect().await.unwrap().to_bytes();
         let view: ReadinessView = serde_json::from_slice(&body).unwrap();
         assert_eq!(view.status, "Not run");
+    }
+
+    #[tokio::test]
+    async fn diagnostics_endpoint_runs_the_selected_context_and_persists_the_result() {
+        let _workspace_lock = workspace_test_lock().await;
+        let app = WorkbenchServer::new(workspace_root()).router();
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/diagnostics/run",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "context": "workspace"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let validation: ValidationRunView = serde_json::from_slice(&body).unwrap();
+        assert_eq!(validation.context, "workspace");
+        assert!(!matches!(validation.state, ValidationRunState::NotRun));
+        assert_eq!(validation.phases.len(), 5);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/projection")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .unwrap();
+        assert_eq!(
+            projection["diagnostics"]["validation"]["context"],
+            "workspace"
+        );
+        assert_ne!(projection["diagnostics"]["validation"]["state"], "not_run");
     }
 
     #[tokio::test]
@@ -6066,6 +6284,38 @@ mod tests {
                 .as_str()
                 .is_some_and(|id| id.starts_with("work-"))
         );
+
+        let basis: MutationBasis = serde_json::from_value(serde_json::json!({
+            "expected_revision": projection["snapshot"]["revision"],
+            "expected_workspace_fingerprint": projection["snapshot"]["fingerprint"],
+            "expected_source_hash": projection["snapshot"]["source_hash"]
+        }))
+        .expect("rename basis");
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "rename",
+                "title": "Explain the finished change"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("renamed projection");
+        assert_eq!(
+            projection["journey"]["title"],
+            "Explain the finished change"
+        );
+        assert_eq!(
+            projection["work"]["request"]["summary"], "Make the finished change understandable",
+            "renaming the display title must not invalidate the canonical request or plan"
+        );
+        assert_eq!(projection["journey"]["primary_action"]["action"], "prepare");
 
         let basis: MutationBasis = serde_json::from_value(serde_json::json!({
             "expected_revision": projection["snapshot"]["revision"],

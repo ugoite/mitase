@@ -26,6 +26,11 @@ export async function request(url, options = {}) {
 export const readProjection = () => request('/api/projection');
 export const establishSession = () => request('/api/work/session');
 export const runReadiness = () => request('/api/readiness/run', { method: 'POST' });
+export const runDiagnostics = (projection, context, range = '') => post('/api/diagnostics/run', {
+  basis: mutationBasis(projection),
+  context,
+  ...(range.trim() ? { range: range.trim() } : {}),
+});
 export const readSource = path => request(`/api/source?path=${encodeURIComponent(path)}`);
 export const readTargetSource = target => request(`/api/source?target=${encodeURIComponent(target)}`);
 

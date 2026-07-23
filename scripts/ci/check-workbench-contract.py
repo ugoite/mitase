@@ -97,7 +97,8 @@ assert "journey-advanced" in WORK_JS
 assert "journeyQuery" in WORK_JS
 assert "if (!state.specificationQuery.trim())" in SPECIFICATIONS_JS
 assert "async function runBusy" in SPECIFICATIONS_JS
-assert 'data-workbench-status role="status" aria-live="polite"' in HTML
+assert 'data-workbench-status role="progressbar" aria-live="polite"' in HTML
+assert "workbench-progress-track" in HTML
 CSS_COMPACT = re.sub(r"\s+", "", CSS)
 for token in ("--bg:#f6f7f8", "--paper:#fff", "--ink:#15171a", "--sidebar:246px", "--topbar:98px", "--rail:310px"):
     assert token in CSS_COMPACT, f"missing normative CSS token {token}"
