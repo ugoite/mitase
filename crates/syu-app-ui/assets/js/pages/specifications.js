@@ -484,26 +484,79 @@ function renderRelated(root, state, selected, onItem, onTarget) {
     (entry.target.claims || []).forEach(claim => { if (claim.criterion) selectedCriteria.add(claim.criterion); });
   });
   if (!entries.length) return;
+  const related = {
+    specification: [],
+    implementation: [],
+    verification: [],
+  };
+  const seenItems = new Set();
+  const seenTargets = new Set();
+  entries.forEach(({ item, binding, target, claim }) => {
+    if (item.id !== selected.id && !seenItems.has(item.id)) {
+      seenItems.add(item.id);
+      related.specification.push({ item });
+    }
+    if (item.id !== selected.id && !selectedCriteria.has(claim.criterion)) return;
+    const kind = claim.kind === 'verifies' ? 'verification' : 'implementation';
+    const reference = target.reference || `${binding.anchor}/target.${target.id}`;
+    if (seenTargets.has(`${kind}:${reference}`)) return;
+    seenTargets.add(`${kind}:${reference}`);
+    related[kind].push({ item, target: { ...target, reference } });
+  });
+  const availableKinds = Object.keys(related).filter(kind => related[kind].length);
+  if (!availableKinds.length) return;
+  if (!availableKinds.includes(state.relatedKind)) state.relatedKind = availableKinds[0];
+
   const section = document.createElement('section');
   section.className = 'specification-related';
   section.append(Object.assign(document.createElement('h3'), { textContent: t('items.related') }));
-  const seenItems = new Set();
-  entries.forEach(({ item, binding, target, claim }) => {
-    if (!seenItems.has(item.id) && item.id !== selected.id) {
-      seenItems.add(item.id);
-      section.append(button(item.title, item.kind === 'feature' ? '◆' : '◈', () => onItem(item.id), 'btn small ghost related-item'));
-    }
-    if (item.id === selected.id || selectedCriteria.has(claim.criterion)) {
-      const isVerification = claim.kind === 'verifies';
-      section.append(button(
-        isVerification ? t('items.verified_by') : t('items.implemented_by'),
-        isVerification ? '✓' : '⌘',
-        () => onTarget({ ...target, reference: target.reference || `${binding.anchor}/target.${target.id}` }),
-        `btn small ghost related-target ${isVerification ? 'verification' : 'implementation'}`,
-      ));
-    }
+  const chooser = document.createElement('label');
+  chooser.className = 'related-chooser';
+  const chooserLabel = document.createElement('span');
+  chooserLabel.textContent = t('items.related.choose');
+  const select = document.createElement('select');
+  select.className = 'native-select';
+  availableKinds.forEach(kind => {
+    const option = document.createElement('option');
+    const icon = kind === 'specification' ? '◆' : kind === 'verification' ? '✓' : '⌘';
+    option.value = kind;
+    option.textContent = `${icon} ${t(`items.related.${kind}`)} · ${related[kind].length}`;
+    option.selected = kind === state.relatedKind;
+    select.append(option);
   });
-  if (section.childElementCount > 1) root.append(section);
+  select.addEventListener('change', () => {
+    state.relatedKind = select.value;
+    state.render();
+  });
+  chooser.append(chooserLabel, select);
+  section.append(chooser);
+
+  const list = document.createElement('div');
+  list.className = 'related-list';
+  related[state.relatedKind].forEach(entry => {
+    if (state.relatedKind === 'specification') {
+      list.append(button(
+        entry.item.title,
+        entry.item.kind === 'feature' ? '◆' : '◈',
+        () => onItem(entry.item.id),
+        'related-row specification',
+      ));
+      return;
+    }
+    const target = entry.target;
+    const targetName = target.selector?.name || target.path || target.reference;
+    const label = target.path && targetName !== target.path
+      ? `${targetName} · ${target.path}`
+      : targetName;
+    list.append(button(
+      label,
+      state.relatedKind === 'verification' ? '✓' : '⌘',
+      () => onTarget(target),
+      `related-row ${state.relatedKind}`,
+    ));
+  });
+  section.append(list);
+  root.append(section);
 }
 
 export function renderSpecificationDetail(root, state, selected, options = {}) {
@@ -535,20 +588,30 @@ export function renderSpecificationDetail(root, state, selected, options = {}) {
   id.textContent = selected.id;
   meta.append(id);
   title.append(meta);
-  head.append(title);
-  if (!readOnly) {
+  if (!options.hideHeading) head.append(title);
+  if (!readOnly || options.action) {
     const actions = document.createElement('div');
     actions.className = 'actions';
-    actions.append(button(t('common.edit'), '✎', () => {
-      state.specificationEditor = { mode: 'edit', itemId: selected.id };
-      state.specificationPreview = null;
-      state.targetSuggestions = null;
-      state.targetSuggestionSelection = [];
-      state.render();
-    }, 'btn small'));
+    if (options.action) {
+      actions.append(button(
+        options.action.label,
+        options.action.icon || '→',
+        options.action.onClick,
+        options.action.className || 'btn small primary',
+      ));
+    }
+    if (!readOnly) {
+      actions.append(button(t('common.edit'), '✎', () => {
+        state.specificationEditor = { mode: 'edit', itemId: selected.id };
+        state.specificationPreview = null;
+        state.targetSuggestions = null;
+        state.targetSuggestionSelection = [];
+        state.render();
+      }, 'btn small'));
+    }
     head.append(actions);
   }
-  root.append(head);
+  if (head.childElementCount) root.append(head);
   if (selected.summary || selected.description) {
     const summary = document.createElement('p');
     summary.className = 'specification-summary';
@@ -568,7 +631,7 @@ export function renderSpecificationDetail(root, state, selected, options = {}) {
     card.append(heading);
     values.forEach(value => {
       const row = document.createElement('div');
-      row.className = `specification-row${kind === 'criterion' ? ' specification-criterion' : ''}`;
+      row.className = `specification-row${kind === 'criterion' ? ' specification-criterion' : ''}${value.anchor === options.highlightedAnchor ? ' is-highlighted' : ''}`;
       const text = document.createElement('div');
       const anchor = document.createElement('strong');
       anchor.textContent = value.anchor;
@@ -612,12 +675,6 @@ export function renderSpecificationDetail(root, state, selected, options = {}) {
     });
     root.append(card);
   });
-  if (!readOnly && !groups.some(([, values]) => values.length)) {
-    const empty = document.createElement('p');
-    empty.className = 'empty-state';
-    empty.textContent = t('items.empty.description');
-    root.append(empty);
-  }
   renderRelated(root, state, selected, onItem, onTarget);
   if (!readOnly) renderTargetSuggestions(root, state);
   const advanced = document.createElement('details');

@@ -2,7 +2,7 @@ import { createState } from './state.js';
 import { bindRouter, navigate } from './router.js';
 import * as api from './api.js';
 import { renderWork } from './pages/work.js';
-import { renderReadinessPage } from './pages/readiness.js';
+import { initReadiness, renderReadinessPage } from './pages/readiness.js';
 import { renderScope } from './pages/scope.js';
 import { initSpecifications, renderSpecifications } from './pages/specifications.js';
 import { renderDiagnostics } from './pages/diagnostics.js';
@@ -111,12 +111,20 @@ export async function startWorkbench() {
     render(state);
   };
   initSpecifications(state);
+  initReadiness(state);
   state.go = (page) => {
     state.selectedPage = navigate(page, false);
     state.render();
   };
   state.runAction = (action, onResult) => refreshAfterAction(state, action, onResult);
-  bindRouter(state, () => state.render());
+  bindRouter(state, page => {
+    if (page === 'specifications') {
+      state.specificationSourceTarget = null;
+      state.specificationSource = null;
+      state.specificationSourceFull = false;
+    }
+    state.render();
+  });
   state.busy = true;
   state.busyLabel = translate('common.starting');
   state.render();

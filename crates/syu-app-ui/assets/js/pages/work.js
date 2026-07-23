@@ -75,18 +75,25 @@ function renderStart(root, state) {
   const candidates = matchingCandidates(state);
   root.append(element('h2', 'journey-section-title', t('journey.choose')));
   if (!candidates.length) {
+    state.journeyCandidateAnchor = null;
     root.append(element('p', 'empty-state', t('journey.no_match')));
     return;
   }
+  if (!candidates.some(({ criterion }) => criterion.anchor === state.journeyCandidateAnchor)) {
+    state.journeyCandidateAnchor = candidates[0].criterion.anchor;
+  }
   candidates.forEach(({ item, criterion }) => {
-    const card = element('article', 'journey-card');
+    const selected = criterion.anchor === state.journeyCandidateAnchor;
+    const card = element('article', `journey-card${selected ? ' selected' : ''}`);
     card.append(element('h3', null, item.title));
-    card.append(element('p', null, criterion.statement || item.summary || item.description || 'This behavior is available for review.'));
-    card.append(button(t('journey.review'), () => run(state, {
-      action: 'create',
-      anchor: criterion.anchor,
-      summary: state.journeyQuery,
-    }), true));
+    const meta = element('div', 'meta-line');
+    meta.append(element('span', `chip status-component status-${item.status || 'planned'}`, item.status || item.kind));
+    card.append(meta);
+    card.append(button(t('journey.preview'), () => {
+      state.journeyCandidateAnchor = criterion.anchor;
+      state.journeyContextTab = 'specification';
+      state.render();
+    }, selected, '◈'));
     root.append(card);
   });
 }
@@ -132,8 +139,12 @@ function stateHeader(label, status) {
   return header;
 }
 
-function countChip(value, icon, label) {
-  const chip = element('span', 'journey-count');
+function countChip(value, icon, label, onClick) {
+  const chip = element(onClick ? 'button' : 'span', `journey-count${onClick ? ' interactive' : ''}`);
+  if (onClick) {
+    chip.type = 'button';
+    chip.addEventListener('click', onClick);
+  }
   chip.setAttribute('aria-label', `${label}: ${value}`);
   chip.title = `${label}: ${value}`;
   const iconNode = element('span', null, icon);
@@ -142,15 +153,25 @@ function countChip(value, icon, label) {
   return chip;
 }
 
-function renderScope(journey) {
+function renderScope(journey, state) {
   if (!journey.approved_scope) return null;
   const scope = journey.approved_scope;
   const card = element('section', 'journey-state journey-scope');
   card.append(stateHeader(t(`journey.scope.${scope.status || 'proposed'}`), scope.status));
   const counts = element('div', 'journey-counts');
   counts.append(
-    countChip(scope.editable_target_count, '↔', t('journey.targets')),
-    countChip(scope.slice_count, '▱', t('journey.steps_count')),
+    countChip(scope.editable_target_count, '↔', t('journey.targets'), () => {
+      state.journeyContextTab = 'scope';
+      state.journeyScopeFocus = 'targets';
+      state.journeyContextTarget = null;
+      state.render();
+    }),
+    countChip(scope.slice_count, '▱', t('journey.steps_count'), () => {
+      state.journeyContextTab = 'scope';
+      state.journeyScopeFocus = 'steps';
+      state.journeyContextTarget = null;
+      state.render();
+    }),
   );
   card.append(counts);
   return card;
@@ -228,32 +249,132 @@ function renderJourney(root, journey, state, work) {
   root.append(next);
 
   const states = element('div', 'journey-state-grid');
-  const scope = renderScope(journey);
+  const scope = renderScope(journey, state);
   if (scope) states.append(scope);
   states.append(renderEvidence(journey));
   root.append(states);
   renderAdvanced(root, journey, work);
 }
 
-function renderSpecification(root, workspace, journey, state) {
+function resetContextSource(state) {
+  state.journeyContextTarget = null;
+  state.specificationSourceTarget = null;
+  state.specificationSource = null;
+  state.specificationSourceFull = false;
+}
+
+function renderContextTabs(root, state, hasScope) {
+  const tabs = element('div', 'journey-context-tabs');
+  const addTab = (id, label, icon) => {
+    const tab = element('button', `journey-context-tab${state.journeyContextTab === id ? ' active' : ''}`);
+    tab.type = 'button';
+    tab.setAttribute('aria-pressed', String(state.journeyContextTab === id));
+    tab.append(element('span', null, icon), element('span', null, label));
+    tab.addEventListener('click', () => {
+      state.journeyContextTab = id;
+      resetContextSource(state);
+      state.render();
+    });
+    tabs.append(tab);
+  };
+  addTab('specification', t('journey.panel.specification'), '◈');
+  if (hasScope) addTab('scope', t('journey.panel.scope'), '↔');
+  root.append(tabs);
+}
+
+function renderScopeDetail(root, journey, state, work) {
+  const plan = work?.plan;
+  const slices = plan?.slices || [];
+  if (!slices.length) {
+    root.append(element('p', 'context-empty', t('journey.scope.empty')));
+    return;
+  }
+  const selectedSlice = slices.find(slice => slice.id === state.selectedSlice) || slices[0];
+  state.selectedSlice = selectedSlice.id;
+
+  const steps = element('section', `journey-scope-section${state.journeyScopeFocus === 'steps' ? ' focused' : ''}`);
+  steps.append(element('h3', null, t('journey.scope.steps')));
+  const stepList = element('div', 'journey-scope-steps');
+  slices.forEach((slice, index) => {
+    const step = element('button', `journey-scope-step${slice.id === selectedSlice.id ? ' active' : ''}`);
+    step.type = 'button';
+    step.title = slice.id;
+    step.append(
+      element('span', 'journey-scope-index', String(index + 1)),
+      element('span', null, t('journey.scope.step').replace('{number}', String(index + 1))),
+    );
+    step.addEventListener('click', () => {
+      state.selectedSlice = slice.id;
+      state.journeyScopeFocus = 'targets';
+      state.render();
+    });
+    stepList.append(step);
+  });
+  steps.append(stepList);
+  root.append(steps);
+
+  const targets = element('section', `journey-scope-section${state.journeyScopeFocus === 'targets' ? ' focused' : ''}`);
+  targets.append(element('h3', null, t('journey.scope.targets')));
+  const targetList = element('div', 'journey-scope-targets');
+  (selectedSlice.editable_targets || []).forEach(target => {
+    const targetButton = element('button', 'journey-scope-target');
+    targetButton.type = 'button';
+    targetButton.setAttribute('data-scope-target', target.reference);
+    targetButton.append(
+      element('span', 'journey-scope-target-icon', '↔'),
+      element('strong', null, target.path),
+      element('span', 'chip blue-chip', t('journey.scope.editable')),
+    );
+    targetButton.addEventListener('click', () => {
+      state.journeyContextTarget = target;
+      state.specificationSourceTarget = target;
+      state.specificationSource = null;
+      state.specificationSourceFull = false;
+      state.render();
+    });
+    targetList.append(targetButton);
+  });
+  if (!targetList.childElementCount) targetList.append(element('p', 'context-empty', t('journey.scope.no_targets')));
+  targets.append(targetList);
+  root.append(targets);
+}
+
+function renderSpecification(root, workspace, journey, state, work) {
   const specification = journey?.related_specification;
   const specificationAnchor = journey?.advanced?.specification_anchor || null;
+  const candidates = journey?.current_step === 'describe' && String(state.journeyQuery || '').trim()
+    ? matchingCandidates(state)
+    : [];
+  const candidate = candidates.find(({ criterion }) => criterion.anchor === state.journeyCandidateAnchor)
+    || candidates[0]
+    || null;
+  const contextAnchor = specificationAnchor || candidate?.criterion.anchor || null;
   if (state.journeySpecificationAnchor !== specificationAnchor) {
     state.journeySpecificationAnchor = specificationAnchor;
     state.journeySpecificationExpanded = false;
-    state.journeyContextItemId = specificationAnchor?.split('#')[0] || null;
-    state.journeyContextTarget = null;
+    state.journeyContextTab = 'specification';
+    state.journeyContextItemId = contextAnchor?.split('#')[0] || null;
     state.journeyContextHistory = [];
-    state.specificationSourceTarget = null;
-    state.specificationSource = null;
+    resetContextSource(state);
   }
-  root.hidden = !specification;
-  workspace?.classList.toggle('has-specification', Boolean(specification));
+  if (!specification && candidate && state.journeyContextItemId !== candidate.item.id) {
+    state.journeyContextItemId = candidate.item.id;
+    state.journeyContextHistory = [];
+    resetContextSource(state);
+  }
+  const hasContext = Boolean(specification || candidate);
+  const hasScope = Boolean(journey?.approved_scope && work?.plan?.slices?.length);
+  if (!hasScope && state.journeyContextTab === 'scope') state.journeyContextTab = 'specification';
+  root.hidden = !hasContext;
+  workspace?.classList.toggle('has-specification', hasContext);
   root.replaceChildren();
-  if (!specification) return;
+  if (!hasContext) return;
 
   const header = element('header', 'journey-specification-head');
-  header.append(element('p', 'eyebrow', t('journey.specification')));
+  const heading = element('div');
+  heading.append(element('p', 'eyebrow', t('journey.context')));
+  if (candidate && !specification) heading.append(element('h2', null, t('journey.specification.preview')));
+  header.append(heading);
   const toggle = element('button', 'journey-specification-toggle');
   toggle.type = 'button';
   toggle.setAttribute('aria-expanded', String(state.journeySpecificationExpanded));
@@ -268,11 +389,27 @@ function renderSpecification(root, workspace, journey, state) {
   });
   header.append(toggle);
   root.append(header);
+  if (specification) renderContextTabs(root, state, hasScope);
 
   const body = element('div', `journey-specification-body${state.journeySpecificationExpanded ? ' expanded' : ''}`);
+  body.setAttribute('data-journey-panel', state.journeyContextTab);
+  if (state.journeyContextTarget) {
+    state.specificationSourceTarget = state.journeyContextTarget;
+    renderSourceDetail(body, state, state.journeyContextTarget, () => {
+      resetContextSource(state);
+      state.render();
+    });
+    root.append(body);
+    return;
+  }
+  if (state.journeyContextTab === 'scope') {
+    renderScopeDetail(body, journey, state, work);
+    root.append(body);
+    return;
+  }
   const items = state.projection.specifications?.specifications || [];
   const selected = items.find(item => item.id === state.journeyContextItemId)
-    || items.find(item => item.id === specificationAnchor?.split('#')[0]);
+    || items.find(item => item.id === contextAnchor?.split('#')[0]);
   if (!selected) return;
   if (state.journeyContextHistory.length && !state.journeyContextTarget) {
     body.append(button(t('items.back'), () => {
@@ -283,33 +420,38 @@ function renderSpecification(root, workspace, journey, state) {
       state.render();
     }, false, '←'));
   }
-  if (state.journeyContextTarget) {
-    state.specificationSourceTarget = state.journeyContextTarget;
-    renderSourceDetail(body, state, state.journeyContextTarget, () => {
-      state.journeyContextTarget = null;
-      state.specificationSourceTarget = null;
-      state.specificationSource = null;
+  renderSpecificationDetail(body, state, selected, {
+    readOnly: true,
+    hideHeading: Boolean(candidate && !specification),
+    highlightedAnchor: contextAnchor,
+    action: candidate && !specification ? {
+      label: t('journey.select'),
+      icon: '✓',
+      onClick: () => run(state, {
+        action: 'create',
+        anchor: candidate.criterion.anchor,
+        summary: state.journeyQuery,
+      }),
+    } : null,
+    onItem: itemId => {
+      if (itemId === state.journeyContextItemId) return;
+      state.journeyContextHistory.push(state.journeyContextItemId);
+      state.journeyContextItemId = itemId;
       state.render();
-    });
+    },
+    onTarget: target => {
+      state.journeyContextTarget = target;
+      state.specificationSourceTarget = target;
+      state.specificationSource = null;
+      state.specificationSourceFull = false;
+      state.render();
+    },
+  });
+  if (candidate && !specification) {
+    body.setAttribute('data-journey-preview', candidate.criterion.anchor);
   } else {
-    renderSpecificationDetail(body, state, selected, {
-      readOnly: true,
-      onItem: itemId => {
-        if (itemId === state.journeyContextItemId) return;
-        state.journeyContextHistory.push(state.journeyContextItemId);
-        state.journeyContextItemId = itemId;
-        state.render();
-      },
-      onTarget: target => {
-        state.journeyContextTarget = target;
-        state.specificationSourceTarget = target;
-        state.specificationSource = null;
-        state.specificationSourceFull = false;
-        state.render();
-      },
-    });
     body.querySelector('.canvas-head h2')?.setAttribute('data-work-specification-title', '');
-    body.querySelector('.specification-criterion p')?.setAttribute('data-work-specification-criterion', '');
+    body.querySelector('.specification-criterion.is-highlighted p')?.setAttribute('data-work-specification-criterion', '');
   }
   root.append(body);
 }
@@ -325,5 +467,5 @@ export function renderWork(work, state) {
   if (!journey || journey.current_step === 'describe') renderStart(content, state);
   else renderJourney(content, journey, state, work);
   replace(root, content);
-  if (specificationRoot) renderSpecification(specificationRoot, workspace, journey, state);
+  if (specificationRoot) renderSpecification(specificationRoot, workspace, journey, state, work);
 }

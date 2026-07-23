@@ -129,9 +129,15 @@ setTimeout(()=>{
   const visible=s=>{const node=document.querySelector(s);return !!node&&!node.hidden;};
 
   (async()=>{
-  await click('[data-route="specifications"]');
-  await click('[data-page="specifications"] .specification-criterion button');
-  if(!visible('[data-page="work"]')) failures.push('criterion did not open Work page');
+  const query=document.querySelector('[data-page="work"] .journey-intake textarea');
+  query.value='s';
+  await click('[data-page="work"] .journey-intake .journey-action');
+  if(!document.querySelector('[data-page="work"] .journey-card.selected')) failures.push('search did not select a candidate');
+  if(!document.querySelector('[data-work-specification] [data-journey-preview]')) failures.push('search did not render the specification preview');
+  const previewColumns=getComputedStyle(document.querySelector('[data-work-journey-workspace]')).gridTemplateColumns.split(' ').length;
+  if(window.innerWidth>=1200 && previewColumns!==2) failures.push(`desktop search layout did not split: ${previewColumns} columns`);
+  await click('[data-work-specification] .actions .primary');
+  if(!visible('[data-page="work"]')) failures.push('candidate did not open Work page');
   if(document.querySelectorAll('[data-page="work"] [data-work-specification-title]').length!==1) failures.push('related specification title is missing or duplicated');
   if(document.querySelectorAll('[data-page="work"] [data-work-specification-criterion]').length!==1) failures.push('related criterion is missing or duplicated');
   if(document.querySelector('[data-work-overview] [data-work-specification-title], [data-work-overview] [data-work-specification-criterion]')) failures.push('specification content leaked into the Work pane');
@@ -145,21 +151,37 @@ setTimeout(()=>{
     await wait(40);
     if(getComputedStyle(document.querySelector('[data-work-specification] .journey-specification-body')).display==='none') failures.push('narrow related specification did not expand');
   }
-  const relatedFeature=document.querySelector('[data-work-specification] .related-item');
+  const relatedFeature=document.querySelector('[data-work-specification] .related-row.specification');
   if(!relatedFeature) failures.push('related feature navigation is missing');
   else {
     relatedFeature.click();
     await wait(40);
-    const relatedCode=document.querySelector('[data-work-specification] .related-target.implementation');
-    if(!relatedCode) failures.push('related implementation target is missing');
+    const relationType=document.querySelector('[data-work-specification] .related-chooser select');
+    if(!relationType) failures.push('related type selector is missing');
     else {
-      relatedCode.click();
-      await wait(80);
-      if(!document.querySelector('[data-work-specification] .source-code')) failures.push('related source excerpt did not render');
+      relationType.value='implementation';
+      relationType.dispatchEvent(new Event('change',{bubbles:true}));
+      await wait(40);
+      const relatedCode=document.querySelector('[data-work-specification] .related-row.implementation');
+      if(!relatedCode) failures.push('related implementation target is missing');
+      else {
+        relatedCode.click();
+        await wait(80);
+        if(!document.querySelector('[data-work-specification] .source-code')) failures.push('related source excerpt did not render');
+      }
     }
   }
   window.confirm=()=>true;
   await click('[data-page="work"] .journey-action.primary');
+  await click('[data-page="work"] .journey-count.interactive');
+  if(!document.querySelector('[data-work-specification] [data-journey-panel="scope"]')) failures.push('scope count did not open the scope panel');
+  const scopeTarget=document.querySelector('[data-work-specification] [data-scope-target]');
+  if(!scopeTarget) failures.push('scope panel did not render an exact target');
+  else {
+    scopeTarget.click();
+    await wait(80);
+    if(!document.querySelector('[data-work-specification] .source-code')) failures.push('scope target did not render its source excerpt');
+  }
   await click('[data-page="work"] .journey-action.primary');
   await click('[data-page="work"] .journey-action.primary');
   await click('[data-page="work"] .journey-action.primary');

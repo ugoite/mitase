@@ -101,7 +101,7 @@ assert 'data-workbench-status role="status" aria-live="polite"' in HTML
 CSS_COMPACT = re.sub(r"\s+", "", CSS)
 for token in ("--bg:#f6f7f8", "--paper:#fff", "--ink:#15171a", "--sidebar:246px", "--topbar:98px", "--rail:310px"):
     assert token in CSS_COMPACT, f"missing normative CSS token {token}"
-assert "grid-template-columns:repeat(5,1fr)" in CSS_COMPACT
+assert "grid-template-columns:repeat(6,1fr)" in CSS_COMPACT
 assert "[data-settings-layer-panel][hidden]{display:none!important}" in CSS_COMPACT
 assert ".settings-panel[hidden]" in CSS_COMPACT
 assert ".settings-toolbar[hidden]" in CSS_COMPACT
