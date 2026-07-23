@@ -64,16 +64,22 @@ pathlib.Path(sys.argv[3]).write_text(
     """  if(method!=='GET' && suppliedCsrf!==csrfToken) return body({error:'missing csrf token'},403);\n"""
     """  if(path.includes('/api/projection')) return body(projection,200,{'x-syu-csrf-token':csrfToken});\n"""
     """  if(path.includes('/api/work/session')) return body({ready:true},200,{'x-syu-csrf-token':csrfToken});\n"""
+    """  if(path.includes('/api/source?target=')) return body({path:'tests/behavior.rs',content:'#[test]\\nfn behavior_stays_valid() {}',hash:'visual-test-hash',line_start:1,line_end:2,is_excerpt:true});\n"""
     """  if(path.includes('/api/source?path=syu.yaml')) return body({content:'schema: syu/config/v1\\nworkspace:\\n  spec_roots: [docs/syu]\\n',hash:'visual-test-hash'});\n"""
+    """  if(path.includes('/api/scope/diff')) return body({range:'origin/main...HEAD',state:'ready',additions:2,deletions:1,files:[{path:'src/lib.rs',status:'modified',additions:2,deletions:1,patch:'diff --git a/src/lib.rs b/src/lib.rs\\n--- a/src/lib.rs\\n+++ b/src/lib.rs\\n@@ -1 +1,2 @@\\n-old\\n+new\\n+line'}]});\n"""
+    """  if(path.includes('/api/scope/branch')) return body({branch:{range:'origin/main...HEAD',state:'ready',reason:null,changed:[{path:'src/lib.rs',status:'modified',owners:['FEAT-VISUAL'],anchors:['REQ-VISUAL#criterion.behavior'],artifact_identities:['rust:src/lib.rs']}],owned:[],unowned:[],affected_items:[]}});\n"""
     """  if(path.includes('/api/config')) return body({});\n"""
-    """  if(path.includes('/api/work/request')) { window.__SYU_FLOW__.push('request'); projection.work.request={summary:payload.request.summary,operation:'modify',seed_count:1,requested_target_count:0}; projection.work.plan=null; return body(projection); }\n"""
-    """  if(path.includes('/api/work/plan')) { window.__SYU_FLOW__.push('plan'); projection.work.plan={id:'PLAN-VISUAL-FLOW',status:'ready',slices:[{id:'slice-visual-flow',editable_targets:[{reference:'FEAT-VISUAL#binding.work/target.code',access:'editable',path:'src/lib.rs'}]}]}; return body(projection.work.plan); }\n"""
-    """  if(path.includes('/api/work/context')) { window.__SYU_FLOW__.push('context'); projection.work.selected_slice='slice-visual-flow'; projection.work.context_pack={slice_id:'slice-visual-flow',entry_count:2}; return body({schema:'syu/context-pack/v1',slice:'slice-visual-flow',artifact_context:[]}); }\n"""
-    """  if(path.includes('/api/work/validate')) { window.__SYU_FLOW__.push('validate'); projection.work.validation={state:'passed',context:'work-plan'}; return body(projection.work.validation); }\n"""
-    """  if(path.includes('/api/work/approve')) { window.__SYU_FLOW__.push('approve'); return body({schema:'syu/plan-approval/v1',approval_id:'approval-visual-flow',plan_digest:'visual-plan'}); }\n"""
-    """  if(path.includes('/api/work/verify')) { window.__SYU_FLOW__.push('verify'); receipt={schema:'syu/verification-receipt/v1',plan_digest:'visual-plan',slice_id:'slice-visual-flow',revision:'visual-revision',workspace_fingerprint:'visual-fingerprint',started_at:'1',completed_at:'2',executions:[{target:'REQ-VISUAL#binding.test/target.exact',runner:'mock',command:['mock'],exit_code:0,stdout_digest:'stdout',stderr_digest:'stderr',implementation_digests:{},verification_digest:'verification'}]}; projection.work.verification_receipt={slice_id:'slice-visual-flow'}; projection.work.completion={current:{attempt_id:'attempt-visual-flow',status:'complete',plan_digest:'visual-plan',slice_id:'slice-visual-flow',finalized:false},previous:[]}; return body({receipt}); }\n"""
-    """  if(path.includes('/api/work/finalize/preview')) { window.__SYU_FLOW__.push('finalize-preview'); return body({preview_token:'visual-preview-token'}); }\n"""
-    """  if(path.includes('/api/work/finalize/apply')) { window.__SYU_FLOW__.push('finalize-apply'); projection.work.completion.current.finalized=true; return body({schema:'syu/finalization-receipt/v1'}); }\n"""
+    """  if(path.includes('/api/work/action')) {\n"""
+    """    const action=payload.action; window.__SYU_FLOW__.push(action);\n"""
+    """    const journey=(step,primary,status)=>projection.journey={title:payload.summary||projection.work.request?.summary||'Make the behavior clear',current_step:step,steps:[],primary_action:{action:primary,confirmation_required:['approve','start','finalize'].includes(primary)},recovery_action:primary==='cancel'?null:{action:'cancel',confirmation_required:true},approved_scope:step==='review'?null:{editable_target_count:1,slice_count:1},evidence:{status,blockers:[]},related_specification:projection.journey.related_specification||null,advanced:{request_id:'work-visual',plan_id:projection.work.plan?.id||null,selected_slice_id:'slice-visual-flow',attempt_id:projection.work.completion?.current?.attempt_id||null,specification_anchor:projection.journey.advanced?.specification_anchor||null}};\n"""
+    """    if(action==='create') { const item=projection.specifications.specifications.find(candidate=>candidate.criteria?.some(criterion=>criterion.anchor===payload.anchor)); const criterion=item?.criteria.find(candidate=>candidate.anchor===payload.anchor); projection.journey.related_specification=item&&criterion?{title:item.title,overview:item.summary||item.description||'',status:item.status,criterion_statement:criterion.statement}:null; projection.journey.advanced={specification_anchor:criterion?.anchor||null}; projection.work.request={summary:payload.summary,operation:'modify',seed_count:1,requested_target_count:0}; journey('review','prepare','draft'); }\n"""
+    """    else if(action==='prepare') { projection.work.plan={id:'PLAN-VISUAL-FLOW',digest:'visual-plan',status:'ready',slices:[{id:'slice-visual-flow',editable_targets:[{reference:'FEAT-VISUAL#binding.work/target.code',access:'editable',path:'src/lib.rs'}]}]}; projection.work.selected_slice='slice-visual-flow'; projection.work.validation={state:'passed',context:'work-plan'}; journey('approve','approve','reviewed'); }\n"""
+    """    else if(action==='approve') journey('implement','start','approved');\n"""
+    """    else if(action==='start') { projection.work.agent={run_id:'agent-visual-flow',status:'active'}; journey('verify','verify','in_progress'); }\n"""
+    """    else if(action==='verify') { projection.work.agent.status='completed'; projection.work.completion={current:{attempt_id:'attempt-visual-flow',status:'complete',plan_digest:'visual-plan',slice_id:'slice-visual-flow',demonstrated:['REQ-VISUAL#criterion.behavior'],finalized:false},previous:[]}; journey('complete','finalize','ready'); }\n"""
+    """    else if(action==='finalize') { projection.work.completion.current.finalized=true; journey('complete','cancel','complete'); }\n"""
+    """    return body(projection);\n"""
+    """  }\n"""
     """  return body({error:`unhandled fetch ${url}`},404);\n"""
     """};\n"""
 )
@@ -116,8 +122,8 @@ PY
 cat >>"$tmp/workbench.html" <<'HTML'
 <script>
 window.__SYU_VISUAL_ERRORS__=[];
-window.addEventListener('error',event=>window.__SYU_VISUAL_ERRORS__.push(event.message||'error'));
-window.addEventListener('unhandledrejection',event=>window.__SYU_VISUAL_ERRORS__.push(String(event.reason||'rejection')));
+window.addEventListener('error',event=>window.__SYU_VISUAL_ERRORS__.push(`${event.error?.stack||event.message||'error'} at ${event.filename}:${event.lineno}:${event.colno}`));
+window.addEventListener('unhandledrejection',event=>window.__SYU_VISUAL_ERRORS__.push(event.reason?.stack||String(event.reason||'rejection')));
 setTimeout(()=>{
   const failures=[];
   const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -125,22 +131,75 @@ setTimeout(()=>{
   const visible=s=>{const node=document.querySelector(s);return !!node&&!node.hidden;};
 
   (async()=>{
-  await click('[data-route="specifications"]');
-  await click('[data-page="specifications"] .specification-criterion button');
-  if(!visible('[data-page="work"]')) failures.push('criterion did not open Work page');
-  await click('[data-work-plan]');
-  if(!document.querySelector('[data-work-slices-rail] .rail-item')) failures.push('Plan did not create a slice');
-  await click('[data-work-context]');
-  await click('[data-work-validate]');
-  await click('[data-work-approve]');
-  await click('[data-work-verify]');
-  await click('[data-work-finalize]');
-  if(JSON.stringify(window.__SYU_FLOW__)!=='["request","plan","context","validate","approve","verify","finalize-preview","finalize-apply"]') failures.push(`unexpected work flow: ${JSON.stringify(window.__SYU_FLOW__)}`);
+  const query=document.querySelector('[data-page="work"] .journey-intake textarea');
+  query.value='s';
+  await click('[data-page="work"] .journey-intake .journey-action');
+  if(!document.querySelector('[data-page="work"] .journey-card.selected')) failures.push('search did not select a candidate');
+  if(!document.querySelector('[data-work-specification] [data-journey-preview]')) failures.push('search did not render the specification preview');
+  const previewColumns=getComputedStyle(document.querySelector('[data-work-journey-workspace]')).gridTemplateColumns.split(' ').length;
+  if(window.innerWidth>=1200 && previewColumns!==2) failures.push(`desktop search layout did not split: ${previewColumns} columns`);
+  await click('[data-work-specification] .actions .primary');
+  if(!visible('[data-page="work"]')) failures.push('candidate did not open Work page');
+  if(document.querySelectorAll('[data-page="work"] [data-work-specification-title]').length!==1) failures.push('related specification title is missing or duplicated');
+  if(document.querySelectorAll('[data-page="work"] [data-work-specification-criterion]').length!==1) failures.push('related criterion is missing or duplicated');
+  if(document.querySelector('[data-work-overview] [data-work-specification-title], [data-work-overview] [data-work-specification-criterion]')) failures.push('specification content leaked into the Work pane');
+  const specificationBody=document.querySelector('[data-work-specification] .journey-specification-body');
+  const specificationToggle=document.querySelector('[data-work-specification] .journey-specification-toggle');
+  const columns=getComputedStyle(document.querySelector('[data-work-journey-workspace]')).gridTemplateColumns.split(' ').length;
+  if(window.innerWidth>=1200 && columns!==2) failures.push(`desktop Work layout did not split: ${columns} columns`);
+  if(window.innerWidth<1200 && getComputedStyle(specificationBody).display!=='none') failures.push('narrow related specification started expanded');
+  if(window.innerWidth<1200) {
+    specificationToggle.click();
+    await wait(40);
+    if(getComputedStyle(document.querySelector('[data-work-specification] .journey-specification-body')).display==='none') failures.push('narrow related specification did not expand');
+  }
+  const relatedFeature=document.querySelector('[data-work-specification] .related-row.specification');
+  if(!relatedFeature) failures.push('related feature navigation is missing');
+  else {
+    relatedFeature.click();
+    await wait(40);
+    const relationType=document.querySelector('[data-work-specification] .related-chooser select');
+    if(!relationType) failures.push('related type selector is missing');
+    else {
+      relationType.value='implementation';
+      relationType.dispatchEvent(new Event('change',{bubbles:true}));
+      await wait(40);
+      const relatedCode=document.querySelector('[data-work-specification] .related-row.implementation');
+      if(!relatedCode) failures.push('related implementation target is missing');
+      else {
+        relatedCode.click();
+        await wait(80);
+        if(!document.querySelector('[data-work-specification] .source-code')) failures.push('related source excerpt did not render');
+      }
+    }
+  }
+  window.confirm=()=>true;
+  await click('[data-page="work"] .journey-action.primary');
+  await click('[data-page="work"] .journey-count.interactive');
+  if(!document.querySelector('[data-work-specification] [data-journey-panel="scope"]')) failures.push('scope count did not open the scope panel');
+  const scopeTarget=document.querySelector('[data-work-specification] [data-scope-target]');
+  if(!scopeTarget) failures.push('scope panel did not render an exact target');
+  else {
+    scopeTarget.click();
+    await wait(80);
+    if(!document.querySelector('[data-work-specification] .source-code')) failures.push('scope target did not render its source excerpt');
+  }
+  await click('[data-page="work"] .journey-action.primary');
+  await click('[data-page="work"] .journey-action.primary');
+  if(!document.querySelector('[data-work-specification] [data-journey-panel="diff"] .diff-file')) failures.push('implementation did not open the diff panel');
+  await click('[data-page="work"] .journey-action.primary');
+  await click('[data-page="work"] .journey-action.primary');
+  if(JSON.stringify(window.__SYU_FLOW__)!=='["create","prepare","approve","start","verify","finalize"]') failures.push(`unexpected work flow: ${JSON.stringify(window.__SYU_FLOW__)}`);
+  if(!document.querySelector('[data-page="work"] .journey-advanced')) failures.push('advanced completion evidence missing');
+  await click('[data-page="work"] [data-tab="slices"]');
+  if(!visible('[data-page="work"] [data-panel="slices"]')) failures.push('Work slices tab did not open');
+  if(!document.querySelector('[data-work-slice-detail] .journey-scope-target')) failures.push('Work slices tab did not render targets');
 
-  click('[data-page="work"] [data-tab="slices"]');
-  if(!visible('[data-page="work"] [data-panel="slices"]')) failures.push('work slices panel did not open');
-  click('[data-page="work"] [data-tab="context"]');
-  if(!visible('[data-page="work"] [data-panel="context"]')) failures.push('work context panel did not open');
+  await click('[data-route="scope"]');
+  await click('[data-scope-mode-button="branch"]');
+  if(!document.querySelector('[data-scope-detail] .diff-file')) failures.push('Branch scope did not render diff');
+  await click('[data-page="scope"] [data-tab="intent"]');
+  if(!document.querySelector('[data-scope-detail] .scope-flow')) failures.push('Scope intent tab did not render');
 
   click('[data-route="settings"]');
   click('[data-settings-layer="workspace"]');
@@ -165,11 +224,13 @@ setTimeout(()=>{
 </script>
 HTML
 
-behavior="$("$chrome" --headless --disable-gpu --no-sandbox --allow-file-access-from-files --virtual-time-budget=1800 --dump-dom "file://${tmp}/workbench.html?page=work&lang=en&theme=light")"
-if ! echo "$behavior" | grep -q 'id="syu-visual-behavior-result" data-status="pass"'; then
-  echo "$behavior" | grep 'id="syu-visual-behavior-result"' >&2 || true
-  exit 1
-fi
+for viewport in 1280,900 760,900; do
+  behavior="$("$chrome" --headless --disable-gpu --no-sandbox --allow-file-access-from-files --window-size="$viewport" --virtual-time-budget=6000 --dump-dom "file://${tmp}/workbench.html?page=work&lang=en&theme=light")"
+  if ! echo "$behavior" | grep -q 'id="syu-visual-behavior-result" data-status="pass"'; then
+    echo "$behavior" | grep 'id="syu-visual-behavior-result"' >&2 || true
+    exit 1
+  fi
+done
 
 read -r server_port debug_port < <(python3 - <<'PY'
 import socket
@@ -302,6 +363,12 @@ async function main() {
   await devtools.send('Page.enable');
   await devtools.send('Runtime.enable');
   await devtools.send('Network.enable');
+  await devtools.send('Emulation.setDeviceMetricsOverride', {
+    width: 1280,
+    height: 900,
+    deviceScaleFactor: 1,
+    mobile: false,
+  });
   await devtools.send('Page.addScriptToEvaluateOnNewDocument', {
     source: `
       window.__SYU_BROWSER_ERRORS__ = [];
@@ -311,7 +378,9 @@ async function main() {
     `,
   });
   const load = new Promise(resolve => devtools.on('Page.loadEventFired', resolve));
-  await devtools.send('Page.navigate', { url: targetUrl });
+  const pageUrl = new URL(targetUrl);
+  pageUrl.searchParams.set('lang', 'en');
+  await devtools.send('Page.navigate', { url: pageUrl.toString() });
   await load;
 
   const evaluation = await devtools.send('Runtime.evaluate', {
@@ -350,17 +419,17 @@ async function main() {
         };
 
         await click('specifications', '[data-route="specifications"]');
-        await click('request', '[data-page="specifications"] .specification-criterion button');
-        await click('plan', '[data-work-plan]');
-        await wait('planned slice', () => document.querySelector('[data-work-slices-rail] .rail-item'));
-        await click('context', '[data-work-context]');
-        await wait('context pack', () => (document.querySelector('[data-work-context-detail]')?.textContent || '').includes('Context pack loaded'));
-        await click('validate', '[data-work-validate]');
-        await wait('passed validation', () => document.querySelector('[data-work-validation-detail]')?.textContent === 'passed');
+        await click('create', '[data-page="specifications"] .specification-criterion button');
+        await click('prepare', '[data-page="work"] .journey-action.primary');
+        await wait('approval step', () => document.querySelector('[data-page="work"] .journey-step.current')?.getAttribute('aria-label') === 'Approve');
 
         return {
           flow,
-          validation: document.querySelector('[data-work-validation-detail]')?.textContent || '',
+          currentStep: document.querySelector('[data-page="work"] .journey-step.current')?.getAttribute('aria-label') || '',
+          specificationTitleCount: document.querySelectorAll('[data-page="work"] [data-work-specification-title]').length,
+          specificationCriterionCount: document.querySelectorAll('[data-page="work"] [data-work-specification-criterion]').length,
+          workPaneSpecificationCount: document.querySelectorAll('[data-work-overview] [data-work-specification-title], [data-work-overview] [data-work-specification-criterion]').length,
+          layoutColumns: getComputedStyle(document.querySelector('[data-work-journey-workspace]')).gridTemplateColumns.split(' ').length,
           errors: window.__SYU_BROWSER_ERRORS__ || [],
         };
       })()
@@ -368,14 +437,21 @@ async function main() {
   });
   if (evaluation.exceptionDetails) throw new Error(evaluation.exceptionDetails.text || 'browser flow failed');
   const result = { ...evaluation.result.value, mutationResponses };
-  const expectedFlow = ['specifications', 'request', 'plan', 'context', 'validate'];
+  const expectedFlow = ['specifications', 'create', 'prepare'];
   if (JSON.stringify(result.flow) !== JSON.stringify(expectedFlow)) {
     throw new Error(`unexpected Workbench browser flow: ${JSON.stringify(result)}`);
   }
-  if (result.errors.length || result.validation !== 'passed') {
+  if (
+    result.errors.length
+    || result.currentStep !== 'Approve'
+    || result.specificationTitleCount !== 1
+    || result.specificationCriterionCount !== 1
+    || result.workPaneSpecificationCount !== 0
+    || result.layoutColumns !== 2
+  ) {
     throw new Error(`Workbench browser errors: ${JSON.stringify(result)}`);
   }
-  if (mutationResponses.length < 4 || mutationResponses.some(response => response.status < 200 || response.status >= 300)) {
+  if (mutationResponses.length < 2 || mutationResponses.some(response => response.status < 200 || response.status >= 300)) {
     throw new Error(`Workbench mutation responses were not successful: ${JSON.stringify(result)}`);
   }
   console.log(JSON.stringify(result));
