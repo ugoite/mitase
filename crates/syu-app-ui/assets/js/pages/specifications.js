@@ -17,7 +17,12 @@ function status(text) {
   const node = document.createElement('span');
   const normalized = String(text || 'planned').toLowerCase().replace(/\s+/g, '-');
   node.className = `chip status-component status-${normalized}`;
-  node.innerHTML = `<span class="status-dot" aria-hidden="true"></span><span>${text || normalized}</span>`;
+  const translatedStatuses = new Set(['modified', 'added', 'deleted', 'renamed', 'untracked', 'planned', 'implemented', 'deprecated', 'ready', 'blocked', 'unknown']);
+  const label = translatedStatuses.has(normalized) ? t(`status.${normalized}`) : text || normalized;
+  node.innerHTML = '<span class="status-dot" aria-hidden="true"></span>';
+  const copy = document.createElement('span');
+  copy.textContent = label;
+  node.append(copy);
   return node;
 }
 
@@ -452,7 +457,128 @@ function renderEditor(root, state) {
   root.append(form);
 }
 
-function renderDetail(root, state, selected) {
+function allTargets(projection) {
+  return (projection?.specifications?.specifications || []).flatMap(item =>
+    (item.bindings || []).flatMap(binding => (binding.targets || []).map(target => ({ item, binding, target }))),
+  );
+}
+
+function relatedTargets(state, selected) {
+  const criteria = new Set((selected.criteria || []).map(value => value.anchor));
+  allTargets(state.projection).forEach(entry => {
+    if (entry.item.id !== selected.id) return;
+    (entry.target.claims || []).forEach(claim => {
+      if (claim.criterion) criteria.add(claim.criterion);
+    });
+  });
+  const related = [];
+  allTargets(state.projection).forEach(entry => {
+    (entry.target.claims || []).forEach(claim => {
+      const isOwnCriterion = criteria.has(claim.criterion);
+      const isOwnTarget = entry.item.id === selected.id;
+      if (isOwnCriterion || isOwnTarget) related.push({ ...entry, claim });
+    });
+  });
+  return related;
+}
+
+function renderRelated(root, state, selected, onItem, onTarget) {
+  const entries = relatedTargets(state, selected);
+  const selectedCriteria = new Set((selected.criteria || []).map(value => value.anchor));
+  allTargets(state.projection).filter(entry => entry.item.id === selected.id).forEach(entry => {
+    (entry.target.claims || []).forEach(claim => { if (claim.criterion) selectedCriteria.add(claim.criterion); });
+  });
+  if (!entries.length) return;
+  const related = {
+    specification: [],
+    implementation: [],
+    verification: [],
+  };
+  const seenItems = new Set();
+  const seenTargets = new Set();
+  entries.forEach(({ item, binding, target, claim }) => {
+    if (item.id !== selected.id && !seenItems.has(item.id)) {
+      seenItems.add(item.id);
+      related.specification.push({ item });
+    }
+    if (item.id !== selected.id && !selectedCriteria.has(claim.criterion)) return;
+    const kind = claim.kind === 'verifies' ? 'verification' : 'implementation';
+    const reference = target.reference || `${binding.anchor}/target.${target.id}`;
+    if (seenTargets.has(`${kind}:${reference}`)) return;
+    seenTargets.add(`${kind}:${reference}`);
+    related[kind].push({ item, target: { ...target, reference } });
+  });
+  const availableKinds = Object.keys(related).filter(kind => related[kind].length);
+  if (!availableKinds.length) return;
+  if (!availableKinds.includes(state.relatedKind)) state.relatedKind = availableKinds[0];
+
+  const section = document.createElement('section');
+  section.className = 'specification-related';
+  section.append(Object.assign(document.createElement('h3'), { textContent: t('items.related') }));
+  const chooser = document.createElement('label');
+  chooser.className = 'related-chooser';
+  const chooserLabel = document.createElement('span');
+  chooserLabel.textContent = t('items.related.choose');
+  const select = document.createElement('select');
+  select.className = 'native-select';
+  availableKinds.forEach(kind => {
+    const option = document.createElement('option');
+    const icon = kind === 'specification' ? '◆' : kind === 'verification' ? '✓' : '⌘';
+    option.value = kind;
+    option.textContent = `${icon} ${t(`items.related.${kind}`)} · ${related[kind].length}`;
+    option.selected = kind === state.relatedKind;
+    select.append(option);
+  });
+  select.addEventListener('change', () => {
+    state.relatedKind = select.value;
+    state.render();
+  });
+  chooser.append(chooserLabel, select);
+  section.append(chooser);
+
+  const list = document.createElement('div');
+  list.className = 'related-list';
+  related[state.relatedKind].forEach(entry => {
+    if (state.relatedKind === 'specification') {
+      list.append(button(
+        entry.item.title,
+        entry.item.kind === 'feature' ? '◆' : '◈',
+        () => onItem(entry.item.id),
+        'related-row specification',
+      ));
+      return;
+    }
+    const target = entry.target;
+    const targetName = target.selector?.name || target.path || target.reference;
+    const label = target.path && targetName !== target.path
+      ? `${targetName} · ${target.path}`
+      : targetName;
+    list.append(button(
+      label,
+      state.relatedKind === 'verification' ? '✓' : '⌘',
+      () => onTarget(target),
+      `related-row ${state.relatedKind}`,
+    ));
+  });
+  section.append(list);
+  root.append(section);
+}
+
+export function renderSpecificationDetail(root, state, selected, options = {}) {
+  const readOnly = Boolean(options.readOnly);
+  const onItem = options.onItem || (itemId => {
+    state.selectedSpecification = itemId;
+    state.specificationSourceTarget = null;
+    state.specificationSource = null;
+    state.specificationSourceFull = false;
+    state.render();
+  });
+  const onTarget = options.onTarget || (target => {
+    state.specificationSourceTarget = target;
+    state.specificationSource = null;
+    state.specificationSourceFull = false;
+    state.render();
+  });
   const head = document.createElement('div');
   head.className = 'canvas-head';
   const title = document.createElement('div');
@@ -467,18 +593,30 @@ function renderDetail(root, state, selected) {
   id.textContent = selected.id;
   meta.append(id);
   title.append(meta);
-  head.append(title);
-  const actions = document.createElement('div');
-  actions.className = 'actions';
-  actions.append(button(t('common.edit'), '✎', () => {
-    state.specificationEditor = { mode: 'edit', itemId: selected.id };
-    state.specificationPreview = null;
-    state.targetSuggestions = null;
-    state.targetSuggestionSelection = [];
-    state.render();
-  }, 'btn small'));
-  head.append(actions);
-  root.append(head);
+  if (!options.hideHeading) head.append(title);
+  if (!readOnly || options.action) {
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    if (options.action) {
+      actions.append(button(
+        options.action.label,
+        options.action.icon || '→',
+        options.action.onClick,
+        options.action.className || 'btn small primary',
+      ));
+    }
+    if (!readOnly) {
+      actions.append(button(t('common.edit'), '✎', () => {
+        state.specificationEditor = { mode: 'edit', itemId: selected.id };
+        state.specificationPreview = null;
+        state.targetSuggestions = null;
+        state.targetSuggestionSelection = [];
+        state.render();
+      }, 'btn small'));
+    }
+    head.append(actions);
+  }
+  if (head.childElementCount) root.append(head);
   if (selected.summary || selected.description) {
     const summary = document.createElement('p');
     summary.className = 'specification-summary';
@@ -498,7 +636,7 @@ function renderDetail(root, state, selected) {
     card.append(heading);
     values.forEach(value => {
       const row = document.createElement('div');
-      row.className = `specification-row${kind === 'criterion' ? ' specification-criterion' : ''}`;
+      row.className = `specification-row${kind === 'criterion' ? ' specification-criterion' : ''}${value.anchor === options.highlightedAnchor ? ' is-highlighted' : ''}`;
       const text = document.createElement('div');
       const anchor = document.createElement('strong');
       anchor.textContent = value.anchor;
@@ -506,13 +644,17 @@ function renderDetail(root, state, selected) {
       statement.textContent = value.statement;
       text.append(anchor, statement);
       row.append(text);
-      if (kind === 'criterion' && selected.status === 'implemented') {
+      if (!readOnly && kind === 'criterion' && selected.status === 'implemented') {
         row.append(button(t('items.create_work'), '→', () => state.runAction(
-          () => state.api.createModifyWork(state.projection, value.anchor),
+          () => state.api.runJourneyAction(state.projection, {
+            action: 'create',
+            anchor: value.anchor,
+            summary: `Change ${selected.title}`,
+          }),
           () => { state.selectedSlice = null; state.go('work'); },
         ), 'btn small'));
       }
-      if (kind === 'criterion') {
+      if (!readOnly && kind === 'criterion') {
         row.append(button(t('items.suggestions.review'), '◎', () => runBusy(state, async () => {
             const suggestions = await state.api.readTargetSuggestions(value.anchor);
             state.targetSuggestions = suggestions;
@@ -520,7 +662,7 @@ function renderDetail(root, state, selected) {
             state.specificationError = null;
         }), 'btn small'));
       }
-      row.append(button(t('common.edit'), '✎', () => {
+      if (!readOnly) row.append(button(t('common.edit'), '✎', () => {
         state.specificationEditor = {
           mode: 'edit',
           anchor: value.anchor,
@@ -538,13 +680,8 @@ function renderDetail(root, state, selected) {
     });
     root.append(card);
   });
-  if (!groups.some(([, values]) => values.length)) {
-    const empty = document.createElement('p');
-    empty.className = 'empty-state';
-    empty.textContent = t('items.empty.description');
-    root.append(empty);
-  }
-  renderTargetSuggestions(root, state);
+  renderRelated(root, state, selected, onItem, onTarget);
+  if (!readOnly) renderTargetSuggestions(root, state);
   const advanced = document.createElement('details');
   const summary = document.createElement('summary');
   summary.textContent = t('common.advanced');
@@ -556,7 +693,60 @@ function renderDetail(root, state, selected) {
   const anchors = document.createElement('p');
   anchors.textContent = `${t('items.bindings')}: ${(selected.anchors || []).join(', ') || '—'}`;
   advanced.append(anchors);
-  root.append(advanced);
+  if (!readOnly) root.append(advanced);
+}
+
+export function renderSourceDetail(root, state, target, onBack) {
+  const head = document.createElement('div');
+  head.className = 'canvas-head source-head';
+  head.append(button(t('items.back'), '←', onBack, 'btn small ghost'));
+  const title = document.createElement('div');
+  title.append(Object.assign(document.createElement('h2'), { textContent: t('items.open_code') }));
+  head.append(title);
+  const full = Boolean(state.specificationSourceFull);
+  head.append(button(full ? t('items.show_excerpt') : t('items.show_file'), full ? '↙' : '↗', () => {
+    state.specificationSourceFull = !full;
+    state.specificationSource = null;
+    state.render();
+  }, 'btn small ghost'));
+  root.append(head);
+  const key = `${target.reference}:${full ? 'file' : 'excerpt'}`;
+  if (state.specificationSource?.key === key) {
+    appendSource(root, state.specificationSource.value);
+    return;
+  }
+  const loading = document.createElement('p');
+  loading.className = 'empty-state';
+  loading.textContent = t('common.loading');
+  root.append(loading);
+  const request = full ? state.api.readSource(target.path) : state.api.readTargetSource(target.reference);
+  request.then(value => {
+    if (state.specificationSourceTarget?.reference !== target.reference || Boolean(state.specificationSourceFull) !== full) return;
+    state.specificationSource = { key, value };
+    state.render();
+  }).catch(() => {
+    if (state.specificationSourceTarget?.reference !== target.reference) return;
+    state.specificationSource = { key, value: null };
+    state.render();
+  });
+}
+
+function appendSource(root, source) {
+  if (!source) {
+    const error = document.createElement('p');
+    error.className = 'status-message status-error';
+    error.textContent = t('items.source_unavailable');
+    root.append(error);
+    return;
+  }
+  const meta = document.createElement('p');
+  meta.className = 'path source-path';
+  meta.textContent = `${source.path}:${source.line_start}${source.line_end !== source.line_start ? `-${source.line_end}` : ''}`;
+  root.append(meta);
+  const code = document.createElement('pre');
+  code.className = 'source-code';
+  code.textContent = source.content;
+  root.append(code);
 }
 
 export function initSpecifications(state) {
@@ -663,6 +853,14 @@ export function renderSpecifications(specifications, stateOrRoot = document.quer
     return entries;
   }
   if (state) state.selectedSpecification = selected.id;
-  renderDetail(root, state, selected);
+  if (state?.specificationSourceTarget) {
+    renderSourceDetail(root, state, state.specificationSourceTarget, () => {
+      state.specificationSourceTarget = null;
+      state.specificationSource = null;
+      state.render();
+    });
+  } else {
+    renderSpecificationDetail(root, state, selected);
+  }
   return entries;
 }

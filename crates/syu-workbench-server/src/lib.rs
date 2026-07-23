@@ -14,6 +14,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::net::IpAddr;
 use std::path::PathBuf;
 use std::process::Command;
+use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{fs, path::Path};
@@ -33,7 +34,7 @@ use syu_work_model::{
     AgentBlocker, AgentEvent, AgentPatch, AgentRun, AgentRunStatus, COMPLETION_ATTEMPT_SCHEMA,
     CompletionAttempt, FinalizationPreview, FinalizationReceipt, PLAN_APPROVAL_SCHEMA,
     PlanApproval, PlanStatus, RequestedTarget, VerificationReceipt, WORK_REQUEST_SCHEMA,
-    WorkConstraints, WorkOperation, WorkPlan, WorkRequest,
+    WorkConstraints, WorkOperation, WorkPlan, WorkRequest, WorkSeed,
 };
 use syu_workspace::{SpecIndex, SpecWorkspace};
 
@@ -54,6 +55,7 @@ pub struct WorkbenchSession {
     pub selected_page: WorkbenchPage,
     pub selected_item: Option<String>,
     pub selected_slice: Option<String>,
+    pub work_title: Option<String>,
     pub draft_request: Option<WorkRequest>,
     pub plan: Option<WorkPlan>,
     pub context_pack: Option<syu_work_model::ContextPack>,
@@ -154,6 +156,7 @@ impl WorkbenchServer {
             .route("/assets/{*asset}", get(api_asset))
             .route("/api/readiness", get(api_readiness))
             .route("/api/readiness/run", post(api_readiness_run))
+            .route("/api/diagnostics/run", post(api_diagnostics_run))
             .route("/api/specifications", get(api_specifications))
             .route(
                 "/api/specifications/candidates",
@@ -192,8 +195,10 @@ impl WorkbenchServer {
             .route("/api/config/apply", put(api_config_apply))
             .route("/api/config", get(api_config))
             .route("/api/scope/branch", get(api_branch_scope))
+            .route("/api/scope/diff", get(api_scope_diff))
             .route("/api/source", get(api_source))
             .route("/api/work/request", post(api_request))
+            .route("/api/work/action", post(api_journey_action))
             .route("/api/work/plan", post(api_plan))
             .route("/api/work/validate", post(api_validate))
             .route("/api/work/approve", post(api_approve))
@@ -419,6 +424,80 @@ pub struct WorkRequestCommand {
     pub basis: MutationBasis,
     pub request: WorkRequest,
 }
+
+/// The browser and native WebView use one user-facing action boundary.  The
+/// low-level planner and delivery APIs remain server implementation details.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
+pub enum JourneyAction {
+    Create { anchor: String, summary: String },
+    Rename { title: String },
+    Prepare,
+    Approve,
+    Start,
+    Retry,
+    Verify,
+    Finalize,
+    Restart,
+    Cancel,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct JourneyActionCommand {
+    pub basis: MutationBasis,
+    #[serde(flatten)]
+    pub action: JourneyAction,
+}
+
+fn journey_action_key(action: &JourneyAction) -> &'static str {
+    match action {
+        JourneyAction::Create { .. } => "create",
+        JourneyAction::Rename { .. } => "rename",
+        JourneyAction::Prepare => "prepare",
+        JourneyAction::Approve => "approve",
+        JourneyAction::Start => "start",
+        JourneyAction::Retry => "retry",
+        JourneyAction::Verify => "verify",
+        JourneyAction::Finalize => "finalize",
+        JourneyAction::Restart => "restart",
+        JourneyAction::Cancel => "cancel",
+    }
+}
+
+fn ensure_journey_transition(
+    service: &WorkbenchService,
+    basis_command: &MutationBasis,
+    action: &JourneyAction,
+) -> Result<(), ApiError> {
+    let snapshot = match action {
+        JourneyAction::Verify | JourneyAction::Finalize => {
+            execution_basis(service, basis_command).map_err(ApiError::from)?
+        }
+        _ => basis(service, basis_command).map_err(ApiError::from)?,
+    };
+    let session = service
+        .session
+        .read()
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+    let projection = project_session(&snapshot, &session).map_err(ApiError::from)?;
+    let requested = journey_action_key(action);
+    let expected = projection.journey.primary_action.action.as_str();
+    let recovery = projection
+        .journey
+        .recovery_action
+        .as_ref()
+        .map(|action| action.action.as_str());
+    if requested != expected && recovery != Some(requested) {
+        return Err(ApiError(
+            StatusCode::CONFLICT,
+            anyhow::anyhow!(
+                "journey action {requested} is not available; the current next action is {expected}"
+            ),
+        ));
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SliceCommand {
@@ -794,6 +873,10 @@ async fn api_asset(AxumPath(asset): AxumPath<String>) -> Response {
             "text/javascript; charset=utf-8",
             include_str!("../../syu-app-ui/assets/js/components/diagnostic.js").into(),
         ),
+        "js/components/diff.js" => (
+            "text/javascript; charset=utf-8",
+            include_str!("../../syu-app-ui/assets/js/components/diff.js").into(),
+        ),
         "js/components/editor.js" => (
             "text/javascript; charset=utf-8",
             include_str!("../../syu-app-ui/assets/js/components/editor.js").into(),
@@ -865,6 +948,150 @@ async fn api_readiness_run(
         .write()
         .map_err(|_| anyhow::anyhow!("workbench session lock"))?
         .readiness = Some(view.clone());
+    Ok(Json(view))
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct DiagnosticsRunCommand {
+    basis: MutationBasis,
+    context: String,
+    #[serde(default)]
+    range: Option<String>,
+}
+
+async fn api_diagnostics_run(
+    State(service): State<Arc<WorkbenchService>>,
+    Json(command): Json<DiagnosticsRunCommand>,
+) -> Result<Json<ValidationRunView>, ApiError> {
+    let snapshot = basis(&service, &command.basis)?;
+    let started = SystemTime::now();
+    let context = command.context.as_str();
+    let view = match context {
+        "workspace" => {
+            let result = syu_validation::validate_without_readiness(&ValidationContext {
+                config: &snapshot.workspace.config,
+                workspace: &snapshot.workspace,
+                index: &snapshot.index,
+                changed_files: None,
+                reported_changed_files: None,
+                work_plan: None,
+                selected_slice: None,
+                plan_mode: PlanValidationMode::PreState,
+                preset: snapshot.workspace.config.validation.preset,
+                revision: Some(&snapshot.revision),
+                change_base_revision: None,
+            });
+            ValidationRunView::completed(
+                "workspace",
+                Some(snapshot.revision.clone()),
+                result,
+                false,
+                false,
+                snapshot.workspace.config.validation.preset,
+                started,
+            )
+        }
+        "git_range" => {
+            let range = command
+                .range
+                .filter(|range| !range.trim().is_empty())
+                .unwrap_or(configured_change_range(&snapshot.workspace)?);
+            let changed_files = branch_changed_files(&snapshot.workspace.root, &range)?;
+            let result = syu_validation::validate_without_readiness(&ValidationContext {
+                config: &snapshot.workspace.config,
+                workspace: &snapshot.workspace,
+                index: &snapshot.index,
+                changed_files: Some(&changed_files),
+                reported_changed_files: None,
+                work_plan: None,
+                selected_slice: None,
+                plan_mode: PlanValidationMode::PreState,
+                preset: snapshot.workspace.config.validation.preset,
+                revision: Some(&snapshot.revision),
+                change_base_revision: None,
+            });
+            ValidationRunView::completed(
+                "git_range",
+                Some(range),
+                result,
+                true,
+                false,
+                snapshot.workspace.config.validation.preset,
+                started,
+            )
+        }
+        "work-plan" | "work_plan" | "slice" => {
+            let (plan, selected_slice_id) = {
+                let session = service
+                    .session
+                    .read()
+                    .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+                (
+                    session.plan.clone().ok_or_else(|| {
+                        anyhow::anyhow!("prepare a work plan before diagnosing it")
+                    })?,
+                    session.selected_slice.clone(),
+                )
+            };
+            let canonical_plan = syu_validation::canonical_plan_for_execution(
+                &snapshot.workspace,
+                &snapshot.index,
+                &plan,
+                &snapshot.revision,
+            )
+            .map_err(|error| ApiError(StatusCode::CONFLICT, error))?;
+            let selected_slice = if context == "slice" {
+                let selected_slice_id = selected_slice_id
+                    .as_deref()
+                    .ok_or_else(|| anyhow::anyhow!("select a work slice before diagnosing it"))?;
+                Some(
+                    canonical_plan
+                        .slices
+                        .iter()
+                        .find(|slice| slice.id == selected_slice_id)
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("the selected slice is not in the work plan")
+                        })?,
+                )
+            } else {
+                None
+            };
+            let result = syu_validation::validate_without_readiness(&ValidationContext {
+                config: &snapshot.workspace.config,
+                workspace: &snapshot.workspace,
+                index: &snapshot.index,
+                changed_files: None,
+                reported_changed_files: None,
+                work_plan: Some(&canonical_plan),
+                selected_slice,
+                plan_mode: PlanValidationMode::PreState,
+                preset: snapshot.workspace.config.validation.preset,
+                revision: Some(&snapshot.revision),
+                change_base_revision: None,
+            });
+            ValidationRunView::completed(
+                context,
+                Some(canonical_plan.canonical_digest.clone()),
+                result,
+                false,
+                true,
+                snapshot.workspace.config.validation.preset,
+                started,
+            )
+        }
+        _ => {
+            return Err(ApiError(
+                StatusCode::BAD_REQUEST,
+                anyhow::anyhow!("unknown diagnostics context"),
+            ));
+        }
+    };
+    service
+        .session
+        .write()
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))?
+        .last_validation = Some(view.clone());
     Ok(Json(view))
 }
 
@@ -1973,6 +2200,7 @@ async fn api_branch_scope(
         Some(range) => range,
         None => configured_change_range(workspace)?,
     };
+    validate_diff_range(&range)?;
     let changed = branch_changed_files(&workspace.root, &range)?;
     Ok(Json(ScopeView {
         branch: Some(branch_scope_view(
@@ -1987,6 +2215,140 @@ async fn api_branch_scope(
 #[derive(Debug, Deserialize)]
 struct BranchScopeQuery {
     range: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ScopeDiffView {
+    pub range: String,
+    pub state: String,
+    pub additions: usize,
+    pub deletions: usize,
+    pub files: Vec<ScopeDiffFileView>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ScopeDiffFileView {
+    pub path: String,
+    pub status: String,
+    pub additions: usize,
+    pub deletions: usize,
+    pub patch: String,
+}
+
+async fn api_scope_diff(
+    State(service): State<Arc<WorkbenchService>>,
+    Query(query): Query<BranchScopeQuery>,
+) -> Result<Json<ScopeDiffView>, ApiError> {
+    let snapshot = service.snapshot()?;
+    let range = match query.range {
+        Some(range) => range,
+        None => configured_change_range(&snapshot.workspace)?,
+    };
+    validate_diff_range(&range)?;
+    let changed = branch_changed_files(&snapshot.workspace.root, &range)?;
+    Ok(Json(scope_diff_view(
+        &snapshot.workspace.root,
+        range,
+        &changed,
+    )?))
+}
+
+fn validate_diff_range(range: &str) -> Result<()> {
+    if range.trim().is_empty()
+        || range.starts_with('-')
+        || range.chars().any(char::is_control)
+        || range.chars().any(char::is_whitespace)
+    {
+        anyhow::bail!("invalid Git range");
+    }
+    Ok(())
+}
+
+fn diff_base_revision(root: &Path, range: &str) -> Result<String> {
+    if let Some((left, right)) = range.split_once("...") {
+        validate_diff_range(left)?;
+        validate_diff_range(right)?;
+        return git_merge_base(root, left, right);
+    }
+    if let Some((left, _)) = range.split_once("..") {
+        validate_diff_range(left)?;
+        return Ok(left.to_owned());
+    }
+    Ok(range.to_owned())
+}
+
+fn scope_diff_view(
+    root: &Path,
+    range: String,
+    changed: &[syu_validation::ChangedFile],
+) -> Result<ScopeDiffView> {
+    let base = diff_base_revision(root, &range)?;
+    let mut files = Vec::new();
+    for changed_file in changed {
+        let path = changed_file
+            .new_path
+            .as_ref()
+            .or(changed_file.old_path.as_ref())
+            .map(|path| path.display().to_string())
+            .unwrap_or_default();
+        if path.is_empty() {
+            continue;
+        }
+        let mut patch = git_output(
+            root,
+            &[
+                "diff",
+                "--no-ext-diff",
+                "--unified=3",
+                "--no-color",
+                &base,
+                "--",
+                &path,
+            ],
+        )
+        .map(String::from_utf8)??;
+        if patch.is_empty()
+            && matches!(changed_file.status, syu_validation::ChangeStatus::Untracked)
+        {
+            let content = fs::read_to_string(root.join(&path)).unwrap_or_default();
+            patch = format!(
+                "diff --git a/{path} b/{path}\nnew file mode 100644\n--- /dev/null\n+++ b/{path}\n@@ -0,0 +1,{} @@\n{}",
+                content.lines().count(),
+                content
+                    .lines()
+                    .map(|line| format!("+{line}\n"))
+                    .collect::<String>()
+            );
+        }
+        let additions = patch
+            .lines()
+            .filter(|line| line.starts_with('+') && !line.starts_with("+++"))
+            .count();
+        let deletions = patch
+            .lines()
+            .filter(|line| line.starts_with('-') && !line.starts_with("---"))
+            .count();
+        files.push(ScopeDiffFileView {
+            path,
+            status: format!("{:?}", changed_file.status).to_ascii_lowercase(),
+            additions,
+            deletions,
+            patch,
+        });
+    }
+    let additions = files.iter().map(|file| file.additions).sum();
+    let deletions = files.iter().map(|file| file.deletions).sum();
+    Ok(ScopeDiffView {
+        range,
+        state: if files.is_empty() {
+            "empty".into()
+        } else {
+            "ready".into()
+        },
+        additions,
+        deletions,
+        files,
+    })
 }
 
 fn branch_changed_files(root: &Path, range: &str) -> Result<Vec<syu_validation::ChangedFile>> {
@@ -2234,7 +2596,8 @@ fn collect_branch_patch(
 
 #[derive(Debug, Deserialize)]
 struct SourceQuery {
-    path: String,
+    path: Option<String>,
+    target: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -2242,14 +2605,45 @@ struct SourceView {
     path: String,
     content: String,
     hash: String,
+    line_start: usize,
+    line_end: usize,
+    is_excerpt: bool,
 }
 
 async fn api_source(
     State(service): State<Arc<WorkbenchService>>,
     Query(query): Query<SourceQuery>,
 ) -> Result<Json<SourceView>, ApiError> {
+    if query.path.is_some() == query.target.is_some() {
+        return Err(ApiError(
+            StatusCode::BAD_REQUEST,
+            anyhow::anyhow!("source requests require exactly one of path or target"),
+        ));
+    }
+    if let Some(reference) = query.target {
+        let target = reference
+            .parse::<BoundTargetRef>()
+            .map_err(|error| ApiError(StatusCode::BAD_REQUEST, anyhow::anyhow!(error)))?;
+        let snapshot = service.snapshot()?;
+        let artifact = snapshot.index.target(&target).ok_or_else(|| {
+            ApiError(
+                StatusCode::NOT_FOUND,
+                anyhow::anyhow!("target {target} was not found"),
+            )
+        })?;
+        let resolved = syu_workspace::resolve_target_in_workspace(&snapshot.workspace, artifact)?;
+        return Ok(Json(SourceView {
+            path: artifact.path.to_string_lossy().into_owned(),
+            content: resolved.excerpt,
+            hash: resolved.content_hash,
+            line_start: resolved.line_start,
+            line_end: resolved.line_end,
+            is_excerpt: true,
+        }));
+    }
+    let source_path = query.path.expect("validated source path");
     let workspace = SpecWorkspace::load(&service.workspace_root)?;
-    let relative = syu_spec_model::RepoPath::new(&query.path)
+    let relative = syu_spec_model::RepoPath::new(&source_path)
         .map_err(|error| ApiError(StatusCode::BAD_REQUEST, anyhow::anyhow!(error)))?;
     let root = fs::canonicalize(&workspace.root).map_err(anyhow::Error::from)?;
     let path = fs::canonicalize(root.join(relative.as_path()))
@@ -2261,10 +2655,14 @@ async fn api_source(
         ));
     }
     let content = fs::read_to_string(&path).map_err(anyhow::Error::from)?;
+    let line_end = content.lines().count().max(1);
     Ok(Json(SourceView {
         path: relative.to_string_lossy().into_owned(),
         hash: content_hash(&content),
         content,
+        line_start: 1,
+        line_end,
+        is_excerpt: false,
     }))
 }
 async fn api_request(
@@ -2276,6 +2674,7 @@ async fn api_request(
         .session
         .write()
         .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+    session.work_title = Some(command.request.summary.trim().to_owned());
     session.draft_request = Some(command.request);
     session.plan = None;
     session.selected_slice = None;
@@ -2283,6 +2682,195 @@ async fn api_request(
     session.verification_receipt = None;
     session.agent_run = None;
     session.last_validation = None;
+    Ok(Json(project_session(&snapshot, &session)?))
+}
+
+async fn api_journey_action(
+    State(service): State<Arc<WorkbenchService>>,
+    Json(command): Json<JourneyActionCommand>,
+) -> Result<Json<WorkspaceProjection>, ApiError> {
+    if !matches!(
+        &command.action,
+        JourneyAction::Create { .. } | JourneyAction::Rename { .. }
+    ) {
+        ensure_journey_transition(&service, &command.basis, &command.action)?;
+    }
+    match command.action {
+        JourneyAction::Create { anchor, summary } => {
+            let snapshot = basis(&service, &command.basis)?;
+            let anchor = SpecAnchor::from_str(&anchor)
+                .map_err(|error| ApiError(StatusCode::BAD_REQUEST, anyhow::anyhow!(error)))?;
+            if summary.trim().is_empty() {
+                return Err(ApiError(
+                    StatusCode::BAD_REQUEST,
+                    anyhow::anyhow!("describe the change before continuing"),
+                ));
+            }
+            let store = DeliveryStore::for_workspace(&snapshot.workspace.root)?;
+            let mut session = service
+                .session
+                .write()
+                .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+            let summary = summary.trim().to_owned();
+            session.work_title = Some(summary.clone());
+            session.draft_request = Some(WorkRequest {
+                schema: WORK_REQUEST_SCHEMA.into(),
+                id: store.new_id("work"),
+                summary,
+                operation: WorkOperation::Modify,
+                seeds: vec![WorkSeed::Anchor(anchor)],
+                // A guided journey has one executable change boundary.  Plans
+                // with several isolated slices need separate worktrees, so do
+                // not silently pick and execute their first slice here.
+                constraints: WorkConstraints {
+                    max_slices: Some(1),
+                    ..WorkConstraints::default()
+                },
+                requested_targets: vec![],
+            });
+            session.plan = None;
+            session.selected_slice = None;
+            session.context_pack = None;
+            session.verification_receipt = None;
+            session.agent_run = None;
+            session.last_validation = None;
+        }
+        JourneyAction::Rename { title } => {
+            let _ = basis(&service, &command.basis)?;
+            let title = title.trim();
+            if title.is_empty() || title.chars().count() > 120 {
+                return Err(ApiError(
+                    StatusCode::BAD_REQUEST,
+                    anyhow::anyhow!("work title must contain 1 to 120 characters"),
+                ));
+            }
+            let mut session = service
+                .session
+                .write()
+                .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+            if session.draft_request.is_none() {
+                return Err(ApiError(
+                    StatusCode::CONFLICT,
+                    anyhow::anyhow!("start work before changing its title"),
+                ));
+            }
+            session.work_title = Some(title.to_owned());
+        }
+        JourneyAction::Prepare => {
+            let Json(plan) = api_plan(State(service.clone()), Json(command.basis.clone())).await?;
+            // A guided journey owns one focused change boundary. Requests
+            // supplied by a CLI caller can legitimately plan multiple ready
+            // slices, so do not quietly pick the first one here.
+            if matches!(plan.status, PlanStatus::Ready) && plan.slices.len() == 1 {
+                let slice_id = plan
+                    .slices
+                    .first()
+                    .map(|slice| slice.id.clone())
+                    .ok_or_else(|| anyhow::anyhow!("the plan has no executable slice"))?;
+                let _ = api_context(
+                    State(service.clone()),
+                    Json(SliceCommand {
+                        basis: command.basis.clone(),
+                        slice_id,
+                    }),
+                )
+                .await?;
+                let _ = api_validate(State(service.clone()), Json(command.basis.clone())).await?;
+            }
+        }
+        JourneyAction::Approve => {
+            let _ = api_approve(State(service.clone()), Json(command.basis.clone())).await?;
+        }
+        JourneyAction::Start | JourneyAction::Retry => {
+            let slice_id = service
+                .session
+                .read()
+                .map_err(|_| anyhow::anyhow!("workbench session lock"))?
+                .selected_slice
+                .clone()
+                .ok_or_else(|| anyhow::anyhow!("prepare a selected slice before implementation"))?;
+            let _ = api_agent_start(
+                State(service.clone()),
+                Json(AgentStartCommand {
+                    basis: command.basis.clone(),
+                    slice_id,
+                }),
+            )
+            .await?;
+        }
+        JourneyAction::Verify => {
+            let slice_id = service
+                .session
+                .read()
+                .map_err(|_| anyhow::anyhow!("workbench session lock"))?
+                .selected_slice
+                .clone()
+                .ok_or_else(|| anyhow::anyhow!("select a prepared slice before verification"))?;
+            let _ = api_agent_verify(
+                State(service.clone()),
+                Json(SliceCommand {
+                    basis: command.basis.clone(),
+                    slice_id,
+                }),
+            )
+            .await?;
+        }
+        JourneyAction::Finalize => {
+            let snapshot = basis(&service, &command.basis)?;
+            let (plan_digest, slice_id) = {
+                let session = service
+                    .session
+                    .read()
+                    .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
+                (
+                    session
+                        .plan
+                        .as_ref()
+                        .map(|plan| plan.canonical_digest.clone())
+                        .ok_or_else(|| anyhow::anyhow!("prepare a work plan before finalizing"))?,
+                    session
+                        .selected_slice
+                        .clone()
+                        .ok_or_else(|| anyhow::anyhow!("select a work slice before finalizing"))?,
+                )
+            };
+            let attempt_id = completion_history(&snapshot.workspace)?
+                .current_for(&plan_digest, &slice_id)
+                .filter(|attempt| attempt.status == "complete" && !attempt.finalized)
+                .map(|attempt| attempt.attempt_id.clone())
+                .ok_or_else(|| anyhow::anyhow!("there is no completed work ready to finish"))?;
+            let Json(preview) = api_finalize_preview(
+                State(service.clone()),
+                Json(FinalizeCommand {
+                    basis: command.basis.clone(),
+                    attempt_id: attempt_id.clone(),
+                    preview_token: None,
+                }),
+            )
+            .await?;
+            let _ = api_finalize_apply(
+                State(service.clone()),
+                Json(FinalizeCommand {
+                    basis: command.basis.clone(),
+                    attempt_id,
+                    preview_token: Some(preview.preview_token),
+                }),
+            )
+            .await?;
+        }
+        JourneyAction::Restart | JourneyAction::Cancel => {
+            let _ = api_discard(State(service.clone())).await?;
+        }
+    }
+    // Verification and finalization are allowed to update editable source.
+    // The action's precondition has already been checked by its lower-level
+    // endpoint, so build the response from the fresh snapshot rather than
+    // rejecting a side effect that just succeeded against the old basis.
+    let snapshot = service.snapshot()?;
+    let session = service
+        .session
+        .read()
+        .map_err(|_| anyhow::anyhow!("workbench session lock"))?;
     Ok(Json(project_session(&snapshot, &session)?))
 }
 async fn api_plan(
@@ -2823,6 +3411,7 @@ async fn api_discard(State(service): State<Arc<WorkbenchService>>) -> Result<Sta
 pub struct WorkspaceProjection {
     pub snapshot: WorkspaceSummary,
     pub navigation: NavigationView,
+    pub journey: WorkJourneyView,
     pub capabilities: Vec<ActionCapabilityView>,
     pub work: WorkSessionView,
     pub readiness: ReadinessView,
@@ -2831,6 +3420,78 @@ pub struct WorkspaceProjection {
     pub diagnostics: DiagnosticsView,
 }
 pub type WorkbenchProjection = WorkspaceProjection;
+
+/// A presentation-safe view of the work lifecycle.  It deliberately contains
+/// no repository paths, selectors, opaque IDs, or commands; those belong in
+/// `advanced` and are revealed only by an explicit user choice.
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkJourneyView {
+    pub title: String,
+    pub current_step: String,
+    pub steps: Vec<JourneyStepView>,
+    pub primary_action: JourneyActionView,
+    pub recovery_action: Option<JourneyActionView>,
+    pub approved_scope: Option<JourneyScopeView>,
+    pub evidence: JourneyEvidenceView,
+    pub related_specification: Option<JourneySpecificationView>,
+    pub advanced: JourneyAdvancedView,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JourneySpecificationView {
+    pub title: String,
+    pub overview: String,
+    pub status: Option<String>,
+    pub criterion_statement: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JourneyStepView {
+    pub id: String,
+    pub status: String,
+    pub title: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JourneyActionView {
+    pub action: String,
+    pub label: String,
+    pub label_key: String,
+    pub explanation: String,
+    pub explanation_key: String,
+    pub confirmation_required: bool,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JourneyScopeView {
+    pub summary: String,
+    pub status: String,
+    pub editable_target_count: usize,
+    pub slice_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JourneyEvidenceView {
+    pub status: String,
+    pub summary: String,
+    pub blockers: Vec<JourneyBlockerView>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct JourneyBlockerView {
+    pub message: String,
+    pub next_action: String,
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct JourneyAdvancedView {
+    pub request_id: Option<String>,
+    pub plan_id: Option<String>,
+    pub selected_slice_id: Option<String>,
+    pub attempt_id: Option<String>,
+    pub specification_anchor: Option<String>,
+}
 #[derive(Debug, Clone, Serialize)]
 pub struct NavigationView {
     pub selected_page: WorkbenchPage,
@@ -2859,6 +3520,15 @@ pub struct CompletionHistoryView {
     pub current: Option<CompletionAttemptView>,
     pub previous: Vec<CompletionAttemptView>,
 }
+
+impl CompletionHistoryView {
+    fn current_for(&self, plan_digest: &str, slice_id: &str) -> Option<&CompletionAttemptView> {
+        self.current
+            .iter()
+            .chain(self.previous.iter())
+            .find(|attempt| attempt.plan_digest == plan_digest && attempt.slice_id == slice_id)
+    }
+}
 #[derive(Debug, Clone, Serialize)]
 pub struct CompletionAttemptView {
     pub attempt_id: String,
@@ -2880,6 +3550,7 @@ pub struct WorkRequestView {
 #[derive(Debug, Clone, Serialize)]
 pub struct PlanView {
     pub id: String,
+    pub digest: String,
     pub status: String,
     pub slices: Vec<SliceView>,
 }
@@ -3425,6 +4096,7 @@ fn project_with_index(
                 WorkbenchPage::Settings,
             ],
         },
+        journey: empty_journey(),
         capabilities: vec![
             ActionCapabilityView {
                 id: "work.plan".into(),
@@ -3487,6 +4159,59 @@ fn project_with_index(
     })
 }
 
+fn empty_journey() -> WorkJourneyView {
+    WorkJourneyView {
+        title: "Describe the change you want to make".into(),
+        current_step: "describe".into(),
+        steps: journey_steps("describe"),
+        primary_action: JourneyActionView {
+            action: "create".into(),
+            label: "Choose a relevant requirement".into(),
+            label_key: "journey.action.create".into(),
+            explanation: "Start with a plain-language description, then choose the behavior that should change.".into(),
+            explanation_key: "journey.explanation.create".into(),
+            confirmation_required: false,
+            enabled: true,
+        },
+        recovery_action: None,
+        approved_scope: None,
+        evidence: JourneyEvidenceView {
+            status: "not_started".into(),
+            summary: "No work has been started yet.".into(),
+            blockers: vec![],
+        },
+        related_specification: None,
+        advanced: JourneyAdvancedView::default(),
+    }
+}
+
+fn journey_steps(current: &str) -> Vec<JourneyStepView> {
+    let ids = [
+        ("describe", "Describe"),
+        ("review", "Review"),
+        ("approve", "Approve"),
+        ("implement", "Implement"),
+        ("verify", "Check"),
+        ("complete", "Complete"),
+    ];
+    let current_index = ids.iter().position(|(id, _)| *id == current).unwrap_or(0);
+    ids.iter()
+        .enumerate()
+        .map(|(index, (id, title))| JourneyStepView {
+            id: (*id).into(),
+            title: (*title).into(),
+            status: if index < current_index {
+                "complete"
+            } else if index == current_index {
+                "current"
+            } else {
+                "upcoming"
+            }
+            .into(),
+        })
+        .collect()
+}
+
 fn request_view(request: &WorkRequest) -> WorkRequestView {
     WorkRequestView {
         summary: request.summary.clone(),
@@ -3507,6 +4232,7 @@ fn target_view(target: &syu_work_model::PlannedTarget) -> TargetView {
 fn plan_view(plan: &WorkPlan) -> PlanView {
     PlanView {
         id: plan.id.clone(),
+        digest: plan.canonical_digest.clone(),
         status: format!("{:?}", plan.status).to_ascii_lowercase(),
         slices: plan
             .slices
@@ -3667,6 +4393,7 @@ fn project_session(
         .last_validation
         .clone()
         .unwrap_or_else(ValidationRunView::not_run);
+    projection.diagnostics.validation = projection.work.validation.clone();
     let plan_validated = session
         .last_validation
         .as_ref()
@@ -3699,7 +4426,399 @@ fn project_session(
         capability.disabled_reason = (!verifiable)
             .then(|| "Validate a selected verifiable slice before verification.".into());
     }
+    projection.journey = journey_view(
+        workspace,
+        &projection.work,
+        &projection.specifications.specifications,
+        session,
+    )?;
     Ok(projection)
+}
+
+fn journey_specification_context(
+    items: &[ItemSummary],
+    request: Option<&WorkRequest>,
+) -> Option<(JourneySpecificationView, String)> {
+    let request = request?;
+    let mut criteria = request
+        .seeds
+        .iter()
+        .filter_map(|seed| match seed {
+            WorkSeed::Anchor(anchor) if anchor.kind == LocalAnchorKind::Criterion => {
+                Some(anchor.clone())
+            }
+            _ => None,
+        })
+        .chain(
+            request
+                .requested_targets
+                .iter()
+                .filter_map(|target| target.criterion.clone()),
+        )
+        .collect::<BTreeSet<_>>();
+    if criteria.len() != 1 {
+        return None;
+    }
+    let anchor = criteria.pop_first()?;
+    let anchor_text = anchor.to_string();
+    let item_id = anchor.item.to_string();
+    let item = items.iter().find(|item| item.id == item_id)?;
+    let criterion = item
+        .criteria
+        .iter()
+        .find(|criterion| criterion.anchor == anchor_text)?;
+    let overview = if item.summary.trim().is_empty() {
+        item.description.clone().unwrap_or_default()
+    } else {
+        item.summary.clone()
+    };
+    Some((
+        JourneySpecificationView {
+            title: item.title.clone(),
+            overview,
+            status: item.status.clone(),
+            criterion_statement: criterion.statement.clone(),
+        },
+        anchor_text,
+    ))
+}
+
+fn journey_view(
+    workspace: &SpecWorkspace,
+    work: &WorkSessionView,
+    items: &[ItemSummary],
+    session: &WorkbenchSession,
+) -> Result<WorkJourneyView> {
+    let title = session
+        .work_title
+        .clone()
+        .or_else(|| work.request.as_ref().map(|request| request.summary.clone()))
+        .unwrap_or_else(|| "Describe the change you want to make".into());
+    let specification = journey_specification_context(items, session.draft_request.as_ref());
+    let related_specification = specification.as_ref().map(|(view, _)| view.clone());
+    let mut advanced = JourneyAdvancedView {
+        request_id: session
+            .draft_request
+            .as_ref()
+            .map(|request| request.id.clone()),
+        plan_id: work.plan.as_ref().map(|plan| plan.id.clone()),
+        selected_slice_id: work.selected_slice.clone(),
+        attempt_id: None,
+        specification_anchor: specification.as_ref().map(|(_, anchor)| anchor.clone()),
+    };
+    if work.request.is_none() {
+        return Ok(empty_journey());
+    }
+    let Some(plan) = work.plan.as_ref() else {
+        return Ok(WorkJourneyView {
+            title,
+            current_step: "review".into(),
+            steps: journey_steps("review"),
+            primary_action: JourneyActionView {
+                action: "prepare".into(),
+                label: "Prepare a safe plan".into(),
+                label_key: "journey.action.prepare".into(),
+                explanation:
+                    "We will explain the proposed change and check it before asking for approval."
+                        .into(),
+                explanation_key: "journey.explanation.prepare".into(),
+                confirmation_required: false,
+                enabled: true,
+            },
+            recovery_action: Some(cancel_action()),
+            approved_scope: None,
+            evidence: JourneyEvidenceView {
+                status: "draft".into(),
+                summary: "A behavior has been selected; its scope has not been approved.".into(),
+                blockers: vec![],
+            },
+            related_specification,
+            advanced,
+        });
+    };
+    if plan.status != "ready" || plan.slices.len() != 1 {
+        let (summary, message, next_action) = if plan.slices.len() > 1 {
+            (
+                "The proposed change needs separate focused steps.",
+                "This change needs separate focused steps.",
+                "Choose one behavior to change first.",
+            )
+        } else if plan.slices.is_empty() {
+            (
+                "We could not find a safe executable change for this behavior.",
+                "This behavior does not yet have a bounded implementation path.",
+                "Choose a related behavior or add its implementation guidance.",
+            )
+        } else {
+            (
+                "The proposed change cannot be prepared safely yet.",
+                "The change boundary needs attention before implementation can begin.",
+                "Choose a smaller related behavior and review it again.",
+            )
+        };
+        return Ok(WorkJourneyView {
+            title,
+            current_step: "review".into(),
+            steps: journey_steps("review"),
+            primary_action: JourneyActionView {
+                action: "restart".into(),
+                label: "Choose a smaller change".into(),
+                label_key: "journey.action.restart".into(),
+                explanation:
+                    "This change needs separate focused work. Choose one behavior to change first."
+                        .into(),
+                explanation_key: "journey.explanation.restart".into(),
+                confirmation_required: false,
+                enabled: true,
+            },
+            recovery_action: Some(cancel_action()),
+            approved_scope: None,
+            evidence: JourneyEvidenceView {
+                status: "blocked".into(),
+                summary: summary.into(),
+                blockers: vec![JourneyBlockerView {
+                    message: message.into(),
+                    next_action: next_action.into(),
+                }],
+            },
+            related_specification,
+            advanced,
+        });
+    }
+    let approved = DeliveryStore::for_workspace(&workspace.root)
+        .ok()
+        .and_then(|store| store.approval(&plan.digest).ok())
+        .is_some();
+    let scope = JourneyScopeView {
+        summary: format!(
+            "{} focused change{} are proposed.",
+            plan.slices.len(),
+            if plan.slices.len() == 1 { "" } else { "s" }
+        ),
+        status: if approved { "approved" } else { "proposed" }.into(),
+        editable_target_count: plan
+            .slices
+            .iter()
+            .map(|slice| slice.editable_targets.len())
+            .sum(),
+        slice_count: plan.slices.len(),
+    };
+    let validation_passed = matches!(work.validation.state, ValidationRunState::Passed);
+    let completed = work
+        .selected_slice
+        .as_deref()
+        .and_then(|slice_id| work.completion.current_for(&plan.digest, slice_id));
+    advanced.attempt_id = completed.map(|attempt| attempt.attempt_id.clone());
+    let blockers = completed
+        .map(|attempt| {
+            attempt
+                .blockers
+                .iter()
+                .map(|blocker| JourneyBlockerView {
+                    message: blocker.message.clone(),
+                    next_action: blocker.next_action.clone(),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    if completed.is_some_and(|attempt| attempt.finalized) {
+        return Ok(WorkJourneyView {
+            title,
+            current_step: "complete".into(),
+            steps: journey_steps("complete"),
+            primary_action: JourneyActionView {
+                action: "cancel".into(),
+                label: "Start another change".into(),
+                label_key: "journey.action.start_another".into(),
+                explanation: "This work is complete. Start a new change when you are ready.".into(),
+                explanation_key: "journey.explanation.start_another".into(),
+                confirmation_required: false,
+                enabled: true,
+            },
+            recovery_action: None,
+            approved_scope: Some(scope),
+            evidence: JourneyEvidenceView {
+                status: "complete".into(),
+                summary: "The approved change and its completion evidence were recorded.".into(),
+                blockers,
+            },
+            related_specification,
+            advanced,
+        });
+    }
+    if completed.is_some_and(|attempt| attempt.status == "complete") {
+        return Ok(WorkJourneyView {
+            title,
+            current_step: "complete".into(),
+            steps: journey_steps("complete"),
+            primary_action: JourneyActionView {
+                action: "finalize".into(),
+                label: "Confirm completion".into(),
+                label_key: "journey.action.finalize".into(),
+                explanation: "Confirm the checked change after reviewing the completion evidence."
+                    .into(),
+                explanation_key: "journey.explanation.finalize".into(),
+                confirmation_required: true,
+                enabled: true,
+            },
+            recovery_action: Some(cancel_action()),
+            approved_scope: Some(scope),
+            evidence: JourneyEvidenceView {
+                status: "ready".into(),
+                summary: "Verification evidence is ready for confirmation.".into(),
+                blockers,
+            },
+            related_specification,
+            advanced,
+        });
+    }
+    if work
+        .agent
+        .as_ref()
+        .is_some_and(|agent| matches!(agent.status, AgentRunStatus::Blocked))
+    {
+        return Ok(WorkJourneyView {
+            title,
+            current_step: "implement".into(),
+            steps: journey_steps("implement"),
+            primary_action: JourneyActionView {
+                action: "retry".into(),
+                label: "Start a new implementation run".into(),
+                label_key: "journey.action.retry".into(),
+                explanation:
+                    "Resolve the reported blocker, then start a new run in the approved scope."
+                        .into(),
+                explanation_key: "journey.explanation.retry".into(),
+                confirmation_required: true,
+                enabled: true,
+            },
+            recovery_action: Some(cancel_action()),
+            approved_scope: Some(scope),
+            evidence: JourneyEvidenceView {
+                status: "implementation_blocked".into(),
+                summary:
+                    "Implementation could not be verified; resolve the blocker before retrying."
+                        .into(),
+                blockers,
+            },
+            related_specification,
+            advanced,
+        });
+    }
+    if !validation_passed {
+        return Ok(WorkJourneyView {
+            title,
+            current_step: "review".into(),
+            steps: journey_steps("review"),
+            primary_action: JourneyActionView {
+                action: "prepare".into(),
+                label: "Review the plan again".into(),
+                label_key: "journey.action.prepare".into(),
+                explanation: "The plan needs a successful safety check before it can be approved."
+                    .into(),
+                explanation_key: "journey.explanation.prepare".into(),
+                confirmation_required: false,
+                enabled: true,
+            },
+            recovery_action: Some(cancel_action()),
+            approved_scope: Some(scope),
+            evidence: JourneyEvidenceView {
+                status: "needs_attention".into(),
+                summary: "Resolve the plan review findings before continuing.".into(),
+                blockers,
+            },
+            related_specification,
+            advanced,
+        });
+    }
+    if !approved {
+        return Ok(WorkJourneyView {
+            title,
+            current_step: "approve".into(),
+            steps: journey_steps("approve"),
+            primary_action: JourneyActionView {
+                action: "approve".into(),
+                label: "Approve this plan".into(),
+                label_key: "journey.action.approve".into(),
+                explanation: "Approval fixes the bounded change before implementation can begin."
+                    .into(),
+                explanation_key: "journey.explanation.approve".into(),
+                confirmation_required: true,
+                enabled: true,
+            },
+            recovery_action: Some(cancel_action()),
+            approved_scope: Some(scope),
+            evidence: JourneyEvidenceView {
+                status: "reviewed".into(),
+                summary: "The proposed scope passed its safety check.".into(),
+                blockers,
+            },
+            related_specification,
+            advanced,
+        });
+    }
+    if work.agent.is_none() {
+        return Ok(WorkJourneyView {
+            title,
+            current_step: "implement".into(),
+            steps: journey_steps("implement"),
+            primary_action: JourneyActionView {
+                action: "start".into(),
+                label: "Start implementation".into(),
+                label_key: "journey.action.start".into(),
+                explanation: "Implementation is limited to the approved scope.".into(),
+                explanation_key: "journey.explanation.start".into(),
+                confirmation_required: true,
+                enabled: true,
+            },
+            recovery_action: Some(cancel_action()),
+            approved_scope: Some(scope),
+            evidence: JourneyEvidenceView {
+                status: "approved".into(),
+                summary: "The scope is approved and ready for implementation.".into(),
+                blockers,
+            },
+            related_specification,
+            advanced,
+        });
+    }
+    Ok(WorkJourneyView {
+        title,
+        current_step: "verify".into(),
+        steps: journey_steps("verify"),
+        primary_action: JourneyActionView {
+            action: "verify".into(),
+            label: "Check the completed change".into(),
+            label_key: "journey.action.verify".into(),
+            explanation: "Run the approved completion checks and show the evidence.".into(),
+            explanation_key: "journey.explanation.verify".into(),
+            confirmation_required: false,
+            enabled: true,
+        },
+        recovery_action: Some(cancel_action()),
+        approved_scope: Some(scope),
+        evidence: JourneyEvidenceView {
+            status: "in_progress".into(),
+            summary: "Implementation is in progress inside the approved scope.".into(),
+            blockers,
+        },
+        related_specification,
+        advanced,
+    })
+}
+
+fn cancel_action() -> JourneyActionView {
+    JourneyActionView {
+        action: "cancel".into(),
+        label: "Cancel this work".into(),
+        label_key: "journey.action.cancel".into(),
+        explanation:
+            "This stops the current journey. Changes already written to files are not undone."
+                .into(),
+        explanation_key: "journey.explanation.cancel".into(),
+        confirmation_required: true,
+        enabled: true,
+    }
 }
 
 /// Compatibility entrypoint for CLI and HTTP callers. The implementation lives
@@ -4166,6 +5285,37 @@ mod tests {
             .await
     }
 
+    #[test]
+    fn scope_diff_combines_status_and_patch_for_the_working_tree() {
+        let temp = tempfile::tempdir().expect("diff fixture");
+        let git = |args: &[&str]| {
+            let status = Command::new("git")
+                .arg("-C")
+                .arg(temp.path())
+                .args(args)
+                .status()
+                .expect("run git");
+            assert!(status.success(), "git {}", args.join(" "));
+        };
+        git(&["init", "--quiet"]);
+        git(&["config", "user.email", "workbench@example.invalid"]);
+        git(&["config", "user.name", "Workbench Test"]);
+        fs::write(temp.path().join("sample.txt"), "before\n").expect("write fixture");
+        git(&["add", "sample.txt"]);
+        git(&["commit", "--quiet", "-m", "fixture"]);
+        fs::write(temp.path().join("sample.txt"), "after\nadded\n").expect("modify fixture");
+
+        let changed = branch_changed_files(temp.path(), "HEAD").expect("changed files");
+        let view = scope_diff_view(temp.path(), "HEAD".into(), &changed).expect("diff view");
+
+        assert_eq!(view.state, "ready");
+        assert_eq!(view.files.len(), 1);
+        assert_eq!(view.files[0].path, "sample.txt");
+        assert_eq!(view.files[0].additions, 2);
+        assert_eq!(view.files[0].deletions, 1);
+        assert!(view.files[0].patch.contains("+added"));
+    }
+
     #[tokio::test]
     async fn workbench_http_projection_readiness_and_esm_flow() {
         let _workspace_lock = workspace_test_lock().await;
@@ -4201,6 +5351,75 @@ mod tests {
         let body = readiness.into_body().collect().await.unwrap().to_bytes();
         let view: ReadinessView = serde_json::from_slice(&body).unwrap();
         assert_eq!(view.status, "Not run");
+    }
+
+    #[tokio::test]
+    async fn diagnostics_endpoint_runs_the_selected_context_and_persists_the_result() {
+        let _workspace_lock = workspace_test_lock().await;
+        let app = WorkbenchServer::new(workspace_root()).router();
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/diagnostics/run",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "context": "workspace"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let validation: ValidationRunView = serde_json::from_slice(&body).unwrap();
+        assert_eq!(validation.context, "workspace");
+        assert!(!matches!(validation.state, ValidationRunState::NotRun));
+        assert_eq!(validation.phases.len(), 5);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/projection")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .unwrap();
+        assert_eq!(
+            projection["diagnostics"]["validation"]["context"],
+            "workspace"
+        );
+        assert_ne!(projection["diagnostics"]["validation"]["state"], "not_run");
+    }
+
+    #[tokio::test]
+    async fn source_endpoint_returns_an_exact_target_excerpt() {
+        let _workspace_lock = workspace_test_lock().await;
+        let app = WorkbenchServer::new(workspace_root()).router();
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/source?target=FEAT-WORKBENCH-GUIDED-JOURNEY-001%23binding.journey%2Ftarget.journey-action")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let source: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(source["path"], "crates/syu-workbench-server/src/lib.rs");
+        assert_eq!(source["is_excerpt"], true);
+        assert!(
+            source["content"]
+                .as_str()
+                .unwrap()
+                .contains("api_journey_action")
+        );
+        assert!(source["line_start"].as_u64().unwrap() > 0);
     }
 
     fn workspace_root() -> PathBuf {
@@ -4249,6 +5468,15 @@ mod tests {
                 .into(),
         };
         (basis, csrf, projection)
+    }
+
+    fn basis_from_projection(projection: &serde_json::Value) -> MutationBasis {
+        serde_json::from_value(serde_json::json!({
+            "expected_revision": projection["snapshot"]["revision"],
+            "expected_workspace_fingerprint": projection["snapshot"]["fingerprint"],
+            "expected_source_hash": projection["snapshot"]["source_hash"]
+        }))
+        .expect("projection mutation basis")
     }
 
     async fn json_mutation<T: Serialize>(
@@ -5136,6 +6364,23 @@ mod tests {
             target.criterion.as_ref()
                 == Some(&"REQ-FIXTURE-001#criterion.behavior".parse().unwrap())
         }));
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/projection")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("approved target projection");
+        assert_eq!(
+            projection["journey"]["related_specification"]["criterion_statement"],
+            "The fixture behavior returns true."
+        );
         let response = json_mutation(&app, Method::POST, "/api/work/plan", &csrf, &basis).await;
         assert_eq!(response.status(), StatusCode::OK);
         let plan: WorkPlan =
@@ -5143,6 +6388,462 @@ mod tests {
                 .expect("approved target plan");
         assert_eq!(plan.request.requested_targets, request.requested_targets);
         assert!(plan.diagnostics.is_empty());
+    }
+
+    #[tokio::test]
+    async fn journey_action_exposes_one_friendly_next_step_and_can_cancel() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("fixture tempdir");
+        copy_fixture_tree(&fixture, temp.path());
+        initialize_fixture_git(temp.path());
+        let server = WorkbenchServer::new(temp.path().to_path_buf());
+        let service = server.service.clone();
+        let app = server.router();
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "create",
+                "anchor": "REQ-FIXTURE-001#criterion.behavior",
+                "summary": "Make the finished change understandable"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("journey projection");
+        assert_eq!(
+            projection["journey"]["title"],
+            "Make the finished change understandable"
+        );
+        assert_eq!(projection["journey"]["primary_action"]["action"], "prepare");
+        assert_eq!(
+            projection["journey"]["related_specification"],
+            serde_json::json!({
+                "title": "Keep the fixture behavior valid",
+                "overview": "The fixture exposes one bounded behavior for Workbench post-state validation.",
+                "status": "implemented",
+                "criterion_statement": "The fixture behavior returns true."
+            })
+        );
+        assert_eq!(
+            projection["journey"]["advanced"]["specification_anchor"],
+            "REQ-FIXTURE-001#criterion.behavior"
+        );
+        assert_eq!(
+            service
+                .session
+                .read()
+                .expect("journey session")
+                .draft_request
+                .as_ref()
+                .and_then(|request| request.constraints.max_slices),
+            Some(1)
+        );
+        assert!(
+            projection["journey"]["advanced"]["request_id"]
+                .as_str()
+                .is_some_and(|id| id.starts_with("work-"))
+        );
+
+        let basis: MutationBasis = serde_json::from_value(serde_json::json!({
+            "expected_revision": projection["snapshot"]["revision"],
+            "expected_workspace_fingerprint": projection["snapshot"]["fingerprint"],
+            "expected_source_hash": projection["snapshot"]["source_hash"]
+        }))
+        .expect("rename basis");
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "rename",
+                "title": "Explain the finished change"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("renamed projection");
+        assert_eq!(
+            projection["journey"]["title"],
+            "Explain the finished change"
+        );
+        assert_eq!(
+            projection["work"]["request"]["summary"], "Make the finished change understandable",
+            "renaming the display title must not invalidate the canonical request or plan"
+        );
+        assert_eq!(projection["journey"]["primary_action"]["action"], "prepare");
+
+        let basis: MutationBasis = serde_json::from_value(serde_json::json!({
+            "expected_revision": projection["snapshot"]["revision"],
+            "expected_workspace_fingerprint": projection["snapshot"]["fingerprint"],
+            "expected_source_hash": projection["snapshot"]["source_hash"]
+        }))
+        .expect("fresh basis");
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({ "basis": basis, "action": "prepare" }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("prepared projection");
+        assert_eq!(projection["journey"]["current_step"], "approve");
+        assert_eq!(
+            projection["journey"]["approved_scope"]["status"],
+            "proposed"
+        );
+        let basis: MutationBasis = serde_json::from_value(serde_json::json!({
+            "expected_revision": projection["snapshot"]["revision"],
+            "expected_workspace_fingerprint": projection["snapshot"]["fingerprint"],
+            "expected_source_hash": projection["snapshot"]["source_hash"]
+        }))
+        .expect("prepared basis");
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({ "basis": basis, "action": "approve" }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("approved projection");
+        assert_eq!(projection["journey"]["current_step"], "implement");
+        assert_eq!(
+            projection["journey"]["approved_scope"]["status"],
+            "approved"
+        );
+        let basis: MutationBasis = serde_json::from_value(serde_json::json!({
+            "expected_revision": projection["snapshot"]["revision"],
+            "expected_workspace_fingerprint": projection["snapshot"]["fingerprint"],
+            "expected_source_hash": projection["snapshot"]["source_hash"]
+        }))
+        .expect("approved basis");
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({ "basis": basis, "action": "start" }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("started projection");
+        assert_eq!(projection["journey"]["current_step"], "verify");
+        assert_eq!(
+            projection["journey"]["recovery_action"]["label_key"],
+            "journey.action.cancel"
+        );
+        let basis: MutationBasis = serde_json::from_value(serde_json::json!({
+            "expected_revision": projection["snapshot"]["revision"],
+            "expected_workspace_fingerprint": projection["snapshot"]["fingerprint"],
+            "expected_source_hash": projection["snapshot"]["source_hash"]
+        }))
+        .expect("started basis");
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({ "basis": basis, "action": "verify" }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("verified projection");
+        assert_eq!(projection["journey"]["primary_action"]["action"], "retry");
+        assert_eq!(projection["work"]["agent"]["status"], "blocked");
+        assert!(
+            projection["work"]["agent_events"]
+                .as_array()
+                .is_some_and(|events| {
+                    events
+                        .iter()
+                        .any(|event| event["event"]["kind"] == "verification-recorded")
+                })
+        );
+        let basis: MutationBasis = serde_json::from_value(serde_json::json!({
+            "expected_revision": projection["snapshot"]["revision"],
+            "expected_workspace_fingerprint": projection["snapshot"]["fingerprint"],
+            "expected_source_hash": projection["snapshot"]["source_hash"]
+        }))
+        .expect("verified basis");
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({ "basis": basis, "action": "retry" }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("retried projection");
+        assert_eq!(projection["journey"]["primary_action"]["action"], "verify");
+        assert_eq!(projection["work"]["agent"]["status"], "active");
+        let basis: MutationBasis = serde_json::from_value(serde_json::json!({
+            "expected_revision": projection["snapshot"]["revision"],
+            "expected_workspace_fingerprint": projection["snapshot"]["fingerprint"],
+            "expected_source_hash": projection["snapshot"]["source_hash"]
+        }))
+        .expect("retried basis");
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({ "basis": basis, "action": "cancel" }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("cancelled projection");
+        assert_eq!(projection["journey"]["current_step"], "describe");
+        assert!(projection["journey"]["related_specification"].is_null());
+
+        let basis: MutationBasis = serde_json::from_value(serde_json::json!({
+            "expected_revision": projection["snapshot"]["revision"],
+            "expected_workspace_fingerprint": projection["snapshot"]["fingerprint"],
+            "expected_source_hash": projection["snapshot"]["source_hash"]
+        }))
+        .expect("cancelled basis");
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/request",
+            &csrf,
+            &WorkRequestCommand {
+                basis,
+                request: WorkRequest {
+                    schema: WORK_REQUEST_SCHEMA.into(),
+                    id: "WORK-MULTIPLE-CRITERIA".into(),
+                    summary: "Change several fixture criteria".into(),
+                    operation: WorkOperation::Modify,
+                    seeds: vec![
+                        WorkSeed::Anchor("REQ-FIXTURE-001#criterion.behavior".parse().unwrap()),
+                        WorkSeed::Anchor("REQ-FIXTURE-001#criterion.other".parse().unwrap()),
+                    ],
+                    constraints: WorkConstraints::default(),
+                    requested_targets: vec![],
+                },
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("multiple criteria projection");
+        assert!(projection["journey"]["related_specification"].is_null());
+    }
+
+    #[tokio::test]
+    async fn journey_prepare_returns_recovery_for_a_blocked_plan() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("fixture tempdir");
+        copy_fixture_tree(&fixture, temp.path());
+        initialize_fixture_git(temp.path());
+        let app = WorkbenchServer::new(temp.path().to_path_buf()).router();
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+        let request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-BLOCKED-JOURNEY".into(),
+            summary: "keep the fixture behavior valid".into(),
+            operation: WorkOperation::Modify,
+            seeds: vec![WorkSeed::Anchor(
+                "REQ-FIXTURE-001#criterion.behavior".parse().unwrap(),
+            )],
+            constraints: WorkConstraints {
+                max_slices: Some(0),
+                ..WorkConstraints::default()
+            },
+            requested_targets: vec![],
+        };
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/request",
+            &csrf,
+            &WorkRequestCommand {
+                basis: basis.clone(),
+                request,
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({ "basis": basis, "action": "prepare" }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("blocked journey projection");
+        assert_eq!(projection["journey"]["evidence"]["status"], "blocked");
+        assert_eq!(projection["journey"]["primary_action"]["action"], "restart");
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis_from_projection(&projection),
+                "action": "approve"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn journey_verify_returns_a_fresh_projection_after_editable_change() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("fixture tempdir");
+        copy_fixture_tree(&fixture, temp.path());
+        initialize_fixture_git(temp.path());
+        let app = WorkbenchServer::new(temp.path().to_path_buf()).router();
+        let (basis, csrf, _) = projection_and_basis(&app).await;
+
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis,
+                "action": "create",
+                "anchor": "REQ-FIXTURE-001#criterion.behavior",
+                "summary": "Make the fixture behavior pass"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("created journey projection");
+
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({ "basis": basis_from_projection(&projection), "action": "prepare" }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("prepared journey projection");
+
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({ "basis": basis_from_projection(&projection), "action": "approve" }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("approved journey projection");
+
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({ "basis": basis_from_projection(&projection), "action": "start" }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("started journey projection");
+        let stale_basis = basis_from_projection(&projection);
+
+        fs::write(
+            temp.path().join("src/lib.rs"),
+            "pub fn behavior() -> bool {\n    let result = true;\n    result\n}\n",
+        )
+        .expect("apply editable fixture change");
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({ "basis": stale_basis, "action": "verify" }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("verified journey projection");
+        assert_eq!(
+            projection["journey"]["primary_action"]["action"],
+            "finalize"
+        );
+        assert_eq!(projection["work"]["agent"]["status"], "completed");
+        let response = json_mutation(
+            &app,
+            Method::POST,
+            "/api/work/action",
+            &csrf,
+            &serde_json::json!({
+                "basis": basis_from_projection(&projection),
+                "action": "finalize"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let projection: serde_json::Value =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("finalized journey projection");
+        assert_eq!(projection["journey"]["current_step"], "complete");
+        assert_eq!(
+            projection["journey"]["primary_action"]["label_key"],
+            "journey.action.start_another"
+        );
     }
 
     async fn raw_http(
@@ -5256,10 +6957,39 @@ mod tests {
 
     #[test]
     fn completion_history_projection_is_store_backed() {
-        let workspace = SpecWorkspace::load(workspace_root()).expect("workspace loads");
+        let fixture = workspace_root().join("fixtures/v1/valid-workbench-flow");
+        let temp = tempfile::tempdir().expect("completion history fixture");
+        copy_fixture_tree(&fixture, temp.path());
+        initialize_fixture_git(temp.path());
+        let workspace = SpecWorkspace::load(temp.path()).expect("workspace loads");
         let history = completion_history(&workspace).expect("completion history loads");
         assert!(history.current.is_none());
         assert!(history.previous.is_empty());
+    }
+
+    #[test]
+    fn completion_history_scopes_attempts_to_the_active_plan_and_slice() {
+        let attempt = |id: &str, plan_digest: &str, slice_id: &str| CompletionAttemptView {
+            attempt_id: id.into(),
+            plan_digest: plan_digest.into(),
+            slice_id: slice_id.into(),
+            status: "complete".into(),
+            demonstrated: vec![],
+            blockers: vec![],
+            next_action: None,
+            finalized: false,
+        };
+        let history = CompletionHistoryView {
+            current: Some(attempt("attempt-old", "plan-old", "slice-old")),
+            previous: vec![attempt("attempt-current", "plan-current", "slice-current")],
+        };
+        assert_eq!(
+            history
+                .current_for("plan-current", "slice-current")
+                .map(|attempt| attempt.attempt_id.as_str()),
+            Some("attempt-current")
+        );
+        assert!(history.current_for("plan-current", "slice-other").is_none());
     }
 
     async fn run_spec_transaction(app: Router) {
