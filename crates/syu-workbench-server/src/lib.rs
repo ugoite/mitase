@@ -195,6 +195,7 @@ impl WorkbenchServer {
             .route("/api/config/apply", put(api_config_apply))
             .route("/api/config", get(api_config))
             .route("/api/scope/branch", get(api_branch_scope))
+            .route("/api/scope/diff", get(api_scope_diff))
             .route("/api/source", get(api_source))
             .route("/api/work/request", post(api_request))
             .route("/api/work/action", post(api_journey_action))
@@ -871,6 +872,10 @@ async fn api_asset(AxumPath(asset): AxumPath<String>) -> Response {
         "js/components/diagnostic.js" => (
             "text/javascript; charset=utf-8",
             include_str!("../../syu-app-ui/assets/js/components/diagnostic.js").into(),
+        ),
+        "js/components/diff.js" => (
+            "text/javascript; charset=utf-8",
+            include_str!("../../syu-app-ui/assets/js/components/diff.js").into(),
         ),
         "js/components/editor.js" => (
             "text/javascript; charset=utf-8",
@@ -2195,6 +2200,7 @@ async fn api_branch_scope(
         Some(range) => range,
         None => configured_change_range(workspace)?,
     };
+    validate_diff_range(&range)?;
     let changed = branch_changed_files(&workspace.root, &range)?;
     Ok(Json(ScopeView {
         branch: Some(branch_scope_view(
@@ -2209,6 +2215,140 @@ async fn api_branch_scope(
 #[derive(Debug, Deserialize)]
 struct BranchScopeQuery {
     range: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ScopeDiffView {
+    pub range: String,
+    pub state: String,
+    pub additions: usize,
+    pub deletions: usize,
+    pub files: Vec<ScopeDiffFileView>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ScopeDiffFileView {
+    pub path: String,
+    pub status: String,
+    pub additions: usize,
+    pub deletions: usize,
+    pub patch: String,
+}
+
+async fn api_scope_diff(
+    State(service): State<Arc<WorkbenchService>>,
+    Query(query): Query<BranchScopeQuery>,
+) -> Result<Json<ScopeDiffView>, ApiError> {
+    let snapshot = service.snapshot()?;
+    let range = match query.range {
+        Some(range) => range,
+        None => configured_change_range(&snapshot.workspace)?,
+    };
+    validate_diff_range(&range)?;
+    let changed = branch_changed_files(&snapshot.workspace.root, &range)?;
+    Ok(Json(scope_diff_view(
+        &snapshot.workspace.root,
+        range,
+        &changed,
+    )?))
+}
+
+fn validate_diff_range(range: &str) -> Result<()> {
+    if range.trim().is_empty()
+        || range.starts_with('-')
+        || range.chars().any(char::is_control)
+        || range.chars().any(char::is_whitespace)
+    {
+        anyhow::bail!("invalid Git range");
+    }
+    Ok(())
+}
+
+fn diff_base_revision(root: &Path, range: &str) -> Result<String> {
+    if let Some((left, right)) = range.split_once("...") {
+        validate_diff_range(left)?;
+        validate_diff_range(right)?;
+        return git_merge_base(root, left, right);
+    }
+    if let Some((left, _)) = range.split_once("..") {
+        validate_diff_range(left)?;
+        return Ok(left.to_owned());
+    }
+    Ok(range.to_owned())
+}
+
+fn scope_diff_view(
+    root: &Path,
+    range: String,
+    changed: &[syu_validation::ChangedFile],
+) -> Result<ScopeDiffView> {
+    let base = diff_base_revision(root, &range)?;
+    let mut files = Vec::new();
+    for changed_file in changed {
+        let path = changed_file
+            .new_path
+            .as_ref()
+            .or(changed_file.old_path.as_ref())
+            .map(|path| path.display().to_string())
+            .unwrap_or_default();
+        if path.is_empty() {
+            continue;
+        }
+        let mut patch = git_output(
+            root,
+            &[
+                "diff",
+                "--no-ext-diff",
+                "--unified=3",
+                "--no-color",
+                &base,
+                "--",
+                &path,
+            ],
+        )
+        .map(String::from_utf8)??;
+        if patch.is_empty()
+            && matches!(changed_file.status, syu_validation::ChangeStatus::Untracked)
+        {
+            let content = fs::read_to_string(root.join(&path)).unwrap_or_default();
+            patch = format!(
+                "diff --git a/{path} b/{path}\nnew file mode 100644\n--- /dev/null\n+++ b/{path}\n@@ -0,0 +1,{} @@\n{}",
+                content.lines().count(),
+                content
+                    .lines()
+                    .map(|line| format!("+{line}\n"))
+                    .collect::<String>()
+            );
+        }
+        let additions = patch
+            .lines()
+            .filter(|line| line.starts_with('+') && !line.starts_with("+++"))
+            .count();
+        let deletions = patch
+            .lines()
+            .filter(|line| line.starts_with('-') && !line.starts_with("---"))
+            .count();
+        files.push(ScopeDiffFileView {
+            path,
+            status: format!("{:?}", changed_file.status).to_ascii_lowercase(),
+            additions,
+            deletions,
+            patch,
+        });
+    }
+    let additions = files.iter().map(|file| file.additions).sum();
+    let deletions = files.iter().map(|file| file.deletions).sum();
+    Ok(ScopeDiffView {
+        range,
+        state: if files.is_empty() {
+            "empty".into()
+        } else {
+            "ready".into()
+        },
+        additions,
+        deletions,
+        files,
+    })
 }
 
 fn branch_changed_files(root: &Path, range: &str) -> Result<Vec<syu_validation::ChangedFile>> {
@@ -5143,6 +5283,37 @@ mod tests {
             .get_or_init(|| Mutex::new(()))
             .lock()
             .await
+    }
+
+    #[test]
+    fn scope_diff_combines_status_and_patch_for_the_working_tree() {
+        let temp = tempfile::tempdir().expect("diff fixture");
+        let git = |args: &[&str]| {
+            let status = Command::new("git")
+                .arg("-C")
+                .arg(temp.path())
+                .args(args)
+                .status()
+                .expect("run git");
+            assert!(status.success(), "git {}", args.join(" "));
+        };
+        git(&["init", "--quiet"]);
+        git(&["config", "user.email", "workbench@example.invalid"]);
+        git(&["config", "user.name", "Workbench Test"]);
+        fs::write(temp.path().join("sample.txt"), "before\n").expect("write fixture");
+        git(&["add", "sample.txt"]);
+        git(&["commit", "--quiet", "-m", "fixture"]);
+        fs::write(temp.path().join("sample.txt"), "after\nadded\n").expect("modify fixture");
+
+        let changed = branch_changed_files(temp.path(), "HEAD").expect("changed files");
+        let view = scope_diff_view(temp.path(), "HEAD".into(), &changed).expect("diff view");
+
+        assert_eq!(view.state, "ready");
+        assert_eq!(view.files.len(), 1);
+        assert_eq!(view.files[0].path, "sample.txt");
+        assert_eq!(view.files[0].additions, 2);
+        assert_eq!(view.files[0].deletions, 1);
+        assert!(view.files[0].patch.contains("+added"));
     }
 
     #[tokio::test]

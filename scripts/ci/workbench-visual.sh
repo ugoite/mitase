@@ -66,6 +66,8 @@ pathlib.Path(sys.argv[3]).write_text(
     """  if(path.includes('/api/work/session')) return body({ready:true},200,{'x-syu-csrf-token':csrfToken});\n"""
     """  if(path.includes('/api/source?target=')) return body({path:'tests/behavior.rs',content:'#[test]\\nfn behavior_stays_valid() {}',hash:'visual-test-hash',line_start:1,line_end:2,is_excerpt:true});\n"""
     """  if(path.includes('/api/source?path=syu.yaml')) return body({content:'schema: syu/config/v1\\nworkspace:\\n  spec_roots: [docs/syu]\\n',hash:'visual-test-hash'});\n"""
+    """  if(path.includes('/api/scope/diff')) return body({range:'origin/main...HEAD',state:'ready',additions:2,deletions:1,files:[{path:'src/lib.rs',status:'modified',additions:2,deletions:1,patch:'diff --git a/src/lib.rs b/src/lib.rs\\n--- a/src/lib.rs\\n+++ b/src/lib.rs\\n@@ -1 +1,2 @@\\n-old\\n+new\\n+line'}]});\n"""
+    """  if(path.includes('/api/scope/branch')) return body({branch:{range:'origin/main...HEAD',state:'ready',reason:null,changed:[{path:'src/lib.rs',status:'modified',owners:['FEAT-VISUAL'],anchors:['REQ-VISUAL#criterion.behavior'],artifact_identities:['rust:src/lib.rs']}],owned:[],unowned:[],affected_items:[]}});\n"""
     """  if(path.includes('/api/config')) return body({});\n"""
     """  if(path.includes('/api/work/action')) {\n"""
     """    const action=payload.action; window.__SYU_FLOW__.push(action);\n"""
@@ -184,10 +186,20 @@ setTimeout(()=>{
   }
   await click('[data-page="work"] .journey-action.primary');
   await click('[data-page="work"] .journey-action.primary');
+  if(!document.querySelector('[data-work-specification] [data-journey-panel="diff"] .diff-file')) failures.push('implementation did not open the diff panel');
   await click('[data-page="work"] .journey-action.primary');
   await click('[data-page="work"] .journey-action.primary');
   if(JSON.stringify(window.__SYU_FLOW__)!=='["create","prepare","approve","start","verify","finalize"]') failures.push(`unexpected work flow: ${JSON.stringify(window.__SYU_FLOW__)}`);
   if(!document.querySelector('[data-page="work"] .journey-advanced')) failures.push('advanced completion evidence missing');
+  await click('[data-page="work"] [data-tab="slices"]');
+  if(!visible('[data-page="work"] [data-panel="slices"]')) failures.push('Work slices tab did not open');
+  if(!document.querySelector('[data-work-slice-detail] .journey-scope-target')) failures.push('Work slices tab did not render targets');
+
+  await click('[data-route="scope"]');
+  await click('[data-scope-mode-button="branch"]');
+  if(!document.querySelector('[data-scope-detail] .diff-file')) failures.push('Branch scope did not render diff');
+  await click('[data-page="scope"] [data-tab="intent"]');
+  if(!document.querySelector('[data-scope-detail] .scope-flow')) failures.push('Scope intent tab did not render');
 
   click('[data-route="settings"]');
   click('[data-settings-layer="workspace"]');

@@ -26,6 +26,12 @@ export async function request(url, options = {}) {
 export const readProjection = () => request('/api/projection');
 export const establishSession = () => request('/api/work/session');
 export const runReadiness = () => request('/api/readiness/run', { method: 'POST' });
+export const readBranchScope = (range = '') => request(
+  `/api/scope/branch${range.trim() ? `?range=${encodeURIComponent(range.trim())}` : ''}`,
+);
+export const readScopeDiff = (range = '') => request(
+  `/api/scope/diff${range.trim() ? `?range=${encodeURIComponent(range.trim())}` : ''}`,
+);
 export const runDiagnostics = (projection, context, range = '') => post('/api/diagnostics/run', {
   basis: mutationBasis(projection),
   context,

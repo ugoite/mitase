@@ -9,6 +9,22 @@ function element(tag, className, text) {
   return node;
 }
 
+function diagnosticTitle(diagnostic) {
+  if (document.documentElement.lang !== 'ja') {
+    return diagnostic.message || t('diagnostics.unknown');
+  }
+  const family = String(diagnostic.rule_id || '')
+    .replace(/^SYU-/, '')
+    .split('-')[0]
+    .toLowerCase();
+  const families = new Set([
+    'schema', 'id', 'anchor', 'binding', 'contract', 'doc', 'facet', 'feature',
+    'generated', 'operation', 'philosophy', 'policy', 'readiness', 'requirement',
+    'target', 'verification', 'work', 'change', 'completion',
+  ]);
+  return families.has(family) ? t(`diagnostics.family.${family}`) : t('diagnostics.unknown');
+}
+
 export function renderDiagnostic(diagnostic) {
   const severity = diagnostic.severity || 'info';
   const item = element('details', `diagnostic-card ${severity}`);
@@ -17,7 +33,7 @@ export function renderDiagnostic(diagnostic) {
   marker.setAttribute('aria-hidden', 'true');
   const copy = element('span', 'diagnostic-card-copy');
   copy.append(
-    element('strong', null, diagnostic.message || t('diagnostics.unknown')),
+    element('strong', null, diagnosticTitle(diagnostic)),
     element('span', 'diagnostic-location', [
       diagnostic.primary?.path,
       diagnostic.primary?.line ? `:${diagnostic.primary.line}` : '',
@@ -33,6 +49,20 @@ export function renderDiagnostic(diagnostic) {
   item.append(summary);
 
   const detail = element('div', 'diagnostic-card-detail');
+  if (document.documentElement.lang === 'ja' && diagnostic.message) {
+    const meaning = element('section', 'diagnostic-detail-section');
+    meaning.append(
+      element('h3', null, t('diagnostics.meaning')),
+      element('p', null, t(`diagnostics.phase_help.${diagnostic.phase || 'plan'}`)),
+    );
+    const technical = element('details', 'diagnostic-technical');
+    technical.append(
+      element('summary', null, t('diagnostics.technical')),
+      element('p', null, diagnostic.message),
+    );
+    meaning.append(technical);
+    detail.append(meaning);
+  }
   if (diagnostic.help) {
     const help = element('section', 'diagnostic-detail-section');
     help.append(element('h3', null, t('diagnostics.next')), element('p', null, diagnostic.help));

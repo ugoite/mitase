@@ -24,6 +24,28 @@ function axisLabel(axis) {
     : translated;
 }
 
+function blockerParts(blocker) {
+  const raw = String(blocker?.message || blocker || '');
+  const separator = raw.lastIndexOf(': ');
+  const subject = separator > 0 ? raw.slice(0, separator) : '';
+  const reason = separator > 0 ? raw.slice(separator + 2) : raw;
+  const normalized = reason
+    .replace(/^.+ is not an exact implementation target$/, 'implementation target is not exact')
+    .replace(/^.+ has no canonical owner$/, 'implementation target has no owner');
+  const key = {
+    'implementation target does not resolve to one exact artifact': 'readiness.blocker.target_not_exact',
+    'criterion has no canonical ready plan': 'readiness.blocker.plan_not_ready',
+    'implementation target is not exact': 'readiness.blocker.target_not_exact',
+    'implementation target has no owner': 'readiness.blocker.owner_missing',
+    'canonical target slice is not ready': 'readiness.blocker.slice_not_ready',
+    'structural verification closure is not ready': 'readiness.blocker.closure_not_ready',
+  }[normalized];
+  return {
+    subject,
+    reason: key ? t(key) : reason,
+  };
+}
+
 function controlButton(label, value, current, count, onClick, tone = '') {
   const button = element('button', `insight-filter${current === value ? ' active' : ''}${tone ? ` ${tone}` : ''}`);
   button.type = 'button';
@@ -60,7 +82,13 @@ export function renderReadinessPage(
         : t('readiness.description.complete'),
     ),
   );
-  const target = element('span', 'chip insight-target', readiness.target);
+  const targetKey = `readiness.target.${String(readiness.target || '').replaceAll('-', '_')}`;
+  const translatedTarget = t(targetKey);
+  const target = element(
+    'span',
+    'chip insight-target',
+    translatedTarget === targetKey ? readiness.target : translatedTarget,
+  );
   target.setAttribute('aria-label', `${t('readiness.target')}: ${readiness.target}`);
   summary.append(iconNode, copy, target);
   root.append(summary);
@@ -135,10 +163,25 @@ export function renderReadinessPage(
     const blockers = value.blockers || [];
     const detail = element('div', 'readiness-row-detail');
     if (blockers.length) {
-      const listNode = element('ul', 'readiness-blockers');
-      blockers.forEach(blocker => {
-        const valueNode = blocker.message || blocker;
-        listNode.append(element('li', null, valueNode));
+      const listNode = element('div', 'readiness-blockers');
+      blockers.forEach((blocker, index) => {
+        const parts = blockerParts(blocker);
+        const item = element('details', 'readiness-blocker');
+        const summary = element('summary');
+        summary.append(
+          element('span', 'status-marker', '!'),
+          element('strong', null, parts.reason || `${t('readiness.blocker.label')} ${index + 1}`),
+        );
+        item.append(summary);
+        if (parts.subject) {
+          const technical = element('div', 'readiness-blocker-detail');
+          technical.append(
+            element('span', 'chip', t('readiness.blocker.target')),
+            element('code', null, parts.subject),
+          );
+          item.append(technical);
+        }
+        listNode.append(item);
       });
       detail.append(listNode);
     } else {

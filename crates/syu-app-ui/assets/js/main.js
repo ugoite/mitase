@@ -3,7 +3,7 @@ import { bindRouter, navigate } from './router.js';
 import * as api from './api.js';
 import { renderWork } from './pages/work.js';
 import { initReadiness, renderReadinessPage } from './pages/readiness.js';
-import { renderScope } from './pages/scope.js';
+import { initScope, renderScope } from './pages/scope.js';
 import { initSpecifications, renderSpecifications } from './pages/specifications.js';
 import { initDiagnostics, renderDiagnostics } from './pages/diagnostics.js';
 import { renderSettings } from './pages/settings.js';
@@ -14,7 +14,7 @@ function render(state) {
   const renderPage = {
     work: () => renderWork(projection.work, state),
     readiness: () => renderReadinessPage(projection.readiness, undefined, { state }),
-    scope: () => renderScope(projection.scope),
+    scope: () => renderScope(projection.scope, state),
     specifications: () => renderSpecifications(projection.specifications, state),
     diagnostics: () => renderDiagnostics(projection.diagnostics, undefined, state),
     settings: () => renderSettings(projection),
@@ -117,6 +117,7 @@ export async function startWorkbench() {
   initSpecifications(state);
   initReadiness(state);
   initDiagnostics(state);
+  initScope(state);
   state.go = (page) => {
     state.selectedPage = navigate(page, false);
     state.render();

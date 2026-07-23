@@ -31,6 +31,14 @@ function contextLabel(context) {
   return translated === key ? String(context || 'workspace').replaceAll('_', ' ') : translated;
 }
 
+function blockerTitle(blocker) {
+  if (document.documentElement.lang !== 'ja') return blocker.message;
+  return {
+    'SYU-COMPLETION-CHECK': t('completion.blocker.check'),
+    'SYU-WORK-011': t('completion.blocker.unchanged'),
+  }[blocker.code] || t('completion.blocker.default');
+}
+
 function filterButton(label, value, current, count, onClick, tone = '') {
   const button = element('button', `insight-filter${current === value ? ' active' : ''}${tone ? ` ${tone}` : ''}`);
   button.type = 'button';
@@ -124,8 +132,30 @@ function renderCompletion(root, completion, planDigest) {
       body.append(element('h3', null, t('journey.advanced.demonstrated')), list);
     }
     (attempt.blockers || []).forEach(blocker => {
-      const item = element('div', 'journey-blocker');
-      item.append(element('strong', null, blocker.message), element('p', null, blocker.next_action));
+      const item = element('details', 'journey-blocker-detail');
+      const summary = element('summary');
+      summary.append(
+        element('span', 'status-marker', '!'),
+        element('strong', null, blockerTitle(blocker)),
+        element('code', 'chip diagnostic-rule', blocker.code),
+      );
+      const detail = element('div', 'journey-blocker');
+      if (document.documentElement.lang === 'ja') {
+        const technical = element('details', 'diagnostic-technical');
+        technical.append(
+          element('summary', null, t('diagnostics.technical')),
+          element('p', null, blocker.message),
+        );
+        detail.append(technical);
+      } else {
+        detail.append(element('p', null, blocker.message));
+      }
+      detail.append(element(
+        'p',
+        null,
+        document.documentElement.lang === 'ja' ? t('completion.blocker.next') : blocker.next_action,
+      ));
+      item.append(summary, detail);
       body.append(item);
     });
     if (attempt.next_action && !attempt.blockers?.length) {

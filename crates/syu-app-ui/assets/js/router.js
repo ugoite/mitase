@@ -56,7 +56,23 @@ export function bindRouter(state, onRoute) {
     onRoute?.(state.selectedPage);
   }));
   bindKeyboardTabs();
-  const page = new URL(location.href).searchParams.get('page') || state.selectedPage || 'work';
-  state.selectedPage = navigate(page, false);
-  onRoute?.(state.selectedPage);
+  const applyLocation = () => {
+    const parameters = new URL(location.href).searchParams;
+    const page = parameters.get('page') || state.selectedPage || 'work';
+    state.selectedPage = navigate(page, false);
+    for (const group of TAB_GROUPS) {
+      const requested = parameters.get(`${group}Tab`);
+      const fallback = document.querySelector(`[data-tab-group="${group}"].active`)?.dataset.tab;
+      const selected = requested || fallback;
+      selectTab(group, selected, false);
+      if (group === 'scope' && selected) state.selectedScopeTab = selected;
+      if (group === 'specifications' && selected) state.specificationKind = selected;
+    }
+    onRoute?.(state.selectedPage);
+  };
+  applyLocation();
+  addEventListener('popstate', () => {
+    applyLocation();
+    state.render();
+  });
 }

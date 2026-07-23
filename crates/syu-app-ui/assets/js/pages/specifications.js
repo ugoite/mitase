@@ -17,7 +17,12 @@ function status(text) {
   const node = document.createElement('span');
   const normalized = String(text || 'planned').toLowerCase().replace(/\s+/g, '-');
   node.className = `chip status-component status-${normalized}`;
-  node.innerHTML = `<span class="status-dot" aria-hidden="true"></span><span>${text || normalized}</span>`;
+  const translatedStatuses = new Set(['modified', 'added', 'deleted', 'renamed', 'untracked', 'planned', 'implemented', 'deprecated', 'ready', 'blocked', 'unknown']);
+  const label = translatedStatuses.has(normalized) ? t(`status.${normalized}`) : text || normalized;
+  node.innerHTML = '<span class="status-dot" aria-hidden="true"></span>';
+  const copy = document.createElement('span');
+  copy.textContent = label;
+  node.append(copy);
   return node;
 }
 

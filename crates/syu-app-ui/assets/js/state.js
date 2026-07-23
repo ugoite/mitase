@@ -23,6 +23,7 @@ export function createState(projection) {
     journeyContextTarget: null,
     journeyContextHistory: [],
     journeyScopeFocus: null,
+    journeyDiffRequested: false,
     workTitleEditing: false,
     relatedKind: 'specification',
     selectedSlice: projection.work.plan?.slices?.[0]?.id || null,
@@ -38,6 +39,13 @@ export function createState(projection) {
     readinessFilter: 'all',
     readinessSort: 'attention',
     selectedScopeMode: 'plan',
+    selectedScopeTab: 'change',
+    scopeRange: '',
+    scopeLoading: false,
+    scopeError: null,
+    scopeDiff: null,
+    scopeDiffLoading: false,
+    scopeDiffError: null,
   };
 }
 

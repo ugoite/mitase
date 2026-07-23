@@ -1,4 +1,5 @@
 import { translate } from '../i18n.js';
+import { renderDiff } from '../components/diff.js';
 import { renderSourceDetail, renderSpecificationDetail } from './specifications.js';
 import { renderReadinessPage } from './readiness.js';
 import { renderDiagnostics } from './diagnostics.js';
@@ -35,6 +36,35 @@ function actionText(action, kind) {
   return t(`journey.${namespace}.${action?.action || 'unknown'}`);
 }
 
+function statusText(status) {
+  const normalized = String(status || 'planned').toLowerCase();
+  const statuses = new Set(['planned', 'implemented', 'deprecated', 'ready', 'blocked', 'unknown']);
+  if (statuses.has(normalized)) return t(`status.${normalized}`);
+  const kinds = new Set(['philosophy', 'policy', 'requirement', 'feature']);
+  return kinds.has(normalized) ? t(`items.${normalized}`) : status;
+}
+
+async function loadWorkDiff(state, force = false) {
+  if (state.scopeDiffLoading || (state.scopeDiff && !force)) return;
+  state.scopeDiffLoading = true;
+  state.scopeDiffError = null;
+  state.render();
+  try {
+    state.scopeDiff = await state.api.readScopeDiff(state.scopeRange || '');
+  } catch (error) {
+    state.scopeDiffError = error.message;
+  }
+  state.scopeDiffLoading = false;
+  state.render();
+}
+
+function openWorkDiff(state, force = false) {
+  state.journeyContextTab = 'diff';
+  state.journeySpecificationExpanded = true;
+  state.journeyDiffRequested = true;
+  loadWorkDiff(state, force);
+}
+
 function matchingCandidates(state) {
   const query = String(state.journeyQuery || '').trim().toLowerCase();
   const items = state.projection.specifications?.specifications || [];
@@ -60,6 +90,7 @@ function run(state, action) {
         state.journeyContextTab = 'diagnostics';
         state.journeySpecificationExpanded = true;
       }
+      if (action.action === 'start' || action.action === 'retry') openWorkDiff(state, true);
       if (action.action === 'rename') state.workTitleEditing = false;
     },
     action.action === 'rename' ? t('work.title.saving') : actionText(action, 'label'),
@@ -99,7 +130,11 @@ function renderStart(root, state) {
     const card = element('article', `journey-card${selected ? ' selected' : ''}`);
     card.append(element('h3', null, item.title));
     const meta = element('div', 'meta-line');
-    meta.append(element('span', `chip status-component status-${item.status || 'planned'}`, item.status || item.kind));
+    meta.append(element(
+      'span',
+      `chip status-component status-${item.status || 'planned'}`,
+      statusText(item.status || item.kind),
+    ));
     card.append(meta);
     card.append(button(t('journey.preview'), () => {
       state.journeyCandidateAnchor = criterion.anchor;
@@ -201,6 +236,36 @@ function renderEvidence(journey, state) {
       state.journeySpecificationExpanded = true;
       state.render();
     }));
+    const flow = element('div', 'journey-blocked-flow');
+    [
+      ['✓', t('journey.visual.intent'), 'success'],
+      ['!', t('journey.visual.split'), 'danger'],
+      ['○', t('journey.visual.retry'), 'muted'],
+    ].forEach(([icon, label, tone]) => {
+      const step = element('span', `journey-blocked-step ${tone}`);
+      step.append(element('b', null, icon), element('span', null, label));
+      flow.append(step);
+    });
+    card.append(flow);
+    const details = element('div', 'journey-blocker-list');
+    blockers.forEach((blocker, index) => {
+      const item = element('details', 'journey-blocker-detail');
+      const summary = element('summary');
+      summary.append(
+        element('span', 'status-marker', '!'),
+        element('strong', null, blocker.message || `${t('journey.blockers')} ${index + 1}`),
+      );
+      item.append(summary, element('p', null, blocker.next_action));
+      details.append(item);
+    });
+    card.append(details);
+  } else if (['in_progress', 'ready', 'complete'].includes(status)) {
+    card.append(countChip(
+      state.scopeDiff?.files?.length ?? '…',
+      '±',
+      t('diff.action'),
+      () => openWorkDiff(state),
+    ));
   }
   return card;
 }
@@ -343,6 +408,7 @@ function renderContextTabs(root, state, hasScope, hasWorkInsights) {
   if (hasWorkInsights) {
     addTab('readiness', t('nav.readiness'), '◇');
     addTab('diagnostics', t('nav.diagnostics'), '✓');
+    addTab('diff', t('diff.action'), '±');
   }
   root.append(tabs);
 }
@@ -475,6 +541,19 @@ function renderSpecification(root, workspace, journey, state, work) {
     root.append(body);
     return;
   }
+  if (state.journeyContextTab === 'diff') {
+    renderDiff(state.scopeDiff, body, {
+      loading: state.scopeDiffLoading,
+      error: state.scopeDiffError,
+      compact: true,
+      openFirst: true,
+    });
+    if (!state.scopeDiff && !state.scopeDiffLoading && !state.scopeDiffError) {
+      queueMicrotask(() => loadWorkDiff(state));
+    }
+    root.append(body);
+    return;
+  }
   if (state.journeyContextTarget) {
     state.specificationSourceTarget = state.journeyContextTarget;
     renderSourceDetail(body, state, state.journeyContextTarget, () => {
@@ -542,6 +621,85 @@ function renderSpecification(root, workspace, journey, state, work) {
   root.append(body);
 }
 
+function renderWorkSlices(work, state) {
+  const rail = document.querySelector('[data-work-slices-rail]');
+  const root = document.querySelector('[data-work-slice-detail]');
+  if (!rail || !root) return;
+  rail.replaceChildren();
+  root.replaceChildren();
+  const slices = work?.plan?.slices || [];
+  if (!slices.length) {
+    root.append(element('p', 'context-empty', t('work.slices.empty.description')));
+    return;
+  }
+  const selected = slices.find(slice => slice.id === state.selectedSlice) || slices[0];
+  state.selectedSlice = selected.id;
+  slices.forEach((slice, index) => {
+    const item = element('button', `rail-item${slice.id === selected.id ? ' active' : ''}`);
+    item.type = 'button';
+    const copy = element('div');
+    copy.append(
+      element('b', null, t('journey.scope.step').replace('{number}', String(index + 1))),
+      element('p', null, `${slice.editable_targets?.length || 0} ${t('journey.targets')}`),
+    );
+    item.append(copy);
+    item.addEventListener('click', () => {
+      state.selectedSlice = slice.id;
+      state.render();
+    });
+    rail.append(item);
+  });
+  root.append(element('h2', null, t('work.exact_targets')));
+  (selected.editable_targets || []).forEach(target => {
+    const row = element('button', 'journey-scope-target');
+    row.type = 'button';
+    row.append(
+      element('span', 'journey-scope-target-icon', '↔'),
+      element('strong', null, target.path),
+      element('span', 'chip blue-chip', t('work.context.editable')),
+    );
+    row.addEventListener('click', () => {
+      state.journeyContextTarget = target;
+      state.journeyContextTab = 'scope';
+      state.journeySpecificationExpanded = true;
+      state.render();
+    });
+    root.append(row);
+  });
+}
+
+function renderWorkContext(work) {
+  const rail = document.querySelector('[data-work-context-rail]');
+  const root = document.querySelector('[data-work-context-detail]');
+  if (!rail || !root) return;
+  rail.replaceChildren();
+  root.replaceChildren();
+  if (!work?.context_pack) {
+    root.append(element('p', 'context-empty', t('work.context.empty.description')));
+    return;
+  }
+  const card = element('section', 'scope-detail-card');
+  card.append(
+    element('span', 'chip green-chip', t('work.context.ready')),
+    element('h2', null, t('work.context.title')),
+    element('p', null, `${work.context_pack.entry_count} ${t('common.item')}`),
+  );
+  root.append(card);
+}
+
+function renderWorkValidation(work, state) {
+  const rail = document.querySelector('[data-work-validation-rail]');
+  const root = document.querySelector('[data-work-validation-detail]');
+  if (!rail || !root) return;
+  rail.replaceChildren();
+  renderDiagnostics(
+    { validation: work?.validation },
+    root,
+    state,
+    { completion: work?.completion, planDigest: work?.plan?.digest },
+  );
+}
+
 export function renderWork(work, state) {
   const root = document.querySelector('[data-work-overview-summary]');
   const specificationRoot = document.querySelector('[data-work-specification]');
@@ -554,4 +712,7 @@ export function renderWork(work, state) {
   else renderJourney(content, journey, state, work);
   replace(root, content);
   if (specificationRoot) renderSpecification(specificationRoot, workspace, journey, state, work);
+  renderWorkSlices(work, state);
+  renderWorkContext(work);
+  renderWorkValidation(work, state);
 }
