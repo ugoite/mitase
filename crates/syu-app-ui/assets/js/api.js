@@ -25,6 +25,20 @@ export async function request(url, options = {}) {
 
 export const readProjection = () => request('/api/projection');
 export const establishSession = () => request('/api/work/session');
+export const runReadiness = () => request('/api/readiness/run', { method: 'POST' });
+export const readBranchScope = (range = '') => request(
+  `/api/scope/branch${range.trim() ? `?range=${encodeURIComponent(range.trim())}` : ''}`,
+);
+export const readScopeDiff = (range = '') => request(
+  `/api/scope/diff${range.trim() ? `?range=${encodeURIComponent(range.trim())}` : ''}`,
+);
+export const runDiagnostics = (projection, context, range = '') => post('/api/diagnostics/run', {
+  basis: mutationBasis(projection),
+  context,
+  ...(range.trim() ? { range: range.trim() } : {}),
+});
+export const readSource = path => request(`/api/source?path=${encodeURIComponent(path)}`);
+export const readTargetSource = target => request(`/api/source?target=${encodeURIComponent(target)}`);
 
 export const searchSpecificationCandidates = (query = '', kind = '') => {
   const params = new URLSearchParams();
@@ -87,54 +101,7 @@ export const post = (url, payload) => request(url, {
   body: JSON.stringify(payload),
 });
 
-export function createModifyWork(projection, criterion) {
-  return post('/api/work/request', {
-    basis: mutationBasis(projection),
-    request: {
-      schema: 'syu/work-request/v1',
-      id: `WORK-WORKBENCH-${Date.now()}`,
-      summary: `Modify ${criterion}`,
-      operation: 'modify',
-      seeds: [criterion],
-      constraints: {},
-      requested_targets: [],
-    },
-  });
-}
-
-export const planWork = (projection) => post('/api/work/plan', mutationBasis(projection));
-
-export const exportContext = (projection, sliceId) => post('/api/work/context', {
+export const runJourneyAction = (projection, action) => post('/api/work/action', {
   basis: mutationBasis(projection),
-  slice_id: sliceId,
-});
-
-export const validateWork = (projection) => post('/api/work/validate', mutationBasis(projection));
-
-export const approveWork = (projection) => post('/api/work/approve', mutationBasis(projection));
-
-export const startAgent = (projection, sliceId) => post('/api/work/agent/start', {
-  basis: mutationBasis(projection),
-  slice_id: sliceId,
-});
-
-export const verifyAgent = (projection, sliceId) => post('/api/work/agent/verify', {
-  basis: mutationBasis(projection),
-  slice_id: sliceId,
-});
-
-export const verifyWork = (projection, sliceId) => post('/api/work/verify', {
-  basis: mutationBasis(projection),
-  slice_id: sliceId,
-});
-
-export const finalizePreview = (projection, attemptId) => post('/api/work/finalize/preview', {
-  basis: mutationBasis(projection),
-  attempt_id: attemptId,
-});
-
-export const finalizeApply = (projection, attemptId, previewToken) => post('/api/work/finalize/apply', {
-  basis: mutationBasis(projection),
-  attempt_id: attemptId,
-  preview_token: previewToken,
+  ...action,
 });

@@ -2,10 +2,10 @@ import { createState } from './state.js';
 import { bindRouter, navigate } from './router.js';
 import * as api from './api.js';
 import { renderWork } from './pages/work.js';
-import { renderReadinessPage } from './pages/readiness.js';
-import { renderScope } from './pages/scope.js';
+import { initReadiness, renderReadinessPage } from './pages/readiness.js';
+import { initScope, renderScope } from './pages/scope.js';
 import { initSpecifications, renderSpecifications } from './pages/specifications.js';
-import { renderDiagnostics } from './pages/diagnostics.js';
+import { initDiagnostics, renderDiagnostics } from './pages/diagnostics.js';
 import { renderSettings } from './pages/settings.js';
 import { translate } from './i18n.js';
 
@@ -13,10 +13,10 @@ function render(state) {
   const projection = state.projection;
   const renderPage = {
     work: () => renderWork(projection.work, state),
-    readiness: () => renderReadinessPage(projection.readiness),
-    scope: () => renderScope(projection.scope),
+    readiness: () => renderReadinessPage(projection.readiness, undefined, { state }),
+    scope: () => renderScope(projection.scope, state),
     specifications: () => renderSpecifications(projection.specifications, state),
-    diagnostics: () => renderDiagnostics(projection.diagnostics),
+    diagnostics: () => renderDiagnostics(projection.diagnostics, undefined, state),
     settings: () => renderSettings(projection),
   }[state.selectedPage] || (() => renderWork(projection.work, state));
   renderPage();
@@ -24,11 +24,11 @@ function render(state) {
   renderBusyState(state);
 }
 
-async function refreshAfterAction(state, action, onResult) {
+async function refreshAfterAction(state, action, onResult, busyLabel) {
   if (state.busy) return;
   state.error = null;
   state.busy = true;
-  state.busyLabel = translate('common.loading');
+  state.busyLabel = busyLabel || translate('common.loading');
   state.render();
   try {
     const result = await action();
@@ -74,7 +74,9 @@ function renderBusyState(state) {
   const status = document.querySelector('[data-workbench-status]');
   if (status) {
     status.hidden = !state.busy;
-    status.textContent = state.busyLabel || translate('common.loading');
+    status.setAttribute('aria-label', state.busyLabel || translate('common.loading'));
+    const label = status.querySelector('[data-progress-label]');
+    if (label) label.textContent = state.busyLabel || translate('common.loading');
   }
   if (state.busy) {
     disableBusyButtons();
@@ -100,7 +102,9 @@ export async function startWorkbench() {
     const startupStatus = document.querySelector('[data-workbench-status]');
     if (startupStatus) {
       startupStatus.hidden = false;
-      startupStatus.textContent = translate('common.starting');
+      startupStatus.setAttribute('aria-label', translate('common.starting'));
+      const label = startupStatus.querySelector('[data-progress-label]');
+      if (label) label.textContent = translate('common.starting');
     }
   }
   const projection = inlineProjection || await api.readProjection();
@@ -111,12 +115,22 @@ export async function startWorkbench() {
     render(state);
   };
   initSpecifications(state);
+  initReadiness(state);
+  initDiagnostics(state);
+  initScope(state);
   state.go = (page) => {
     state.selectedPage = navigate(page, false);
     state.render();
   };
-  state.runAction = (action, onResult) => refreshAfterAction(state, action, onResult);
-  bindRouter(state, () => state.render());
+  state.runAction = (action, onResult, busyLabel) => refreshAfterAction(state, action, onResult, busyLabel);
+  bindRouter(state, page => {
+    if (page === 'specifications') {
+      state.specificationSourceTarget = null;
+      state.specificationSource = null;
+      state.specificationSourceFull = false;
+    }
+    state.render();
+  });
   state.busy = true;
   state.busyLabel = translate('common.starting');
   state.render();

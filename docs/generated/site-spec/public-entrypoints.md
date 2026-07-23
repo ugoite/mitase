@@ -91,12 +91,12 @@ description: "Generated reference for docs/syu/public-entrypoints.yaml"
       - **facet**: public
       - **responsibility**: Keep this public entrypoint addressable by an exact target.
       - **targets**:
-        - **id**: entrypoint-005-javascript-crates-syu-app-ui-assets-js-api-js-validatew
+        - **id**: entrypoint-005-javascript-crates-syu-app-ui-assets-js-api-js-runjourn
           - **adapter**: javascript
           - **path**: crates/syu-app-ui/assets/js/api.js
           - **selector**:
             - **kind**: symbol
-            - **name**: validateWork
+            - **name**: runJourneyAction
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-PUBLIC-001#criterion.entrypoint
@@ -1206,6 +1206,20 @@ description: "Generated reference for docs/syu/public-entrypoints.yaml"
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-PUBLIC-001#criterion.entrypoint
+    - **id**: public-api-084
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **targets**:
+        - **id**: entrypoint-084-javascript-crates-syu-app-ui-assets-js-components-diff
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/components/diff.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: renderDiff
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-PUBLIC-001#criterion.entrypoint
 
 ## Source YAML
 
@@ -1281,12 +1295,12 @@ features:
     facet: public
     responsibility: Keep this public entrypoint addressable by an exact target.
     targets:
-    - id: entrypoint-005-javascript-crates-syu-app-ui-assets-js-api-js-validatew
+    - id: entrypoint-005-javascript-crates-syu-app-ui-assets-js-api-js-runjourn
       adapter: javascript
       path: crates/syu-app-ui/assets/js/api.js
       selector:
         kind: symbol
-        name: validateWork
+        name: runJourneyAction
       claims:
       - kind: satisfies
         criterion: REQ-PUBLIC-001#criterion.entrypoint
@@ -2393,6 +2407,20 @@ features:
       selector:
         kind: symbol
         name: resolve_indexed_target
+      claims:
+      - kind: satisfies
+        criterion: REQ-PUBLIC-001#criterion.entrypoint
+  - id: public-api-084
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint addressable by an exact target.
+    targets:
+    - id: entrypoint-084-javascript-crates-syu-app-ui-assets-js-components-diff
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/components/diff.js
+      selector:
+        kind: symbol
+        name: renderDiff
       claims:
       - kind: satisfies
         criterion: REQ-PUBLIC-001#criterion.entrypoint
