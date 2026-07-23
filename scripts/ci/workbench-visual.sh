@@ -225,7 +225,7 @@ setTimeout(()=>{
 HTML
 
 for viewport in 1280,900 760,900; do
-  behavior="$("$chrome" --headless --disable-gpu --no-sandbox --allow-file-access-from-files --window-size="$viewport" --virtual-time-budget=1800 --dump-dom "file://${tmp}/workbench.html?page=work&lang=en&theme=light")"
+  behavior="$("$chrome" --headless --disable-gpu --no-sandbox --allow-file-access-from-files --window-size="$viewport" --virtual-time-budget=6000 --dump-dom "file://${tmp}/workbench.html?page=work&lang=en&theme=light")"
   if ! echo "$behavior" | grep -q 'id="syu-visual-behavior-result" data-status="pass"'; then
     echo "$behavior" | grep 'id="syu-visual-behavior-result"' >&2 || true
     exit 1

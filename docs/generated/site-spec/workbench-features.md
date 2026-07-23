@@ -347,6 +347,11 @@ description: "Generated reference for docs/syu/workbench-features.yaml"
           - **path**: crates/syu-app-ui/assets/js/components/diagnostic.js
           - **selector**:
             - **kind**: file
+        - **id**: selfhost-crates-syu-app-ui-assets-js-components-diff-js
+          - **adapter**: declared
+          - **path**: crates/syu-app-ui/assets/js/components/diff.js
+          - **selector**:
+            - **kind**: file
         - **id**: selfhost-crates-syu-app-ui-assets-js-components-editor-js
           - **adapter**: declared
           - **path**: crates/syu-app-ui/assets/js/components/editor.js
@@ -1661,6 +1666,12 @@ description: "Generated reference for docs/syu/workbench-features.yaml"
           - **selector**:
             - **kind**: module
             - **name**: *
+        - **id**: assets-diff-module
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/components/diff.js
+          - **selector**:
+            - **kind**: module
+            - **name**: *
         - **id**: assets-editor-module
           - **adapter**: javascript
           - **path**: crates/syu-app-ui/assets/js/components/editor.js
@@ -2449,6 +2460,11 @@ features:
     - id: selfhost-crates-syu-app-ui-assets-js-components-diagnostic-js
       adapter: declared
       path: crates/syu-app-ui/assets/js/components/diagnostic.js
+      selector:
+        kind: file
+    - id: selfhost-crates-syu-app-ui-assets-js-components-diff-js
+      adapter: declared
+      path: crates/syu-app-ui/assets/js/components/diff.js
       selector:
         kind: file
     - id: selfhost-crates-syu-app-ui-assets-js-components-editor-js
@@ -3758,6 +3774,12 @@ features:
     - id: assets-diagnostic-module
       adapter: javascript
       path: crates/syu-app-ui/assets/js/components/diagnostic.js
+      selector:
+        kind: module
+        name: '*'
+    - id: assets-diff-module
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/components/diff.js
       selector:
         kind: module
         name: '*'

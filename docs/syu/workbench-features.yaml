@@ -307,6 +307,11 @@ features:
       path: crates/syu-app-ui/assets/js/components/diagnostic.js
       selector:
         kind: file
+    - id: selfhost-crates-syu-app-ui-assets-js-components-diff-js
+      adapter: declared
+      path: crates/syu-app-ui/assets/js/components/diff.js
+      selector:
+        kind: file
     - id: selfhost-crates-syu-app-ui-assets-js-components-editor-js
       adapter: declared
       path: crates/syu-app-ui/assets/js/components/editor.js
@@ -1614,6 +1619,12 @@ features:
     - id: assets-diagnostic-module
       adapter: javascript
       path: crates/syu-app-ui/assets/js/components/diagnostic.js
+      selector:
+        kind: module
+        name: '*'
+    - id: assets-diff-module
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/components/diff.js
       selector:
         kind: module
         name: '*'
