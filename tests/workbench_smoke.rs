@@ -3,6 +3,8 @@ use syu_app_ui::{WORKBENCH_CSS, WORKBENCH_MAIN_JS, WorkbenchView};
 use syu_workbench_server::project;
 use syu_workspace::SpecWorkspace;
 
+mod support;
+
 #[test]
 fn workbench_projection_is_server_owned_and_starts_not_run() {
     let output = Command::cargo_bin("syu")
@@ -33,7 +35,8 @@ fn workbench_projection_is_server_owned_and_starts_not_run() {
 
 #[test]
 fn rendered_workbench_uses_external_module_assets_and_specifications_route() {
-    let workspace = SpecWorkspace::load("fixtures/v1/valid-web-app").unwrap();
+    let fixture = support::isolated_fixture("valid-web-app");
+    let workspace = SpecWorkspace::load(fixture.path()).unwrap();
     let projection = project(&workspace, None, "test-revision").unwrap();
     let html = WorkbenchView::new(&projection).render_html();
     assert!(html.contains("type=\"module\" src=\"/assets/js/main.js\""));
