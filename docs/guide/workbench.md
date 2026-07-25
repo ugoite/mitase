@@ -16,13 +16,19 @@ projection debugging.
 
 The server keeps one canonical workspace, inventory index, and static projection snapshot while repository content is unchanged. Warm reads and planning actions reuse that snapshot; tracked, staged, deleted, renamed, and untracked content changes invalidate it before the next operation. The server returns the browser shell immediately, the browser fetches the canonical projection once while showing startup progress, renders only the visible page, and shows an accessible busy state while actions are running.
 
-The persistent roles are Work, Scope, Items, and Diagnostics. Settings is a
-utility page. Work is the default page. The command palette navigates to the
-owning page and focuses its control; it does not create generic result pages.
+Work is a guided journey for people who do not need to know repository
+internals: describe the desired outcome, review the relevant behavior, approve
+a bounded change, follow implementation, inspect evidence, and confirm
+completion. The server supplies one next action at a time and explains why it
+is available. Scope, diagnostics, identifiers, paths, selectors, and commands
+are available only from Advanced details. Settings remains a utility page.
 
-- Work presents the request, plan status, isolated execution slices, context,
-  and plan validation. When no Work is selected, it starts from a branch
-  change, a specification item, or a plain-language description.
+- Work starts from a plain-language description and a reviewed behavior. It
+  separates advisory suggestions from the approved executable boundary and
+  offers a concrete recovery action when work is blocked.
+- After a behavior is selected, Work keeps its parent specification and exact
+  criterion visible once in a read-only desktop split. Narrow layouts reduce
+  the same context to one collapsed heading until the user opens it.
 - Scope explains why a change is needed, which specification anchors support
   it, and only then the exact editable, verification, and readonly targets.
 - Items projects typed anchors, bindings, targets, and contracts from
@@ -34,7 +40,13 @@ The UI never parses YAML or infers ownership, contracts, target scope, or
 validation meaning. Those decisions belong to the workspace, planner, and
 validation crates and arrive through `syu-workbench-server`.
 
-Interactive operations are backed by local server endpoints:
+Interactive Work operations use the typed `/api/work/action` journey endpoint.
+The browser and native WebView submit the same action and mutation basis; the
+server returns the refreshed canonical projection. Cancelling a journey clears
+the uncommitted session but never silently reverts file changes already made by
+an implementation agent.
+
+Supporting operations are backed by local server endpoints:
 
 - WorkRequest edit/replan and Item-based Work creation run the canonical
   planner.
