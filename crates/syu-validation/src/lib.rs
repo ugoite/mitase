@@ -13,6 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use syu_diagnostics::{Diagnostic, ValidationPhase, ValidationResult};
 use syu_planner::plan as canonical_plan;
 use syu_project_model::{ProjectConfig, ReadinessLevel, ValidationPreset};
+use syu_spec_model::format_sha256;
 use syu_spec_model::{
     BindingRole, BoundTargetRef, ItemStatus, LocalAnchorKind, OwnershipSelector, RepoPath,
     RuleLevel, Selector, SpecAnchor, SpecDocument, TargetClaim,
@@ -1397,7 +1398,7 @@ fn expand_runner_argument(template: &str, values: &BTreeMap<String, String>) -> 
 fn digest(bytes: &[u8]) -> String {
     let mut hash = Sha256::new();
     hash.update(bytes);
-    format!("sha256:{:x}", hash.finalize())
+    format_sha256(hash.finalize())
 }
 
 fn epoch_seconds() -> String {

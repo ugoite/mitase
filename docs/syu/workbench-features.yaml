@@ -458,6 +458,11 @@ features:
     facet: tooling
     responsibility: Own crate and CLI module units that are not covered by a more specific Workbench feature.
     owns:
+    - id: selfhost-crates-syu-code-intel-cargo-toml
+      adapter: declared
+      path: crates/syu-code-intel/Cargo.toml
+      selector:
+        kind: file
     - id: selfhost-crates-syu-code-intel-src-lib-rs
       adapter: declared
       path: crates/syu-code-intel/src/lib.rs
