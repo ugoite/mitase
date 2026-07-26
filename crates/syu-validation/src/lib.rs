@@ -1790,6 +1790,11 @@ fn validate_changed_spec_impact(
         ) {
             continue;
         }
+        let criterion_removed = baseline
+            .as_ref()
+            .and_then(|baseline| baseline.index.anchor(&anchor))
+            .is_some()
+            && ctx.index.anchor(&anchor).is_none();
         let implementation_changed = binding_set_for_criterion(
             baseline.as_ref().map(|baseline| &baseline.index),
             ctx.index,
@@ -1824,7 +1829,31 @@ fn validate_changed_spec_impact(
                 changed_files,
             )
         });
-        if !(implementation_changed || verification_changed) {
+        let retired_binding_changed = criterion_removed
+            && binding_set_for_criterion(
+                baseline.as_ref().map(|baseline| &baseline.index),
+                ctx.index,
+                &anchor,
+                true,
+            )
+            .iter()
+            .any(|binding| {
+                anchor_changed(
+                    binding,
+                    baseline.as_ref().map(|baseline| &baseline.index),
+                    ctx.index,
+                ) && changed_spec_documents.iter().any(|document| {
+                    document.to_string_lossy()
+                        == changed_anchor_path(
+                            binding,
+                            baseline.as_ref().map(|baseline| &baseline.workspace),
+                            baseline.as_ref().map(|baseline| &baseline.index),
+                            ctx.workspace,
+                            ctx.index,
+                        )
+                })
+            });
+        if !(implementation_changed || verification_changed || retired_binding_changed) {
             push(
                 out,
                 "SYU-CHANGE-003",
