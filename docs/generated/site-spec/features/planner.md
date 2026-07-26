@@ -1,9 +1,9 @@
 ---
 title: "Work planning / Planner"
-description: "Generated reference for docs/syu/planner.yaml"
+description: "Generated reference for docs/syu/features/planner.yaml"
 ---
 
-> Generated from `docs/syu/planner.yaml`.
+> Generated from `docs/syu/features/planner.yaml`.
 
 ## Parsed content
 

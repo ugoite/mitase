@@ -1,9 +1,9 @@
 ---
 title: "Capability acceptance contracts / Capability Contracts"
-description: "Generated reference for docs/syu/capability-contracts.yaml"
+description: "Generated reference for docs/syu/requirements/capability-contracts.yaml"
 ---
 
-> Generated from `docs/syu/capability-contracts.yaml`.
+> Generated from `docs/syu/requirements/capability-contracts.yaml`.
 
 ## Parsed content
 

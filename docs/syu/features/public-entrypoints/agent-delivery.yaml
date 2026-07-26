@@ -1,0 +1,136 @@
+schema: syu/spec/v1
+kind: features
+namespace: public
+category: Public entrypoint contracts
+features:
+- id: FEAT-PUBLIC-AGENT-DELIVERY-001
+  title: Agent delivery evidence
+  summary: Govern scoped-agent and durable delivery evidence entrypoints.
+  status: implemented
+  bindings:
+  - id: public-api-agent-current-run
+    role: implementation
+    facet: public
+    responsibility: Govern current scoped-agent run reads.
+    targets:
+    - id: entrypoint-agent-current-run
+      adapter: rust
+      path: crates/syu-agent/src/lib.rs
+      selector:
+        kind: symbol
+        name: current_run
+      claims:
+      - kind: satisfies
+        criterion: REQ-PUBLIC-001#criterion.agent-delivery
+  - id: public-api-agent-events
+    role: implementation
+    facet: public
+    responsibility: Govern scoped-agent event reads.
+    targets:
+    - id: entrypoint-agent-events
+      adapter: rust
+      path: crates/syu-agent/src/lib.rs
+      selector:
+        kind: symbol
+        name: events
+      claims:
+      - kind: satisfies
+        criterion: REQ-PUBLIC-001#criterion.agent-delivery
+  - id: public-api-agent-record-blocker
+    role: implementation
+    facet: public
+    responsibility: Govern scoped-agent blocker evidence.
+    targets:
+    - id: entrypoint-agent-record-blocker
+      adapter: rust
+      path: crates/syu-agent/src/lib.rs
+      selector:
+        kind: symbol
+        name: record_blocker
+      claims:
+      - kind: satisfies
+        criterion: REQ-PUBLIC-001#criterion.agent-delivery
+  - id: public-api-agent-record-verification
+    role: implementation
+    facet: public
+    responsibility: Govern scoped-agent verification evidence.
+    targets:
+    - id: entrypoint-agent-record-verification
+      adapter: rust
+      path: crates/syu-agent/src/lib.rs
+      selector:
+        kind: symbol
+        name: record_verification
+      claims:
+      - kind: satisfies
+        criterion: REQ-PUBLIC-001#criterion.agent-delivery
+  - id: public-api-delivery-agent-events
+    role: implementation
+    facet: public
+    responsibility: Govern durable agent event reads.
+    targets:
+    - id: entrypoint-delivery-agent-events
+      adapter: rust
+      path: crates/syu-delivery/src/lib.rs
+      selector:
+        kind: symbol
+        name: agent_events
+      claims:
+      - kind: satisfies
+        criterion: REQ-PUBLIC-001#criterion.agent-delivery
+  - id: public-api-delivery-agent-run
+    role: implementation
+    facet: public
+    responsibility: Govern durable agent run reads.
+    targets:
+    - id: entrypoint-delivery-agent-run
+      adapter: rust
+      path: crates/syu-delivery/src/lib.rs
+      selector:
+        kind: symbol
+        name: agent_run
+      claims:
+      - kind: satisfies
+        criterion: REQ-PUBLIC-001#criterion.agent-delivery
+  - id: public-api-delivery-latest-agent-run
+    role: implementation
+    facet: public
+    responsibility: Govern latest durable agent run reads.
+    targets:
+    - id: entrypoint-delivery-latest-agent-run
+      adapter: rust
+      path: crates/syu-delivery/src/lib.rs
+      selector:
+        kind: symbol
+        name: latest_agent_run
+      claims:
+      - kind: satisfies
+        criterion: REQ-PUBLIC-001#criterion.agent-delivery
+  - id: public-readiness
+    role: verification
+    facet: public
+    responsibility: Prove agent delivery evidence entrypoints have bounded canonical
+      plans.
+    targets:
+    - id: canonical-plans
+      adapter: rust
+      path: crates/syu-validation/src/readiness.rs
+      selector:
+        kind: symbol
+        name: tests::agent_delivery_public_entrypoints_have_canonical_plans
+      claims:
+      - kind: verifies
+        criterion: REQ-PUBLIC-001#criterion.agent-delivery
+        covers:
+        - FEAT-PUBLIC-AGENT-DELIVERY-001#binding.public-api-agent-current-run/target.entrypoint-agent-current-run
+        - FEAT-PUBLIC-AGENT-DELIVERY-001#binding.public-api-agent-events/target.entrypoint-agent-events
+        - FEAT-PUBLIC-AGENT-DELIVERY-001#binding.public-api-agent-record-blocker/target.entrypoint-agent-record-blocker
+        - FEAT-PUBLIC-AGENT-DELIVERY-001#binding.public-api-agent-record-verification/target.entrypoint-agent-record-verification
+        - FEAT-PUBLIC-AGENT-DELIVERY-001#binding.public-api-delivery-agent-events/target.entrypoint-delivery-agent-events
+        - FEAT-PUBLIC-AGENT-DELIVERY-001#binding.public-api-delivery-agent-run/target.entrypoint-delivery-agent-run
+        - FEAT-PUBLIC-AGENT-DELIVERY-001#binding.public-api-delivery-latest-agent-run/target.entrypoint-delivery-latest-agent-run
+        runner:
+          runner: cargo-test
+          arguments:
+            package: syu-validation
+            test: tests::agent_delivery_public_entrypoints_have_canonical_plans

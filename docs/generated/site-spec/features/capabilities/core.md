@@ -1,0 +1,322 @@
+---
+title: "Syu functional units / Core"
+description: "Generated reference for docs/syu/features/capabilities/core.yaml"
+---
+
+> Generated from `docs/syu/features/capabilities/core.yaml`.
+
+## Parsed content
+
+### Schema
+
+- syu/spec/v1
+
+### Kind
+
+- features
+
+### Namespace
+
+- capabilities
+
+### Category
+
+- Syu functional units
+
+### Features
+
+- **id**: FEAT-SPEC-MODEL-001
+  - **title**: Spec model
+  - **summary**: Parse and validate the canonical syu/spec/v1 model.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: implementation
+      - **role**: implementation
+      - **facet**: model
+      - **responsibility**: Provide the typed specification model.
+      - **targets**:
+        - **id**: spec-document
+          - **adapter**: rust
+          - **path**: crates/syu-spec-model/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: SpecDocument
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.spec-model
+- **id**: FEAT-PROJECT-CONFIG-001
+  - **title**: Project configuration
+  - **summary**: Load and validate syu/config/v1 project configuration.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: implementation
+      - **role**: implementation
+      - **facet**: configuration
+      - **responsibility**: Provide the typed project configuration model.
+      - **targets**:
+        - **id**: project-config
+          - **adapter**: rust
+          - **path**: crates/syu-project-model/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: ProjectConfig
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.project-config
+- **id**: FEAT-INVENTORY-001
+  - **title**: Inventory providers
+  - **summary**: Discover active artifact units through profile-selected providers.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: implementation
+      - **role**: implementation
+      - **facet**: inventory
+      - **responsibility**: Discover provider-owned semantic artifact units.
+      - **targets**:
+        - **id**: inventory-registry
+          - **adapter**: rust
+          - **path**: crates/syu-inventory/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: InventoryRegistry
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.inventory-discovery
+- **id**: FEAT-IDENTITY-001
+  - **title**: Exact artifact identity
+  - **summary**: Resolve one exact editable or observable artifact target per identity.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: implementation
+      - **role**: implementation
+      - **facet**: identity
+      - **responsibility**: Resolve exact targets through the overlay-aware workspace.
+      - **targets**:
+        - **id**: target-resolver
+          - **adapter**: rust
+          - **path**: crates/syu-workspace/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: resolve_target_in_workspace
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.exact-identity
+- **id**: FEAT-INDEX-001
+  - **title**: Graph indexing
+  - **summary**: Index specifications, targets, claims, and contracts into one graph.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: implementation
+      - **role**: implementation
+      - **facet**: index
+      - **responsibility**: Build the canonical specification and artifact index.
+      - **targets**:
+        - **id**: spec-index
+          - **adapter**: rust
+          - **path**: crates/syu-workspace/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: SpecIndex
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.graph-index
+- **id**: FEAT-OWNERSHIP-001
+  - **title**: Ownership resolution
+  - **summary**: Resolve ownership scopes and target claims without path-only inference.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: implementation
+      - **role**: implementation
+      - **facet**: ownership
+      - **responsibility**: Represent exact and scoped ownership references.
+      - **targets**:
+        - **id**: ownership-ref
+          - **adapter**: rust
+          - **path**: crates/syu-workspace/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: OwnershipRef
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.ownership-resolution
+- **id**: FEAT-READINESS-001
+  - **title**: Readiness validation
+  - **summary**: Evaluate traceable, seedable, work-ready, verifiable, and closed-loop readiness.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: implementation
+      - **role**: implementation
+      - **facet**: readiness
+      - **responsibility**: Evaluate readiness subjects and canonical execution closure.
+      - **targets**:
+        - **id**: readiness-evaluate
+          - **adapter**: rust
+          - **path**: crates/syu-validation/src/readiness.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: evaluate
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.readiness-ladder
+- **id**: FEAT-CHANGE-VALIDATION-001
+  - **title**: Change validation
+  - **summary**: Validate changed work against the canonical workspace and plan.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: implementation
+      - **role**: implementation
+      - **facet**: validation
+      - **responsibility**: Validate semantic changed units against ownership and plan scope.
+      - **targets**:
+        - **id**: change-validate
+          - **adapter**: rust
+          - **path**: crates/syu-validation/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: validate
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.change-validation
+
+## Source YAML
+
+```yaml
+schema: syu/spec/v1
+kind: features
+namespace: capabilities
+category: Syu functional units
+features:
+  - id: FEAT-SPEC-MODEL-001
+    title: Spec model
+    summary: Parse and validate the canonical syu/spec/v1 model.
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: model
+        responsibility: Provide the typed specification model.
+        targets:
+          - id: spec-document
+            adapter: rust
+            path: crates/syu-spec-model/src/lib.rs
+            selector: { kind: symbol, name: SpecDocument }
+            claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.spec-model }]
+
+  - id: FEAT-PROJECT-CONFIG-001
+    title: Project configuration
+    summary: Load and validate syu/config/v1 project configuration.
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: configuration
+        responsibility: Provide the typed project configuration model.
+        targets:
+          - id: project-config
+            adapter: rust
+            path: crates/syu-project-model/src/lib.rs
+            selector: { kind: symbol, name: ProjectConfig }
+            claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.project-config }]
+
+  - id: FEAT-INVENTORY-001
+    title: Inventory providers
+    summary: Discover active artifact units through profile-selected providers.
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: inventory
+        responsibility: Discover provider-owned semantic artifact units.
+        targets:
+          - id: inventory-registry
+            adapter: rust
+            path: crates/syu-inventory/src/lib.rs
+            selector: { kind: symbol, name: InventoryRegistry }
+            claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.inventory-discovery }]
+
+  - id: FEAT-IDENTITY-001
+    title: Exact artifact identity
+    summary: Resolve one exact editable or observable artifact target per identity.
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: identity
+        responsibility: Resolve exact targets through the overlay-aware workspace.
+        targets:
+          - id: target-resolver
+            adapter: rust
+            path: crates/syu-workspace/src/lib.rs
+            selector: { kind: symbol, name: resolve_target_in_workspace }
+            claims:
+              - kind: satisfies
+                criterion: REQ-CAPABILITY-001#criterion.exact-identity
+
+  - id: FEAT-INDEX-001
+    title: Graph indexing
+    summary: Index specifications, targets, claims, and contracts into one graph.
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: index
+        responsibility: Build the canonical specification and artifact index.
+        targets:
+          - id: spec-index
+            adapter: rust
+            path: crates/syu-workspace/src/lib.rs
+            selector: { kind: symbol, name: SpecIndex }
+            claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.graph-index }]
+
+  - id: FEAT-OWNERSHIP-001
+    title: Ownership resolution
+    summary: Resolve ownership scopes and target claims without path-only inference.
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: ownership
+        responsibility: Represent exact and scoped ownership references.
+        targets:
+          - id: ownership-ref
+            adapter: rust
+            path: crates/syu-workspace/src/lib.rs
+            selector: { kind: symbol, name: OwnershipRef }
+            claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.ownership-resolution }]
+
+  - id: FEAT-READINESS-001
+    title: Readiness validation
+    summary: Evaluate traceable, seedable, work-ready, verifiable, and closed-loop readiness.
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: readiness
+        responsibility: Evaluate readiness subjects and canonical execution closure.
+        targets:
+          - id: readiness-evaluate
+            adapter: rust
+            path: crates/syu-validation/src/readiness.rs
+            selector: { kind: symbol, name: evaluate }
+            claims:
+              - kind: satisfies
+                criterion: REQ-CAPABILITY-001#criterion.readiness-ladder
+
+  - id: FEAT-CHANGE-VALIDATION-001
+    title: Change validation
+    summary: Validate changed work against the canonical workspace and plan.
+    status: implemented
+    bindings:
+      - id: implementation
+        role: implementation
+        facet: validation
+        responsibility: Validate semantic changed units against ownership and plan scope.
+        targets:
+          - id: change-validate
+            adapter: rust
+            path: crates/syu-validation/src/lib.rs
+            selector: { kind: symbol, name: validate }
+            claims:
+              - kind: satisfies
+                criterion: REQ-CAPABILITY-001#criterion.change-validation
+```

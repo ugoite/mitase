@@ -1,9 +1,9 @@
 ---
 title: "Foundation / Foundation"
-description: "Generated reference for docs/syu/foundation.yaml"
+description: "Generated reference for docs/syu/philosophies/foundation.yaml"
 ---
 
-> Generated from `docs/syu/foundation.yaml`.
+> Generated from `docs/syu/philosophies/foundation.yaml`.
 
 ## Parsed content
 

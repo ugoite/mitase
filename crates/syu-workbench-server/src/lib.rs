@@ -6993,7 +6993,7 @@ mod tests {
     }
 
     async fn run_spec_transaction(app: Router) {
-        let path = workspace_root().join("docs/syu/workbench.yaml");
+        let path = workspace_root().join("docs/syu/requirements/workbench.yaml");
         let original = fs::read_to_string(&path).expect("original specification");
         let (basis, csrf, _) = projection_and_basis(&app).await;
         let command = StructuredEditCommand {

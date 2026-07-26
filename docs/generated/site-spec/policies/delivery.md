@@ -1,9 +1,9 @@
 ---
 title: "Delivery governance / Delivery"
-description: "Generated reference for docs/syu/delivery.yaml"
+description: "Generated reference for docs/syu/policies/delivery.yaml"
 ---
 
-> Generated from `docs/syu/delivery.yaml`.
+> Generated from `docs/syu/policies/delivery.yaml`.
 
 ## Parsed content
 

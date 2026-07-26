@@ -77,16 +77,43 @@ inventory:
             - crates/syu-workbench-server/src/lib.rs
             - crates/syu-workspace/Cargo.toml
             - crates/syu-workspace/src/lib.rs
-            - docs/generated/site-spec/capabilities.md
-            - docs/generated/site-spec/capability-contracts.md
-            - docs/generated/site-spec/delivery.md
-            - docs/generated/site-spec/foundation.md
             - docs/generated/site-spec/index.md
-            - docs/generated/site-spec/planner.md
-            - docs/generated/site-spec/public-entrypoints.md
-            - docs/generated/site-spec/work.md
-            - docs/generated/site-spec/workbench.md
-            - docs/generated/site-spec/workbench-features.md
+            - docs/generated/site-spec/features/capabilities/core.md
+            - docs/generated/site-spec/features/capabilities/delivery.md
+            - docs/generated/site-spec/features/capabilities/planning.md
+            - docs/generated/site-spec/features/planner.md
+            - docs/generated/site-spec/features/public-entrypoints/agent-delivery.md
+            - docs/generated/site-spec/features/public-entrypoints/code-diagnostics.md
+            - docs/generated/site-spec/features/public-entrypoints/inventory.md
+            - docs/generated/site-spec/features/public-entrypoints/spec-model.md
+            - docs/generated/site-spec/features/public-entrypoints/validation.md
+            - docs/generated/site-spec/features/public-entrypoints/work-planning.md
+            - docs/generated/site-spec/features/public-entrypoints/workbench-actions.md
+            - docs/generated/site-spec/features/public-entrypoints/workbench-components.md
+            - docs/generated/site-spec/features/public-entrypoints/workbench-navigation.md
+            - docs/generated/site-spec/features/public-entrypoints/workbench-pages.md
+            - docs/generated/site-spec/features/public-entrypoints/workbench-rendering.md
+            - docs/generated/site-spec/features/public-entrypoints/workbench-server.md
+            - docs/generated/site-spec/features/public-entrypoints/workbench-transport.md
+            - docs/generated/site-spec/features/public-entrypoints/workbench-validation.md
+            - docs/generated/site-spec/features/public-entrypoints/workspace-loading.md
+            - docs/generated/site-spec/features/public-entrypoints/workspace-resolution.md
+            - docs/generated/site-spec/features/workbench/completion-history.md
+            - docs/generated/site-spec/features/workbench/guided-journey.md
+            - docs/generated/site-spec/features/workbench/navigation.md
+            - docs/generated/site-spec/features/workbench/projection.md
+            - docs/generated/site-spec/features/workbench/quality-gates.md
+            - docs/generated/site-spec/features/workbench/scoped-agent.md
+            - docs/generated/site-spec/features/workbench/server.md
+            - docs/generated/site-spec/features/workbench/specification-editor.md
+            - docs/generated/site-spec/features/workbench/target-suggestions.md
+            - docs/generated/site-spec/features/workbench/verification.md
+            - docs/generated/site-spec/features/workbench/work-ui.md
+            - docs/generated/site-spec/philosophies/foundation.md
+            - docs/generated/site-spec/policies/delivery.md
+            - docs/generated/site-spec/requirements/capability-contracts.md
+            - docs/generated/site-spec/requirements/work.md
+            - docs/generated/site-spec/requirements/workbench.md
             - docs/guide/command-card.md
             - docs/guide/configuration.md
             - docs/guide/examples-and-templates.md
@@ -95,15 +122,42 @@ inventory:
             - docs/guide/spec-antipatterns.md
             - docs/guide/vscode-extension.md
             - docs/guide/workbench.md
-            - docs/syu/capabilities.yaml
-            - docs/syu/capability-contracts.yaml
-            - docs/syu/delivery.yaml
-            - docs/syu/foundation.yaml
-            - docs/syu/planner.yaml
-            - docs/syu/public-entrypoints.yaml
-            - docs/syu/work.yaml
-            - docs/syu/workbench-features.yaml
-            - docs/syu/workbench.yaml
+            - docs/syu/features/capabilities/core.yaml
+            - docs/syu/features/capabilities/delivery.yaml
+            - docs/syu/features/capabilities/planning.yaml
+            - docs/syu/features/planner.yaml
+            - docs/syu/features/public-entrypoints/agent-delivery.yaml
+            - docs/syu/features/public-entrypoints/code-diagnostics.yaml
+            - docs/syu/features/public-entrypoints/inventory.yaml
+            - docs/syu/features/public-entrypoints/spec-model.yaml
+            - docs/syu/features/public-entrypoints/validation.yaml
+            - docs/syu/features/public-entrypoints/work-planning.yaml
+            - docs/syu/features/public-entrypoints/workbench-actions.yaml
+            - docs/syu/features/public-entrypoints/workbench-components.yaml
+            - docs/syu/features/public-entrypoints/workbench-navigation.yaml
+            - docs/syu/features/public-entrypoints/workbench-pages.yaml
+            - docs/syu/features/public-entrypoints/workbench-rendering.yaml
+            - docs/syu/features/public-entrypoints/workbench-server.yaml
+            - docs/syu/features/public-entrypoints/workbench-transport.yaml
+            - docs/syu/features/public-entrypoints/workbench-validation.yaml
+            - docs/syu/features/public-entrypoints/workspace-loading.yaml
+            - docs/syu/features/public-entrypoints/workspace-resolution.yaml
+            - docs/syu/features/workbench/completion-history.yaml
+            - docs/syu/features/workbench/guided-journey.yaml
+            - docs/syu/features/workbench/navigation.yaml
+            - docs/syu/features/workbench/projection.yaml
+            - docs/syu/features/workbench/quality-gates.yaml
+            - docs/syu/features/workbench/scoped-agent.yaml
+            - docs/syu/features/workbench/server.yaml
+            - docs/syu/features/workbench/specification-editor.yaml
+            - docs/syu/features/workbench/target-suggestions.yaml
+            - docs/syu/features/workbench/verification.yaml
+            - docs/syu/features/workbench/work-ui.yaml
+            - docs/syu/philosophies/foundation.yaml
+            - docs/syu/policies/delivery.yaml
+            - docs/syu/requirements/capability-contracts.yaml
+            - docs/syu/requirements/work.yaml
+            - docs/syu/requirements/workbench.yaml
             - editors/vscode/README.md
             - editors/vscode/src/model.js
             - editors/vscode/test/model.test.js

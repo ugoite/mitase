@@ -23,17 +23,13 @@ fn current_workspace_validates_and_reports_configured_readiness() {
 #[test]
 fn generated_spec_reference_covers_every_source_document() {
     let index = fs::read_to_string("docs/generated/site-spec/index.md").expect("generated index");
-    for entry in fs::read_dir("docs/syu").expect("spec directory") {
-        let entry = entry.expect("spec entry");
-        let source = entry.path();
-        if source.extension().and_then(|value| value.to_str()) != Some("yaml") {
-            continue;
-        }
-        let stem = source
-            .file_stem()
-            .and_then(|value| value.to_str())
-            .expect("spec stem");
-        let generated = Path::new("docs/generated/site-spec").join(format!("{stem}.md"));
+    let mut sources = Vec::new();
+    collect_spec_yaml_files(Path::new("docs/syu"), &mut sources);
+    for source in sources {
+        let relative = source.strip_prefix("docs/syu").expect("spec source path");
+        let generated = Path::new("docs/generated/site-spec")
+            .join(relative)
+            .with_extension("md");
         let page = fs::read_to_string(&generated)
             .unwrap_or_else(|error| panic!("read {}: {error}", generated.display()));
         let source_display = source.to_string_lossy();
@@ -42,10 +38,23 @@ fn generated_spec_reference_covers_every_source_document() {
             "{} does not identify its canonical source",
             generated.display()
         );
+        let doc_link = relative.with_extension("").to_string_lossy().into_owned();
         assert!(
-            index.contains(&format!("({stem})")),
-            "generated index does not link {stem}"
+            index.contains(&format!("({doc_link})")),
+            "generated index does not link {doc_link}"
         );
+    }
+}
+
+fn collect_spec_yaml_files(directory: &Path, files: &mut Vec<std::path::PathBuf>) {
+    for entry in fs::read_dir(directory).expect("spec directory") {
+        let entry = entry.expect("spec entry");
+        let path = entry.path();
+        if path.is_dir() {
+            collect_spec_yaml_files(&path, files);
+        } else if path.extension().and_then(|value| value.to_str()) == Some("yaml") {
+            files.push(path);
+        }
     }
 }
 

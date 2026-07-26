@@ -1,0 +1,136 @@
+schema: syu/spec/v1
+kind: features
+namespace: public
+category: Public entrypoint contracts
+features:
+- id: FEAT-PUBLIC-WORKBENCH-COMPONENTS-001
+  title: Workbench components
+  summary: Govern reusable Workbench rendering, translation, and diff components.
+  status: implemented
+  bindings:
+  - id: public-api-006
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint addressable by an exact target.
+    targets:
+    - id: entrypoint-006-javascript-crates-syu-app-ui-assets-js-components-actio
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/components/action.js
+      selector:
+        kind: symbol
+        name: actionCapability
+      claims:
+      - kind: satisfies
+        criterion: REQ-PUBLIC-001#criterion.workbench-components
+  - id: public-api-007
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint addressable by an exact target.
+    targets:
+    - id: entrypoint-007-javascript-crates-syu-app-ui-assets-js-components-diagn
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/components/diagnostic.js
+      selector:
+        kind: symbol
+        name: renderDiagnostic
+      claims:
+      - kind: satisfies
+        criterion: REQ-PUBLIC-001#criterion.workbench-components
+  - id: public-api-008
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint addressable by an exact target.
+    targets:
+    - id: entrypoint-008-javascript-crates-syu-app-ui-assets-js-components-edito
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/components/editor.js
+      selector:
+        kind: symbol
+        name: structuredEditor
+      claims:
+      - kind: satisfies
+        criterion: REQ-PUBLIC-001#criterion.workbench-components
+  - id: public-api-009
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint addressable by an exact target.
+    targets:
+    - id: entrypoint-009-javascript-crates-syu-app-ui-assets-js-components-readi
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/components/readiness.js
+      selector:
+        kind: symbol
+        name: renderReadiness
+      claims:
+      - kind: satisfies
+        criterion: REQ-PUBLIC-001#criterion.workbench-components
+  - id: public-api-010
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint addressable by an exact target.
+    targets:
+    - id: entrypoint-010-javascript-crates-syu-app-ui-assets-js-components-targe
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/components/target.js
+      selector:
+        kind: symbol
+        name: renderTarget
+      claims:
+      - kind: satisfies
+        criterion: REQ-PUBLIC-001#criterion.workbench-components
+  - id: public-api-011
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint addressable by an exact target.
+    targets:
+    - id: entrypoint-011-javascript-crates-syu-app-ui-assets-js-i18n-js-translat
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/i18n.js
+      selector:
+        kind: symbol
+        name: translate
+      claims:
+      - kind: satisfies
+        criterion: REQ-PUBLIC-001#criterion.workbench-components
+  - id: public-api-render-diff
+    role: implementation
+    facet: public
+    responsibility: Govern bounded diff rendering.
+    targets:
+    - id: entrypoint-render-diff
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/components/diff.js
+      selector:
+        kind: symbol
+        name: renderDiff
+      claims:
+      - kind: satisfies
+        criterion: REQ-PUBLIC-001#criterion.workbench-components
+  - id: public-readiness
+    role: verification
+    facet: public
+    responsibility: Prove workbench components entrypoints have bounded canonical
+      plans.
+    targets:
+    - id: canonical-plans
+      adapter: rust
+      path: crates/syu-validation/src/readiness.rs
+      selector:
+        kind: symbol
+        name: tests::workbench_components_public_entrypoints_have_canonical_plans
+      claims:
+      - kind: verifies
+        criterion: REQ-PUBLIC-001#criterion.workbench-components
+        covers:
+        - FEAT-PUBLIC-WORKBENCH-COMPONENTS-001#binding.public-api-006/target.entrypoint-006-javascript-crates-syu-app-ui-assets-js-components-actio
+        - FEAT-PUBLIC-WORKBENCH-COMPONENTS-001#binding.public-api-007/target.entrypoint-007-javascript-crates-syu-app-ui-assets-js-components-diagn
+        - FEAT-PUBLIC-WORKBENCH-COMPONENTS-001#binding.public-api-008/target.entrypoint-008-javascript-crates-syu-app-ui-assets-js-components-edito
+        - FEAT-PUBLIC-WORKBENCH-COMPONENTS-001#binding.public-api-009/target.entrypoint-009-javascript-crates-syu-app-ui-assets-js-components-readi
+        - FEAT-PUBLIC-WORKBENCH-COMPONENTS-001#binding.public-api-010/target.entrypoint-010-javascript-crates-syu-app-ui-assets-js-components-targe
+        - FEAT-PUBLIC-WORKBENCH-COMPONENTS-001#binding.public-api-011/target.entrypoint-011-javascript-crates-syu-app-ui-assets-js-i18n-js-translat
+        - FEAT-PUBLIC-WORKBENCH-COMPONENTS-001#binding.public-api-render-diff/target.entrypoint-render-diff
+        runner:
+          runner: cargo-test
+          arguments:
+            package: syu-validation
+            test: tests::workbench_components_public_entrypoints_have_canonical_plans

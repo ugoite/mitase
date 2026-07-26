@@ -1,9 +1,9 @@
 ---
 title: "Workbench behavior / Workbench"
-description: "Generated reference for docs/syu/workbench.yaml"
+description: "Generated reference for docs/syu/requirements/workbench.yaml"
 ---
 
-> Generated from `docs/syu/workbench.yaml`.
+> Generated from `docs/syu/requirements/workbench.yaml`.
 
 ## Parsed content
 
