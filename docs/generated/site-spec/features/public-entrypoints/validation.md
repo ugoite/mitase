@@ -33,7 +33,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/valid
     - **id**: public-api-041
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-044-rust-crates-syu-validation-src-lib-rs-phase-for-rule
           - **adapter**: rust
@@ -42,12 +42,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/valid
             - **kind**: symbol
             - **name**: phase_for_rule
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.validation-engine
+            - **kind**: exposes
+              - **target**: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
     - **id**: public-api-042
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-047-rust-crates-syu-validation-src-lib-rs-validate-without
           - **adapter**: rust
@@ -56,12 +56,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/valid
             - **kind**: symbol
             - **name**: validate_without_readiness
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.validation-engine
+            - **kind**: exposes
+              - **target**: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
     - **id**: public-api-078
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-078-rust-crates-syu-validation-src-lib-rs-readinessaxis
           - **adapter**: rust
@@ -70,12 +70,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/valid
             - **kind**: symbol
             - **name**: ReadinessAxis
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.validation-engine
+            - **kind**: exposes
+              - **target**: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
     - **id**: public-api-079
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-079-rust-crates-syu-validation-src-lib-rs-readinessaxisid
           - **adapter**: rust
@@ -84,12 +84,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/valid
             - **kind**: symbol
             - **name**: ReadinessAxisId
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.validation-engine
+            - **kind**: exposes
+              - **target**: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
     - **id**: public-api-080
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-080-rust-crates-syu-validation-src-lib-rs-readinessreport
           - **adapter**: rust
@@ -98,12 +98,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/valid
             - **kind**: symbol
             - **name**: ReadinessReport
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.validation-engine
+            - **kind**: exposes
+              - **target**: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
     - **id**: public-api-081
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-081-rust-crates-syu-validation-src-lib-rs-evaluate-readiness
           - **adapter**: rust
@@ -112,12 +112,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/valid
             - **kind**: symbol
             - **name**: evaluate_readiness
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.validation-engine
+            - **kind**: exposes
+              - **target**: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
     - **id**: public-api-082
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-082-rust-crates-syu-validation-src-lib-rs-required-axes
           - **adapter**: rust
@@ -126,8 +126,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/valid
             - **kind**: symbol
             - **name**: required_axes
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.validation-engine
+            - **kind**: exposes
+              - **target**: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
     - **id**: public-api-changed-files-against-revision
       - **role**: implementation
       - **facet**: public
@@ -140,8 +140,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/valid
             - **kind**: symbol
             - **name**: changed_files_against_revision
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.validation-engine
+            - **kind**: exposes
+              - **target**: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
     - **id**: public-api-execute-verification-attempt
       - **role**: implementation
       - **facet**: public
@@ -154,8 +154,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/valid
             - **kind**: symbol
             - **name**: execute_verification_attempt
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.validation-engine
+            - **kind**: exposes
+              - **target**: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
     - **id**: public-api-validate-workspace
       - **role**: implementation
       - **facet**: public
@@ -168,38 +168,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/valid
             - **kind**: symbol
             - **name**: validate_workspace
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.validation-engine
-    - **id**: public-readiness
-      - **role**: verification
-      - **facet**: public
-      - **responsibility**: Prove validation engine entrypoints have bounded canonical plans.
-      - **targets**:
-        - **id**: canonical-plans
-          - **adapter**: rust
-          - **path**: crates/syu-validation/src/readiness.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: tests::validation_engine_public_entrypoints_have_canonical_plans
-          - **claims**:
-            - **kind**: verifies
-              - **criterion**: REQ-PUBLIC-001#criterion.validation-engine
-              - **covers**:
-                - FEAT-PUBLIC-VALIDATION-001#binding.public-api-041/target.entrypoint-044-rust-crates-syu-validation-src-lib-rs-phase-for-rule
-                - FEAT-PUBLIC-VALIDATION-001#binding.public-api-042/target.entrypoint-047-rust-crates-syu-validation-src-lib-rs-validate-without
-                - FEAT-PUBLIC-VALIDATION-001#binding.public-api-078/target.entrypoint-078-rust-crates-syu-validation-src-lib-rs-readinessaxis
-                - FEAT-PUBLIC-VALIDATION-001#binding.public-api-079/target.entrypoint-079-rust-crates-syu-validation-src-lib-rs-readinessaxisid
-                - FEAT-PUBLIC-VALIDATION-001#binding.public-api-080/target.entrypoint-080-rust-crates-syu-validation-src-lib-rs-readinessreport
-                - FEAT-PUBLIC-VALIDATION-001#binding.public-api-081/target.entrypoint-081-rust-crates-syu-validation-src-lib-rs-evaluate-readiness
-                - FEAT-PUBLIC-VALIDATION-001#binding.public-api-082/target.entrypoint-082-rust-crates-syu-validation-src-lib-rs-required-axes
-                - FEAT-PUBLIC-VALIDATION-001#binding.public-api-changed-files-against-revision/target.entrypoint-changed-files-against-revision
-                - FEAT-PUBLIC-VALIDATION-001#binding.public-api-execute-verification-attempt/target.entrypoint-execute-verification-attempt
-                - FEAT-PUBLIC-VALIDATION-001#binding.public-api-validate-workspace/target.entrypoint-validate-workspace
-              - **runner**:
-                - **runner**: cargo-test
-                - **arguments**:
-                  - **package**: syu-validation
-                  - **test**: tests::validation_engine_public_entrypoints_have_canonical_plans
+            - **kind**: exposes
+              - **target**: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
 
 ## Source YAML
 
@@ -217,7 +187,7 @@ features:
   - id: public-api-041
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-044-rust-crates-syu-validation-src-lib-rs-phase-for-rule
       adapter: rust
@@ -226,12 +196,12 @@ features:
         kind: symbol
         name: phase_for_rule
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.validation-engine
+      - kind: exposes
+        target: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
   - id: public-api-042
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-047-rust-crates-syu-validation-src-lib-rs-validate-without
       adapter: rust
@@ -240,12 +210,12 @@ features:
         kind: symbol
         name: validate_without_readiness
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.validation-engine
+      - kind: exposes
+        target: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
   - id: public-api-078
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-078-rust-crates-syu-validation-src-lib-rs-readinessaxis
       adapter: rust
@@ -254,12 +224,12 @@ features:
         kind: symbol
         name: ReadinessAxis
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.validation-engine
+      - kind: exposes
+        target: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
   - id: public-api-079
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-079-rust-crates-syu-validation-src-lib-rs-readinessaxisid
       adapter: rust
@@ -268,12 +238,12 @@ features:
         kind: symbol
         name: ReadinessAxisId
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.validation-engine
+      - kind: exposes
+        target: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
   - id: public-api-080
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-080-rust-crates-syu-validation-src-lib-rs-readinessreport
       adapter: rust
@@ -282,12 +252,12 @@ features:
         kind: symbol
         name: ReadinessReport
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.validation-engine
+      - kind: exposes
+        target: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
   - id: public-api-081
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-081-rust-crates-syu-validation-src-lib-rs-evaluate-readiness
       adapter: rust
@@ -296,12 +266,12 @@ features:
         kind: symbol
         name: evaluate_readiness
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.validation-engine
+      - kind: exposes
+        target: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
   - id: public-api-082
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-082-rust-crates-syu-validation-src-lib-rs-required-axes
       adapter: rust
@@ -310,8 +280,8 @@ features:
         kind: symbol
         name: required_axes
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.validation-engine
+      - kind: exposes
+        target: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
   - id: public-api-changed-files-against-revision
     role: implementation
     facet: public
@@ -324,8 +294,8 @@ features:
         kind: symbol
         name: changed_files_against_revision
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.validation-engine
+      - kind: exposes
+        target: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
   - id: public-api-execute-verification-attempt
     role: implementation
     facet: public
@@ -338,8 +308,8 @@ features:
         kind: symbol
         name: execute_verification_attempt
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.validation-engine
+      - kind: exposes
+        target: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
   - id: public-api-validate-workspace
     role: implementation
     facet: public
@@ -352,36 +322,6 @@ features:
         kind: symbol
         name: validate_workspace
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.validation-engine
-  - id: public-readiness
-    role: verification
-    facet: public
-    responsibility: Prove validation engine entrypoints have bounded canonical plans.
-    targets:
-    - id: canonical-plans
-      adapter: rust
-      path: crates/syu-validation/src/readiness.rs
-      selector:
-        kind: symbol
-        name: tests::validation_engine_public_entrypoints_have_canonical_plans
-      claims:
-      - kind: verifies
-        criterion: REQ-PUBLIC-001#criterion.validation-engine
-        covers:
-        - FEAT-PUBLIC-VALIDATION-001#binding.public-api-041/target.entrypoint-044-rust-crates-syu-validation-src-lib-rs-phase-for-rule
-        - FEAT-PUBLIC-VALIDATION-001#binding.public-api-042/target.entrypoint-047-rust-crates-syu-validation-src-lib-rs-validate-without
-        - FEAT-PUBLIC-VALIDATION-001#binding.public-api-078/target.entrypoint-078-rust-crates-syu-validation-src-lib-rs-readinessaxis
-        - FEAT-PUBLIC-VALIDATION-001#binding.public-api-079/target.entrypoint-079-rust-crates-syu-validation-src-lib-rs-readinessaxisid
-        - FEAT-PUBLIC-VALIDATION-001#binding.public-api-080/target.entrypoint-080-rust-crates-syu-validation-src-lib-rs-readinessreport
-        - FEAT-PUBLIC-VALIDATION-001#binding.public-api-081/target.entrypoint-081-rust-crates-syu-validation-src-lib-rs-evaluate-readiness
-        - FEAT-PUBLIC-VALIDATION-001#binding.public-api-082/target.entrypoint-082-rust-crates-syu-validation-src-lib-rs-required-axes
-        - FEAT-PUBLIC-VALIDATION-001#binding.public-api-changed-files-against-revision/target.entrypoint-changed-files-against-revision
-        - FEAT-PUBLIC-VALIDATION-001#binding.public-api-execute-verification-attempt/target.entrypoint-execute-verification-attempt
-        - FEAT-PUBLIC-VALIDATION-001#binding.public-api-validate-workspace/target.entrypoint-validate-workspace
-        runner:
-          runner: cargo-test
-          arguments:
-            package: syu-validation
-            test: tests::validation_engine_public_entrypoints_have_canonical_plans
+      - kind: exposes
+        target: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
 ```

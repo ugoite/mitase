@@ -33,7 +33,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
     - **id**: public-api-005
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-005-javascript-crates-syu-app-ui-assets-js-api-js-runjourn
           - **adapter**: javascript
@@ -42,8 +42,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: runJourneyAction
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-client-actions
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
     - **id**: public-api-apply-specification-candidate
       - **role**: implementation
       - **facet**: public
@@ -56,8 +56,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: applySpecificationCandidate
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-client-actions
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
     - **id**: public-api-approve-target-suggestions
       - **role**: implementation
       - **facet**: public
@@ -70,8 +70,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: approveTargetSuggestions
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-client-actions
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
     - **id**: public-api-preview-specification-candidate
       - **role**: implementation
       - **facet**: public
@@ -84,8 +84,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: previewSpecificationCandidate
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-client-actions
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
     - **id**: public-api-read-target-suggestions
       - **role**: implementation
       - **facet**: public
@@ -98,8 +98,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: readTargetSuggestions
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-client-actions
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
     - **id**: public-api-reject-target-suggestion
       - **role**: implementation
       - **facet**: public
@@ -112,8 +112,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: rejectTargetSuggestion
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-client-actions
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
     - **id**: public-api-run-diagnostics
       - **role**: implementation
       - **facet**: public
@@ -126,8 +126,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: runDiagnostics
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-client-actions
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
     - **id**: public-api-run-readiness
       - **role**: implementation
       - **facet**: public
@@ -140,8 +140,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: runReadiness
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-client-actions
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
     - **id**: public-api-search-specification-candidates
       - **role**: implementation
       - **facet**: public
@@ -154,37 +154,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: searchSpecificationCandidates
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-client-actions
-    - **id**: public-readiness
-      - **role**: verification
-      - **facet**: public
-      - **responsibility**: Prove workbench client actions entrypoints have bounded canonical plans.
-      - **targets**:
-        - **id**: canonical-plans
-          - **adapter**: rust
-          - **path**: crates/syu-validation/src/readiness.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: tests::workbench_client_actions_public_entrypoints_have_canonical_plans
-          - **claims**:
-            - **kind**: verifies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-client-actions
-              - **covers**:
-                - FEAT-PUBLIC-WORKBENCH-ACTIONS-001#binding.public-api-005/target.entrypoint-005-javascript-crates-syu-app-ui-assets-js-api-js-runjourn
-                - FEAT-PUBLIC-WORKBENCH-ACTIONS-001#binding.public-api-apply-specification-candidate/target.entrypoint-apply-specification-candidate
-                - FEAT-PUBLIC-WORKBENCH-ACTIONS-001#binding.public-api-approve-target-suggestions/target.entrypoint-approve-target-suggestions
-                - FEAT-PUBLIC-WORKBENCH-ACTIONS-001#binding.public-api-preview-specification-candidate/target.entrypoint-preview-specification-candidate
-                - FEAT-PUBLIC-WORKBENCH-ACTIONS-001#binding.public-api-read-target-suggestions/target.entrypoint-read-target-suggestions
-                - FEAT-PUBLIC-WORKBENCH-ACTIONS-001#binding.public-api-reject-target-suggestion/target.entrypoint-reject-target-suggestion
-                - FEAT-PUBLIC-WORKBENCH-ACTIONS-001#binding.public-api-run-diagnostics/target.entrypoint-run-diagnostics
-                - FEAT-PUBLIC-WORKBENCH-ACTIONS-001#binding.public-api-run-readiness/target.entrypoint-run-readiness
-                - FEAT-PUBLIC-WORKBENCH-ACTIONS-001#binding.public-api-search-specification-candidates/target.entrypoint-search-specification-candidates
-              - **runner**:
-                - **runner**: cargo-test
-                - **arguments**:
-                  - **package**: syu-validation
-                  - **test**: tests::workbench_client_actions_public_entrypoints_have_canonical_plans
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
 
 ## Source YAML
 
@@ -203,7 +174,7 @@ features:
   - id: public-api-005
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-005-javascript-crates-syu-app-ui-assets-js-api-js-runjourn
       adapter: javascript
@@ -212,8 +183,8 @@ features:
         kind: symbol
         name: runJourneyAction
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-client-actions
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
   - id: public-api-apply-specification-candidate
     role: implementation
     facet: public
@@ -226,8 +197,8 @@ features:
         kind: symbol
         name: applySpecificationCandidate
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-client-actions
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
   - id: public-api-approve-target-suggestions
     role: implementation
     facet: public
@@ -240,8 +211,8 @@ features:
         kind: symbol
         name: approveTargetSuggestions
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-client-actions
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
   - id: public-api-preview-specification-candidate
     role: implementation
     facet: public
@@ -254,8 +225,8 @@ features:
         kind: symbol
         name: previewSpecificationCandidate
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-client-actions
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
   - id: public-api-read-target-suggestions
     role: implementation
     facet: public
@@ -268,8 +239,8 @@ features:
         kind: symbol
         name: readTargetSuggestions
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-client-actions
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
   - id: public-api-reject-target-suggestion
     role: implementation
     facet: public
@@ -282,8 +253,8 @@ features:
         kind: symbol
         name: rejectTargetSuggestion
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-client-actions
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
   - id: public-api-run-diagnostics
     role: implementation
     facet: public
@@ -296,8 +267,8 @@ features:
         kind: symbol
         name: runDiagnostics
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-client-actions
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
   - id: public-api-run-readiness
     role: implementation
     facet: public
@@ -310,8 +281,8 @@ features:
         kind: symbol
         name: runReadiness
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-client-actions
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
   - id: public-api-search-specification-candidates
     role: implementation
     facet: public
@@ -324,36 +295,6 @@ features:
         kind: symbol
         name: searchSpecificationCandidates
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-client-actions
-  - id: public-readiness
-    role: verification
-    facet: public
-    responsibility: Prove workbench client actions entrypoints have bounded canonical
-      plans.
-    targets:
-    - id: canonical-plans
-      adapter: rust
-      path: crates/syu-validation/src/readiness.rs
-      selector:
-        kind: symbol
-        name: tests::workbench_client_actions_public_entrypoints_have_canonical_plans
-      claims:
-      - kind: verifies
-        criterion: REQ-PUBLIC-001#criterion.workbench-client-actions
-        covers:
-        - FEAT-PUBLIC-WORKBENCH-ACTIONS-001#binding.public-api-005/target.entrypoint-005-javascript-crates-syu-app-ui-assets-js-api-js-runjourn
-        - FEAT-PUBLIC-WORKBENCH-ACTIONS-001#binding.public-api-apply-specification-candidate/target.entrypoint-apply-specification-candidate
-        - FEAT-PUBLIC-WORKBENCH-ACTIONS-001#binding.public-api-approve-target-suggestions/target.entrypoint-approve-target-suggestions
-        - FEAT-PUBLIC-WORKBENCH-ACTIONS-001#binding.public-api-preview-specification-candidate/target.entrypoint-preview-specification-candidate
-        - FEAT-PUBLIC-WORKBENCH-ACTIONS-001#binding.public-api-read-target-suggestions/target.entrypoint-read-target-suggestions
-        - FEAT-PUBLIC-WORKBENCH-ACTIONS-001#binding.public-api-reject-target-suggestion/target.entrypoint-reject-target-suggestion
-        - FEAT-PUBLIC-WORKBENCH-ACTIONS-001#binding.public-api-run-diagnostics/target.entrypoint-run-diagnostics
-        - FEAT-PUBLIC-WORKBENCH-ACTIONS-001#binding.public-api-run-readiness/target.entrypoint-run-readiness
-        - FEAT-PUBLIC-WORKBENCH-ACTIONS-001#binding.public-api-search-specification-candidates/target.entrypoint-search-specification-candidates
-        runner:
-          runner: cargo-test
-          arguments:
-            package: syu-validation
-            test: tests::workbench_client_actions_public_entrypoints_have_canonical_plans
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
 ```

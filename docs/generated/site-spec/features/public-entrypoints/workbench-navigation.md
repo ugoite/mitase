@@ -33,7 +33,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
     - **id**: public-api-019
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-019-javascript-crates-syu-app-ui-assets-js-router-js-pages
           - **adapter**: javascript
@@ -42,12 +42,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: PAGES
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-navigation
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
     - **id**: public-api-020
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-020-javascript-crates-syu-app-ui-assets-js-router-js-tab-gr
           - **adapter**: javascript
@@ -56,12 +56,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: TAB_GROUPS
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-navigation
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
     - **id**: public-api-021
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-021-javascript-crates-syu-app-ui-assets-js-router-js-naviga
           - **adapter**: javascript
@@ -70,12 +70,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: navigate
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-navigation
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
     - **id**: public-api-022
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-022-javascript-crates-syu-app-ui-assets-js-state-js-creates
           - **adapter**: javascript
@@ -84,12 +84,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: createState
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-navigation
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
     - **id**: public-api-023
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-023-javascript-crates-syu-app-ui-assets-js-state-js-replace
           - **adapter**: javascript
@@ -98,12 +98,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: replaceProjection
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-navigation
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
     - **id**: public-api-024
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-024-javascript-crates-syu-app-ui-assets-js-state-js-selects
           - **adapter**: javascript
@@ -112,12 +112,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: selectSlice
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-navigation
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
     - **id**: public-api-025
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-025-javascript-website-src-pages-index-js-home
           - **adapter**: javascript
@@ -126,35 +126,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: Home
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-navigation
-    - **id**: public-readiness
-      - **role**: verification
-      - **facet**: public
-      - **responsibility**: Prove workbench navigation entrypoints have bounded canonical plans.
-      - **targets**:
-        - **id**: canonical-plans
-          - **adapter**: rust
-          - **path**: crates/syu-validation/src/readiness.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: tests::workbench_navigation_public_entrypoints_have_canonical_plans
-          - **claims**:
-            - **kind**: verifies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-navigation
-              - **covers**:
-                - FEAT-PUBLIC-WORKBENCH-NAVIGATION-001#binding.public-api-019/target.entrypoint-019-javascript-crates-syu-app-ui-assets-js-router-js-pages
-                - FEAT-PUBLIC-WORKBENCH-NAVIGATION-001#binding.public-api-020/target.entrypoint-020-javascript-crates-syu-app-ui-assets-js-router-js-tab-gr
-                - FEAT-PUBLIC-WORKBENCH-NAVIGATION-001#binding.public-api-021/target.entrypoint-021-javascript-crates-syu-app-ui-assets-js-router-js-naviga
-                - FEAT-PUBLIC-WORKBENCH-NAVIGATION-001#binding.public-api-022/target.entrypoint-022-javascript-crates-syu-app-ui-assets-js-state-js-creates
-                - FEAT-PUBLIC-WORKBENCH-NAVIGATION-001#binding.public-api-023/target.entrypoint-023-javascript-crates-syu-app-ui-assets-js-state-js-replace
-                - FEAT-PUBLIC-WORKBENCH-NAVIGATION-001#binding.public-api-024/target.entrypoint-024-javascript-crates-syu-app-ui-assets-js-state-js-selects
-                - FEAT-PUBLIC-WORKBENCH-NAVIGATION-001#binding.public-api-025/target.entrypoint-025-javascript-website-src-pages-index-js-home
-              - **runner**:
-                - **runner**: cargo-test
-                - **arguments**:
-                  - **package**: syu-validation
-                  - **test**: tests::workbench_navigation_public_entrypoints_have_canonical_plans
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
 
 ## Source YAML
 
@@ -172,7 +145,7 @@ features:
   - id: public-api-019
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-019-javascript-crates-syu-app-ui-assets-js-router-js-pages
       adapter: javascript
@@ -181,12 +154,12 @@ features:
         kind: symbol
         name: PAGES
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-navigation
+      - kind: exposes
+        target: FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
   - id: public-api-020
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-020-javascript-crates-syu-app-ui-assets-js-router-js-tab-gr
       adapter: javascript
@@ -195,12 +168,12 @@ features:
         kind: symbol
         name: TAB_GROUPS
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-navigation
+      - kind: exposes
+        target: FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
   - id: public-api-021
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-021-javascript-crates-syu-app-ui-assets-js-router-js-naviga
       adapter: javascript
@@ -209,12 +182,12 @@ features:
         kind: symbol
         name: navigate
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-navigation
+      - kind: exposes
+        target: FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
   - id: public-api-022
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-022-javascript-crates-syu-app-ui-assets-js-state-js-creates
       adapter: javascript
@@ -223,12 +196,12 @@ features:
         kind: symbol
         name: createState
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-navigation
+      - kind: exposes
+        target: FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
   - id: public-api-023
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-023-javascript-crates-syu-app-ui-assets-js-state-js-replace
       adapter: javascript
@@ -237,12 +210,12 @@ features:
         kind: symbol
         name: replaceProjection
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-navigation
+      - kind: exposes
+        target: FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
   - id: public-api-024
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-024-javascript-crates-syu-app-ui-assets-js-state-js-selects
       adapter: javascript
@@ -251,12 +224,12 @@ features:
         kind: symbol
         name: selectSlice
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-navigation
+      - kind: exposes
+        target: FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
   - id: public-api-025
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-025-javascript-website-src-pages-index-js-home
       adapter: javascript
@@ -265,34 +238,6 @@ features:
         kind: symbol
         name: Home
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-navigation
-  - id: public-readiness
-    role: verification
-    facet: public
-    responsibility: Prove workbench navigation entrypoints have bounded canonical
-      plans.
-    targets:
-    - id: canonical-plans
-      adapter: rust
-      path: crates/syu-validation/src/readiness.rs
-      selector:
-        kind: symbol
-        name: tests::workbench_navigation_public_entrypoints_have_canonical_plans
-      claims:
-      - kind: verifies
-        criterion: REQ-PUBLIC-001#criterion.workbench-navigation
-        covers:
-        - FEAT-PUBLIC-WORKBENCH-NAVIGATION-001#binding.public-api-019/target.entrypoint-019-javascript-crates-syu-app-ui-assets-js-router-js-pages
-        - FEAT-PUBLIC-WORKBENCH-NAVIGATION-001#binding.public-api-020/target.entrypoint-020-javascript-crates-syu-app-ui-assets-js-router-js-tab-gr
-        - FEAT-PUBLIC-WORKBENCH-NAVIGATION-001#binding.public-api-021/target.entrypoint-021-javascript-crates-syu-app-ui-assets-js-router-js-naviga
-        - FEAT-PUBLIC-WORKBENCH-NAVIGATION-001#binding.public-api-022/target.entrypoint-022-javascript-crates-syu-app-ui-assets-js-state-js-creates
-        - FEAT-PUBLIC-WORKBENCH-NAVIGATION-001#binding.public-api-023/target.entrypoint-023-javascript-crates-syu-app-ui-assets-js-state-js-replace
-        - FEAT-PUBLIC-WORKBENCH-NAVIGATION-001#binding.public-api-024/target.entrypoint-024-javascript-crates-syu-app-ui-assets-js-state-js-selects
-        - FEAT-PUBLIC-WORKBENCH-NAVIGATION-001#binding.public-api-025/target.entrypoint-025-javascript-website-src-pages-index-js-home
-        runner:
-          runner: cargo-test
-          arguments:
-            package: syu-validation
-            test: tests::workbench_navigation_public_entrypoints_have_canonical_plans
+      - kind: exposes
+        target: FEAT-WORKBENCH-NAVIGATION-001#binding.navigation/target.javascript-navigation
 ```

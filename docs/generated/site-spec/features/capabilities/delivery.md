@@ -559,6 +559,18 @@ description: "Generated reference for docs/syu/features/capabilities/delivery.ya
                 - **arguments**:
                   - **package**: syu-workbench-server
                   - **test**: tests::workbench_agent_rejects_unrelated_write_before_application
+            - **kind**: verifies
+              - **criterion**: REQ-WORKBENCH-011#criterion.scoped-agent
+              - **covers**:
+                - FEAT-WORKBENCH-SCOPED-AGENT-001#binding.agent-api/target.agent-start
+                - FEAT-WORKBENCH-SCOPED-AGENT-001#binding.agent-api/target.agent-patch
+                - FEAT-WORKBENCH-SCOPED-AGENT-001#binding.agent-api/target.agent-projection
+                - FEAT-WORKBENCH-SCOPED-AGENT-001#binding.agent-api/target.agent-ui
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-workbench-server
+                  - **test**: tests::workbench_agent_rejects_unrelated_write_before_application
 
 ## Source YAML
 
@@ -917,5 +929,13 @@ features:
                 criterion: REQ-WORK-003#criterion.agent-evidence
                 covers:
                   - FEAT-AGENT-001#binding.implementation/target.agent-events
+                runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_agent_rejects_unrelated_write_before_application } }
+              - kind: verifies
+                criterion: REQ-WORKBENCH-011#criterion.scoped-agent
+                covers:
+                  - FEAT-WORKBENCH-SCOPED-AGENT-001#binding.agent-api/target.agent-start
+                  - FEAT-WORKBENCH-SCOPED-AGENT-001#binding.agent-api/target.agent-patch
+                  - FEAT-WORKBENCH-SCOPED-AGENT-001#binding.agent-api/target.agent-projection
+                  - FEAT-WORKBENCH-SCOPED-AGENT-001#binding.agent-api/target.agent-ui
                 runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_agent_rejects_unrelated_write_before_application } }
 ```

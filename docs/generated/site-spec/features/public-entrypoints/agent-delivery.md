@@ -42,8 +42,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/agent
             - **kind**: symbol
             - **name**: current_run
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.agent-delivery
+            - **kind**: exposes
+              - **target**: FEAT-AGENT-001#binding.implementation/target.agent-start
     - **id**: public-api-agent-events
       - **role**: implementation
       - **facet**: public
@@ -56,8 +56,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/agent
             - **kind**: symbol
             - **name**: events
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.agent-delivery
+            - **kind**: exposes
+              - **target**: FEAT-AGENT-001#binding.implementation/target.agent-start
     - **id**: public-api-agent-record-blocker
       - **role**: implementation
       - **facet**: public
@@ -70,8 +70,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/agent
             - **kind**: symbol
             - **name**: record_blocker
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.agent-delivery
+            - **kind**: exposes
+              - **target**: FEAT-AGENT-001#binding.implementation/target.agent-start
     - **id**: public-api-agent-record-verification
       - **role**: implementation
       - **facet**: public
@@ -84,8 +84,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/agent
             - **kind**: symbol
             - **name**: record_verification
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.agent-delivery
+            - **kind**: exposes
+              - **target**: FEAT-AGENT-001#binding.implementation/target.agent-start
     - **id**: public-api-delivery-agent-events
       - **role**: implementation
       - **facet**: public
@@ -98,8 +98,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/agent
             - **kind**: symbol
             - **name**: agent_events
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.agent-delivery
+            - **kind**: exposes
+              - **target**: FEAT-DELIVERY-001#binding.implementation/target.delivery-store
     - **id**: public-api-delivery-agent-run
       - **role**: implementation
       - **facet**: public
@@ -112,8 +112,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/agent
             - **kind**: symbol
             - **name**: agent_run
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.agent-delivery
+            - **kind**: exposes
+              - **target**: FEAT-DELIVERY-001#binding.implementation/target.delivery-store
     - **id**: public-api-delivery-latest-agent-run
       - **role**: implementation
       - **facet**: public
@@ -126,35 +126,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/agent
             - **kind**: symbol
             - **name**: latest_agent_run
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.agent-delivery
-    - **id**: public-readiness
-      - **role**: verification
-      - **facet**: public
-      - **responsibility**: Prove agent delivery evidence entrypoints have bounded canonical plans.
-      - **targets**:
-        - **id**: canonical-plans
-          - **adapter**: rust
-          - **path**: crates/syu-validation/src/readiness.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: tests::agent_delivery_public_entrypoints_have_canonical_plans
-          - **claims**:
-            - **kind**: verifies
-              - **criterion**: REQ-PUBLIC-001#criterion.agent-delivery
-              - **covers**:
-                - FEAT-PUBLIC-AGENT-DELIVERY-001#binding.public-api-agent-current-run/target.entrypoint-agent-current-run
-                - FEAT-PUBLIC-AGENT-DELIVERY-001#binding.public-api-agent-events/target.entrypoint-agent-events
-                - FEAT-PUBLIC-AGENT-DELIVERY-001#binding.public-api-agent-record-blocker/target.entrypoint-agent-record-blocker
-                - FEAT-PUBLIC-AGENT-DELIVERY-001#binding.public-api-agent-record-verification/target.entrypoint-agent-record-verification
-                - FEAT-PUBLIC-AGENT-DELIVERY-001#binding.public-api-delivery-agent-events/target.entrypoint-delivery-agent-events
-                - FEAT-PUBLIC-AGENT-DELIVERY-001#binding.public-api-delivery-agent-run/target.entrypoint-delivery-agent-run
-                - FEAT-PUBLIC-AGENT-DELIVERY-001#binding.public-api-delivery-latest-agent-run/target.entrypoint-delivery-latest-agent-run
-              - **runner**:
-                - **runner**: cargo-test
-                - **arguments**:
-                  - **package**: syu-validation
-                  - **test**: tests::agent_delivery_public_entrypoints_have_canonical_plans
+            - **kind**: exposes
+              - **target**: FEAT-DELIVERY-001#binding.implementation/target.delivery-store
 
 ## Source YAML
 
@@ -181,8 +154,8 @@ features:
         kind: symbol
         name: current_run
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.agent-delivery
+      - kind: exposes
+        target: FEAT-AGENT-001#binding.implementation/target.agent-start
   - id: public-api-agent-events
     role: implementation
     facet: public
@@ -195,8 +168,8 @@ features:
         kind: symbol
         name: events
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.agent-delivery
+      - kind: exposes
+        target: FEAT-AGENT-001#binding.implementation/target.agent-start
   - id: public-api-agent-record-blocker
     role: implementation
     facet: public
@@ -209,8 +182,8 @@ features:
         kind: symbol
         name: record_blocker
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.agent-delivery
+      - kind: exposes
+        target: FEAT-AGENT-001#binding.implementation/target.agent-start
   - id: public-api-agent-record-verification
     role: implementation
     facet: public
@@ -223,8 +196,8 @@ features:
         kind: symbol
         name: record_verification
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.agent-delivery
+      - kind: exposes
+        target: FEAT-AGENT-001#binding.implementation/target.agent-start
   - id: public-api-delivery-agent-events
     role: implementation
     facet: public
@@ -237,8 +210,8 @@ features:
         kind: symbol
         name: agent_events
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.agent-delivery
+      - kind: exposes
+        target: FEAT-DELIVERY-001#binding.implementation/target.delivery-store
   - id: public-api-delivery-agent-run
     role: implementation
     facet: public
@@ -251,8 +224,8 @@ features:
         kind: symbol
         name: agent_run
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.agent-delivery
+      - kind: exposes
+        target: FEAT-DELIVERY-001#binding.implementation/target.delivery-store
   - id: public-api-delivery-latest-agent-run
     role: implementation
     facet: public
@@ -265,34 +238,6 @@ features:
         kind: symbol
         name: latest_agent_run
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.agent-delivery
-  - id: public-readiness
-    role: verification
-    facet: public
-    responsibility: Prove agent delivery evidence entrypoints have bounded canonical
-      plans.
-    targets:
-    - id: canonical-plans
-      adapter: rust
-      path: crates/syu-validation/src/readiness.rs
-      selector:
-        kind: symbol
-        name: tests::agent_delivery_public_entrypoints_have_canonical_plans
-      claims:
-      - kind: verifies
-        criterion: REQ-PUBLIC-001#criterion.agent-delivery
-        covers:
-        - FEAT-PUBLIC-AGENT-DELIVERY-001#binding.public-api-agent-current-run/target.entrypoint-agent-current-run
-        - FEAT-PUBLIC-AGENT-DELIVERY-001#binding.public-api-agent-events/target.entrypoint-agent-events
-        - FEAT-PUBLIC-AGENT-DELIVERY-001#binding.public-api-agent-record-blocker/target.entrypoint-agent-record-blocker
-        - FEAT-PUBLIC-AGENT-DELIVERY-001#binding.public-api-agent-record-verification/target.entrypoint-agent-record-verification
-        - FEAT-PUBLIC-AGENT-DELIVERY-001#binding.public-api-delivery-agent-events/target.entrypoint-delivery-agent-events
-        - FEAT-PUBLIC-AGENT-DELIVERY-001#binding.public-api-delivery-agent-run/target.entrypoint-delivery-agent-run
-        - FEAT-PUBLIC-AGENT-DELIVERY-001#binding.public-api-delivery-latest-agent-run/target.entrypoint-delivery-latest-agent-run
-        runner:
-          runner: cargo-test
-          arguments:
-            package: syu-validation
-            test: tests::agent_delivery_public_entrypoints_have_canonical_plans
+      - kind: exposes
+        target: FEAT-DELIVERY-001#binding.implementation/target.delivery-store
 ```

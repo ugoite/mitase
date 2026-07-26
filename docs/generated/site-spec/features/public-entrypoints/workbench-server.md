@@ -33,7 +33,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
     - **id**: public-api-047
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-052-rust-crates-syu-workbench-server-src-lib-rs-branchscope
           - **adapter**: rust
@@ -42,12 +42,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: BranchScopeView::not_applicable
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard
     - **id**: public-api-048
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-053-rust-crates-syu-workbench-server-src-lib-rs-validationr
           - **adapter**: rust
@@ -56,12 +56,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: ValidationRunView::completed
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard
     - **id**: public-api-049
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-054-rust-crates-syu-workbench-server-src-lib-rs-validationr
           - **adapter**: rust
@@ -70,12 +70,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: ValidationRunView::failed
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard
     - **id**: public-api-050
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-055-rust-crates-syu-workbench-server-src-lib-rs-validationr
           - **adapter**: rust
@@ -84,12 +84,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: ValidationRunView::not_applicable
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard
     - **id**: public-api-051
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-056-rust-crates-syu-workbench-server-src-lib-rs-validationr
           - **adapter**: rust
@@ -98,12 +98,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: ValidationRunView::not_run
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard
     - **id**: public-api-052
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-057-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
           - **adapter**: rust
@@ -112,12 +112,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: WorkbenchServer::new
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard
     - **id**: public-api-053
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-058-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
           - **adapter**: rust
@@ -126,12 +126,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: WorkbenchServer::projection
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard
     - **id**: public-api-054
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-059-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
           - **adapter**: rust
@@ -140,12 +140,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: WorkbenchServer::router
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard
     - **id**: public-api-055
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-060-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
           - **adapter**: rust
@@ -154,12 +154,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: WorkbenchServer::run
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard
     - **id**: public-api-056
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-061-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
           - **adapter**: rust
@@ -168,12 +168,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: WorkbenchServer::with_launch
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard
     - **id**: public-api-057
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-062-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
           - **adapter**: rust
@@ -182,39 +182,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: WorkbenchServer::with_request
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
-    - **id**: public-readiness
-      - **role**: verification
-      - **facet**: public
-      - **responsibility**: Prove workbench server lifecycle entrypoints have bounded canonical plans.
-      - **targets**:
-        - **id**: canonical-plans
-          - **adapter**: rust
-          - **path**: crates/syu-validation/src/readiness.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: tests::workbench_server_lifecycle_public_entrypoints_have_canonical_plans
-          - **claims**:
-            - **kind**: verifies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
-              - **covers**:
-                - FEAT-PUBLIC-WORKBENCH-SERVER-001#binding.public-api-047/target.entrypoint-052-rust-crates-syu-workbench-server-src-lib-rs-branchscope
-                - FEAT-PUBLIC-WORKBENCH-SERVER-001#binding.public-api-048/target.entrypoint-053-rust-crates-syu-workbench-server-src-lib-rs-validationr
-                - FEAT-PUBLIC-WORKBENCH-SERVER-001#binding.public-api-049/target.entrypoint-054-rust-crates-syu-workbench-server-src-lib-rs-validationr
-                - FEAT-PUBLIC-WORKBENCH-SERVER-001#binding.public-api-050/target.entrypoint-055-rust-crates-syu-workbench-server-src-lib-rs-validationr
-                - FEAT-PUBLIC-WORKBENCH-SERVER-001#binding.public-api-051/target.entrypoint-056-rust-crates-syu-workbench-server-src-lib-rs-validationr
-                - FEAT-PUBLIC-WORKBENCH-SERVER-001#binding.public-api-052/target.entrypoint-057-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
-                - FEAT-PUBLIC-WORKBENCH-SERVER-001#binding.public-api-053/target.entrypoint-058-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
-                - FEAT-PUBLIC-WORKBENCH-SERVER-001#binding.public-api-054/target.entrypoint-059-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
-                - FEAT-PUBLIC-WORKBENCH-SERVER-001#binding.public-api-055/target.entrypoint-060-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
-                - FEAT-PUBLIC-WORKBENCH-SERVER-001#binding.public-api-056/target.entrypoint-061-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
-                - FEAT-PUBLIC-WORKBENCH-SERVER-001#binding.public-api-057/target.entrypoint-062-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
-              - **runner**:
-                - **runner**: cargo-test
-                - **arguments**:
-                  - **package**: syu-validation
-                  - **test**: tests::workbench_server_lifecycle_public_entrypoints_have_canonical_plans
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard
 
 ## Source YAML
 
@@ -232,7 +201,7 @@ features:
   - id: public-api-047
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-052-rust-crates-syu-workbench-server-src-lib-rs-branchscope
       adapter: rust
@@ -241,12 +210,12 @@ features:
         kind: symbol
         name: BranchScopeView::not_applicable
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
+      - kind: exposes
+        target: FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard
   - id: public-api-048
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-053-rust-crates-syu-workbench-server-src-lib-rs-validationr
       adapter: rust
@@ -255,12 +224,12 @@ features:
         kind: symbol
         name: ValidationRunView::completed
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
+      - kind: exposes
+        target: FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard
   - id: public-api-049
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-054-rust-crates-syu-workbench-server-src-lib-rs-validationr
       adapter: rust
@@ -269,12 +238,12 @@ features:
         kind: symbol
         name: ValidationRunView::failed
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
+      - kind: exposes
+        target: FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard
   - id: public-api-050
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-055-rust-crates-syu-workbench-server-src-lib-rs-validationr
       adapter: rust
@@ -283,12 +252,12 @@ features:
         kind: symbol
         name: ValidationRunView::not_applicable
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
+      - kind: exposes
+        target: FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard
   - id: public-api-051
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-056-rust-crates-syu-workbench-server-src-lib-rs-validationr
       adapter: rust
@@ -297,12 +266,12 @@ features:
         kind: symbol
         name: ValidationRunView::not_run
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
+      - kind: exposes
+        target: FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard
   - id: public-api-052
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-057-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
       adapter: rust
@@ -311,12 +280,12 @@ features:
         kind: symbol
         name: WorkbenchServer::new
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
+      - kind: exposes
+        target: FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard
   - id: public-api-053
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-058-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
       adapter: rust
@@ -325,12 +294,12 @@ features:
         kind: symbol
         name: WorkbenchServer::projection
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
+      - kind: exposes
+        target: FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard
   - id: public-api-054
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-059-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
       adapter: rust
@@ -339,12 +308,12 @@ features:
         kind: symbol
         name: WorkbenchServer::router
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
+      - kind: exposes
+        target: FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard
   - id: public-api-055
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-060-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
       adapter: rust
@@ -353,12 +322,12 @@ features:
         kind: symbol
         name: WorkbenchServer::run
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
+      - kind: exposes
+        target: FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard
   - id: public-api-056
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-061-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
       adapter: rust
@@ -367,12 +336,12 @@ features:
         kind: symbol
         name: WorkbenchServer::with_launch
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
+      - kind: exposes
+        target: FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard
   - id: public-api-057
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-062-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
       adapter: rust
@@ -381,38 +350,6 @@ features:
         kind: symbol
         name: WorkbenchServer::with_request
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
-  - id: public-readiness
-    role: verification
-    facet: public
-    responsibility: Prove workbench server lifecycle entrypoints have bounded canonical
-      plans.
-    targets:
-    - id: canonical-plans
-      adapter: rust
-      path: crates/syu-validation/src/readiness.rs
-      selector:
-        kind: symbol
-        name: tests::workbench_server_lifecycle_public_entrypoints_have_canonical_plans
-      claims:
-      - kind: verifies
-        criterion: REQ-PUBLIC-001#criterion.workbench-server-lifecycle
-        covers:
-        - FEAT-PUBLIC-WORKBENCH-SERVER-001#binding.public-api-047/target.entrypoint-052-rust-crates-syu-workbench-server-src-lib-rs-branchscope
-        - FEAT-PUBLIC-WORKBENCH-SERVER-001#binding.public-api-048/target.entrypoint-053-rust-crates-syu-workbench-server-src-lib-rs-validationr
-        - FEAT-PUBLIC-WORKBENCH-SERVER-001#binding.public-api-049/target.entrypoint-054-rust-crates-syu-workbench-server-src-lib-rs-validationr
-        - FEAT-PUBLIC-WORKBENCH-SERVER-001#binding.public-api-050/target.entrypoint-055-rust-crates-syu-workbench-server-src-lib-rs-validationr
-        - FEAT-PUBLIC-WORKBENCH-SERVER-001#binding.public-api-051/target.entrypoint-056-rust-crates-syu-workbench-server-src-lib-rs-validationr
-        - FEAT-PUBLIC-WORKBENCH-SERVER-001#binding.public-api-052/target.entrypoint-057-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
-        - FEAT-PUBLIC-WORKBENCH-SERVER-001#binding.public-api-053/target.entrypoint-058-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
-        - FEAT-PUBLIC-WORKBENCH-SERVER-001#binding.public-api-054/target.entrypoint-059-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
-        - FEAT-PUBLIC-WORKBENCH-SERVER-001#binding.public-api-055/target.entrypoint-060-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
-        - FEAT-PUBLIC-WORKBENCH-SERVER-001#binding.public-api-056/target.entrypoint-061-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
-        - FEAT-PUBLIC-WORKBENCH-SERVER-001#binding.public-api-057/target.entrypoint-062-rust-crates-syu-workbench-server-src-lib-rs-workbenchse
-        runner:
-          runner: cargo-test
-          arguments:
-            package: syu-validation
-            test: tests::workbench_server_lifecycle_public_entrypoints_have_canonical_plans
+      - kind: exposes
+        target: FEAT-WORKBENCH-SERVER-001#binding.server/target.mutation-guard
 ```

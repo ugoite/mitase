@@ -234,12 +234,15 @@ validation:
   preset: agent-ready
   readiness:
     target: traceable
-    scopes: { planner: work-ready, work: work-ready, public-entrypoints: seedable }
     probes:
-      implemented_criteria: "REQ-WORK-001#criterion.exact-slice,REQ-WORKBENCH-002#criterion.work-session"
-      public_entrypoints: all
+      implemented_criteria:
+        - criterion: REQ-WORK-001#criterion.exact-slice
+          level: work-ready
+        - criterion: REQ-WORKBENCH-002#criterion.work-session
+          level: work-ready
+      public_entrypoints: { selection: all, level: seedable }
       changed_units: false
-    limits: { max_ownership_scope_units: 160, max_targets_per_binding: 12, max_slices_per_seed: 4 }
+    limits: { max_ownership_scope_units: 300, max_targets_per_binding: 12, max_slices_per_seed: 4 }
   changed:
     baseline: { strategy: merge-base, against: origin/main }
     require_owned_changes: true

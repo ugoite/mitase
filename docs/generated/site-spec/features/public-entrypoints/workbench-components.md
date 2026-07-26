@@ -33,7 +33,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
     - **id**: public-api-006
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-006-javascript-crates-syu-app-ui-assets-js-components-actio
           - **adapter**: javascript
@@ -42,12 +42,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: actionCapability
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-components
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
     - **id**: public-api-007
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-007-javascript-crates-syu-app-ui-assets-js-components-diagn
           - **adapter**: javascript
@@ -56,12 +56,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: renderDiagnostic
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-components
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
     - **id**: public-api-008
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-008-javascript-crates-syu-app-ui-assets-js-components-edito
           - **adapter**: javascript
@@ -70,12 +70,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: structuredEditor
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-components
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
     - **id**: public-api-009
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-009-javascript-crates-syu-app-ui-assets-js-components-readi
           - **adapter**: javascript
@@ -84,12 +84,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: renderReadiness
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-components
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
     - **id**: public-api-010
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-010-javascript-crates-syu-app-ui-assets-js-components-targe
           - **adapter**: javascript
@@ -98,12 +98,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: renderTarget
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-components
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
     - **id**: public-api-011
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-011-javascript-crates-syu-app-ui-assets-js-i18n-js-translat
           - **adapter**: javascript
@@ -112,8 +112,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: translate
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-components
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
     - **id**: public-api-render-diff
       - **role**: implementation
       - **facet**: public
@@ -126,35 +126,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: renderDiff
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-components
-    - **id**: public-readiness
-      - **role**: verification
-      - **facet**: public
-      - **responsibility**: Prove workbench components entrypoints have bounded canonical plans.
-      - **targets**:
-        - **id**: canonical-plans
-          - **adapter**: rust
-          - **path**: crates/syu-validation/src/readiness.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: tests::workbench_components_public_entrypoints_have_canonical_plans
-          - **claims**:
-            - **kind**: verifies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-components
-              - **covers**:
-                - FEAT-PUBLIC-WORKBENCH-COMPONENTS-001#binding.public-api-006/target.entrypoint-006-javascript-crates-syu-app-ui-assets-js-components-actio
-                - FEAT-PUBLIC-WORKBENCH-COMPONENTS-001#binding.public-api-007/target.entrypoint-007-javascript-crates-syu-app-ui-assets-js-components-diagn
-                - FEAT-PUBLIC-WORKBENCH-COMPONENTS-001#binding.public-api-008/target.entrypoint-008-javascript-crates-syu-app-ui-assets-js-components-edito
-                - FEAT-PUBLIC-WORKBENCH-COMPONENTS-001#binding.public-api-009/target.entrypoint-009-javascript-crates-syu-app-ui-assets-js-components-readi
-                - FEAT-PUBLIC-WORKBENCH-COMPONENTS-001#binding.public-api-010/target.entrypoint-010-javascript-crates-syu-app-ui-assets-js-components-targe
-                - FEAT-PUBLIC-WORKBENCH-COMPONENTS-001#binding.public-api-011/target.entrypoint-011-javascript-crates-syu-app-ui-assets-js-i18n-js-translat
-                - FEAT-PUBLIC-WORKBENCH-COMPONENTS-001#binding.public-api-render-diff/target.entrypoint-render-diff
-              - **runner**:
-                - **runner**: cargo-test
-                - **arguments**:
-                  - **package**: syu-validation
-                  - **test**: tests::workbench_components_public_entrypoints_have_canonical_plans
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
 
 ## Source YAML
 
@@ -172,7 +145,7 @@ features:
   - id: public-api-006
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-006-javascript-crates-syu-app-ui-assets-js-components-actio
       adapter: javascript
@@ -181,12 +154,12 @@ features:
         kind: symbol
         name: actionCapability
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-components
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
   - id: public-api-007
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-007-javascript-crates-syu-app-ui-assets-js-components-diagn
       adapter: javascript
@@ -195,12 +168,12 @@ features:
         kind: symbol
         name: renderDiagnostic
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-components
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
   - id: public-api-008
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-008-javascript-crates-syu-app-ui-assets-js-components-edito
       adapter: javascript
@@ -209,12 +182,12 @@ features:
         kind: symbol
         name: structuredEditor
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-components
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
   - id: public-api-009
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-009-javascript-crates-syu-app-ui-assets-js-components-readi
       adapter: javascript
@@ -223,12 +196,12 @@ features:
         kind: symbol
         name: renderReadiness
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-components
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
   - id: public-api-010
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-010-javascript-crates-syu-app-ui-assets-js-components-targe
       adapter: javascript
@@ -237,12 +210,12 @@ features:
         kind: symbol
         name: renderTarget
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-components
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
   - id: public-api-011
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-011-javascript-crates-syu-app-ui-assets-js-i18n-js-translat
       adapter: javascript
@@ -251,8 +224,8 @@ features:
         kind: symbol
         name: translate
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-components
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
   - id: public-api-render-diff
     role: implementation
     facet: public
@@ -265,34 +238,6 @@ features:
         kind: symbol
         name: renderDiff
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-components
-  - id: public-readiness
-    role: verification
-    facet: public
-    responsibility: Prove workbench components entrypoints have bounded canonical
-      plans.
-    targets:
-    - id: canonical-plans
-      adapter: rust
-      path: crates/syu-validation/src/readiness.rs
-      selector:
-        kind: symbol
-        name: tests::workbench_components_public_entrypoints_have_canonical_plans
-      claims:
-      - kind: verifies
-        criterion: REQ-PUBLIC-001#criterion.workbench-components
-        covers:
-        - FEAT-PUBLIC-WORKBENCH-COMPONENTS-001#binding.public-api-006/target.entrypoint-006-javascript-crates-syu-app-ui-assets-js-components-actio
-        - FEAT-PUBLIC-WORKBENCH-COMPONENTS-001#binding.public-api-007/target.entrypoint-007-javascript-crates-syu-app-ui-assets-js-components-diagn
-        - FEAT-PUBLIC-WORKBENCH-COMPONENTS-001#binding.public-api-008/target.entrypoint-008-javascript-crates-syu-app-ui-assets-js-components-edito
-        - FEAT-PUBLIC-WORKBENCH-COMPONENTS-001#binding.public-api-009/target.entrypoint-009-javascript-crates-syu-app-ui-assets-js-components-readi
-        - FEAT-PUBLIC-WORKBENCH-COMPONENTS-001#binding.public-api-010/target.entrypoint-010-javascript-crates-syu-app-ui-assets-js-components-targe
-        - FEAT-PUBLIC-WORKBENCH-COMPONENTS-001#binding.public-api-011/target.entrypoint-011-javascript-crates-syu-app-ui-assets-js-i18n-js-translat
-        - FEAT-PUBLIC-WORKBENCH-COMPONENTS-001#binding.public-api-render-diff/target.entrypoint-render-diff
-        runner:
-          runner: cargo-test
-          arguments:
-            package: syu-validation
-            test: tests::workbench_components_public_entrypoints_have_canonical_plans
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
 ```

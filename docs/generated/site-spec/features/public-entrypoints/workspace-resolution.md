@@ -33,7 +33,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/works
     - **id**: public-api-069
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-074-rust-crates-syu-workspace-src-lib-rs-specworkspace-path
           - **adapter**: rust
@@ -42,12 +42,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/works
             - **kind**: symbol
             - **name**: SpecWorkspace::path_is_artifact
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workspace-resolution
+            - **kind**: exposes
+              - **target**: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
     - **id**: public-api-070
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-075-rust-crates-syu-workspace-src-lib-rs-specworkspace-path
           - **adapter**: rust
@@ -56,12 +56,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/works
             - **kind**: symbol
             - **name**: SpecWorkspace::path_is_excluded
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workspace-resolution
+            - **kind**: exposes
+              - **target**: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
     - **id**: public-api-071
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-076-rust-crates-syu-workspace-src-lib-rs-specworkspace-path
           - **adapter**: rust
@@ -70,12 +70,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/works
             - **kind**: symbol
             - **name**: SpecWorkspace::path_is_spec
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workspace-resolution
+            - **kind**: exposes
+              - **target**: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
     - **id**: public-api-074
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-079-rust-crates-syu-workspace-src-lib-rs-specworkspace-try
           - **adapter**: rust
@@ -84,12 +84,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/works
             - **kind**: symbol
             - **name**: SpecWorkspace::try_fingerprint
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workspace-resolution
+            - **kind**: exposes
+              - **target**: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
     - **id**: public-api-075
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-080-rust-crates-syu-workspace-src-lib-rs-resolve-target
           - **adapter**: rust
@@ -98,12 +98,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/works
             - **kind**: symbol
             - **name**: resolve_target
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workspace-resolution
+            - **kind**: exposes
+              - **target**: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
     - **id**: public-api-076
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-082-rust-crates-syu-workspace-src-lib-rs-resolve-target-wit
           - **adapter**: rust
@@ -112,12 +112,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/works
             - **kind**: symbol
             - **name**: resolve_target_with_adapters
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workspace-resolution
+            - **kind**: exposes
+              - **target**: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
     - **id**: public-api-077
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-083-rust-crates-syu-workspace-src-lib-rs-selector-supports
           - **adapter**: rust
@@ -126,12 +126,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/works
             - **kind**: symbol
             - **name**: selector_supports_editable
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workspace-resolution
+            - **kind**: exposes
+              - **target**: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
     - **id**: public-api-resolve-indexed-target
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-resolve-indexed-target
           - **adapter**: rust
@@ -140,8 +140,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/works
             - **kind**: symbol
             - **name**: resolve_indexed_target
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workspace-resolution
+            - **kind**: exposes
+              - **target**: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
     - **id**: public-api-ownership-fingerprint
       - **role**: implementation
       - **facet**: public
@@ -154,8 +154,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/works
             - **kind**: symbol
             - **name**: ownership_fingerprint
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workspace-resolution
+            - **kind**: exposes
+              - **target**: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
     - **id**: public-api-spec-fingerprint
       - **role**: implementation
       - **facet**: public
@@ -168,38 +168,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/works
             - **kind**: symbol
             - **name**: spec_fingerprint
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workspace-resolution
-    - **id**: public-readiness
-      - **role**: verification
-      - **facet**: public
-      - **responsibility**: Prove workspace resolution entrypoints have bounded canonical plans.
-      - **targets**:
-        - **id**: canonical-plans
-          - **adapter**: rust
-          - **path**: crates/syu-validation/src/readiness.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: tests::workspace_resolution_public_entrypoints_have_canonical_plans
-          - **claims**:
-            - **kind**: verifies
-              - **criterion**: REQ-PUBLIC-001#criterion.workspace-resolution
-              - **covers**:
-                - FEAT-PUBLIC-WORKSPACE-RESOLUTION-001#binding.public-api-069/target.entrypoint-074-rust-crates-syu-workspace-src-lib-rs-specworkspace-path
-                - FEAT-PUBLIC-WORKSPACE-RESOLUTION-001#binding.public-api-070/target.entrypoint-075-rust-crates-syu-workspace-src-lib-rs-specworkspace-path
-                - FEAT-PUBLIC-WORKSPACE-RESOLUTION-001#binding.public-api-071/target.entrypoint-076-rust-crates-syu-workspace-src-lib-rs-specworkspace-path
-                - FEAT-PUBLIC-WORKSPACE-RESOLUTION-001#binding.public-api-074/target.entrypoint-079-rust-crates-syu-workspace-src-lib-rs-specworkspace-try
-                - FEAT-PUBLIC-WORKSPACE-RESOLUTION-001#binding.public-api-075/target.entrypoint-080-rust-crates-syu-workspace-src-lib-rs-resolve-target
-                - FEAT-PUBLIC-WORKSPACE-RESOLUTION-001#binding.public-api-076/target.entrypoint-082-rust-crates-syu-workspace-src-lib-rs-resolve-target-wit
-                - FEAT-PUBLIC-WORKSPACE-RESOLUTION-001#binding.public-api-077/target.entrypoint-083-rust-crates-syu-workspace-src-lib-rs-selector-supports
-                - FEAT-PUBLIC-WORKSPACE-RESOLUTION-001#binding.public-api-resolve-indexed-target/target.entrypoint-resolve-indexed-target
-                - FEAT-PUBLIC-WORKSPACE-RESOLUTION-001#binding.public-api-ownership-fingerprint/target.entrypoint-ownership-fingerprint
-                - FEAT-PUBLIC-WORKSPACE-RESOLUTION-001#binding.public-api-spec-fingerprint/target.entrypoint-spec-fingerprint
-              - **runner**:
-                - **runner**: cargo-test
-                - **arguments**:
-                  - **package**: syu-validation
-                  - **test**: tests::workspace_resolution_public_entrypoints_have_canonical_plans
+            - **kind**: exposes
+              - **target**: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
 
 ## Source YAML
 
@@ -217,7 +187,7 @@ features:
   - id: public-api-069
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-074-rust-crates-syu-workspace-src-lib-rs-specworkspace-path
       adapter: rust
@@ -226,12 +196,12 @@ features:
         kind: symbol
         name: SpecWorkspace::path_is_artifact
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workspace-resolution
+      - kind: exposes
+        target: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
   - id: public-api-070
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-075-rust-crates-syu-workspace-src-lib-rs-specworkspace-path
       adapter: rust
@@ -240,12 +210,12 @@ features:
         kind: symbol
         name: SpecWorkspace::path_is_excluded
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workspace-resolution
+      - kind: exposes
+        target: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
   - id: public-api-071
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-076-rust-crates-syu-workspace-src-lib-rs-specworkspace-path
       adapter: rust
@@ -254,12 +224,12 @@ features:
         kind: symbol
         name: SpecWorkspace::path_is_spec
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workspace-resolution
+      - kind: exposes
+        target: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
   - id: public-api-074
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-079-rust-crates-syu-workspace-src-lib-rs-specworkspace-try
       adapter: rust
@@ -268,12 +238,12 @@ features:
         kind: symbol
         name: SpecWorkspace::try_fingerprint
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workspace-resolution
+      - kind: exposes
+        target: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
   - id: public-api-075
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-080-rust-crates-syu-workspace-src-lib-rs-resolve-target
       adapter: rust
@@ -282,12 +252,12 @@ features:
         kind: symbol
         name: resolve_target
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workspace-resolution
+      - kind: exposes
+        target: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
   - id: public-api-076
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-082-rust-crates-syu-workspace-src-lib-rs-resolve-target-wit
       adapter: rust
@@ -296,12 +266,12 @@ features:
         kind: symbol
         name: resolve_target_with_adapters
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workspace-resolution
+      - kind: exposes
+        target: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
   - id: public-api-077
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-083-rust-crates-syu-workspace-src-lib-rs-selector-supports
       adapter: rust
@@ -310,12 +280,12 @@ features:
         kind: symbol
         name: selector_supports_editable
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workspace-resolution
+      - kind: exposes
+        target: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
   - id: public-api-resolve-indexed-target
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-resolve-indexed-target
       adapter: rust
@@ -324,8 +294,8 @@ features:
         kind: symbol
         name: resolve_indexed_target
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workspace-resolution
+      - kind: exposes
+        target: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
   - id: public-api-ownership-fingerprint
     role: implementation
     facet: public
@@ -338,8 +308,8 @@ features:
         kind: symbol
         name: ownership_fingerprint
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workspace-resolution
+      - kind: exposes
+        target: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
   - id: public-api-spec-fingerprint
     role: implementation
     facet: public
@@ -352,37 +322,6 @@ features:
         kind: symbol
         name: spec_fingerprint
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workspace-resolution
-  - id: public-readiness
-    role: verification
-    facet: public
-    responsibility: Prove workspace resolution entrypoints have bounded canonical
-      plans.
-    targets:
-    - id: canonical-plans
-      adapter: rust
-      path: crates/syu-validation/src/readiness.rs
-      selector:
-        kind: symbol
-        name: tests::workspace_resolution_public_entrypoints_have_canonical_plans
-      claims:
-      - kind: verifies
-        criterion: REQ-PUBLIC-001#criterion.workspace-resolution
-        covers:
-        - FEAT-PUBLIC-WORKSPACE-RESOLUTION-001#binding.public-api-069/target.entrypoint-074-rust-crates-syu-workspace-src-lib-rs-specworkspace-path
-        - FEAT-PUBLIC-WORKSPACE-RESOLUTION-001#binding.public-api-070/target.entrypoint-075-rust-crates-syu-workspace-src-lib-rs-specworkspace-path
-        - FEAT-PUBLIC-WORKSPACE-RESOLUTION-001#binding.public-api-071/target.entrypoint-076-rust-crates-syu-workspace-src-lib-rs-specworkspace-path
-        - FEAT-PUBLIC-WORKSPACE-RESOLUTION-001#binding.public-api-074/target.entrypoint-079-rust-crates-syu-workspace-src-lib-rs-specworkspace-try
-        - FEAT-PUBLIC-WORKSPACE-RESOLUTION-001#binding.public-api-075/target.entrypoint-080-rust-crates-syu-workspace-src-lib-rs-resolve-target
-        - FEAT-PUBLIC-WORKSPACE-RESOLUTION-001#binding.public-api-076/target.entrypoint-082-rust-crates-syu-workspace-src-lib-rs-resolve-target-wit
-        - FEAT-PUBLIC-WORKSPACE-RESOLUTION-001#binding.public-api-077/target.entrypoint-083-rust-crates-syu-workspace-src-lib-rs-selector-supports
-        - FEAT-PUBLIC-WORKSPACE-RESOLUTION-001#binding.public-api-resolve-indexed-target/target.entrypoint-resolve-indexed-target
-        - FEAT-PUBLIC-WORKSPACE-RESOLUTION-001#binding.public-api-ownership-fingerprint/target.entrypoint-ownership-fingerprint
-        - FEAT-PUBLIC-WORKSPACE-RESOLUTION-001#binding.public-api-spec-fingerprint/target.entrypoint-spec-fingerprint
-        runner:
-          runner: cargo-test
-          arguments:
-            package: syu-validation
-            test: tests::workspace_resolution_public_entrypoints_have_canonical_plans
+      - kind: exposes
+        target: FEAT-IDENTITY-001#binding.implementation/target.target-resolver
 ```

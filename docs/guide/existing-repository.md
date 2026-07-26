@@ -55,9 +55,10 @@ validation:
   preset: agent-ready
   readiness:
     target: traceable
-    scopes: { first-capability: work-ready }
     probes:
-      implemented_criteria: "REQ-FIRST-001#criterion.behavior"
+      implemented_criteria:
+        - criterion: REQ-FIRST-001#criterion.behavior
+          level: work-ready
       changed_units: false
     limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_seed: 4 }
   changed:
@@ -78,6 +79,6 @@ Treat the selected criterion, its exact targets, and its verification as the rea
 
 Add the next capability only after the current slice stays green in CI. Move each capability through `traceable` → `seedable` → `work-ready` → `verifiable` → `closed-loop` as its evidence becomes real.
 
-Enable `public_entrypoints: all` with a `public-entrypoints: seedable` scope only after every currently discovered public entrypoint has one exact owner, an implemented criterion, exact verification, and a ready target-specific plan. Once enabled, a newly exported entrypoint fails canonical workspace validation until it is governed.
+Enable `public_entrypoints: { selection: all, level: seedable }` only after every currently discovered public entrypoint has one exact owner, exposes a behaviorally verified capability target, and has a ready target-specific plan. Once enabled, a newly exported entrypoint fails canonical workspace validation until it is governed.
 
 Import and suggestion automation remains follow-up work. This path is intentionally manual, bounded, and evidence-preserving; it does not claim that an existing repository is self-hosted after its first slice.

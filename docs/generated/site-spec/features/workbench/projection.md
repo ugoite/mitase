@@ -91,6 +91,11 @@ description: "Generated reference for docs/syu/features/workbench/projection.yam
           - **selector**:
             - **kind**: module
             - **name**: lib
+        - **id**: code-intel-manifest
+          - **adapter**: declared
+          - **path**: crates/syu-code-intel/Cargo.toml
+          - **selector**:
+            - **kind**: file
         - **id**: code-intel-module
           - **adapter**: rust
           - **path**: crates/syu-code-intel/src/lib.rs
@@ -203,6 +208,11 @@ features:
       selector:
         kind: module
         name: lib
+    - id: code-intel-manifest
+      adapter: declared
+      path: crates/syu-code-intel/Cargo.toml
+      selector:
+        kind: file
     - id: code-intel-module
       adapter: rust
       path: crates/syu-code-intel/src/lib.rs

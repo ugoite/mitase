@@ -33,7 +33,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/inven
     - **id**: public-api-032
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-032-rust-crates-syu-inventory-src-lib-rs-inventoryregistry
           - **adapter**: rust
@@ -42,12 +42,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/inven
             - **kind**: symbol
             - **name**: InventoryRegistry::discover
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.inventory-discovery
+            - **kind**: exposes
+              - **target**: FEAT-INVENTORY-001#binding.implementation/target.inventory-registry
     - **id**: public-api-033
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-033-rust-crates-syu-inventory-src-lib-rs-read-bytes
           - **adapter**: rust
@@ -56,12 +56,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/inven
             - **kind**: symbol
             - **name**: read_bytes
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.inventory-discovery
+            - **kind**: exposes
+              - **target**: FEAT-INVENTORY-001#binding.implementation/target.inventory-registry
     - **id**: public-api-034
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-034-rust-crates-syu-inventory-src-lib-rs-union
           - **adapter**: rust
@@ -70,31 +70,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/inven
             - **kind**: symbol
             - **name**: union
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.inventory-discovery
-    - **id**: public-readiness
-      - **role**: verification
-      - **facet**: public
-      - **responsibility**: Prove inventory discovery entrypoints have bounded canonical plans.
-      - **targets**:
-        - **id**: canonical-plans
-          - **adapter**: rust
-          - **path**: crates/syu-validation/src/readiness.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: tests::inventory_discovery_public_entrypoints_have_canonical_plans
-          - **claims**:
-            - **kind**: verifies
-              - **criterion**: REQ-PUBLIC-001#criterion.inventory-discovery
-              - **covers**:
-                - FEAT-PUBLIC-INVENTORY-001#binding.public-api-032/target.entrypoint-032-rust-crates-syu-inventory-src-lib-rs-inventoryregistry
-                - FEAT-PUBLIC-INVENTORY-001#binding.public-api-033/target.entrypoint-033-rust-crates-syu-inventory-src-lib-rs-read-bytes
-                - FEAT-PUBLIC-INVENTORY-001#binding.public-api-034/target.entrypoint-034-rust-crates-syu-inventory-src-lib-rs-union
-              - **runner**:
-                - **runner**: cargo-test
-                - **arguments**:
-                  - **package**: syu-validation
-                  - **test**: tests::inventory_discovery_public_entrypoints_have_canonical_plans
+            - **kind**: exposes
+              - **target**: FEAT-INVENTORY-001#binding.implementation/target.inventory-registry
 
 ## Source YAML
 
@@ -112,7 +89,7 @@ features:
   - id: public-api-032
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-032-rust-crates-syu-inventory-src-lib-rs-inventoryregistry
       adapter: rust
@@ -121,12 +98,12 @@ features:
         kind: symbol
         name: InventoryRegistry::discover
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.inventory-discovery
+      - kind: exposes
+        target: FEAT-INVENTORY-001#binding.implementation/target.inventory-registry
   - id: public-api-033
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-033-rust-crates-syu-inventory-src-lib-rs-read-bytes
       adapter: rust
@@ -135,12 +112,12 @@ features:
         kind: symbol
         name: read_bytes
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.inventory-discovery
+      - kind: exposes
+        target: FEAT-INVENTORY-001#binding.implementation/target.inventory-registry
   - id: public-api-034
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-034-rust-crates-syu-inventory-src-lib-rs-union
       adapter: rust
@@ -149,29 +126,6 @@ features:
         kind: symbol
         name: union
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.inventory-discovery
-  - id: public-readiness
-    role: verification
-    facet: public
-    responsibility: Prove inventory discovery entrypoints have bounded canonical plans.
-    targets:
-    - id: canonical-plans
-      adapter: rust
-      path: crates/syu-validation/src/readiness.rs
-      selector:
-        kind: symbol
-        name: tests::inventory_discovery_public_entrypoints_have_canonical_plans
-      claims:
-      - kind: verifies
-        criterion: REQ-PUBLIC-001#criterion.inventory-discovery
-        covers:
-        - FEAT-PUBLIC-INVENTORY-001#binding.public-api-032/target.entrypoint-032-rust-crates-syu-inventory-src-lib-rs-inventoryregistry
-        - FEAT-PUBLIC-INVENTORY-001#binding.public-api-033/target.entrypoint-033-rust-crates-syu-inventory-src-lib-rs-read-bytes
-        - FEAT-PUBLIC-INVENTORY-001#binding.public-api-034/target.entrypoint-034-rust-crates-syu-inventory-src-lib-rs-union
-        runner:
-          runner: cargo-test
-          arguments:
-            package: syu-validation
-            test: tests::inventory_discovery_public_entrypoints_have_canonical_plans
+      - kind: exposes
+        target: FEAT-INVENTORY-001#binding.implementation/target.inventory-registry
 ```

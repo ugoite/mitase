@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use syu_spec_model::RepoPath;
+use syu_spec_model::{RepoPath, SpecAnchor};
 
 pub const CONFIG_SCHEMA: &str = "syu/config/v1";
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -64,8 +64,6 @@ pub enum ReadinessLevel {
 pub struct ReadinessConfig {
     pub target: ReadinessLevel,
     #[serde(default)]
-    pub scopes: BTreeMap<String, ReadinessLevel>,
-    #[serde(default)]
     pub probes: ReadinessProbes,
     pub limits: ReadinessLimits,
 }
@@ -73,13 +71,30 @@ pub struct ReadinessConfig {
 #[serde(deny_unknown_fields)]
 pub struct ReadinessProbes {
     #[serde(default)]
-    pub implemented_criteria: Option<String>,
+    pub implemented_criteria: Vec<ReadinessCriterionProbe>,
     #[serde(default)]
-    pub public_entrypoints: Option<String>,
+    pub public_entrypoints: Option<ReadinessSelectionProbe>,
     #[serde(default)]
-    pub contracts: Option<String>,
+    pub contracts: Option<ReadinessSelectionProbe>,
     #[serde(default)]
     pub changed_units: bool,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReadinessCriterionProbe {
+    pub criterion: SpecAnchor,
+    pub level: ReadinessLevel,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ReadinessSelection {
+    All,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReadinessSelectionProbe {
+    pub selection: ReadinessSelection,
+    pub level: ReadinessLevel,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -154,8 +169,12 @@ validation:
   preset: agent-ready
   readiness:
     target: traceable
-    scopes: { public-entrypoints: seedable }
-    probes: { implemented_criteria: all, public_entrypoints: all, changed_units: false }
+    probes:
+      implemented_criteria:
+        - criterion: REQ-WORK-001#criterion.exact-slice
+          level: work-ready
+      public_entrypoints: { selection: all, level: seedable }
+      changed_units: false
     limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_seed: 4 }
   changed: { require_owned_changes: true, require_plan: true }
 verification: { runners: {} }
@@ -168,8 +187,10 @@ work:
             ReadinessLevel::Traceable
         );
         assert_eq!(
-            config.validation.readiness.scopes.get("public-entrypoints"),
-            Some(&ReadinessLevel::Seedable)
+            config.validation.readiness.probes.implemented_criteria[0]
+                .criterion
+                .to_string(),
+            "REQ-WORK-001#criterion.exact-slice"
         );
         assert_eq!(
             config
@@ -177,11 +198,19 @@ work:
                 .readiness
                 .probes
                 .public_entrypoints
-                .as_deref(),
-            Some("all")
+                .as_ref()
+                .map(|probe| probe.level),
+            Some(ReadinessLevel::Seedable)
         );
         assert!(
             serde_yaml::from_str::<ProjectConfig>(&format!("{source}unknown: true\n")).is_err()
+        );
+        assert!(
+            serde_yaml::from_str::<ProjectConfig>(&source.replace(
+                "public_entrypoints: { selection: all, level: seedable }",
+                "public_entrypoints: { selection: typo-anything, level: seedable }",
+            ))
+            .is_err()
         );
     }
 }

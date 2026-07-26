@@ -44,6 +44,15 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-CAPABILITY-001#criterion.spec-model
+        - **id**: digest-format
+          - **adapter**: rust
+          - **path**: crates/syu-spec-model/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: format_sha256
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.digest-format
 - **id**: FEAT-PROJECT-CONFIG-001
   - **title**: Project configuration
   - **summary**: Load and validate syu/config/v1 project configuration.
@@ -201,6 +210,11 @@ features:
             path: crates/syu-spec-model/src/lib.rs
             selector: { kind: symbol, name: SpecDocument }
             claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.spec-model }]
+          - id: digest-format
+            adapter: rust
+            path: crates/syu-spec-model/src/lib.rs
+            selector: { kind: symbol, name: format_sha256 }
+            claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.digest-format }]
 
   - id: FEAT-PROJECT-CONFIG-001
     title: Project configuration

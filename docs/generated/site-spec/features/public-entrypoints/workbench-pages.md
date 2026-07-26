@@ -33,7 +33,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
     - **id**: public-api-013
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-013-javascript-crates-syu-app-ui-assets-js-pages-diagnostic
           - **adapter**: javascript
@@ -42,12 +42,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: renderDiagnostics
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-pages
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
     - **id**: public-api-014
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-014-javascript-crates-syu-app-ui-assets-js-pages-readiness
           - **adapter**: javascript
@@ -56,12 +56,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: renderReadinessPage
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-pages
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
     - **id**: public-api-015
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-015-javascript-crates-syu-app-ui-assets-js-pages-scope-js-r
           - **adapter**: javascript
@@ -70,12 +70,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: renderScope
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-pages
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
     - **id**: public-api-016
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-016-javascript-crates-syu-app-ui-assets-js-pages-settings-j
           - **adapter**: javascript
@@ -84,12 +84,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: renderSettings
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-pages
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
     - **id**: public-api-017
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-017-javascript-crates-syu-app-ui-assets-js-pages-specificat
           - **adapter**: javascript
@@ -98,8 +98,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: renderSpecifications
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-pages
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
     - **id**: public-api-init-diagnostics
       - **role**: implementation
       - **facet**: public
@@ -112,8 +112,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: initDiagnostics
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-pages
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
     - **id**: public-api-init-readiness
       - **role**: implementation
       - **facet**: public
@@ -126,8 +126,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: initReadiness
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-pages
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
     - **id**: public-api-init-scope
       - **role**: implementation
       - **facet**: public
@@ -140,8 +140,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: initScope
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-pages
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
     - **id**: public-api-init-specifications
       - **role**: implementation
       - **facet**: public
@@ -154,8 +154,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: initSpecifications
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-pages
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
     - **id**: public-api-render-source-detail
       - **role**: implementation
       - **facet**: public
@@ -168,8 +168,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: renderSourceDetail
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-pages
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
     - **id**: public-api-render-specification-detail
       - **role**: implementation
       - **facet**: public
@@ -182,39 +182,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: renderSpecificationDetail
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-pages
-    - **id**: public-readiness
-      - **role**: verification
-      - **facet**: public
-      - **responsibility**: Prove workbench pages entrypoints have bounded canonical plans.
-      - **targets**:
-        - **id**: canonical-plans
-          - **adapter**: rust
-          - **path**: crates/syu-validation/src/readiness.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: tests::workbench_pages_public_entrypoints_have_canonical_plans
-          - **claims**:
-            - **kind**: verifies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-pages
-              - **covers**:
-                - FEAT-PUBLIC-WORKBENCH-PAGES-001#binding.public-api-013/target.entrypoint-013-javascript-crates-syu-app-ui-assets-js-pages-diagnostic
-                - FEAT-PUBLIC-WORKBENCH-PAGES-001#binding.public-api-014/target.entrypoint-014-javascript-crates-syu-app-ui-assets-js-pages-readiness
-                - FEAT-PUBLIC-WORKBENCH-PAGES-001#binding.public-api-015/target.entrypoint-015-javascript-crates-syu-app-ui-assets-js-pages-scope-js-r
-                - FEAT-PUBLIC-WORKBENCH-PAGES-001#binding.public-api-016/target.entrypoint-016-javascript-crates-syu-app-ui-assets-js-pages-settings-j
-                - FEAT-PUBLIC-WORKBENCH-PAGES-001#binding.public-api-017/target.entrypoint-017-javascript-crates-syu-app-ui-assets-js-pages-specificat
-                - FEAT-PUBLIC-WORKBENCH-PAGES-001#binding.public-api-init-diagnostics/target.entrypoint-init-diagnostics
-                - FEAT-PUBLIC-WORKBENCH-PAGES-001#binding.public-api-init-readiness/target.entrypoint-init-readiness
-                - FEAT-PUBLIC-WORKBENCH-PAGES-001#binding.public-api-init-scope/target.entrypoint-init-scope
-                - FEAT-PUBLIC-WORKBENCH-PAGES-001#binding.public-api-init-specifications/target.entrypoint-init-specifications
-                - FEAT-PUBLIC-WORKBENCH-PAGES-001#binding.public-api-render-source-detail/target.entrypoint-render-source-detail
-                - FEAT-PUBLIC-WORKBENCH-PAGES-001#binding.public-api-render-specification-detail/target.entrypoint-render-specification-detail
-              - **runner**:
-                - **runner**: cargo-test
-                - **arguments**:
-                  - **package**: syu-validation
-                  - **test**: tests::workbench_pages_public_entrypoints_have_canonical_plans
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
 
 ## Source YAML
 
@@ -232,7 +201,7 @@ features:
   - id: public-api-013
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-013-javascript-crates-syu-app-ui-assets-js-pages-diagnostic
       adapter: javascript
@@ -241,12 +210,12 @@ features:
         kind: symbol
         name: renderDiagnostics
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-pages
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
   - id: public-api-014
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-014-javascript-crates-syu-app-ui-assets-js-pages-readiness
       adapter: javascript
@@ -255,12 +224,12 @@ features:
         kind: symbol
         name: renderReadinessPage
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-pages
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
   - id: public-api-015
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-015-javascript-crates-syu-app-ui-assets-js-pages-scope-js-r
       adapter: javascript
@@ -269,12 +238,12 @@ features:
         kind: symbol
         name: renderScope
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-pages
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
   - id: public-api-016
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-016-javascript-crates-syu-app-ui-assets-js-pages-settings-j
       adapter: javascript
@@ -283,12 +252,12 @@ features:
         kind: symbol
         name: renderSettings
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-pages
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
   - id: public-api-017
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-017-javascript-crates-syu-app-ui-assets-js-pages-specificat
       adapter: javascript
@@ -297,8 +266,8 @@ features:
         kind: symbol
         name: renderSpecifications
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-pages
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
   - id: public-api-init-diagnostics
     role: implementation
     facet: public
@@ -311,8 +280,8 @@ features:
         kind: symbol
         name: initDiagnostics
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-pages
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
   - id: public-api-init-readiness
     role: implementation
     facet: public
@@ -325,8 +294,8 @@ features:
         kind: symbol
         name: initReadiness
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-pages
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
   - id: public-api-init-scope
     role: implementation
     facet: public
@@ -339,8 +308,8 @@ features:
         kind: symbol
         name: initScope
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-pages
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
   - id: public-api-init-specifications
     role: implementation
     facet: public
@@ -353,8 +322,8 @@ features:
         kind: symbol
         name: initSpecifications
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-pages
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
   - id: public-api-render-source-detail
     role: implementation
     facet: public
@@ -367,8 +336,8 @@ features:
         kind: symbol
         name: renderSourceDetail
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-pages
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
   - id: public-api-render-specification-detail
     role: implementation
     facet: public
@@ -381,37 +350,6 @@ features:
         kind: symbol
         name: renderSpecificationDetail
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-pages
-  - id: public-readiness
-    role: verification
-    facet: public
-    responsibility: Prove workbench pages entrypoints have bounded canonical plans.
-    targets:
-    - id: canonical-plans
-      adapter: rust
-      path: crates/syu-validation/src/readiness.rs
-      selector:
-        kind: symbol
-        name: tests::workbench_pages_public_entrypoints_have_canonical_plans
-      claims:
-      - kind: verifies
-        criterion: REQ-PUBLIC-001#criterion.workbench-pages
-        covers:
-        - FEAT-PUBLIC-WORKBENCH-PAGES-001#binding.public-api-013/target.entrypoint-013-javascript-crates-syu-app-ui-assets-js-pages-diagnostic
-        - FEAT-PUBLIC-WORKBENCH-PAGES-001#binding.public-api-014/target.entrypoint-014-javascript-crates-syu-app-ui-assets-js-pages-readiness
-        - FEAT-PUBLIC-WORKBENCH-PAGES-001#binding.public-api-015/target.entrypoint-015-javascript-crates-syu-app-ui-assets-js-pages-scope-js-r
-        - FEAT-PUBLIC-WORKBENCH-PAGES-001#binding.public-api-016/target.entrypoint-016-javascript-crates-syu-app-ui-assets-js-pages-settings-j
-        - FEAT-PUBLIC-WORKBENCH-PAGES-001#binding.public-api-017/target.entrypoint-017-javascript-crates-syu-app-ui-assets-js-pages-specificat
-        - FEAT-PUBLIC-WORKBENCH-PAGES-001#binding.public-api-init-diagnostics/target.entrypoint-init-diagnostics
-        - FEAT-PUBLIC-WORKBENCH-PAGES-001#binding.public-api-init-readiness/target.entrypoint-init-readiness
-        - FEAT-PUBLIC-WORKBENCH-PAGES-001#binding.public-api-init-scope/target.entrypoint-init-scope
-        - FEAT-PUBLIC-WORKBENCH-PAGES-001#binding.public-api-init-specifications/target.entrypoint-init-specifications
-        - FEAT-PUBLIC-WORKBENCH-PAGES-001#binding.public-api-render-source-detail/target.entrypoint-render-source-detail
-        - FEAT-PUBLIC-WORKBENCH-PAGES-001#binding.public-api-render-specification-detail/target.entrypoint-render-specification-detail
-        runner:
-          runner: cargo-test
-          arguments:
-            package: syu-validation
-            test: tests::workbench_pages_public_entrypoints_have_canonical_plans
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
 ```

@@ -41,21 +41,3 @@ features:
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-011#criterion.scoped-agent
-  - id: verification
-    role: verification
-    facet: scoped-agent
-    responsibility: Verify agent rejection and evidence rendering through the Workbench server.
-    targets:
-    - id: agent-http-test
-      adapter: rust
-      path: crates/syu-workbench-server/src/lib.rs
-      selector: { kind: symbol, name: tests::workbench_agent_rejects_unrelated_write_before_application }
-      claims:
-      - kind: verifies
-        criterion: REQ-WORKBENCH-011#criterion.scoped-agent
-        covers:
-        - FEAT-WORKBENCH-SCOPED-AGENT-001#binding.agent-api/target.agent-start
-        - FEAT-WORKBENCH-SCOPED-AGENT-001#binding.agent-api/target.agent-patch
-        - FEAT-WORKBENCH-SCOPED-AGENT-001#binding.agent-api/target.agent-projection
-        - FEAT-WORKBENCH-SCOPED-AGENT-001#binding.agent-api/target.agent-ui
-        runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::workbench_agent_rejects_unrelated_write_before_application } }

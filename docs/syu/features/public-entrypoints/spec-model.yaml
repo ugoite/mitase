@@ -11,7 +11,7 @@ features:
   - id: public-api-035
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-036-rust-crates-syu-spec-model-src-lib-rs-localanchorkind-l
       adapter: rust
@@ -20,12 +20,12 @@ features:
         kind: symbol
         name: LocalAnchorKind::label
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.specification-model
+      - kind: exposes
+        target: FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document
   - id: public-api-036
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-037-rust-crates-syu-spec-model-src-lib-rs-repopath-as-path
       adapter: rust
@@ -34,12 +34,12 @@ features:
         kind: symbol
         name: RepoPath::as_path
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.specification-model
+      - kind: exposes
+        target: FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document
   - id: public-api-037
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-038-rust-crates-syu-spec-model-src-lib-rs-repopath-display
       adapter: rust
@@ -48,12 +48,12 @@ features:
         kind: symbol
         name: RepoPath::display
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.specification-model
+      - kind: exposes
+        target: FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document
   - id: public-api-038
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-039-rust-crates-syu-spec-model-src-lib-rs-repopath-new
       adapter: rust
@@ -62,12 +62,12 @@ features:
         kind: symbol
         name: RepoPath::new
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.specification-model
+      - kind: exposes
+        target: FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document
   - id: public-api-039
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-040-rust-crates-syu-spec-model-src-lib-rs-repopath-to-strin
       adapter: rust
@@ -76,12 +76,12 @@ features:
         kind: symbol
         name: RepoPath::to_string_lossy
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.specification-model
+      - kind: exposes
+        target: FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document
   - id: public-api-040
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-041-rust-crates-syu-spec-model-src-lib-rs-specdocument-sche
       adapter: rust
@@ -90,8 +90,8 @@ features:
         kind: symbol
         name: SpecDocument::schema
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.specification-model
+      - kind: exposes
+        target: FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document
   - id: public-api-repo-path-from-path
     role: implementation
     facet: public
@@ -104,32 +104,17 @@ features:
         kind: symbol
         name: RepoPath::from_path
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.specification-model
-  - id: public-readiness
-    role: verification
+      - kind: exposes
+        target: FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document
+  - id: public-api-lowercase-hex
+    role: implementation
     facet: public
-    responsibility: Prove specification model entrypoints have bounded canonical plans.
+    responsibility: Govern lowercase hexadecimal digest encoding.
     targets:
-    - id: canonical-plans
+    - id: entrypoint-lowercase-hex
       adapter: rust
-      path: crates/syu-validation/src/readiness.rs
-      selector:
-        kind: symbol
-        name: tests::specification_model_public_entrypoints_have_canonical_plans
+      path: crates/syu-spec-model/src/lib.rs
+      selector: { kind: symbol, name: lowercase_hex }
       claims:
-      - kind: verifies
-        criterion: REQ-PUBLIC-001#criterion.specification-model
-        covers:
-        - FEAT-PUBLIC-SPEC-MODEL-001#binding.public-api-035/target.entrypoint-036-rust-crates-syu-spec-model-src-lib-rs-localanchorkind-l
-        - FEAT-PUBLIC-SPEC-MODEL-001#binding.public-api-036/target.entrypoint-037-rust-crates-syu-spec-model-src-lib-rs-repopath-as-path
-        - FEAT-PUBLIC-SPEC-MODEL-001#binding.public-api-037/target.entrypoint-038-rust-crates-syu-spec-model-src-lib-rs-repopath-display
-        - FEAT-PUBLIC-SPEC-MODEL-001#binding.public-api-038/target.entrypoint-039-rust-crates-syu-spec-model-src-lib-rs-repopath-new
-        - FEAT-PUBLIC-SPEC-MODEL-001#binding.public-api-039/target.entrypoint-040-rust-crates-syu-spec-model-src-lib-rs-repopath-to-strin
-        - FEAT-PUBLIC-SPEC-MODEL-001#binding.public-api-040/target.entrypoint-041-rust-crates-syu-spec-model-src-lib-rs-specdocument-sche
-        - FEAT-PUBLIC-SPEC-MODEL-001#binding.public-api-repo-path-from-path/target.entrypoint-repo-path-from-path
-        runner:
-          runner: cargo-test
-          arguments:
-            package: syu-validation
-            test: tests::specification_model_public_entrypoints_have_canonical_plans
+      - kind: exposes
+        target: FEAT-SPEC-MODEL-001#binding.implementation/target.digest-format

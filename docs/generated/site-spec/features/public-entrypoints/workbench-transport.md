@@ -33,7 +33,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
     - **id**: public-api-001
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-001-javascript-crates-syu-app-ui-assets-js-api-js-mutationb
           - **adapter**: javascript
@@ -42,12 +42,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: mutationBasis
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-client-transport
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
     - **id**: public-api-002
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-002-javascript-crates-syu-app-ui-assets-js-api-js-post
           - **adapter**: javascript
@@ -56,12 +56,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: post
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-client-transport
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
     - **id**: public-api-003
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-003-javascript-crates-syu-app-ui-assets-js-api-js-readproje
           - **adapter**: javascript
@@ -70,12 +70,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: readProjection
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-client-transport
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
     - **id**: public-api-004
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-004-javascript-crates-syu-app-ui-assets-js-api-js-request
           - **adapter**: javascript
@@ -84,8 +84,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: request
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-client-transport
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
     - **id**: public-api-establish-session
       - **role**: implementation
       - **facet**: public
@@ -98,8 +98,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: establishSession
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-client-transport
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
     - **id**: public-api-read-branch-scope
       - **role**: implementation
       - **facet**: public
@@ -112,8 +112,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: readBranchScope
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-client-transport
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
     - **id**: public-api-read-scope-diff
       - **role**: implementation
       - **facet**: public
@@ -126,8 +126,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: readScopeDiff
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-client-transport
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
     - **id**: public-api-read-source
       - **role**: implementation
       - **facet**: public
@@ -140,8 +140,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: readSource
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-client-transport
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
     - **id**: public-api-read-target-source
       - **role**: implementation
       - **facet**: public
@@ -154,37 +154,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: readTargetSource
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-client-transport
-    - **id**: public-readiness
-      - **role**: verification
-      - **facet**: public
-      - **responsibility**: Prove workbench client transport entrypoints have bounded canonical plans.
-      - **targets**:
-        - **id**: canonical-plans
-          - **adapter**: rust
-          - **path**: crates/syu-validation/src/readiness.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: tests::workbench_client_transport_public_entrypoints_have_canonical_plans
-          - **claims**:
-            - **kind**: verifies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-client-transport
-              - **covers**:
-                - FEAT-PUBLIC-WORKBENCH-TRANSPORT-001#binding.public-api-001/target.entrypoint-001-javascript-crates-syu-app-ui-assets-js-api-js-mutationb
-                - FEAT-PUBLIC-WORKBENCH-TRANSPORT-001#binding.public-api-002/target.entrypoint-002-javascript-crates-syu-app-ui-assets-js-api-js-post
-                - FEAT-PUBLIC-WORKBENCH-TRANSPORT-001#binding.public-api-003/target.entrypoint-003-javascript-crates-syu-app-ui-assets-js-api-js-readproje
-                - FEAT-PUBLIC-WORKBENCH-TRANSPORT-001#binding.public-api-004/target.entrypoint-004-javascript-crates-syu-app-ui-assets-js-api-js-request
-                - FEAT-PUBLIC-WORKBENCH-TRANSPORT-001#binding.public-api-establish-session/target.entrypoint-establish-session
-                - FEAT-PUBLIC-WORKBENCH-TRANSPORT-001#binding.public-api-read-branch-scope/target.entrypoint-read-branch-scope
-                - FEAT-PUBLIC-WORKBENCH-TRANSPORT-001#binding.public-api-read-scope-diff/target.entrypoint-read-scope-diff
-                - FEAT-PUBLIC-WORKBENCH-TRANSPORT-001#binding.public-api-read-source/target.entrypoint-read-source
-                - FEAT-PUBLIC-WORKBENCH-TRANSPORT-001#binding.public-api-read-target-source/target.entrypoint-read-target-source
-              - **runner**:
-                - **runner**: cargo-test
-                - **arguments**:
-                  - **package**: syu-validation
-                  - **test**: tests::workbench_client_transport_public_entrypoints_have_canonical_plans
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
 
 ## Source YAML
 
@@ -203,7 +174,7 @@ features:
   - id: public-api-001
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-001-javascript-crates-syu-app-ui-assets-js-api-js-mutationb
       adapter: javascript
@@ -212,12 +183,12 @@ features:
         kind: symbol
         name: mutationBasis
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-client-transport
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
   - id: public-api-002
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-002-javascript-crates-syu-app-ui-assets-js-api-js-post
       adapter: javascript
@@ -226,12 +197,12 @@ features:
         kind: symbol
         name: post
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-client-transport
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
   - id: public-api-003
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-003-javascript-crates-syu-app-ui-assets-js-api-js-readproje
       adapter: javascript
@@ -240,12 +211,12 @@ features:
         kind: symbol
         name: readProjection
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-client-transport
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
   - id: public-api-004
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-004-javascript-crates-syu-app-ui-assets-js-api-js-request
       adapter: javascript
@@ -254,8 +225,8 @@ features:
         kind: symbol
         name: request
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-client-transport
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
   - id: public-api-establish-session
     role: implementation
     facet: public
@@ -268,8 +239,8 @@ features:
         kind: symbol
         name: establishSession
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-client-transport
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
   - id: public-api-read-branch-scope
     role: implementation
     facet: public
@@ -282,8 +253,8 @@ features:
         kind: symbol
         name: readBranchScope
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-client-transport
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
   - id: public-api-read-scope-diff
     role: implementation
     facet: public
@@ -296,8 +267,8 @@ features:
         kind: symbol
         name: readScopeDiff
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-client-transport
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
   - id: public-api-read-source
     role: implementation
     facet: public
@@ -310,8 +281,8 @@ features:
         kind: symbol
         name: readSource
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-client-transport
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
   - id: public-api-read-target-source
     role: implementation
     facet: public
@@ -324,36 +295,6 @@ features:
         kind: symbol
         name: readTargetSource
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-client-transport
-  - id: public-readiness
-    role: verification
-    facet: public
-    responsibility: Prove workbench client transport entrypoints have bounded canonical
-      plans.
-    targets:
-    - id: canonical-plans
-      adapter: rust
-      path: crates/syu-validation/src/readiness.rs
-      selector:
-        kind: symbol
-        name: tests::workbench_client_transport_public_entrypoints_have_canonical_plans
-      claims:
-      - kind: verifies
-        criterion: REQ-PUBLIC-001#criterion.workbench-client-transport
-        covers:
-        - FEAT-PUBLIC-WORKBENCH-TRANSPORT-001#binding.public-api-001/target.entrypoint-001-javascript-crates-syu-app-ui-assets-js-api-js-mutationb
-        - FEAT-PUBLIC-WORKBENCH-TRANSPORT-001#binding.public-api-002/target.entrypoint-002-javascript-crates-syu-app-ui-assets-js-api-js-post
-        - FEAT-PUBLIC-WORKBENCH-TRANSPORT-001#binding.public-api-003/target.entrypoint-003-javascript-crates-syu-app-ui-assets-js-api-js-readproje
-        - FEAT-PUBLIC-WORKBENCH-TRANSPORT-001#binding.public-api-004/target.entrypoint-004-javascript-crates-syu-app-ui-assets-js-api-js-request
-        - FEAT-PUBLIC-WORKBENCH-TRANSPORT-001#binding.public-api-establish-session/target.entrypoint-establish-session
-        - FEAT-PUBLIC-WORKBENCH-TRANSPORT-001#binding.public-api-read-branch-scope/target.entrypoint-read-branch-scope
-        - FEAT-PUBLIC-WORKBENCH-TRANSPORT-001#binding.public-api-read-scope-diff/target.entrypoint-read-scope-diff
-        - FEAT-PUBLIC-WORKBENCH-TRANSPORT-001#binding.public-api-read-source/target.entrypoint-read-source
-        - FEAT-PUBLIC-WORKBENCH-TRANSPORT-001#binding.public-api-read-target-source/target.entrypoint-read-target-source
-        runner:
-          runner: cargo-test
-          arguments:
-            package: syu-validation
-            test: tests::workbench_client_transport_public_entrypoints_have_canonical_plans
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
 ```

@@ -36,6 +36,11 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
       - **statement**: Canonical specification documents accept the v1 shape and reject obsolete or ambiguous identities.
       - **governed_by**:
         - POL-ADOPTION-001#rule.feature-evidence
+    - **id**: digest-format
+      - **kind**: behavior
+      - **statement**: Canonical digests use the sha256 prefix and lowercase hexadecimal representation.
+      - **governed_by**:
+        - POL-ADOPTION-001#rule.feature-evidence
     - **id**: project-config
       - **kind**: behavior
       - **statement**: Project configuration preserves explicit inventory, readiness, verification, and work limits while rejecting unknown fields.
@@ -134,6 +139,22 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
                 - **arguments**:
                   - **package**: syu-spec-model
                   - **test**: tests::old_shape_is_rejected
+        - **id**: digest-format-test
+          - **adapter**: rust
+          - **path**: crates/syu-spec-model/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::sha256_digests_use_the_canonical_lowercase_representation
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-CAPABILITY-001#criterion.digest-format
+              - **covers**:
+                - FEAT-SPEC-MODEL-001#binding.implementation/target.digest-format
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-spec-model
+                  - **test**: tests::sha256_digests_use_the_canonical_lowercase_representation
         - **id**: project-config-test
           - **adapter**: rust
           - **path**: crates/syu-project-model/src/lib.rs
@@ -299,6 +320,15 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
                 - **arguments**:
                   - **package**: syu-validation
                   - **test**: tests::exact_test_execution_requires_match
+            - **kind**: verifies
+              - **criterion**: REQ-WORK-001#criterion.completion-evidence
+              - **covers**:
+                - FEAT-RESULT-VALIDATION-001#binding.implementation/target.completion-evaluation
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-validation
+                  - **test**: tests::exact_test_execution_requires_match
         - **id**: plan-validation-test
           - **adapter**: rust
           - **path**: crates/syu-validation/src/lib.rs
@@ -400,6 +430,10 @@ requirements:
         kind: behavior
         statement: Canonical specification documents accept the v1 shape and reject obsolete or ambiguous identities.
         governed_by: [POL-ADOPTION-001#rule.feature-evidence]
+      - id: digest-format
+        kind: behavior
+        statement: Canonical digests use the sha256 prefix and lowercase hexadecimal representation.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
       - id: project-config
         kind: behavior
         statement: Project configuration preserves explicit inventory, readiness, verification, and work limits while rejecting unknown fields.
@@ -475,6 +509,15 @@ requirements:
                 criterion: REQ-CAPABILITY-001#criterion.spec-model
                 covers: [FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document]
                 runner: { runner: cargo-test, arguments: { package: syu-spec-model, test: tests::old_shape_is_rejected } }
+          - id: digest-format-test
+            adapter: rust
+            path: crates/syu-spec-model/src/lib.rs
+            selector: { kind: symbol, name: tests::sha256_digests_use_the_canonical_lowercase_representation }
+            claims:
+              - kind: verifies
+                criterion: REQ-CAPABILITY-001#criterion.digest-format
+                covers: [FEAT-SPEC-MODEL-001#binding.implementation/target.digest-format]
+                runner: { runner: cargo-test, arguments: { package: syu-spec-model, test: tests::sha256_digests_use_the_canonical_lowercase_representation } }
           - id: project-config-test
             adapter: rust
             path: crates/syu-project-model/src/lib.rs
@@ -569,6 +612,10 @@ requirements:
               - kind: verifies
                 criterion: REQ-CAPABILITY-001#criterion.verification-execution
                 covers: [FEAT-VERIFICATION-001#binding.implementation/target.execute-verification]
+                runner: { runner: cargo-test, arguments: { package: syu-validation, test: tests::exact_test_execution_requires_match } }
+              - kind: verifies
+                criterion: REQ-WORK-001#criterion.completion-evidence
+                covers: [FEAT-RESULT-VALIDATION-001#binding.implementation/target.completion-evaluation]
                 runner: { runner: cargo-test, arguments: { package: syu-validation, test: tests::exact_test_execution_requires_match } }
           - id: plan-validation-test
             adapter: rust

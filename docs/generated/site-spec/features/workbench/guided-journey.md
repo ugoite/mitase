@@ -66,14 +66,6 @@ description: "Generated reference for docs/syu/features/workbench/guided-journey
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-WORKBENCH-013#criterion.linked-specification-context
-        - **id**: journey-layout
-          - **adapter**: declared
-          - **path**: crates/syu-app-ui/assets/workbench.css
-          - **selector**:
-            - **kind**: file
-          - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-WORKBENCH-013#criterion.linked-specification-context
         - **id**: journey-browser
           - **adapter**: declared
           - **path**: crates/syu-app-ui/assets/js/pages/work.js
@@ -114,7 +106,6 @@ description: "Generated reference for docs/syu/features/workbench/guided-journey
                 - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-action
                 - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-source
                 - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-browser
-                - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-layout
               - **runner**:
                 - **runner**: cargo-test
                 - **arguments**:
@@ -164,13 +155,6 @@ features:
       claims:
       - kind: satisfies
         criterion: REQ-WORKBENCH-013#criterion.linked-specification-context
-    - id: journey-layout
-      adapter: declared
-      path: crates/syu-app-ui/assets/workbench.css
-      selector: { kind: file }
-      claims:
-      - kind: satisfies
-        criterion: REQ-WORKBENCH-013#criterion.linked-specification-context
     - id: journey-browser
       adapter: declared
       path: crates/syu-app-ui/assets/js/pages/work.js
@@ -204,6 +188,5 @@ features:
         - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-action
         - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-source
         - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-browser
-        - FEAT-WORKBENCH-GUIDED-JOURNEY-001#binding.journey/target.journey-layout
         runner: { runner: cargo-test, arguments: { package: syu-workbench-server, test: tests::journey_action_exposes_one_friendly_next_step_and_can_cancel } }
 ```

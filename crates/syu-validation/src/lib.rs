@@ -1736,8 +1736,19 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 if let Some(binding) = ctx.index.bindings.get(&owner.binding)
                     && binding.role == BindingRole::Implementation
                     && !binding.targets.iter().any(|target| {
-                        target.claims.iter().any(|claim| {
-                            matches!(claim, syu_spec_model::TargetClaim::Satisfies { .. })
+                        target.claims.iter().any(|claim| match claim {
+                            syu_spec_model::TargetClaim::Satisfies { .. } => true,
+                            syu_spec_model::TargetClaim::Exposes { target } => {
+                                ctx.index.target(target).is_some_and(|exposed| {
+                                    exposed.claims.iter().any(|claim| {
+                                        matches!(
+                                            claim,
+                                            syu_spec_model::TargetClaim::Satisfies { .. }
+                                        )
+                                    })
+                                })
+                            }
+                            _ => false,
                         })
                     })
                 {
@@ -2003,16 +2014,51 @@ struct BaselineWorkspace {
 }
 
 fn load_workspace_at_revision(root: &Path, revision: &str) -> Option<BaselineWorkspace> {
-    let syu_config = git_show(root, revision, Path::new("syu.yaml")).ok()?;
-    let config: ProjectConfig = serde_yaml::from_str(&syu_config).ok()?;
+    match try_load_workspace_at_revision(root, revision) {
+        Ok(workspace) => Some(workspace),
+        Err(error) => {
+            if std::env::var_os("SYU_DEBUG_BASELINE").is_some() {
+                eprintln!("could not load validation baseline {revision}: {error:#}");
+            }
+            None
+        }
+    }
+}
+
+fn try_load_workspace_at_revision(root: &Path, revision: &str) -> Result<BaselineWorkspace> {
+    let syu_config = git_show(root, revision, Path::new("syu.yaml"))
+        .map_err(anyhow::Error::msg)
+        .context("read baseline syu.yaml")?;
+    let (syu_config, config) = match serde_yaml::from_str::<ProjectConfig>(&syu_config) {
+        Ok(config) => (syu_config, config),
+        Err(_) => {
+            // Change validation must still be able to compare a branch with a
+            // revision that used the earlier v1 readiness shape. Readiness is
+            // irrelevant to the baseline graph, so remove only those legacy
+            // probe fields and keep the historical inventory/spec inputs.
+            let normalized = normalize_legacy_baseline_config(&syu_config)
+                .context("normalize legacy baseline readiness config")?;
+            let config = serde_yaml::from_str::<ProjectConfig>(&normalized)
+                .context("parse normalized baseline config")?;
+            (normalized, config)
+        }
+    };
     let tempdir = tempfile::Builder::new()
         .prefix("syu-baseline-")
         .tempdir()
-        .ok()?;
+        .context("create baseline workspace")?;
     let workspace_dir = tempdir.path();
-    fs::write(workspace_dir.join("syu.yaml"), syu_config).ok()?;
-    let files = git_ls_tree(root, revision).ok()?;
+    fs::write(workspace_dir.join("syu.yaml"), syu_config)
+        .context("write normalized baseline config")?;
+    let files = git_ls_tree(root, revision)
+        .map_err(anyhow::Error::msg)
+        .context("list baseline files")?;
     for relative in &files {
+        if relative == Path::new("syu.yaml") {
+            // Keep the normalized baseline config written above. Copying the
+            // historical source here would reintroduce its legacy shape.
+            continue;
+        }
         let include = relative == Path::new("syu.yaml")
             || config
                 .workspace
@@ -2029,17 +2075,35 @@ fn load_workspace_at_revision(root: &Path, revision: &str) -> Option<BaselineWor
         };
         let destination = workspace_dir.join(relative);
         if let Some(parent) = destination.parent() {
-            fs::create_dir_all(parent).ok()?;
+            fs::create_dir_all(parent).context("create baseline parent directory")?;
         }
-        fs::write(destination, contents).ok()?;
+        fs::write(destination, contents).context("write baseline file")?;
     }
-    let workspace = SpecWorkspace::load(workspace_dir).ok()?;
-    let index = workspace.index().ok()?;
-    Some(BaselineWorkspace {
+    let workspace = SpecWorkspace::load(workspace_dir).context("load baseline workspace")?;
+    let index = workspace.index().context("index baseline workspace")?;
+    Ok(BaselineWorkspace {
         _tempdir: tempdir,
         workspace,
         index,
     })
+}
+
+fn normalize_legacy_baseline_config(source: &str) -> Option<String> {
+    let mut value = serde_yaml::from_str::<serde_yaml::Value>(source).ok()?;
+    let readiness = value
+        .get_mut("validation")?
+        .get_mut("readiness")?
+        .as_mapping_mut()?;
+    readiness.remove(serde_yaml::Value::String("scopes".into()));
+    if let Some(probes) = readiness
+        .get_mut(serde_yaml::Value::String("probes".into()))
+        .and_then(serde_yaml::Value::as_mapping_mut)
+    {
+        for key in ["implemented_criteria", "public_entrypoints", "contracts"] {
+            probes.remove(serde_yaml::Value::String(key.into()));
+        }
+    }
+    serde_yaml::to_string(&value).ok()
 }
 
 fn repository_revision(root: &Path) -> Result<String> {
@@ -2489,28 +2553,42 @@ fn validate_document_shapes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnosti
                                 binding: binding_anchor.clone(),
                                 target_id: target.id.clone(),
                             };
-                            let criteria = target
-                                .claims
-                                .iter()
-                                .filter_map(|claim| match claim {
-                                    TargetClaim::Satisfies { criterion } => Some(criterion),
-                                    _ => None,
-                                })
-                                .collect::<Vec<_>>();
-                            if criteria.is_empty() {
+                            let mut acceptance = Vec::new();
+                            for claim in &target.claims {
+                                match claim {
+                                    TargetClaim::Satisfies { criterion } => {
+                                        acceptance.push((criterion.clone(), target_ref.clone()));
+                                    }
+                                    TargetClaim::Exposes { target: exposed } => {
+                                        let Some(exposed_target) = ctx.index.target(exposed) else {
+                                            continue;
+                                        };
+                                        acceptance.extend(exposed_target.claims.iter().filter_map(
+                                            |claim| match claim {
+                                                TargetClaim::Satisfies { criterion } => {
+                                                    Some((criterion.clone(), exposed.clone()))
+                                                }
+                                                _ => None,
+                                            },
+                                        ));
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            if acceptance.is_empty() {
                                 push(
                                     out,
                                     "SYU-FEATURE-002",
                                     format!(
-                                        "implemented feature target {target_ref} has no acceptance criterion"
+                                        "implemented feature target {target_ref} has no direct or exposed acceptance criterion"
                                     ),
                                     &path,
                                     Some(binding_anchor.clone()),
                                 );
                                 continue;
                             }
-                            for criterion in criteria {
-                                if ctx.index.criterion_status.get(criterion)
+                            for (criterion, verified_target) in acceptance {
+                                if ctx.index.criterion_status.get(&criterion)
                                     != Some(&ItemStatus::Implemented)
                                 {
                                     push(
@@ -2527,7 +2605,7 @@ fn validate_document_shapes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnosti
                                 let verified = ctx
                                     .index
                                     .verification_by_target
-                                    .get(&target_ref)
+                                    .get(&verified_target)
                                     .into_iter()
                                     .flatten()
                                     .any(|verification_ref| {
@@ -2546,8 +2624,8 @@ fn validate_document_shapes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnosti
                                                                 criterion: actual,
                                                                 covers,
                                                                 runner,
-                                                            } if actual == criterion
-                                                                && covers.contains(&target_ref)
+                                                            } if actual == &criterion
+                                                                && covers.contains(&verified_target)
                                                                 && ctx
                                                                     .config
                                                                     .verification
@@ -2563,7 +2641,7 @@ fn validate_document_shapes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnosti
                                         out,
                                         "SYU-FEATURE-002",
                                         format!(
-                                            "implemented feature target {target_ref} has no exact verification for {criterion}"
+                                            "implemented feature target {target_ref} has no exact verification for {criterion} through {verified_target}"
                                         ),
                                         &path,
                                         Some(binding_anchor.clone()),
@@ -2697,6 +2775,12 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         _ => None,
                     })
                     .collect::<Vec<_>>();
+                let has_exposes = binding.targets.iter().any(|target| {
+                    target
+                        .claims
+                        .iter()
+                        .any(|claim| matches!(claim, TargetClaim::Exposes { .. }))
+                });
                 if matches!(
                     binding.role,
                     BindingRole::Implementation
@@ -2705,6 +2789,7 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         | BindingRole::Enforcement
                         | BindingRole::Evidence
                 ) && relation.is_empty()
+                    && !(binding.role == BindingRole::Implementation && has_exposes)
                 {
                     push(
                         out,
@@ -2726,28 +2811,77 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                     }
                 }
                 for artifact_target in &binding.targets {
+                    let exposure_count = artifact_target
+                        .claims
+                        .iter()
+                        .filter(|claim| matches!(claim, TargetClaim::Exposes { .. }))
+                        .count();
+                    if exposure_count > 1
+                        || (binding.facet == "public"
+                            && (exposure_count != 1
+                                || artifact_target
+                                    .claims
+                                    .iter()
+                                    .any(|claim| matches!(claim, TargetClaim::Satisfies { .. }))))
+                    {
+                        push(
+                            out,
+                            "SYU-EXPOSURE-001",
+                            "public governance targets must expose exactly one capability target and must not claim capability acceptance directly",
+                            &path,
+                            Some(anchor.clone()),
+                        );
+                    }
                     for claim in &artifact_target.claims {
-                        if let syu_spec_model::TargetClaim::Verifies { covers, .. } = claim {
-                            if covers.is_empty() {
-                                push(
-                                    out,
-                                    "SYU-VERIFICATION-001",
-                                    "verification target must cover at least one exact target",
-                                    &path,
-                                    Some(anchor.clone()),
-                                );
-                            }
-                            for covered in covers {
-                                if ctx.index.target(covered).is_none() {
+                        match claim {
+                            syu_spec_model::TargetClaim::Verifies { covers, .. } => {
+                                if covers.is_empty() {
                                     push(
                                         out,
-                                        "SYU-VERIFICATION-002",
-                                        format!("verification covers unresolved target {covered}"),
+                                        "SYU-VERIFICATION-001",
+                                        "verification target must cover at least one exact target",
+                                        &path,
+                                        Some(anchor.clone()),
+                                    );
+                                }
+                                for covered in covers {
+                                    if ctx.index.target(covered).is_none() {
+                                        push(
+                                            out,
+                                            "SYU-VERIFICATION-002",
+                                            format!(
+                                                "verification covers unresolved target {covered}"
+                                            ),
+                                            &path,
+                                            Some(anchor.clone()),
+                                        );
+                                    }
+                                }
+                            }
+                            syu_spec_model::TargetClaim::Exposes { target } => {
+                                let valid = ctx.index.target(target).is_some()
+                                    && ctx.index.bindings.get(&target.binding).is_some_and(
+                                        |exposed_binding| {
+                                            exposed_binding.role == BindingRole::Implementation
+                                                && !matches!(
+                                                    ctx.index.item_status.get(&target.binding.item),
+                                                    Some(ItemStatus::Planned)
+                                                )
+                                        },
+                                    );
+                                if binding.role != BindingRole::Implementation || !valid {
+                                    push(
+                                        out,
+                                        "SYU-EXPOSURE-001",
+                                        format!(
+                                            "exposes must reference a current exact implementation target: {target}"
+                                        ),
                                         &path,
                                         Some(anchor.clone()),
                                     );
                                 }
                             }
+                            _ => {}
                         }
                     }
                 }
@@ -4202,6 +4336,41 @@ mod tests {
         (tempdir, workspace, index)
     }
 
+    #[test]
+    fn legacy_readiness_shape_is_normalized_only_for_historical_baselines() {
+        let source = fs::read_to_string(fixture_root().join("syu.yaml"))
+            .expect("fixture config")
+            .replace(
+                "    target: closed-loop\n",
+                concat!(
+                    "    target: traceable\n",
+                    "    scopes: { auth: work-ready }\n",
+                    "    probes: { implemented_criteria: REQ-AUTH-001#criterion.invalid-credentials, public_entrypoints: all, changed_units: false }\n",
+                ),
+            );
+        assert!(serde_yaml::from_str::<ProjectConfig>(&source).is_err());
+        let normalized =
+            normalize_legacy_baseline_config(&source).expect("normalized baseline config");
+        let config =
+            serde_yaml::from_str::<ProjectConfig>(&normalized).expect("current config shape");
+        assert!(
+            config
+                .validation
+                .readiness
+                .probes
+                .implemented_criteria
+                .is_empty()
+        );
+        assert!(
+            config
+                .validation
+                .readiness
+                .probes
+                .public_entrypoints
+                .is_none()
+        );
+    }
+
     fn validate_loaded_workspace(workspace: &SpecWorkspace, index: &SpecIndex) -> ValidationResult {
         validate_without_readiness(&ValidationContext {
             config: &workspace.config,
@@ -4457,7 +4626,9 @@ requirements:
         let result = validate_loaded_workspace(&workspace, &index);
         assert!(result.diagnostics.iter().any(|diagnostic| {
             diagnostic.rule_id == "SYU-FEATURE-002"
-                && diagnostic.message.contains("has no acceptance criterion")
+                && diagnostic
+                    .message
+                    .contains("has no direct or exposed acceptance criterion")
         }));
     }
 
@@ -4505,6 +4676,106 @@ requirements:
             diagnostic.rule_id == "SYU-FEATURE-002"
                 && diagnostic.message.contains("target.submit")
                 && diagnostic.message.contains("has no exact verification")
+        }));
+    }
+
+    #[test]
+    fn duplicate_exact_owner_is_a_repository_wide_readiness_blocker() {
+        let (tempdir, _, _) = load_fixture_workspace();
+        let path = tempdir.path().join("spec/feature.yaml");
+        let source = fs::read_to_string(&path).unwrap().replacen(
+            "            claims: [{ kind: satisfies, criterion: REQ-AUTH-001#criterion.invalid-credentials }]",
+            concat!(
+                "            claims: [{ kind: satisfies, criterion: REQ-AUTH-001#criterion.invalid-credentials }]\n",
+                "          - id: submit-alias\n",
+                "            adapter: typescript\n",
+                "            path: web/login.ts\n",
+                "            selector: { kind: symbol, name: submitLogin }\n",
+                "            claims: [{ kind: satisfies, criterion: REQ-AUTH-001#criterion.invalid-credentials }]",
+            ),
+            1,
+        );
+        fs::write(path, source).unwrap();
+        let workspace = SpecWorkspace::load(tempdir.path()).unwrap();
+        let index = workspace.index().unwrap();
+        let report =
+            evaluate_readiness(&workspace, &index, "readiness-test", false).expect("readiness");
+        assert!(report.ownership.blockers.iter().any(|blocker| {
+            blocker.contains("typescript:web/login.ts") && blocker.contains("has 2 owners")
+        }));
+    }
+
+    #[test]
+    fn ownership_scope_limit_is_not_reduced_by_a_bounded_criterion_probe() {
+        let (tempdir, _, _) = load_fixture_workspace();
+        let path = tempdir.path().join("spec/feature.yaml");
+        let source = fs::read_to_string(&path).unwrap().replacen(
+            "        responsibility: Submit login and show generic failure.\n",
+            concat!(
+                "        responsibility: Submit login and show generic failure.\n",
+                "        owns:\n",
+                "          - { id: repository-wide, adapter: openapi, path: openapi.yaml, selector: { kind: path-prefix, value: openapi.yaml } }\n",
+            ),
+            1,
+        );
+        fs::write(path, source).unwrap();
+        let mut workspace = SpecWorkspace::load(tempdir.path()).unwrap();
+        workspace
+            .config
+            .validation
+            .readiness
+            .limits
+            .max_ownership_scope_units = 0;
+        workspace
+            .config
+            .validation
+            .readiness
+            .probes
+            .implemented_criteria = vec![syu_project_model::ReadinessCriterionProbe {
+            criterion: "REQ-AUTH-001#criterion.invalid-credentials"
+                .parse()
+                .unwrap(),
+            level: syu_project_model::ReadinessLevel::WorkReady,
+        }];
+        let index = workspace.index().unwrap();
+        let report =
+            evaluate_readiness(&workspace, &index, "readiness-test", false).expect("readiness");
+        assert!(
+            report.ownership.blockers.iter().any(|blocker| {
+                blocker.contains("ownership-scope:FEAT-AUTH-001#binding.ui/repository-wide")
+                    && blocker.contains("max_ownership_scope_units")
+            }),
+            "{:?}",
+            report.ownership.blockers
+        );
+    }
+
+    #[test]
+    fn ungoverned_public_function_fails_the_public_entrypoint_probe() {
+        let tempdir = tempdir().unwrap();
+        copy_dir(&workbench_fixture_root(), tempdir.path());
+        fs::write(
+            tempdir.path().join("src/lib.rs"),
+            "pub fn behavior() -> bool {\n    true\n}\n\npub fn ungoverned() {}\n",
+        )
+        .unwrap();
+        let mut workspace = SpecWorkspace::load(tempdir.path()).unwrap();
+        workspace.config.validation.readiness.target = syu_project_model::ReadinessLevel::Traceable;
+        workspace
+            .config
+            .validation
+            .readiness
+            .probes
+            .public_entrypoints = Some(syu_project_model::ReadinessSelectionProbe {
+            selection: syu_project_model::ReadinessSelection::All,
+            level: syu_project_model::ReadinessLevel::Seedable,
+        });
+        let index = workspace.index().unwrap();
+        let report =
+            evaluate_readiness(&workspace, &index, "readiness-test", false).expect("readiness");
+        assert!(report.seedability.blockers.iter().any(|blocker| {
+            blocker.contains("ungoverned")
+                && blocker.contains("requires exactly one exact ArtifactTarget owner")
         }));
     }
 
@@ -4930,5 +5201,33 @@ requirements:
             evaluate_completion(&workspace, &index, &plan, &invalid_receipt).expect("report");
         assert_eq!(invalid_report.status, CompletionStatus::Blocked);
         assert!(invalid_report.demonstrated.is_empty());
+    }
+
+    #[test]
+    fn ready_plan_does_not_mask_broken_capability_behavior() {
+        let tempdir = tempdir().unwrap();
+        copy_dir(&workbench_fixture_root(), tempdir.path());
+        let revision = init_git_repo(tempdir.path());
+        let plan = fixture_execution_plan(tempdir.path(), &revision);
+        let slice = plan
+            .slices
+            .iter()
+            .find(|slice| !slice.verification_targets.is_empty())
+            .expect("verification slice");
+        assert_eq!(plan.status, syu_work_model::PlanStatus::Ready);
+        fs::write(
+            tempdir.path().join("src/lib.rs"),
+            "pub fn behavior() -> bool {\n    false\n}\n",
+        )
+        .unwrap();
+        let workspace = SpecWorkspace::load(tempdir.path()).unwrap();
+        let index = workspace.index().unwrap();
+        let error = execute_verification(&workspace, &index, &plan, &slice.id, &revision)
+            .expect_err("broken behavior must fail its real verification")
+            .to_string();
+        assert!(
+            error.contains("verification runner cargo-test failed"),
+            "{error}"
+        );
     }
 }

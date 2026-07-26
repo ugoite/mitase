@@ -33,7 +33,7 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
     - **id**: public-api-058
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-063-rust-crates-syu-workbench-server-src-lib-rs-branch-scop
           - **adapter**: rust
@@ -42,12 +42,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: branch_scope_view
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-server-validation
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-VERIFICATION-001#binding.verification-harness/target.verification-endpoint
     - **id**: public-api-059
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-064-rust-crates-syu-workbench-server-src-lib-rs-execute-ver
           - **adapter**: rust
@@ -56,12 +56,12 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: execute_verification
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-server-validation
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-VERIFICATION-001#binding.verification-harness/target.verification-endpoint
     - **id**: public-api-060
       - **role**: implementation
       - **facet**: public
-      - **responsibility**: Keep this public entrypoint addressable by an exact target.
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
       - **targets**:
         - **id**: entrypoint-065-rust-crates-syu-workbench-server-src-lib-rs-validate-ve
           - **adapter**: rust
@@ -70,31 +70,8 @@ description: "Generated reference for docs/syu/features/public-entrypoints/workb
             - **kind**: symbol
             - **name**: validate_verification_receipt
           - **claims**:
-            - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-server-validation
-    - **id**: public-readiness
-      - **role**: verification
-      - **facet**: public
-      - **responsibility**: Prove workbench server validation entrypoints have bounded canonical plans.
-      - **targets**:
-        - **id**: canonical-plans
-          - **adapter**: rust
-          - **path**: crates/syu-validation/src/readiness.rs
-          - **selector**:
-            - **kind**: symbol
-            - **name**: tests::workbench_server_validation_public_entrypoints_have_canonical_plans
-          - **claims**:
-            - **kind**: verifies
-              - **criterion**: REQ-PUBLIC-001#criterion.workbench-server-validation
-              - **covers**:
-                - FEAT-PUBLIC-WORKBENCH-VALIDATION-001#binding.public-api-058/target.entrypoint-063-rust-crates-syu-workbench-server-src-lib-rs-branch-scop
-                - FEAT-PUBLIC-WORKBENCH-VALIDATION-001#binding.public-api-059/target.entrypoint-064-rust-crates-syu-workbench-server-src-lib-rs-execute-ver
-                - FEAT-PUBLIC-WORKBENCH-VALIDATION-001#binding.public-api-060/target.entrypoint-065-rust-crates-syu-workbench-server-src-lib-rs-validate-ve
-              - **runner**:
-                - **runner**: cargo-test
-                - **arguments**:
-                  - **package**: syu-validation
-                  - **test**: tests::workbench_server_validation_public_entrypoints_have_canonical_plans
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-VERIFICATION-001#binding.verification-harness/target.verification-endpoint
 
 ## Source YAML
 
@@ -112,7 +89,7 @@ features:
   - id: public-api-058
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-063-rust-crates-syu-workbench-server-src-lib-rs-branch-scop
       adapter: rust
@@ -121,12 +98,12 @@ features:
         kind: symbol
         name: branch_scope_view
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-server-validation
+      - kind: exposes
+        target: FEAT-WORKBENCH-VERIFICATION-001#binding.verification-harness/target.verification-endpoint
   - id: public-api-059
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-064-rust-crates-syu-workbench-server-src-lib-rs-execute-ver
       adapter: rust
@@ -135,12 +112,12 @@ features:
         kind: symbol
         name: execute_verification
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-server-validation
+      - kind: exposes
+        target: FEAT-WORKBENCH-VERIFICATION-001#binding.verification-harness/target.verification-endpoint
   - id: public-api-060
     role: implementation
     facet: public
-    responsibility: Keep this public entrypoint addressable by an exact target.
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
     targets:
     - id: entrypoint-065-rust-crates-syu-workbench-server-src-lib-rs-validate-ve
       adapter: rust
@@ -149,30 +126,6 @@ features:
         kind: symbol
         name: validate_verification_receipt
       claims:
-      - kind: satisfies
-        criterion: REQ-PUBLIC-001#criterion.workbench-server-validation
-  - id: public-readiness
-    role: verification
-    facet: public
-    responsibility: Prove workbench server validation entrypoints have bounded canonical
-      plans.
-    targets:
-    - id: canonical-plans
-      adapter: rust
-      path: crates/syu-validation/src/readiness.rs
-      selector:
-        kind: symbol
-        name: tests::workbench_server_validation_public_entrypoints_have_canonical_plans
-      claims:
-      - kind: verifies
-        criterion: REQ-PUBLIC-001#criterion.workbench-server-validation
-        covers:
-        - FEAT-PUBLIC-WORKBENCH-VALIDATION-001#binding.public-api-058/target.entrypoint-063-rust-crates-syu-workbench-server-src-lib-rs-branch-scop
-        - FEAT-PUBLIC-WORKBENCH-VALIDATION-001#binding.public-api-059/target.entrypoint-064-rust-crates-syu-workbench-server-src-lib-rs-execute-ver
-        - FEAT-PUBLIC-WORKBENCH-VALIDATION-001#binding.public-api-060/target.entrypoint-065-rust-crates-syu-workbench-server-src-lib-rs-validate-ve
-        runner:
-          runner: cargo-test
-          arguments:
-            package: syu-validation
-            test: tests::workbench_server_validation_public_entrypoints_have_canonical_plans
+      - kind: exposes
+        target: FEAT-WORKBENCH-VERIFICATION-001#binding.verification-harness/target.verification-endpoint
 ```

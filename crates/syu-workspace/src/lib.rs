@@ -56,10 +56,21 @@ pub struct SpecIndex {
     pub artifact_units: Vec<ArtifactUnit>,
     pub artifact_owners: BTreeMap<String, Vec<OwnershipRef>>,
     pub target_to_artifact: BTreeMap<BoundTargetRef, String>,
+    /// Current implementation claims from non-planned specification items.
     pub criteria_to_implementation_targets: BTreeMap<SpecAnchor, Vec<BoundTargetRef>>,
+    /// Current verification claims from non-planned specification items.
     pub criteria_to_verification_targets: BTreeMap<SpecAnchor, Vec<BoundTargetRef>>,
+    /// Full implementation graph, including planned catalog entries.
+    pub all_criteria_to_implementation_targets: BTreeMap<SpecAnchor, Vec<BoundTargetRef>>,
+    /// Full verification graph, including planned catalog entries.
+    pub all_criteria_to_verification_targets: BTreeMap<SpecAnchor, Vec<BoundTargetRef>>,
     pub contracts_by_target: BTreeMap<BoundTargetRef, Vec<SpecAnchor>>,
+    /// Current exact verification coverage from non-planned items.
     pub verification_by_target: BTreeMap<BoundTargetRef, Vec<BoundTargetRef>>,
+    /// Full exact verification coverage, including planned catalog entries.
+    pub all_verification_by_target: BTreeMap<BoundTargetRef, Vec<BoundTargetRef>>,
+    /// Public governance targets mapped to the capability boundary they expose.
+    pub exposes_by_target: BTreeMap<BoundTargetRef, BoundTargetRef>,
     pub inventory_error: Option<String>,
 }
 
@@ -464,6 +475,10 @@ impl SpecIndex {
             Err(error) => out.inventory_error = Some(error.to_string()),
         }
         for (binding_anchor, binding) in &out.bindings {
+            let active_binding = !matches!(
+                out.item_status.get(&binding_anchor.item),
+                Some(ItemStatus::Planned)
+            );
             for target in &binding.targets {
                 let target_ref = BoundTargetRef {
                     binding: binding_anchor.clone(),
@@ -501,24 +516,47 @@ impl SpecIndex {
                 }
                 for claim in &target.claims {
                     match claim {
-                        TargetClaim::Satisfies { criterion } => out
-                            .criteria_to_implementation_targets
-                            .entry(criterion.clone())
-                            .or_default()
-                            .push(target_ref.clone()),
+                        TargetClaim::Satisfies { criterion } => {
+                            out.all_criteria_to_implementation_targets
+                                .entry(criterion.clone())
+                                .or_default()
+                                .push(target_ref.clone());
+                            if active_binding {
+                                out.criteria_to_implementation_targets
+                                    .entry(criterion.clone())
+                                    .or_default()
+                                    .push(target_ref.clone());
+                            }
+                        }
                         TargetClaim::Verifies {
                             criterion, covers, ..
                         } => {
-                            out.criteria_to_verification_targets
+                            out.all_criteria_to_verification_targets
                                 .entry(criterion.clone())
                                 .or_default()
                                 .push(target_ref.clone());
                             for covered in covers {
-                                out.verification_by_target
+                                out.all_verification_by_target
                                     .entry(covered.clone())
                                     .or_default()
                                     .push(target_ref.clone());
                             }
+                            if active_binding {
+                                out.criteria_to_verification_targets
+                                    .entry(criterion.clone())
+                                    .or_default()
+                                    .push(target_ref.clone());
+                                for covered in covers {
+                                    out.verification_by_target
+                                        .entry(covered.clone())
+                                        .or_default()
+                                        .push(target_ref.clone());
+                                }
+                            }
+                        }
+                        TargetClaim::Exposes { target } if active_binding => {
+                            out.exposes_by_target
+                                .insert(target_ref.clone(), target.clone());
                         }
                         _ => {}
                     }
@@ -576,6 +614,9 @@ impl SpecIndex {
             .values_mut()
             .chain(out.criteria_to_verification_targets.values_mut())
             .chain(out.verification_by_target.values_mut())
+            .chain(out.all_criteria_to_implementation_targets.values_mut())
+            .chain(out.all_criteria_to_verification_targets.values_mut())
+            .chain(out.all_verification_by_target.values_mut())
         {
             values.sort();
             values.dedup();
@@ -1446,7 +1487,21 @@ mod tests {
                 "        owns:\n",
                 "          - { id: module, adapter: rust, path: src/lib.rs, selector: { kind: module, name: lib } }\n",
                 "        targets:\n",
-                "          - { id: api, adapter: rust, path: src/lib.rs, selector: { kind: symbol, name: api }, claims: [] }\n",
+                "          - { id: api, adapter: rust, path: src/lib.rs, selector: { kind: symbol, name: api }, claims: [{ kind: satisfies, criterion: REQ-TEST-001#criterion.api }] }\n",
+                "      - id: verification\n",
+                "        role: verification\n",
+                "        facet: test\n",
+                "        responsibility: Describe future verification.\n",
+                "        targets:\n",
+                "          - id: api-test\n",
+                "            adapter: rust\n",
+                "            path: src/lib.rs\n",
+                "            selector: { kind: symbol, name: api }\n",
+                "            claims:\n",
+                "              - kind: verifies\n",
+                "                criterion: REQ-TEST-001#criterion.api\n",
+                "                covers: [FEAT-TEST-001#binding.implementation/target.api]\n",
+                "                runner: { runner: cargo-test, arguments: { package: test, test: api } }\n",
             ),
         )
         .expect("feature");
@@ -1464,6 +1519,49 @@ mod tests {
             index
                 .artifact_owners
                 .get(identity)
+                .is_none_or(Vec::is_empty)
+        );
+        let criterion: SpecAnchor = "REQ-TEST-001#criterion.api".parse().expect("criterion");
+        let implementation: BoundTargetRef = "FEAT-TEST-001#binding.implementation/target.api"
+            .parse()
+            .expect("implementation target");
+        let verification: BoundTargetRef = "FEAT-TEST-001#binding.verification/target.api-test"
+            .parse()
+            .expect("verification target");
+        assert!(
+            index
+                .all_criteria_to_implementation_targets
+                .get(&criterion)
+                .is_some_and(|targets| targets.contains(&implementation))
+        );
+        assert!(
+            index
+                .all_criteria_to_verification_targets
+                .get(&criterion)
+                .is_some_and(|targets| targets.contains(&verification))
+        );
+        assert!(
+            index
+                .all_verification_by_target
+                .get(&implementation)
+                .is_some_and(|targets| targets.contains(&verification))
+        );
+        assert!(
+            index
+                .criteria_to_implementation_targets
+                .get(&criterion)
+                .is_none_or(Vec::is_empty)
+        );
+        assert!(
+            index
+                .criteria_to_verification_targets
+                .get(&criterion)
+                .is_none_or(Vec::is_empty)
+        );
+        assert!(
+            index
+                .verification_by_target
+                .get(&implementation)
                 .is_none_or(Vec::is_empty)
         );
     }
