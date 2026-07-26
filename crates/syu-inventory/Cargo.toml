@@ -12,7 +12,7 @@ serde_yaml.workspace = true
 sha2.workspace = true
 syu-spec-model = { path = "../syu-spec-model" }
 syu-project-model = { path = "../syu-project-model" }
-syn = { version = "2.0.106", features = ["full", "visit"] }
+syn = { version = "3.0.1", features = ["full", "visit"] }
 proc-macro2 = { version = "1.0.103", features = ["span-locations"] }
 quote.workspace = true
 

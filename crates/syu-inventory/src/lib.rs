@@ -15,7 +15,7 @@ use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Meta, Token};
 use syu_project_model::InventoryProfile;
-use syu_spec_model::RepoPath;
+use syu_spec_model::{RepoPath, format_sha256};
 
 #[derive(Debug, Clone)]
 pub struct InventoryContext {
@@ -256,8 +256,6 @@ fn unit(context: &InventoryContext, adapter: &str, path: PathBuf) -> Result<Arti
         .map_err(|error| anyhow::anyhow!("file inventory path {:?}: {error}", path))?;
     let bytes = read_bytes(context, &root.join(path.as_path()))?;
     let text = String::from_utf8_lossy(&bytes);
-    let mut hash = Sha256::new();
-    hash.update(&bytes);
     Ok(ArtifactUnit {
         adapter: adapter.into(),
         identity: format!("{}:{}", adapter, path.to_string_lossy()),
@@ -271,7 +269,7 @@ fn unit(context: &InventoryContext, adapter: &str, path: PathBuf) -> Result<Arti
             line_start: 1,
             line_end: text.lines().count().max(1),
         },
-        digest: format!("sha256:{:x}", hash.finalize()),
+        digest: digest(&bytes),
     })
 }
 
@@ -1021,7 +1019,7 @@ impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
         let trait_name = item
             .trait_
             .as_ref()
-            .map(|(_, path, _)| path.to_token_stream().to_string().replace(' ', ""));
+            .map(|(path, _)| path.to_token_stream().to_string().replace(' ', ""));
         let type_name = trait_name
             .map(|name| format!("{name}for{type_name}"))
             .unwrap_or(type_name);
@@ -1320,7 +1318,7 @@ fn line_offsets(source: &str) -> Vec<usize> {
 fn digest(bytes: &[u8]) -> String {
     let mut hash = Sha256::new();
     hash.update(bytes);
-    format!("sha256:{:x}", hash.finalize())
+    format_sha256(hash.finalize())
 }
 
 fn collect_matching(

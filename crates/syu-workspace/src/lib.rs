@@ -11,6 +11,7 @@ use std::{
 use syu_code_intel::resolve_symbol;
 use syu_inventory::{ArtifactUnit, ArtifactUnitKind, InventoryContext, InventoryRegistry};
 use syu_project_model::{CONFIG_SCHEMA, ProjectConfig};
+use syu_spec_model::format_sha256;
 use syu_spec_model::*;
 
 #[derive(Debug, Clone)]
@@ -218,7 +219,7 @@ impl SpecWorkspace {
                 hash.update(argument.as_bytes());
             }
         }
-        Ok(format!("sha256:{:x}", hash.finalize()))
+        Ok(format_sha256(hash.finalize()))
     }
 
     /// Snapshots may still be rendered for an invalid workspace. Execution
@@ -242,7 +243,7 @@ impl SpecWorkspace {
             }
             hash.update(self.read_bytes(&document.path)?);
         }
-        Ok(format!("sha256:{:x}", hash.finalize()))
+        Ok(format_sha256(hash.finalize()))
     }
 
     pub fn read_bytes(&self, path: &Path) -> Result<Vec<u8>> {
@@ -616,7 +617,7 @@ impl SpecIndex {
                 }
             }
         }
-        format!("sha256:{:x}", hash.finalize())
+        format_sha256(hash.finalize())
     }
     fn insert(
         &mut self,
@@ -1151,7 +1152,7 @@ fn resolve_target_from_content(
         path: target.path.as_path().to_path_buf(),
         description,
         symbols,
-        content_hash: format!("sha256:{:x}", hash.finalize()),
+        content_hash: format_sha256(hash.finalize()),
         bytes: content.len(),
         byte_start,
         byte_end,
@@ -1174,7 +1175,7 @@ pub fn selector_supports_editable(selector: &Selector) -> bool {
 fn hash_bytes(value: &[u8]) -> String {
     let mut hash = Sha256::new();
     hash.update(value);
-    format!("sha256:{:x}", hash.finalize())
+    format_sha256(hash.finalize())
 }
 
 fn extract_yaml_block(

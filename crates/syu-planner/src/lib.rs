@@ -6,6 +6,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use syu_diagnostics::Diagnostic;
 use syu_project_model::ValidationPreset;
+use syu_spec_model::format_sha256;
 use syu_spec_model::{
     ArtifactBinding, BindingRole, BoundTargetRef, ItemStatus, LocalAnchorKind, RepoPath, Selector,
     SpecAnchor, TargetClaim,
@@ -3003,7 +3004,7 @@ fn build_context_pack(
                             let excerpt = String::from_utf8_lossy(&bytes).into_owned();
                             let mut hash = Sha256::new();
                             hash.update(&bytes);
-                            let digest = format!("sha256:{:x}", hash.finalize());
+                            let digest = format_sha256(hash.finalize());
                             let support_id = format!("support:{}", target.reference);
                             if included_supports.insert(support_id.clone()) {
                                 artifact_context.push(ArtifactContextEntry::Support(
