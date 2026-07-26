@@ -158,8 +158,12 @@ features:
       - id: implementation
         role: implementation
         facet: documentation
-        responsibility: Maintain the generated specification documentation entrypoint.
+        responsibility: Maintain the generated specification documentation entrypoint and explicitly retire obsolete generated paths.
         owns:
+          - { id: retired-generated-delivery, adapter: declared, path: docs/generated/site-spec/delivery.md, selector: { kind: file } }
+          - { id: retired-generated-public-entrypoints, adapter: declared, path: docs/generated/site-spec/public-entrypoints.md, selector: { kind: file } }
+          - { id: retired-generated-work, adapter: declared, path: docs/generated/site-spec/work.md, selector: { kind: file } }
+          - { id: retired-generated-workbench-features, adapter: declared, path: docs/generated/site-spec/workbench-features.md, selector: { kind: file } }
           - { id: generated-feature-capabilities-core, adapter: declared, path: docs/generated/site-spec/features/capabilities/core.md, selector: { kind: file } }
           - { id: generated-feature-capabilities-delivery, adapter: declared, path: docs/generated/site-spec/features/capabilities/delivery.md, selector: { kind: file } }
           - { id: generated-feature-capabilities-planning, adapter: declared, path: docs/generated/site-spec/features/capabilities/planning.md, selector: { kind: file } }

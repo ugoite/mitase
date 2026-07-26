@@ -2530,26 +2530,32 @@ fn validate_document_shapes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnosti
                                     .into_iter()
                                     .flatten()
                                     .any(|verification_ref| {
-                                        ctx.index.target(verification_ref).is_some_and(
-                                            |verification| {
-                                                verification.claims.iter().any(|claim| {
-                                                    matches!(
-                                                        claim,
-                                                        TargetClaim::Verifies {
-                                                            criterion: actual,
-                                                            covers,
-                                                            runner,
-                                                        } if actual == criterion
-                                                            && covers.contains(&target_ref)
-                                                            && ctx
-                                                                .config
-                                                                .verification
-                                                                .runners
-                                                                .contains_key(&runner.runner)
-                                                    )
-                                                })
-                                            },
-                                        )
+                                        ctx.index
+                                            .bindings
+                                            .get(&verification_ref.binding)
+                                            .is_some_and(|binding| {
+                                                binding.role == BindingRole::Verification
+                                            })
+                                            && ctx.index.target(verification_ref).is_some_and(
+                                                |verification| {
+                                                    verification.claims.iter().any(|claim| {
+                                                        matches!(
+                                                            claim,
+                                                            TargetClaim::Verifies {
+                                                                criterion: actual,
+                                                                covers,
+                                                                runner,
+                                                            } if actual == criterion
+                                                                && covers.contains(&target_ref)
+                                                                && ctx
+                                                                    .config
+                                                                    .verification
+                                                                    .runners
+                                                                    .contains_key(&runner.runner)
+                                                        )
+                                                    })
+                                                },
+                                            )
                                     });
                                 if !verified {
                                     push(
@@ -4463,6 +4469,34 @@ requirements:
             "",
         );
         fs::write(path, source).unwrap();
+        let workspace = SpecWorkspace::load(tempdir.path()).unwrap();
+        let index = workspace.index().unwrap();
+        let result = validate_loaded_workspace(&workspace, &index);
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.rule_id == "SYU-FEATURE-002"
+                && diagnostic.message.contains("target.submit")
+                && diagnostic.message.contains("has no exact verification")
+        }));
+    }
+
+    #[test]
+    fn implemented_feature_target_cannot_self_verify() {
+        let (tempdir, _, _) = load_fixture_workspace();
+        let feature_path = tempdir.path().join("spec/feature.yaml");
+        let feature = fs::read_to_string(&feature_path)
+            .unwrap()
+            .replacen(
+                "            claims: [{ kind: satisfies, criterion: REQ-AUTH-001#criterion.invalid-credentials }]",
+                "            claims: [{ kind: satisfies, criterion: REQ-AUTH-001#criterion.invalid-credentials }, { kind: verifies, criterion: REQ-AUTH-001#criterion.invalid-credentials, covers: [FEAT-AUTH-001#binding.ui/target.submit], runner: { runner: cargo-test, arguments: { package: app, test: invalid_credentials } } }]",
+                1,
+            );
+        fs::write(feature_path, feature).unwrap();
+        let requirement_path = tempdir.path().join("spec/requirement.yaml");
+        let requirement = fs::read_to_string(&requirement_path).unwrap().replace(
+            "                  - FEAT-AUTH-001#binding.ui/target.submit\n",
+            "",
+        );
+        fs::write(requirement_path, requirement).unwrap();
         let workspace = SpecWorkspace::load(tempdir.path()).unwrap();
         let index = workspace.index().unwrap();
         let result = validate_loaded_workspace(&workspace, &index);
