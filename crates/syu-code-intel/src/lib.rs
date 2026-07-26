@@ -3,6 +3,7 @@ use anyhow::{Result, bail};
 use proc_macro2::{LineColumn, Span};
 use sha2::{Digest, Sha256};
 use syn::spanned::Spanned;
+use syu_spec_model::format_sha256;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SymbolResolution {
@@ -687,7 +688,7 @@ fn build(
         line_start,
         line_end,
         excerpt,
-        excerpt_hash: format!("sha256:{:x}", hash.finalize()),
+        excerpt_hash: format_sha256(hash.finalize()),
     }
 }
 

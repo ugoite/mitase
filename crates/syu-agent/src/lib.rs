@@ -8,7 +8,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use syu_delivery::DeliveryStore;
-use syu_spec_model::BoundTargetRef;
+use syu_spec_model::{BoundTargetRef, format_sha256};
 use syu_validation::canonical_plan_for_execution;
 use syu_work_model::{
     AGENT_EVENT_SCHEMA, AGENT_PATCH_SCHEMA, AGENT_RUN_SCHEMA, AgentBlocker, AgentContextPack,
@@ -624,5 +624,5 @@ fn hash_bytes(value: &[u8]) -> String {
     use sha2::{Digest, Sha256};
     let mut hash = Sha256::new();
     hash.update(value);
-    format!("sha256:{:x}", hash.finalize())
+    format_sha256(hash.finalize())
 }

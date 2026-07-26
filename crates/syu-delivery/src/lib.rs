@@ -10,7 +10,7 @@ use std::{
     process::Command,
     time::{SystemTime, UNIX_EPOCH},
 };
-use syu_spec_model::{ItemStatus, SpecDocument, SpecItemRef};
+use syu_spec_model::{ItemStatus, SpecDocument, SpecItemRef, format_sha256, lowercase_hex};
 use syu_work_model::{
     AgentEvent, AgentEventKind, AgentRun, AgentRunStatus, CompletionAttempt, CompletionBlocker,
     CompletionStatus, FINALIZATION_RECEIPT_SCHEMA, FinalizationPreview, FinalizationReceipt,
@@ -386,7 +386,7 @@ impl DeliveryStore {
         let bytes = serde_json::to_vec(value)?;
         let mut hash = Sha256::new();
         hash.update(bytes);
-        Ok(format!("sha256:{:x}", hash.finalize()))
+        Ok(format_sha256(hash.finalize()))
     }
 
     fn approvals_dir(&self) -> PathBuf {
@@ -427,7 +427,7 @@ impl DeliveryStore {
 fn component(value: &str) -> String {
     let mut hash = Sha256::new();
     hash.update(value.as_bytes());
-    format!("{:x}", hash.finalize())
+    lowercase_hex(hash.finalize())
 }
 
 fn now_nanos() -> u128 {
