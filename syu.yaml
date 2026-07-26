@@ -57,6 +57,7 @@ inventory:
             - crates/syu-app-ui/src/lib.rs
             - crates/syu-app-ui/src/pages.rs
             - crates/syu-app-ui/src/shell.rs
+            - crates/syu-code-intel/Cargo.toml
             - crates/syu-code-intel/src/lib.rs
             - crates/syu-diagnostics/Cargo.toml
             - crates/syu-delivery/Cargo.toml
