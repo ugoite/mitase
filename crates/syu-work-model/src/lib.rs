@@ -2,6 +2,7 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use syu_diagnostics::Diagnostic;
+use syu_spec_model::format_sha256;
 use syu_spec_model::{
     BindingRole, BoundTargetRef, ContractKind, RepoPath, SpecAnchor, SpecItemRef,
 };
@@ -758,7 +759,7 @@ pub fn readonly_targets_fingerprint(slices: &[ExecutionSlice]) -> String {
             hash.update(format!("{:?}", target.role).as_bytes());
         }
     }
-    format!("sha256:{:x}", hash.finalize())
+    format_sha256(hash.finalize())
 }
 
 pub fn work_plan_digest(plan: &WorkPlan) -> String {
@@ -767,5 +768,5 @@ pub fn work_plan_digest(plan: &WorkPlan) -> String {
     let bytes = serde_json::to_vec(&copy).expect("serialize work plan digest");
     let mut hash = Sha256::new();
     hash.update(bytes);
-    format!("sha256:{:x}", hash.finalize())
+    format_sha256(hash.finalize())
 }

@@ -8,6 +8,24 @@ use std::{
 };
 
 pub const SPEC_SCHEMA: &str = "syu/spec/v1";
+pub const SHA256_PREFIX: &str = "sha256:";
+
+/// Encodes bytes as lowercase hexadecimal for stable serialized identifiers.
+pub fn lowercase_hex(bytes: impl AsRef<[u8]>) -> String {
+    use std::fmt::Write as _;
+
+    let bytes = bytes.as_ref();
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        write!(output, "{byte:02x}").expect("writing to a String cannot fail");
+    }
+    output
+}
+
+/// Encodes a SHA-256 digest in the canonical form used by serialized syu data.
+pub fn format_sha256(digest: impl AsRef<[u8]>) -> String {
+    format!("{SHA256_PREFIX}{}", lowercase_hex(digest))
+}
 
 macro_rules! string_id {
     ($name:ident, $validator:ident) => {
@@ -541,6 +559,13 @@ impl SpecDocument {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sha256_digests_use_the_canonical_lowercase_representation() {
+        assert_eq!(lowercase_hex([0xAB, 0xCD]), "abcd");
+        assert_eq!(format_sha256([0xAB, 0xCD]), "sha256:abcd");
+    }
+
     #[test]
     fn anchors_roundtrip() {
         for text in [

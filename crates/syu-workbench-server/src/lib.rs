@@ -24,6 +24,7 @@ use syu_planner::{
     SplitWorkRecommendation, TargetSuggestionSet, plan, split_work_recommendation, suggest_targets,
 };
 use syu_project_model::{ChangeBaseline, ValidationPreset};
+use syu_spec_model::format_sha256;
 use syu_spec_model::{
     ArtifactBinding, BindingRole, BoundTargetRef, Contract, ContractKind, Criterion, CriterionKind,
     ItemStatus, LocalAnchorKind, LocalId, OwnershipScope, Philosophy, Policy, Priority,
@@ -335,7 +336,7 @@ fn workspace_signature(root: &Path) -> Result<String> {
             Err(error) => return Err(error.into()),
         }
     }
-    Ok(format!("sha256:{:x}", hash.finalize()))
+    Ok(format_sha256(hash.finalize()))
 }
 
 fn open_browser(url: &str) -> Result<()> {
@@ -367,7 +368,7 @@ fn security_token(root: &Path) -> String {
             .as_nanos()
             .to_le_bytes(),
     );
-    format!("sha256:{:x}", hash.finalize())
+    format_sha256(hash.finalize())
 }
 
 async fn mutation_guard(
@@ -5074,7 +5075,7 @@ fn item_summary_from_feature(
 fn content_hash(content: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(content.as_bytes());
-    format!("sha256:{:x}", hasher.finalize())
+    format_sha256(hasher.finalize())
 }
 
 fn anchors_for(index: &syu_workspace::SpecIndex, item: &syu_spec_model::SpecId) -> Vec<String> {
