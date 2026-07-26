@@ -1398,4 +1398,72 @@ mod tests {
         let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
         assert_eq!(workspace.documents.len(), 1);
     }
+
+    #[test]
+    fn planned_features_do_not_own_active_artifacts() {
+        let tempdir = tempdir().expect("tempdir");
+        fs::create_dir_all(tempdir.path().join("docs/syu")).expect("spec dir");
+        fs::create_dir_all(tempdir.path().join("src")).expect("source dir");
+        fs::write(tempdir.path().join("src/lib.rs"), "pub fn api() {}\n").expect("source");
+        fs::write(
+            tempdir.path().join("syu.yaml"),
+            concat!(
+                "schema: syu/config/v1\n",
+                "workspace: { spec_roots: [docs/syu], excludes: [] }\n",
+                "inventory:\n",
+                "  active_profile: default\n",
+                "  profiles: [{ id: default, providers: { rust: {} } }]\n",
+                "validation:\n",
+                "  preset: agent-ready\n",
+                "  readiness:\n",
+                "    target: 'off'\n",
+                "    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_seed: 4 }\n",
+                "  changed: { require_owned_changes: false, require_plan: false }\n",
+                "verification: { runners: {} }\n",
+                "work:\n",
+                "  slicing: { max_editable_files: 4, max_editable_symbols: 8, max_verification_targets: 8, max_readonly_targets: 12, max_total_bytes: 120000 }\n",
+            ),
+        )
+        .expect("config");
+        fs::write(
+            tempdir.path().join("docs/syu/planned.yaml"),
+            concat!(
+                "schema: syu/spec/v1\n",
+                "kind: features\n",
+                "namespace: test\n",
+                "category: Test\n",
+                "features:\n",
+                "  - id: FEAT-TEST-001\n",
+                "    title: Planned\n",
+                "    summary: Planned capability.\n",
+                "    status: planned\n",
+                "    bindings:\n",
+                "      - id: implementation\n",
+                "        role: implementation\n",
+                "        facet: test\n",
+                "        responsibility: Describe future work.\n",
+                "        owns:\n",
+                "          - { id: module, adapter: rust, path: src/lib.rs, selector: { kind: module, name: lib } }\n",
+                "        targets:\n",
+                "          - { id: api, adapter: rust, path: src/lib.rs, selector: { kind: symbol, name: api }, claims: [] }\n",
+            ),
+        )
+        .expect("feature");
+
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let identity = "rust:src/lib.rs::lib::api";
+        assert!(
+            index
+                .artifact_units
+                .iter()
+                .any(|unit| unit.identity == identity)
+        );
+        assert!(
+            index
+                .artifact_owners
+                .get(identity)
+                .is_none_or(Vec::is_empty)
+        );
+    }
 }

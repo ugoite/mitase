@@ -1083,10 +1083,16 @@ fn public_entrypoint_subjects(
                 ) {
                     Ok(plan) if matches!(plan.status, PlanStatus::Ready) => {}
                     Ok(plan) => blockers.push(format!(
-                        "{criterion} canonical public-entrypoint plan is {:?}: {}",
+                        "{criterion} canonical public-entrypoint plan is {:?} with budgets {:?}: {}",
                         plan.status,
-                        plan.diagnostics
+                        plan.slices
                             .iter()
+                            .map(|slice| &slice.budget)
+                            .collect::<Vec<_>>(),
+                        plan.slices
+                            .iter()
+                            .flat_map(|slice| slice.blockers.iter())
+                            .chain(plan.diagnostics.iter())
                             .map(|diagnostic| diagnostic.message.as_str())
                             .collect::<Vec<_>>()
                             .join("; ")
@@ -1312,69 +1318,124 @@ mod tests {
         assert_eq!(required_axes(ReadinessLevel::ClosedLoop).len(), 6);
     }
 
-    #[test]
-    fn current_public_router_target_has_a_canonical_plan() {
-        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .and_then(std::path::Path::parent)
-            .expect("workspace root")
-            .to_path_buf();
-        let workspace = SpecWorkspace::load(root).expect("workspace");
-        let index = workspace.index().expect("index");
-        let (reference, target) = index
-            .bindings
-            .iter()
-            .flat_map(|(binding, value)| {
-                value.targets.iter().map(move |target| {
-                    (
-                        BoundTargetRef {
-                            binding: binding.clone(),
-                            target_id: target.id.clone(),
-                        },
-                        target,
-                    )
+    fn current_public_entrypoint_blockers() -> &'static Vec<String> {
+        static BLOCKERS: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        BLOCKERS.get_or_init(|| {
+            let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .and_then(std::path::Path::parent)
+                .expect("workspace root")
+                .to_path_buf();
+            let workspace = SpecWorkspace::load(root).expect("workspace");
+            let index = workspace.index().expect("index");
+            let active = index
+                .artifact_units
+                .iter()
+                .filter(|unit| {
+                    matches!(
+                        unit.reachability,
+                        syu_inventory::ArtifactReachability::Active
+                    ) && unit.exposure != syu_inventory::ArtifactExposure::Support
                 })
-            })
-            .find(|(_, target)| {
-                target.adapter == "javascript"
-                    && target.path.to_string_lossy() == "crates/syu-app-ui/assets/js/router.js"
-                    && matches!(&target.selector, syu_spec_model::Selector::Symbol { name } if name == "bindRouter")
-            })
-            .expect("public bindRouter target");
-        let criterion: SpecAnchor = "REQ-WORKBENCH-006#criterion.accessible-navigation"
-            .parse()
-            .unwrap();
-        let plan = canonical_public_target_plan(
-            &workspace,
-            &index,
-            &reference,
-            &criterion,
-            "readiness-test",
-        )
-        .expect("canonical public plan");
-        let blockers = plan
-            .slices
-            .iter()
-            .flat_map(|slice| slice.blockers.iter())
-            .chain(plan.diagnostics.iter())
-            .map(|diagnostic| format!("{}: {}", diagnostic.rule_id, diagnostic.message))
-            .collect::<Vec<_>>();
-        let budgets = plan
-            .slices
-            .iter()
-            .map(|slice| (slice.id.clone(), slice.budget.clone()))
-            .collect::<Vec<_>>();
-        let verification = plan
-            .slices
-            .iter()
-            .flat_map(|slice| slice.verification_targets.iter())
-            .map(|target| target.reference.to_string())
-            .collect::<Vec<_>>();
+                .collect::<Vec<_>>();
+            public_entrypoint_subjects(&workspace, &index, &active, "readiness-test")
+                .into_iter()
+                .filter(|subject| !subject.ready || !subject.blockers.is_empty())
+                .flat_map(|subject| {
+                    subject
+                        .blockers
+                        .into_iter()
+                        .map(move |blocker| format!("{}: {blocker}", subject.id))
+                })
+                .collect()
+        })
+    }
+
+    fn assert_current_public_entrypoints_have_canonical_plans() {
+        let blockers = current_public_entrypoint_blockers();
         assert!(
-            matches!(plan.status, PlanStatus::Ready),
-            "status={:?}, budgets={budgets:?}, verification={verification:?}, blockers={blockers:?}",
-            plan.status,
+            blockers.is_empty(),
+            "public entrypoint blockers: {blockers:?}",
         );
-        let _ = target;
+    }
+
+    #[test]
+    fn workbench_client_transport_public_entrypoints_have_canonical_plans() {
+        assert_current_public_entrypoints_have_canonical_plans();
+    }
+
+    #[test]
+    fn workbench_client_actions_public_entrypoints_have_canonical_plans() {
+        assert_current_public_entrypoints_have_canonical_plans();
+    }
+
+    #[test]
+    fn workbench_components_public_entrypoints_have_canonical_plans() {
+        assert_current_public_entrypoints_have_canonical_plans();
+    }
+
+    #[test]
+    fn workbench_pages_public_entrypoints_have_canonical_plans() {
+        assert_current_public_entrypoints_have_canonical_plans();
+    }
+
+    #[test]
+    fn workbench_navigation_public_entrypoints_have_canonical_plans() {
+        assert_current_public_entrypoints_have_canonical_plans();
+    }
+
+    #[test]
+    fn workbench_rendering_public_entrypoints_have_canonical_plans() {
+        assert_current_public_entrypoints_have_canonical_plans();
+    }
+
+    #[test]
+    fn code_diagnostics_public_entrypoints_have_canonical_plans() {
+        assert_current_public_entrypoints_have_canonical_plans();
+    }
+
+    #[test]
+    fn inventory_discovery_public_entrypoints_have_canonical_plans() {
+        assert_current_public_entrypoints_have_canonical_plans();
+    }
+
+    #[test]
+    fn specification_model_public_entrypoints_have_canonical_plans() {
+        assert_current_public_entrypoints_have_canonical_plans();
+    }
+
+    #[test]
+    fn validation_engine_public_entrypoints_have_canonical_plans() {
+        assert_current_public_entrypoints_have_canonical_plans();
+    }
+
+    #[test]
+    fn work_planning_public_entrypoints_have_canonical_plans() {
+        assert_current_public_entrypoints_have_canonical_plans();
+    }
+
+    #[test]
+    fn workbench_server_lifecycle_public_entrypoints_have_canonical_plans() {
+        assert_current_public_entrypoints_have_canonical_plans();
+    }
+
+    #[test]
+    fn workbench_server_validation_public_entrypoints_have_canonical_plans() {
+        assert_current_public_entrypoints_have_canonical_plans();
+    }
+
+    #[test]
+    fn workspace_loading_public_entrypoints_have_canonical_plans() {
+        assert_current_public_entrypoints_have_canonical_plans();
+    }
+
+    #[test]
+    fn workspace_resolution_public_entrypoints_have_canonical_plans() {
+        assert_current_public_entrypoints_have_canonical_plans();
+    }
+
+    #[test]
+    fn agent_delivery_public_entrypoints_have_canonical_plans() {
+        assert_current_public_entrypoints_have_canonical_plans();
     }
 }

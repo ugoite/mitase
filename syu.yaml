@@ -20,10 +20,6 @@ inventory:
         html: { roots: [crates/syu-app-ui/assets] }
         declared:
           roots:
-            - CONTRIBUTING.md
-            - Cargo.toml
-            - Cargo.lock
-            - README.md
             - .github/ISSUE_TEMPLATE/bug_report.yml
             - .github/pull_request_template.md
             - .github/workflows/branch-push.yml
@@ -82,6 +78,7 @@ inventory:
             - crates/syu-workspace/Cargo.toml
             - crates/syu-workspace/src/lib.rs
             - docs/generated/site-spec/capabilities.md
+            - docs/generated/site-spec/capability-contracts.md
             - docs/generated/site-spec/delivery.md
             - docs/generated/site-spec/foundation.md
             - docs/generated/site-spec/index.md
@@ -99,6 +96,7 @@ inventory:
             - docs/guide/vscode-extension.md
             - docs/guide/workbench.md
             - docs/syu/capabilities.yaml
+            - docs/syu/capability-contracts.yaml
             - docs/syu/delivery.yaml
             - docs/syu/foundation.yaml
             - docs/syu/planner.yaml
@@ -170,30 +168,9 @@ inventory:
             - scripts/ci/workbench-visual.sh
             - scripts/dev/validate-changed.sh
             - skills/syu-maintainer/SKILL.md
-            - src/command/add.rs
-            - src/command/audit.rs
-            - src/command/browse.rs
-            - src/command/check.rs
-            - src/command/completion.rs
-            - src/command/doctor.rs
-            - src/command/explain.rs
-            - src/command/init.rs
-            - src/command/issue_text.rs
-            - src/command/list.rs
-            - src/command/log.rs
-            - src/command/lookup.rs
-            - src/command/mod.rs
-            - src/command/prompt.rs
-            - src/command/relate.rs
-            - src/command/report.rs
-            - src/command/search.rs
-            - src/command/show.rs
-            - src/command/task.rs
-            - src/command/templates.rs
-            - src/command/trace.rs
-            - src/command/workbench.rs
             - src/lib.rs
             - tests/v1_cli.rs
+            - tests/support/mod.rs
             - tests/workbench_smoke.rs
             - tests/workbench_visual.rs
             - website/src/pages/index.js
@@ -202,8 +179,11 @@ validation:
   preset: agent-ready
   readiness:
     target: traceable
-    scopes: { planner: work-ready, work: work-ready }
-    probes: { implemented_criteria: "REQ-WORK-001#criterion.exact-slice,REQ-WORKBENCH-002#criterion.work-session", changed_units: false }
+    scopes: { planner: work-ready, work: work-ready, public-entrypoints: seedable }
+    probes:
+      implemented_criteria: "REQ-WORK-001#criterion.exact-slice,REQ-WORKBENCH-002#criterion.work-session"
+      public_entrypoints: all
+      changed_units: false
     limits: { max_ownership_scope_units: 160, max_targets_per_binding: 12, max_slices_per_seed: 4 }
   changed:
     baseline: { strategy: merge-base, against: origin/main }

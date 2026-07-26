@@ -21,6 +21,35 @@ fn current_workspace_validates_and_reports_configured_readiness() {
 }
 
 #[test]
+fn generated_spec_reference_covers_every_source_document() {
+    let index = fs::read_to_string("docs/generated/site-spec/index.md").expect("generated index");
+    for entry in fs::read_dir("docs/syu").expect("spec directory") {
+        let entry = entry.expect("spec entry");
+        let source = entry.path();
+        if source.extension().and_then(|value| value.to_str()) != Some("yaml") {
+            continue;
+        }
+        let stem = source
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .expect("spec stem");
+        let generated = Path::new("docs/generated/site-spec").join(format!("{stem}.md"));
+        let page = fs::read_to_string(&generated)
+            .unwrap_or_else(|error| panic!("read {}: {error}", generated.display()));
+        let source_display = source.to_string_lossy();
+        assert!(
+            page.contains(&format!("Generated from `{source_display}`")),
+            "{} does not identify its canonical source",
+            generated.display()
+        );
+        assert!(
+            index.contains(&format!("({stem})")),
+            "generated index does not link {stem}"
+        );
+    }
+}
+
+#[test]
 fn obsolete_config_shape_is_rejected() {
     let temp = tempdir().unwrap();
     fs::create_dir_all(temp.path().join("docs/syu")).unwrap();

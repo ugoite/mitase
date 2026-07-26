@@ -137,3 +137,51 @@ pub struct SliceLimits {
     pub max_readonly_targets: usize,
     pub max_total_bytes: usize,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn project_config_preserves_readiness_configuration() {
+        let source = r#"
+schema: syu/config/v1
+workspace: { spec_roots: [docs/syu], excludes: [] }
+inventory:
+  active_profile: default
+  profiles: [{ id: default, providers: { rust: {} } }]
+validation:
+  preset: agent-ready
+  readiness:
+    target: traceable
+    scopes: { public-entrypoints: seedable }
+    probes: { implemented_criteria: all, public_entrypoints: all, changed_units: false }
+    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_seed: 4 }
+  changed: { require_owned_changes: true, require_plan: true }
+verification: { runners: {} }
+work:
+  slicing: { max_editable_files: 4, max_editable_symbols: 8, max_verification_targets: 8, max_readonly_targets: 12, max_total_bytes: 120000 }
+"#;
+        let config: ProjectConfig = serde_yaml::from_str(source).expect("project config");
+        assert_eq!(
+            config.validation.readiness.target,
+            ReadinessLevel::Traceable
+        );
+        assert_eq!(
+            config.validation.readiness.scopes.get("public-entrypoints"),
+            Some(&ReadinessLevel::Seedable)
+        );
+        assert_eq!(
+            config
+                .validation
+                .readiness
+                .probes
+                .public_entrypoints
+                .as_deref(),
+            Some("all")
+        );
+        assert!(
+            serde_yaml::from_str::<ProjectConfig>(&format!("{source}unknown: true\n")).is_err()
+        );
+    }
+}

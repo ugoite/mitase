@@ -41,6 +41,9 @@ description: "Generated reference for docs/syu/capabilities.yaml"
           - **selector**:
             - **kind**: symbol
             - **name**: SpecDocument
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.spec-model
 - **id**: FEAT-PROJECT-CONFIG-001
   - **title**: Project configuration
   - **summary**: Load and validate syu/config/v1 project configuration.
@@ -57,6 +60,9 @@ description: "Generated reference for docs/syu/capabilities.yaml"
           - **selector**:
             - **kind**: symbol
             - **name**: ProjectConfig
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.project-config
 - **id**: FEAT-INVENTORY-001
   - **title**: Inventory providers
   - **summary**: Discover active artifact units through profile-selected providers.
@@ -73,6 +79,9 @@ description: "Generated reference for docs/syu/capabilities.yaml"
           - **selector**:
             - **kind**: symbol
             - **name**: InventoryRegistry
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.inventory-discovery
 - **id**: FEAT-IDENTITY-001
   - **title**: Exact artifact identity
   - **summary**: Resolve one exact editable or observable artifact target per identity.
@@ -91,7 +100,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: resolve_target_in_workspace
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.entrypoint
+              - **criterion**: REQ-CAPABILITY-001#criterion.exact-identity
 - **id**: FEAT-INDEX-001
   - **title**: Graph indexing
   - **summary**: Index specifications, targets, claims, and contracts into one graph.
@@ -108,6 +117,9 @@ description: "Generated reference for docs/syu/capabilities.yaml"
           - **selector**:
             - **kind**: symbol
             - **name**: SpecIndex
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.graph-index
 - **id**: FEAT-OWNERSHIP-001
   - **title**: Ownership resolution
   - **summary**: Resolve ownership scopes and target claims without path-only inference.
@@ -124,6 +136,9 @@ description: "Generated reference for docs/syu/capabilities.yaml"
           - **selector**:
             - **kind**: symbol
             - **name**: OwnershipRef
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.ownership-resolution
 - **id**: FEAT-READINESS-001
   - **title**: Readiness validation
   - **summary**: Evaluate traceable, seedable, work-ready, verifiable, and closed-loop readiness.
@@ -142,7 +157,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: evaluate
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.entrypoint
+              - **criterion**: REQ-CAPABILITY-001#criterion.readiness-ladder
 - **id**: FEAT-CHANGE-VALIDATION-001
   - **title**: Change validation
   - **summary**: Validate changed work against the canonical workspace and plan.
@@ -161,7 +176,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: validate
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.entrypoint
+              - **criterion**: REQ-CAPABILITY-001#criterion.change-validation
 - **id**: FEAT-PLANNER-001
   - **title**: Canonical planning
   - **summary**: Generate deterministic bounded execution slices from exact work seeds.
@@ -199,7 +214,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: export_context
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.entrypoint
+              - **criterion**: REQ-CAPABILITY-001#criterion.context-export
 - **id**: FEAT-CONTRACT-001
   - **title**: Contract closure
   - **summary**: Close contract participants and guarantees over exact targets.
@@ -216,6 +231,9 @@ description: "Generated reference for docs/syu/capabilities.yaml"
           - **selector**:
             - **kind**: symbol
             - **name**: Contract
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.contract-closure
 - **id**: FEAT-VERIFICATION-001
   - **title**: Verification execution
   - **summary**: Execute configured verification runners and produce canonical receipts.
@@ -234,7 +252,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: execute_verification
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.entrypoint
+              - **criterion**: REQ-CAPABILITY-001#criterion.verification-execution
 - **id**: FEAT-PLAN-VALIDATION-001
   - **title**: Plan validation
   - **summary**: Validate a canonical work plan before execution.
@@ -253,7 +271,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: canonical_plan_for_execution
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.entrypoint
+              - **criterion**: REQ-CAPABILITY-001#criterion.plan-validation
 - **id**: FEAT-RESULT-VALIDATION-001
   - **title**: Result validation
   - **summary**: Validate verification receipts, post-state, and explicit completion evidence against a plan.
@@ -272,7 +290,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: validate_verification_receipt
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.entrypoint
+              - **criterion**: REQ-CAPABILITY-001#criterion.receipt-validation
         - **id**: completion-evaluation
           - **adapter**: rust
           - **path**: crates/syu-validation/src/lib.rs
@@ -300,7 +318,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: run
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-PUBLIC-001#criterion.entrypoint
+              - **criterion**: REQ-CAPABILITY-001#criterion.cli-orchestration
 - **id**: FEAT-LSP-001
   - **title**: LSP
   - **summary**: Serve canonical specification navigation and hover information.
@@ -317,6 +335,9 @@ description: "Generated reference for docs/syu/capabilities.yaml"
           - **selector**:
             - **kind**: symbol
             - **name**: run_lsp_server
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.lsp-navigation
 - **id**: FEAT-DOCS-001
   - **title**: Documentation generation
   - **summary**: Keep checked-in guides and generated specification documentation aligned.
@@ -326,12 +347,101 @@ description: "Generated reference for docs/syu/capabilities.yaml"
       - **role**: implementation
       - **facet**: documentation
       - **responsibility**: Maintain the generated specification documentation entrypoint.
+      - **owns**:
+        - **id**: generated-capabilities
+          - **adapter**: declared
+          - **path**: docs/generated/site-spec/capabilities.md
+          - **selector**:
+            - **kind**: file
+        - **id**: generated-capability-contracts
+          - **adapter**: declared
+          - **path**: docs/generated/site-spec/capability-contracts.md
+          - **selector**:
+            - **kind**: file
+        - **id**: generated-delivery
+          - **adapter**: declared
+          - **path**: docs/generated/site-spec/delivery.md
+          - **selector**:
+            - **kind**: file
+        - **id**: generated-foundation
+          - **adapter**: declared
+          - **path**: docs/generated/site-spec/foundation.md
+          - **selector**:
+            - **kind**: file
+        - **id**: generated-planner
+          - **adapter**: declared
+          - **path**: docs/generated/site-spec/planner.md
+          - **selector**:
+            - **kind**: file
+        - **id**: generated-public-entrypoints
+          - **adapter**: declared
+          - **path**: docs/generated/site-spec/public-entrypoints.md
+          - **selector**:
+            - **kind**: file
+        - **id**: generated-work
+          - **adapter**: declared
+          - **path**: docs/generated/site-spec/work.md
+          - **selector**:
+            - **kind**: file
+        - **id**: generated-workbench
+          - **adapter**: declared
+          - **path**: docs/generated/site-spec/workbench.md
+          - **selector**:
+            - **kind**: file
+        - **id**: generated-workbench-features
+          - **adapter**: declared
+          - **path**: docs/generated/site-spec/workbench-features.md
+          - **selector**:
+            - **kind**: file
+        - **id**: guide-command-card
+          - **adapter**: declared
+          - **path**: docs/guide/command-card.md
+          - **selector**:
+            - **kind**: file
+        - **id**: guide-configuration
+          - **adapter**: declared
+          - **path**: docs/guide/configuration.md
+          - **selector**:
+            - **kind**: file
+        - **id**: guide-examples
+          - **adapter**: declared
+          - **path**: docs/guide/examples-and-templates.md
+          - **selector**:
+            - **kind**: file
+        - **id**: guide-existing-repository
+          - **adapter**: declared
+          - **path**: docs/guide/existing-repository.md
+          - **selector**:
+            - **kind**: file
+        - **id**: guide-migration
+          - **adapter**: declared
+          - **path**: docs/guide/migration.md
+          - **selector**:
+            - **kind**: file
+        - **id**: guide-antipatterns
+          - **adapter**: declared
+          - **path**: docs/guide/spec-antipatterns.md
+          - **selector**:
+            - **kind**: file
+        - **id**: guide-vscode
+          - **adapter**: declared
+          - **path**: docs/guide/vscode-extension.md
+          - **selector**:
+            - **kind**: file
+        - **id**: guide-workbench
+          - **adapter**: declared
+          - **path**: docs/guide/workbench.md
+          - **selector**:
+            - **kind**: file
       - **targets**:
         - **id**: generated-index
           - **adapter**: declared
           - **path**: docs/generated/site-spec/index.md
           - **selector**:
             - **kind**: file
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-001#criterion.docs-generation
 - **id**: FEAT-DELIVERY-001
   - **title**: Durable completion delivery
   - **summary**: Persist completion attempts, enforce reviewed plan scope, and finalize complete work safely.
@@ -362,7 +472,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: DeliveryStore
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.store-boundary
         - **id**: delivery-source
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -370,7 +480,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **kind**: file
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.store-boundary
         - **id**: delivery-apply-status
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -379,7 +489,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: apply_status_overlay
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.approval-scope
         - **id**: delivery-atomic-write
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -388,7 +498,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: atomic_write
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.immutable-attempt
         - **id**: delivery-attempt-plan
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -397,7 +507,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: attempt_plan
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.approval-scope
         - **id**: delivery-changed-paths
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -406,7 +516,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: changed_document_paths
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.approval-scope
         - **id**: delivery-component
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -415,7 +525,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: component
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.approval-scope
         - **id**: delivery-json-files
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -424,7 +534,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: json_files
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.immutable-attempt
         - **id**: delivery-now-nanos
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -433,7 +543,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: now_nanos
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.immutable-attempt
         - **id**: delivery-preview-token
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -442,7 +552,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: preview_without_token
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.approval-scope
         - **id**: delivery-read-json
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -451,7 +561,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: read_json
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.immutable-attempt
         - **id**: delivery-restore-files
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -460,7 +570,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: restore_files
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.approval-scope
         - **id**: delivery-validate-digest
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -469,7 +579,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: validate_attempt_digest
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.immutable-attempt
         - **id**: delivery-write-json
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -478,7 +588,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: write_immutable_json
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.immutable-attempt
         - **id**: delivery-append-attempt
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -487,7 +597,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: append_attempt
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.immutable-attempt
         - **id**: delivery-append-finalization
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -514,7 +624,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: approval
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.approval-scope
         - **id**: delivery-approve
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -523,7 +633,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: approve
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.approval-scope
         - **id**: delivery-attempt
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -532,7 +642,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: attempt
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.immutable-attempt
         - **id**: delivery-attempts
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -541,7 +651,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: attempts
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.immutable-attempt
         - **id**: delivery-digest
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -550,7 +660,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: digest
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.immutable-attempt
         - **id**: delivery-ensure
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -559,7 +669,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: ensure
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.store-boundary
         - **id**: delivery-finalization
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -586,7 +696,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: for_workspace
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.store-boundary
         - **id**: delivery-new-id
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -595,7 +705,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: new_id
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.immutable-attempt
         - **id**: delivery-root
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -604,7 +714,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: root
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.store-boundary
         - **id**: delivery-approval-path
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -613,7 +723,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: approval_path
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.store-boundary
         - **id**: delivery-approvals-dir
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -622,7 +732,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: approvals_dir
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.store-boundary
         - **id**: delivery-attempt-path
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -631,7 +741,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: attempt_path
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.store-boundary
         - **id**: delivery-attempts-dir
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -640,7 +750,7 @@ description: "Generated reference for docs/syu/capabilities.yaml"
             - **name**: attempts_dir
           - **claims**:
             - **kind**: satisfies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.store-boundary
         - **id**: delivery-finalization-path
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -671,41 +781,22 @@ description: "Generated reference for docs/syu/capabilities.yaml"
     - **id**: verification
       - **role**: verification
       - **facet**: delivery
-      - **responsibility**: Verify immutable attempt storage and complete-attempt finalization gating.
+      - **responsibility**: Verify the repository-local store, immutable attempt evidence, approved scope, and complete-attempt finalization gate.
       - **targets**:
         - **id**: delivery-store-test
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
           - **selector**:
             - **kind**: symbol
-            - **name**: store_is_outside_worktree
+            - **name**: store_boundary_is_repository_local_and_explicit
           - **claims**:
             - **kind**: verifies
-              - **criterion**: REQ-WORK-002#criterion.durable-attempt
+              - **criterion**: REQ-WORK-002#criterion.store-boundary
               - **covers**:
                 - FEAT-DELIVERY-001#binding.implementation/target.delivery-store
                 - FEAT-DELIVERY-001#binding.implementation/target.delivery-source
-                - FEAT-DELIVERY-001#binding.implementation/target.delivery-apply-status
-                - FEAT-DELIVERY-001#binding.implementation/target.delivery-atomic-write
-                - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempt-plan
-                - FEAT-DELIVERY-001#binding.implementation/target.delivery-changed-paths
-                - FEAT-DELIVERY-001#binding.implementation/target.delivery-component
-                - FEAT-DELIVERY-001#binding.implementation/target.delivery-json-files
-                - FEAT-DELIVERY-001#binding.implementation/target.delivery-now-nanos
-                - FEAT-DELIVERY-001#binding.implementation/target.delivery-preview-token
-                - FEAT-DELIVERY-001#binding.implementation/target.delivery-read-json
-                - FEAT-DELIVERY-001#binding.implementation/target.delivery-restore-files
-                - FEAT-DELIVERY-001#binding.implementation/target.delivery-validate-digest
-                - FEAT-DELIVERY-001#binding.implementation/target.delivery-write-json
-                - FEAT-DELIVERY-001#binding.implementation/target.delivery-append-attempt
-                - FEAT-DELIVERY-001#binding.implementation/target.delivery-approval
-                - FEAT-DELIVERY-001#binding.implementation/target.delivery-approve
-                - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempt
-                - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempts
-                - FEAT-DELIVERY-001#binding.implementation/target.delivery-digest
                 - FEAT-DELIVERY-001#binding.implementation/target.delivery-ensure
                 - FEAT-DELIVERY-001#binding.implementation/target.delivery-for-workspace
-                - FEAT-DELIVERY-001#binding.implementation/target.delivery-new-id
                 - FEAT-DELIVERY-001#binding.implementation/target.delivery-root
                 - FEAT-DELIVERY-001#binding.implementation/target.delivery-approval-path
                 - FEAT-DELIVERY-001#binding.implementation/target.delivery-approvals-dir
@@ -715,7 +806,56 @@ description: "Generated reference for docs/syu/capabilities.yaml"
                 - **runner**: cargo-test
                 - **arguments**:
                   - **package**: syu-delivery
-                  - **test**: tests::store_is_outside_worktree
+                  - **test**: tests::store_boundary_is_repository_local_and_explicit
+        - **id**: immutable-attempt-test
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: immutable_attempts_validate_digests_and_preserve_history
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-WORK-002#criterion.immutable-attempt
+              - **covers**:
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-atomic-write
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-json-files
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-now-nanos
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-read-json
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-validate-digest
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-write-json
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-append-attempt
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempt
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempts
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-digest
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-new-id
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-delivery
+                  - **test**: tests::immutable_attempts_validate_digests_and_preserve_history
+        - **id**: approval-scope-test
+          - **adapter**: rust
+          - **path**: crates/syu-delivery/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: approvals_require_canonical_scope_and_are_idempotent
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-WORK-002#criterion.approval-scope
+              - **covers**:
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-apply-status
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempt-plan
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-changed-paths
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-component
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-preview-token
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-restore-files
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-approval
+                - FEAT-DELIVERY-001#binding.implementation/target.delivery-approve
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-delivery
+                  - **test**: tests::approvals_require_canonical_scope_and_are_idempotent
         - **id**: finalization-gate-test
           - **adapter**: rust
           - **path**: crates/syu-delivery/src/lib.rs
@@ -855,7 +995,11 @@ features:
         facet: model
         responsibility: Provide the typed specification model.
         targets:
-          - { id: spec-document, adapter: rust, path: crates/syu-spec-model/src/lib.rs, selector: { kind: symbol, name: SpecDocument } }
+          - id: spec-document
+            adapter: rust
+            path: crates/syu-spec-model/src/lib.rs
+            selector: { kind: symbol, name: SpecDocument }
+            claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.spec-model }]
 
   - id: FEAT-PROJECT-CONFIG-001
     title: Project configuration
@@ -867,7 +1011,11 @@ features:
         facet: configuration
         responsibility: Provide the typed project configuration model.
         targets:
-          - { id: project-config, adapter: rust, path: crates/syu-project-model/src/lib.rs, selector: { kind: symbol, name: ProjectConfig } }
+          - id: project-config
+            adapter: rust
+            path: crates/syu-project-model/src/lib.rs
+            selector: { kind: symbol, name: ProjectConfig }
+            claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.project-config }]
 
   - id: FEAT-INVENTORY-001
     title: Inventory providers
@@ -879,7 +1027,11 @@ features:
         facet: inventory
         responsibility: Discover provider-owned semantic artifact units.
         targets:
-          - { id: inventory-registry, adapter: rust, path: crates/syu-inventory/src/lib.rs, selector: { kind: symbol, name: InventoryRegistry } }
+          - id: inventory-registry
+            adapter: rust
+            path: crates/syu-inventory/src/lib.rs
+            selector: { kind: symbol, name: InventoryRegistry }
+            claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.inventory-discovery }]
 
   - id: FEAT-IDENTITY-001
     title: Exact artifact identity
@@ -897,7 +1049,7 @@ features:
             selector: { kind: symbol, name: resolve_target_in_workspace }
             claims:
               - kind: satisfies
-                criterion: REQ-PUBLIC-001#criterion.entrypoint
+                criterion: REQ-CAPABILITY-001#criterion.exact-identity
 
   - id: FEAT-INDEX-001
     title: Graph indexing
@@ -909,7 +1061,11 @@ features:
         facet: index
         responsibility: Build the canonical specification and artifact index.
         targets:
-          - { id: spec-index, adapter: rust, path: crates/syu-workspace/src/lib.rs, selector: { kind: symbol, name: SpecIndex } }
+          - id: spec-index
+            adapter: rust
+            path: crates/syu-workspace/src/lib.rs
+            selector: { kind: symbol, name: SpecIndex }
+            claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.graph-index }]
 
   - id: FEAT-OWNERSHIP-001
     title: Ownership resolution
@@ -921,7 +1077,11 @@ features:
         facet: ownership
         responsibility: Represent exact and scoped ownership references.
         targets:
-          - { id: ownership-ref, adapter: rust, path: crates/syu-workspace/src/lib.rs, selector: { kind: symbol, name: OwnershipRef } }
+          - id: ownership-ref
+            adapter: rust
+            path: crates/syu-workspace/src/lib.rs
+            selector: { kind: symbol, name: OwnershipRef }
+            claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.ownership-resolution }]
 
   - id: FEAT-READINESS-001
     title: Readiness validation
@@ -939,7 +1099,7 @@ features:
             selector: { kind: symbol, name: evaluate }
             claims:
               - kind: satisfies
-                criterion: REQ-PUBLIC-001#criterion.entrypoint
+                criterion: REQ-CAPABILITY-001#criterion.readiness-ladder
 
   - id: FEAT-CHANGE-VALIDATION-001
     title: Change validation
@@ -957,7 +1117,7 @@ features:
             selector: { kind: symbol, name: validate }
             claims:
               - kind: satisfies
-                criterion: REQ-PUBLIC-001#criterion.entrypoint
+                criterion: REQ-CAPABILITY-001#criterion.change-validation
 
   - id: FEAT-PLANNER-001
     title: Canonical planning
@@ -993,7 +1153,7 @@ features:
             selector: { kind: symbol, name: export_context }
             claims:
               - kind: satisfies
-                criterion: REQ-PUBLIC-001#criterion.entrypoint
+                criterion: REQ-CAPABILITY-001#criterion.context-export
 
   - id: FEAT-CONTRACT-001
     title: Contract closure
@@ -1005,7 +1165,11 @@ features:
         facet: contract
         responsibility: Represent exact contract participants and guarantees.
         targets:
-          - { id: contract-model, adapter: rust, path: crates/syu-spec-model/src/lib.rs, selector: { kind: symbol, name: Contract } }
+          - id: contract-model
+            adapter: rust
+            path: crates/syu-spec-model/src/lib.rs
+            selector: { kind: symbol, name: Contract }
+            claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.contract-closure }]
 
   - id: FEAT-VERIFICATION-001
     title: Verification execution
@@ -1023,7 +1187,7 @@ features:
             selector: { kind: symbol, name: execute_verification }
             claims:
               - kind: satisfies
-                criterion: REQ-PUBLIC-001#criterion.entrypoint
+                criterion: REQ-CAPABILITY-001#criterion.verification-execution
 
   - id: FEAT-PLAN-VALIDATION-001
     title: Plan validation
@@ -1041,7 +1205,7 @@ features:
             selector: { kind: symbol, name: canonical_plan_for_execution }
             claims:
               - kind: satisfies
-                criterion: REQ-PUBLIC-001#criterion.entrypoint
+                criterion: REQ-CAPABILITY-001#criterion.plan-validation
 
   - id: FEAT-RESULT-VALIDATION-001
     title: Result validation
@@ -1059,7 +1223,7 @@ features:
             selector: { kind: symbol, name: validate_verification_receipt }
             claims:
               - kind: satisfies
-                criterion: REQ-PUBLIC-001#criterion.entrypoint
+                criterion: REQ-CAPABILITY-001#criterion.receipt-validation
           - id: completion-evaluation
             adapter: rust
             path: crates/syu-validation/src/lib.rs
@@ -1084,7 +1248,7 @@ features:
             selector: { kind: symbol, name: run }
             claims:
               - kind: satisfies
-                criterion: REQ-PUBLIC-001#criterion.entrypoint
+                criterion: REQ-CAPABILITY-001#criterion.cli-orchestration
 
   - id: FEAT-LSP-001
     title: LSP
@@ -1096,7 +1260,11 @@ features:
         facet: lsp
         responsibility: Serve canonical specification language-server state.
         targets:
-          - { id: lsp-server, adapter: rust, path: src/lsp/mod.rs, selector: { kind: symbol, name: run_lsp_server } }
+          - id: lsp-server
+            adapter: rust
+            path: src/lsp/mod.rs
+            selector: { kind: symbol, name: run_lsp_server }
+            claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.lsp-navigation }]
 
   - id: FEAT-DOCS-001
     title: Documentation generation
@@ -1107,8 +1275,30 @@ features:
         role: implementation
         facet: documentation
         responsibility: Maintain the generated specification documentation entrypoint.
+        owns:
+          - { id: generated-capabilities, adapter: declared, path: docs/generated/site-spec/capabilities.md, selector: { kind: file } }
+          - { id: generated-capability-contracts, adapter: declared, path: docs/generated/site-spec/capability-contracts.md, selector: { kind: file } }
+          - { id: generated-delivery, adapter: declared, path: docs/generated/site-spec/delivery.md, selector: { kind: file } }
+          - { id: generated-foundation, adapter: declared, path: docs/generated/site-spec/foundation.md, selector: { kind: file } }
+          - { id: generated-planner, adapter: declared, path: docs/generated/site-spec/planner.md, selector: { kind: file } }
+          - { id: generated-public-entrypoints, adapter: declared, path: docs/generated/site-spec/public-entrypoints.md, selector: { kind: file } }
+          - { id: generated-work, adapter: declared, path: docs/generated/site-spec/work.md, selector: { kind: file } }
+          - { id: generated-workbench, adapter: declared, path: docs/generated/site-spec/workbench.md, selector: { kind: file } }
+          - { id: generated-workbench-features, adapter: declared, path: docs/generated/site-spec/workbench-features.md, selector: { kind: file } }
+          - { id: guide-command-card, adapter: declared, path: docs/guide/command-card.md, selector: { kind: file } }
+          - { id: guide-configuration, adapter: declared, path: docs/guide/configuration.md, selector: { kind: file } }
+          - { id: guide-examples, adapter: declared, path: docs/guide/examples-and-templates.md, selector: { kind: file } }
+          - { id: guide-existing-repository, adapter: declared, path: docs/guide/existing-repository.md, selector: { kind: file } }
+          - { id: guide-migration, adapter: declared, path: docs/guide/migration.md, selector: { kind: file } }
+          - { id: guide-antipatterns, adapter: declared, path: docs/guide/spec-antipatterns.md, selector: { kind: file } }
+          - { id: guide-vscode, adapter: declared, path: docs/guide/vscode-extension.md, selector: { kind: file } }
+          - { id: guide-workbench, adapter: declared, path: docs/guide/workbench.md, selector: { kind: file } }
         targets:
-          - { id: generated-index, adapter: declared, path: docs/generated/site-spec/index.md, selector: { kind: file } }
+          - id: generated-index
+            adapter: declared
+            path: docs/generated/site-spec/index.md
+            selector: { kind: file }
+            claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.docs-generation }]
   - id: FEAT-DELIVERY-001
     title: Durable completion delivery
     summary: Persist completion attempts, enforce reviewed plan scope, and finalize complete work safely.
@@ -1134,79 +1324,79 @@ features:
             selector: { kind: symbol, name: DeliveryStore }
             claims:
               - kind: satisfies
-                criterion: REQ-WORK-002#criterion.durable-attempt
+                criterion: REQ-WORK-002#criterion.store-boundary
           - id: delivery-source
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: file }
             claims:
               - kind: satisfies
-                criterion: REQ-WORK-002#criterion.durable-attempt
+                criterion: REQ-WORK-002#criterion.store-boundary
           - id: delivery-apply-status
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: apply_status_overlay }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.approval-scope }]
           - id: delivery-atomic-write
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: atomic_write }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.immutable-attempt }]
           - id: delivery-attempt-plan
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: attempt_plan }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.approval-scope }]
           - id: delivery-changed-paths
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: changed_document_paths }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.approval-scope }]
           - id: delivery-component
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: component }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.approval-scope }]
           - id: delivery-json-files
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: json_files }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.immutable-attempt }]
           - id: delivery-now-nanos
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: now_nanos }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.immutable-attempt }]
           - id: delivery-preview-token
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: preview_without_token }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.approval-scope }]
           - id: delivery-read-json
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: read_json }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.immutable-attempt }]
           - id: delivery-restore-files
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: restore_files }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.approval-scope }]
           - id: delivery-validate-digest
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: validate_attempt_digest }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.immutable-attempt }]
           - id: delivery-write-json
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: write_immutable_json }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.immutable-attempt }]
           - id: delivery-append-attempt
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: append_attempt }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.immutable-attempt }]
           - id: delivery-append-finalization
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
@@ -1221,32 +1411,32 @@ features:
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: approval }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.approval-scope }]
           - id: delivery-approve
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: approve }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.approval-scope }]
           - id: delivery-attempt
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: attempt }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.immutable-attempt }]
           - id: delivery-attempts
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: attempts }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.immutable-attempt }]
           - id: delivery-digest
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: digest }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.immutable-attempt }]
           - id: delivery-ensure
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: ensure }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.store-boundary }]
           - id: delivery-finalization
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
@@ -1261,37 +1451,37 @@ features:
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: for_workspace }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.store-boundary }]
           - id: delivery-new-id
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: new_id }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.immutable-attempt }]
           - id: delivery-root
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: root }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.store-boundary }]
           - id: delivery-approval-path
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: approval_path }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.store-boundary }]
           - id: delivery-approvals-dir
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: approvals_dir }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.store-boundary }]
           - id: delivery-attempt-path
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: attempt_path }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.store-boundary }]
           - id: delivery-attempts-dir
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
             selector: { kind: symbol, name: attempts_dir }
-            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.durable-attempt }]
+            claims: [{ kind: satisfies, criterion: REQ-WORK-002#criterion.store-boundary }]
           - id: delivery-finalization-path
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
@@ -1312,45 +1502,63 @@ features:
       - id: verification
         role: verification
         facet: delivery
-        responsibility: Verify immutable attempt storage and complete-attempt finalization gating.
+        responsibility: Verify the repository-local store, immutable attempt evidence, approved scope, and complete-attempt finalization gate.
         targets:
           - id: delivery-store-test
             adapter: rust
             path: crates/syu-delivery/src/lib.rs
-            selector: { kind: symbol, name: store_is_outside_worktree }
+            selector: { kind: symbol, name: store_boundary_is_repository_local_and_explicit }
             claims:
               - kind: verifies
-                criterion: REQ-WORK-002#criterion.durable-attempt
+                criterion: REQ-WORK-002#criterion.store-boundary
                 covers:
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-store
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-source
-                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-apply-status
-                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-atomic-write
-                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempt-plan
-                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-changed-paths
-                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-component
-                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-json-files
-                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-now-nanos
-                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-preview-token
-                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-read-json
-                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-restore-files
-                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-validate-digest
-                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-write-json
-                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-append-attempt
-                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-approval
-                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-approve
-                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempt
-                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempts
-                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-digest
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-ensure
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-for-workspace
-                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-new-id
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-root
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-approval-path
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-approvals-dir
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempt-path
                   - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempts-dir
-                runner: { runner: cargo-test, arguments: { package: syu-delivery, test: tests::store_is_outside_worktree } }
+                runner: { runner: cargo-test, arguments: { package: syu-delivery, test: tests::store_boundary_is_repository_local_and_explicit } }
+          - id: immutable-attempt-test
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: immutable_attempts_validate_digests_and_preserve_history }
+            claims:
+              - kind: verifies
+                criterion: REQ-WORK-002#criterion.immutable-attempt
+                covers:
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-atomic-write
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-json-files
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-now-nanos
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-read-json
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-validate-digest
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-write-json
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-append-attempt
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempt
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempts
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-digest
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-new-id
+                runner: { runner: cargo-test, arguments: { package: syu-delivery, test: tests::immutable_attempts_validate_digests_and_preserve_history } }
+          - id: approval-scope-test
+            adapter: rust
+            path: crates/syu-delivery/src/lib.rs
+            selector: { kind: symbol, name: approvals_require_canonical_scope_and_are_idempotent }
+            claims:
+              - kind: verifies
+                criterion: REQ-WORK-002#criterion.approval-scope
+                covers:
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-apply-status
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-attempt-plan
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-changed-paths
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-component
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-preview-token
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-restore-files
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-approval
+                  - FEAT-DELIVERY-001#binding.implementation/target.delivery-approve
+                runner: { runner: cargo-test, arguments: { package: syu-delivery, test: tests::approvals_require_canonical_scope_and_are_idempotent } }
           - id: finalization-gate-test
             adapter: rust
             path: crates/syu-delivery/src/lib.rs

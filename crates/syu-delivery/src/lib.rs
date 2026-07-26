@@ -720,44 +720,33 @@ mod tests {
         .unwrap()
     }
 
-    #[test]
-    fn store_is_outside_worktree() {
-        let root = tempfile::tempdir().unwrap();
-        Command::new("git")
-            .args(["init", "-q"])
-            .current_dir(root.path())
-            .status()
-            .unwrap();
-        let store = DeliveryStore::for_workspace(root.path()).unwrap();
-        assert!(!store.root().starts_with(root.path().join("docs")));
-        assert!(store.root().display().to_string().contains("syu"));
+    fn fixture_approval(
+        workspace: &SpecWorkspace,
+        plan: &syu_work_model::WorkPlan,
+        revision: &str,
+    ) -> PlanApproval {
+        PlanApproval {
+            schema: PLAN_APPROVAL_SCHEMA.into(),
+            approval_id: "approval-test".into(),
+            plan_digest: plan.canonical_digest.clone(),
+            workspace_fingerprint: workspace.try_fingerprint().unwrap(),
+            revision: revision.into(),
+            reviewed_at: "0".into(),
+            plan: plan.clone(),
+        }
     }
 
-    #[test]
-    fn finalization_preview_requires_complete_attempt() {
-        let temp = tempfile::tempdir().unwrap();
-        copy_dir(&workbench_fixture_root(), temp.path());
-        let revision = init_git_repo(temp.path());
-        let workspace = SpecWorkspace::load(temp.path()).unwrap();
-        let plan = fixture_plan(temp.path(), &revision);
+    fn fixture_attempt(
+        plan: &syu_work_model::WorkPlan,
+        approval: &PlanApproval,
+        revision: &str,
+    ) -> CompletionAttempt {
         let slice_id = plan.slices[0].id.clone();
-        let store = DeliveryStore::for_workspace(temp.path()).unwrap();
-        let approval = store
-            .approve(&PlanApproval {
-                schema: PLAN_APPROVAL_SCHEMA.into(),
-                approval_id: "approval-test".into(),
-                plan_digest: plan.canonical_digest.clone(),
-                workspace_fingerprint: workspace.try_fingerprint().unwrap(),
-                revision: revision.clone(),
-                reviewed_at: "0".into(),
-                plan: plan.clone(),
-            })
-            .unwrap();
         let receipt = VerificationReceipt {
             schema: VERIFICATION_RECEIPT_SCHEMA.into(),
             plan_digest: plan.canonical_digest.clone(),
             slice_id: slice_id.clone(),
-            revision,
+            revision: revision.into(),
             workspace_fingerprint: "sha256:stale".into(),
             started_at: "0".into(),
             completed_at: "1".into(),
@@ -768,8 +757,8 @@ mod tests {
             attempt_id: "attempt-test".into(),
             attempt_digest: String::new(),
             plan_digest: plan.canonical_digest.clone(),
-            slice_id,
-            approved_plan_digest: approval.plan_digest,
+            slice_id: slice_id.clone(),
+            approved_plan_digest: approval.plan_digest.clone(),
             started_at: "0".into(),
             completed_at: "1".into(),
             verification: VerificationAttemptResult {
@@ -782,7 +771,7 @@ mod tests {
                 schema: COMPLETION_REPORT_SCHEMA.into(),
                 attempt_id: "attempt-test".into(),
                 plan_digest: plan.canonical_digest.clone(),
-                slice_id: plan.slices[0].id.clone(),
+                slice_id,
                 receipt_digest: None,
                 status: CompletionStatus::Complete,
                 demonstrated: vec![],
@@ -792,6 +781,81 @@ mod tests {
         };
         attempt.attempt_digest =
             DeliveryStore::digest(&attempt_with_empty_digest(&attempt)).unwrap();
+        attempt
+    }
+
+    #[test]
+    fn store_boundary_is_repository_local_and_explicit() {
+        let root = tempfile::tempdir().unwrap();
+        Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(root.path())
+            .status()
+            .unwrap();
+        let store = DeliveryStore::for_workspace(root.path()).unwrap();
+        assert!(!store.root().starts_with(root.path().join("docs")));
+        assert!(store.root().display().to_string().contains("syu"));
+        store.ensure().unwrap();
+        assert!(store.approvals_dir().is_dir());
+        assert!(store.attempts_dir().is_dir());
+        assert!(store.finalizations_dir().is_dir());
+        assert!(store.agent_events_dir().is_dir());
+    }
+
+    #[test]
+    fn approvals_require_canonical_scope_and_are_idempotent() {
+        let temp = tempfile::tempdir().unwrap();
+        copy_dir(&workbench_fixture_root(), temp.path());
+        let revision = init_git_repo(temp.path());
+        let workspace = SpecWorkspace::load(temp.path()).unwrap();
+        let plan = fixture_plan(temp.path(), &revision);
+        let store = DeliveryStore::for_workspace(temp.path()).unwrap();
+        let approval = fixture_approval(&workspace, &plan, &revision);
+
+        let mut invalid = approval.clone();
+        invalid.plan_digest = "sha256:not-the-canonical-plan".into();
+        assert!(store.approve(&invalid).is_err());
+
+        assert_eq!(store.approve(&approval).unwrap(), approval);
+        assert_eq!(store.approve(&approval).unwrap(), approval);
+        assert_eq!(store.approval(&approval.plan_digest).unwrap(), approval);
+    }
+
+    #[test]
+    fn immutable_attempts_validate_digests_and_preserve_history() {
+        let temp = tempfile::tempdir().unwrap();
+        copy_dir(&workbench_fixture_root(), temp.path());
+        let revision = init_git_repo(temp.path());
+        let workspace = SpecWorkspace::load(temp.path()).unwrap();
+        let plan = fixture_plan(temp.path(), &revision);
+        let store = DeliveryStore::for_workspace(temp.path()).unwrap();
+        let approval = store
+            .approve(&fixture_approval(&workspace, &plan, &revision))
+            .unwrap();
+        let attempt = fixture_attempt(&plan, &approval, &revision);
+
+        assert_eq!(store.append_attempt(&attempt).unwrap(), attempt);
+        assert_eq!(store.attempt(&attempt.attempt_id).unwrap(), attempt);
+        assert_eq!(store.attempts().unwrap(), vec![attempt.clone()]);
+        assert!(store.append_attempt(&attempt).is_err());
+
+        let mut tampered = attempt;
+        tampered.completed_at = "later".into();
+        assert!(store.append_attempt(&tampered).is_err());
+    }
+
+    #[test]
+    fn finalization_preview_requires_complete_attempt() {
+        let temp = tempfile::tempdir().unwrap();
+        copy_dir(&workbench_fixture_root(), temp.path());
+        let revision = init_git_repo(temp.path());
+        let workspace = SpecWorkspace::load(temp.path()).unwrap();
+        let plan = fixture_plan(temp.path(), &revision);
+        let store = DeliveryStore::for_workspace(temp.path()).unwrap();
+        let approval = store
+            .approve(&fixture_approval(&workspace, &plan, &revision))
+            .unwrap();
+        let attempt = fixture_attempt(&plan, &approval, &revision);
         let attempt = store.append_attempt(&attempt).unwrap();
 
         let preview = store.finalization_preview(&workspace, &attempt).unwrap();

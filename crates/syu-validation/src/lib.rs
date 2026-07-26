@@ -102,6 +102,8 @@ pub static RULES: &[RuleMetadata] = &[
     metadata!("SYU-REQUIREMENT-001"),
     metadata!("SYU-REQUIREMENT-002"),
     metadata!("SYU-FEATURE-001"),
+    fixed_metadata!("SYU-FEATURE-002"),
+    fixed_metadata!("SYU-FEATURE-003"),
     metadata!("SYU-BINDING-001"),
     metadata!("SYU-BINDING-002"),
     metadata!("SYU-BINDING-003"),
@@ -1732,7 +1734,6 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
             for owner in owners.into_iter().flatten() {
                 if let Some(binding) = ctx.index.bindings.get(&owner.binding)
                     && binding.role == BindingRole::Implementation
-                    && !is_capability_binding(ctx, &owner.binding)
                     && !binding.targets.iter().any(|target| {
                         target.claims.iter().any(|claim| {
                             matches!(claim, syu_spec_model::TargetClaim::Satisfies { .. })
@@ -2418,11 +2419,12 @@ fn validate_document_shapes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnosti
             }
             SpecDocument::Features { features, .. } => {
                 for item in features {
-                    if item.status == ItemStatus::Implemented
-                        && !item
-                            .bindings
-                            .iter()
-                            .any(|binding| binding.role == BindingRole::Implementation)
+                    let implementation_bindings = item
+                        .bindings
+                        .iter()
+                        .filter(|binding| binding.role == BindingRole::Implementation)
+                        .collect::<Vec<_>>();
+                    if item.status == ItemStatus::Implemented && implementation_bindings.is_empty()
                     {
                         push(
                             out,
@@ -2432,25 +2434,112 @@ fn validate_document_shapes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnosti
                             None,
                         );
                     }
+                    if item.status == ItemStatus::Planned
+                        && item.bindings.iter().any(|binding| !binding.owns.is_empty())
+                    {
+                        push(
+                            out,
+                            "SYU-FEATURE-003",
+                            "planned feature must not declare current artifact ownership",
+                            &path,
+                            None,
+                        );
+                    }
+                    if item.status != ItemStatus::Implemented {
+                        continue;
+                    }
+                    for binding in implementation_bindings {
+                        let binding_anchor = SpecAnchor {
+                            item: item.id.clone(),
+                            kind: LocalAnchorKind::Binding,
+                            local_id: binding.id.clone(),
+                        };
+                        for target in &binding.targets {
+                            let target_ref = BoundTargetRef {
+                                binding: binding_anchor.clone(),
+                                target_id: target.id.clone(),
+                            };
+                            let criteria = target
+                                .claims
+                                .iter()
+                                .filter_map(|claim| match claim {
+                                    TargetClaim::Satisfies { criterion } => Some(criterion),
+                                    _ => None,
+                                })
+                                .collect::<Vec<_>>();
+                            if criteria.is_empty() {
+                                push(
+                                    out,
+                                    "SYU-FEATURE-002",
+                                    format!(
+                                        "implemented feature target {target_ref} has no acceptance criterion"
+                                    ),
+                                    &path,
+                                    Some(binding_anchor.clone()),
+                                );
+                                continue;
+                            }
+                            for criterion in criteria {
+                                if ctx.index.criterion_status.get(criterion)
+                                    != Some(&ItemStatus::Implemented)
+                                {
+                                    push(
+                                        out,
+                                        "SYU-FEATURE-002",
+                                        format!(
+                                            "implemented feature target {target_ref} references a non-implemented criterion {criterion}"
+                                        ),
+                                        &path,
+                                        Some(binding_anchor.clone()),
+                                    );
+                                    continue;
+                                }
+                                let verified = ctx
+                                    .index
+                                    .verification_by_target
+                                    .get(&target_ref)
+                                    .into_iter()
+                                    .flatten()
+                                    .any(|verification_ref| {
+                                        ctx.index.target(verification_ref).is_some_and(
+                                            |verification| {
+                                                verification.claims.iter().any(|claim| {
+                                                    matches!(
+                                                        claim,
+                                                        TargetClaim::Verifies {
+                                                            criterion: actual,
+                                                            covers,
+                                                            runner,
+                                                        } if actual == criterion
+                                                            && covers.contains(&target_ref)
+                                                            && ctx
+                                                                .config
+                                                                .verification
+                                                                .runners
+                                                                .contains_key(&runner.runner)
+                                                    )
+                                                })
+                                            },
+                                        )
+                                    });
+                                if !verified {
+                                    push(
+                                        out,
+                                        "SYU-FEATURE-002",
+                                        format!(
+                                            "implemented feature target {target_ref} has no exact verification for {criterion}"
+                                        ),
+                                        &path,
+                                        Some(binding_anchor.clone()),
+                                    );
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
-}
-fn is_capability_binding(ctx: &ValidationContext<'_>, anchor: &SpecAnchor) -> bool {
-    let Some(path) = ctx.index.item_paths.get(&anchor.item) else {
-        return false;
-    };
-    ctx.workspace
-        .documents
-        .iter()
-        .find(|loaded| &loaded.path == path)
-        .is_some_and(|loaded| {
-            matches!(
-                &loaded.document,
-                SpecDocument::Features { namespace, .. } if namespace == "capabilities"
-            )
-        })
 }
 
 fn push(
@@ -2580,7 +2669,6 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         | BindingRole::Enforcement
                         | BindingRole::Evidence
                 ) && relation.is_empty()
-                    && !is_capability_binding(ctx, anchor)
                 {
                     push(
                         out,
@@ -4078,6 +4166,22 @@ mod tests {
         (tempdir, workspace, index)
     }
 
+    fn validate_loaded_workspace(workspace: &SpecWorkspace, index: &SpecIndex) -> ValidationResult {
+        validate_without_readiness(&ValidationContext {
+            config: &workspace.config,
+            workspace,
+            index,
+            changed_files: None,
+            reported_changed_files: None,
+            work_plan: None,
+            selected_slice: None,
+            plan_mode: PlanValidationMode::PreState,
+            preset: workspace.config.validation.preset,
+            revision: None,
+            change_base_revision: None,
+        })
+    }
+
     fn write_generated_binding_workspace(root: &Path) {
         fs::create_dir_all(root.join("spec")).expect("spec dir");
         fs::create_dir_all(root.join("src")).expect("src dir");
@@ -4274,6 +4378,70 @@ requirements:
                     .unwrap()
             )
         );
+    }
+
+    #[test]
+    fn planned_feature_ownership_is_rejected() {
+        let (tempdir, _, _) = load_fixture_workspace();
+        let path = tempdir.path().join("spec/feature.yaml");
+        let source = fs::read_to_string(&path).unwrap();
+        let source = source
+            .replacen("status: implemented", "status: planned", 1)
+            .replacen(
+                "        responsibility: Submit login and show generic failure.\n",
+                concat!(
+                    "        responsibility: Submit login and show generic failure.\n",
+                    "        owns:\n",
+                    "          - { id: login-file, adapter: typescript, path: web/login.ts, selector: { kind: file } }\n",
+                ),
+                1,
+            );
+        fs::write(path, source).unwrap();
+        let workspace = SpecWorkspace::load(tempdir.path()).unwrap();
+        let index = workspace.index().unwrap();
+        let result = validate_loaded_workspace(&workspace, &index);
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.rule_id == "SYU-FEATURE-003"
+                && diagnostic.message.contains("planned feature")
+        }));
+    }
+
+    #[test]
+    fn implemented_feature_target_requires_acceptance() {
+        let (tempdir, _, _) = load_fixture_workspace();
+        let path = tempdir.path().join("spec/feature.yaml");
+        let source = fs::read_to_string(&path).unwrap().replacen(
+            "            claims: [{ kind: satisfies, criterion: REQ-AUTH-001#criterion.invalid-credentials }]",
+            "            claims: []",
+            1,
+        );
+        fs::write(path, source).unwrap();
+        let workspace = SpecWorkspace::load(tempdir.path()).unwrap();
+        let index = workspace.index().unwrap();
+        let result = validate_loaded_workspace(&workspace, &index);
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.rule_id == "SYU-FEATURE-002"
+                && diagnostic.message.contains("has no acceptance criterion")
+        }));
+    }
+
+    #[test]
+    fn implemented_feature_target_requires_exact_verification() {
+        let (tempdir, _, _) = load_fixture_workspace();
+        let path = tempdir.path().join("spec/requirement.yaml");
+        let source = fs::read_to_string(&path).unwrap().replace(
+            "                  - FEAT-AUTH-001#binding.ui/target.submit\n",
+            "",
+        );
+        fs::write(path, source).unwrap();
+        let workspace = SpecWorkspace::load(tempdir.path()).unwrap();
+        let index = workspace.index().unwrap();
+        let result = validate_loaded_workspace(&workspace, &index);
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.rule_id == "SYU-FEATURE-002"
+                && diagnostic.message.contains("target.submit")
+                && diagnostic.message.contains("has no exact verification")
+        }));
     }
 
     #[test]

@@ -8,6 +8,7 @@ This section is generated from the YAML source under `docs/syu/`.
 ## Available documents
 
 - [Syu functional units / Capabilities](capabilities)
+- [Capability acceptance contracts / Capability Contracts](capability-contracts)
 - [Delivery governance / Delivery](delivery)
 - [Foundation / Foundation](foundation)
 - [Work planning / Planner](planner)

@@ -85,25 +85,126 @@ description: "Generated reference for docs/syu/work.yaml"
                   - **package**: syu-validation
                   - **test**: tests::exact_test_execution_requires_match
 - **id**: REQ-PUBLIC-001
-  - **title**: Public entrypoint traceability
-  - **description**: Every discovered public entrypoint has an exact target and bounded canonical work plan.
-  - **priority**: low
-  - **status**: planned
+  - **title**: Public entrypoint governance
+  - **description**: Every discovered public entrypoint belongs to a concrete capability with acceptance, verification, and a bounded canonical work plan.
+  - **priority**: critical
+  - **status**: implemented
   - **criteria**:
-    - **id**: entrypoint
+    - **id**: workbench-client-transport
       - **kind**: quality
-      - **statement**: A public entrypoint resolves through an exact target to a canonical plan.
+      - **statement**: Workbench transport and session entrypoints preserve repository identity and return canonical projection data.
       - **governed_by**:
-        - POL-DELIVERY-001#rule.exact-ownership
+        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-ADOPTION-001#rule.bounded-rollout
+    - **id**: workbench-client-actions
+      - **kind**: quality
+      - **statement**: Workbench action entrypoints expose typed preview, approval, diagnostics, and readiness operations without bypassing canonical validation.
+      - **governed_by**:
+        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-ADOPTION-001#rule.bounded-rollout
+    - **id**: workbench-components
+      - **kind**: quality
+      - **statement**: Reusable Workbench components render canonical state, diagnostics, targets, translations, and diffs.
+      - **governed_by**:
+        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-ADOPTION-001#rule.bounded-rollout
+    - **id**: workbench-pages
+      - **kind**: quality
+      - **statement**: Workbench pages initialize and render diagnostics, readiness, scope, settings, and specification details from canonical projections.
+      - **governed_by**:
+        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-ADOPTION-001#rule.bounded-rollout
+    - **id**: workbench-navigation
+      - **kind**: quality
+      - **statement**: Workbench navigation and state entrypoints preserve valid page, tab, and selected-slice transitions.
+      - **governed_by**:
+        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-ADOPTION-001#rule.bounded-rollout
+    - **id**: workbench-rendering
+      - **kind**: quality
+      - **statement**: Server-rendered Workbench entrypoints emit a localized shell that can start the canonical client.
+      - **governed_by**:
+        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-ADOPTION-001#rule.bounded-rollout
+    - **id**: code-diagnostics
+      - **kind**: quality
+      - **statement**: Code intelligence and diagnostic entrypoints return stable symbol and validation results.
+      - **governed_by**:
+        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-ADOPTION-001#rule.bounded-rollout
+    - **id**: inventory-discovery
+      - **kind**: quality
+      - **statement**: Inventory entrypoints discover active artifacts and combine adapter output without losing exact identity.
+      - **governed_by**:
+        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-ADOPTION-001#rule.bounded-rollout
+    - **id**: specification-model
+      - **kind**: quality
+      - **statement**: Specification-model entrypoints preserve normalized repository paths, anchors, and schema identity.
+      - **governed_by**:
+        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-ADOPTION-001#rule.bounded-rollout
+    - **id**: validation-engine
+      - **kind**: quality
+      - **statement**: Validation entrypoints expose canonical phases, readiness, changed-file analysis, and verification execution.
+      - **governed_by**:
+        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-ADOPTION-001#rule.bounded-rollout
+    - **id**: work-planning
+      - **kind**: quality
+      - **statement**: Work-model and planner entrypoints preserve exact requested targets, stable plan identity, and bounded split guidance.
+      - **governed_by**:
+        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-ADOPTION-001#rule.bounded-rollout
+    - **id**: workbench-server-lifecycle
+      - **kind**: quality
+      - **statement**: Workbench server lifecycle entrypoints construct, project, route, and run sessions with explicit launch state.
+      - **governed_by**:
+        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-ADOPTION-001#rule.bounded-rollout
+    - **id**: workbench-server-validation
+      - **kind**: quality
+      - **statement**: Workbench server validation entrypoints report branch scope and accept only matching canonical verification receipts.
+      - **governed_by**:
+        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-ADOPTION-001#rule.bounded-rollout
+    - **id**: workspace-loading
+      - **kind**: quality
+      - **statement**: Workspace loading and index entrypoints preserve overlays, fingerprints, exact anchors, and readable content.
+      - **governed_by**:
+        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-ADOPTION-001#rule.bounded-rollout
+    - **id**: workspace-resolution
+      - **kind**: quality
+      - **statement**: Workspace resolution entrypoints map selectors to exact artifacts and stable ownership and specification fingerprints.
+      - **governed_by**:
+        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-ADOPTION-001#rule.bounded-rollout
+    - **id**: agent-delivery
+      - **kind**: quality
+      - **statement**: Agent and delivery entrypoints preserve inspectable run, blocker, verification, and durable event evidence.
+      - **governed_by**:
+        - POL-ADOPTION-001#rule.feature-evidence
+        - POL-ADOPTION-001#rule.bounded-rollout
 - **id**: REQ-WORK-002
   - **title**: Durable completion delivery
   - **description**: Completion verification is preserved as immutable attempts and can be finalized only after explicit plan approval.
   - **priority**: critical
   - **status**: implemented
   - **criteria**:
-    - **id**: durable-attempt
+    - **id**: store-boundary
       - **kind**: behavior
-      - **statement**: Failed and successful verification attempts remain queryable without widening their approved scope.
+      - **statement**: Delivery data stays outside the worktree in a stable repository-local store with explicit approval and attempt paths.
+      - **governed_by**:
+        - POL-DELIVERY-001#rule.exact-ownership
+    - **id**: immutable-attempt
+      - **kind**: behavior
+      - **statement**: Failed and successful verification attempts are digest-checked, immutable, and queryable without widening their approved scope.
+      - **governed_by**:
+        - POL-DELIVERY-001#rule.exact-ownership
+    - **id**: approval-scope
+      - **kind**: behavior
+      - **statement**: An approval and its stored plan preserve the reviewed workspace, targets, and status transition without hidden expansion.
       - **governed_by**:
         - POL-DELIVERY-001#rule.exact-ownership
     - **id**: finalization-handoff
@@ -185,24 +286,92 @@ requirements:
                 covers: [FEAT-RESULT-VALIDATION-001#binding.implementation/target.completion-evaluation]
                 runner: { runner: cargo-test, arguments: { package: syu-validation, test: tests::exact_test_execution_requires_match } }
   - id: REQ-PUBLIC-001
-    title: Public entrypoint traceability
-    description: Every discovered public entrypoint has an exact target and bounded canonical work plan.
-    priority: low
-    status: planned
+    title: Public entrypoint governance
+    description: Every discovered public entrypoint belongs to a concrete capability with acceptance, verification, and a bounded canonical work plan.
+    priority: critical
+    status: implemented
     criteria:
-      - id: entrypoint
+      - id: workbench-client-transport
         kind: quality
-        statement: A public entrypoint resolves through an exact target to a canonical plan.
-        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+        statement: Workbench transport and session entrypoints preserve repository identity and return canonical projection data.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence, POL-ADOPTION-001#rule.bounded-rollout]
+      - id: workbench-client-actions
+        kind: quality
+        statement: Workbench action entrypoints expose typed preview, approval, diagnostics, and readiness operations without bypassing canonical validation.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence, POL-ADOPTION-001#rule.bounded-rollout]
+      - id: workbench-components
+        kind: quality
+        statement: Reusable Workbench components render canonical state, diagnostics, targets, translations, and diffs.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence, POL-ADOPTION-001#rule.bounded-rollout]
+      - id: workbench-pages
+        kind: quality
+        statement: Workbench pages initialize and render diagnostics, readiness, scope, settings, and specification details from canonical projections.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence, POL-ADOPTION-001#rule.bounded-rollout]
+      - id: workbench-navigation
+        kind: quality
+        statement: Workbench navigation and state entrypoints preserve valid page, tab, and selected-slice transitions.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence, POL-ADOPTION-001#rule.bounded-rollout]
+      - id: workbench-rendering
+        kind: quality
+        statement: Server-rendered Workbench entrypoints emit a localized shell that can start the canonical client.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence, POL-ADOPTION-001#rule.bounded-rollout]
+      - id: code-diagnostics
+        kind: quality
+        statement: Code intelligence and diagnostic entrypoints return stable symbol and validation results.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence, POL-ADOPTION-001#rule.bounded-rollout]
+      - id: inventory-discovery
+        kind: quality
+        statement: Inventory entrypoints discover active artifacts and combine adapter output without losing exact identity.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence, POL-ADOPTION-001#rule.bounded-rollout]
+      - id: specification-model
+        kind: quality
+        statement: Specification-model entrypoints preserve normalized repository paths, anchors, and schema identity.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence, POL-ADOPTION-001#rule.bounded-rollout]
+      - id: validation-engine
+        kind: quality
+        statement: Validation entrypoints expose canonical phases, readiness, changed-file analysis, and verification execution.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence, POL-ADOPTION-001#rule.bounded-rollout]
+      - id: work-planning
+        kind: quality
+        statement: Work-model and planner entrypoints preserve exact requested targets, stable plan identity, and bounded split guidance.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence, POL-ADOPTION-001#rule.bounded-rollout]
+      - id: workbench-server-lifecycle
+        kind: quality
+        statement: Workbench server lifecycle entrypoints construct, project, route, and run sessions with explicit launch state.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence, POL-ADOPTION-001#rule.bounded-rollout]
+      - id: workbench-server-validation
+        kind: quality
+        statement: Workbench server validation entrypoints report branch scope and accept only matching canonical verification receipts.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence, POL-ADOPTION-001#rule.bounded-rollout]
+      - id: workspace-loading
+        kind: quality
+        statement: Workspace loading and index entrypoints preserve overlays, fingerprints, exact anchors, and readable content.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence, POL-ADOPTION-001#rule.bounded-rollout]
+      - id: workspace-resolution
+        kind: quality
+        statement: Workspace resolution entrypoints map selectors to exact artifacts and stable ownership and specification fingerprints.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence, POL-ADOPTION-001#rule.bounded-rollout]
+      - id: agent-delivery
+        kind: quality
+        statement: Agent and delivery entrypoints preserve inspectable run, blocker, verification, and durable event evidence.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence, POL-ADOPTION-001#rule.bounded-rollout]
   - id: REQ-WORK-002
     title: Durable completion delivery
     description: Completion verification is preserved as immutable attempts and can be finalized only after explicit plan approval.
     priority: critical
     status: implemented
     criteria:
-      - id: durable-attempt
+      - id: store-boundary
         kind: behavior
-        statement: Failed and successful verification attempts remain queryable without widening their approved scope.
+        statement: Delivery data stays outside the worktree in a stable repository-local store with explicit approval and attempt paths.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+      - id: immutable-attempt
+        kind: behavior
+        statement: Failed and successful verification attempts are digest-checked, immutable, and queryable without widening their approved scope.
+        governed_by: [POL-DELIVERY-001#rule.exact-ownership]
+      - id: approval-scope
+        kind: behavior
+        statement: An approval and its stored plan preserve the reviewed workspace, targets, and status transition without hidden expansion.
         governed_by: [POL-DELIVERY-001#rule.exact-ownership]
       - id: finalization-handoff
         kind: behavior
