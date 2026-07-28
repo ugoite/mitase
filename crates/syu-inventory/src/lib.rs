@@ -48,6 +48,11 @@ pub struct ArtifactUnit {
     pub reachability: ArtifactReachability,
     pub span: SourceSpan,
     pub digest: String,
+    /// Digest of the artifact shape with its declared name removed. Unlike
+    /// `digest`, this stays stable across a pure rename and lets inventory
+    /// comparison retain semantic identity without line-based heuristics.
+    #[serde(default)]
+    pub structural_digest: String,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -57,6 +62,7 @@ pub enum ArtifactUnitKind {
     Marker,
     Operation,
     Heading,
+    SchemaNode,
     Generated,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -82,6 +88,29 @@ pub struct SourceSpan {
     pub byte_end: usize,
     pub line_start: usize,
     pub line_end: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SemanticChangeKind {
+    PublicAddition,
+    Addition,
+    PrivateModification,
+    Modification,
+    Rename,
+    Deletion,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SemanticChange {
+    pub kind: SemanticChangeKind,
+    pub adapter: String,
+    pub path: RepoPath,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub before_identity: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub after_identity: Option<String>,
+    pub exposure: ArtifactExposure,
 }
 
 /// Deliberately boring provider used for declared/documentation assets. Language
@@ -163,11 +192,115 @@ fn openapi_operations(context: &InventoryContext, path: PathBuf) -> Result<Vec<A
                         line_end: 1,
                     },
                     digest: digest(format!("{} {}", method, path_value).as_bytes()),
+                    structural_digest: digest(
+                        format!("{} {}", method.to_ascii_uppercase(), path_value).as_bytes(),
+                    ),
                 });
             }
         }
     }
     Ok(units)
+}
+
+fn schema_nodes(
+    context: &InventoryContext,
+    path: PathBuf,
+    adapter: &str,
+) -> Result<Vec<ArtifactUnit>> {
+    let relative = path
+        .strip_prefix(&context.workspace_root)
+        .context("schema path escaped workspace")?;
+    let repo_path = RepoPath::from_path(relative)
+        .map_err(|error| anyhow::anyhow!("schema path {:?}: {error}", path))?;
+    let bytes = read_bytes(context, &path)?;
+    let document: serde_yaml::Value = if adapter == "json" || adapter == "json-schema" {
+        let json: serde_json::Value = serde_json::from_slice(&bytes)
+            .with_context(|| format!("parse JSON schema {}", repo_path.display()))?;
+        serde_yaml::to_value(json)?
+    } else {
+        serde_yaml::from_slice(&bytes)
+            .with_context(|| format!("parse YAML schema {}", repo_path.display()))?
+    };
+    let line_end = String::from_utf8_lossy(&bytes).lines().count().max(1);
+    let mut units = Vec::new();
+    collect_schema_nodes(
+        adapter,
+        &repo_path,
+        &document,
+        String::new(),
+        bytes.len(),
+        line_end,
+        &mut units,
+    )?;
+    Ok(units)
+}
+
+fn collect_schema_nodes(
+    adapter: &str,
+    path: &RepoPath,
+    value: &serde_yaml::Value,
+    pointer: String,
+    byte_end: usize,
+    line_end: usize,
+    units: &mut Vec<ArtifactUnit>,
+) -> Result<()> {
+    if !pointer.is_empty() {
+        let serialized = serde_json::to_vec(value)?;
+        units.push(ArtifactUnit {
+            adapter: adapter.into(),
+            path: path.clone(),
+            identity: format!("{adapter}:{}::pointer::{pointer}", path.to_string_lossy()),
+            kind: ArtifactUnitKind::SchemaNode,
+            exposure: if adapter == "json-schema" {
+                ArtifactExposure::Public
+            } else {
+                ArtifactExposure::Workspace
+            },
+            reachability: ArtifactReachability::Active,
+            span: SourceSpan {
+                byte_start: 0,
+                byte_end,
+                line_start: 1,
+                line_end,
+            },
+            digest: digest(&serialized),
+            structural_digest: digest(&serialized),
+        });
+    }
+    match value {
+        serde_yaml::Value::Mapping(mapping) => {
+            for (key, child) in mapping {
+                let Some(key) = key.as_str() else {
+                    continue;
+                };
+                let escaped = key.replace('~', "~0").replace('/', "~1");
+                collect_schema_nodes(
+                    adapter,
+                    path,
+                    child,
+                    format!("{pointer}/{escaped}"),
+                    byte_end,
+                    line_end,
+                    units,
+                )?;
+            }
+        }
+        serde_yaml::Value::Sequence(sequence) => {
+            for (index, child) in sequence.iter().enumerate() {
+                collect_schema_nodes(
+                    adapter,
+                    path,
+                    child,
+                    format!("{pointer}/{index}"),
+                    byte_end,
+                    line_end,
+                    units,
+                )?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 fn markdown_headings(context: &InventoryContext, path: PathBuf) -> Result<Vec<ArtifactUnit>> {
@@ -210,6 +343,13 @@ fn markdown_headings(context: &InventoryContext, path: PathBuf) -> Result<Vec<Ar
                 line_end: line_index + 1,
             },
             digest: digest(line.as_bytes()),
+            structural_digest: digest(
+                trimmed
+                    .chars()
+                    .take_while(|character| *character == '#')
+                    .collect::<String>()
+                    .as_bytes(),
+            ),
         });
     }
     Ok(units)
@@ -270,6 +410,7 @@ fn unit(context: &InventoryContext, adapter: &str, path: PathBuf) -> Result<Arti
             line_end: text.lines().count().max(1),
         },
         digest: digest(&bytes),
+        structural_digest: digest(&bytes),
     })
 }
 
@@ -410,6 +551,8 @@ fn provider_for(adapter: &str, settings: serde_yaml::Value) -> Result<Box<dyn In
         "go" => &["go"],
         "shell" => &["sh", "bash", "zsh"],
         "openapi" => &["yaml", "yml", "json"],
+        "json" | "json-schema" => &["json"],
+        "yaml" => &["yaml", "yml"],
         "documentation" | "markdown" => &["md", "mdx"],
         "html" => &["html"],
         // Declared artifacts are explicitly configured in the profile. The
@@ -477,6 +620,8 @@ impl InventoryProvider for ExtensionInventoryProvider {
                 units.extend(markdown_headings(context, path)?);
             } else if self.adapter == "openapi" {
                 units.extend(openapi_operations(context, path)?);
+            } else if matches!(self.adapter.as_str(), "json" | "json-schema" | "yaml") {
+                units.extend(schema_nodes(context, path, &self.adapter)?);
             } else if matches!(self.adapter.as_str(), "javascript" | "typescript") {
                 units.extend(source_symbol_units(context, path, &self.adapter)?);
             } else if self.adapter == "html" {
@@ -563,6 +708,7 @@ fn html_marker_units(context: &InventoryContext, path: PathBuf) -> Result<Vec<Ar
                 line_end,
             },
             digest: digest(marker.as_bytes()),
+            structural_digest: digest(marker.as_bytes()),
         });
     }
     Ok(units)
@@ -607,7 +753,7 @@ fn source_symbol_units(
             exposure: if exported {
                 ArtifactExposure::Public
             } else {
-                ArtifactExposure::Workspace
+                ArtifactExposure::Private
             },
             reachability: ArtifactReachability::Active,
             span: SourceSpan {
@@ -617,6 +763,7 @@ fn source_symbol_units(
                 line_end,
             },
             digest: digest(&source.as_bytes()[start..end.max(start + 1)]),
+            structural_digest: structural_digest(&source[start..end.max(start + 1)], name),
         });
     };
 
@@ -915,6 +1062,7 @@ fn discover_rust(
             module_path: vec![module_name(&path)],
             impl_type: None,
             attributes: Vec::new(),
+            current_active: true,
             test_file: is_test_file,
             cfg: &cfg,
             public_module: file_visibility.get(&path).copied().unwrap_or(true),
@@ -952,6 +1100,7 @@ fn support_unit(context: &InventoryContext, path: PathBuf) -> Result<ArtifactUni
             line_end: 1,
         },
         digest: digest(&bytes),
+        structural_digest: digest(&bytes),
     })
 }
 
@@ -964,6 +1113,7 @@ struct RustVisitor<'a> {
     module_path: Vec<String>,
     impl_type: Option<String>,
     attributes: Vec<String>,
+    current_active: bool,
     test_file: bool,
     cfg: &'a CfgContext,
     public_module: bool,
@@ -971,43 +1121,59 @@ struct RustVisitor<'a> {
 
 impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
     fn visit_item_fn(&mut self, item: &'ast syn::ItemFn) {
-        if !cfg_active(&item.attrs, self.cfg) {
-            return;
-        }
         let previous = self.attributes.clone();
+        let previous_active = self.current_active;
         self.attributes = attribute_keys(&item.attrs);
+        let active = cfg_active(&item.attrs, self.cfg);
+        self.current_active = active;
         self.add(&item.sig.ident.to_string(), &item.vis, item.span(), true);
-        syn::visit::visit_item_fn(self, item);
+        if active {
+            syn::visit::visit_item_fn(self, item);
+        }
         self.attributes = previous;
+        self.current_active = previous_active;
     }
 
     fn visit_item_struct(&mut self, item: &'ast syn::ItemStruct) {
-        if !cfg_active(&item.attrs, self.cfg) {
-            return;
-        }
+        let previous = self.attributes.clone();
+        let previous_active = self.current_active;
+        self.attributes = attribute_keys(&item.attrs);
+        self.current_active = cfg_active(&item.attrs, self.cfg);
         self.add(&item.ident.to_string(), &item.vis, item.span(), false);
-        syn::visit::visit_item_struct(self, item);
+        if self.current_active {
+            syn::visit::visit_item_struct(self, item);
+        }
+        self.attributes = previous;
+        self.current_active = previous_active;
     }
 
     fn visit_item_enum(&mut self, item: &'ast syn::ItemEnum) {
-        if !cfg_active(&item.attrs, self.cfg) {
-            return;
-        }
+        let previous = self.attributes.clone();
+        let previous_active = self.current_active;
+        self.attributes = attribute_keys(&item.attrs);
+        self.current_active = cfg_active(&item.attrs, self.cfg);
         self.add(&item.ident.to_string(), &item.vis, item.span(), false);
-        syn::visit::visit_item_enum(self, item);
+        if self.current_active {
+            syn::visit::visit_item_enum(self, item);
+        }
+        self.attributes = previous;
+        self.current_active = previous_active;
     }
 
     fn visit_item_trait(&mut self, item: &'ast syn::ItemTrait) {
-        if !cfg_active(&item.attrs, self.cfg) {
-            return;
-        }
         let previous_attributes = self.attributes.clone();
+        let previous_active = self.current_active;
         self.attributes = attribute_keys(&item.attrs);
+        let active = cfg_active(&item.attrs, self.cfg);
+        self.current_active = active;
         self.add(&item.ident.to_string(), &item.vis, item.span(), false);
-        let previous = self.impl_type.replace(format!("trait({})", item.ident));
-        syn::visit::visit_item_trait(self, item);
-        self.impl_type = previous;
+        if active {
+            let previous = self.impl_type.replace(format!("trait({})", item.ident));
+            syn::visit::visit_item_trait(self, item);
+            self.impl_type = previous;
+        }
         self.attributes = previous_attributes;
+        self.current_active = previous_active;
     }
 
     fn visit_item_impl(&mut self, item: &'ast syn::ItemImpl) {
@@ -1032,58 +1198,74 @@ impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
     }
 
     fn visit_item_mod(&mut self, item: &'ast syn::ItemMod) {
-        if !cfg_active(&item.attrs, self.cfg) {
-            return;
-        }
+        let previous_attributes = self.attributes.clone();
+        let previous_active = self.current_active;
+        self.attributes = attribute_keys(&item.attrs);
+        let active = cfg_active(&item.attrs, self.cfg);
+        self.current_active = active;
         self.add(&item.ident.to_string(), &item.vis, item.span(), false);
-        let previous_len = self.module_path.len();
-        let previous_public = self.public_module;
-        self.module_path.push(item.ident.to_string());
-        self.public_module = self.public_module && matches!(item.vis, syn::Visibility::Public(_));
-        syn::visit::visit_item_mod(self, item);
-        self.module_path.truncate(previous_len);
-        self.public_module = previous_public;
+        if active {
+            let previous_len = self.module_path.len();
+            let previous_public = self.public_module;
+            self.module_path.push(item.ident.to_string());
+            self.public_module =
+                self.public_module && matches!(item.vis, syn::Visibility::Public(_));
+            syn::visit::visit_item_mod(self, item);
+            self.module_path.truncate(previous_len);
+            self.public_module = previous_public;
+        }
+        self.attributes = previous_attributes;
+        self.current_active = previous_active;
     }
 
     fn visit_impl_item_fn(&mut self, item: &'ast syn::ImplItemFn) {
-        if !cfg_active(&item.attrs, self.cfg) {
-            return;
-        }
         let previous = self.attributes.clone();
+        let previous_active = self.current_active;
         self.attributes = attribute_keys(&item.attrs);
+        let active = cfg_active(&item.attrs, self.cfg);
+        self.current_active = active;
         self.add(&item.sig.ident.to_string(), &item.vis, item.span(), true);
-        syn::visit::visit_impl_item_fn(self, item);
+        if active {
+            syn::visit::visit_impl_item_fn(self, item);
+        }
         self.attributes = previous;
+        self.current_active = previous_active;
     }
 
     fn visit_trait_item_fn(&mut self, item: &'ast syn::TraitItemFn) {
-        if !cfg_active(&item.attrs, self.cfg) {
-            return;
-        }
         let previous = self.attributes.clone();
+        let previous_active = self.current_active;
         self.attributes = attribute_keys(&item.attrs);
+        let active = cfg_active(&item.attrs, self.cfg);
+        self.current_active = active;
         self.add(
             &item.sig.ident.to_string(),
             &syn::Visibility::Inherited,
             item.span(),
             false,
         );
-        syn::visit::visit_trait_item_fn(self, item);
+        if active {
+            syn::visit::visit_trait_item_fn(self, item);
+        }
         self.attributes = previous;
+        self.current_active = previous_active;
     }
 
     fn visit_item_use(&mut self, item: &'ast syn::ItemUse) {
-        if !self.public_module
-            || !matches!(item.vis, syn::Visibility::Public(_))
-            || !cfg_active(&item.attrs, self.cfg)
-        {
+        if !self.public_module || !matches!(item.vis, syn::Visibility::Public(_)) {
             return;
         }
+        let previous = self.attributes.clone();
+        let previous_active = self.current_active;
+        self.attributes = attribute_keys(&item.attrs);
+        self.current_active = cfg_active(&item.attrs, self.cfg);
         let mut names = Vec::new();
         collect_use_names(&item.tree, &mut names);
         for name in names {
             self.add(&name, &item.vis, item.span(), true);
         }
+        self.attributes = previous;
+        self.current_active = previous_active;
     }
 }
 
@@ -1146,7 +1328,13 @@ impl RustVisitor<'_> {
             } else {
                 ArtifactExposure::Private
             },
-            reachability: ArtifactReachability::Active,
+            reachability: if self.current_active {
+                ArtifactReachability::Active
+            } else {
+                ArtifactReachability::Conditional {
+                    profile: self.attributes.join(","),
+                }
+            },
             span: SourceSpan {
                 byte_start,
                 byte_end,
@@ -1154,6 +1342,7 @@ impl RustVisitor<'_> {
                 line_end,
             },
             digest: digest(excerpt.as_bytes()),
+            structural_digest: structural_digest(excerpt, name),
         });
     }
 
@@ -1319,6 +1508,149 @@ fn digest(bytes: &[u8]) -> String {
     let mut hash = Sha256::new();
     hash.update(bytes);
     format_sha256(hash.finalize())
+}
+
+fn structural_digest(source: &str, declared_name: &str) -> String {
+    let normalized = source
+        .replacen(declared_name, "<identity>", 1)
+        .split_whitespace()
+        .collect::<String>();
+    digest(normalized.as_bytes())
+}
+
+/// Compare two inventory snapshots by semantic identity. Exact identities are
+/// independent of source spans, while a structural digest connects a pure
+/// rename without guessing from line movement.
+pub fn semantic_diff(before: &[ArtifactUnit], after: &[ArtifactUnit]) -> Vec<SemanticChange> {
+    let before_by_identity = before
+        .iter()
+        .map(|unit| (unit.identity.as_str(), unit))
+        .collect::<BTreeMap<_, _>>();
+    let after_by_identity = after
+        .iter()
+        .map(|unit| (unit.identity.as_str(), unit))
+        .collect::<BTreeMap<_, _>>();
+    let mut changes = Vec::new();
+    let mut removed = before
+        .iter()
+        .filter(|unit| !after_by_identity.contains_key(unit.identity.as_str()))
+        .collect::<Vec<_>>();
+    let mut added = after
+        .iter()
+        .filter(|unit| !before_by_identity.contains_key(unit.identity.as_str()))
+        .collect::<Vec<_>>();
+
+    for unit in before {
+        let Some(current) = after_by_identity.get(unit.identity.as_str()) else {
+            continue;
+        };
+        if unit.digest == current.digest && unit.exposure == current.exposure {
+            continue;
+        }
+        changes.push(SemanticChange {
+            kind: if current.exposure == ArtifactExposure::Public
+                && unit.exposure != ArtifactExposure::Public
+            {
+                SemanticChangeKind::PublicAddition
+            } else if matches!(
+                current.exposure,
+                ArtifactExposure::Private | ArtifactExposure::Workspace
+            ) {
+                SemanticChangeKind::PrivateModification
+            } else {
+                SemanticChangeKind::Modification
+            },
+            adapter: current.adapter.clone(),
+            path: current.path.clone(),
+            before_identity: Some(unit.identity.clone()),
+            after_identity: Some(current.identity.clone()),
+            exposure: current.exposure.clone(),
+        });
+    }
+
+    let mut removed_used = BTreeSet::new();
+    let mut added_used = BTreeSet::new();
+    for (before_index, previous) in removed.iter().enumerate() {
+        let structural = if previous.structural_digest.is_empty() {
+            previous.digest.as_str()
+        } else {
+            previous.structural_digest.as_str()
+        };
+        let candidates = added
+            .iter()
+            .enumerate()
+            .filter(|(after_index, current)| {
+                !added_used.contains(after_index)
+                    && previous.adapter == current.adapter
+                    && previous.kind == current.kind
+                    && previous.exposure == current.exposure
+                    && structural
+                        == if current.structural_digest.is_empty() {
+                            current.digest.as_str()
+                        } else {
+                            current.structural_digest.as_str()
+                        }
+            })
+            .collect::<Vec<_>>();
+        if candidates.len() != 1 {
+            continue;
+        }
+        let (after_index, current) = candidates[0];
+        removed_used.insert(before_index);
+        added_used.insert(after_index);
+        changes.push(SemanticChange {
+            kind: SemanticChangeKind::Rename,
+            adapter: current.adapter.clone(),
+            path: current.path.clone(),
+            before_identity: Some(previous.identity.clone()),
+            after_identity: Some(current.identity.clone()),
+            exposure: current.exposure.clone(),
+        });
+    }
+
+    for (index, unit) in removed.drain(..).enumerate() {
+        if removed_used.contains(&index) {
+            continue;
+        }
+        changes.push(SemanticChange {
+            kind: SemanticChangeKind::Deletion,
+            adapter: unit.adapter.clone(),
+            path: unit.path.clone(),
+            before_identity: Some(unit.identity.clone()),
+            after_identity: None,
+            exposure: unit.exposure.clone(),
+        });
+    }
+    for (index, unit) in added.drain(..).enumerate() {
+        if added_used.contains(&index) {
+            continue;
+        }
+        changes.push(SemanticChange {
+            kind: if unit.exposure == ArtifactExposure::Public {
+                SemanticChangeKind::PublicAddition
+            } else {
+                SemanticChangeKind::Addition
+            },
+            adapter: unit.adapter.clone(),
+            path: unit.path.clone(),
+            before_identity: None,
+            after_identity: Some(unit.identity.clone()),
+            exposure: unit.exposure.clone(),
+        });
+    }
+    changes.sort_by(|left, right| {
+        (
+            left.path.to_string_lossy(),
+            left.before_identity.as_deref(),
+            left.after_identity.as_deref(),
+        )
+            .cmp(&(
+                right.path.to_string_lossy(),
+                right.before_identity.as_deref(),
+                right.after_identity.as_deref(),
+            ))
+    });
+    changes
 }
 
 fn collect_matching(
@@ -1768,5 +2100,158 @@ mod tests {
                 .iter()
                 .all(|unit| unit.span.byte_end > unit.span.byte_start)
         );
+    }
+
+    #[test]
+    fn semantic_diff_distinguishes_public_private_rename_and_deletion() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("model.ts");
+        fs::write(
+            &path,
+            "export function stable() {}\nfunction helper() { return 1; }\nfunction oldName() { return 2; }\nfunction removed() { return 3; }\n",
+        )
+        .unwrap();
+        let context = InventoryContext {
+            workspace_root: temp.path().into(),
+            profile: "default".into(),
+            settings: serde_yaml::Value::Null,
+            excludes: vec![],
+            overlays: BTreeMap::new(),
+        };
+        let before = source_symbol_units(&context, path.clone(), "typescript").unwrap();
+        fs::write(
+            &path,
+            "export function stable() {}\nexport function added() {}\nfunction helper() { return 10; }\nfunction newName() { return 2; }\n",
+        )
+        .unwrap();
+        let after = source_symbol_units(&context, path, "typescript").unwrap();
+        let changes = semantic_diff(&before, &after);
+
+        assert!(changes.iter().any(|change| {
+            change.kind == SemanticChangeKind::PublicAddition
+                && change
+                    .after_identity
+                    .as_deref()
+                    .is_some_and(|id| id.ends_with("::added"))
+        }));
+        assert!(changes.iter().any(|change| {
+            change.kind == SemanticChangeKind::PrivateModification
+                && change
+                    .after_identity
+                    .as_deref()
+                    .is_some_and(|id| id.ends_with("::helper"))
+        }));
+        assert!(changes.iter().any(|change| {
+            change.kind == SemanticChangeKind::Rename
+                && change
+                    .before_identity
+                    .as_deref()
+                    .is_some_and(|id| id.ends_with("::oldName"))
+                && change
+                    .after_identity
+                    .as_deref()
+                    .is_some_and(|id| id.ends_with("::newName"))
+        }));
+        assert!(changes.iter().any(|change| {
+            change.kind == SemanticChangeKind::Deletion
+                && change
+                    .before_identity
+                    .as_deref()
+                    .is_some_and(|id| id.ends_with("::removed"))
+        }));
+    }
+
+    #[test]
+    fn semantic_identity_ignores_line_movement_and_formatting() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("model.js");
+        fs::write(&path, "export function api(){return true;}\n").unwrap();
+        let context = InventoryContext {
+            workspace_root: temp.path().into(),
+            profile: "default".into(),
+            settings: serde_yaml::Value::Null,
+            excludes: vec![],
+            overlays: BTreeMap::new(),
+        };
+        let before = source_symbol_units(&context, path.clone(), "javascript").unwrap();
+        fs::write(&path, "\n\nexport function api() {\n  return true;\n}\n").unwrap();
+        let after = source_symbol_units(&context, path, "javascript").unwrap();
+        assert_eq!(before[0].identity, after[0].identity);
+        assert_ne!(before[0].span.line_start, after[0].span.line_start);
+    }
+
+    #[test]
+    fn inactive_rust_cfg_units_are_inventory_only() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("src")).unwrap();
+        fs::write(
+            temp.path().join("src/lib.rs"),
+            "#[cfg(feature = \"enterprise\")]\npub fn enterprise() {}\npub fn active() {}\n",
+        )
+        .unwrap();
+        fs::write(
+            temp.path().join("Cargo.toml"),
+            "[package]\nname = \"fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        )
+        .unwrap();
+        let profile = InventoryProfile {
+            id: "default".into(),
+            providers: BTreeMap::from([("rust".into(), serde_yaml::Value::Null)]),
+        };
+        let units = InventoryRegistry::discover(
+            &InventoryContext {
+                workspace_root: temp.path().into(),
+                profile: "default".into(),
+                settings: serde_yaml::Value::Null,
+                excludes: vec![],
+                overlays: BTreeMap::new(),
+            },
+            &profile,
+        )
+        .unwrap();
+        let enterprise = units
+            .iter()
+            .find(|unit| unit.identity.contains("enterprise"))
+            .unwrap();
+        assert!(matches!(
+            enterprise.reachability,
+            ArtifactReachability::Conditional { .. }
+        ));
+        assert!(units.iter().any(|unit| {
+            unit.identity.ends_with("::active") && unit.reachability == ArtifactReachability::Active
+        }));
+    }
+
+    #[test]
+    fn json_schema_provider_discovers_exact_pointer_identities() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(
+            temp.path().join("schema.json"),
+            r#"{"properties":{"user":{"type":"string"}}}"#,
+        )
+        .unwrap();
+        let profile = InventoryProfile {
+            id: "default".into(),
+            providers: BTreeMap::from([(
+                "json-schema".into(),
+                serde_yaml::from_str("{ roots: [schema.json] }").unwrap(),
+            )]),
+        };
+        let units = InventoryRegistry::discover(
+            &InventoryContext {
+                workspace_root: temp.path().into(),
+                profile: "default".into(),
+                settings: serde_yaml::Value::Null,
+                excludes: vec![],
+                overlays: BTreeMap::new(),
+            },
+            &profile,
+        )
+        .unwrap();
+        assert!(units.iter().any(|unit| {
+            unit.kind == ArtifactUnitKind::SchemaNode
+                && unit.identity == "json-schema:schema.json::pointer::/properties/user/type"
+                && unit.exposure == ArtifactExposure::Public
+        }));
     }
 }

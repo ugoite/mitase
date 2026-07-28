@@ -1215,7 +1215,7 @@ fn build_requested_target_slice(
         match target.access {
             TargetAccessMode::Editable => editable.push(target),
             TargetAccessMode::RunOnly => verification.push(target),
-            TargetAccessMode::Readonly => readonly.push(target),
+            TargetAccessMode::Readonly | TargetAccessMode::Generated => readonly.push(target),
         }
     }
     let mut contracts = Vec::new();
@@ -1328,7 +1328,7 @@ fn build_requested_criterion_slice(
             match target.access {
                 TargetAccessMode::Editable => editable.push(target),
                 TargetAccessMode::RunOnly => verification.push(target),
-                TargetAccessMode::Readonly => readonly.push(target),
+                TargetAccessMode::Readonly | TargetAccessMode::Generated => readonly.push(target),
             }
         }
         let (more_readonly, more_contracts) = contract_readonly_context_for_target(
@@ -1457,6 +1457,7 @@ fn finalize_requested_slice(
     mut blockers: Vec<Diagnostic>,
     criterion: Option<SpecAnchor>,
 ) -> Result<ExecutionSlice> {
+    normalize_generated_access(index, &editable, &mut readonly);
     drop_readonly_overlaps(&mut readonly, &editable, &verification);
     validate_target_access_uniqueness(
         &mut blockers,
@@ -1836,6 +1837,7 @@ fn finalize_slice(
         readonly.append(&mut verification);
         dedup(&mut readonly);
     }
+    normalize_generated_access(index, &editable, &mut readonly);
     anchors.extend(contracts.clone());
     if true {
         for rule in index.criteria_to_rules.get(criterion).into_iter().flatten() {
@@ -1936,6 +1938,34 @@ fn finalize_slice(
         confidence: PlanConfidence::Exact,
         blockers,
     })
+}
+
+fn normalize_generated_access(
+    index: &SpecIndex,
+    editable: &[PlannedTarget],
+    readonly: &mut [PlannedTarget],
+) {
+    let editable_sources = editable
+        .iter()
+        .filter(|target| target.access == TargetAccessMode::Editable)
+        .map(|target| target.reference.clone())
+        .collect::<BTreeSet<_>>();
+    for generated in readonly
+        .iter_mut()
+        .filter(|target| target.access == TargetAccessMode::Generated)
+    {
+        if !index
+            .generated_from
+            .get(&generated.reference)
+            .is_some_and(|sources| {
+                sources
+                    .iter()
+                    .any(|source| editable_sources.contains(source))
+            })
+        {
+            generated.access = TargetAccessMode::Readonly;
+        }
+    }
 }
 
 fn default_non_goals(request: &WorkRequest) -> Vec<NonGoal> {
@@ -2143,6 +2173,64 @@ fn contract_readonly_context_for_target(
             }
         }
     }
+    for generated in index
+        .generated_by_source
+        .get(implementation)
+        .cloned()
+        .unwrap_or_default()
+    {
+        if let Some(binding) = index.bindings.get(&generated.binding)
+            && let Some(target) = index.target(&generated)
+        {
+            let mut planned = one_target(
+                workspace,
+                index,
+                &generated,
+                binding,
+                target,
+                TargetPlanOptions {
+                    policy: target_policy(TargetTransition::Readonly),
+                    reason: "Generated output derived from this editable source; tools may not write it directly.",
+                    operation: WorkOperation::Modify,
+                    add_budget_bytes: None,
+                    add_budget_lines: None,
+                    exclude_matcher,
+                },
+                blockers,
+            );
+            for target in &mut planned {
+                target.access = TargetAccessMode::Generated;
+            }
+            readonly.extend(planned);
+        }
+    }
+    for source in index
+        .generated_from
+        .get(implementation)
+        .cloned()
+        .unwrap_or_default()
+    {
+        if let Some(binding) = index.bindings.get(&source.binding)
+            && let Some(target) = index.target(&source)
+        {
+            readonly.extend(one_target(
+                workspace,
+                index,
+                &source,
+                binding,
+                target,
+                TargetPlanOptions {
+                    policy: target_policy(TargetTransition::Readonly),
+                    reason: "Exact source of this generated artifact.",
+                    operation: WorkOperation::Modify,
+                    add_budget_bytes: None,
+                    add_budget_lines: None,
+                    exclude_matcher,
+                },
+                blockers,
+            ));
+        }
+    }
     (readonly, contracts)
 }
 #[allow(clippy::too_many_arguments)]
@@ -2211,6 +2299,20 @@ fn one_target(
         .exclude_matcher
         .is_some_and(|matcher| matcher.is_match(&target.path))
     {
+        return vec![];
+    }
+    if binding.role == BindingRole::Generated
+        && matches!(options.policy.access, TargetAccessMode::Editable)
+    {
+        let mut diagnostic = Diagnostic::error(
+            "SYU-WORK-013",
+            format!(
+                "generated target {reference} is not directly editable; request one of its generated-from source targets"
+            ),
+            target.path.to_string_lossy(),
+        );
+        diagnostic.target = Some(reference.clone());
+        blockers.push(diagnostic);
         return vec![];
     }
     if !matches!(options.policy.transition, TargetTransition::Add)
@@ -3605,5 +3707,276 @@ mod tests {
             .expect("support entry");
         assert_eq!(support.supports.target_id.to_string(), "handler-missing");
         assert!(support.support_id.starts_with("support:"));
+    }
+
+    fn write_dependency_workspace(root: &Path) {
+        fs::create_dir_all(root.join("spec")).expect("spec dir");
+        fs::create_dir_all(root.join("src")).expect("src dir");
+        fs::create_dir_all(root.join("web")).expect("web dir");
+        fs::write(
+            root.join("syu.yaml"),
+            concat!(
+                "schema: syu/config/v1\n",
+                "workspace: { spec_roots: [spec], excludes: [] }\n",
+                "inventory:\n",
+                "  active_profile: default\n",
+                "  profiles:\n",
+                "    - id: default\n",
+                "      providers:\n",
+                "        rust: {}\n",
+                "        javascript: { roots: [web] }\n",
+                "        declared: { roots: [generated.txt] }\n",
+                "validation:\n",
+                "  preset: standard\n",
+                "  readiness:\n",
+                "    target: off\n",
+                "    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_seed: 4 }\n",
+                "  changed: { require_owned_changes: false, require_plan: false }\n",
+                "verification: { runners: {} }\n",
+                "work:\n",
+                "  slicing: { max_editable_files: 4, max_editable_symbols: 8, max_verification_targets: 4, max_readonly_targets: 8, max_total_bytes: 8192 }\n",
+            ),
+        )
+        .expect("config");
+        fs::write(
+            root.join("spec/requirement.yaml"),
+            concat!(
+                "schema: syu/spec/v1\n",
+                "kind: requirements\n",
+                "namespace: dependency\n",
+                "category: Dependency\n",
+                "requirements:\n",
+                "  - id: REQ-DEPENDENCY-001\n",
+                "    title: Dependency\n",
+                "    description: Keep provider and consumer coherent.\n",
+                "    priority: high\n",
+                "    status: implemented\n",
+                "    criteria:\n",
+                "      - id: coherent\n",
+                "        kind: behavior\n",
+                "        statement: Provider and consumer change coherently.\n",
+                "        governed_by: []\n",
+            ),
+        )
+        .expect("requirement");
+        fs::write(
+            root.join("spec/feature.yaml"),
+            concat!(
+                "schema: syu/spec/v1\n",
+                "kind: features\n",
+                "namespace: dependency\n",
+                "category: Dependency\n",
+                "features:\n",
+                "  - id: FEAT-DEPENDENCY-001\n",
+                "    title: Dependency planning\n",
+                "    summary: Plan cross-language and generated dependencies.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: provider\n",
+                "        role: implementation\n",
+                "        facet: backend\n",
+                "        responsibility: Provide the API.\n",
+                "        targets:\n",
+                "          - { id: provider, adapter: rust, path: src/lib.rs, selector: { kind: symbol, name: provider }, claims: [{ kind: satisfies, criterion: REQ-DEPENDENCY-001#criterion.coherent }] }\n",
+                "      - id: consumer\n",
+                "        role: implementation\n",
+                "        facet: frontend\n",
+                "        responsibility: Consume the API.\n",
+                "        targets:\n",
+                "          - { id: consumer, adapter: javascript, path: web/client.js, selector: { kind: symbol, name: consumer }, claims: [{ kind: satisfies, criterion: REQ-DEPENDENCY-001#criterion.coherent }] }\n",
+                "      - id: contract-source\n",
+                "        role: contract-source\n",
+                "        facet: api\n",
+                "        responsibility: Define the API contract.\n",
+                "        targets:\n",
+                "          - { id: contract, adapter: javascript, path: web/client.js, selector: { kind: symbol, name: contract }, claims: [] }\n",
+                "      - id: generator\n",
+                "        role: implementation\n",
+                "        facet: generation\n",
+                "        responsibility: Generate the checked-in artifact.\n",
+                "        targets:\n",
+                "          - { id: source, adapter: rust, path: src/lib.rs, selector: { kind: symbol, name: generate }, claims: [{ kind: satisfies, criterion: REQ-DEPENDENCY-001#criterion.coherent }] }\n",
+                "      - id: generated\n",
+                "        role: generated\n",
+                "        facet: generation\n",
+                "        responsibility: Record generated output.\n",
+                "        targets:\n",
+                "          - id: output\n",
+                "            adapter: declared\n",
+                "            path: generated.txt\n",
+                "            selector: { kind: file }\n",
+                "            claims:\n",
+                "              - kind: generated-from\n",
+                "                targets: [FEAT-DEPENDENCY-001#binding.generator/target.source]\n",
+                "    contracts:\n",
+                "      - id: provider-consumer\n",
+                "        kind: function\n",
+                "        source: FEAT-DEPENDENCY-001#binding.contract-source/target.contract\n",
+                "        participants:\n",
+                "          - { target: FEAT-DEPENDENCY-001#binding.provider/target.provider, role: provider }\n",
+                "          - { target: FEAT-DEPENDENCY-001#binding.consumer/target.consumer, role: consumer }\n",
+                "        guarantees: [REQ-DEPENDENCY-001#criterion.coherent]\n",
+            ),
+        )
+        .expect("feature");
+        fs::write(
+            root.join("src/lib.rs"),
+            "pub fn provider() {}\npub fn generate() {}\n",
+        )
+        .expect("rust");
+        fs::write(
+            root.join("web/client.js"),
+            "export function consumer() {}\nexport function contract() {}\n",
+        )
+        .expect("javascript");
+        fs::write(root.join("generated.txt"), "generated\n").expect("generated");
+    }
+
+    #[test]
+    fn cross_language_provider_and_consumer_share_one_contract_slice() {
+        let tempdir = tempdir().expect("tempdir");
+        write_dependency_workspace(tempdir.path());
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-DEPENDENCY-001".into(),
+            summary: "Change provider and consumer".into(),
+            operation: WorkOperation::Modify,
+            seeds: vec![],
+            constraints: WorkConstraints::default(),
+            requested_targets: vec![
+                RequestedTarget {
+                    reference: "FEAT-DEPENDENCY-001#binding.provider/target.provider"
+                        .parse()
+                        .unwrap(),
+                    criterion: None,
+                    transition: TargetTransition::Modify,
+                },
+                RequestedTarget {
+                    reference: "FEAT-DEPENDENCY-001#binding.consumer/target.consumer"
+                        .parse()
+                        .unwrap(),
+                    criterion: None,
+                    transition: TargetTransition::Modify,
+                },
+            ],
+        };
+        let plan = plan(&request, &workspace, &index, "rev-contract").expect("plan");
+        assert_eq!(plan.status, PlanStatus::Ready);
+        assert_eq!(plan.slices.len(), 1);
+        let slice = &plan.slices[0];
+        assert_eq!(
+            slice
+                .editable_targets
+                .iter()
+                .map(|target| target.adapter.as_str())
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from(["javascript", "rust"])
+        );
+        assert!(slice.contracts.iter().any(|contract| {
+            contract.to_string() == "FEAT-DEPENDENCY-001#contract.provider-consumer"
+        }));
+        assert!(slice.readonly_context.iter().any(|target| {
+            target.reference.to_string()
+                == "FEAT-DEPENDENCY-001#binding.contract-source/target.contract"
+        }));
+    }
+
+    #[test]
+    fn generated_outputs_are_derived_context_and_never_directly_editable() {
+        let tempdir = tempdir().expect("tempdir");
+        write_dependency_workspace(tempdir.path());
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let source_request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-GENERATED-SOURCE".into(),
+            summary: "Change generator".into(),
+            operation: WorkOperation::Modify,
+            seeds: vec![],
+            constraints: WorkConstraints::default(),
+            requested_targets: vec![RequestedTarget {
+                reference: "FEAT-DEPENDENCY-001#binding.generator/target.source"
+                    .parse()
+                    .unwrap(),
+                criterion: None,
+                transition: TargetTransition::Modify,
+            }],
+        };
+        let source_plan =
+            plan(&source_request, &workspace, &index, "rev-generated").expect("source plan");
+        assert_eq!(source_plan.status, PlanStatus::Ready);
+        assert!(source_plan.slices[0].readonly_context.iter().any(|target| {
+            target.reference.to_string() == "FEAT-DEPENDENCY-001#binding.generated/target.output"
+                && target.access == TargetAccessMode::Generated
+        }));
+
+        let direct_request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-GENERATED-DIRECT".into(),
+            summary: "Change generated output".into(),
+            operation: WorkOperation::Modify,
+            seeds: vec![],
+            constraints: WorkConstraints::default(),
+            requested_targets: vec![RequestedTarget {
+                reference: "FEAT-DEPENDENCY-001#binding.generated/target.output"
+                    .parse()
+                    .unwrap(),
+                criterion: Some("REQ-DEPENDENCY-001#criterion.coherent".parse().unwrap()),
+                transition: TargetTransition::Modify,
+            }],
+        };
+        let direct_plan =
+            plan(&direct_request, &workspace, &index, "rev-generated").expect("direct plan");
+        assert_eq!(direct_plan.status, PlanStatus::Blocked);
+        assert!(direct_plan.slices[0].blockers.iter().any(|diagnostic| {
+            diagnostic.rule_id == "SYU-WORK-013"
+                && diagnostic.message.contains("generated-from source")
+        }));
+    }
+
+    #[test]
+    fn inactive_build_profile_target_never_enters_executable_scope() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        fs::write(
+            tempdir.path().join("src/handler.rs"),
+            "#[cfg(feature = \"enterprise\")]\npub fn handler() {}\n",
+        )
+        .expect("handler");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        assert!(index.artifact_units.iter().any(|unit| {
+            unit.identity.contains("handler")
+                && matches!(
+                    unit.reachability,
+                    syu_inventory::ArtifactReachability::Conditional { .. }
+                )
+        }));
+        let request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-INACTIVE".into(),
+            summary: "Change inactive target".into(),
+            operation: WorkOperation::Modify,
+            seeds: vec![],
+            constraints: WorkConstraints::default(),
+            requested_targets: vec![RequestedTarget {
+                reference: "FEAT-TEST-001#binding.impl/target.handler-present"
+                    .parse()
+                    .unwrap(),
+                criterion: None,
+                transition: TargetTransition::Modify,
+            }],
+        };
+        let plan = plan(&request, &workspace, &index, "rev-inactive").expect("plan");
+        assert_eq!(plan.status, PlanStatus::Blocked);
+        assert!(
+            plan.slices[0]
+                .blockers
+                .iter()
+                .any(|diagnostic| diagnostic.rule_id == "SYU-TARGET-002")
+        );
+        assert!(plan.slices[0].editable_targets.is_empty());
     }
 }

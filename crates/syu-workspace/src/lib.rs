@@ -69,6 +69,10 @@ pub struct SpecIndex {
     pub verification_by_target: BTreeMap<BoundTargetRef, Vec<BoundTargetRef>>,
     /// Full exact verification coverage, including planned catalog entries.
     pub all_verification_by_target: BTreeMap<BoundTargetRef, Vec<BoundTargetRef>>,
+    /// Generated target -> exact source targets.
+    pub generated_from: BTreeMap<BoundTargetRef, Vec<BoundTargetRef>>,
+    /// Exact source target -> generated targets derived from it.
+    pub generated_by_source: BTreeMap<BoundTargetRef, Vec<BoundTargetRef>>,
     /// Public governance targets mapped to the capability boundary they expose.
     pub exposes_by_target: BTreeMap<BoundTargetRef, BoundTargetRef>,
     pub inventory_error: Option<String>,
@@ -558,6 +562,18 @@ impl SpecIndex {
                             out.exposes_by_target
                                 .insert(target_ref.clone(), target.clone());
                         }
+                        TargetClaim::GeneratedFrom { targets } if active_binding => {
+                            out.generated_from
+                                .entry(target_ref.clone())
+                                .or_default()
+                                .extend(targets.iter().cloned());
+                            for source in targets {
+                                out.generated_by_source
+                                    .entry(source.clone())
+                                    .or_default()
+                                    .push(target_ref.clone());
+                            }
+                        }
                         _ => {}
                     }
                 }
@@ -598,6 +614,10 @@ impl SpecIndex {
             }
         }
         for (contract_anchor, contract) in &out.contracts {
+            out.contracts_by_target
+                .entry(contract.source.clone())
+                .or_default()
+                .push(contract_anchor.clone());
             for participant in &contract.participants {
                 out.contracts_by_target
                     .entry(participant.target.clone())
@@ -617,6 +637,8 @@ impl SpecIndex {
             .chain(out.all_criteria_to_implementation_targets.values_mut())
             .chain(out.all_criteria_to_verification_targets.values_mut())
             .chain(out.all_verification_by_target.values_mut())
+            .chain(out.generated_from.values_mut())
+            .chain(out.generated_by_source.values_mut())
         {
             values.sort();
             values.dedup();
@@ -733,8 +755,10 @@ fn artifact_identities_for_target(units: &[ArtifactUnit], target: &ArtifactTarge
                     unit.kind == ArtifactUnitKind::Heading
                         && unit.identity.ends_with(&format!("::heading::{value}"))
                 }
-                Selector::File | Selector::JsonPointer { .. } => {
-                    unit.kind == ArtifactUnitKind::File
+                Selector::File => unit.kind == ArtifactUnitKind::File,
+                Selector::JsonPointer { value } => {
+                    unit.kind == ArtifactUnitKind::SchemaNode
+                        && unit.identity.ends_with(&format!("::pointer::{value}"))
                 }
                 Selector::Marker { value } => {
                     unit.kind == ArtifactUnitKind::Marker
@@ -753,6 +777,7 @@ fn artifact_identities_for_target(units: &[ArtifactUnit], target: &ArtifactTarge
 
 fn symbol_identity_matches(identity: &str, name: &str) -> bool {
     identity.ends_with(&format!("::{name}"))
+        || identity.contains(&format!("::{name}["))
         || identity.contains(&format!("::{name}@"))
         || identity.ends_with(&format!("::{name})"))
         || name.rsplit_once("::").is_some_and(|(container, leaf)| {
@@ -905,6 +930,7 @@ pub fn resolve_target_in_workspace(
         "openapi",
         "yaml",
         "json",
+        "json-schema",
         "html",
         "declared",
     ];
@@ -1006,6 +1032,7 @@ pub fn resolve_target_with_adapters(
         "openapi",
         "yaml",
         "json",
+        "json-schema",
         "html",
         "declared",
     ];

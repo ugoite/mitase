@@ -411,6 +411,165 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
                   - **package**: syu
                   - **harness**: v1_cli
                   - **test**: generated_spec_reference_covers_every_source_document
+- **id**: REQ-CAPABILITY-002
+  - **title**: Multi-language dependency planning
+  - **description**: Semantic inventories and explicit dependency relations derive one exact, profile-aware work boundary across languages and generated artifacts.
+  - **priority**: critical
+  - **status**: implemented
+  - **criteria**:
+    - **id**: language-aware-inventory
+      - **kind**: behavior
+      - **statement**: Rust, JavaScript, TypeScript, OpenAPI, Markdown, JSON, YAML, and JSON Schema providers expose language-aware semantic identities from the active inventory profile.
+      - **governed_by**:
+        - POL-ADOPTION-001#rule.feature-evidence
+    - **id**: stable-identity
+      - **kind**: compatibility
+      - **statement**: Semantic identity is independent of source line numbers and remains stable across line movement and formatting.
+      - **governed_by**:
+        - POL-ADOPTION-001#rule.feature-evidence
+    - **id**: build-profile-scope
+      - **kind**: security
+      - **statement**: Conditional artifacts outside the active build profile remain observable inventory context but never enter executable scope.
+      - **governed_by**:
+        - POL-ADOPTION-001#rule.feature-evidence
+    - **id**: coherent-cross-language
+      - **kind**: behavior
+      - **statement**: Explicit provider and consumer contract targets across languages share one coherent WorkPlan slice with dependency-aware readonly context.
+      - **governed_by**:
+        - POL-ADOPTION-001#rule.feature-evidence
+    - **id**: generated-source
+      - **kind**: security
+      - **statement**: Generated artifacts are derived context of exact source targets and cannot be directly editable.
+      - **governed_by**:
+        - POL-ADOPTION-001#rule.feature-evidence
+    - **id**: generated-change-scope
+      - **kind**: security
+      - **statement**: A generated artifact may change in result scope only when one of its exact generated-from sources is editable and changed in the same slice.
+      - **governed_by**:
+        - POL-ADOPTION-001#rule.feature-evidence
+    - **id**: semantic-diff
+      - **kind**: behavior
+      - **statement**: Semantic inventory comparison distinguishes public additions, private helper modifications, renames, and deletions.
+      - **governed_by**:
+        - POL-ADOPTION-001#rule.feature-evidence
+  - **bindings**:
+    - **id**: dependency-verification
+      - **role**: verification
+      - **facet**: capability-verification
+      - **responsibility**: Verify language-aware inventory, stable identity, build-profile exclusion, contract closure, generated-source enforcement, and semantic change classification.
+      - **targets**:
+        - **id**: language-inventory-test
+          - **adapter**: rust
+          - **path**: crates/syu-inventory/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::json_schema_provider_discovers_exact_pointer_identities
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-CAPABILITY-002#criterion.language-aware-inventory
+              - **covers**:
+                - FEAT-INVENTORY-001#binding.implementation/target.inventory-registry
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-inventory
+                  - **test**: tests::json_schema_provider_discovers_exact_pointer_identities
+        - **id**: stable-identity-test
+          - **adapter**: rust
+          - **path**: crates/syu-inventory/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::semantic_identity_ignores_line_movement_and_formatting
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-CAPABILITY-002#criterion.stable-identity
+              - **covers**:
+                - FEAT-INVENTORY-001#binding.implementation/target.semantic-diff
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-inventory
+                  - **test**: tests::semantic_identity_ignores_line_movement_and_formatting
+        - **id**: build-profile-test
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::inactive_build_profile_target_never_enters_executable_scope
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-CAPABILITY-002#criterion.build-profile-scope
+              - **covers**:
+                - FEAT-PLANNER-001#binding.implementation/target.canonical-plan
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-planner
+                  - **test**: tests::inactive_build_profile_target_never_enters_executable_scope
+        - **id**: cross-language-test
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::cross_language_provider_and_consumer_share_one_contract_slice
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-CAPABILITY-002#criterion.coherent-cross-language
+              - **covers**:
+                - FEAT-PLANNER-001#binding.implementation/target.canonical-plan
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-planner
+                  - **test**: tests::cross_language_provider_and_consumer_share_one_contract_slice
+        - **id**: generated-source-test
+          - **adapter**: rust
+          - **path**: crates/syu-planner/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::generated_outputs_are_derived_context_and_never_directly_editable
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-CAPABILITY-002#criterion.generated-source
+              - **covers**:
+                - FEAT-PLANNER-001#binding.implementation/target.canonical-plan
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-planner
+                  - **test**: tests::generated_outputs_are_derived_context_and_never_directly_editable
+        - **id**: generated-change-scope-test
+          - **adapter**: rust
+          - **path**: crates/syu-validation/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::generated_scope_requires_a_changed_exact_source
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-CAPABILITY-002#criterion.generated-change-scope
+              - **covers**:
+                - FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-validation
+                  - **test**: tests::generated_scope_requires_a_changed_exact_source
+        - **id**: semantic-diff-test
+          - **adapter**: rust
+          - **path**: crates/syu-inventory/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::semantic_diff_distinguishes_public_private_rename_and_deletion
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-CAPABILITY-002#criterion.semantic-diff
+              - **covers**:
+                - FEAT-INVENTORY-001#binding.implementation/target.semantic-diff
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-inventory
+                  - **test**: tests::semantic_diff_distinguishes_public_private_rename_and_deletion
 
 ## Source YAML
 
@@ -662,4 +821,108 @@ requirements:
                 criterion: REQ-CAPABILITY-001#criterion.docs-generation
                 covers: [FEAT-DOCS-001#binding.implementation/target.generated-index]
                 runner: { runner: cargo-test-integration, arguments: { package: syu, harness: v1_cli, test: generated_spec_reference_covers_every_source_document } }
+
+  - id: REQ-CAPABILITY-002
+    title: Multi-language dependency planning
+    description: Semantic inventories and explicit dependency relations derive one exact, profile-aware work boundary across languages and generated artifacts.
+    priority: critical
+    status: implemented
+    criteria:
+      - id: language-aware-inventory
+        kind: behavior
+        statement: Rust, JavaScript, TypeScript, OpenAPI, Markdown, JSON, YAML, and JSON Schema providers expose language-aware semantic identities from the active inventory profile.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
+      - id: stable-identity
+        kind: compatibility
+        statement: Semantic identity is independent of source line numbers and remains stable across line movement and formatting.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
+      - id: build-profile-scope
+        kind: security
+        statement: Conditional artifacts outside the active build profile remain observable inventory context but never enter executable scope.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
+      - id: coherent-cross-language
+        kind: behavior
+        statement: Explicit provider and consumer contract targets across languages share one coherent WorkPlan slice with dependency-aware readonly context.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
+      - id: generated-source
+        kind: security
+        statement: Generated artifacts are derived context of exact source targets and cannot be directly editable.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
+      - id: generated-change-scope
+        kind: security
+        statement: A generated artifact may change in result scope only when one of its exact generated-from sources is editable and changed in the same slice.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
+      - id: semantic-diff
+        kind: behavior
+        statement: Semantic inventory comparison distinguishes public additions, private helper modifications, renames, and deletions.
+        governed_by: [POL-ADOPTION-001#rule.feature-evidence]
+    bindings:
+      - id: dependency-verification
+        role: verification
+        facet: capability-verification
+        responsibility: Verify language-aware inventory, stable identity, build-profile exclusion, contract closure, generated-source enforcement, and semantic change classification.
+        targets:
+          - id: language-inventory-test
+            adapter: rust
+            path: crates/syu-inventory/src/lib.rs
+            selector: { kind: symbol, name: tests::json_schema_provider_discovers_exact_pointer_identities }
+            claims:
+              - kind: verifies
+                criterion: REQ-CAPABILITY-002#criterion.language-aware-inventory
+                covers: [FEAT-INVENTORY-001#binding.implementation/target.inventory-registry]
+                runner: { runner: cargo-test, arguments: { package: syu-inventory, test: tests::json_schema_provider_discovers_exact_pointer_identities } }
+          - id: stable-identity-test
+            adapter: rust
+            path: crates/syu-inventory/src/lib.rs
+            selector: { kind: symbol, name: tests::semantic_identity_ignores_line_movement_and_formatting }
+            claims:
+              - kind: verifies
+                criterion: REQ-CAPABILITY-002#criterion.stable-identity
+                covers: [FEAT-INVENTORY-001#binding.implementation/target.semantic-diff]
+                runner: { runner: cargo-test, arguments: { package: syu-inventory, test: tests::semantic_identity_ignores_line_movement_and_formatting } }
+          - id: build-profile-test
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: symbol, name: tests::inactive_build_profile_target_never_enters_executable_scope }
+            claims:
+              - kind: verifies
+                criterion: REQ-CAPABILITY-002#criterion.build-profile-scope
+                covers: [FEAT-PLANNER-001#binding.implementation/target.canonical-plan]
+                runner: { runner: cargo-test, arguments: { package: syu-planner, test: tests::inactive_build_profile_target_never_enters_executable_scope } }
+          - id: cross-language-test
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: symbol, name: tests::cross_language_provider_and_consumer_share_one_contract_slice }
+            claims:
+              - kind: verifies
+                criterion: REQ-CAPABILITY-002#criterion.coherent-cross-language
+                covers: [FEAT-PLANNER-001#binding.implementation/target.canonical-plan]
+                runner: { runner: cargo-test, arguments: { package: syu-planner, test: tests::cross_language_provider_and_consumer_share_one_contract_slice } }
+          - id: generated-source-test
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: symbol, name: tests::generated_outputs_are_derived_context_and_never_directly_editable }
+            claims:
+              - kind: verifies
+                criterion: REQ-CAPABILITY-002#criterion.generated-source
+                covers: [FEAT-PLANNER-001#binding.implementation/target.canonical-plan]
+                runner: { runner: cargo-test, arguments: { package: syu-planner, test: tests::generated_outputs_are_derived_context_and_never_directly_editable } }
+          - id: generated-change-scope-test
+            adapter: rust
+            path: crates/syu-validation/src/lib.rs
+            selector: { kind: symbol, name: tests::generated_scope_requires_a_changed_exact_source }
+            claims:
+              - kind: verifies
+                criterion: REQ-CAPABILITY-002#criterion.generated-change-scope
+                covers: [FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate]
+                runner: { runner: cargo-test, arguments: { package: syu-validation, test: tests::generated_scope_requires_a_changed_exact_source } }
+          - id: semantic-diff-test
+            adapter: rust
+            path: crates/syu-inventory/src/lib.rs
+            selector: { kind: symbol, name: tests::semantic_diff_distinguishes_public_private_rename_and_deletion }
+            claims:
+              - kind: verifies
+                criterion: REQ-CAPABILITY-002#criterion.semantic-diff
+                covers: [FEAT-INVENTORY-001#binding.implementation/target.semantic-diff]
+                runner: { runner: cargo-test, arguments: { package: syu-inventory, test: tests::semantic_diff_distinguishes_public_private_rename_and_deletion } }
 ```

@@ -20,6 +20,12 @@ features:
             claims:
               - kind: satisfies
                 criterion: REQ-WORK-001#criterion.exact-slice
+              - kind: satisfies
+                criterion: REQ-CAPABILITY-002#criterion.build-profile-scope
+              - kind: satisfies
+                criterion: REQ-CAPABILITY-002#criterion.coherent-cross-language
+              - kind: satisfies
+                criterion: REQ-CAPABILITY-002#criterion.generated-source
 
   - id: FEAT-CONTEXT-001
     title: Context export
