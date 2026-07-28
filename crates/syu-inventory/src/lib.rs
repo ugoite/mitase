@@ -95,6 +95,7 @@ pub struct SourceSpan {
 #[serde(rename_all = "kebab-case")]
 pub enum SemanticChangeKind {
     PublicAddition,
+    PublicRemoval,
     Addition,
     PrivateModification,
     Modification,
@@ -194,7 +195,11 @@ fn openapi_operations(context: &InventoryContext, path: PathBuf) -> Result<Vec<A
                         line_end: 1,
                     },
                     digest: digest(&serialized),
-                    structural_digest: digest(&serialized),
+                    // A path move can preserve an operation's contract shape,
+                    // but changing its HTTP method cannot. Keep the method in
+                    // the rename corroborator while deliberately omitting the
+                    // path so GET /old -> GET /new remains an endpoint rename.
+                    structural_digest: openapi_structural_digest(method, &serialized),
                 });
             }
         }
@@ -726,59 +731,25 @@ fn source_symbol_units(
     let repo_path = RepoPath::from_path(relative)
         .map_err(|error| anyhow::anyhow!("source symbol path {:?}: {error}", path))?;
     let source = String::from_utf8(read_bytes(context, &path)?)?;
-    let mut units = Vec::new();
-    let mut identities = BTreeSet::new();
-    let mut add_symbol = |name: &str, exported: bool, node: Node<'_>| {
-        if name.is_empty() || name.starts_with('#') {
-            return;
-        }
-        let identity = format!("{adapter}:{}::{name}", repo_path.to_string_lossy());
-        if !identities.insert(identity.clone()) {
-            return;
-        }
-        let start = node.start_byte();
-        let end = node.end_byte();
-        let line_start = source[..start]
-            .bytes()
-            .filter(|byte| *byte == b'\n')
-            .count()
-            + 1;
-        let line_end = source[..end].bytes().filter(|byte| *byte == b'\n').count() + 1;
-        units.push(ArtifactUnit {
-            adapter: adapter.into(),
-            path: repo_path.clone(),
-            identity,
-            kind: ArtifactUnitKind::Symbol,
-            exposure: if exported {
-                ArtifactExposure::Public
-            } else {
-                ArtifactExposure::Private
-            },
-            reachability: ArtifactReachability::Active,
-            span: SourceSpan {
-                byte_start: start,
-                byte_end: end.max(start + 1),
-                line_start,
-                line_end,
-            },
-            digest: digest(&source.as_bytes()[start..end.max(start + 1)]),
-            structural_digest: structural_digest(&source[start..end.max(start + 1)], name),
-        });
-    };
+    let mut units: Vec<ArtifactUnit> = Vec::new();
+    let mut identities: BTreeMap<String, usize> = BTreeMap::new();
     let mut parser = TsParser::new();
-    let is_jsx = adapter == "javascript"
-        || path
-            .extension()
-            .is_some_and(|extension| matches!(extension.to_str(), Some("jsx" | "tsx")));
+    let extension = path.extension().and_then(|extension| extension.to_str());
     parser
-        .set_language(
-            &(if is_jsx {
-                tree_sitter_typescript::LANGUAGE_TSX
-            } else {
-                tree_sitter_typescript::LANGUAGE_TYPESCRIPT
-            })
-            .into(),
-        )
+        .set_language(&match extension {
+            // Grammar selection follows the source document, not the
+            // provider name: a JavaScript provider can legitimately own
+            // both plain JavaScript and JSX files.
+            Some("tsx") => tree_sitter_typescript::LANGUAGE_TSX.into(),
+            Some("jsx") | Some("js") | Some("mjs") | Some("cjs") => {
+                tree_sitter_javascript::LANGUAGE.into()
+            }
+            Some("ts") | Some("mts") | Some("cts") => {
+                tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()
+            }
+            _ if adapter == "javascript" => tree_sitter_javascript::LANGUAGE.into(),
+            _ => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+        })
         .map_err(|error| anyhow::anyhow!("load JavaScript/TypeScript grammar: {error}"))?;
     let tree = parser
         .parse(&source, None)
@@ -786,30 +757,141 @@ fn source_symbol_units(
     if tree.root_node().has_error() {
         bail!("JavaScript/TypeScript source has syntax errors; refusing approximate inventory");
     }
-    for child in tree
-        .root_node()
-        .named_children(&mut tree.root_node().walk())
+    let mut star_reexports = Vec::new();
     {
-        if child.kind() == "export_statement" {
-            if let Some(declaration) = child.child_by_field_name("declaration") {
-                javascript_declaration_names(&source, declaration, true, child, &mut add_symbol);
-            } else if let Some(clause) = child
+        let mut add_symbol = |name: &str, exported: bool, node: Node<'_>| {
+            if name.is_empty() || name.starts_with('#') {
+                return;
+            }
+            let identity = format!("{adapter}:{}::{name}", repo_path.to_string_lossy());
+            if let Some(index) = identities.get(&identity).copied() {
+                if exported {
+                    units[index].exposure = ArtifactExposure::Public;
+                }
+                return;
+            }
+            let start = node.start_byte();
+            let end = node.end_byte();
+            let line_start = source[..start]
+                .bytes()
+                .filter(|byte| *byte == b'\n')
+                .count()
+                + 1;
+            let line_end = source[..end].bytes().filter(|byte| *byte == b'\n').count() + 1;
+            identities.insert(identity.clone(), units.len());
+            units.push(ArtifactUnit {
+                adapter: adapter.into(),
+                path: repo_path.clone(),
+                identity,
+                kind: ArtifactUnitKind::Symbol,
+                exposure: if exported {
+                    ArtifactExposure::Public
+                } else {
+                    ArtifactExposure::Private
+                },
+                reachability: ArtifactReachability::Active,
+                span: SourceSpan {
+                    byte_start: start,
+                    byte_end: end.max(start + 1),
+                    line_start,
+                    line_end,
+                },
+                digest: digest(&source.as_bytes()[start..end.max(start + 1)]),
+                structural_digest: structural_digest(&source[start..end.max(start + 1)], name),
+            });
+        };
+        // Discover declarations before export clauses. This makes `export { foo
+        // }; const foo = ...` promote the declaration just as reliably as the
+        // conventional declaration-before-export spelling.
+        for child in tree
+            .root_node()
+            .named_children(&mut tree.root_node().walk())
+        {
+            if child.kind() == "export_statement" {
+                let export_source = &source[child.byte_range()];
+                if let Some(declaration) = child.child_by_field_name("declaration") {
+                    javascript_declaration_names(
+                        &source,
+                        declaration,
+                        !export_source.starts_with("export default"),
+                        child,
+                        &mut add_symbol,
+                    );
+                } else if let Some(value) = child.child_by_field_name("value") {
+                    javascript_declaration_names(
+                        &source,
+                        value,
+                        !export_source.starts_with("export default"),
+                        child,
+                        &mut add_symbol,
+                    );
+                }
+            } else {
+                javascript_declaration_names(&source, child, false, child, &mut add_symbol);
+            }
+        }
+        for child in tree
+            .root_node()
+            .named_children(&mut tree.root_node().walk())
+            .filter(|child| child.kind() == "export_statement")
+        {
+            let export_source = &source[child.byte_range()];
+            if export_source.starts_with("export default") {
+                add_symbol("default", true, child);
+                continue;
+            }
+            if let Some(clause) = child
                 .named_child(0)
                 .filter(|node| node.kind() == "export_clause")
             {
                 for specifier in clause.named_children(&mut clause.walk()) {
-                    let name = specifier
+                    let exported = specifier
                         .child_by_field_name("alias")
                         .or_else(|| specifier.child_by_field_name("name"));
-                    if let Some(name) = name {
-                        add_symbol(&source[name.byte_range()], true, child);
+                    if let Some(exported) = exported {
+                        // `export { foo }` promotes foo. `export { foo as bar }`
+                        // exposes the API identity bar and leaves local foo
+                        // private; the export itself remains the exact source
+                        // span for a re-export with no local declaration.
+                        add_symbol(&source[exported.byte_range()], true, child);
                     }
                 }
-            } else if let Some(value) = child.child_by_field_name("value") {
-                javascript_declaration_names(&source, value, true, child, &mut add_symbol);
+            } else if export_source.starts_with("export *") {
+                star_reexports.push(child);
             }
-        } else {
-            javascript_declaration_names(&source, child, false, child, &mut add_symbol);
+        }
+    }
+    for child in star_reexports {
+        {
+            // Star re-exports cannot be expanded without following another
+            // module graph. Preserve that boundary as support context rather
+            // than inventing public symbols that may not exist.
+            let identity = format!("{adapter}:{}::re-export::*", repo_path.to_string_lossy());
+            if !identities.contains_key(&identity) {
+                let start = child.start_byte();
+                let end = child.end_byte().max(start + 1);
+                identities.insert(identity.clone(), units.len());
+                units.push(ArtifactUnit {
+                    adapter: adapter.into(),
+                    path: repo_path.clone(),
+                    identity,
+                    kind: ArtifactUnitKind::Symbol,
+                    exposure: ArtifactExposure::Support,
+                    reachability: ArtifactReachability::Active,
+                    span: SourceSpan {
+                        byte_start: start,
+                        byte_end: end,
+                        line_start: source[..start]
+                            .bytes()
+                            .filter(|byte| *byte == b'\n')
+                            .count()
+                            + 1,
+                        line_end: source[..end].bytes().filter(|byte| *byte == b'\n').count() + 1,
+                    },
+                    digest: digest(&source.as_bytes()[start..end]),
+                    structural_digest: digest(&source.as_bytes()[start..end]),
+                });
+            }
         }
     }
     Ok(units)
@@ -1591,6 +1673,13 @@ fn structural_digest(source: &str, declared_name: &str) -> String {
     digest(normalized.as_bytes())
 }
 
+fn openapi_structural_digest(method: &str, serialized_operation: &[u8]) -> String {
+    let mut bytes = method.to_ascii_lowercase().into_bytes();
+    bytes.push(b'\n');
+    bytes.extend_from_slice(serialized_operation);
+    digest(&bytes)
+}
+
 /// Compare two inventory snapshots by semantic identity. Exact identities are
 /// independent of source spans, while a structural digest connects a pure
 /// rename without guessing from line movement.
@@ -1635,6 +1724,10 @@ pub fn semantic_diff(before: &[ArtifactUnit], after: &[ArtifactUnit]) -> Vec<Sem
                 && unit.exposure != ArtifactExposure::Public
             {
                 SemanticChangeKind::PublicAddition
+            } else if unit.exposure == ArtifactExposure::Public
+                && current.exposure != ArtifactExposure::Public
+            {
+                SemanticChangeKind::PublicRemoval
             } else if matches!(
                 current.exposure,
                 ArtifactExposure::Private | ArtifactExposure::Workspace
@@ -1668,6 +1761,9 @@ pub fn semantic_diff(before: &[ArtifactUnit], after: &[ArtifactUnit]) -> Vec<Sem
                     && previous.kind == current.kind
                     && previous.exposure == current.exposure
                     && previous.path == current.path
+                    && (previous.kind != ArtifactUnitKind::Operation
+                        || openapi_operation_method(&previous.identity)
+                            == openapi_operation_method(&current.identity))
                     && structural
                         == if current.structural_digest.is_empty() {
                             current.digest.as_str()
@@ -1735,6 +1831,12 @@ pub fn semantic_diff(before: &[ArtifactUnit], after: &[ArtifactUnit]) -> Vec<Sem
             ))
     });
     changes
+}
+
+fn openapi_operation_method(identity: &str) -> Option<&str> {
+    identity
+        .rsplit_once("::")
+        .and_then(|(_, operation)| operation.split_whitespace().next())
 }
 
 fn collect_matching(
@@ -2367,6 +2469,163 @@ mod tests {
     }
 
     #[test]
+    fn javascript_exports_promote_local_symbols_and_model_export_forms_explicitly() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("module.ts");
+        fs::write(
+            &path,
+            concat!(
+                "const foo = 1;\n",
+                "export { foo };\n",
+                "const aliased = 2;\n",
+                "export { aliased as publicAlias };\n",
+                "export { declaredLater };\n",
+                "const declaredLater = 3;\n",
+                "export { remote } from \"./remote.js\";\n",
+                "export default function internalDefault() {}\n",
+                "type Shape = { id: string };\n",
+                "export type { Shape };\n",
+                "const helper = () => {};\n",
+                "export * from \"./star.js\";\n",
+            ),
+        )
+        .unwrap();
+        let context = InventoryContext {
+            workspace_root: temp.path().into(),
+            profile: "default".into(),
+            settings: serde_yaml::Value::Null,
+            excludes: vec![],
+            overlays: BTreeMap::new(),
+        };
+        let units = source_symbol_units(&context, path, "typescript").unwrap();
+        let exposure = |name: &str| {
+            units
+                .iter()
+                .find(|unit| unit.identity.ends_with(&format!("::{name}")))
+                .map(|unit| unit.exposure.clone())
+        };
+        assert_eq!(exposure("foo"), Some(ArtifactExposure::Public));
+        assert_eq!(exposure("publicAlias"), Some(ArtifactExposure::Public));
+        assert_eq!(exposure("aliased"), Some(ArtifactExposure::Private));
+        assert_eq!(exposure("declaredLater"), Some(ArtifactExposure::Public));
+        assert_eq!(exposure("remote"), Some(ArtifactExposure::Public));
+        assert_eq!(exposure("default"), Some(ArtifactExposure::Public));
+        assert_eq!(exposure("internalDefault"), Some(ArtifactExposure::Private));
+        assert_eq!(exposure("Shape"), Some(ArtifactExposure::Public));
+        assert_eq!(exposure("helper"), Some(ArtifactExposure::Private));
+        assert!(units.iter().any(|unit| {
+            unit.identity.ends_with("::re-export::*") && unit.exposure == ArtifactExposure::Support
+        }));
+    }
+
+    #[test]
+    fn javascript_and_typescript_extensions_select_their_native_grammars() {
+        let temp = tempfile::tempdir().unwrap();
+        let context = InventoryContext {
+            workspace_root: temp.path().into(),
+            profile: "default".into(),
+            settings: serde_yaml::Value::Null,
+            excludes: vec![],
+            overlays: BTreeMap::new(),
+        };
+        for (name, source, adapter) in [
+            (
+                "plain.js",
+                "export const value = { get ready() { return true; } };",
+                "javascript",
+            ),
+            (
+                "view.jsx",
+                "export const View = () => <main>ok</main>;",
+                "javascript",
+            ),
+            (
+                "types.ts",
+                "export interface Shape { id: string }",
+                "typescript",
+            ),
+            (
+                "view.tsx",
+                "export const View = () => <main>ok</main>;",
+                "typescript",
+            ),
+        ] {
+            let path = temp.path().join(name);
+            fs::write(&path, source).unwrap();
+            assert!(
+                source_symbol_units(&context, path, adapter).is_ok(),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn semantic_diff_names_visibility_transitions_without_downgrading_public_removal() {
+        let base = |exposure, reachability| ArtifactUnit {
+            adapter: "typescript".into(),
+            path: RepoPath::new("src/api.ts").unwrap(),
+            identity: "typescript:src/api.ts::api".into(),
+            kind: ArtifactUnitKind::Symbol,
+            exposure,
+            reachability,
+            span: SourceSpan {
+                byte_start: 0,
+                byte_end: 1,
+                line_start: 1,
+                line_end: 1,
+            },
+            digest: "same".into(),
+            structural_digest: "same".into(),
+        };
+        let classify = |before, after| semantic_diff(&[before], &[after])[0].kind;
+        assert_eq!(
+            classify(
+                base(ArtifactExposure::Private, ArtifactReachability::Active),
+                base(ArtifactExposure::Public, ArtifactReachability::Active),
+            ),
+            SemanticChangeKind::PublicAddition
+        );
+        assert_eq!(
+            classify(
+                base(ArtifactExposure::Workspace, ArtifactReachability::Active),
+                base(ArtifactExposure::Public, ArtifactReachability::Active),
+            ),
+            SemanticChangeKind::PublicAddition
+        );
+        assert_eq!(
+            classify(
+                base(ArtifactExposure::Public, ArtifactReachability::Active),
+                base(ArtifactExposure::Private, ArtifactReachability::Active),
+            ),
+            SemanticChangeKind::PublicRemoval
+        );
+        assert_eq!(
+            classify(
+                base(ArtifactExposure::Public, ArtifactReachability::Active),
+                base(
+                    ArtifactExposure::Public,
+                    ArtifactReachability::Conditional {
+                        profile: "enterprise".into(),
+                    },
+                ),
+            ),
+            SemanticChangeKind::Modification
+        );
+        assert_eq!(
+            classify(
+                base(
+                    ArtifactExposure::Public,
+                    ArtifactReachability::Conditional {
+                        profile: "enterprise".into(),
+                    },
+                ),
+                base(ArtifactExposure::Public, ArtifactReachability::Active),
+            ),
+            SemanticChangeKind::Modification
+        );
+    }
+
+    #[test]
     fn semantic_diff_preserves_literal_meaning_and_rejects_false_renames() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("model.ts");
@@ -2735,6 +2994,30 @@ mod tests {
         let renamed = openapi_operations(&context, path).unwrap();
         assert!(
             semantic_diff(&modified, &renamed)
+                .iter()
+                .any(|change| change.kind == SemanticChangeKind::Rename)
+        );
+
+        fs::write(
+            temp.path().join("openapi.yaml"),
+            "paths:\n  /new:\n    delete:\n      summary: Read account\n",
+        )
+        .unwrap();
+        let method_changed =
+            openapi_operations(&context, temp.path().join("openapi.yaml")).unwrap();
+        let method_changes = semantic_diff(&renamed, &method_changed);
+        assert!(
+            method_changes
+                .iter()
+                .any(|change| change.kind == SemanticChangeKind::Deletion)
+        );
+        assert!(
+            method_changes
+                .iter()
+                .any(|change| change.kind == SemanticChangeKind::PublicAddition)
+        );
+        assert!(
+            !method_changes
                 .iter()
                 .any(|change| change.kind == SemanticChangeKind::Rename)
         );

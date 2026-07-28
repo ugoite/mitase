@@ -104,6 +104,12 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
               - **criterion**: REQ-CAPABILITY-002#criterion.stable-identity
             - **kind**: satisfies
               - **criterion**: REQ-CAPABILITY-002#criterion.semantic-diff
+      - **owns**:
+        - **id**: inventory-manifest
+          - **adapter**: declared
+          - **path**: crates/syu-inventory/Cargo.toml
+          - **selector**:
+            - **kind**: file
 - **id**: FEAT-IDENTITY-001
   - **title**: Exact artifact identity
   - **summary**: Resolve one exact editable or observable artifact target per identity.
@@ -271,6 +277,11 @@ features:
             claims:
               - { kind: satisfies, criterion: REQ-CAPABILITY-002#criterion.stable-identity }
               - { kind: satisfies, criterion: REQ-CAPABILITY-002#criterion.semantic-diff }
+        owns:
+          - id: inventory-manifest
+            adapter: declared
+            path: crates/syu-inventory/Cargo.toml
+            selector: { kind: file }
 
   - id: FEAT-IDENTITY-001
     title: Exact artifact identity

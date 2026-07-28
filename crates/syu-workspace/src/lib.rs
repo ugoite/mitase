@@ -1098,19 +1098,40 @@ fn resolve_target_from_content(
                 if method.trim().is_empty() || path.trim().is_empty() {
                     bail!("operation selector must not be empty");
                 }
-                let yaml: serde_yaml::Value = serde_yaml::from_slice(&content)?;
-                let exists = yaml
-                    .get("paths")
-                    .and_then(|v| v.get(path))
-                    .and_then(|v| v.get(method.to_ascii_lowercase()))
-                    .is_some();
-                if !exists {
-                    bail!("operation {method} {path} not found");
-                }
                 let (byte_start, byte_end, line_start, line_end, excerpt) =
-                    openapi_operation_span(&text, method, path).ok_or_else(|| {
-                        anyhow::anyhow!("operation {method} {path} has no unambiguous source span")
-                    })?;
+                    if is_json_document(&text) {
+                        let json: serde_json::Value = serde_json::from_slice(&content)?;
+                        let method = method.to_ascii_lowercase();
+                        let exists = json
+                            .get("paths")
+                            .and_then(|value| value.get(path))
+                            .and_then(|value| value.get(&method))
+                            .is_some();
+                        if !exists {
+                            bail!("operation {method} {path} not found");
+                        }
+                        let pointer = format!(
+                            "/paths/{}/{}",
+                            path.replace('~', "~0").replace('/', "~1"),
+                            method
+                        );
+                        json_pointer_span(&text, &pointer)?
+                    } else {
+                        let yaml: serde_yaml::Value = serde_yaml::from_slice(&content)?;
+                        let exists = yaml
+                            .get("paths")
+                            .and_then(|value| value.get(path))
+                            .and_then(|value| value.get(method.to_ascii_lowercase()))
+                            .is_some();
+                        if !exists {
+                            bail!("operation {method} {path} not found");
+                        }
+                        openapi_operation_span(&text, method, path).ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "operation {method} {path} has no unambiguous source span"
+                            )
+                        })?
+                    };
                 (
                     format!("operation {} {path}", method.to_ascii_uppercase()),
                     vec![],
@@ -1218,6 +1239,10 @@ fn resolve_target_from_content(
         excerpt,
         excerpt_hash,
     })
+}
+
+fn is_json_document(text: &str) -> bool {
+    matches!(text.trim_start().as_bytes().first(), Some(b'{' | b'['))
 }
 
 pub fn selector_supports_editable(selector: &Selector) -> bool {
@@ -1600,6 +1625,41 @@ mod tests {
         let (_, _, _, _, excerpt) = openapi_operation_span(openapi, "get", "/items").unwrap();
         assert!(excerpt.contains("get:"));
         assert!(!excerpt.contains("post:"));
+    }
+
+    #[test]
+    fn json_openapi_operations_resolve_to_their_exact_escaped_pointer_span() {
+        let tempdir = tempdir().expect("tempdir");
+        let source = concat!(
+            "{\n",
+            "  \"paths\": {\n",
+            "    \"/users/~current\": {\n",
+            "      \"get\": { \"summary\": \"current\" },\n",
+            "      \"post\": { \"summary\": \"other method\" }\n",
+            "    },\n",
+            "    \"/users\": {\n",
+            "      \"get\": { \"summary\": \"other path\" }\n",
+            "    }\n",
+            "  }\n",
+            "}\n",
+        );
+        fs::write(tempdir.path().join("openapi.json"), source).expect("openapi");
+        let target = ArtifactTarget {
+            id: "operation".into(),
+            adapter: "openapi".into(),
+            path: RepoPath::new("openapi.json").expect("repo path"),
+            selector: Selector::Operation {
+                method: "GET".into(),
+                path: "/users/~current".into(),
+            },
+            claims: vec![],
+        };
+        let resolved = resolve_target(tempdir.path(), &target).expect("exact JSON operation");
+        assert!(resolved.excerpt.contains("current"));
+        assert!(!resolved.excerpt.contains("other method"));
+        assert!(!resolved.excerpt.contains("other path"));
+        assert_eq!(resolved.line_start, 4);
+        assert_eq!(resolved.line_end, 4);
     }
 
     #[test]

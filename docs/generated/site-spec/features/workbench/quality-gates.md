@@ -108,6 +108,11 @@ description: "Generated reference for docs/syu/features/workbench/quality-gates.
           - **path**: Cargo.toml
           - **selector**:
             - **kind**: file
+        - **id**: cargo-lock
+          - **adapter**: declared
+          - **path**: Cargo.lock
+          - **selector**:
+            - **kind**: file
         - **id**: root-build-script
           - **adapter**: declared
           - **path**: build.rs
@@ -254,6 +259,10 @@ features:
     - id: cargo-manifest
       adapter: declared
       path: Cargo.toml
+      selector: { kind: file }
+    - id: cargo-lock
+      adapter: declared
+      path: Cargo.lock
       selector: { kind: file }
     - id: root-build-script
       adapter: declared

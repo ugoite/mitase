@@ -5052,6 +5052,96 @@ requirements:
     }
 
     #[test]
+    fn json_openapi_operation_scope_rejects_a_sibling_operation_change() {
+        let tempdir = tempdir().expect("tempdir");
+        fs::write(
+            tempdir.path().join("openapi.json"),
+            concat!(
+                "{\n",
+                "  \"paths\": {\n",
+                "    \"/users\": {\n",
+                "      \"get\": { \"summary\": \"read\" },\n",
+                "      \"post\": { \"summary\": \"create\" }\n",
+                "    }\n",
+                "  }\n",
+                "}\n",
+            ),
+        )
+        .expect("openapi");
+        let declared = syu_spec_model::ArtifactTarget {
+            id: "get-users".into(),
+            adapter: "openapi".into(),
+            path: RepoPath::new("openapi.json").unwrap(),
+            selector: Selector::Operation {
+                method: "get".into(),
+                path: "/users".into(),
+            },
+            claims: vec![],
+        };
+        let resolved = syu_workspace::resolve_target(tempdir.path(), &declared).unwrap();
+        let (_fixture, workspace, index) = load_fixture_workspace();
+        let ctx = ValidationContext {
+            config: &workspace.config,
+            workspace: &workspace,
+            index: &index,
+            changed_files: None,
+            reported_changed_files: None,
+            work_plan: None,
+            selected_slice: None,
+            plan_mode: PlanValidationMode::PostState,
+            preset: workspace.config.validation.preset,
+            revision: None,
+            change_base_revision: None,
+        };
+        let mut target = sample_target(
+            "openapi.json",
+            "operation GET /users",
+            (resolved.line_start, resolved.line_end),
+        );
+        target.adapter = "openapi".into();
+        target.lifecycle = TargetLifecycle::Stable;
+        let sibling_change = ChangedFile {
+            status: ChangeStatus::Modified,
+            old_path: Some(RepoPath::new("openapi.json").unwrap()),
+            new_path: Some(RepoPath::new("openapi.json").unwrap()),
+            hunks: vec![ChangedRange {
+                old_start: 5,
+                old_end: 5,
+                new_start: 5,
+                new_end: 5,
+            }],
+        };
+        assert!(!change_is_within_editable_scope(
+            &ctx,
+            &[&target],
+            &sibling_change,
+            &sibling_change.hunks[0],
+        ));
+        let slice = ExecutionSlice {
+            id: "json-openapi-scope".into(),
+            goal: "Change only GET /users".into(),
+            anchors: vec![],
+            editable_targets: vec![target],
+            verification_targets: vec![],
+            readonly_context: vec![],
+            acceptance: vec![],
+            contracts: vec![],
+            non_goals: vec![],
+            completion: vec![CompletionCheck::DiffWithinScope],
+            budget: Default::default(),
+            confidence: PlanConfidence::Exact,
+            blockers: vec![],
+        };
+        let mut diagnostics = Vec::new();
+        validate_slice_scope(&ctx, &[sibling_change], &slice, &mut diagnostics);
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.rule_id == "SYU-WORK-006")
+        );
+    }
+
+    #[test]
     fn generated_binding_without_source_is_rejected() {
         let tempdir = tempdir().expect("tempdir");
         write_generated_binding_workspace(tempdir.path());

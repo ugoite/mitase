@@ -449,7 +449,7 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
         - POL-ADOPTION-001#rule.feature-evidence
     - **id**: semantic-diff
       - **kind**: behavior
-      - **statement**: Semantic inventory comparison distinguishes public additions, private helper modifications, renames, and deletions.
+      - **statement**: Semantic inventory comparison distinguishes public additions and removals, private helper modifications, reachability changes, renames, and deletions.
       - **governed_by**:
         - POL-ADOPTION-001#rule.feature-evidence
   - **bindings**:
@@ -474,6 +474,54 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
                 - **arguments**:
                   - **package**: syu-inventory
                   - **test**: tests::language_aware_profile_discovers_each_supported_semantic_boundary
+        - **id**: javascript-export-test
+          - **adapter**: rust
+          - **path**: crates/syu-inventory/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::javascript_exports_promote_local_symbols_and_model_export_forms_explicitly
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-CAPABILITY-002#criterion.language-aware-inventory
+              - **covers**:
+                - FEAT-INVENTORY-001#binding.implementation/target.inventory-registry
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-inventory
+                  - **test**: tests::javascript_exports_promote_local_symbols_and_model_export_forms_explicitly
+        - **id**: json-openapi-resolution-test
+          - **adapter**: rust
+          - **path**: crates/syu-workspace/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::json_openapi_operations_resolve_to_their_exact_escaped_pointer_span
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-CAPABILITY-002#criterion.language-aware-inventory
+              - **covers**:
+                - FEAT-INVENTORY-001#binding.implementation/target.inventory-registry
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-workspace
+                  - **test**: tests::json_openapi_operations_resolve_to_their_exact_escaped_pointer_span
+        - **id**: json-openapi-scope-test
+          - **adapter**: rust
+          - **path**: crates/syu-validation/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::json_openapi_operation_scope_rejects_a_sibling_operation_change
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-CAPABILITY-002#criterion.language-aware-inventory
+              - **covers**:
+                - FEAT-INVENTORY-001#binding.implementation/target.inventory-registry
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-validation
+                  - **test**: tests::json_openapi_operation_scope_rejects_a_sibling_operation_change
         - **id**: stable-identity-test
           - **adapter**: rust
           - **path**: crates/syu-inventory/src/lib.rs
@@ -570,6 +618,22 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
                 - **arguments**:
                   - **package**: syu-inventory
                   - **test**: tests::semantic_diff_distinguishes_public_private_rename_and_deletion
+        - **id**: visibility-transition-test
+          - **adapter**: rust
+          - **path**: crates/syu-inventory/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: tests::semantic_diff_names_visibility_transitions_without_downgrading_public_removal
+          - **claims**:
+            - **kind**: verifies
+              - **criterion**: REQ-CAPABILITY-002#criterion.semantic-diff
+              - **covers**:
+                - FEAT-INVENTORY-001#binding.implementation/target.semantic-diff
+              - **runner**:
+                - **runner**: cargo-test
+                - **arguments**:
+                  - **package**: syu-inventory
+                  - **test**: tests::semantic_diff_names_visibility_transitions_without_downgrading_public_removal
 
 ## Source YAML
 
@@ -854,7 +918,7 @@ requirements:
         governed_by: [POL-ADOPTION-001#rule.feature-evidence]
       - id: semantic-diff
         kind: behavior
-        statement: Semantic inventory comparison distinguishes public additions, private helper modifications, renames, and deletions.
+        statement: Semantic inventory comparison distinguishes public additions and removals, private helper modifications, reachability changes, renames, and deletions.
         governed_by: [POL-ADOPTION-001#rule.feature-evidence]
     bindings:
       - id: dependency-verification
@@ -871,6 +935,33 @@ requirements:
                 criterion: REQ-CAPABILITY-002#criterion.language-aware-inventory
                 covers: [FEAT-INVENTORY-001#binding.implementation/target.inventory-registry]
                 runner: { runner: cargo-test, arguments: { package: syu-inventory, test: tests::language_aware_profile_discovers_each_supported_semantic_boundary } }
+          - id: javascript-export-test
+            adapter: rust
+            path: crates/syu-inventory/src/lib.rs
+            selector: { kind: symbol, name: tests::javascript_exports_promote_local_symbols_and_model_export_forms_explicitly }
+            claims:
+              - kind: verifies
+                criterion: REQ-CAPABILITY-002#criterion.language-aware-inventory
+                covers: [FEAT-INVENTORY-001#binding.implementation/target.inventory-registry]
+                runner: { runner: cargo-test, arguments: { package: syu-inventory, test: tests::javascript_exports_promote_local_symbols_and_model_export_forms_explicitly } }
+          - id: json-openapi-resolution-test
+            adapter: rust
+            path: crates/syu-workspace/src/lib.rs
+            selector: { kind: symbol, name: tests::json_openapi_operations_resolve_to_their_exact_escaped_pointer_span }
+            claims:
+              - kind: verifies
+                criterion: REQ-CAPABILITY-002#criterion.language-aware-inventory
+                covers: [FEAT-INVENTORY-001#binding.implementation/target.inventory-registry]
+                runner: { runner: cargo-test, arguments: { package: syu-workspace, test: tests::json_openapi_operations_resolve_to_their_exact_escaped_pointer_span } }
+          - id: json-openapi-scope-test
+            adapter: rust
+            path: crates/syu-validation/src/lib.rs
+            selector: { kind: symbol, name: tests::json_openapi_operation_scope_rejects_a_sibling_operation_change }
+            claims:
+              - kind: verifies
+                criterion: REQ-CAPABILITY-002#criterion.language-aware-inventory
+                covers: [FEAT-INVENTORY-001#binding.implementation/target.inventory-registry]
+                runner: { runner: cargo-test, arguments: { package: syu-validation, test: tests::json_openapi_operation_scope_rejects_a_sibling_operation_change } }
           - id: stable-identity-test
             adapter: rust
             path: crates/syu-inventory/src/lib.rs
@@ -925,4 +1016,13 @@ requirements:
                 criterion: REQ-CAPABILITY-002#criterion.semantic-diff
                 covers: [FEAT-INVENTORY-001#binding.implementation/target.semantic-diff]
                 runner: { runner: cargo-test, arguments: { package: syu-inventory, test: tests::semantic_diff_distinguishes_public_private_rename_and_deletion } }
+          - id: visibility-transition-test
+            adapter: rust
+            path: crates/syu-inventory/src/lib.rs
+            selector: { kind: symbol, name: tests::semantic_diff_names_visibility_transitions_without_downgrading_public_removal }
+            claims:
+              - kind: verifies
+                criterion: REQ-CAPABILITY-002#criterion.semantic-diff
+                covers: [FEAT-INVENTORY-001#binding.implementation/target.semantic-diff]
+                runner: { runner: cargo-test, arguments: { package: syu-inventory, test: tests::semantic_diff_names_visibility_transitions_without_downgrading_public_removal } }
 ```
