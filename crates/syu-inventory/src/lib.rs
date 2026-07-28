@@ -16,6 +16,7 @@ use syn::visit::Visit;
 use syn::{Meta, Token};
 use syu_project_model::InventoryProfile;
 use syu_spec_model::{RepoPath, format_sha256};
+use tree_sitter::{Node, Parser as TsParser};
 
 #[derive(Debug, Clone)]
 pub struct InventoryContext {
@@ -727,10 +728,7 @@ fn source_symbol_units(
     let source = String::from_utf8(read_bytes(context, &path)?)?;
     let mut units = Vec::new();
     let mut identities = BTreeSet::new();
-    let tokens = javascript_tokens(&source);
-    let mut depth = 0usize;
-
-    let mut add_symbol = |name: &str, exported: bool, start: usize, end: usize| {
+    let mut add_symbol = |name: &str, exported: bool, node: Node<'_>| {
         if name.is_empty() || name.starts_with('#') {
             return;
         }
@@ -738,6 +736,8 @@ fn source_symbol_units(
         if !identities.insert(identity.clone()) {
             return;
         }
+        let start = node.start_byte();
+        let end = node.end_byte();
         let line_start = source[..start]
             .bytes()
             .filter(|byte| *byte == b'\n')
@@ -765,192 +765,107 @@ fn source_symbol_units(
             structural_digest: structural_digest(&source[start..end.max(start + 1)], name),
         });
     };
-
-    let mut index = 0usize;
-    while index < tokens.len() {
-        let before_depth = depth;
-        if before_depth == 0 {
-            let mut cursor = index;
-            let mut exported = false;
-            if tokens[cursor].text == "export" {
-                exported = true;
-                cursor += 1;
-                if tokens
-                    .get(cursor)
-                    .is_some_and(|token| token.text == "default")
-                {
-                    cursor += 1;
-                }
-                if tokens.get(cursor).is_some_and(|token| token.text == "{") {
-                    cursor += 1;
-                    while let Some(token) = tokens.get(cursor) {
-                        if token.text == "}" {
-                            break;
-                        }
-                        if token.text != "," && token.text != "as" {
-                            add_symbol(&token.text, true, token.start, token.end);
-                        }
-                        cursor += 1;
-                    }
-                    index = cursor;
-                }
-            }
-            while tokens
-                .get(cursor)
-                .is_some_and(|token| matches!(token.text.as_str(), "async" | "declare"))
+    let mut parser = TsParser::new();
+    let is_jsx = adapter == "javascript"
+        || path
+            .extension()
+            .is_some_and(|extension| matches!(extension.to_str(), Some("jsx" | "tsx")));
+    parser
+        .set_language(
+            &(if is_jsx {
+                tree_sitter_typescript::LANGUAGE_TSX
+            } else {
+                tree_sitter_typescript::LANGUAGE_TYPESCRIPT
+            })
+            .into(),
+        )
+        .map_err(|error| anyhow::anyhow!("load JavaScript/TypeScript grammar: {error}"))?;
+    let tree = parser
+        .parse(&source, None)
+        .context("parse JavaScript/TypeScript source")?;
+    if tree.root_node().has_error() {
+        bail!("JavaScript/TypeScript source has syntax errors; refusing approximate inventory");
+    }
+    for child in tree
+        .root_node()
+        .named_children(&mut tree.root_node().walk())
+    {
+        if child.kind() == "export_statement" {
+            if let Some(declaration) = child.child_by_field_name("declaration") {
+                javascript_declaration_names(&source, declaration, true, child, &mut add_symbol);
+            } else if let Some(clause) = child
+                .named_child(0)
+                .filter(|node| node.kind() == "export_clause")
             {
-                cursor += 1;
-            }
-            if let Some(keyword) = tokens.get(cursor).map(|token| token.text.as_str()) {
-                if matches!(
-                    keyword,
-                    "function" | "class" | "interface" | "type" | "enum"
-                ) {
-                    let mut name_cursor = cursor + 1;
-                    if tokens
-                        .get(name_cursor)
-                        .is_some_and(|token| token.text == "*")
-                    {
-                        name_cursor += 1;
+                for specifier in clause.named_children(&mut clause.walk()) {
+                    let name = specifier
+                        .child_by_field_name("alias")
+                        .or_else(|| specifier.child_by_field_name("name"));
+                    if let Some(name) = name {
+                        add_symbol(&source[name.byte_range()], true, child);
                     }
-                    if let Some(name) = tokens.get(name_cursor) {
-                        add_symbol(
-                            &name.text,
-                            exported,
-                            tokens[index].start,
-                            javascript_declaration_end(&source, &tokens, index),
-                        );
-                    }
-                } else if matches!(keyword, "const" | "let" | "var")
-                    && let Some(name) = tokens.get(cursor + 1)
-                {
-                    add_symbol(
-                        &name.text,
-                        exported,
-                        tokens[index].start,
-                        javascript_declaration_end(&source, &tokens, index),
-                    );
                 }
+            } else if let Some(value) = child.child_by_field_name("value") {
+                javascript_declaration_names(&source, value, true, child, &mut add_symbol);
             }
+        } else {
+            javascript_declaration_names(&source, child, false, child, &mut add_symbol);
         }
-        if tokens[index].text == "{" {
-            depth += 1;
-        } else if tokens[index].text == "}" {
-            depth = depth.saturating_sub(1);
-        }
-        index += 1;
     }
     Ok(units)
 }
 
-#[derive(Debug, Clone)]
-struct JavascriptToken {
-    text: String,
-    start: usize,
-    end: usize,
-}
-
-fn javascript_declaration_end(
+fn javascript_declaration_names(
     source: &str,
-    tokens: &[JavascriptToken],
-    start_index: usize,
-) -> usize {
-    let start = tokens
-        .get(start_index)
-        .map(|token| token.start)
-        .unwrap_or(source.len());
-    let mut depth = 0usize;
-    let mut saw_brace = false;
-    let mut last_end = start;
-    for token in tokens.iter().skip(start_index) {
-        last_end = token.end;
-        match token.text.as_str() {
-            "{" => {
-                depth += 1;
-                saw_brace = true;
+    declaration: Node<'_>,
+    exported: bool,
+    span: Node<'_>,
+    add_symbol: &mut impl FnMut(&str, bool, Node<'_>),
+) {
+    match declaration.kind() {
+        "function_declaration"
+        | "class_declaration"
+        | "interface_declaration"
+        | "type_alias_declaration"
+        | "enum_declaration"
+        | "internal_module" => {
+            if let Some(name) = declaration.child_by_field_name("name") {
+                add_symbol(&source[name.byte_range()], exported, span);
             }
-            "}" if depth > 0 => {
-                depth -= 1;
-                if saw_brace && depth == 0 {
-                    return token.end;
+        }
+        "lexical_declaration" | "variable_declaration" => {
+            for declarator in declaration.named_children(&mut declaration.walk()) {
+                if declarator.kind() != "variable_declarator" {
+                    continue;
+                }
+                if let Some(name) = declarator.child_by_field_name("name") {
+                    javascript_pattern_names(source, name, exported, span, add_symbol);
                 }
             }
-            ";" if depth == 0 => return token.end,
-            _ => {}
         }
+        "ambient_declaration" => {
+            for child in declaration.named_children(&mut declaration.walk()) {
+                javascript_declaration_names(source, child, exported, span, add_symbol);
+            }
+        }
+        _ => {}
     }
-    source[start..]
-        .find('\n')
-        .map(|offset| start + offset)
-        .unwrap_or(last_end.max(start + 1))
 }
 
-/// Tokenize JavaScript/TypeScript declarations without treating braces inside
-/// strings, template literals, or comments as syntax. The old line scanner
-/// misclassified later exports whenever an earlier function contained a
-/// template expression or object literal.
-fn javascript_tokens(source: &str) -> Vec<JavascriptToken> {
-    let bytes = source.as_bytes();
-    let mut tokens = Vec::new();
-    let mut index = 0usize;
-    while index < bytes.len() {
-        if bytes[index].is_ascii_whitespace() {
-            index += 1;
-            continue;
-        }
-        if bytes[index] == b'/' && bytes.get(index + 1) == Some(&b'/') {
-            index += 2;
-            while index < bytes.len() && bytes[index] != b'\n' {
-                index += 1;
-            }
-            continue;
-        }
-        if bytes[index] == b'/' && bytes.get(index + 1) == Some(&b'*') {
-            index += 2;
-            while index + 1 < bytes.len() && !(bytes[index] == b'*' && bytes[index + 1] == b'/') {
-                index += 1;
-            }
-            index = (index + 2).min(bytes.len());
-            continue;
-        }
-        if matches!(bytes[index], b'\'' | b'"' | b'`') {
-            let quote = bytes[index];
-            index += 1;
-            while index < bytes.len() {
-                if bytes[index] == b'\\' {
-                    index = (index + 2).min(bytes.len());
-                } else if bytes[index] == quote {
-                    index += 1;
-                    break;
-                } else {
-                    index += 1;
-                }
-            }
-            continue;
-        }
-        if bytes[index].is_ascii_alphanumeric() || matches!(bytes[index], b'_' | b'$') {
-            let start = index;
-            index += 1;
-            while index < bytes.len()
-                && (bytes[index].is_ascii_alphanumeric() || matches!(bytes[index], b'_' | b'$'))
-            {
-                index += 1;
-            }
-            tokens.push(JavascriptToken {
-                text: source[start..index].into(),
-                start,
-                end: index,
-            });
-            continue;
-        }
-        tokens.push(JavascriptToken {
-            text: source[index..index + 1].into(),
-            start: index,
-            end: index + 1,
-        });
-        index += 1;
+fn javascript_pattern_names(
+    source: &str,
+    pattern: Node<'_>,
+    exported: bool,
+    span: Node<'_>,
+    add_symbol: &mut impl FnMut(&str, bool, Node<'_>),
+) {
+    if pattern.kind() == "identifier" || pattern.kind().ends_with("_identifier_pattern") {
+        add_symbol(&source[pattern.byte_range()], exported, span);
+        return;
     }
-    tokens
+    for child in pattern.named_children(&mut pattern.walk()) {
+        javascript_pattern_names(source, child, exported, span, add_symbol);
+    }
 }
 
 /// Rust inventory uses the syntax tree rather than line-oriented symbol
@@ -988,7 +903,7 @@ fn discover_rust(
     let test_mode = mode == "test";
     // Test and production inventories use separate cfg evaluation. Root
     // discovery still honors the independent `include_tests` setting below.
-    let cfg = cfg_context(settings, test_mode);
+    let cfg = cfg_context(settings, test_mode, &context.profile);
     let mut files = Vec::new();
     let mut support_files = Vec::new();
     let mut file_visibility = BTreeMap::new();
@@ -1068,6 +983,7 @@ fn discover_rust(
             cfg: &cfg,
             profile: &context.profile,
             public_module: file_visibility.get(&path).copied().unwrap_or(true),
+            trait_public: false,
         };
         visitor.visit_file(&syntax);
         units.extend(visitor.units);
@@ -1120,6 +1036,7 @@ struct RustVisitor<'a> {
     cfg: &'a CfgContext,
     profile: &'a str,
     public_module: bool,
+    trait_public: bool,
 }
 
 impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
@@ -1130,9 +1047,9 @@ impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
         let active = previous_active && cfg_active(&item.attrs, self.cfg);
         self.current_active = active;
         self.add(&item.sig.ident.to_string(), &item.vis, item.span(), true);
-        if active {
-            syn::visit::visit_item_fn(self, item);
-        }
+        // Function bodies can contain local items (for example `const KNOWN`
+        // helper tables). They are not module-level semantic targets and
+        // would otherwise collide with an item in a different function.
         self.attributes = previous;
         self.current_active = previous_active;
     }
@@ -1142,7 +1059,7 @@ impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
         let previous_active = self.current_active;
         self.attributes = attribute_keys(&item.attrs);
         self.current_active = previous_active && cfg_active(&item.attrs, self.cfg);
-        self.add(&item.ident.to_string(), &item.vis, item.span(), false);
+        self.add(&item.ident.to_string(), &item.vis, item.span(), true);
         if self.current_active {
             syn::visit::visit_item_struct(self, item);
         }
@@ -1155,12 +1072,60 @@ impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
         let previous_active = self.current_active;
         self.attributes = attribute_keys(&item.attrs);
         self.current_active = previous_active && cfg_active(&item.attrs, self.cfg);
-        self.add(&item.ident.to_string(), &item.vis, item.span(), false);
+        self.add(&item.ident.to_string(), &item.vis, item.span(), true);
         if self.current_active {
             syn::visit::visit_item_enum(self, item);
         }
         self.attributes = previous;
         self.current_active = previous_active;
+    }
+
+    fn visit_item_const(&mut self, item: &'ast syn::ItemConst) {
+        self.visit_named_item(
+            &item.attrs,
+            &item.ident.to_string(),
+            &item.vis,
+            item.span(),
+            |this| {
+                syn::visit::visit_item_const(this, item);
+            },
+        );
+    }
+
+    fn visit_item_static(&mut self, item: &'ast syn::ItemStatic) {
+        self.visit_named_item(
+            &item.attrs,
+            &item.ident.to_string(),
+            &item.vis,
+            item.span(),
+            |this| {
+                syn::visit::visit_item_static(this, item);
+            },
+        );
+    }
+
+    fn visit_item_type(&mut self, item: &'ast syn::ItemType) {
+        self.visit_named_item(
+            &item.attrs,
+            &item.ident.to_string(),
+            &item.vis,
+            item.span(),
+            |this| {
+                syn::visit::visit_item_type(this, item);
+            },
+        );
+    }
+
+    fn visit_item_union(&mut self, item: &'ast syn::ItemUnion) {
+        self.visit_named_item(
+            &item.attrs,
+            &item.ident.to_string(),
+            &item.vis,
+            item.span(),
+            |this| {
+                syn::visit::visit_item_union(this, item);
+            },
+        );
     }
 
     fn visit_item_trait(&mut self, item: &'ast syn::ItemTrait) {
@@ -1169,10 +1134,13 @@ impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
         self.attributes = attribute_keys(&item.attrs);
         let active = previous_active && cfg_active(&item.attrs, self.cfg);
         self.current_active = active;
-        self.add(&item.ident.to_string(), &item.vis, item.span(), false);
+        self.add(&item.ident.to_string(), &item.vis, item.span(), true);
         let previous = self.impl_type.replace(format!("trait({})", item.ident));
+        let previous_trait_public = self.trait_public;
+        self.trait_public = self.public_module && matches!(item.vis, syn::Visibility::Public(_));
         syn::visit::visit_item_trait(self, item);
         self.impl_type = previous;
+        self.trait_public = previous_trait_public;
         self.attributes = previous_attributes;
         self.current_active = previous_active;
     }
@@ -1204,7 +1172,7 @@ impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
         self.attributes = attribute_keys(&item.attrs);
         let active = previous_active && cfg_active(&item.attrs, self.cfg);
         self.current_active = active;
-        self.add(&item.ident.to_string(), &item.vis, item.span(), false);
+        self.add(&item.ident.to_string(), &item.vis, item.span(), true);
         let previous_len = self.module_path.len();
         let previous_public = self.public_module;
         self.module_path.push(item.ident.to_string());
@@ -1223,9 +1191,6 @@ impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
         let active = previous_active && cfg_active(&item.attrs, self.cfg);
         self.current_active = active;
         self.add(&item.sig.ident.to_string(), &item.vis, item.span(), true);
-        if active {
-            syn::visit::visit_impl_item_fn(self, item);
-        }
         self.attributes = previous;
         self.current_active = previous_active;
     }
@@ -1240,7 +1205,7 @@ impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
             &item.sig.ident.to_string(),
             &syn::Visibility::Inherited,
             item.span(),
-            false,
+            true,
         );
         if active {
             syn::visit::visit_trait_item_fn(self, item);
@@ -1282,6 +1247,26 @@ fn collect_use_names(tree: &syn::UseTree, names: &mut Vec<String>) {
 }
 
 impl RustVisitor<'_> {
+    fn visit_named_item(
+        &mut self,
+        attributes: &[syn::Attribute],
+        name: &str,
+        visibility: &syn::Visibility,
+        span: proc_macro2::Span,
+        visit: impl FnOnce(&mut Self),
+    ) {
+        let previous_attributes = self.attributes.clone();
+        let previous_active = self.current_active;
+        self.attributes = attribute_keys(attributes);
+        self.current_active = previous_active && cfg_active(attributes, self.cfg);
+        self.add(name, visibility, span, true);
+        if self.current_active {
+            visit(self);
+        }
+        self.attributes = previous_attributes;
+        self.current_active = previous_active;
+    }
+
     fn add(
         &mut self,
         name: &str,
@@ -1320,7 +1305,8 @@ impl RustVisitor<'_> {
                 ArtifactExposure::Test
             } else if public_entrypoint
                 && self.public_module
-                && matches!(visibility, syn::Visibility::Public(_))
+                && (matches!(visibility, syn::Visibility::Public(_))
+                    || (self.trait_public && matches!(visibility, syn::Visibility::Inherited)))
             {
                 ArtifactExposure::Public
             } else {
@@ -1391,14 +1377,16 @@ struct CfgContext {
     values: BTreeSet<String>,
 }
 
-fn cfg_context(settings: &serde_yaml::Value, test_mode: bool) -> CfgContext {
+fn cfg_context(settings: &serde_yaml::Value, test_mode: bool, profile: &str) -> CfgContext {
     let mut values = BTreeSet::new();
     if test_mode {
         values.insert("test".into());
     } else {
         values.insert("not(test)".into());
     }
-    if cfg!(debug_assertions) {
+    // `debug_assertions` belongs to the inspected Cargo profile, never to the
+    // Syu binary that happens to be running this inventory.
+    if !matches!(profile, "release" | "production") {
         values.insert("debug_assertions".into());
     }
     let target = settings
@@ -1513,27 +1501,91 @@ fn digest(bytes: &[u8]) -> String {
 }
 
 fn structural_digest(source: &str, declared_name: &str) -> String {
+    // This digest is used only to corroborate a rename. It must therefore be
+    // strictly more conservative than source equality: preserve every byte
+    // (including literals, comments, and formatting) and replace only lexical
+    // identifiers. This covers a declaration plus its references without
+    // confusing a same-spelled string value with a rename.
     let mut normalized = String::with_capacity(source.len());
-    let mut characters = source.chars().peekable();
-    while let Some(character) = characters.next() {
-        if character.is_whitespace() {
+    let bytes = source.as_bytes();
+    let mut offset = 0usize;
+    while offset < bytes.len() {
+        if matches!(bytes[offset], b'\'' | b'"' | b'`') {
+            let quote = bytes[offset];
+            let start = offset;
+            offset += 1;
+            while offset < bytes.len() {
+                if bytes[offset] == b'\\' {
+                    offset = (offset + 2).min(bytes.len());
+                } else if bytes[offset] == quote {
+                    offset += 1;
+                    break;
+                } else {
+                    offset += 1;
+                }
+            }
+            normalized.push_str(&source[start..offset]);
             continue;
         }
-        if character == '_' || character == '$' || character.is_alphabetic() {
-            let mut identifier = String::from(character);
-            while characters
-                .peek()
-                .is_some_and(|next| *next == '_' || *next == '$' || next.is_alphanumeric())
-            {
-                identifier.push(characters.next().expect("peeked identifier character"));
+        if bytes[offset] == b'/' && bytes.get(offset + 1) == Some(&b'/') {
+            let start = offset;
+            offset = source[offset..]
+                .find('\n')
+                .map(|index| offset + index)
+                .unwrap_or(bytes.len());
+            normalized.push_str(&source[start..offset]);
+            continue;
+        }
+        if bytes[offset] == b'/' && bytes.get(offset + 1) == Some(&b'*') {
+            let start = offset;
+            offset = source[offset + 2..]
+                .find("*/")
+                .map(|index| offset + 2 + index + 2)
+                .unwrap_or(bytes.len());
+            normalized.push_str(&source[start..offset]);
+            continue;
+        }
+        if bytes[offset] == b'/' {
+            // Without language-specific lexer context, `/` could be division
+            // or a regex literal. Treat the whole candidate as opaque: this
+            // may miss a rename, but it cannot erase a regex value change.
+            let start = offset;
+            offset += 1;
+            while offset < bytes.len() && bytes[offset] != b'\n' {
+                if bytes[offset] == b'\\' {
+                    offset = (offset + 2).min(bytes.len());
+                } else if bytes[offset] == b'/' {
+                    offset += 1;
+                    break;
+                } else {
+                    offset += 1;
+                }
             }
-            if identifier == declared_name {
+            normalized.push_str(&source[start..offset]);
+            continue;
+        }
+        let character = source[offset..]
+            .chars()
+            .next()
+            .expect("offset is in source");
+        if character == '_' || character == '$' || character.is_alphabetic() {
+            let start = offset;
+            offset += character.len_utf8();
+            while let Some(character) = source[offset..].chars().next() {
+                if character == '_' || character == '$' || character.is_alphanumeric() {
+                    offset += character.len_utf8();
+                } else {
+                    break;
+                }
+            }
+            if &source[start..offset] == declared_name {
                 normalized.push_str("<identity>");
             } else {
-                normalized.push_str(&identifier);
+                normalized.push_str(&source[start..offset]);
             }
         } else {
             normalized.push(character);
+            offset += character.len_utf8();
         }
     }
     digest(normalized.as_bytes())
@@ -1572,13 +1624,7 @@ pub fn semantic_diff(before: &[ArtifactUnit], after: &[ArtifactUnit]) -> Vec<Sem
         let Some(current) = after_by_identity.get(unit.identity.as_str()) else {
             continue;
         };
-        let same_structure =
-            if unit.structural_digest.is_empty() || current.structural_digest.is_empty() {
-                unit.digest == current.digest
-            } else {
-                unit.structural_digest == current.structural_digest
-            };
-        if same_structure
+        if unit.digest == current.digest
             && unit.exposure == current.exposure
             && unit.reachability == current.reachability
         {
@@ -1621,6 +1667,7 @@ pub fn semantic_diff(before: &[ArtifactUnit], after: &[ArtifactUnit]) -> Vec<Sem
                     && previous.adapter == current.adapter
                     && previous.kind == current.kind
                     && previous.exposure == current.exposure
+                    && previous.path == current.path
                     && structural
                         == if current.structural_digest.is_empty() {
                             current.digest.as_str()
@@ -1769,16 +1816,21 @@ fn cargo_roots(root: &Path, settings: &serde_yaml::Value) -> Result<Vec<PathBuf>
         struct Package {
             manifest_path: PathBuf,
             targets: Vec<PackageTarget>,
+            #[serde(default)]
+            features: BTreeMap<String, Vec<String>>,
         }
         #[derive(Deserialize)]
         struct PackageTarget {
             src_path: PathBuf,
             kind: Vec<String>,
+            #[serde(default, rename = "required-features")]
+            required_features: Vec<String>,
         }
         let metadata: Metadata =
             serde_json::from_slice(&output.stdout).context("parse cargo metadata output")?;
         let mut roots = BTreeSet::new();
         for package in metadata.packages {
+            let enabled_features = cargo_enabled_features(&package.features, settings);
             for target in package.targets {
                 if !target.kind.is_empty()
                     && (include_tests
@@ -1786,6 +1838,10 @@ fn cargo_roots(root: &Path, settings: &serde_yaml::Value) -> Result<Vec<PathBuf>
                             .kind
                             .iter()
                             .any(|kind| matches!(kind.as_str(), "test" | "bench")))
+                    && target
+                        .required_features
+                        .iter()
+                        .all(|feature| enabled_features.contains(feature))
                 {
                     roots.insert(target.src_path);
                 }
@@ -1820,6 +1876,47 @@ fn cargo_roots(root: &Path, settings: &serde_yaml::Value) -> Result<Vec<PathBuf>
         }
     }
     Ok(roots.into_iter().collect())
+}
+
+fn cargo_enabled_features(
+    declared: &BTreeMap<String, Vec<String>>,
+    settings: &serde_yaml::Value,
+) -> BTreeSet<String> {
+    let mut requested = settings
+        .get("features")
+        .and_then(serde_yaml::Value::as_sequence)
+        .into_iter()
+        .flatten()
+        .filter_map(serde_yaml::Value::as_str)
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    if settings
+        .get("all_features")
+        .and_then(serde_yaml::Value::as_bool)
+        .unwrap_or(false)
+    {
+        requested.extend(declared.keys().cloned());
+    } else if !settings
+        .get("no_default_features")
+        .and_then(serde_yaml::Value::as_bool)
+        .unwrap_or(false)
+    {
+        requested.push("default".into());
+    }
+    let mut enabled = BTreeSet::new();
+    while let Some(feature) = requested.pop() {
+        if !enabled.insert(feature.clone()) {
+            continue;
+        }
+        for nested in declared.get(&feature).into_iter().flatten() {
+            // Cargo feature definitions may also activate optional deps. Those
+            // are not feature names and cannot satisfy required-features.
+            if !nested.starts_with("dep:") && !nested.contains('/') {
+                requested.push(nested.strip_prefix("?").unwrap_or(nested).into());
+            }
+        }
+    }
+    enabled
 }
 
 fn cargo_metadata(
@@ -2118,6 +2215,44 @@ mod tests {
     }
 
     #[test]
+    fn javascript_inventory_uses_export_semantics_and_unicode_safe_ast_spans() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("model.ts");
+        fs::write(
+            &path,
+            concat!(
+                "const pattern = /{/;\n",
+                "const local = 1;\n",
+                "export { local as public_name };\n",
+                "export const { value } = source;\n",
+                "export const 日本語 = `value: ${value}`;\n",
+                "export default function () {}\n",
+                "export function api() { return pattern; }\n",
+            ),
+        )
+        .unwrap();
+        let context = InventoryContext {
+            workspace_root: temp.path().into(),
+            profile: "default".into(),
+            settings: serde_yaml::Value::Null,
+            excludes: vec![],
+            overlays: BTreeMap::new(),
+        };
+        let units = source_symbol_units(&context, path, "typescript").unwrap();
+        let public = |name: &str| {
+            units.iter().any(|unit| {
+                unit.identity.ends_with(&format!("::{name}"))
+                    && unit.exposure == ArtifactExposure::Public
+            })
+        };
+        assert!(public("public_name"));
+        assert!(public("value"));
+        assert!(public("日本語"));
+        assert!(public("api"));
+        assert!(!public("local"));
+    }
+
+    #[test]
     fn html_marker_inventory_keeps_attributes_as_distinct_units() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("workbench.html");
@@ -2208,7 +2343,7 @@ mod tests {
     }
 
     #[test]
-    fn semantic_identity_ignores_line_movement_and_formatting() {
+    fn semantic_identity_survives_line_movement_but_reports_content_changes() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("model.js");
         fs::write(&path, "export function api(){return true;}\n").unwrap();
@@ -2224,7 +2359,104 @@ mod tests {
         let after = source_symbol_units(&context, path, "javascript").unwrap();
         assert_eq!(before[0].identity, after[0].identity);
         assert_ne!(before[0].span.line_start, after[0].span.line_start);
-        assert!(semantic_diff(&before, &after).is_empty());
+        assert!(
+            semantic_diff(&before, &after)
+                .iter()
+                .any(|change| change.kind == SemanticChangeKind::Modification)
+        );
+    }
+
+    #[test]
+    fn semantic_diff_preserves_literal_meaning_and_rejects_false_renames() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("model.ts");
+        let context = InventoryContext {
+            workspace_root: temp.path().into(),
+            profile: "default".into(),
+            settings: serde_yaml::Value::Null,
+            excludes: vec![],
+            overlays: BTreeMap::new(),
+        };
+        fs::write(&path, "function api() { return \"a b\"; }\n").unwrap();
+        let before = source_symbol_units(&context, path.clone(), "typescript").unwrap();
+        fs::write(&path, "function api() { return \"ab\"; }\n").unwrap();
+        let after = source_symbol_units(&context, path.clone(), "typescript").unwrap();
+        assert!(
+            semantic_diff(&before, &after)
+                .iter()
+                .any(|change| change.kind == SemanticChangeKind::PrivateModification)
+        );
+
+        fs::write(&path, "function old() { return \"old\"; }\n").unwrap();
+        let before = source_symbol_units(&context, path.clone(), "typescript").unwrap();
+        fs::write(&path, "function new() { return \"new\"; }\n").unwrap();
+        let after = source_symbol_units(&context, path.clone(), "typescript").unwrap();
+        let changes = semantic_diff(&before, &after);
+        assert!(
+            !changes
+                .iter()
+                .any(|change| change.kind == SemanticChangeKind::Rename)
+        );
+        assert!(
+            changes
+                .iter()
+                .any(|change| change.kind == SemanticChangeKind::Deletion)
+        );
+        assert!(
+            changes
+                .iter()
+                .any(|change| change.kind == SemanticChangeKind::Addition)
+        );
+    }
+
+    #[test]
+    fn semantic_diff_does_not_infer_cross_file_renames() {
+        let path_a = RepoPath::new("src/a.ts").unwrap();
+        let path_b = RepoPath::new("src/b.ts").unwrap();
+        let before = vec![ArtifactUnit {
+            adapter: "typescript".into(),
+            path: path_a,
+            identity: "typescript:src/a.ts::old".into(),
+            kind: ArtifactUnitKind::Symbol,
+            exposure: ArtifactExposure::Private,
+            reachability: ArtifactReachability::Active,
+            span: SourceSpan {
+                byte_start: 0,
+                byte_end: 1,
+                line_start: 1,
+                line_end: 1,
+            },
+            digest: "before".into(),
+            structural_digest: "shape".into(),
+        }];
+        let after = vec![ArtifactUnit {
+            adapter: "typescript".into(),
+            path: path_b,
+            identity: "typescript:src/b.ts::new".into(),
+            kind: ArtifactUnitKind::Symbol,
+            exposure: ArtifactExposure::Private,
+            reachability: ArtifactReachability::Active,
+            span: SourceSpan {
+                byte_start: 0,
+                byte_end: 1,
+                line_start: 1,
+                line_end: 1,
+            },
+            digest: "after".into(),
+            structural_digest: "shape".into(),
+        }];
+        let changes = semantic_diff(&before, &after);
+        assert_eq!(changes.len(), 2);
+        assert!(
+            changes
+                .iter()
+                .any(|change| change.kind == SemanticChangeKind::Deletion)
+        );
+        assert!(
+            changes
+                .iter()
+                .any(|change| change.kind == SemanticChangeKind::Addition)
+        );
     }
 
     #[test]
@@ -2286,6 +2518,101 @@ mod tests {
         assert!(units.iter().any(|unit| {
             unit.identity.ends_with("::active") && unit.reachability == ArtifactReachability::Active
         }));
+    }
+
+    #[test]
+    fn rust_inventory_models_effective_public_items_and_private_modules() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("src")).unwrap();
+        fs::write(
+            temp.path().join("src/lib.rs"),
+            concat!(
+                "pub struct Request;\n",
+                "pub enum Error { Failed }\n",
+                "pub trait Service { fn call(&self); }\n",
+                "pub const LIMIT: usize = 1;\n",
+                "pub type Alias = Request;\n",
+                "mod private { pub fn helper() {} }\n",
+                "pub use Request as ExportedRequest;\n",
+            ),
+        )
+        .unwrap();
+        let context = InventoryContext {
+            workspace_root: temp.path().into(),
+            profile: "default".into(),
+            settings: serde_yaml::Value::Null,
+            excludes: vec![],
+            overlays: BTreeMap::new(),
+        };
+        let units = discover_rust(
+            &context,
+            &[RepoPath::new("src/lib.rs").unwrap()],
+            &serde_yaml::Value::Null,
+        )
+        .unwrap()
+        .units;
+        let exposure = |suffix: &str| {
+            units
+                .iter()
+                .find(|unit| unit.identity.ends_with(suffix))
+                .map(|unit| unit.exposure.clone())
+        };
+        for name in [
+            "::Request",
+            "::Error",
+            "::Service",
+            "::LIMIT",
+            "::Alias",
+            "::ExportedRequest",
+        ] {
+            assert_eq!(exposure(name), Some(ArtifactExposure::Public), "{name}");
+        }
+        assert_eq!(
+            exposure("::impl(trait(Service))::call"),
+            Some(ArtifactExposure::Public)
+        );
+        assert_eq!(
+            exposure("::private::helper"),
+            Some(ArtifactExposure::Private)
+        );
+    }
+
+    #[test]
+    fn cargo_roots_exclude_targets_with_disabled_required_features() {
+        let temp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(temp.path().join("src")).unwrap();
+        fs::write(
+            temp.path().join("Cargo.toml"),
+            concat!(
+                "[package]\nname = \"feature-roots\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+                "[features]\ndefault = [\"default_api\"]\ndefault_api = []\nadmin = []\n",
+                "[[bin]]\nname = \"admin\"\npath = \"src/admin.rs\"\nrequired-features = [\"admin\"]\n",
+            ),
+        )
+        .unwrap();
+        fs::write(temp.path().join("src/lib.rs"), "pub fn api() {}\n").unwrap();
+        fs::write(temp.path().join("src/admin.rs"), "fn main() {}\n").unwrap();
+        let default_roots = cargo_roots(temp.path(), &serde_yaml::Value::Null).unwrap();
+        assert!(
+            !default_roots
+                .iter()
+                .any(|path| path.ends_with("src/admin.rs"))
+        );
+        let enabled = serde_yaml::from_str("features: [admin]").unwrap();
+        let enabled_roots = cargo_roots(temp.path(), &enabled).unwrap();
+        assert!(
+            enabled_roots
+                .iter()
+                .any(|path| path.ends_with("src/admin.rs"))
+        );
+        let no_default = serde_yaml::from_str("no_default_features: true").unwrap();
+        assert!(
+            !cargo_enabled_features(
+                &BTreeMap::from([("default".into(), vec!["default_api".into()])]),
+                &no_default,
+            )
+            .contains("default_api")
+        );
     }
 
     #[test]

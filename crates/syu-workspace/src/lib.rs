@@ -996,7 +996,7 @@ pub fn resolve_indexed_target(
         ExactSelector::Symbol { name } => (format!("symbol {name}"), vec![name.clone()]),
         ExactSelector::Heading { value } => (format!("heading {value}"), vec![]),
         ExactSelector::Marker { value } => (format!("marker {value}"), vec![]),
-        _ => return Ok(None),
+        ExactSelector::Operation { .. } | ExactSelector::JsonPointer { .. } => return Ok(None),
     };
     Ok(Some(ResolvedTarget {
         path: unit.path.as_path().to_path_buf(),
@@ -1108,16 +1108,9 @@ fn resolve_target_from_content(
                     bail!("operation {method} {path} not found");
                 }
                 let (byte_start, byte_end, line_start, line_end, excerpt) =
-                    extract_yaml_block(&text, |line| {
-                        line.trim_start().starts_with(path.as_str())
-                            || line
-                                .trim_start()
-                                .starts_with(&format!("{}:", method.to_ascii_lowercase()))
-                    })
-                    .unwrap_or_else(|| {
-                        let excerpt = text.to_string();
-                        (0, content.len(), 1, text.lines().count(), excerpt)
-                    });
+                    openapi_operation_span(&text, method, path).ok_or_else(|| {
+                        anyhow::anyhow!("operation {method} {path} has no unambiguous source span")
+                    })?;
                 (
                     format!("operation {} {path}", method.to_ascii_uppercase()),
                     vec![],
@@ -1166,22 +1159,18 @@ fn resolve_target_from_content(
                 if value.trim().is_empty() {
                     bail!("json pointer selector must not be empty");
                 }
-                let json: serde_json::Value = if target.adapter == "json" {
-                    serde_json::from_slice(&content)?
-                } else {
-                    serde_json::to_value(serde_yaml::from_slice::<serde_yaml::Value>(&content)?)?
-                };
-                if json.pointer(value).is_none() {
-                    bail!("pointer {value} not found");
+                if target.adapter != "json" && target.adapter != "json-schema" {
+                    bail!("pointer {value} requires a source-location-aware JSON document");
                 }
-                let excerpt = text.to_string();
+                let (byte_start, byte_end, line_start, line_end, excerpt) =
+                    json_pointer_span(&text, value)?;
                 (
                     format!("json pointer {value}"),
                     vec![],
-                    0,
-                    content.len(),
-                    1,
-                    text.lines().count(),
+                    byte_start,
+                    byte_end,
+                    line_start,
+                    line_end,
                     excerpt.clone(),
                     hash_bytes(excerpt.as_bytes()),
                 )
@@ -1236,45 +1225,228 @@ pub fn selector_supports_editable(selector: &Selector) -> bool {
         selector,
         Selector::File
             | Selector::Symbol { .. }
+            | Selector::Operation { .. }
             | Selector::Heading { .. }
+            | Selector::JsonPointer { .. }
             | Selector::Marker { .. }
     )
 }
+
+/// Return an exact source span for a JSON Pointer without serializing the
+/// document again. `serde_json::Value` deliberately does not retain locations,
+/// so this small CST walk keeps the original byte ranges while using
+/// `serde_json` to validate string decoding.
+fn json_pointer_span(text: &str, pointer: &str) -> Result<(usize, usize, usize, usize, String)> {
+    if !pointer.starts_with('/') {
+        bail!("json pointer must start with '/'");
+    }
+    serde_json::from_str::<serde_json::Value>(text).context("parse JSON document")?;
+    let mut parser = JsonSpanParser {
+        source: text,
+        offset: 0,
+        spans: BTreeMap::new(),
+    };
+    parser.parse_value("")?;
+    let Some((start, end)) = parser.spans.get(pointer).copied() else {
+        bail!("pointer {pointer} not found");
+    };
+    exact_span(text, start, end)
+}
+
+struct JsonSpanParser<'a> {
+    source: &'a str,
+    offset: usize,
+    spans: BTreeMap<String, (usize, usize)>,
+}
+
+impl JsonSpanParser<'_> {
+    fn skip_whitespace(&mut self) {
+        while self
+            .source
+            .as_bytes()
+            .get(self.offset)
+            .is_some_and(u8::is_ascii_whitespace)
+        {
+            self.offset += 1;
+        }
+    }
+
+    fn parse_value(&mut self, pointer: &str) -> Result<()> {
+        self.skip_whitespace();
+        let start = self.offset;
+        match self.source.as_bytes().get(self.offset) {
+            Some(b'{') => {
+                self.offset += 1;
+                self.skip_whitespace();
+                while self.source.as_bytes().get(self.offset) != Some(&b'}') {
+                    let (key_start, key_end) = self.parse_string()?;
+                    let key: String = serde_json::from_str(&self.source[key_start..key_end])?;
+                    self.skip_whitespace();
+                    if self.source.as_bytes().get(self.offset) != Some(&b':') {
+                        bail!("invalid JSON object separator");
+                    }
+                    self.offset += 1;
+                    let child = format!("{pointer}/{}", key.replace('~', "~0").replace('/', "~1"));
+                    self.parse_value(&child)?;
+                    self.skip_whitespace();
+                    match self.source.as_bytes().get(self.offset) {
+                        Some(b',') => {
+                            self.offset += 1;
+                            self.skip_whitespace();
+                        }
+                        Some(b'}') => {}
+                        _ => bail!("invalid JSON object"),
+                    }
+                }
+                self.offset += 1;
+            }
+            Some(b'[') => {
+                self.offset += 1;
+                self.skip_whitespace();
+                let mut index = 0usize;
+                while self.source.as_bytes().get(self.offset) != Some(&b']') {
+                    self.parse_value(&format!("{pointer}/{index}"))?;
+                    index += 1;
+                    self.skip_whitespace();
+                    match self.source.as_bytes().get(self.offset) {
+                        Some(b',') => {
+                            self.offset += 1;
+                            self.skip_whitespace();
+                        }
+                        Some(b']') => {}
+                        _ => bail!("invalid JSON array"),
+                    }
+                }
+                self.offset += 1;
+            }
+            Some(b'"') => {
+                self.parse_string()?;
+            }
+            Some(_) => {
+                while self.source.as_bytes().get(self.offset).is_some_and(|byte| {
+                    !byte.is_ascii_whitespace() && !matches!(byte, b',' | b']' | b'}')
+                }) {
+                    self.offset += 1;
+                }
+            }
+            None => bail!("unexpected end of JSON"),
+        }
+        self.spans.insert(pointer.into(), (start, self.offset));
+        Ok(())
+    }
+
+    fn parse_string(&mut self) -> Result<(usize, usize)> {
+        let start = self.offset;
+        if self.source.as_bytes().get(self.offset) != Some(&b'"') {
+            bail!("expected JSON string");
+        }
+        self.offset += 1;
+        while let Some(byte) = self.source.as_bytes().get(self.offset) {
+            match byte {
+                b'\\' => self.offset += 2,
+                b'"' => {
+                    self.offset += 1;
+                    return Ok((start, self.offset));
+                }
+                _ => self.offset += 1,
+            }
+        }
+        bail!("unterminated JSON string")
+    }
+}
+
+fn openapi_operation_span(
+    text: &str,
+    method: &str,
+    path: &str,
+) -> Option<(usize, usize, usize, usize, String)> {
+    let lines = text
+        .split_inclusive('\n')
+        .scan(0usize, |offset, line| {
+            let start = *offset;
+            *offset += line.len();
+            Some((start, line.trim_end_matches('\n')))
+        })
+        .collect::<Vec<_>>();
+    let paths_index = lines
+        .iter()
+        .position(|(_, line)| yaml_key(line) == Some("paths"))?;
+    let paths_indent = indentation(lines[paths_index].1)?;
+    let path_index = lines
+        .iter()
+        .enumerate()
+        .skip(paths_index + 1)
+        .take_while(|(_, (_, line))| {
+            line.trim().is_empty() || indentation(line).is_some_and(|indent| indent > paths_indent)
+        })
+        .find_map(|(index, (_, line))| {
+            (indentation(line).is_some_and(|indent| indent > paths_indent)
+                && yaml_key(line) == Some(path))
+            .then_some(index)
+        })?;
+    let path_indent = indentation(lines[path_index].1)?;
+    let method = method.to_ascii_lowercase();
+    let method_index = lines
+        .iter()
+        .enumerate()
+        .skip(path_index + 1)
+        .take_while(|(_, (_, line))| {
+            line.trim().is_empty() || indentation(line).is_some_and(|indent| indent > path_indent)
+        })
+        .find_map(|(index, (_, line))| {
+            (indentation(line).is_some_and(|indent| indent > path_indent)
+                && yaml_key(line) == Some(method.as_str()))
+            .then_some(index)
+        })?;
+    let method_indent = indentation(lines[method_index].1)?;
+    let end_index = lines
+        .iter()
+        .enumerate()
+        .skip(method_index + 1)
+        .find_map(|(index, (_, line))| {
+            (!line.trim().is_empty()
+                && indentation(line).is_some_and(|indent| indent <= method_indent))
+            .then_some(index)
+        })
+        .unwrap_or(lines.len());
+    exact_span(
+        text,
+        lines[method_index].0,
+        lines.get(end_index).map_or(text.len(), |line| line.0),
+    )
+    .ok()
+}
+
+fn indentation(line: &str) -> Option<usize> {
+    (!line.starts_with('\t')).then_some(line.len() - line.trim_start_matches(' ').len())
+}
+
+fn yaml_key(line: &str) -> Option<&str> {
+    let trimmed = line.trim_start();
+    let key = trimmed
+        .strip_suffix(':')
+        .or_else(|| trimmed.split_once(": #").map(|(key, _)| key))?;
+    Some(key.trim_matches('"').trim_matches('\''))
+}
+
+fn exact_span(
+    text: &str,
+    start: usize,
+    end: usize,
+) -> Result<(usize, usize, usize, usize, String)> {
+    let excerpt = text
+        .get(start..end)
+        .context("source span is not on UTF-8 boundaries")?
+        .to_owned();
+    let line_start = text[..start].bytes().filter(|byte| *byte == b'\n').count() + 1;
+    let line_end = line_start + excerpt.bytes().filter(|byte| *byte == b'\n').count();
+    Ok((start, end, line_start, line_end.max(line_start), excerpt))
+}
+
 fn hash_bytes(value: &[u8]) -> String {
     let mut hash = Sha256::new();
     hash.update(value);
     format_sha256(hash.finalize())
-}
-
-fn extract_yaml_block(
-    text: &str,
-    predicate: impl Fn(&str) -> bool,
-) -> Option<(usize, usize, usize, usize, String)> {
-    let mut start = None;
-    let mut end = None;
-    let mut byte = 0usize;
-    for (index, line) in text.lines().enumerate() {
-        let line_no = index + 1;
-        if start.is_none() && predicate(line) {
-            start = Some((byte, line_no));
-        } else if start.is_some() {
-            let trimmed = line.trim_start();
-            if !trimmed.is_empty() && !line.starts_with(' ') && !line.starts_with('\t') {
-                end = Some((byte, line_no.saturating_sub(1)));
-                break;
-            }
-        }
-        byte += line.len() + 1;
-    }
-    let (start_byte, start_line) = start?;
-    let (end_byte, end_line) = end.unwrap_or((text.len(), text.lines().count()));
-    Some((
-        start_byte,
-        end_byte.max(start_byte),
-        start_line,
-        end_line.max(start_line),
-        text[start_byte..end_byte.max(start_byte)].to_string(),
-    ))
 }
 
 fn extract_heading_block(
@@ -1406,6 +1578,28 @@ mod tests {
                 .to_string()
                 .contains("marker ::dup:: is ambiguous")
         );
+    }
+
+    #[test]
+    fn json_pointer_and_openapi_operation_spans_are_exact() {
+        let json =
+            "{\n  \"editable\": { \"name\": \"one\" },\n  \"readonly\": { \"name\": \"two\" }\n}\n";
+        let (start, end, _, _, excerpt) = json_pointer_span(json, "/editable").unwrap();
+        assert_eq!(excerpt, "{ \"name\": \"one\" }");
+        assert!(json[start..end].contains("one"));
+        assert!(!json[start..end].contains("two"));
+
+        let openapi = concat!(
+            "paths:\n",
+            "  /items:\n",
+            "    get:\n",
+            "      responses: {}\n",
+            "    post:\n",
+            "      responses: {}\n",
+        );
+        let (_, _, _, _, excerpt) = openapi_operation_span(openapi, "get", "/items").unwrap();
+        assert!(excerpt.contains("get:"));
+        assert!(!excerpt.contains("post:"));
     }
 
     #[test]

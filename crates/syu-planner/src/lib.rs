@@ -1220,6 +1220,19 @@ fn build_requested_target_slice(
     }
     let mut contracts = Vec::new();
     let mut anchors = vec![reference.binding.clone()];
+    // Dependency closure is a property of the exact requested target, not of
+    // whether its binding happens to carry a Satisfies claim. A configuration
+    // source may legitimately generate output without itself implementing a
+    // requirement criterion.
+    let (more_readonly, more_contracts) = contract_readonly_context_for_target(
+        workspace,
+        index,
+        reference,
+        exclude_matcher,
+        &mut blockers,
+    );
+    readonly.extend(more_readonly);
+    contracts.extend(more_contracts);
     if let Some(criterion) = match requested.criterion().cloned() {
         Some(criterion) => Some(criterion),
         None => match requested_target_criterion(binding) {
@@ -1246,15 +1259,6 @@ fn build_requested_target_slice(
             exclude_matcher,
             &mut blockers,
         ));
-        let (more_readonly, more_contracts) = contract_readonly_context_for_target(
-            workspace,
-            index,
-            reference,
-            exclude_matcher,
-            &mut blockers,
-        );
-        readonly.extend(more_readonly);
-        contracts.extend(more_contracts);
     }
     finalize_requested_slice(
         request,
@@ -2331,7 +2335,12 @@ fn one_target(
         return vec![];
     }
     if matches!(options.policy.access, TargetAccessMode::Editable)
-        && !selector_supports_editable(&target.selector)
+        && (!selector_supports_editable(&target.selector)
+            // A missing semantic node has no current exact span. Creation is
+            // intentionally file-scoped; existing operations/pointers may be
+            // modified through their exact spans below.
+            || (matches!(options.policy.transition, TargetTransition::Add)
+                && matches!(target.selector, Selector::Operation { .. } | Selector::JsonPointer { .. })))
     {
         let mut d = Diagnostic::error(
             "SYU-TARGET-004",
@@ -3795,7 +3804,7 @@ mod tests {
                 "        facet: generation\n",
                 "        responsibility: Generate the checked-in artifact.\n",
                 "        targets:\n",
-                "          - { id: source, adapter: rust, path: src/lib.rs, selector: { kind: symbol, name: generate }, claims: [{ kind: satisfies, criterion: REQ-DEPENDENCY-001#criterion.coherent }] }\n",
+                "          - { id: source, adapter: rust, path: src/lib.rs, selector: { kind: symbol, name: generate }, claims: [] }\n",
                 "      - id: generated\n",
                 "        role: generated\n",
                 "        facet: generation\n",

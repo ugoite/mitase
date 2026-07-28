@@ -479,7 +479,7 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
           - **path**: crates/syu-inventory/src/lib.rs
           - **selector**:
             - **kind**: symbol
-            - **name**: tests::semantic_identity_ignores_line_movement_and_formatting
+            - **name**: tests::semantic_diff_preserves_literal_meaning_and_rejects_false_renames
           - **claims**:
             - **kind**: verifies
               - **criterion**: REQ-CAPABILITY-002#criterion.stable-identity
@@ -489,7 +489,7 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
                 - **runner**: cargo-test
                 - **arguments**:
                   - **package**: syu-inventory
-                  - **test**: tests::semantic_identity_ignores_line_movement_and_formatting
+                  - **test**: tests::semantic_diff_preserves_literal_meaning_and_rejects_false_renames
         - **id**: build-profile-test
           - **adapter**: rust
           - **path**: crates/syu-planner/src/lib.rs
@@ -874,12 +874,12 @@ requirements:
           - id: stable-identity-test
             adapter: rust
             path: crates/syu-inventory/src/lib.rs
-            selector: { kind: symbol, name: tests::semantic_identity_ignores_line_movement_and_formatting }
+            selector: { kind: symbol, name: tests::semantic_diff_preserves_literal_meaning_and_rejects_false_renames }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-002#criterion.stable-identity
                 covers: [FEAT-INVENTORY-001#binding.implementation/target.semantic-diff]
-                runner: { runner: cargo-test, arguments: { package: syu-inventory, test: tests::semantic_identity_ignores_line_movement_and_formatting } }
+                runner: { runner: cargo-test, arguments: { package: syu-inventory, test: tests::semantic_diff_preserves_literal_meaning_and_rejects_false_renames } }
           - id: build-profile-test
             adapter: rust
             path: crates/syu-planner/src/lib.rs
