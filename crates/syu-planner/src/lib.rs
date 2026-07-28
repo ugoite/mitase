@@ -245,7 +245,7 @@ fn claim_anchor(claim: &TargetClaim) -> Option<&SpecAnchor> {
         }
         TargetClaim::Documents { anchor } | TargetClaim::Evidences { anchor } => Some(anchor),
         TargetClaim::Enforces { rule } => Some(rule),
-        TargetClaim::GeneratedFrom { .. } => None,
+        TargetClaim::GeneratedFrom { .. } | TargetClaim::Exposes { .. } => None,
     }
 }
 
@@ -856,7 +856,8 @@ fn binding_criteria(binding: &ArtifactBinding) -> Vec<SpecAnchor> {
             syu_spec_model::TargetClaim::Documents { anchor }
             | syu_spec_model::TargetClaim::Evidences { anchor } => Some(anchor.clone()),
             syu_spec_model::TargetClaim::Enforces { rule } => Some(rule.clone()),
-            syu_spec_model::TargetClaim::GeneratedFrom { .. } => None,
+            syu_spec_model::TargetClaim::GeneratedFrom { .. }
+            | syu_spec_model::TargetClaim::Exposes { .. } => None,
         })
         .collect()
 }

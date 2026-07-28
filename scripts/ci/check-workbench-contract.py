@@ -100,7 +100,7 @@ assert "renderDiff" in WORK_JS
 assert "initScope" in MAIN_JS
 assert "if (!state.specificationQuery.trim())" in SPECIFICATIONS_JS
 assert "async function runBusy" in SPECIFICATIONS_JS
-assert 'data-workbench-status role="progressbar" aria-live="polite"' in HTML
+assert 'data-workbench-status="busy" role="progressbar" aria-live="polite"' in HTML
 assert "workbench-progress-track" in HTML
 CSS_COMPACT = re.sub(r"\s+", "", CSS)
 for token in ("--bg:#f6f7f8", "--paper:#fff", "--ink:#15171a", "--sidebar:246px", "--topbar:98px", "--rail:310px"):
