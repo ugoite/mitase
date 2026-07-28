@@ -2904,29 +2904,59 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         check_kind(ctx, out, target, expected, &path);
                     }
                 }
-                let generated_from = binding
-                    .targets
-                    .iter()
-                    .flat_map(|target| target.claims.iter())
-                    .filter_map(|claim| match claim {
-                        syu_spec_model::TargetClaim::GeneratedFrom { targets } => {
-                            Some(targets.as_slice())
-                        }
-                        _ => None,
-                    })
-                    .flatten()
-                    .collect::<Vec<_>>();
-                if binding.role == BindingRole::Generated && generated_from.is_empty() {
+                for target in &binding.targets {
+                    let generated_from = target
+                        .claims
+                        .iter()
+                        .filter_map(|claim| match claim {
+                            syu_spec_model::TargetClaim::GeneratedFrom { targets } => {
+                                Some(targets.as_slice())
+                            }
+                            _ => None,
+                        })
+                        .flatten()
+                        .collect::<Vec<_>>();
+                    if binding.role == BindingRole::Generated && generated_from.is_empty() {
+                        push(
+                            out,
+                            "SYU-GENERATED-001",
+                            format!(
+                                "generated target {} has no generated_from source",
+                                target.id
+                            ),
+                            &path,
+                            Some(anchor.clone()),
+                        );
+                    } else if binding.role == BindingRole::Generated {
+                        validate_generated_target(ctx, anchor, &generated_from, out, &path);
+                    } else if !generated_from.is_empty() {
+                        push(
+                            out,
+                            "SYU-GENERATED-001",
+                            format!(
+                                "non-generated target {} cannot declare generated_from sources",
+                                target.id
+                            ),
+                            &path,
+                            Some(anchor.clone()),
+                        );
+                    }
+                }
+                if binding.role == BindingRole::Generated
+                    && generated_binding_has_cycle(
+                        ctx,
+                        anchor,
+                        &mut BTreeSet::new(),
+                        &mut BTreeSet::new(),
+                    )
+                {
                     push(
                         out,
-                        "SYU-GENERATED-001",
-                        "generated binding has no generated_from target",
+                        "SYU-GENERATED-002",
+                        "generated binding contains a generated_from cycle",
                         &path,
                         Some(anchor.clone()),
                     );
-                }
-                if binding.role == BindingRole::Generated && !generated_from.is_empty() {
-                    validate_generated_binding(ctx, anchor, &generated_from, out, &path);
                 }
             }
             AnchorValue::Contract(contract) => {
@@ -3023,7 +3053,7 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
     }
 }
 
-fn validate_generated_binding(
+fn validate_generated_target(
     ctx: &ValidationContext<'_>,
     anchor: &SpecAnchor,
     generated_from: &[&BoundTargetRef],
@@ -3060,15 +3090,6 @@ fn validate_generated_binding(
                 Some(anchor.clone()),
             );
         }
-    }
-    if generated_binding_has_cycle(ctx, anchor, &mut BTreeSet::new(), &mut BTreeSet::new()) {
-        push(
-            out,
-            "SYU-GENERATED-002",
-            "generated binding contains a generated_from cycle",
-            path,
-            Some(anchor.clone()),
-        );
     }
 }
 
@@ -5055,6 +5076,61 @@ requirements:
                 .iter()
                 .any(|diagnostic| diagnostic.rule_id == "SYU-GENERATED-001")
         );
+    }
+
+    #[test]
+    fn every_generated_target_requires_its_own_exact_source_relation() {
+        let tempdir = tempdir().expect("tempdir");
+        write_generated_binding_workspace(tempdir.path());
+        fs::write(
+            tempdir.path().join("src/generated.rs"),
+            "pub fn source() {}\npub fn generated_a() {}\npub fn generated_b() {}\n",
+        )
+        .expect("artifacts");
+        fs::write(
+            tempdir.path().join("spec/feature.yaml"),
+            concat!(
+                "schema: syu/spec/v1\n",
+                "kind: features\n",
+                "namespace: sample\n",
+                "category: Sample\n",
+                "features:\n",
+                "  - id: FEAT-TEST-001\n",
+                "    title: Test\n",
+                "    summary: Test feature.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: source\n",
+                "        role: implementation\n",
+                "        facet: backend\n",
+                "        responsibility: Generate artifacts.\n",
+                "        targets:\n",
+                "          - { id: source, adapter: rust, path: src/generated.rs, selector: { kind: symbol, name: source }, claims: [] }\n",
+                "      - id: generated\n",
+                "        role: generated\n",
+                "        facet: backend\n",
+                "        responsibility: Generated artifacts.\n",
+                "        targets:\n",
+                "          - id: generated-a\n",
+                "            adapter: rust\n",
+                "            path: src/generated.rs\n",
+                "            selector: { kind: symbol, name: generated_a }\n",
+                "            claims:\n",
+                "              - kind: generated-from\n",
+                "                targets: [FEAT-TEST-001#binding.source/target.source]\n",
+                "          - { id: generated-b, adapter: rust, path: src/generated.rs, selector: { kind: symbol, name: generated_b }, claims: [] }\n",
+            ),
+        )
+        .expect("feature spec");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let result = validate_loaded_workspace(&workspace, &index);
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.rule_id == "SYU-GENERATED-001" && diagnostic.message.contains("generated-b")
+        }));
+        assert!(!result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.rule_id == "SYU-GENERATED-001" && diagnostic.message.contains("generated-a")
+        }));
     }
 
     #[test]

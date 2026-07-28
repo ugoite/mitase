@@ -3862,10 +3862,10 @@ mod tests {
                 },
             ],
         };
-        let plan = plan(&request, &workspace, &index, "rev-contract").expect("plan");
-        assert_eq!(plan.status, PlanStatus::Ready);
-        assert_eq!(plan.slices.len(), 1);
-        let slice = &plan.slices[0];
+        let combined_plan = plan(&request, &workspace, &index, "rev-contract").expect("plan");
+        assert_eq!(combined_plan.status, PlanStatus::Ready);
+        assert_eq!(combined_plan.slices.len(), 1);
+        let slice = &combined_plan.slices[0];
         assert_eq!(
             slice
                 .editable_targets
@@ -3881,6 +3881,46 @@ mod tests {
             target.reference.to_string()
                 == "FEAT-DEPENDENCY-001#binding.contract-source/target.contract"
         }));
+        let editable_refs = slice
+            .editable_targets
+            .iter()
+            .map(|target| &target.reference)
+            .collect::<BTreeSet<_>>();
+        assert!(
+            slice
+                .readonly_context
+                .iter()
+                .all(|target| !editable_refs.contains(&target.reference))
+        );
+
+        let provider_only = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-DEPENDENCY-PROVIDER".into(),
+            summary: "Change only the provider".into(),
+            operation: WorkOperation::Modify,
+            seeds: vec![],
+            constraints: WorkConstraints::default(),
+            requested_targets: vec![RequestedTarget {
+                reference: "FEAT-DEPENDENCY-001#binding.provider/target.provider"
+                    .parse()
+                    .unwrap(),
+                criterion: None,
+                transition: TargetTransition::Modify,
+            }],
+        };
+        let provider_plan =
+            plan(&provider_only, &workspace, &index, "rev-provider").expect("provider plan");
+        assert_eq!(provider_plan.status, PlanStatus::Ready);
+        assert!(
+            provider_plan.slices[0]
+                .readonly_context
+                .iter()
+                .any(|target| {
+                    target.reference.to_string()
+                        == "FEAT-DEPENDENCY-001#binding.consumer/target.consumer"
+                        && target.access == TargetAccessMode::Readonly
+                })
+        );
     }
 
     #[test]

@@ -163,7 +163,7 @@ fn openapi_operations(context: &InventoryContext, path: PathBuf) -> Result<Vec<A
             let Some(operations) = operations.as_mapping() else {
                 continue;
             };
-            for (method_value, _) in operations {
+            for (method_value, operation) in operations {
                 let Some(method) = method_value.as_str() else {
                     continue;
                 };
@@ -173,6 +173,7 @@ fn openapi_operations(context: &InventoryContext, path: PathBuf) -> Result<Vec<A
                 ) {
                     continue;
                 }
+                let serialized = serde_json::to_vec(operation)?;
                 units.push(ArtifactUnit {
                     adapter: "openapi".into(),
                     path: repo_path.clone(),
@@ -191,10 +192,8 @@ fn openapi_operations(context: &InventoryContext, path: PathBuf) -> Result<Vec<A
                         line_start: 1,
                         line_end: 1,
                     },
-                    digest: digest(format!("{} {}", method, path_value).as_bytes()),
-                    structural_digest: digest(
-                        format!("{} {}", method.to_ascii_uppercase(), path_value).as_bytes(),
-                    ),
+                    digest: digest(&serialized),
+                    structural_digest: digest(&serialized),
                 });
             }
         }
@@ -993,6 +992,7 @@ fn discover_rust(
     let mut files = Vec::new();
     let mut support_files = Vec::new();
     let mut file_visibility = BTreeMap::new();
+    let mut file_activity = BTreeMap::new();
     let mut roots = if configured_roots.is_empty() {
         cargo_roots(&context.workspace_root, settings)?
     } else {
@@ -1030,10 +1030,11 @@ fn discover_rust(
             out: &mut files,
             support: &mut support_files,
             file_visibility: &mut file_visibility,
+            file_activity: &mut file_activity,
             cfg: &cfg,
         };
         for root in roots {
-            collect_reachable_rust(&mut reachability, &root, true)?;
+            collect_reachable_rust(&mut reachability, &root, true, true)?;
         }
     }
     files.sort();
@@ -1062,9 +1063,10 @@ fn discover_rust(
             module_path: vec![module_name(&path)],
             impl_type: None,
             attributes: Vec::new(),
-            current_active: true,
+            current_active: file_activity.get(&path).copied().unwrap_or(true),
             test_file: is_test_file,
             cfg: &cfg,
+            profile: &context.profile,
             public_module: file_visibility.get(&path).copied().unwrap_or(true),
         };
         visitor.visit_file(&syntax);
@@ -1116,6 +1118,7 @@ struct RustVisitor<'a> {
     current_active: bool,
     test_file: bool,
     cfg: &'a CfgContext,
+    profile: &'a str,
     public_module: bool,
 }
 
@@ -1124,7 +1127,7 @@ impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
         let previous = self.attributes.clone();
         let previous_active = self.current_active;
         self.attributes = attribute_keys(&item.attrs);
-        let active = cfg_active(&item.attrs, self.cfg);
+        let active = previous_active && cfg_active(&item.attrs, self.cfg);
         self.current_active = active;
         self.add(&item.sig.ident.to_string(), &item.vis, item.span(), true);
         if active {
@@ -1138,7 +1141,7 @@ impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
         let previous = self.attributes.clone();
         let previous_active = self.current_active;
         self.attributes = attribute_keys(&item.attrs);
-        self.current_active = cfg_active(&item.attrs, self.cfg);
+        self.current_active = previous_active && cfg_active(&item.attrs, self.cfg);
         self.add(&item.ident.to_string(), &item.vis, item.span(), false);
         if self.current_active {
             syn::visit::visit_item_struct(self, item);
@@ -1151,7 +1154,7 @@ impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
         let previous = self.attributes.clone();
         let previous_active = self.current_active;
         self.attributes = attribute_keys(&item.attrs);
-        self.current_active = cfg_active(&item.attrs, self.cfg);
+        self.current_active = previous_active && cfg_active(&item.attrs, self.cfg);
         self.add(&item.ident.to_string(), &item.vis, item.span(), false);
         if self.current_active {
             syn::visit::visit_item_enum(self, item);
@@ -1164,22 +1167,19 @@ impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
         let previous_attributes = self.attributes.clone();
         let previous_active = self.current_active;
         self.attributes = attribute_keys(&item.attrs);
-        let active = cfg_active(&item.attrs, self.cfg);
+        let active = previous_active && cfg_active(&item.attrs, self.cfg);
         self.current_active = active;
         self.add(&item.ident.to_string(), &item.vis, item.span(), false);
-        if active {
-            let previous = self.impl_type.replace(format!("trait({})", item.ident));
-            syn::visit::visit_item_trait(self, item);
-            self.impl_type = previous;
-        }
+        let previous = self.impl_type.replace(format!("trait({})", item.ident));
+        syn::visit::visit_item_trait(self, item);
+        self.impl_type = previous;
         self.attributes = previous_attributes;
         self.current_active = previous_active;
     }
 
     fn visit_item_impl(&mut self, item: &'ast syn::ItemImpl) {
-        if !cfg_active(&item.attrs, self.cfg) {
-            return;
-        }
+        let previous_active = self.current_active;
+        self.current_active = previous_active && cfg_active(&item.attrs, self.cfg);
         let type_name = item.self_ty.to_token_stream().to_string().replace(' ', "");
         let type_name = type_name.split('<').next().unwrap_or(&type_name).to_owned();
         let trait_name = item
@@ -1195,25 +1195,23 @@ impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
         syn::visit::visit_item_impl(self, item);
         self.impl_type = previous;
         self.attributes = previous_attributes;
+        self.current_active = previous_active;
     }
 
     fn visit_item_mod(&mut self, item: &'ast syn::ItemMod) {
         let previous_attributes = self.attributes.clone();
         let previous_active = self.current_active;
         self.attributes = attribute_keys(&item.attrs);
-        let active = cfg_active(&item.attrs, self.cfg);
+        let active = previous_active && cfg_active(&item.attrs, self.cfg);
         self.current_active = active;
         self.add(&item.ident.to_string(), &item.vis, item.span(), false);
-        if active {
-            let previous_len = self.module_path.len();
-            let previous_public = self.public_module;
-            self.module_path.push(item.ident.to_string());
-            self.public_module =
-                self.public_module && matches!(item.vis, syn::Visibility::Public(_));
-            syn::visit::visit_item_mod(self, item);
-            self.module_path.truncate(previous_len);
-            self.public_module = previous_public;
-        }
+        let previous_len = self.module_path.len();
+        let previous_public = self.public_module;
+        self.module_path.push(item.ident.to_string());
+        self.public_module = self.public_module && matches!(item.vis, syn::Visibility::Public(_));
+        syn::visit::visit_item_mod(self, item);
+        self.module_path.truncate(previous_len);
+        self.public_module = previous_public;
         self.attributes = previous_attributes;
         self.current_active = previous_active;
     }
@@ -1222,7 +1220,7 @@ impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
         let previous = self.attributes.clone();
         let previous_active = self.current_active;
         self.attributes = attribute_keys(&item.attrs);
-        let active = cfg_active(&item.attrs, self.cfg);
+        let active = previous_active && cfg_active(&item.attrs, self.cfg);
         self.current_active = active;
         self.add(&item.sig.ident.to_string(), &item.vis, item.span(), true);
         if active {
@@ -1236,7 +1234,7 @@ impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
         let previous = self.attributes.clone();
         let previous_active = self.current_active;
         self.attributes = attribute_keys(&item.attrs);
-        let active = cfg_active(&item.attrs, self.cfg);
+        let active = previous_active && cfg_active(&item.attrs, self.cfg);
         self.current_active = active;
         self.add(
             &item.sig.ident.to_string(),
@@ -1258,7 +1256,7 @@ impl<'ast> syn::visit::Visit<'ast> for RustVisitor<'_> {
         let previous = self.attributes.clone();
         let previous_active = self.current_active;
         self.attributes = attribute_keys(&item.attrs);
-        self.current_active = cfg_active(&item.attrs, self.cfg);
+        self.current_active = previous_active && cfg_active(&item.attrs, self.cfg);
         let mut names = Vec::new();
         collect_use_names(&item.tree, &mut names);
         for name in names {
@@ -1332,7 +1330,11 @@ impl RustVisitor<'_> {
                 ArtifactReachability::Active
             } else {
                 ArtifactReachability::Conditional {
-                    profile: self.attributes.join(","),
+                    profile: if self.attributes.is_empty() {
+                        self.profile.to_owned()
+                    } else {
+                        self.attributes.join(",")
+                    },
                 }
             },
             span: SourceSpan {
@@ -1511,10 +1513,29 @@ fn digest(bytes: &[u8]) -> String {
 }
 
 fn structural_digest(source: &str, declared_name: &str) -> String {
-    let normalized = source
-        .replacen(declared_name, "<identity>", 1)
-        .split_whitespace()
-        .collect::<String>();
+    let mut normalized = String::with_capacity(source.len());
+    let mut characters = source.chars().peekable();
+    while let Some(character) = characters.next() {
+        if character.is_whitespace() {
+            continue;
+        }
+        if character == '_' || character == '$' || character.is_alphabetic() {
+            let mut identifier = String::from(character);
+            while characters
+                .peek()
+                .is_some_and(|next| *next == '_' || *next == '$' || next.is_alphanumeric())
+            {
+                identifier.push(characters.next().expect("peeked identifier character"));
+            }
+            if identifier == declared_name {
+                normalized.push_str("<identity>");
+            } else {
+                normalized.push_str(&identifier);
+            }
+        } else {
+            normalized.push(character);
+        }
+    }
     digest(normalized.as_bytes())
 }
 
@@ -1522,29 +1543,45 @@ fn structural_digest(source: &str, declared_name: &str) -> String {
 /// independent of source spans, while a structural digest connects a pure
 /// rename without guessing from line movement.
 pub fn semantic_diff(before: &[ArtifactUnit], after: &[ArtifactUnit]) -> Vec<SemanticChange> {
+    let semantic_unit = |unit: &&ArtifactUnit| {
+        !(unit.kind == ArtifactUnitKind::File && unit.exposure == ArtifactExposure::Support)
+    };
     let before_by_identity = before
         .iter()
+        .filter(semantic_unit)
         .map(|unit| (unit.identity.as_str(), unit))
         .collect::<BTreeMap<_, _>>();
     let after_by_identity = after
         .iter()
+        .filter(semantic_unit)
         .map(|unit| (unit.identity.as_str(), unit))
         .collect::<BTreeMap<_, _>>();
     let mut changes = Vec::new();
     let mut removed = before
         .iter()
+        .filter(semantic_unit)
         .filter(|unit| !after_by_identity.contains_key(unit.identity.as_str()))
         .collect::<Vec<_>>();
     let mut added = after
         .iter()
+        .filter(semantic_unit)
         .filter(|unit| !before_by_identity.contains_key(unit.identity.as_str()))
         .collect::<Vec<_>>();
 
-    for unit in before {
+    for unit in before.iter().filter(semantic_unit) {
         let Some(current) = after_by_identity.get(unit.identity.as_str()) else {
             continue;
         };
-        if unit.digest == current.digest && unit.exposure == current.exposure {
+        let same_structure =
+            if unit.structural_digest.is_empty() || current.structural_digest.is_empty() {
+                unit.digest == current.digest
+            } else {
+                unit.structural_digest == current.structural_digest
+            };
+        if same_structure
+            && unit.exposure == current.exposure
+            && unit.reachability == current.reachability
+        {
             continue;
         }
         changes.push(SemanticChange {
@@ -1868,6 +1905,7 @@ struct RustReachability<'a> {
     out: &'a mut Vec<PathBuf>,
     support: &'a mut Vec<PathBuf>,
     file_visibility: &'a mut BTreeMap<PathBuf, bool>,
+    file_activity: &'a mut BTreeMap<PathBuf, bool>,
     cfg: &'a CfgContext,
 }
 
@@ -1875,6 +1913,7 @@ fn collect_reachable_rust(
     reachability: &mut RustReachability<'_>,
     file: &Path,
     public_module: bool,
+    active: bool,
 ) -> Result<()> {
     let root = &reachability.context.workspace_root;
     if !file.is_file() {
@@ -1905,8 +1944,17 @@ fn collect_reachable_rust(
     let previous_visibility = reachability
         .file_visibility
         .insert(file.to_path_buf(), was_public || public_module);
+    let was_active = reachability
+        .file_activity
+        .get(file)
+        .copied()
+        .unwrap_or(false);
+    reachability
+        .file_activity
+        .insert(file.to_path_buf(), was_active || active);
     if reachability.out.iter().any(|existing| existing == file)
         && previous_visibility.is_some_and(|was_public| was_public || !public_module)
+        && (was_active || !active)
     {
         return Ok(());
     }
@@ -1920,9 +1968,6 @@ fn collect_reachable_rust(
         let syn::Item::Mod(module) = item else {
             continue;
         };
-        if !cfg_active(&module.attrs, reachability.cfg) {
-            continue;
-        }
         if module.content.is_some() {
             continue;
         }
@@ -1956,6 +2001,7 @@ fn collect_reachable_rust(
                 reachability,
                 &candidate,
                 public_module && matches!(module.vis, syn::Visibility::Public(_)),
+                active && cfg_active(&module.attrs, reachability.cfg),
             )?;
         }
     }
@@ -1982,7 +2028,7 @@ fn collect_reachable_rust(
                 });
             if candidate.is_file() {
                 if macro_name == "include!" {
-                    collect_reachable_rust(reachability, &candidate, public_module)?;
+                    collect_reachable_rust(reachability, &candidate, public_module, active)?;
                 } else if !reachability.excludes.iter().any(|pattern| {
                     glob_match(pattern, candidate.strip_prefix(root).unwrap_or(&candidate))
                 }) {
@@ -2108,7 +2154,7 @@ mod tests {
         let path = temp.path().join("model.ts");
         fs::write(
             &path,
-            "export function stable() {}\nfunction helper() { return 1; }\nfunction oldName() { return 2; }\nfunction removed() { return 3; }\n",
+            "export function stable() {}\nfunction helper() { return 1; }\nfunction oldName(value) { return value ? oldName(false) : 2; }\nfunction removed() { return 3; }\n",
         )
         .unwrap();
         let context = InventoryContext {
@@ -2121,7 +2167,7 @@ mod tests {
         let before = source_symbol_units(&context, path.clone(), "typescript").unwrap();
         fs::write(
             &path,
-            "export function stable() {}\nexport function added() {}\nfunction helper() { return 10; }\nfunction newName() { return 2; }\n",
+            "export function stable() {}\nexport function added() {}\nfunction helper() { return 10; }\nfunction newName(value) { return value ? newName(false) : 2; }\n",
         )
         .unwrap();
         let after = source_symbol_units(&context, path, "typescript").unwrap();
@@ -2178,6 +2224,7 @@ mod tests {
         let after = source_symbol_units(&context, path, "javascript").unwrap();
         assert_eq!(before[0].identity, after[0].identity);
         assert_ne!(before[0].span.line_start, after[0].span.line_start);
+        assert!(semantic_diff(&before, &after).is_empty());
     }
 
     #[test]
@@ -2186,7 +2233,20 @@ mod tests {
         fs::create_dir_all(temp.path().join("src")).unwrap();
         fs::write(
             temp.path().join("src/lib.rs"),
-            "#[cfg(feature = \"enterprise\")]\npub fn enterprise() {}\npub fn active() {}\n",
+            concat!(
+                "#[cfg(feature = \"enterprise\")]\n",
+                "pub fn enterprise() {}\n",
+                "#[cfg(feature = \"enterprise\")]\n",
+                "pub mod external;\n",
+                "#[cfg(feature = \"enterprise\")]\n",
+                "pub mod inline { pub fn nested() {} }\n",
+                "pub fn active() {}\n",
+            ),
+        )
+        .unwrap();
+        fs::write(
+            temp.path().join("src/external.rs"),
+            "pub fn nested_external() {}\n",
         )
         .unwrap();
         fs::write(
@@ -2217,9 +2277,140 @@ mod tests {
             enterprise.reachability,
             ArtifactReachability::Conditional { .. }
         ));
+        for name in ["nested", "nested_external"] {
+            assert!(units.iter().any(|unit| {
+                unit.identity.contains(name)
+                    && matches!(unit.reachability, ArtifactReachability::Conditional { .. })
+            }));
+        }
         assert!(units.iter().any(|unit| {
             unit.identity.ends_with("::active") && unit.reachability == ArtifactReachability::Active
         }));
+    }
+
+    #[test]
+    fn language_aware_profile_discovers_each_supported_semantic_boundary() {
+        let temp = tempfile::tempdir().unwrap();
+        for directory in ["src", "web", "api", "docs", "schema"] {
+            fs::create_dir_all(temp.path().join(directory)).unwrap();
+        }
+        fs::write(
+            temp.path().join("Cargo.toml"),
+            "[package]\nname = \"fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        )
+        .unwrap();
+        fs::write(temp.path().join("src/lib.rs"), "pub fn rust_api() {}\n").unwrap();
+        fs::write(
+            temp.path().join("web/app.js"),
+            "export function javascriptApi() {}\n",
+        )
+        .unwrap();
+        fs::write(
+            temp.path().join("web/app.ts"),
+            "export interface TypeScriptApi { value: string }\n",
+        )
+        .unwrap();
+        fs::write(
+            temp.path().join("api/openapi.yaml"),
+            "openapi: 3.1.0\npaths:\n  /users:\n    get:\n      responses: {}\n",
+        )
+        .unwrap();
+        fs::write(temp.path().join("docs/guide.md"), "# Semantic guide\n").unwrap();
+        fs::write(
+            temp.path().join("schema/data.json"),
+            r#"{"user":{"name":"Ada"}}"#,
+        )
+        .unwrap();
+        fs::write(temp.path().join("schema/data.yaml"), "user:\n  name: Ada\n").unwrap();
+        fs::write(
+            temp.path().join("schema/model.schema.json"),
+            r#"{"properties":{"user":{"type":"string"}}}"#,
+        )
+        .unwrap();
+        let roots = |value: &str| {
+            serde_yaml::from_str::<serde_yaml::Value>(&format!("{{ roots: [{value}] }}")).unwrap()
+        };
+        let profile = InventoryProfile {
+            id: "default".into(),
+            providers: BTreeMap::from([
+                ("rust".into(), serde_yaml::Value::Null),
+                ("javascript".into(), roots("web/app.js")),
+                ("typescript".into(), roots("web/app.ts")),
+                ("openapi".into(), roots("api/openapi.yaml")),
+                ("markdown".into(), roots("docs/guide.md")),
+                ("json".into(), roots("schema/data.json")),
+                ("yaml".into(), roots("schema/data.yaml")),
+                ("json-schema".into(), roots("schema/model.schema.json")),
+            ]),
+        };
+        let units = InventoryRegistry::discover(
+            &InventoryContext {
+                workspace_root: temp.path().into(),
+                profile: "default".into(),
+                settings: serde_yaml::Value::Null,
+                excludes: vec![],
+                overlays: BTreeMap::new(),
+            },
+            &profile,
+        )
+        .unwrap();
+        for expected in [
+            "rust:src/lib.rs::lib::rust_api",
+            "javascript:web/app.js::javascriptApi",
+            "typescript:web/app.ts::TypeScriptApi",
+            "openapi:api/openapi.yaml::GET /users",
+            "markdown:docs/guide.md::heading::Semantic guide",
+            "json:schema/data.json::pointer::/user/name",
+            "yaml:schema/data.yaml::pointer::/user/name",
+            "json-schema:schema/model.schema.json::pointer::/properties/user/type",
+        ] {
+            assert!(
+                units.iter().any(|unit| unit.identity == expected),
+                "missing {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn openapi_semantic_diff_tracks_operation_content_and_path_renames() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("openapi.yaml");
+        let context = InventoryContext {
+            workspace_root: temp.path().into(),
+            profile: "default".into(),
+            settings: serde_yaml::Value::Null,
+            excludes: vec![],
+            overlays: BTreeMap::new(),
+        };
+        fs::write(
+            &path,
+            "paths:\n  /old:\n    get:\n      summary: Read user\n",
+        )
+        .unwrap();
+        let before = openapi_operations(&context, path.clone()).unwrap();
+        fs::write(
+            &path,
+            "paths:\n  /old:\n    get:\n      summary: Read account\n",
+        )
+        .unwrap();
+        let modified = openapi_operations(&context, path.clone()).unwrap();
+        assert!(
+            semantic_diff(&before, &modified)
+                .iter()
+                .any(|change| change.kind == SemanticChangeKind::Modification)
+        );
+
+        fs::write(
+            &path,
+            "paths:\n  /new:\n    get:\n      summary: Read account\n",
+        )
+        .unwrap();
+        let renamed = openapi_operations(&context, path).unwrap();
+        assert!(
+            semantic_diff(&modified, &renamed)
+                .iter()
+                .any(|change| change.kind == SemanticChangeKind::Rename)
+        );
     }
 
     #[test]

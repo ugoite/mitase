@@ -463,7 +463,7 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
           - **path**: crates/syu-inventory/src/lib.rs
           - **selector**:
             - **kind**: symbol
-            - **name**: tests::json_schema_provider_discovers_exact_pointer_identities
+            - **name**: tests::language_aware_profile_discovers_each_supported_semantic_boundary
           - **claims**:
             - **kind**: verifies
               - **criterion**: REQ-CAPABILITY-002#criterion.language-aware-inventory
@@ -473,7 +473,7 @@ description: "Generated reference for docs/syu/requirements/capability-contracts
                 - **runner**: cargo-test
                 - **arguments**:
                   - **package**: syu-inventory
-                  - **test**: tests::json_schema_provider_discovers_exact_pointer_identities
+                  - **test**: tests::language_aware_profile_discovers_each_supported_semantic_boundary
         - **id**: stable-identity-test
           - **adapter**: rust
           - **path**: crates/syu-inventory/src/lib.rs
@@ -865,12 +865,12 @@ requirements:
           - id: language-inventory-test
             adapter: rust
             path: crates/syu-inventory/src/lib.rs
-            selector: { kind: symbol, name: tests::json_schema_provider_discovers_exact_pointer_identities }
+            selector: { kind: symbol, name: tests::language_aware_profile_discovers_each_supported_semantic_boundary }
             claims:
               - kind: verifies
                 criterion: REQ-CAPABILITY-002#criterion.language-aware-inventory
                 covers: [FEAT-INVENTORY-001#binding.implementation/target.inventory-registry]
-                runner: { runner: cargo-test, arguments: { package: syu-inventory, test: tests::json_schema_provider_discovers_exact_pointer_identities } }
+                runner: { runner: cargo-test, arguments: { package: syu-inventory, test: tests::language_aware_profile_discovers_each_supported_semantic_boundary } }
           - id: stable-identity-test
             adapter: rust
             path: crates/syu-inventory/src/lib.rs
