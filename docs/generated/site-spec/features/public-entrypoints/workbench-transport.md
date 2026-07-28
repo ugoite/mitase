@@ -1,0 +1,300 @@
+---
+title: "Public entrypoint contracts / Workbench Transport"
+description: "Generated reference for docs/syu/features/public-entrypoints/workbench-transport.yaml"
+---
+
+> Generated from `docs/syu/features/public-entrypoints/workbench-transport.yaml`.
+
+## Parsed content
+
+### Schema
+
+- syu/spec/v1
+
+### Kind
+
+- features
+
+### Namespace
+
+- public
+
+### Category
+
+- Public entrypoint contracts
+
+### Features
+
+- **id**: FEAT-PUBLIC-WORKBENCH-TRANSPORT-001
+  - **title**: Workbench client transport
+  - **summary**: Govern canonical browser transport, session, projection, scope, and source reads.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: public-api-001
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-001-javascript-crates-syu-app-ui-assets-js-api-js-mutationb
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: mutationBasis
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
+    - **id**: public-api-002
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-002-javascript-crates-syu-app-ui-assets-js-api-js-post
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: post
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
+    - **id**: public-api-003
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-003-javascript-crates-syu-app-ui-assets-js-api-js-readproje
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: readProjection
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
+    - **id**: public-api-004
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-004-javascript-crates-syu-app-ui-assets-js-api-js-request
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: request
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
+    - **id**: public-api-establish-session
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Govern Workbench session establishment.
+      - **targets**:
+        - **id**: entrypoint-establish-session
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: establishSession
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
+    - **id**: public-api-read-branch-scope
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Govern branch-scope reads.
+      - **targets**:
+        - **id**: entrypoint-read-branch-scope
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: readBranchScope
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
+    - **id**: public-api-read-scope-diff
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Govern scope diff reads.
+      - **targets**:
+        - **id**: entrypoint-read-scope-diff
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: readScopeDiff
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
+    - **id**: public-api-read-source
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Govern linked source reads.
+      - **targets**:
+        - **id**: entrypoint-read-source
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: readSource
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
+    - **id**: public-api-read-target-source
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Govern exact target source reads.
+      - **targets**:
+        - **id**: entrypoint-read-target-source
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/api.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: readTargetSource
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
+
+## Source YAML
+
+```yaml
+schema: syu/spec/v1
+kind: features
+namespace: public
+category: Public entrypoint contracts
+features:
+- id: FEAT-PUBLIC-WORKBENCH-TRANSPORT-001
+  title: Workbench client transport
+  summary: Govern canonical browser transport, session, projection, scope, and source
+    reads.
+  status: implemented
+  bindings:
+  - id: public-api-001
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-001-javascript-crates-syu-app-ui-assets-js-api-js-mutationb
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/api.js
+      selector:
+        kind: symbol
+        name: mutationBasis
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
+  - id: public-api-002
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-002-javascript-crates-syu-app-ui-assets-js-api-js-post
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/api.js
+      selector:
+        kind: symbol
+        name: post
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
+  - id: public-api-003
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-003-javascript-crates-syu-app-ui-assets-js-api-js-readproje
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/api.js
+      selector:
+        kind: symbol
+        name: readProjection
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
+  - id: public-api-004
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-004-javascript-crates-syu-app-ui-assets-js-api-js-request
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/api.js
+      selector:
+        kind: symbol
+        name: request
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
+  - id: public-api-establish-session
+    role: implementation
+    facet: public
+    responsibility: Govern Workbench session establishment.
+    targets:
+    - id: entrypoint-establish-session
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/api.js
+      selector:
+        kind: symbol
+        name: establishSession
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
+  - id: public-api-read-branch-scope
+    role: implementation
+    facet: public
+    responsibility: Govern branch-scope reads.
+    targets:
+    - id: entrypoint-read-branch-scope
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/api.js
+      selector:
+        kind: symbol
+        name: readBranchScope
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
+  - id: public-api-read-scope-diff
+    role: implementation
+    facet: public
+    responsibility: Govern scope diff reads.
+    targets:
+    - id: entrypoint-read-scope-diff
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/api.js
+      selector:
+        kind: symbol
+        name: readScopeDiff
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
+  - id: public-api-read-source
+    role: implementation
+    facet: public
+    responsibility: Govern linked source reads.
+    targets:
+    - id: entrypoint-read-source
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/api.js
+      selector:
+        kind: symbol
+        name: readSource
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
+  - id: public-api-read-target-source
+    role: implementation
+    facet: public
+    responsibility: Govern exact target source reads.
+    targets:
+    - id: entrypoint-read-target-source
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/api.js
+      selector:
+        kind: symbol
+        name: readTargetSource
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-WORK-UI-001#binding.work/target.plan
+```

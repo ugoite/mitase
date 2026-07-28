@@ -1,0 +1,131 @@
+---
+title: "Public entrypoint contracts / Workbench Validation"
+description: "Generated reference for docs/syu/features/public-entrypoints/workbench-validation.yaml"
+---
+
+> Generated from `docs/syu/features/public-entrypoints/workbench-validation.yaml`.
+
+## Parsed content
+
+### Schema
+
+- syu/spec/v1
+
+### Kind
+
+- features
+
+### Namespace
+
+- public
+
+### Category
+
+- Public entrypoint contracts
+
+### Features
+
+- **id**: FEAT-PUBLIC-WORKBENCH-VALIDATION-001
+  - **title**: Workbench server validation
+  - **summary**: Govern branch-scope and verification-receipt entrypoints.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: public-api-058
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-063-rust-crates-syu-workbench-server-src-lib-rs-branch-scop
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: branch_scope_view
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-VERIFICATION-001#binding.verification-harness/target.verification-endpoint
+    - **id**: public-api-059
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-064-rust-crates-syu-workbench-server-src-lib-rs-execute-ver
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: execute_verification
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-VERIFICATION-001#binding.verification-harness/target.verification-endpoint
+    - **id**: public-api-060
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-065-rust-crates-syu-workbench-server-src-lib-rs-validate-ve
+          - **adapter**: rust
+          - **path**: crates/syu-workbench-server/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: validate_verification_receipt
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-VERIFICATION-001#binding.verification-harness/target.verification-endpoint
+
+## Source YAML
+
+```yaml
+schema: syu/spec/v1
+kind: features
+namespace: public
+category: Public entrypoint contracts
+features:
+- id: FEAT-PUBLIC-WORKBENCH-VALIDATION-001
+  title: Workbench server validation
+  summary: Govern branch-scope and verification-receipt entrypoints.
+  status: implemented
+  bindings:
+  - id: public-api-058
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-063-rust-crates-syu-workbench-server-src-lib-rs-branch-scop
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: branch_scope_view
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-VERIFICATION-001#binding.verification-harness/target.verification-endpoint
+  - id: public-api-059
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-064-rust-crates-syu-workbench-server-src-lib-rs-execute-ver
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: execute_verification
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-VERIFICATION-001#binding.verification-harness/target.verification-endpoint
+  - id: public-api-060
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-065-rust-crates-syu-workbench-server-src-lib-rs-validate-ve
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: validate_verification_receipt
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-VERIFICATION-001#binding.verification-harness/target.verification-endpoint
+```

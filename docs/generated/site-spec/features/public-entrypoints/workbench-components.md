@@ -1,0 +1,243 @@
+---
+title: "Public entrypoint contracts / Workbench Components"
+description: "Generated reference for docs/syu/features/public-entrypoints/workbench-components.yaml"
+---
+
+> Generated from `docs/syu/features/public-entrypoints/workbench-components.yaml`.
+
+## Parsed content
+
+### Schema
+
+- syu/spec/v1
+
+### Kind
+
+- features
+
+### Namespace
+
+- public
+
+### Category
+
+- Public entrypoint contracts
+
+### Features
+
+- **id**: FEAT-PUBLIC-WORKBENCH-COMPONENTS-001
+  - **title**: Workbench components
+  - **summary**: Govern reusable Workbench rendering, translation, and diff components.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: public-api-006
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-006-javascript-crates-syu-app-ui-assets-js-components-actio
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/components/action.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: actionCapability
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+    - **id**: public-api-007
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-007-javascript-crates-syu-app-ui-assets-js-components-diagn
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/components/diagnostic.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: renderDiagnostic
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+    - **id**: public-api-008
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-008-javascript-crates-syu-app-ui-assets-js-components-edito
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/components/editor.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: structuredEditor
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+    - **id**: public-api-009
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-009-javascript-crates-syu-app-ui-assets-js-components-readi
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/components/readiness.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: renderReadiness
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+    - **id**: public-api-010
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-010-javascript-crates-syu-app-ui-assets-js-components-targe
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/components/target.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: renderTarget
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+    - **id**: public-api-011
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-011-javascript-crates-syu-app-ui-assets-js-i18n-js-translat
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/i18n.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: translate
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+    - **id**: public-api-render-diff
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Govern bounded diff rendering.
+      - **targets**:
+        - **id**: entrypoint-render-diff
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/components/diff.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: renderDiff
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+
+## Source YAML
+
+```yaml
+schema: syu/spec/v1
+kind: features
+namespace: public
+category: Public entrypoint contracts
+features:
+- id: FEAT-PUBLIC-WORKBENCH-COMPONENTS-001
+  title: Workbench components
+  summary: Govern reusable Workbench rendering, translation, and diff components.
+  status: implemented
+  bindings:
+  - id: public-api-006
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-006-javascript-crates-syu-app-ui-assets-js-components-actio
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/components/action.js
+      selector:
+        kind: symbol
+        name: actionCapability
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+  - id: public-api-007
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-007-javascript-crates-syu-app-ui-assets-js-components-diagn
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/components/diagnostic.js
+      selector:
+        kind: symbol
+        name: renderDiagnostic
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+  - id: public-api-008
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-008-javascript-crates-syu-app-ui-assets-js-components-edito
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/components/editor.js
+      selector:
+        kind: symbol
+        name: structuredEditor
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+  - id: public-api-009
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-009-javascript-crates-syu-app-ui-assets-js-components-readi
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/components/readiness.js
+      selector:
+        kind: symbol
+        name: renderReadiness
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+  - id: public-api-010
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-010-javascript-crates-syu-app-ui-assets-js-components-targe
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/components/target.js
+      selector:
+        kind: symbol
+        name: renderTarget
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+  - id: public-api-011
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-011-javascript-crates-syu-app-ui-assets-js-i18n-js-translat
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/i18n.js
+      selector:
+        kind: symbol
+        name: translate
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+  - id: public-api-render-diff
+    role: implementation
+    facet: public
+    responsibility: Govern bounded diff rendering.
+    targets:
+    - id: entrypoint-render-diff
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/components/diff.js
+      selector:
+        kind: symbol
+        name: renderDiff
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+```

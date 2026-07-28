@@ -1,0 +1,269 @@
+---
+title: "Public entrypoint contracts / Spec Model"
+description: "Generated reference for docs/syu/features/public-entrypoints/spec-model.yaml"
+---
+
+> Generated from `docs/syu/features/public-entrypoints/spec-model.yaml`.
+
+## Parsed content
+
+### Schema
+
+- syu/spec/v1
+
+### Kind
+
+- features
+
+### Namespace
+
+- public
+
+### Category
+
+- Public entrypoint contracts
+
+### Features
+
+- **id**: FEAT-PUBLIC-SPEC-MODEL-001
+  - **title**: Specification model
+  - **summary**: Govern repository-path, anchor, and schema entrypoints.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: public-api-035
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-036-rust-crates-syu-spec-model-src-lib-rs-localanchorkind-l
+          - **adapter**: rust
+          - **path**: crates/syu-spec-model/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: LocalAnchorKind::label
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document
+    - **id**: public-api-036
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-037-rust-crates-syu-spec-model-src-lib-rs-repopath-as-path
+          - **adapter**: rust
+          - **path**: crates/syu-spec-model/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: RepoPath::as_path
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document
+    - **id**: public-api-037
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-038-rust-crates-syu-spec-model-src-lib-rs-repopath-display
+          - **adapter**: rust
+          - **path**: crates/syu-spec-model/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: RepoPath::display
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document
+    - **id**: public-api-038
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-039-rust-crates-syu-spec-model-src-lib-rs-repopath-new
+          - **adapter**: rust
+          - **path**: crates/syu-spec-model/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: RepoPath::new
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document
+    - **id**: public-api-039
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-040-rust-crates-syu-spec-model-src-lib-rs-repopath-to-strin
+          - **adapter**: rust
+          - **path**: crates/syu-spec-model/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: RepoPath::to_string_lossy
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document
+    - **id**: public-api-040
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-041-rust-crates-syu-spec-model-src-lib-rs-specdocument-sche
+          - **adapter**: rust
+          - **path**: crates/syu-spec-model/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: SpecDocument::schema
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document
+    - **id**: public-api-repo-path-from-path
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Govern repository path conversion.
+      - **targets**:
+        - **id**: entrypoint-repo-path-from-path
+          - **adapter**: rust
+          - **path**: crates/syu-spec-model/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: RepoPath::from_path
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document
+    - **id**: public-api-lowercase-hex
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Govern lowercase hexadecimal digest encoding.
+      - **targets**:
+        - **id**: entrypoint-lowercase-hex
+          - **adapter**: rust
+          - **path**: crates/syu-spec-model/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: lowercase_hex
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-SPEC-MODEL-001#binding.implementation/target.digest-format
+
+## Source YAML
+
+```yaml
+schema: syu/spec/v1
+kind: features
+namespace: public
+category: Public entrypoint contracts
+features:
+- id: FEAT-PUBLIC-SPEC-MODEL-001
+  title: Specification model
+  summary: Govern repository-path, anchor, and schema entrypoints.
+  status: implemented
+  bindings:
+  - id: public-api-035
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-036-rust-crates-syu-spec-model-src-lib-rs-localanchorkind-l
+      adapter: rust
+      path: crates/syu-spec-model/src/lib.rs
+      selector:
+        kind: symbol
+        name: LocalAnchorKind::label
+      claims:
+      - kind: exposes
+        target: FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document
+  - id: public-api-036
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-037-rust-crates-syu-spec-model-src-lib-rs-repopath-as-path
+      adapter: rust
+      path: crates/syu-spec-model/src/lib.rs
+      selector:
+        kind: symbol
+        name: RepoPath::as_path
+      claims:
+      - kind: exposes
+        target: FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document
+  - id: public-api-037
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-038-rust-crates-syu-spec-model-src-lib-rs-repopath-display
+      adapter: rust
+      path: crates/syu-spec-model/src/lib.rs
+      selector:
+        kind: symbol
+        name: RepoPath::display
+      claims:
+      - kind: exposes
+        target: FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document
+  - id: public-api-038
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-039-rust-crates-syu-spec-model-src-lib-rs-repopath-new
+      adapter: rust
+      path: crates/syu-spec-model/src/lib.rs
+      selector:
+        kind: symbol
+        name: RepoPath::new
+      claims:
+      - kind: exposes
+        target: FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document
+  - id: public-api-039
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-040-rust-crates-syu-spec-model-src-lib-rs-repopath-to-strin
+      adapter: rust
+      path: crates/syu-spec-model/src/lib.rs
+      selector:
+        kind: symbol
+        name: RepoPath::to_string_lossy
+      claims:
+      - kind: exposes
+        target: FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document
+  - id: public-api-040
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-041-rust-crates-syu-spec-model-src-lib-rs-specdocument-sche
+      adapter: rust
+      path: crates/syu-spec-model/src/lib.rs
+      selector:
+        kind: symbol
+        name: SpecDocument::schema
+      claims:
+      - kind: exposes
+        target: FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document
+  - id: public-api-repo-path-from-path
+    role: implementation
+    facet: public
+    responsibility: Govern repository path conversion.
+    targets:
+    - id: entrypoint-repo-path-from-path
+      adapter: rust
+      path: crates/syu-spec-model/src/lib.rs
+      selector:
+        kind: symbol
+        name: RepoPath::from_path
+      claims:
+      - kind: exposes
+        target: FEAT-SPEC-MODEL-001#binding.implementation/target.spec-document
+  - id: public-api-lowercase-hex
+    role: implementation
+    facet: public
+    responsibility: Govern lowercase hexadecimal digest encoding.
+    targets:
+    - id: entrypoint-lowercase-hex
+      adapter: rust
+      path: crates/syu-spec-model/src/lib.rs
+      selector: { kind: symbol, name: lowercase_hex }
+      claims:
+      - kind: exposes
+        target: FEAT-SPEC-MODEL-001#binding.implementation/target.digest-format
+```

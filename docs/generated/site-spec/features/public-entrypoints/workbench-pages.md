@@ -1,0 +1,355 @@
+---
+title: "Public entrypoint contracts / Workbench Pages"
+description: "Generated reference for docs/syu/features/public-entrypoints/workbench-pages.yaml"
+---
+
+> Generated from `docs/syu/features/public-entrypoints/workbench-pages.yaml`.
+
+## Parsed content
+
+### Schema
+
+- syu/spec/v1
+
+### Kind
+
+- features
+
+### Namespace
+
+- public
+
+### Category
+
+- Public entrypoint contracts
+
+### Features
+
+- **id**: FEAT-PUBLIC-WORKBENCH-PAGES-001
+  - **title**: Workbench pages
+  - **summary**: Govern page initialization and canonical projection rendering.
+  - **status**: implemented
+  - **bindings**:
+    - **id**: public-api-013
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-013-javascript-crates-syu-app-ui-assets-js-pages-diagnostic
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/pages/diagnostics.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: renderDiagnostics
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+    - **id**: public-api-014
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-014-javascript-crates-syu-app-ui-assets-js-pages-readiness
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/pages/readiness.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: renderReadinessPage
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+    - **id**: public-api-015
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-015-javascript-crates-syu-app-ui-assets-js-pages-scope-js-r
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/pages/scope.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: renderScope
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+    - **id**: public-api-016
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-016-javascript-crates-syu-app-ui-assets-js-pages-settings-j
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/pages/settings.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: renderSettings
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+    - **id**: public-api-017
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+      - **targets**:
+        - **id**: entrypoint-017-javascript-crates-syu-app-ui-assets-js-pages-specificat
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/pages/specifications.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: renderSpecifications
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+    - **id**: public-api-init-diagnostics
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Govern diagnostics page initialization.
+      - **targets**:
+        - **id**: entrypoint-init-diagnostics
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/pages/diagnostics.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: initDiagnostics
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+    - **id**: public-api-init-readiness
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Govern readiness page initialization.
+      - **targets**:
+        - **id**: entrypoint-init-readiness
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/pages/readiness.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: initReadiness
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+    - **id**: public-api-init-scope
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Govern scope page initialization.
+      - **targets**:
+        - **id**: entrypoint-init-scope
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/pages/scope.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: initScope
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+    - **id**: public-api-init-specifications
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Govern specifications page initialization.
+      - **targets**:
+        - **id**: entrypoint-init-specifications
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/pages/specifications.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: initSpecifications
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+    - **id**: public-api-render-source-detail
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Govern linked source detail rendering.
+      - **targets**:
+        - **id**: entrypoint-render-source-detail
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/pages/specifications.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: renderSourceDetail
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+    - **id**: public-api-render-specification-detail
+      - **role**: implementation
+      - **facet**: public
+      - **responsibility**: Govern specification detail rendering.
+      - **targets**:
+        - **id**: entrypoint-render-specification-detail
+          - **adapter**: javascript
+          - **path**: crates/syu-app-ui/assets/js/pages/specifications.js
+          - **selector**:
+            - **kind**: symbol
+            - **name**: renderSpecificationDetail
+          - **claims**:
+            - **kind**: exposes
+              - **target**: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+
+## Source YAML
+
+```yaml
+schema: syu/spec/v1
+kind: features
+namespace: public
+category: Public entrypoint contracts
+features:
+- id: FEAT-PUBLIC-WORKBENCH-PAGES-001
+  title: Workbench pages
+  summary: Govern page initialization and canonical projection rendering.
+  status: implemented
+  bindings:
+  - id: public-api-013
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-013-javascript-crates-syu-app-ui-assets-js-pages-diagnostic
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/diagnostics.js
+      selector:
+        kind: symbol
+        name: renderDiagnostics
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+  - id: public-api-014
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-014-javascript-crates-syu-app-ui-assets-js-pages-readiness
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/readiness.js
+      selector:
+        kind: symbol
+        name: renderReadinessPage
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+  - id: public-api-015
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-015-javascript-crates-syu-app-ui-assets-js-pages-scope-js-r
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/scope.js
+      selector:
+        kind: symbol
+        name: renderScope
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+  - id: public-api-016
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-016-javascript-crates-syu-app-ui-assets-js-pages-settings-j
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/settings.js
+      selector:
+        kind: symbol
+        name: renderSettings
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+  - id: public-api-017
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-017-javascript-crates-syu-app-ui-assets-js-pages-specificat
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/specifications.js
+      selector:
+        kind: symbol
+        name: renderSpecifications
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+  - id: public-api-init-diagnostics
+    role: implementation
+    facet: public
+    responsibility: Govern diagnostics page initialization.
+    targets:
+    - id: entrypoint-init-diagnostics
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/diagnostics.js
+      selector:
+        kind: symbol
+        name: initDiagnostics
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+  - id: public-api-init-readiness
+    role: implementation
+    facet: public
+    responsibility: Govern readiness page initialization.
+    targets:
+    - id: entrypoint-init-readiness
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/readiness.js
+      selector:
+        kind: symbol
+        name: initReadiness
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+  - id: public-api-init-scope
+    role: implementation
+    facet: public
+    responsibility: Govern scope page initialization.
+    targets:
+    - id: entrypoint-init-scope
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/scope.js
+      selector:
+        kind: symbol
+        name: initScope
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+  - id: public-api-init-specifications
+    role: implementation
+    facet: public
+    responsibility: Govern specifications page initialization.
+    targets:
+    - id: entrypoint-init-specifications
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/specifications.js
+      selector:
+        kind: symbol
+        name: initSpecifications
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+  - id: public-api-render-source-detail
+    role: implementation
+    facet: public
+    responsibility: Govern linked source detail rendering.
+    targets:
+    - id: entrypoint-render-source-detail
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/specifications.js
+      selector:
+        kind: symbol
+        name: renderSourceDetail
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+  - id: public-api-render-specification-detail
+    role: implementation
+    facet: public
+    responsibility: Govern specification detail rendering.
+    targets:
+    - id: entrypoint-render-specification-detail
+      adapter: javascript
+      path: crates/syu-app-ui/assets/js/pages/specifications.js
+      selector:
+        kind: symbol
+        name: renderSpecificationDetail
+      claims:
+      - kind: exposes
+        target: FEAT-WORKBENCH-PROJECTION-001#binding.projection/target.project
+```

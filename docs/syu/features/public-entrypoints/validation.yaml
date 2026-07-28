@@ -1,0 +1,150 @@
+schema: syu/spec/v1
+kind: features
+namespace: public
+category: Public entrypoint contracts
+features:
+- id: FEAT-PUBLIC-VALIDATION-001
+  title: Validation engine
+  summary: Govern canonical validation, readiness, change, and verification entrypoints.
+  status: implemented
+  bindings:
+  - id: public-api-041
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-044-rust-crates-syu-validation-src-lib-rs-phase-for-rule
+      adapter: rust
+      path: crates/syu-validation/src/lib.rs
+      selector:
+        kind: symbol
+        name: phase_for_rule
+      claims:
+      - kind: exposes
+        target: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
+  - id: public-api-042
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-047-rust-crates-syu-validation-src-lib-rs-validate-without
+      adapter: rust
+      path: crates/syu-validation/src/lib.rs
+      selector:
+        kind: symbol
+        name: validate_without_readiness
+      claims:
+      - kind: exposes
+        target: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
+  - id: public-api-078
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-078-rust-crates-syu-validation-src-lib-rs-readinessaxis
+      adapter: rust
+      path: crates/syu-validation/src/lib.rs
+      selector:
+        kind: symbol
+        name: ReadinessAxis
+      claims:
+      - kind: exposes
+        target: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
+  - id: public-api-079
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-079-rust-crates-syu-validation-src-lib-rs-readinessaxisid
+      adapter: rust
+      path: crates/syu-validation/src/lib.rs
+      selector:
+        kind: symbol
+        name: ReadinessAxisId
+      claims:
+      - kind: exposes
+        target: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
+  - id: public-api-080
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-080-rust-crates-syu-validation-src-lib-rs-readinessreport
+      adapter: rust
+      path: crates/syu-validation/src/lib.rs
+      selector:
+        kind: symbol
+        name: ReadinessReport
+      claims:
+      - kind: exposes
+        target: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
+  - id: public-api-081
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-081-rust-crates-syu-validation-src-lib-rs-evaluate-readiness
+      adapter: rust
+      path: crates/syu-validation/src/lib.rs
+      selector:
+        kind: symbol
+        name: evaluate_readiness
+      claims:
+      - kind: exposes
+        target: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
+  - id: public-api-082
+    role: implementation
+    facet: public
+    responsibility: Keep this public entrypoint exactly addressable and linked to its verified capability boundary.
+    targets:
+    - id: entrypoint-082-rust-crates-syu-validation-src-lib-rs-required-axes
+      adapter: rust
+      path: crates/syu-validation/src/lib.rs
+      selector:
+        kind: symbol
+        name: required_axes
+      claims:
+      - kind: exposes
+        target: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
+  - id: public-api-changed-files-against-revision
+    role: implementation
+    facet: public
+    responsibility: Govern canonical changed-file collection.
+    targets:
+    - id: entrypoint-changed-files-against-revision
+      adapter: rust
+      path: crates/syu-validation/src/lib.rs
+      selector:
+        kind: symbol
+        name: changed_files_against_revision
+      claims:
+      - kind: exposes
+        target: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
+  - id: public-api-execute-verification-attempt
+    role: implementation
+    facet: public
+    responsibility: Govern durable exact verification attempts.
+    targets:
+    - id: entrypoint-execute-verification-attempt
+      adapter: rust
+      path: crates/syu-validation/src/lib.rs
+      selector:
+        kind: symbol
+        name: execute_verification_attempt
+      claims:
+      - kind: exposes
+        target: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate
+  - id: public-api-validate-workspace
+    role: implementation
+    facet: public
+    responsibility: Govern canonical workspace validation.
+    targets:
+    - id: entrypoint-validate-workspace
+      adapter: rust
+      path: crates/syu-validation/src/lib.rs
+      selector:
+        kind: symbol
+        name: validate_workspace
+      claims:
+      - kind: exposes
+        target: FEAT-CHANGE-VALIDATION-001#binding.implementation/target.change-validate

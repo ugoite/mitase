@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use syu_spec_model::RepoPath;
+use syu_spec_model::{RepoPath, SpecAnchor};
 
 pub const CONFIG_SCHEMA: &str = "syu/config/v1";
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -64,8 +64,6 @@ pub enum ReadinessLevel {
 pub struct ReadinessConfig {
     pub target: ReadinessLevel,
     #[serde(default)]
-    pub scopes: BTreeMap<String, ReadinessLevel>,
-    #[serde(default)]
     pub probes: ReadinessProbes,
     pub limits: ReadinessLimits,
 }
@@ -73,13 +71,30 @@ pub struct ReadinessConfig {
 #[serde(deny_unknown_fields)]
 pub struct ReadinessProbes {
     #[serde(default)]
-    pub implemented_criteria: Option<String>,
+    pub implemented_criteria: Vec<ReadinessCriterionProbe>,
     #[serde(default)]
-    pub public_entrypoints: Option<String>,
+    pub public_entrypoints: Option<ReadinessSelectionProbe>,
     #[serde(default)]
-    pub contracts: Option<String>,
+    pub contracts: Option<ReadinessSelectionProbe>,
     #[serde(default)]
     pub changed_units: bool,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReadinessCriterionProbe {
+    pub criterion: SpecAnchor,
+    pub level: ReadinessLevel,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ReadinessSelection {
+    All,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReadinessSelectionProbe {
+    pub selection: ReadinessSelection,
+    pub level: ReadinessLevel,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -136,4 +151,66 @@ pub struct SliceLimits {
     pub max_verification_targets: usize,
     pub max_readonly_targets: usize,
     pub max_total_bytes: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn project_config_preserves_readiness_configuration() {
+        let source = r#"
+schema: syu/config/v1
+workspace: { spec_roots: [docs/syu], excludes: [] }
+inventory:
+  active_profile: default
+  profiles: [{ id: default, providers: { rust: {} } }]
+validation:
+  preset: agent-ready
+  readiness:
+    target: traceable
+    probes:
+      implemented_criteria:
+        - criterion: REQ-WORK-001#criterion.exact-slice
+          level: work-ready
+      public_entrypoints: { selection: all, level: seedable }
+      changed_units: false
+    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_seed: 4 }
+  changed: { require_owned_changes: true, require_plan: true }
+verification: { runners: {} }
+work:
+  slicing: { max_editable_files: 4, max_editable_symbols: 8, max_verification_targets: 8, max_readonly_targets: 12, max_total_bytes: 120000 }
+"#;
+        let config: ProjectConfig = serde_yaml::from_str(source).expect("project config");
+        assert_eq!(
+            config.validation.readiness.target,
+            ReadinessLevel::Traceable
+        );
+        assert_eq!(
+            config.validation.readiness.probes.implemented_criteria[0]
+                .criterion
+                .to_string(),
+            "REQ-WORK-001#criterion.exact-slice"
+        );
+        assert_eq!(
+            config
+                .validation
+                .readiness
+                .probes
+                .public_entrypoints
+                .as_ref()
+                .map(|probe| probe.level),
+            Some(ReadinessLevel::Seedable)
+        );
+        assert!(
+            serde_yaml::from_str::<ProjectConfig>(&format!("{source}unknown: true\n")).is_err()
+        );
+        assert!(
+            serde_yaml::from_str::<ProjectConfig>(&source.replace(
+                "public_entrypoints: { selection: all, level: seedable }",
+                "public_entrypoints: { selection: typo-anything, level: seedable }",
+            ))
+            .is_err()
+        );
+    }
 }
