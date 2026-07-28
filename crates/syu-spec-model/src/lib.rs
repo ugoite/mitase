@@ -316,6 +316,9 @@ pub enum TargetClaim {
     GeneratedFrom {
         targets: Vec<BoundTargetRef>,
     },
+    Exposes {
+        target: BoundTargetRef,
+    },
     Evidences {
         anchor: SpecAnchor,
     },
