@@ -1,7 +1,7 @@
 schema: syu/config/v1
 workspace:
   spec_roots: [docs/syu]
-  excludes: [target/**, node_modules/**, fixtures/v1/valid-workbench-flow/**, website/package-lock.json, website/package.json]
+  excludes: [target/**, node_modules/**, fixtures/v1/valid-workbench-flow/**, website/package-lock.json, website/package.json, .github/workflows/maintenance.yml]
 inventory:
   active_profile: default
   profiles:
