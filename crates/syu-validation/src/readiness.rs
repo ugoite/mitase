@@ -16,6 +16,10 @@ use syu_workspace::{SpecIndex, SpecWorkspace};
 #[derive(Debug, Clone, Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct ReadinessSubject {
     pub id: String,
+    /// Canonical configuration identity for the subject. Readiness gates
+    /// compare this identity as well as the level, so equal levels assigned
+    /// to different probes cannot satisfy each other accidentally.
+    pub scope_id: String,
     pub required_level: ReadinessLevel,
     pub ready: bool,
     pub blockers: Vec<String>,
@@ -46,6 +50,7 @@ impl ReadinessAxis {
     pub fn empty(message: impl Into<String>) -> Self {
         axis_from_subjects(vec![ReadinessSubject {
             id: "axis-empty".into(),
+            scope_id: repository_scope(),
             required_level: ReadinessLevel::Traceable,
             ready: false,
             blockers: vec![message.into()],
@@ -69,45 +74,85 @@ impl ReadinessReport {
         })
     }
 
-    /// Evaluate both the workspace-wide readiness target and every explicitly
-    /// configured facet scope. A repository can therefore remain traceable
-    /// overall while requiring a bounded Workbench facet to be closed-loop.
+    /// Evaluate the workspace-wide target and every typed probe by its exact
+    /// configuration identity. A subject from another criterion or probe can
+    /// never satisfy the configured requirement merely because its level is
+    /// the same.
     pub fn meets_configured(&self, config: &ProjectConfig) -> bool {
         if !self.meets(config.validation.readiness.target) {
             return false;
         }
-        config
-            .validation
-            .readiness
-            .scopes
-            .values()
-            .copied()
-            .filter(|level| *level != ReadinessLevel::Off)
-            .all(|level| {
-                required_axes(level).iter().all(|axis| match axis {
-                    ReadinessAxisId::Inventory => self.inventory.is_ready(),
-                    ReadinessAxisId::Ownership => self.ownership.is_ready(),
-                    ReadinessAxisId::Seedability => scoped_axis_is_ready(&self.seedability, level),
-                    ReadinessAxisId::Workability => scoped_axis_is_ready(&self.workability, level),
-                    ReadinessAxisId::Verification => {
-                        scoped_axis_is_ready(&self.verification, level)
-                    }
-                    ReadinessAxisId::ClosedLoop => scoped_axis_is_ready(&self.closed_loop, level),
-                })
-            })
+        let readiness = &config.validation.readiness;
+        readiness
+            .probes
+            .implemented_criteria
+            .iter()
+            .all(|probe| self.meets_scope(&criterion_scope(&probe.criterion), probe.level))
+            && readiness
+                .probes
+                .public_entrypoints
+                .as_ref()
+                .is_none_or(|probe| self.meets_scope(public_entrypoints_scope(), probe.level))
+            && readiness
+                .probes
+                .contracts
+                .as_ref()
+                .is_none_or(|probe| self.meets_scope(contracts_scope(), probe.level))
+    }
+
+    fn meets_scope(&self, scope_id: &str, level: ReadinessLevel) -> bool {
+        if level == ReadinessLevel::Off {
+            return true;
+        }
+        required_axes(level).iter().all(|axis| match axis {
+            // Structural invariants are repository-wide by design and must
+            // never be reduced to the maturity probe denominator.
+            ReadinessAxisId::Inventory => self.inventory.is_ready(),
+            ReadinessAxisId::Ownership => self.ownership.is_ready(),
+            ReadinessAxisId::Seedability => {
+                scoped_axis_is_ready(&self.seedability, scope_id, level)
+            }
+            ReadinessAxisId::Workability => {
+                scoped_axis_is_ready(&self.workability, scope_id, level)
+            }
+            ReadinessAxisId::Verification => {
+                scoped_axis_is_ready(&self.verification, scope_id, level)
+            }
+            ReadinessAxisId::ClosedLoop => scoped_axis_is_ready(&self.closed_loop, scope_id, level),
+        })
     }
 }
 
-fn scoped_axis_is_ready(axis: &ReadinessAxis, level: ReadinessLevel) -> bool {
+fn scoped_axis_is_ready(axis: &ReadinessAxis, scope_id: &str, level: ReadinessLevel) -> bool {
     let subjects = axis
         .subjects
         .iter()
-        .filter(|subject| subject.required_level == level)
+        .filter(|subject| subject.scope_id == scope_id && subject.required_level == level)
         .collect::<Vec<_>>();
     !subjects.is_empty()
         && subjects
             .iter()
             .all(|subject| subject.ready && subject.blockers.is_empty())
+}
+
+fn repository_scope() -> String {
+    "repository".into()
+}
+
+fn criterion_scope(criterion: &SpecAnchor) -> String {
+    format!("criterion:{criterion}")
+}
+
+fn public_entrypoints_scope() -> &'static str {
+    "public-entrypoints"
+}
+
+fn contracts_scope() -> &'static str {
+    "contracts"
+}
+
+fn changed_units_scope() -> &'static str {
+    "changed-units"
 }
 
 pub fn required_axes(level: ReadinessLevel) -> &'static [ReadinessAxisId] {
@@ -161,6 +206,7 @@ pub fn evaluate(
     let inventory_subjects = if let Some(error) = &index.inventory_error {
         vec![ReadinessSubject {
             id: "inventory:error".into(),
+            scope_id: repository_scope(),
             required_level: ReadinessLevel::Traceable,
             ready: false,
             blockers: vec![error.clone()],
@@ -170,6 +216,7 @@ pub fn evaluate(
             .iter()
             .map(|unit| ReadinessSubject {
                 id: format!("inventory:{}", unit.identity),
+                scope_id: repository_scope(),
                 required_level: ReadinessLevel::Traceable,
                 ready: true,
                 blockers: vec![],
@@ -178,61 +225,44 @@ pub fn evaluate(
     };
     let inventory = axis_from_subjects(inventory_subjects);
 
-    // When readiness is configured for a bounded criterion set, ownership is
-    // evaluated for the exact implementation/verification artifacts selected
-    // by those criteria. This keeps a repository-wide planned self-hosting
-    // catalog from becoming an artificial ownership denominator.
-    let criteria = implemented_criteria(workspace, index);
-    let ownership_focus = workspace
-        .config
-        .validation
-        .readiness
-        .probes
-        .implemented_criteria
-        .as_deref()
-        .filter(|selection| *selection != "all")
-        .map(|_| {
-            criteria
-                .iter()
-                .flat_map(|criterion| {
+    let criteria = implemented_criteria(workspace, index)?;
+    let ownership_required = criteria
+        .iter()
+        .flat_map(|criterion| {
+            index
+                .criteria_to_implementation_targets
+                .get(criterion)
+                .into_iter()
+                .flatten()
+                .chain(
                     index
-                        .criteria_to_implementation_targets
+                        .criteria_to_verification_targets
                         .get(criterion)
                         .into_iter()
-                        .flatten()
-                        .chain(
-                            index
-                                .criteria_to_verification_targets
-                                .get(criterion)
-                                .into_iter()
-                                .flatten(),
-                        )
-                })
-                .filter_map(|target| index.target_to_artifact.get(target))
-                .cloned()
-                .collect::<BTreeSet<_>>()
-        });
+                        .flatten(),
+                )
+        })
+        .filter_map(|target| index.target_to_artifact.get(target))
+        .cloned()
+        .collect::<BTreeSet<_>>();
 
     let ownership_subjects = active
         .iter()
-        .filter(|unit| {
-            ownership_focus
-                .as_ref()
-                .is_none_or(|focused| focused.contains(&unit.identity))
-        })
-        .map(|unit| {
+        .filter_map(|unit| {
             let owners = index
                 .artifact_owners
                 .get(&unit.identity)
                 .cloned()
                 .unwrap_or_default();
-            let mut blockers = if owners.len() == 1 {
-                vec![]
-            } else {
+            let required_for_maturity = ownership_required.contains(&unit.identity);
+            let mut blockers = if owners.len() > 1 || (required_for_maturity && owners.len() != 1) {
                 vec![format!("{} has {} owners", unit.identity, owners.len())]
+            } else {
+                vec![]
             };
             for owner in &owners {
-                if let Some(binding) = index.bindings.get(&owner.binding)
+                if required_for_maturity
+                    && let Some(binding) = index.bindings.get(&owner.binding)
                     && binding.targets.len()
                         > workspace
                             .config
@@ -248,12 +278,13 @@ pub fn evaluate(
                     ));
                 }
             }
-            ReadinessSubject {
+            (required_for_maturity || !blockers.is_empty()).then(|| ReadinessSubject {
                 id: format!("ownership:{}", unit.identity),
+                scope_id: repository_scope(),
                 required_level: ReadinessLevel::Traceable,
                 ready: blockers.is_empty(),
                 blockers,
-            }
+            })
         })
         .collect::<Vec<_>>();
     let mut ownership_subjects = ownership_subjects;
@@ -267,11 +298,6 @@ pub fn evaluate(
         for scope in &binding.owns {
             let matched = active
                 .iter()
-                .filter(|unit| {
-                    ownership_focus
-                        .as_ref()
-                        .is_none_or(|focused| focused.contains(&unit.identity))
-                })
                 .filter(|unit| scope_matches(scope, unit))
                 .count();
             if matched
@@ -284,6 +310,7 @@ pub fn evaluate(
             {
                 ownership_subjects.push(ReadinessSubject {
                     id: format!("ownership-scope:{binding_anchor}/{}", scope.id),
+                    scope_id: repository_scope(),
                     required_level: ReadinessLevel::Traceable,
                     ready: false,
                     blockers: vec![format!(
@@ -307,16 +334,16 @@ pub fn evaluate(
         .readiness
         .probes
         .public_entrypoints
-        .as_deref()
-        .is_some_and(|value| value == "all");
+        .as_ref()
+        .map(|probe| probe.level);
     let contracts_probe = workspace
         .config
         .validation
         .readiness
         .probes
         .contracts
-        .as_deref()
-        .is_some_and(|value| value == "all");
+        .as_ref()
+        .map(|probe| probe.level);
 
     let mut seed_subjects = Vec::new();
     let mut work_subjects = Vec::new();
@@ -325,6 +352,7 @@ pub fn evaluate(
     let mut execution_jobs = Vec::new();
 
     for criterion in &criteria {
+        let scope_id = criterion_scope(criterion);
         let implementation_targets = index
             .criteria_to_implementation_targets
             .get(criterion)
@@ -344,6 +372,7 @@ pub fn evaluate(
         if implementation_targets.is_empty() {
             seed_subjects.push(subject(
                 format!("criterion:{criterion}/implementation"),
+                scope_id.clone(),
                 required_level,
                 false,
                 "criterion has no exact implementation target",
@@ -379,6 +408,7 @@ pub fn evaluate(
                 }
                 seed_subjects.push(ReadinessSubject {
                     id: format!("criterion:{criterion}/target:{}", target_ref),
+                    scope_id: scope_id.clone(),
                     required_level,
                     ready: seed_blockers.is_empty(),
                     blockers: seed_blockers,
@@ -407,6 +437,7 @@ pub fn evaluate(
                 if required_level >= ReadinessLevel::WorkReady {
                     work_subjects.push(subject(
                         format!("{target_subject}/work"),
+                        scope_id.clone(),
                         required_level,
                         work_ready,
                         if work_ready {
@@ -422,6 +453,7 @@ pub fn evaluate(
                     let closed_id = format!("{target_subject}/closed-loop");
                     let mut closed = subject(
                         closed_id.clone(),
+                        scope_id.clone(),
                         required_level,
                         false,
                         if !execute_verification {
@@ -475,6 +507,7 @@ pub fn evaluate(
             if required_level >= ReadinessLevel::WorkReady {
                 work_subjects.push(subject(
                     format!("criterion:{criterion}/work"),
+                    scope_id.clone(),
                     required_level,
                     work_ready,
                     if work_ready {
@@ -489,6 +522,7 @@ pub fn evaluate(
             if required_level >= ReadinessLevel::ClosedLoop {
                 closed_subjects.push(subject(
                     format!("criterion:{criterion}/closed-loop"),
+                    scope_id,
                     required_level,
                     false,
                     if !execute_verification {
@@ -507,16 +541,18 @@ pub fn evaluate(
     // criterion of its own.
     seed_subjects.extend(implemented_feature_subjects(workspace, index));
 
-    if public_probe {
-        let public_subjects = public_entrypoint_subjects(workspace, index, &active, revision);
+    if let Some(required_level) = public_probe {
+        let public_subjects =
+            public_entrypoint_subjects(workspace, index, &active, revision, required_level);
         seed_subjects.extend(public_subjects);
     }
 
-    if contracts_probe {
+    if let Some(required_level) = contracts_probe {
         if index.contracts.is_empty() {
             let empty = subject(
                 "contracts:active".into(),
-                ReadinessLevel::Seedable,
+                contracts_scope(),
+                required_level,
                 false,
                 "contracts: all was requested but no active contract is declared",
             );
@@ -590,16 +626,20 @@ pub fn evaluate(
                 let ready = blockers.is_empty();
                 seed_subjects.push(ReadinessSubject {
                     id: format!("contract:{anchor}"),
-                    required_level: ReadinessLevel::Seedable,
+                    scope_id: contracts_scope().into(),
+                    required_level,
                     ready,
                     blockers: blockers.clone(),
                 });
-                work_subjects.push(ReadinessSubject {
-                    id: format!("contract:{anchor}/plan"),
-                    required_level: ReadinessLevel::WorkReady,
-                    ready,
-                    blockers,
-                });
+                if required_level >= ReadinessLevel::WorkReady {
+                    work_subjects.push(ReadinessSubject {
+                        id: format!("contract:{anchor}/plan"),
+                        scope_id: contracts_scope().into(),
+                        required_level,
+                        ready,
+                        blockers,
+                    });
+                }
             }
         }
     }
@@ -631,6 +671,7 @@ pub fn evaluate(
                 let ready = owners.len() == 1;
                 seed_subjects.push(ReadinessSubject {
                     id: format!("changed:{path}"),
+                    scope_id: changed_units_scope().into(),
                     required_level: ReadinessLevel::Seedable,
                     ready,
                     blockers: if ready {
@@ -652,6 +693,7 @@ pub fn evaluate(
                     let ready = owners.len() == 1;
                     seed_subjects.push(ReadinessSubject {
                         id: format!("changed:{}", unit.identity),
+                        scope_id: changed_units_scope().into(),
                         required_level: ReadinessLevel::Seedable,
                         ready,
                         blockers: if ready {
@@ -777,12 +819,14 @@ fn canonical_contract_plan(
 
 fn subject(
     id: String,
+    scope_id: impl Into<String>,
     required_level: ReadinessLevel,
     ready: bool,
     blocker: &str,
 ) -> ReadinessSubject {
     ReadinessSubject {
         id,
+        scope_id: scope_id.into(),
         required_level,
         ready,
         blockers: if ready || blocker.is_empty() {
@@ -825,29 +869,37 @@ fn axis_from_subjects(subjects: Vec<ReadinessSubject>) -> ReadinessAxis {
     }
 }
 
-fn implemented_criteria(workspace: &SpecWorkspace, index: &SpecIndex) -> Vec<SpecAnchor> {
-    let selection = workspace
+fn implemented_criteria(workspace: &SpecWorkspace, index: &SpecIndex) -> Result<Vec<SpecAnchor>> {
+    let configured = &workspace
         .config
         .validation
         .readiness
         .probes
-        .implemented_criteria
-        .as_deref();
-    index
-        .criterion_status
-        .iter()
-        .filter(|(anchor, status)| {
-            **status == ItemStatus::Implemented
-                && selection.is_none_or(|selection| {
-                    selection == "all"
-                        || selection
-                            .split(',')
-                            .map(str::trim)
-                            .any(|candidate| candidate == anchor.to_string())
-                })
-        })
-        .map(|(anchor, _)| anchor.clone())
-        .collect()
+        .implemented_criteria;
+    if configured.is_empty() {
+        return Ok(index
+            .criterion_status
+            .iter()
+            .filter(|(_, status)| **status == ItemStatus::Implemented)
+            .map(|(anchor, _)| anchor.clone())
+            .collect());
+    }
+    let mut criteria = BTreeSet::new();
+    for probe in configured {
+        if !criteria.insert(probe.criterion.clone()) {
+            anyhow::bail!(
+                "readiness criterion {} is configured more than once",
+                probe.criterion
+            );
+        }
+        if index.criterion_status.get(&probe.criterion) != Some(&ItemStatus::Implemented) {
+            anyhow::bail!(
+                "configured readiness criterion {} is missing or not implemented",
+                probe.criterion
+            );
+        }
+    }
+    Ok(criteria.into_iter().collect())
 }
 
 fn implemented_feature_subjects(
@@ -900,6 +952,7 @@ fn implemented_feature_subjects(
             }
             ReadinessSubject {
                 id: format!("feature:{}", feature.id),
+                scope_id: repository_scope(),
                 required_level: ReadinessLevel::Traceable,
                 ready: blockers.is_empty(),
                 blockers,
@@ -1021,6 +1074,7 @@ fn verification_subject(
     }
     ReadinessSubject {
         id: format!("criterion:{criterion}/verification"),
+        scope_id: criterion_scope(criterion),
         required_level,
         ready: blockers.is_empty(),
         blockers,
@@ -1032,6 +1086,7 @@ fn public_entrypoint_subjects(
     index: &SpecIndex,
     active: &[&syu_inventory::ArtifactUnit],
     revision: &str,
+    required_level: ReadinessLevel,
 ) -> Vec<ReadinessSubject> {
     active
         .iter()
@@ -1043,50 +1098,70 @@ fn public_entrypoint_subjects(
                 .get(&unit.identity)
                 .cloned()
                 .unwrap_or_default();
-            let exact = owners.iter().find_map(|owner| {
-                let id = owner.target_id.as_ref()?;
-                let reference = BoundTargetRef {
-                    binding: owner.binding.clone(),
-                    target_id: id.clone(),
-                };
-                (index.target_to_artifact.get(&reference) == Some(&unit.identity))
-                    .then_some(reference)
-            });
-            let Some(target_ref) = exact else {
+            let exact = owners
+                .iter()
+                .filter_map(|owner| {
+                    let id = owner.target_id.as_ref()?;
+                    let reference = BoundTargetRef {
+                        binding: owner.binding.clone(),
+                        target_id: id.clone(),
+                    };
+                    (index.target_to_artifact.get(&reference) == Some(&unit.identity))
+                        .then_some(reference)
+                })
+                .collect::<Vec<_>>();
+            if exact.len() != 1 {
                 return subject(
                     format!("public:{}", unit.identity),
-                    ReadinessLevel::Seedable,
+                    public_entrypoints_scope(),
+                    required_level,
                     false,
-                    "public artifact requires an exact ArtifactTarget owner",
+                    &format!(
+                        "public artifact requires exactly one exact ArtifactTarget owner; found {}",
+                        exact.len()
+                    ),
                 );
-            };
-            if index.target_to_artifact.get(&target_ref) != Some(&unit.identity) {
+            }
+            let target_ref = &exact[0];
+            if index.target_to_artifact.get(target_ref) != Some(&unit.identity) {
                 blockers
                     .push("exact ArtifactTarget does not resolve to the public artifact".into());
             }
+            // A capability boundary may itself be public. Registry-only
+            // targets use `exposes` to point at that boundary; direct
+            // capability targets retain their own real acceptance criterion.
+            let exposed_target = index.exposes_by_target.get(target_ref).unwrap_or(target_ref);
             let criteria = index
                 .criteria_to_implementation_targets
                 .iter()
-                .filter(|(_, targets)| targets.contains(&target_ref))
+                .filter(|(_, targets)| targets.contains(exposed_target))
                 .map(|(criterion, _)| criterion.clone())
                 .collect::<Vec<_>>();
             if criteria.is_empty() {
-                blockers.push("public artifact is not connected to a criterion".into());
+                blockers.push(
+                    "exposed capability target is not connected to a current criterion".into(),
+                );
             }
             for criterion in criteria {
                 match canonical_public_target_plan(
                     workspace,
                     index,
-                    &target_ref,
+                    target_ref,
                     &criterion,
                     revision,
                 ) {
                     Ok(plan) if matches!(plan.status, PlanStatus::Ready) => {}
                     Ok(plan) => blockers.push(format!(
-                        "{criterion} canonical public-entrypoint plan is {:?}: {}",
+                        "{criterion} canonical public-entrypoint plan is {:?} with budgets {:?}: {}",
                         plan.status,
-                        plan.diagnostics
+                        plan.slices
                             .iter()
+                            .map(|slice| &slice.budget)
+                            .collect::<Vec<_>>(),
+                        plan.slices
+                            .iter()
+                            .flat_map(|slice| slice.blockers.iter())
+                            .chain(plan.diagnostics.iter())
                             .map(|diagnostic| diagnostic.message.as_str())
                             .collect::<Vec<_>>()
                             .join("; ")
@@ -1098,7 +1173,8 @@ fn public_entrypoint_subjects(
             }
             ReadinessSubject {
                 id: format!("public:{}", unit.identity),
-                required_level: ReadinessLevel::Seedable,
+                scope_id: public_entrypoints_scope().into(),
+                required_level,
                 ready: blockers.is_empty(),
                 blockers,
             }
@@ -1256,29 +1332,18 @@ fn readiness_label(level: ReadinessLevel) -> &'static str {
 fn scope_level(
     workspace: &SpecWorkspace,
     criterion: &SpecAnchor,
-    index: &SpecIndex,
+    _index: &SpecIndex,
 ) -> ReadinessLevel {
-    let default = workspace.config.validation.readiness.target;
-    index
-        .criteria_to_implementation_targets
-        .get(criterion)
-        .into_iter()
-        .flatten()
-        .filter_map(|target| {
-            let facet = index.bindings.get(&target.binding)?.facet.as_str();
-            Some(
-                workspace
-                    .config
-                    .validation
-                    .readiness
-                    .scopes
-                    .get(facet)
-                    .copied()
-                    .unwrap_or(default),
-            )
-        })
-        .max()
-        .unwrap_or(default)
+    workspace
+        .config
+        .validation
+        .readiness
+        .probes
+        .implemented_criteria
+        .iter()
+        .find(|probe| &probe.criterion == criterion)
+        .map(|probe| probe.level)
+        .unwrap_or(workspace.config.validation.readiness.target)
 }
 
 #[cfg(test)]
@@ -1294,6 +1359,7 @@ mod tests {
     fn axis_counts_subjects_not_blockers() {
         let axis = axis_from_subjects(vec![ReadinessSubject {
             id: "one".into(),
+            scope_id: repository_scope(),
             required_level: ReadinessLevel::Traceable,
             ready: false,
             blockers: vec!["a".into(), "b".into()],
@@ -1313,68 +1379,71 @@ mod tests {
     }
 
     #[test]
-    fn current_public_router_target_has_a_canonical_plan() {
-        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .and_then(std::path::Path::parent)
-            .expect("workspace root")
-            .to_path_buf();
-        let workspace = SpecWorkspace::load(root).expect("workspace");
-        let index = workspace.index().expect("index");
-        let (reference, target) = index
-            .bindings
-            .iter()
-            .flat_map(|(binding, value)| {
-                value.targets.iter().map(move |target| {
-                    (
-                        BoundTargetRef {
-                            binding: binding.clone(),
-                            target_id: target.id.clone(),
-                        },
-                        target,
-                    )
+    fn scoped_readiness_requires_matching_scope_identity() {
+        let axis = axis_from_subjects(vec![ReadinessSubject {
+            id: "public".into(),
+            scope_id: public_entrypoints_scope().into(),
+            required_level: ReadinessLevel::Seedable,
+            ready: true,
+            blockers: vec![],
+        }]);
+        assert!(scoped_axis_is_ready(
+            &axis,
+            public_entrypoints_scope(),
+            ReadinessLevel::Seedable
+        ));
+        assert!(!scoped_axis_is_ready(
+            &axis,
+            "typo-anything",
+            ReadinessLevel::Seedable
+        ));
+    }
+
+    fn current_public_entrypoint_blockers() -> &'static Vec<String> {
+        static BLOCKERS: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+        BLOCKERS.get_or_init(|| {
+            let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .parent()
+                .and_then(std::path::Path::parent)
+                .expect("workspace root")
+                .to_path_buf();
+            let workspace = SpecWorkspace::load(root).expect("workspace");
+            let index = workspace.index().expect("index");
+            let active = index
+                .artifact_units
+                .iter()
+                .filter(|unit| {
+                    matches!(
+                        unit.reachability,
+                        syu_inventory::ArtifactReachability::Active
+                    ) && unit.exposure != syu_inventory::ArtifactExposure::Support
                 })
+                .collect::<Vec<_>>();
+            public_entrypoint_subjects(
+                &workspace,
+                &index,
+                &active,
+                "readiness-test",
+                ReadinessLevel::Seedable,
+            )
+            .into_iter()
+            .filter(|subject| !subject.ready || !subject.blockers.is_empty())
+            .flat_map(|subject| {
+                subject
+                    .blockers
+                    .into_iter()
+                    .map(move |blocker| format!("{}: {blocker}", subject.id))
             })
-            .find(|(_, target)| {
-                target.adapter == "javascript"
-                    && target.path.to_string_lossy() == "crates/syu-app-ui/assets/js/router.js"
-                    && matches!(&target.selector, syu_spec_model::Selector::Symbol { name } if name == "bindRouter")
-            })
-            .expect("public bindRouter target");
-        let criterion: SpecAnchor = "REQ-WORKBENCH-006#criterion.accessible-navigation"
-            .parse()
-            .unwrap();
-        let plan = canonical_public_target_plan(
-            &workspace,
-            &index,
-            &reference,
-            &criterion,
-            "readiness-test",
-        )
-        .expect("canonical public plan");
-        let blockers = plan
-            .slices
-            .iter()
-            .flat_map(|slice| slice.blockers.iter())
-            .chain(plan.diagnostics.iter())
-            .map(|diagnostic| format!("{}: {}", diagnostic.rule_id, diagnostic.message))
-            .collect::<Vec<_>>();
-        let budgets = plan
-            .slices
-            .iter()
-            .map(|slice| (slice.id.clone(), slice.budget.clone()))
-            .collect::<Vec<_>>();
-        let verification = plan
-            .slices
-            .iter()
-            .flat_map(|slice| slice.verification_targets.iter())
-            .map(|target| target.reference.to_string())
-            .collect::<Vec<_>>();
+            .collect()
+        })
+    }
+
+    #[test]
+    fn all_current_public_entrypoints_have_exact_governance_and_canonical_plans() {
+        let blockers = current_public_entrypoint_blockers();
         assert!(
-            matches!(plan.status, PlanStatus::Ready),
-            "status={:?}, budgets={budgets:?}, verification={verification:?}, blockers={blockers:?}",
-            plan.status,
+            blockers.is_empty(),
+            "public entrypoint blockers: {blockers:?}",
         );
-        let _ = target;
     }
 }

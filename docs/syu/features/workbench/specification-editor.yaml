@@ -1,0 +1,108 @@
+schema: syu/spec/v1
+kind: features
+namespace: workbench
+category: Workbench implementation
+features:
+- id: FEAT-WORKBENCH-SPEC-EDITOR-001
+  title: Workbench specification editor
+  summary: Preview and apply structured specification and configuration edits transactionally.
+  status: implemented
+  bindings:
+  - id: editor
+    role: implementation
+    facet: editor
+    responsibility: Apply validated structured edits through the Workbench transaction boundary.
+    targets:
+    - id: specification-apply
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: api_specification_apply
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-003#criterion.transactional-spec-edit
+    - id: config-apply
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: api_config_apply
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-004#criterion.transactional-config-edit
+    - id: specification-candidates
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: api_specification_candidates
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-007#criterion.guided-specification-selection
+    - id: specification-candidate-preview
+      adapter: rust
+      path: crates/syu-workbench-server/src/lib.rs
+      selector:
+        kind: symbol
+        name: api_specification_candidate_preview
+      claims:
+      - kind: satisfies
+        criterion: REQ-WORKBENCH-007#criterion.guided-specification-selection
+    owns:
+    - id: spec-model-module
+      adapter: rust
+      path: crates/syu-spec-model/src/lib.rs
+      selector:
+        kind: module
+        name: lib
+    - id: app-ui-components-module
+      adapter: rust
+      path: crates/syu-app-ui/src/components.rs
+      selector:
+        kind: module
+        name: components
+    - id: app-ui-components-file
+      adapter: rust
+      path: crates/syu-app-ui/src/components.rs
+      selector:
+        kind: file
+    - id: app-ui-document-module
+      adapter: rust
+      path: crates/syu-app-ui/src/document.rs
+      selector:
+        kind: module
+        name: document
+    - id: app-ui-document-file
+      adapter: rust
+      path: crates/syu-app-ui/src/document.rs
+      selector:
+        kind: file
+    - id: app-ui-lib-module
+      adapter: rust
+      path: crates/syu-app-ui/src/lib.rs
+      selector:
+        kind: module
+        name: lib
+    - id: app-ui-pages-module
+      adapter: rust
+      path: crates/syu-app-ui/src/pages.rs
+      selector:
+        kind: module
+        name: pages
+    - id: app-ui-pages-file
+      adapter: rust
+      path: crates/syu-app-ui/src/pages.rs
+      selector:
+        kind: file
+    - id: app-ui-shell-module
+      adapter: rust
+      path: crates/syu-app-ui/src/shell.rs
+      selector:
+        kind: module
+        name: shell
+    - id: app-ui-shell-file
+      adapter: rust
+      path: crates/syu-app-ui/src/shell.rs
+      selector:
+        kind: file

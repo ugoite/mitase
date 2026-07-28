@@ -52,8 +52,18 @@ case "$mode" in
         range="$empty_tree..$to_ref"
         git ls-tree -r --name-only -z "$to_ref" >"$paths_file"
       else
-        range="$from_ref..$to_ref"
-        git diff --name-only -z "$from_ref" "$to_ref" >"$paths_file"
+        # A branch may merge origin/main before it is pushed. Comparing it to
+        # its stale remote tip would then treat main's already-governed files
+        # as new branch changes. The repository's change-validation baseline
+        # is origin/main, so use that merge-base whenever it is available.
+        if git rev-parse --verify --quiet origin/main >/dev/null; then
+          baseline="$(git merge-base "$to_ref" origin/main)"
+          range="$baseline..$to_ref"
+          git diff --name-only -z "$baseline" "$to_ref" >"$paths_file"
+        else
+          range="$from_ref..$to_ref"
+          git diff --name-only -z "$from_ref" "$to_ref" >"$paths_file"
+        fi
       fi
       while IFS= read -r -d '' path; do
         paths+=("$path")
