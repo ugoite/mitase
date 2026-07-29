@@ -5,13 +5,13 @@ category: Syu functional units
 features:
   - id: FEAT-PLANNER-001
     title: Canonical planning
-    summary: Generate deterministic bounded execution slices from exact work seeds.
+    summary: Generate deterministic bounded execution slices from exact work seeds, including approved Add and Remove target lifecycles.
     status: implemented
     bindings:
       - id: implementation
         role: implementation
         facet: planner
-        responsibility: Generate deterministic bounded work slices.
+        responsibility: Generate deterministic bounded work slices with lifecycle-aware execution and ownership bases.
         targets:
           - id: canonical-plan
             adapter: rust
@@ -26,6 +26,13 @@ features:
                 criterion: REQ-CAPABILITY-002#criterion.coherent-cross-language
               - kind: satisfies
                 criterion: REQ-CAPABILITY-002#criterion.generated-source
+          - id: lifecycle-plan
+            adapter: rust
+            path: crates/syu-planner/src/lib.rs
+            selector: { kind: symbol, name: declared_target_plan }
+            claims:
+              - kind: satisfies
+                criterion: REQ-WORK-001#criterion.exact-slice
 
   - id: FEAT-CONTEXT-001
     title: Context export
@@ -99,13 +106,13 @@ features:
 
   - id: FEAT-RESULT-VALIDATION-001
     title: Result validation
-    summary: Validate verification receipts, post-state, and explicit completion evidence against a plan.
+    summary: Validate verification receipts, lifecycle post-state, and explicit completion evidence against a plan.
     status: implemented
     bindings:
       - id: implementation
         role: implementation
         facet: result-validation
-        responsibility: Validate canonical receipts and post-state closure.
+        responsibility: Validate canonical receipts, target lifecycle proofs, and post-state closure.
         targets:
           - id: receipt-validation
             adapter: rust
@@ -121,6 +128,13 @@ features:
             claims:
               - kind: satisfies
                 criterion: REQ-WORK-001#criterion.completion-evidence
+          - id: lifecycle-proofs
+            adapter: rust
+            path: crates/syu-validation/src/lib.rs
+            selector: { kind: symbol, name: target_lifecycle_proofs }
+            claims:
+              - kind: satisfies
+                criterion: REQ-CAPABILITY-001#criterion.receipt-validation
 
   - id: FEAT-CLI-001
     title: CLI orchestration

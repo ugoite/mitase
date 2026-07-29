@@ -4,6 +4,7 @@ use anyhow::{Context, Result, bail};
 use std::{
     collections::BTreeMap,
     fs,
+    io::Write,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -14,7 +15,8 @@ use syu_work_model::{
     AGENT_EVENT_SCHEMA, AGENT_PATCH_SCHEMA, AGENT_RUN_SCHEMA, AgentBlocker, AgentContextPack,
     AgentEvent, AgentEventKind, AgentPatch, AgentPatchRecord, AgentPatchStatus, AgentRun,
     AgentRunStatus, AgentTargetChange, AgentTargetDigest, AgentTargetWrite, ContextPack,
-    PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus, TargetAccessMode, TargetTransition,
+    PLAN_APPROVAL_SCHEMA, PlanApproval, PlanStatus, TargetAccessMode, TargetLifecycle,
+    TargetTransition,
 };
 use syu_workspace::SpecWorkspace;
 
@@ -52,9 +54,13 @@ pub fn start_run(
         bail!("selected slice has no editable targets");
     }
     if slice.editable_targets.iter().any(|target| {
-        target.access != TargetAccessMode::Editable || target.transition != TargetTransition::Modify
+        target.access != TargetAccessMode::Editable
+            || !matches!(
+                target.transition,
+                TargetTransition::Add | TargetTransition::Modify | TargetTransition::Remove
+            )
     }) {
-        bail!("agent v1 only supports existing editable modify targets");
+        bail!("agent only supports editable Add, Modify, and Remove targets");
     }
     let context = syu_planner::export_context(&plan, slice_id, workspace, &index, &revision)?;
     let agent_context = agent_context(&plan.canonical_digest, slice_id, &context, slice)?;
@@ -251,12 +257,15 @@ fn apply_patch_inner(
         .find(|slice| slice.id == run.slice_id)
         .ok_or_else(|| anyhow::anyhow!("agent slice is absent from its approved plan"))?;
     let mut replacements: BTreeMap<PathBuf, Vec<Replacement>> = BTreeMap::new();
+    let mut appends: BTreeMap<PathBuf, Vec<String>> = BTreeMap::new();
+    let mut created_files: BTreeMap<PathBuf, Vec<u8>> = BTreeMap::new();
+    let mut removed_files: BTreeMap<PathBuf, Vec<u8>> = BTreeMap::new();
+    let mut seen_targets = std::collections::BTreeSet::new();
     for write in &patch.writes {
-        let AgentTargetWrite::Replace {
-            target,
-            expected_excerpt_hash,
-            content,
-        } = write;
+        let target = write_target(write);
+        if !seen_targets.insert(target.clone()) {
+            bail!("patch contains more than one write for target {target}");
+        }
         let planned = slice
             .editable_targets
             .iter()
@@ -264,44 +273,118 @@ fn apply_patch_inner(
             .ok_or_else(|| {
                 anyhow::anyhow!("target {target} is outside the selected editable slice")
             })?;
-        if planned.access != TargetAccessMode::Editable
-            || planned.transition != TargetTransition::Modify
-        {
-            bail!("target {target} is not an editable modify target");
+        if planned.access != TargetAccessMode::Editable {
+            bail!("target {target} is not editable");
         }
-        let declared = index.target(target).ok_or_else(|| {
-            anyhow::anyhow!("target {target} is not present in the current inventory")
-        })?;
-        let resolved = syu_workspace::resolve_target_in_workspace(workspace, declared)?;
-        if resolved.content_hash != planned.content_hash
-            || resolved.excerpt_hash != planned.excerpt_hash
-        {
-            bail!("target {target} is stale; refresh the plan before writing");
-        }
-        if resolved.excerpt_hash != *expected_excerpt_hash {
-            bail!("target {target} excerpt digest does not match the current workspace");
-        }
-        let added_bytes = content.len().saturating_sub(resolved.excerpt.len());
-        if planned.budget_bytes > 0 && added_bytes > planned.budget_bytes {
-            bail!("target {target} exceeds its added-byte budget");
-        }
-        if let Some(limit) = planned.budget_lines {
-            let old_lines = resolved.excerpt.lines().count();
-            let new_lines = content.lines().count();
-            if new_lines.saturating_sub(old_lines) > limit {
-                bail!("target {target} exceeds its added-line budget");
+        match write {
+            AgentTargetWrite::Replace {
+                expected_excerpt_hash,
+                content,
+                ..
+            } => {
+                ensure_transition(target, planned, TargetTransition::Modify, false)?;
+                let resolved = current_target(workspace, &index, target)?;
+                ensure_current_snapshot(target, planned, &resolved)?;
+                if resolved.excerpt_hash != *expected_excerpt_hash {
+                    bail!("target {target} excerpt digest does not match the current workspace");
+                }
+                ensure_replacement_budget(target, planned, &resolved.excerpt, content)?;
+                let path = checked_target_path(workspace, planned)?;
+                replacements.entry(path).or_default().push(Replacement {
+                    start: resolved.byte_start,
+                    end: resolved.byte_end,
+                    old: resolved.excerpt,
+                    new: content.clone(),
+                    target: target.clone(),
+                });
+            }
+            AgentTargetWrite::AddToFile {
+                expected_path_hash,
+                content,
+                ..
+            } => {
+                ensure_transition(target, planned, TargetTransition::Add, false)?;
+                ensure_target_absent(workspace, &index, target)?;
+                let approved = planned.container_content_hash.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "target {target} has no approved existing-file digest; create it as a new file instead"
+                    )
+                })?;
+                if approved != expected_path_hash {
+                    bail!("target {target} insertion digest does not match the approved plan");
+                }
+                let path = checked_target_path(workspace, planned)?;
+                let current = required_file_bytes(&path)?;
+                if hash_bytes(&current) != *approved {
+                    bail!(
+                        "target {target} containing file is stale; refresh the plan before writing"
+                    );
+                }
+                ensure_added_budget(target, planned, content)?;
+                appends.entry(path).or_default().push(content.clone());
+            }
+            AgentTargetWrite::CreateFile { content, .. } => {
+                ensure_transition(target, planned, TargetTransition::Add, true)?;
+                ensure_target_absent(workspace, &index, target)?;
+                if planned.container_content_hash.is_some() {
+                    bail!("target {target} is approved for insertion into an existing file");
+                }
+                let path = checked_target_path(workspace, planned)?;
+                if file_state(&path)?.is_some() {
+                    bail!("target {target} now exists; refresh the plan before creating it");
+                }
+                ensure_added_budget(target, planned, content)?;
+                if created_files
+                    .insert(path, content.as_bytes().to_vec())
+                    .is_some()
+                {
+                    bail!("patch creates the same file more than once");
+                }
+            }
+            AgentTargetWrite::Remove {
+                expected_excerpt_hash,
+                ..
+            } => {
+                ensure_transition(target, planned, TargetTransition::Remove, false)?;
+                let resolved = current_target(workspace, &index, target)?;
+                ensure_current_snapshot(target, planned, &resolved)?;
+                if resolved.excerpt_hash != *expected_excerpt_hash {
+                    bail!("target {target} excerpt digest does not match the current workspace");
+                }
+                let path = checked_target_path(workspace, planned)?;
+                replacements.entry(path).or_default().push(Replacement {
+                    start: resolved.byte_start,
+                    end: resolved.byte_end,
+                    old: resolved.excerpt,
+                    new: String::new(),
+                    target: target.clone(),
+                });
+            }
+            AgentTargetWrite::RemoveFile {
+                expected_content_hash,
+                ..
+            } => {
+                ensure_transition(target, planned, TargetTransition::Remove, true)?;
+                let resolved = current_target(workspace, &index, target)?;
+                ensure_current_snapshot(target, planned, &resolved)?;
+                if resolved.content_hash != *expected_content_hash {
+                    bail!("target {target} content digest does not match the current workspace");
+                }
+                let path = checked_target_path(workspace, planned)?;
+                let bytes = required_file_bytes(&path)?;
+                removed_files.insert(path, bytes);
             }
         }
-        let path = workspace.root.join(&resolved.path);
-        replacements.entry(path).or_default().push(Replacement {
-            start: resolved.byte_start,
-            end: resolved.byte_end,
-            old: resolved.excerpt,
-            new: content.clone(),
-            target: target.clone(),
-        });
     }
-    let mut files = Vec::new();
+    for path in created_files.keys().chain(removed_files.keys()) {
+        if replacements.contains_key(path) || appends.contains_key(path) {
+            bail!(
+                "patch combines a file lifecycle operation with another write in {}",
+                path.display()
+            );
+        }
+    }
+    let mut files = BTreeMap::new();
     for (path, mut changes) in replacements {
         changes.sort_by_key(|change| std::cmp::Reverse(change.start));
         for pair in changes.windows(2) {
@@ -324,37 +407,66 @@ fn apply_patch_inner(
             }
             updated.replace_range(change.start..change.end, &change.new);
         }
-        files.push((path, original.into_bytes(), updated.into_bytes()));
+        for addition in appends.remove(&path).unwrap_or_default() {
+            updated.push_str(&addition);
+        }
+        files.insert(
+            path,
+            FileMutation {
+                original: Some(original.into_bytes()),
+                updated: Some(updated.into_bytes()),
+            },
+        );
     }
-    let old_files = write_files_atomically(&files)?;
+    for (path, additions) in appends {
+        let original = required_file_bytes(&path)?;
+        let mut updated = String::from_utf8(original.clone())?;
+        for addition in additions {
+            updated.push_str(&addition);
+        }
+        files.insert(
+            path,
+            FileMutation {
+                original: Some(original),
+                updated: Some(updated.into_bytes()),
+            },
+        );
+    }
+    for (path, content) in created_files {
+        files.insert(
+            path,
+            FileMutation {
+                original: None,
+                updated: Some(content),
+            },
+        );
+    }
+    for (path, original) in removed_files {
+        files.insert(
+            path,
+            FileMutation {
+                original: Some(original),
+                updated: None,
+            },
+        );
+    }
+    let old_files = apply_file_mutations(&files)?;
     let post_write = (|| {
         let candidate = SpecWorkspace::load(&workspace.root)?;
         let candidate_index = candidate.index()?;
-        validate_post_patch(&index, &candidate, &candidate_index, slice, patch)?;
-        candidate.try_fingerprint()
+        if let Some(error) = &candidate_index.inventory_error {
+            bail!("patch produced an invalid inventory: {error}");
+        }
+        let changes = validate_post_patch(&index, &candidate, &candidate_index, slice, patch)?;
+        Ok((candidate.try_fingerprint()?, changes))
     })();
-    let after_fingerprint = match post_write {
-        Ok(fingerprint) => fingerprint,
+    let (after_fingerprint, changes) = match post_write {
+        Ok(applied) => applied,
         Err(error) => {
             restore_files(&old_files)?;
             return Err(error);
         }
     };
-    let changes = patch
-        .writes
-        .iter()
-        .map(|write| match write {
-            AgentTargetWrite::Replace {
-                target,
-                expected_excerpt_hash,
-                content,
-            } => AgentTargetChange {
-                reference: target.clone(),
-                before_excerpt_hash: expected_excerpt_hash.clone(),
-                after_excerpt_hash: hash_bytes(content.as_bytes()),
-            },
-        })
-        .collect();
     Ok(PatchApplied {
         after_fingerprint,
         changes,
@@ -405,10 +517,11 @@ fn validate_post_patch(
     after: &syu_workspace::SpecIndex,
     slice: &syu_work_model::ExecutionSlice,
     patch: &AgentPatch,
-) -> Result<()> {
+) -> Result<Vec<AgentTargetChange>> {
     let mut allowed_identities = std::collections::BTreeSet::new();
+    let mut proofs = Vec::new();
     for write in &patch.writes {
-        let AgentTargetWrite::Replace { target, .. } = write;
+        let target = write_target(write);
         let planned = slice
             .editable_targets
             .iter()
@@ -416,40 +529,57 @@ fn validate_post_patch(
             .ok_or_else(|| {
                 anyhow::anyhow!("target {target} is outside the selected editable slice")
             })?;
-        let before_target = before
-            .target(target)
-            .ok_or_else(|| anyhow::anyhow!("target {target} disappeared from the inventory"))?;
-        let after_target = after
-            .target(target)
-            .ok_or_else(|| anyhow::anyhow!("target {target} is absent after applying the patch"))?;
-        let before_resolved = syu_workspace::resolve_target_in_workspace(candidate, after_target)?;
-        if before_resolved.content_hash == planned.content_hash {
-            bail!("target {target} was not modified by the patch");
-        }
-        let before_identity = before.target_to_artifact.get(target).ok_or_else(|| {
-            anyhow::anyhow!("target {target} has no inventory identity before the patch")
-        })?;
-        let after_identity = after.target_to_artifact.get(target).ok_or_else(|| {
-            anyhow::anyhow!("target {target} no longer resolves to an inventory identity")
-        })?;
-        if before_identity != after_identity {
-            bail!("target {target} no longer resolves to the same inventory identity");
-        }
-        allowed_identities.insert(before_identity.clone());
-        for unit in &before.artifact_units {
-            if unit.path == before_target.path
-                && matches!(unit.kind, syu_inventory::ArtifactUnitKind::File)
-            {
-                allowed_identities.insert(unit.identity.clone());
+        let before_identity = before.target_to_artifact.get(target);
+        let after_identity = after.target_to_artifact.get(target);
+        let after_resolved = after.target(target).and_then(|declared| {
+            syu_workspace::resolve_target_in_workspace(candidate, declared).ok()
+        });
+        match planned.transition {
+            TargetTransition::Modify => {
+                if let (Some(before_identity), Some(after_identity)) =
+                    (before_identity, after_identity)
+                    && before_identity != after_identity
+                {
+                    bail!("target {target} no longer resolves to the same inventory identity");
+                }
+                let resolved = after_resolved.as_ref().ok_or_else(|| {
+                    anyhow::anyhow!("target {target} no longer resolves after applying the patch")
+                })?;
+                if resolved.content_hash == planned.content_hash {
+                    bail!("target {target} was not modified by the patch");
+                }
+            }
+            TargetTransition::Add => {
+                if before_identity.is_some() {
+                    bail!("target {target} already existed before the patch");
+                }
+                if after_resolved.is_none() {
+                    bail!("target {target} was not created by the patch");
+                }
+            }
+            TargetTransition::Remove => {
+                if after_resolved.is_some() {
+                    bail!("target {target} remains after the patch");
+                }
+            }
+            TargetTransition::RunOnly | TargetTransition::Readonly => {
+                bail!("target {target} is not an editable lifecycle transition");
             }
         }
-        for unit in &after.artifact_units {
-            if unit.path == after_target.path
-                && matches!(unit.kind, syu_inventory::ArtifactUnitKind::File)
-            {
-                allowed_identities.insert(unit.identity.clone());
+        if is_file_target(planned) {
+            allow_path_identities(&mut allowed_identities, before, &planned.resolved_path);
+            allow_path_identities(&mut allowed_identities, after, &planned.resolved_path);
+        } else {
+            if let Some(identity) = before_identity {
+                allowed_identities.insert(identity.clone());
             }
+            if let Some(identity) = after_identity {
+                allowed_identities.insert(identity.clone());
+            }
+            allow_file_identity(&mut allowed_identities, before, &planned.resolved_path);
+            allow_file_identity(&mut allowed_identities, after, &planned.resolved_path);
         }
+        proofs.push(lifecycle_proof(candidate, after, planned)?);
     }
     let before_units = before
         .artifact_units
@@ -469,7 +599,213 @@ fn validate_post_patch(
             bail!("patch added, removed, or changed unapproved inventory unit {identity}");
         }
     }
+    Ok(proofs)
+}
+
+fn write_target(write: &AgentTargetWrite) -> &BoundTargetRef {
+    match write {
+        AgentTargetWrite::Replace { target, .. }
+        | AgentTargetWrite::AddToFile { target, .. }
+        | AgentTargetWrite::CreateFile { target, .. }
+        | AgentTargetWrite::Remove { target, .. }
+        | AgentTargetWrite::RemoveFile { target, .. } => target,
+    }
+}
+
+fn ensure_transition(
+    target: &BoundTargetRef,
+    planned: &syu_work_model::PlannedTarget,
+    transition: TargetTransition,
+    requires_file: bool,
+) -> Result<()> {
+    if planned.transition != transition
+        || (transition == TargetTransition::Add
+            && planned.lifecycle != TargetLifecycle::EnsurePresent)
+        || (transition == TargetTransition::Remove
+            && planned.lifecycle != TargetLifecycle::EnsureAbsent)
+        || (transition == TargetTransition::Modify && planned.lifecycle != TargetLifecycle::Stable)
+    {
+        bail!("target {target} does not permit this lifecycle write");
+    }
+    if is_file_target(planned) != requires_file {
+        bail!("target {target} requires a different scoped file operation");
+    }
     Ok(())
+}
+
+fn is_file_target(target: &syu_work_model::PlannedTarget) -> bool {
+    target.resolved_selector.description == "file" && target.resolved_selector.symbols.is_empty()
+}
+
+fn current_target(
+    workspace: &SpecWorkspace,
+    index: &syu_workspace::SpecIndex,
+    target: &BoundTargetRef,
+) -> Result<syu_workspace::ResolvedTarget> {
+    let declared = index.target(target).ok_or_else(|| {
+        anyhow::anyhow!("target {target} is not present in the current inventory")
+    })?;
+    syu_workspace::resolve_target_in_workspace(workspace, declared)
+        .with_context(|| format!("target {target} is absent or cannot be resolved"))
+}
+
+fn ensure_target_absent(
+    workspace: &SpecWorkspace,
+    index: &syu_workspace::SpecIndex,
+    target: &BoundTargetRef,
+) -> Result<()> {
+    if index.target_to_artifact.contains_key(target) {
+        bail!("target {target} now exists; refresh the plan before writing");
+    }
+    let declared = index.target(target).ok_or_else(|| {
+        anyhow::anyhow!("target {target} is not present in the approved inventory")
+    })?;
+    if syu_workspace::resolve_target_in_workspace(workspace, declared).is_ok() {
+        bail!("target {target} now exists; refresh the plan before writing");
+    }
+    Ok(())
+}
+
+fn ensure_current_snapshot(
+    target: &BoundTargetRef,
+    planned: &syu_work_model::PlannedTarget,
+    resolved: &syu_workspace::ResolvedTarget,
+) -> Result<()> {
+    if resolved.content_hash != planned.content_hash
+        || resolved.excerpt_hash != planned.excerpt_hash
+    {
+        bail!("target {target} is stale; refresh the plan before writing");
+    }
+    Ok(())
+}
+
+fn ensure_replacement_budget(
+    target: &BoundTargetRef,
+    planned: &syu_work_model::PlannedTarget,
+    old: &str,
+    content: &str,
+) -> Result<()> {
+    let added_bytes = content.len().saturating_sub(old.len());
+    if planned.budget_bytes > 0 && added_bytes > planned.budget_bytes {
+        bail!("target {target} exceeds its added-byte budget");
+    }
+    if let Some(limit) = planned.budget_lines
+        && content.lines().count().saturating_sub(old.lines().count()) > limit
+    {
+        bail!("target {target} exceeds its added-line budget");
+    }
+    Ok(())
+}
+
+fn ensure_added_budget(
+    target: &BoundTargetRef,
+    planned: &syu_work_model::PlannedTarget,
+    content: &str,
+) -> Result<()> {
+    if content.len() > planned.budget_bytes {
+        bail!("target {target} exceeds its added-byte budget");
+    }
+    if let Some(limit) = planned.budget_lines
+        && content.lines().count() > limit
+    {
+        bail!("target {target} exceeds its added-line budget");
+    }
+    Ok(())
+}
+
+fn checked_target_path(
+    workspace: &SpecWorkspace,
+    planned: &syu_work_model::PlannedTarget,
+) -> Result<PathBuf> {
+    let root = workspace.root.canonicalize()?;
+    let path = workspace.root.join(&planned.resolved_path);
+    let ancestor = path
+        .ancestors()
+        .find(|candidate| candidate.exists())
+        .ok_or_else(|| anyhow::anyhow!("target path has no existing workspace ancestor"))?;
+    if !ancestor.canonicalize()?.starts_with(&root) {
+        bail!("target path escapes the workspace through a symlink");
+    }
+    Ok(path)
+}
+
+fn file_state(path: &Path) -> Result<Option<Vec<u8>>> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => {
+            if !metadata.file_type().is_file() {
+                bail!("target path is not a regular file: {}", path.display());
+            }
+            Ok(Some(fs::read(path)?))
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn required_file_bytes(path: &Path) -> Result<Vec<u8>> {
+    file_state(path)?.ok_or_else(|| anyhow::anyhow!("target file is missing: {}", path.display()))
+}
+
+fn allow_file_identity(
+    allowed: &mut std::collections::BTreeSet<String>,
+    index: &syu_workspace::SpecIndex,
+    path: &str,
+) {
+    for unit in &index.artifact_units {
+        if unit.path.to_string_lossy() == path
+            && matches!(unit.kind, syu_inventory::ArtifactUnitKind::File)
+        {
+            allowed.insert(unit.identity.clone());
+        }
+    }
+}
+
+fn allow_path_identities(
+    allowed: &mut std::collections::BTreeSet<String>,
+    index: &syu_workspace::SpecIndex,
+    path: &str,
+) {
+    allowed.extend(
+        index
+            .artifact_units
+            .iter()
+            .filter(|unit| unit.path.to_string_lossy() == path)
+            .map(|unit| unit.identity.clone()),
+    );
+}
+
+fn lifecycle_proof(
+    workspace: &SpecWorkspace,
+    index: &syu_workspace::SpecIndex,
+    planned: &syu_work_model::PlannedTarget,
+) -> Result<AgentTargetChange> {
+    let current = index
+        .target(&planned.reference)
+        .and_then(|declared| syu_workspace::resolve_target_in_workspace(workspace, declared).ok());
+    match (planned.lifecycle, current) {
+        (TargetLifecycle::EnsureAbsent, None) => Ok(AgentTargetChange {
+            reference: planned.reference.clone(),
+            transition: planned.transition,
+            lifecycle: planned.lifecycle,
+            before_content_hash: planned.content_hash.clone(),
+            after_content_hash: String::new(),
+            before_excerpt_hash: planned.excerpt_hash.clone(),
+            after_excerpt_hash: String::new(),
+        }),
+        (TargetLifecycle::EnsureAbsent, Some(_)) => {
+            bail!("target {} remains after the patch", planned.reference)
+        }
+        (_, Some(resolved)) => Ok(AgentTargetChange {
+            reference: planned.reference.clone(),
+            transition: planned.transition,
+            lifecycle: planned.lifecycle,
+            before_content_hash: planned.content_hash.clone(),
+            after_content_hash: resolved.content_hash,
+            before_excerpt_hash: planned.excerpt_hash.clone(),
+            after_excerpt_hash: resolved.excerpt_hash,
+        }),
+        (_, None) => bail!("target {} is absent after the patch", planned.reference),
+    }
 }
 
 fn agent_context(
@@ -486,8 +822,10 @@ fn agent_context(
                 path: target.resolved_path.clone(),
                 access: target.access,
                 transition: target.transition,
+                lifecycle: target.lifecycle,
                 content_hash: target.content_hash.clone(),
                 excerpt_hash: target.excerpt_hash.clone(),
+                container_content_hash: target.container_content_hash.clone(),
                 line_start: target.line_start,
                 line_end: target.line_end,
                 budget_bytes: target.budget_bytes,
@@ -519,48 +857,92 @@ struct Replacement {
 struct PatchApplied {
     after_fingerprint: String,
     changes: Vec<AgentTargetChange>,
-    old_files: Vec<(PathBuf, Vec<u8>)>,
+    old_files: Vec<FileRollback>,
 }
 
-fn write_files_atomically(
-    files: &[(PathBuf, Vec<u8>, Vec<u8>)],
-) -> Result<Vec<(PathBuf, Vec<u8>)>> {
-    let mut temporary = Vec::new();
-    for (path, original, content) in files {
-        let parent = path.parent().context("target path has no parent")?;
-        let mut file = tempfile::NamedTempFile::new_in(parent)?;
-        std::io::Write::write_all(&mut file, content)?;
-        file.as_file().sync_all()?;
-        temporary.push((path.clone(), original.clone(), file));
+struct FileMutation {
+    original: Option<Vec<u8>>,
+    updated: Option<Vec<u8>>,
+}
+
+struct FileRollback {
+    path: PathBuf,
+    original: Option<Vec<u8>>,
+}
+
+fn apply_file_mutations(files: &BTreeMap<PathBuf, FileMutation>) -> Result<Vec<FileRollback>> {
+    for (path, mutation) in files {
+        if file_state(path)? != mutation.original {
+            bail!(
+                "target {} changed while the patch was being prepared",
+                path.display()
+            );
+        }
     }
+    let mut temporary = Vec::new();
+    for (path, mutation) in files {
+        let Some(content) = &mutation.updated else {
+            continue;
+        };
+        let parent = path.parent().context("target path has no parent")?;
+        fs::create_dir_all(parent)?;
+        let mut file = tempfile::NamedTempFile::new_in(parent)?;
+        file.write_all(content)?;
+        file.as_file().sync_all()?;
+        temporary.push((path.clone(), file));
+    }
+    let mut temporary = temporary.into_iter().collect::<BTreeMap<_, _>>();
     let mut applied = Vec::new();
-    for (path, expected, file) in temporary {
-        let old = fs::read(&path)?;
-        if old != expected {
-            let temp_path = file.into_temp_path();
-            let _ = temp_path.close();
+    for (path, mutation) in files {
+        if file_state(path)? != mutation.original {
             restore_files(&applied)?;
             bail!(
                 "target {} changed while the patch was being applied",
                 path.display()
             );
         }
-        let temp_path = file.into_temp_path();
-        if let Err(error) = fs::rename(&temp_path, &path) {
-            for (old_path, old) in applied {
-                let _ = fs::write(old_path, old);
+        let result = match (&mutation.original, &mutation.updated) {
+            (Some(_), Some(_)) => {
+                let file = temporary
+                    .remove(path)
+                    .expect("existing writes have a prepared temporary file");
+                fs::rename(file.into_temp_path(), path).map_err(Into::into)
             }
-            let _ = temp_path.close();
-            return Err(error.into());
+            (None, Some(_)) => temporary
+                .remove(path)
+                .expect("new files have a prepared temporary file")
+                .persist_noclobber(path)
+                .map(|_| ())
+                .map_err(|error| error.error.into()),
+            (Some(_), None) => fs::remove_file(path).map_err(Into::into),
+            (None, None) => unreachable!("every patch mutation changes a file"),
+        };
+        if let Err(error) = result {
+            restore_files(&applied)?;
+            return Err(error);
         }
-        applied.push((path, old));
+        applied.push(FileRollback {
+            path: path.clone(),
+            original: mutation.original.clone(),
+        });
     }
     Ok(applied)
 }
 
-fn restore_files(files: &[(PathBuf, Vec<u8>)]) -> Result<()> {
-    for (path, content) in files {
-        fs::write(path, content)?;
+fn restore_files(files: &[FileRollback]) -> Result<()> {
+    for file in files.iter().rev() {
+        match &file.original {
+            Some(content) => {
+                let parent = file.path.parent().context("target path has no parent")?;
+                fs::create_dir_all(parent)?;
+                fs::write(&file.path, content)?;
+            }
+            None => match fs::remove_file(&file.path) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            },
+        }
     }
     Ok(())
 }

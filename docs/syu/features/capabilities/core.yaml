@@ -5,7 +5,7 @@ category: Syu functional units
 features:
   - id: FEAT-SPEC-MODEL-001
     title: Spec model
-    summary: Parse and validate the canonical syu/spec/v1 model.
+    summary: Parse and validate the canonical syu/spec/v1 model, including explicit present and absent target lifecycle declarations.
     status: implemented
     bindings:
       - id: implementation
@@ -23,6 +23,11 @@ features:
             path: crates/syu-spec-model/src/lib.rs
             selector: { kind: symbol, name: format_sha256 }
             claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.digest-format }]
+          - id: target-lifecycle
+            adapter: rust
+            path: crates/syu-spec-model/src/lib.rs
+            selector: { kind: symbol, name: ArtifactTargetLifecycle }
+            claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.spec-model }]
 
   - id: FEAT-PROJECT-CONFIG-001
     title: Project configuration

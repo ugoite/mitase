@@ -3,7 +3,10 @@ use anyhow::{Context, Result, bail};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+};
 use syu_diagnostics::Diagnostic;
 use syu_project_model::ValidationPreset;
 use syu_spec_model::format_sha256;
@@ -93,7 +96,7 @@ pub fn suggest_targets(
     for (binding_anchor, binding) in &index.bindings {
         if matches!(
             index.item_status.get(&binding_anchor.item),
-            Some(ItemStatus::Deprecated)
+            Some(ItemStatus::Deprecated | ItemStatus::Planned)
         ) {
             continue;
         }
@@ -139,14 +142,12 @@ pub fn suggest_targets(
                     "The target participates in a contract guaranteeing this criterion.".into(),
                 );
             }
-            if target.claims.iter().any(|claim| {
-                claim_anchor(claim).is_some_and(|anchor| anchor.item == criterion.item)
-            }) && !directly_claims
-            {
-                score += 25;
-                evidence.push(
-                    "The target claims another anchor in the same specification item.".into(),
-                );
+            // Suggestions may rank evidence, but executable scope starts from
+            // an exact relation to the selected criterion. A shared
+            // requirement item or coincidental terminology is not authority
+            // to propose another criterion's target.
+            if !directly_claims && !enforces_governing_rule && !supports_contract {
+                continue;
             }
             let searchable = format!(
                 "{} {} {} {} {}",
@@ -246,17 +247,6 @@ pub fn suggest_targets(
         split_recommendation,
         suggestion_token,
     })
-}
-
-fn claim_anchor(claim: &TargetClaim) -> Option<&SpecAnchor> {
-    match claim {
-        TargetClaim::Satisfies { criterion } | TargetClaim::Verifies { criterion, .. } => {
-            Some(criterion)
-        }
-        TargetClaim::Documents { anchor } | TargetClaim::Evidences { anchor } => Some(anchor),
-        TargetClaim::Enforces { rule } => Some(rule),
-        TargetClaim::GeneratedFrom { .. } | TargetClaim::Exposes { .. } => None,
-    }
 }
 
 fn transition_for_role(role: BindingRole) -> TargetTransition {
@@ -1768,6 +1758,7 @@ fn apply_changed_artifact_overrides(
             },
             content_hash: resolved.content_hash,
             excerpt_hash: resolved.excerpt_hash,
+            container_content_hash: None,
             adapter: unit.adapter.clone(),
             facet: binding.facet.clone(),
             role: binding.role,
@@ -2550,6 +2541,7 @@ fn one_target(
                 },
                 content_hash: r.content_hash,
                 excerpt_hash: r.excerpt_hash,
+                container_content_hash: None,
                 adapter: target.adapter.clone(),
                 facet: binding.facet.clone(),
                 role: binding.role,
@@ -2588,10 +2580,13 @@ fn one_target(
                     reference,
                     binding,
                     target,
-                    options.policy,
-                    options.reason,
-                    add_budget_bytes,
-                    add_budget_lines,
+                    DeclaredTargetPlanOptions {
+                        policy: options.policy,
+                        reason: options.reason,
+                        add_budget_bytes,
+                        add_budget_lines,
+                        container_content_hash: approved_container_hash(workspace, target),
+                    },
                 )]
             }
             TargetTransition::Remove => {
@@ -2622,18 +2617,15 @@ fn declared_target_plan(
     reference: &BoundTargetRef,
     binding: &ArtifactBinding,
     target: &syu_spec_model::ArtifactTarget,
-    policy: TargetPolicy,
-    reason: &str,
-    add_budget_bytes: usize,
-    add_budget_lines: usize,
+    options: DeclaredTargetPlanOptions<'_>,
 ) -> PlannedTarget {
     PlannedTarget {
         reference: reference.clone(),
         verification_claim: None,
         artifact_identity: None,
-        transition: policy.transition,
-        lifecycle: policy.lifecycle,
-        access: policy.access,
+        transition: options.policy.transition,
+        lifecycle: options.policy.lifecycle,
+        access: options.policy.access,
         resolved_path: target.path.to_string_lossy().into_owned(),
         resolved_selector: ResolvedSelector {
             description: declared_selector(&target.selector).0,
@@ -2641,6 +2633,7 @@ fn declared_target_plan(
         },
         content_hash: String::new(),
         excerpt_hash: String::new(),
+        container_content_hash: options.container_content_hash,
         adapter: target.adapter.clone(),
         facet: binding.facet.clone(),
         role: binding.role,
@@ -2648,10 +2641,34 @@ fn declared_target_plan(
         byte_end: 0,
         line_start: 0,
         line_end: 0,
-        budget_bytes: add_budget_bytes,
-        budget_lines: Some(add_budget_lines),
-        reason: reason.into(),
+        budget_bytes: options.add_budget_bytes,
+        budget_lines: Some(options.add_budget_lines),
+        reason: options.reason.into(),
     }
+}
+
+struct DeclaredTargetPlanOptions<'a> {
+    policy: TargetPolicy,
+    reason: &'a str,
+    add_budget_bytes: usize,
+    add_budget_lines: usize,
+    container_content_hash: Option<String>,
+}
+
+/// A missing semantic target is added to the file state that was reviewed
+/// with the plan. A missing file deliberately has no container snapshot: the
+/// agent must create it with a no-overwrite precondition instead.
+fn approved_container_hash(
+    workspace: &SpecWorkspace,
+    target: &syu_spec_model::ArtifactTarget,
+) -> Option<String> {
+    if matches!(target.selector, Selector::File) {
+        return None;
+    }
+    let bytes = fs::read(workspace.root.join(target.path.as_path())).ok()?;
+    let mut hash = Sha256::new();
+    hash.update(bytes);
+    Some(format_sha256(hash.finalize()))
 }
 
 fn declared_selector(selector: &Selector) -> (String, Vec<String>) {
@@ -2751,8 +2768,20 @@ fn basis(
         spec_fingerprint: workspace
             .spec_fingerprint()
             .expect("plan basis requires readable specification inputs"),
-        ownership_fingerprint: index.ownership_fingerprint(),
-        readonly_fingerprint: readonly_targets_fingerprint(slices),
+        ownership_fingerprint: index.ownership_fingerprint_excluding(
+            &slices
+                .iter()
+                .flat_map(|slice| slice.editable_targets.iter())
+                .filter(|target| {
+                    matches!(
+                        target.transition,
+                        TargetTransition::Add | TargetTransition::Remove
+                    )
+                })
+                .map(|target| target.reference.clone())
+                .collect(),
+        ),
+        readonly_fingerprint: readonly_targets_fingerprint_for_execution(slices),
     }
 }
 fn plan_id(r: &WorkRequest, revision: &str) -> String {
@@ -3235,6 +3264,7 @@ fn build_context_pack(
                                 selector: syu_spec_model::Selector::Marker {
                                     value: "crate".into(),
                                 },
+                                lifecycle: syu_spec_model::ArtifactTargetLifecycle::Present,
                                 claims: vec![],
                             },
                         )

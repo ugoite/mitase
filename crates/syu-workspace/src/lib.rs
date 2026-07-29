@@ -659,6 +659,17 @@ impl SpecIndex {
     /// relationships while allowing an editable target's implementation body
     /// to change after planning.
     pub fn ownership_fingerprint(&self) -> String {
+        self.ownership_fingerprint_excluding(&BTreeSet::new())
+    }
+
+    /// Fingerprint the ownership basis while excluding exact lifecycle targets
+    /// that an approved plan is allowed to create or remove. This keeps those
+    /// transitions from invalidating their own approval without concealing
+    /// ownership changes anywhere else in the workspace.
+    pub fn ownership_fingerprint_excluding(
+        &self,
+        lifecycle_targets: &BTreeSet<BoundTargetRef>,
+    ) -> String {
         let mut hash = Sha256::new();
         for (anchor, binding) in &self.bindings {
             hash.update(anchor.to_string().as_bytes());
@@ -667,12 +678,29 @@ impl SpecIndex {
             );
         }
         for (target, identity) in &self.target_to_artifact {
+            if lifecycle_targets.contains(target) {
+                continue;
+            }
             hash.update(target.to_string().as_bytes());
             hash.update(identity.as_bytes());
         }
         for (identity, owners) in &self.artifact_owners {
+            let retained = owners
+                .iter()
+                .filter(|owner| {
+                    owner.target_id.as_ref().is_none_or(|target_id| {
+                        !lifecycle_targets.contains(&BoundTargetRef {
+                            binding: owner.binding.clone(),
+                            target_id: target_id.clone(),
+                        })
+                    })
+                })
+                .collect::<Vec<_>>();
+            if retained.is_empty() {
+                continue;
+            }
             hash.update(identity.as_bytes());
-            for owner in owners {
+            for owner in retained {
                 hash.update(owner.binding.to_string().as_bytes());
                 hash.update(owner.scope_id.to_string().as_bytes());
                 if let Some(target_id) = &owner.target_id {
@@ -1108,6 +1136,7 @@ pub fn resolve_artifact_unit(
         adapter: unit.adapter.clone(),
         path: unit.path.clone(),
         selector,
+        lifecycle: syu_spec_model::ArtifactTargetLifecycle::Present,
         claims: vec![],
     };
     resolve_target_in_workspace(workspace, &target)
@@ -1664,6 +1693,7 @@ mod tests {
             adapter: "rust".into(),
             path: RepoPath::new("src/doc.md").expect("path"),
             selector,
+            lifecycle: syu_spec_model::ArtifactTargetLifecycle::Present,
             claims: vec![],
         }
     }
@@ -1762,6 +1792,7 @@ mod tests {
                 method: "GET".into(),
                 path: "/users/~current".into(),
             },
+            lifecycle: syu_spec_model::ArtifactTargetLifecycle::Present,
             claims: vec![],
         };
         let resolved = resolve_target(tempdir.path(), &target).expect("exact JSON operation");

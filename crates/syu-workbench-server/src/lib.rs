@@ -5803,8 +5803,11 @@ mod tests {
             )
             .expect("modify unrelated fixture source");
         } else {
-            fs::write(&source, "pub fn behavior() -> bool {\n    1 == 1\n}\n")
-                .expect("modify editable fixture source");
+            fs::write(
+                &source,
+                "mod removable;\n\npub fn behavior() -> bool {\n    1 == 1\n}\n",
+            )
+            .expect("modify editable fixture source");
         }
 
         let response = json_mutation(
@@ -6136,6 +6139,437 @@ mod tests {
         )
         .expect("subsequent request projection");
         assert!(projection["work"]["agent"].is_null());
+    }
+
+    async fn start_lifecycle_agent(
+        app: &Router,
+        target_id: &str,
+        transition: syu_work_model::TargetTransition,
+    ) -> (
+        MutationBasis,
+        String,
+        String,
+        AgentRun,
+        syu_work_model::AgentTargetDigest,
+    ) {
+        let (basis, csrf, _) = projection_and_basis(app).await;
+        let (feature, binding, criterion) = match target_id {
+            "behavior" => ("FEAT-FIXTURE-001", "implementation", "behavior"),
+            "added-symbol" => ("FEAT-LIFECYCLE-ADD-SYMBOL-001", "lifecycle", "add-symbol"),
+            "added-file" => ("FEAT-LIFECYCLE-ADD-FILE-001", "lifecycle", "add-file"),
+            "removed-symbol" => (
+                "FEAT-LIFECYCLE-REMOVE-SYMBOL-001",
+                "lifecycle",
+                "remove-symbol",
+            ),
+            "removed-file" => ("FEAT-LIFECYCLE-REMOVE-FILE-001", "lifecycle", "remove-file"),
+            _ => unreachable!("declared lifecycle case"),
+        };
+        let target: BoundTargetRef = format!("{feature}#binding.{binding}/target.{target_id}")
+            .parse()
+            .expect("lifecycle target");
+        let operation = match transition {
+            syu_work_model::TargetTransition::Add => syu_work_model::WorkOperation::Add,
+            syu_work_model::TargetTransition::Modify => syu_work_model::WorkOperation::Modify,
+            syu_work_model::TargetTransition::Remove => syu_work_model::WorkOperation::Remove,
+            syu_work_model::TargetTransition::RunOnly
+            | syu_work_model::TargetTransition::Readonly => unreachable!("editable lifecycle"),
+        };
+        let constraints = if transition == syu_work_model::TargetTransition::Add {
+            syu_work_model::WorkConstraints {
+                max_added_bytes_per_target: Some(512),
+                max_added_lines_per_target: Some(32),
+                ..Default::default()
+            }
+        } else {
+            Default::default()
+        };
+        let request = WorkRequest {
+            schema: syu_work_model::WORK_REQUEST_SCHEMA.into(),
+            id: format!("WORK-FIXTURE-LIFECYCLE-{target_id}"),
+            summary: format!("apply {transition:?} to {target_id}"),
+            operation,
+            seeds: vec![],
+            constraints,
+            requested_targets: vec![syu_work_model::RequestedTarget {
+                reference: target.clone(),
+                criterion: Some(
+                    format!("REQ-FIXTURE-001#criterion.{criterion}")
+                        .parse()
+                        .unwrap(),
+                ),
+                transition,
+            }],
+        };
+        let response = json_mutation(
+            app,
+            Method::POST,
+            "/api/work/request",
+            &csrf,
+            &WorkRequestCommand {
+                basis: basis.clone(),
+                request,
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = json_mutation(app, Method::POST, "/api/work/plan", &csrf, &basis).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let plan: WorkPlan =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("lifecycle plan");
+        assert_eq!(plan.status, syu_work_model::PlanStatus::Ready, "{plan:?}");
+        let slice = plan
+            .slices
+            .iter()
+            .find(|slice| {
+                slice
+                    .editable_targets
+                    .iter()
+                    .any(|planned| planned.reference == target)
+            })
+            .expect("lifecycle slice")
+            .id
+            .clone();
+        let response = json_mutation(
+            app,
+            Method::POST,
+            "/api/work/context",
+            &csrf,
+            &SliceCommand {
+                basis: basis.clone(),
+                slice_id: slice.clone(),
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = json_mutation(app, Method::POST, "/api/work/validate", &csrf, &basis).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = json_mutation(app, Method::POST, "/api/work/approve", &csrf, &basis).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = json_mutation(
+            app,
+            Method::POST,
+            "/api/work/agent/start",
+            &csrf,
+            &AgentStartCommand {
+                basis: basis.clone(),
+                slice_id: slice.clone(),
+            },
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let run: AgentRun =
+            serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                .expect("lifecycle agent run");
+        let digest = run
+            .context
+            .editable_targets
+            .iter()
+            .find(|planned| planned.reference == target)
+            .expect("lifecycle target digest")
+            .clone();
+        (basis, csrf, slice, run, digest)
+    }
+
+    #[tokio::test]
+    async fn workbench_agent_applies_all_approved_lifecycle_writes() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let cases = [
+            (
+                "behavior",
+                syu_work_model::TargetTransition::Modify,
+                "modify existing symbol",
+            ),
+            (
+                "added-symbol",
+                syu_work_model::TargetTransition::Add,
+                "add symbol to existing file",
+            ),
+            (
+                "added-file",
+                syu_work_model::TargetTransition::Add,
+                "add new file",
+            ),
+            (
+                "removed-symbol",
+                syu_work_model::TargetTransition::Remove,
+                "remove symbol",
+            ),
+            (
+                "removed-file",
+                syu_work_model::TargetTransition::Remove,
+                "remove file",
+            ),
+        ];
+        for (target_id, transition, description) in cases {
+            let temp = tempfile::tempdir().expect("lifecycle fixture tempdir");
+            copy_fixture_tree(&fixture, temp.path());
+            initialize_fixture_git(temp.path());
+            let app = WorkbenchServer::new(temp.path().to_path_buf()).router();
+            let (basis, csrf, slice, run, target) =
+                start_lifecycle_agent(&app, target_id, transition).await;
+            assert_eq!(target.transition, transition, "{description}");
+            let write = match target_id {
+                "behavior" => syu_work_model::AgentTargetWrite::Replace {
+                    target: target.reference.clone(),
+                    expected_excerpt_hash: target.excerpt_hash.clone(),
+                    content: "pub fn behavior() -> bool {\n    1 == 1\n}".into(),
+                },
+                "added-symbol" => syu_work_model::AgentTargetWrite::AddToFile {
+                    target: target.reference.clone(),
+                    expected_path_hash: target
+                        .container_content_hash
+                        .clone()
+                        .expect("approved insertion digest"),
+                    content: "pub fn added_behavior() -> bool {\n    true\n}\n".into(),
+                },
+                "added-file" => syu_work_model::AgentTargetWrite::CreateFile {
+                    target: target.reference.clone(),
+                    content: "pub fn added_file() {}\n".into(),
+                },
+                "removed-symbol" => syu_work_model::AgentTargetWrite::Remove {
+                    target: target.reference.clone(),
+                    expected_excerpt_hash: target.excerpt_hash.clone(),
+                },
+                "removed-file" => syu_work_model::AgentTargetWrite::RemoveFile {
+                    target: target.reference.clone(),
+                    expected_content_hash: target.content_hash.clone(),
+                },
+                _ => unreachable!("declared lifecycle case"),
+            };
+            let response = json_mutation(
+                &app,
+                Method::POST,
+                "/api/work/agent/patch",
+                &csrf,
+                &AgentPatchCommand {
+                    basis,
+                    run_id: run.run_id.clone(),
+                    patch: AgentPatch {
+                        schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
+                        run_id: run.run_id.clone(),
+                        expected_workspace_fingerprint: run
+                            .context
+                            .context
+                            .basis
+                            .workspace_fingerprint
+                            .clone(),
+                        writes: vec![write],
+                    },
+                },
+            )
+            .await;
+            let status = response.status();
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            assert_eq!(
+                status,
+                StatusCode::OK,
+                "{description}: {}",
+                String::from_utf8_lossy(&body)
+            );
+            let patch: syu_work_model::AgentPatchRecord =
+                serde_json::from_slice(&body).expect("lifecycle patch record");
+            assert_eq!(patch.changes.len(), 1, "{description}");
+            assert_eq!(patch.changes[0].transition, transition, "{description}");
+            assert_eq!(
+                patch.changes[0].lifecycle, target.lifecycle,
+                "{description}"
+            );
+            let (post_basis, post_csrf, _) = projection_and_basis(&app).await;
+            let response = json_mutation(
+                &app,
+                Method::POST,
+                "/api/work/agent/verify",
+                &post_csrf,
+                &SliceCommand {
+                    basis: post_basis.clone(),
+                    slice_id: slice.clone(),
+                },
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::OK, "{description}");
+            let attempt: CompletionAttempt =
+                serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                    .expect("lifecycle completion attempt");
+            assert_eq!(
+                attempt.report.status,
+                syu_work_model::CompletionStatus::Complete,
+                "{description}: {attempt:?}"
+            );
+            let receipt = attempt.receipt.expect("lifecycle receipt");
+            assert_eq!(receipt.lifecycle_proofs.len(), 1, "{description}");
+            assert_eq!(receipt.lifecycle_proofs[0].reference, target.reference);
+            assert_eq!(receipt.lifecycle_proofs[0].transition, transition);
+
+            let response = json_mutation(
+                &app,
+                Method::POST,
+                "/api/work/finalize/preview",
+                &post_csrf,
+                &FinalizeCommand {
+                    basis: post_basis.clone(),
+                    attempt_id: attempt.attempt_id.clone(),
+                    preview_token: None,
+                },
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::OK, "{description}");
+            let preview: FinalizationPreview =
+                serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                    .expect("lifecycle finalization preview");
+            assert_eq!(preview.status, syu_work_model::CompletionStatus::Complete);
+            let response = json_mutation(
+                &app,
+                Method::POST,
+                "/api/work/finalize/apply",
+                &post_csrf,
+                &FinalizeCommand {
+                    basis: post_basis,
+                    attempt_id: attempt.attempt_id,
+                    preview_token: Some(preview.preview_token),
+                },
+            )
+            .await;
+            let status = response.status();
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            assert_eq!(
+                status,
+                StatusCode::OK,
+                "{description}: {}",
+                String::from_utf8_lossy(&body)
+            );
+            let finalization: syu_work_model::FinalizationReceipt =
+                serde_json::from_slice(&body).expect("lifecycle finalization receipt");
+            assert_eq!(finalization.lifecycle_proofs.len(), 1, "{description}");
+            assert_eq!(finalization.lifecycle_proofs[0].reference, target.reference);
+        }
+    }
+
+    #[tokio::test]
+    async fn workbench_agent_rejects_stale_or_newly_existing_lifecycle_targets() {
+        let _workspace_lock = workspace_test_lock().await;
+        let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .expect("workspace root")
+            .join("fixtures/v1/valid-workbench-flow");
+        let cases = [
+            (
+                "added-symbol",
+                syu_work_model::TargetTransition::Add,
+                "src/lib.rs",
+                "\npub fn added_behavior() -> bool { true }\n",
+                "now exists",
+            ),
+            (
+                "added-file",
+                syu_work_model::TargetTransition::Add,
+                "src/added.rs",
+                "pub fn preexisting_file() {}\n",
+                "now exists",
+            ),
+            (
+                "removed-symbol",
+                syu_work_model::TargetTransition::Remove,
+                "src/removable.rs",
+                "pub fn remove_me() { panic!(\"changed\") }\n",
+                "is stale",
+            ),
+            (
+                "removed-file",
+                syu_work_model::TargetTransition::Remove,
+                "remove-file.txt",
+                "changed before approved removal\n",
+                "is stale",
+            ),
+        ];
+        for (target_id, transition, path, changed_content, expected_blocker) in cases {
+            let temp = tempfile::tempdir().expect("lifecycle precondition fixture tempdir");
+            copy_fixture_tree(&fixture, temp.path());
+            initialize_fixture_git(temp.path());
+            let app = WorkbenchServer::new(temp.path().to_path_buf()).router();
+            let (_, _, _, run, target) = start_lifecycle_agent(&app, target_id, transition).await;
+
+            let changed_path = temp.path().join(path);
+            if target_id == "added-symbol" {
+                let mut content = fs::read_to_string(&changed_path).expect("existing source");
+                content.push_str(changed_content);
+                fs::write(&changed_path, content).expect("create approved target early");
+            } else {
+                fs::write(&changed_path, changed_content).expect("change lifecycle target");
+            }
+            let (basis, csrf, _) = projection_and_basis(&app).await;
+            let write = match target_id {
+                "added-symbol" => syu_work_model::AgentTargetWrite::AddToFile {
+                    target: target.reference.clone(),
+                    expected_path_hash: target
+                        .container_content_hash
+                        .clone()
+                        .expect("approved insertion digest"),
+                    content: "pub fn added_behavior() -> bool { true }\n".into(),
+                },
+                "added-file" => syu_work_model::AgentTargetWrite::CreateFile {
+                    target: target.reference.clone(),
+                    content: "pub fn approved_file() {}\n".into(),
+                },
+                "removed-symbol" => syu_work_model::AgentTargetWrite::Remove {
+                    target: target.reference.clone(),
+                    expected_excerpt_hash: target.excerpt_hash.clone(),
+                },
+                "removed-file" => syu_work_model::AgentTargetWrite::RemoveFile {
+                    target: target.reference.clone(),
+                    expected_content_hash: target.content_hash.clone(),
+                },
+                _ => unreachable!("declared lifecycle precondition case"),
+            };
+            let response = json_mutation(
+                &app,
+                Method::POST,
+                "/api/work/agent/patch",
+                &csrf,
+                &AgentPatchCommand {
+                    basis,
+                    run_id: run.run_id.clone(),
+                    patch: AgentPatch {
+                        schema: syu_work_model::AGENT_PATCH_SCHEMA.into(),
+                        run_id: run.run_id,
+                        expected_workspace_fingerprint: run
+                            .context
+                            .context
+                            .basis
+                            .workspace_fingerprint
+                            .clone(),
+                        writes: vec![write],
+                    },
+                },
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::CONFLICT, "{target_id}");
+            let body = response.into_body().collect().await.unwrap().to_bytes();
+            assert!(
+                String::from_utf8_lossy(&body).contains(expected_blocker),
+                "{target_id}: {}",
+                String::from_utf8_lossy(&body)
+            );
+            assert_eq!(
+                fs::read_to_string(&changed_path).expect("rejected write preserves target"),
+                if target_id == "added-symbol" {
+                    let mut expected =
+                        fs::read_to_string(fixture.join(path)).expect("fixture source");
+                    expected.push_str(changed_content);
+                    expected
+                } else {
+                    changed_content.to_string()
+                },
+                "{target_id}"
+            );
+        }
     }
 
     #[tokio::test]
@@ -7150,7 +7584,7 @@ mod tests {
 
         fs::write(
             temp.path().join("src/lib.rs"),
-            "pub fn behavior() -> bool {\n    let result = true;\n    result\n}\n",
+            "mod removable;\n\npub fn behavior() -> bool {\n    let result = true;\n    result\n}\n",
         )
         .expect("apply editable fixture change");
         let response = json_mutation(

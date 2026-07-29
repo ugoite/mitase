@@ -270,6 +270,11 @@ impl DeliveryStore {
             post_workspace_fingerprint,
             promoted_items: preview.promoted_items.clone(),
             changed_files: preview.changed_files.clone(),
+            lifecycle_proofs: attempt
+                .receipt
+                .as_ref()
+                .map(|receipt| receipt.lifecycle_proofs.clone())
+                .unwrap_or_default(),
             completed_at: now_nanos().to_string(),
         };
         match self.append_finalization(&receipt) {
@@ -751,6 +756,7 @@ mod tests {
             started_at: "0".into(),
             completed_at: "1".into(),
             executions: vec![],
+            lifecycle_proofs: vec![],
         };
         let mut attempt = CompletionAttempt {
             schema: COMPLETION_ATTEMPT_SCHEMA.into(),
