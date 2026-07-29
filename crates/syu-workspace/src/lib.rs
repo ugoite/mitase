@@ -1490,7 +1490,10 @@ fn openapi_operation_span(
         .scan(0usize, |offset, line| {
             let start = *offset;
             *offset += line.len();
-            Some((start, line.trim_end_matches('\n')))
+            // Git checkouts on Windows may present this YAML with CRLF line
+            // endings. Keep the key parser independent of the line ending so
+            // the same OpenAPI selector resolves on every runner.
+            Some((start, line.trim_end_matches(['\r', '\n'])))
         })
         .collect::<Vec<_>>();
     let paths_index = lines
@@ -1725,6 +1728,13 @@ mod tests {
         let (_, _, _, _, excerpt) = openapi_operation_span(openapi, "get", "/items").unwrap();
         assert!(excerpt.contains("get:"));
         assert!(!excerpt.contains("post:"));
+    }
+
+    #[test]
+    fn openapi_operation_span_accepts_crlf_line_endings() {
+        let openapi = "paths:\r\n  /sessions:\r\n    post:\r\n      responses: {}\r\n";
+        let (_, _, _, _, excerpt) = openapi_operation_span(openapi, "post", "/sessions").unwrap();
+        assert!(excerpt.contains("post:"));
     }
 
     #[test]
