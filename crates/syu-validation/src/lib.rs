@@ -28,8 +28,8 @@ use syu_work_model::{
     work_plan_digest,
 };
 use syu_workspace::{
-    AnchorValue, ResolvedTarget, SpecIndex, SpecWorkspace, resolve_indexed_target,
-    resolve_target_in_workspace, selector_supports_editable,
+    AnchorValue, ResolvedTarget, SpecIndex, SpecWorkspace, resolve_artifact_unit,
+    resolve_indexed_target, resolve_target_in_workspace, selector_supports_editable,
 };
 use tempfile::TempDir;
 
@@ -560,7 +560,12 @@ fn current_readonly_fingerprint(
             .verification_targets
             .iter_mut()
             .chain(slice.readonly_context.iter_mut())
-            .filter(|target| target.access != TargetAccessMode::Editable)
+            .filter(|target| {
+                matches!(
+                    target.access,
+                    TargetAccessMode::Readonly | TargetAccessMode::RunOnly
+                )
+            })
         {
             match resolve_planned_target_for_workspace(workspace, index, target) {
                 Some(resolved) => {
@@ -594,33 +599,7 @@ fn resolve_planned_target_for_workspace(
             .artifact_units
             .iter()
             .find(|unit| &unit.identity == identity)?;
-        if !matches!(
-            unit.reachability,
-            syu_inventory::ArtifactReachability::Active
-        ) {
-            return None;
-        }
-        let bytes = workspace.read_bytes(unit.path.as_path()).ok()?;
-        let byte_start = unit.span.byte_start.min(bytes.len());
-        let byte_end = unit.span.byte_end.min(bytes.len()).max(byte_start);
-        let symbol = identity.rsplit("::").next().unwrap_or(identity).to_owned();
-        return Some(ResolvedTarget {
-            path: unit.path.as_path().to_path_buf(),
-            description: format!("changed semantic artifact {identity}"),
-            symbols: if matches!(unit.kind, syu_inventory::ArtifactUnitKind::File) {
-                vec![]
-            } else {
-                vec![symbol]
-            },
-            content_hash: unit.digest.clone(),
-            bytes: bytes.len(),
-            byte_start,
-            byte_end,
-            line_start: unit.span.line_start,
-            line_end: unit.span.line_end,
-            excerpt: String::from_utf8_lossy(&bytes[byte_start..byte_end]).into_owned(),
-            excerpt_hash: unit.digest.clone(),
-        });
+        return resolve_artifact_unit(workspace, unit).ok();
     }
     let declared = index.target(&target.reference)?;
     if let Some(identity) = index.target_to_artifact.get(&target.reference)
@@ -1662,6 +1641,7 @@ fn validate_changes(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         line_end: end.max(1),
                     },
                     digest: "deleted".into(),
+                    structural_digest: "deleted".into(),
                 },
                 false,
             ));
@@ -2898,29 +2878,59 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                         check_kind(ctx, out, target, expected, &path);
                     }
                 }
-                let generated_from = binding
-                    .targets
-                    .iter()
-                    .flat_map(|target| target.claims.iter())
-                    .filter_map(|claim| match claim {
-                        syu_spec_model::TargetClaim::GeneratedFrom { targets } => {
-                            Some(targets.as_slice())
-                        }
-                        _ => None,
-                    })
-                    .flatten()
-                    .collect::<Vec<_>>();
-                if binding.role == BindingRole::Generated && generated_from.is_empty() {
+                for target in &binding.targets {
+                    let generated_from = target
+                        .claims
+                        .iter()
+                        .filter_map(|claim| match claim {
+                            syu_spec_model::TargetClaim::GeneratedFrom { targets } => {
+                                Some(targets.as_slice())
+                            }
+                            _ => None,
+                        })
+                        .flatten()
+                        .collect::<Vec<_>>();
+                    if binding.role == BindingRole::Generated && generated_from.is_empty() {
+                        push(
+                            out,
+                            "SYU-GENERATED-001",
+                            format!(
+                                "generated target {} has no generated_from source",
+                                target.id
+                            ),
+                            &path,
+                            Some(anchor.clone()),
+                        );
+                    } else if binding.role == BindingRole::Generated {
+                        validate_generated_target(ctx, anchor, &generated_from, out, &path);
+                    } else if !generated_from.is_empty() {
+                        push(
+                            out,
+                            "SYU-GENERATED-001",
+                            format!(
+                                "non-generated target {} cannot declare generated_from sources",
+                                target.id
+                            ),
+                            &path,
+                            Some(anchor.clone()),
+                        );
+                    }
+                }
+                if binding.role == BindingRole::Generated
+                    && generated_binding_has_cycle(
+                        ctx,
+                        anchor,
+                        &mut BTreeSet::new(),
+                        &mut BTreeSet::new(),
+                    )
+                {
                     push(
                         out,
-                        "SYU-GENERATED-001",
-                        "generated binding has no generated_from target",
+                        "SYU-GENERATED-002",
+                        "generated binding contains a generated_from cycle",
                         &path,
                         Some(anchor.clone()),
                     );
-                }
-                if binding.role == BindingRole::Generated && !generated_from.is_empty() {
-                    validate_generated_binding(ctx, anchor, &generated_from, out, &path);
                 }
             }
             AnchorValue::Contract(contract) => {
@@ -3017,7 +3027,7 @@ fn validate_graph(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
     }
 }
 
-fn validate_generated_binding(
+fn validate_generated_target(
     ctx: &ValidationContext<'_>,
     anchor: &SpecAnchor,
     generated_from: &[&BoundTargetRef],
@@ -3054,15 +3064,6 @@ fn validate_generated_binding(
                 Some(anchor.clone()),
             );
         }
-    }
-    if generated_binding_has_cycle(ctx, anchor, &mut BTreeSet::new(), &mut BTreeSet::new()) {
-        push(
-            out,
-            "SYU-GENERATED-002",
-            "generated binding contains a generated_from cycle",
-            path,
-            Some(anchor.clone()),
-        );
     }
 }
 
@@ -3255,7 +3256,10 @@ fn validate_targets(ctx: &ValidationContext<'_>, out: &mut Vec<Diagnostic>) {
                 Selector::Operation { .. } => target.adapter == "openapi",
                 Selector::Heading { .. } => target.adapter == "markdown",
                 Selector::JsonPointer { .. } => {
-                    matches!(target.adapter.as_str(), "yaml" | "json" | "openapi")
+                    matches!(
+                        target.adapter.as_str(),
+                        "yaml" | "json" | "json-schema" | "openapi"
+                    )
                 }
                 Selector::Marker { .. } => true,
             };
@@ -3704,6 +3708,17 @@ fn validate_plan(ctx: &ValidationContext<'_>, plan: &WorkPlan, out: &mut Vec<Dia
                         && resolved.symbols == target.resolved_selector.symbols
                         && planned_target_metadata_matches(ctx, target) => {}
                 Some(resolved)
+                    if allow_post_state
+                        && target.lifecycle == TargetLifecycle::Stable
+                        && target.access == syu_work_model::TargetAccessMode::Generated
+                        && ctx.changed_files.is_some_and(|files| {
+                            generated_target_has_changed_source(ctx, slice, target, files)
+                        })
+                        && resolved.path.to_string_lossy() == target.resolved_path
+                        && resolved.description == target.resolved_selector.description
+                        && resolved.symbols == target.resolved_selector.symbols
+                        && planned_target_metadata_matches(ctx, target) => {}
+                Some(resolved)
                     if resolved.content_hash == target.content_hash
                         && resolved.excerpt_hash == target.excerpt_hash
                         && resolved.path.to_string_lossy() == target.resolved_path
@@ -3877,7 +3892,17 @@ fn validate_slice_scope(
         .verification_targets
         .iter()
         .filter(|target| target.access == syu_work_model::TargetAccessMode::RunOnly)
-        .chain(slice.readonly_context.iter())
+        .chain(
+            slice
+                .readonly_context
+                .iter()
+                .filter(|target| target.access != syu_work_model::TargetAccessMode::Generated),
+        )
+        .collect::<Vec<_>>();
+    let generated_targets = slice
+        .readonly_context
+        .iter()
+        .filter(|target| target.access == syu_work_model::TargetAccessMode::Generated)
         .collect::<Vec<_>>();
     for file in files {
         let Some(path) = file.new_path.as_ref().or(file.old_path.as_ref()) else {
@@ -3895,7 +3920,15 @@ fn validate_slice_scope(
             let editable_hit = editable_targets
                 .iter()
                 .any(|target| editable_target_matches_hunkless_change(ctx, target, file));
-            if readonly_hit {
+            let generated_hit = generated_targets.iter().any(|target| {
+                target_matches_changed_file_path(ctx, target, file)
+                    && generated_target_has_changed_source(ctx, slice, target, files)
+            });
+            let unbacked_generated_hit = generated_targets
+                .iter()
+                .any(|target| target_matches_changed_file_path(ctx, target, file))
+                && !generated_hit;
+            if readonly_hit || unbacked_generated_hit {
                 push(
                     out,
                     "SYU-WORK-005",
@@ -3903,7 +3936,7 @@ fn validate_slice_scope(
                     path.to_string_lossy(),
                     None,
                 );
-            } else if !editable_hit {
+            } else if !editable_hit && !generated_hit {
                 push(
                     out,
                     "SYU-WORK-006",
@@ -3920,7 +3953,15 @@ fn validate_slice_scope(
                 .iter()
                 .any(|target| target_overlaps_change(ctx, target, file, &hunk));
             let editable_hit = change_is_within_editable_scope(ctx, &editable_targets, file, &hunk);
-            if readonly_hit {
+            let generated_hit = generated_targets.iter().any(|target| {
+                target_overlaps_change(ctx, target, file, &hunk)
+                    && generated_target_has_changed_source(ctx, slice, target, files)
+            });
+            let unbacked_generated_hit = generated_targets
+                .iter()
+                .any(|target| target_overlaps_change(ctx, target, file, &hunk))
+                && !generated_hit;
+            if readonly_hit || unbacked_generated_hit {
                 push(
                     out,
                     "SYU-WORK-005",
@@ -3928,7 +3969,7 @@ fn validate_slice_scope(
                     path.to_string_lossy(),
                     None,
                 );
-            } else if !editable_hit {
+            } else if !editable_hit && !generated_hit {
                 push(
                     out,
                     "SYU-WORK-006",
@@ -3939,6 +3980,29 @@ fn validate_slice_scope(
             }
         }
     }
+}
+
+fn generated_target_has_changed_source(
+    ctx: &ValidationContext<'_>,
+    slice: &ExecutionSlice,
+    generated: &syu_work_model::PlannedTarget,
+    files: &[ChangedFile],
+) -> bool {
+    ctx.index
+        .generated_from
+        .get(&generated.reference)
+        .into_iter()
+        .flatten()
+        .any(|source| {
+            slice
+                .editable_targets
+                .iter()
+                .find(|target| {
+                    target.reference == *source
+                        && target.access == syu_work_model::TargetAccessMode::Editable
+                })
+                .is_some_and(|target| planned_target_changed(ctx, target, files))
+        })
 }
 
 fn target_matches_changed_file_path(
@@ -4074,15 +4138,21 @@ fn target_line_range(
     changed_path: &RepoPath,
 ) -> Option<(usize, usize)> {
     if let Some(identity) = &target.artifact_identity {
+        // The plan is the pre-state authority.  The identity can be absent or
+        // moved after a rename/deletion, so never use the post-state inventory
+        // to judge an old-side hunk.
+        if matches!(side, TargetRangeSide::Old) {
+            return (target.resolved_path == changed_path.to_string_lossy())
+                .then_some((target.line_start, target.line_end));
+        }
         let unit = ctx
             .index
             .artifact_units
             .iter()
             .find(|unit| &unit.identity == identity)?;
-        if unit.path.to_string_lossy() != changed_path.to_string_lossy() {
-            return None;
-        }
-        return Some((unit.span.line_start, unit.span.line_end));
+        let resolved = resolve_artifact_unit(ctx.workspace, unit).ok()?;
+        return (resolved.path.to_string_lossy() == changed_path.to_string_lossy())
+            .then_some((resolved.line_start, resolved.line_end));
     }
     let current = if matches!(
         target.lifecycle,
@@ -4133,33 +4203,7 @@ fn resolve_planned_target(
             .artifact_units
             .iter()
             .find(|unit| &unit.identity == identity)?;
-        if !matches!(
-            unit.reachability,
-            syu_inventory::ArtifactReachability::Active
-        ) {
-            return None;
-        }
-        let bytes = ctx.workspace.read_bytes(unit.path.as_path()).ok()?;
-        let byte_start = unit.span.byte_start.min(bytes.len());
-        let byte_end = unit.span.byte_end.min(bytes.len()).max(byte_start);
-        let symbol = identity.rsplit("::").next().unwrap_or(identity).to_owned();
-        return Some(ResolvedTarget {
-            path: unit.path.as_path().to_path_buf(),
-            description: format!("changed semantic artifact {identity}"),
-            symbols: if matches!(unit.kind, syu_inventory::ArtifactUnitKind::File) {
-                vec![]
-            } else {
-                vec![symbol]
-            },
-            content_hash: unit.digest.clone(),
-            bytes: bytes.len(),
-            byte_start,
-            byte_end,
-            line_start: unit.span.line_start,
-            line_end: unit.span.line_end,
-            excerpt: String::from_utf8_lossy(&bytes[byte_start..byte_end]).into_owned(),
-            excerpt_hash: unit.digest.clone(),
-        });
+        return resolve_artifact_unit(ctx.workspace, unit).ok();
     }
     let declared = ctx.index.target(&target.reference)?;
     if let Some(identity) = ctx.index.target_to_artifact.get(&target.reference)
@@ -4751,7 +4795,7 @@ requirements:
     }
 
     #[test]
-    fn ungoverned_public_function_fails_the_public_entrypoint_probe() {
+    fn language_public_symbol_without_an_exposes_claim_is_not_a_public_contract_subject() {
         let tempdir = tempdir().unwrap();
         copy_dir(&workbench_fixture_root(), tempdir.path());
         fs::write(
@@ -4773,10 +4817,15 @@ requirements:
         let index = workspace.index().unwrap();
         let report =
             evaluate_readiness(&workspace, &index, "readiness-test", false).expect("readiness");
-        assert!(report.seedability.blockers.iter().any(|blocker| {
-            blocker.contains("ungoverned")
-                && blocker.contains("requires exactly one exact ArtifactTarget owner")
-        }));
+        assert!(
+            !report
+                .seedability
+                .blockers
+                .iter()
+                .any(|blocker| blocker.contains("ungoverned")),
+            "language visibility alone must not invent a public contract: {:?}",
+            report.seedability.blockers
+        );
     }
 
     #[test]
@@ -4962,6 +5011,96 @@ requirements:
     }
 
     #[test]
+    fn json_openapi_operation_scope_rejects_a_sibling_operation_change() {
+        let tempdir = tempdir().expect("tempdir");
+        fs::write(
+            tempdir.path().join("openapi.json"),
+            concat!(
+                "{\n",
+                "  \"paths\": {\n",
+                "    \"/users\": {\n",
+                "      \"get\": { \"summary\": \"read\" },\n",
+                "      \"post\": { \"summary\": \"create\" }\n",
+                "    }\n",
+                "  }\n",
+                "}\n",
+            ),
+        )
+        .expect("openapi");
+        let declared = syu_spec_model::ArtifactTarget {
+            id: "get-users".into(),
+            adapter: "openapi".into(),
+            path: RepoPath::new("openapi.json").unwrap(),
+            selector: Selector::Operation {
+                method: "get".into(),
+                path: "/users".into(),
+            },
+            claims: vec![],
+        };
+        let resolved = syu_workspace::resolve_target(tempdir.path(), &declared).unwrap();
+        let (_fixture, workspace, index) = load_fixture_workspace();
+        let ctx = ValidationContext {
+            config: &workspace.config,
+            workspace: &workspace,
+            index: &index,
+            changed_files: None,
+            reported_changed_files: None,
+            work_plan: None,
+            selected_slice: None,
+            plan_mode: PlanValidationMode::PostState,
+            preset: workspace.config.validation.preset,
+            revision: None,
+            change_base_revision: None,
+        };
+        let mut target = sample_target(
+            "openapi.json",
+            "operation GET /users",
+            (resolved.line_start, resolved.line_end),
+        );
+        target.adapter = "openapi".into();
+        target.lifecycle = TargetLifecycle::Stable;
+        let sibling_change = ChangedFile {
+            status: ChangeStatus::Modified,
+            old_path: Some(RepoPath::new("openapi.json").unwrap()),
+            new_path: Some(RepoPath::new("openapi.json").unwrap()),
+            hunks: vec![ChangedRange {
+                old_start: 5,
+                old_end: 5,
+                new_start: 5,
+                new_end: 5,
+            }],
+        };
+        assert!(!change_is_within_editable_scope(
+            &ctx,
+            &[&target],
+            &sibling_change,
+            &sibling_change.hunks[0],
+        ));
+        let slice = ExecutionSlice {
+            id: "json-openapi-scope".into(),
+            goal: "Change only GET /users".into(),
+            anchors: vec![],
+            editable_targets: vec![target],
+            verification_targets: vec![],
+            readonly_context: vec![],
+            acceptance: vec![],
+            contracts: vec![],
+            non_goals: vec![],
+            completion: vec![CompletionCheck::DiffWithinScope],
+            budget: Default::default(),
+            confidence: PlanConfidence::Exact,
+            blockers: vec![],
+        };
+        let mut diagnostics = Vec::new();
+        validate_slice_scope(&ctx, &[sibling_change], &slice, &mut diagnostics);
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.rule_id == "SYU-WORK-006")
+        );
+    }
+
+    #[test]
     fn generated_binding_without_source_is_rejected() {
         let tempdir = tempdir().expect("tempdir");
         write_generated_binding_workspace(tempdir.path());
@@ -4985,6 +5124,151 @@ requirements:
                 .diagnostics
                 .iter()
                 .any(|diagnostic| diagnostic.rule_id == "SYU-GENERATED-001")
+        );
+    }
+
+    #[test]
+    fn every_generated_target_requires_its_own_exact_source_relation() {
+        let tempdir = tempdir().expect("tempdir");
+        write_generated_binding_workspace(tempdir.path());
+        fs::write(
+            tempdir.path().join("src/generated.rs"),
+            "pub fn source() {}\npub fn generated_a() {}\npub fn generated_b() {}\n",
+        )
+        .expect("artifacts");
+        fs::write(
+            tempdir.path().join("spec/feature.yaml"),
+            concat!(
+                "schema: syu/spec/v1\n",
+                "kind: features\n",
+                "namespace: sample\n",
+                "category: Sample\n",
+                "features:\n",
+                "  - id: FEAT-TEST-001\n",
+                "    title: Test\n",
+                "    summary: Test feature.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: source\n",
+                "        role: implementation\n",
+                "        facet: backend\n",
+                "        responsibility: Generate artifacts.\n",
+                "        targets:\n",
+                "          - { id: source, adapter: rust, path: src/generated.rs, selector: { kind: symbol, name: source }, claims: [] }\n",
+                "      - id: generated\n",
+                "        role: generated\n",
+                "        facet: backend\n",
+                "        responsibility: Generated artifacts.\n",
+                "        targets:\n",
+                "          - id: generated-a\n",
+                "            adapter: rust\n",
+                "            path: src/generated.rs\n",
+                "            selector: { kind: symbol, name: generated_a }\n",
+                "            claims:\n",
+                "              - kind: generated-from\n",
+                "                targets: [FEAT-TEST-001#binding.source/target.source]\n",
+                "          - { id: generated-b, adapter: rust, path: src/generated.rs, selector: { kind: symbol, name: generated_b }, claims: [] }\n",
+            ),
+        )
+        .expect("feature spec");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let result = validate_loaded_workspace(&workspace, &index);
+        assert!(result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.rule_id == "SYU-GENERATED-001" && diagnostic.message.contains("generated-b")
+        }));
+        assert!(!result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.rule_id == "SYU-GENERATED-001" && diagnostic.message.contains("generated-a")
+        }));
+    }
+
+    #[test]
+    fn generated_scope_requires_a_changed_exact_source() {
+        let (_tempdir, workspace, mut index) = load_fixture_workspace();
+        let source_ref: BoundTargetRef =
+            "FEAT-AUTH-001#binding.ui/target.requested".parse().unwrap();
+        let generated_ref: BoundTargetRef =
+            "FEAT-AUTH-001#binding.ui/target.generated".parse().unwrap();
+        index
+            .generated_from
+            .insert(generated_ref.clone(), vec![source_ref.clone()]);
+
+        let mut source = sample_target("web/login.ts", "symbol requested_function", (1, 1));
+        source.reference = source_ref;
+        source.transition = TargetTransition::Modify;
+        source.lifecycle = TargetLifecycle::Stable;
+        let mut generated = sample_target("web/generated.ts", "symbol requested_function", (1, 1));
+        generated.reference = generated_ref;
+        generated.transition = TargetTransition::Readonly;
+        generated.lifecycle = TargetLifecycle::Stable;
+        generated.access = TargetAccessMode::Generated;
+        generated.role = BindingRole::Generated;
+
+        let slice = ExecutionSlice {
+            id: "generated-scope".into(),
+            goal: "Generate output from source".into(),
+            anchors: vec![],
+            editable_targets: vec![source],
+            verification_targets: vec![],
+            readonly_context: vec![generated],
+            acceptance: vec![],
+            contracts: vec![],
+            non_goals: vec![],
+            completion: vec![CompletionCheck::DiffWithinScope],
+            budget: Default::default(),
+            confidence: PlanConfidence::Exact,
+            blockers: vec![],
+        };
+        let source_change = ChangedFile {
+            status: ChangeStatus::Modified,
+            old_path: Some(RepoPath::new("web/login.ts").unwrap()),
+            new_path: Some(RepoPath::new("web/login.ts").unwrap()),
+            hunks: vec![ChangedRange {
+                old_start: 1,
+                old_end: 1,
+                new_start: 1,
+                new_end: 1,
+            }],
+        };
+        let generated_change = ChangedFile {
+            status: ChangeStatus::Modified,
+            old_path: Some(RepoPath::new("web/generated.ts").unwrap()),
+            new_path: Some(RepoPath::new("web/generated.ts").unwrap()),
+            hunks: vec![ChangedRange {
+                old_start: 1,
+                old_end: 1,
+                new_start: 1,
+                new_end: 1,
+            }],
+        };
+        let ctx = ValidationContext {
+            config: &workspace.config,
+            workspace: &workspace,
+            index: &index,
+            changed_files: None,
+            reported_changed_files: None,
+            work_plan: None,
+            selected_slice: None,
+            plan_mode: PlanValidationMode::PostState,
+            preset: workspace.config.validation.preset,
+            revision: None,
+            change_base_revision: None,
+        };
+
+        let mut diagnostics = Vec::new();
+        validate_slice_scope(
+            &ctx,
+            &[source_change.clone(), generated_change.clone()],
+            &slice,
+            &mut diagnostics,
+        );
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+
+        validate_slice_scope(&ctx, &[generated_change], &slice, &mut diagnostics);
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.rule_id == "SYU-WORK-005")
         );
     }
 
