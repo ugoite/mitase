@@ -30,7 +30,10 @@ are available only from Advanced details. Settings remains a utility page.
   criterion visible once in a read-only desktop split. Narrow layouts reduce
   the same context to one collapsed heading until the user opens it.
 - Scope explains why a change is needed, which specification anchors support
-  it, and only then the exact editable, verification, and readonly targets.
+  it, and only then the exact editable, verification, readonly, and derived
+  generated targets. Contract counterparts appear as dependency-aware readonly
+  context. Generated outputs can change only when their exact source target is
+  editable and changed in the same slice.
 - Items projects typed anchors, bindings, targets, and contracts from
   `syu/spec/v1`.
 - Diagnostics projects canonical diagnostics by validation context and phase.
