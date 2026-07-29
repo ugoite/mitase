@@ -13,6 +13,11 @@ inventory:
     - id: default
       providers:
         rust: { mode: test, include_tests: true }
+        javascript: { roots: [web/src] }
+        typescript: { roots: [packages] }
+        openapi: { roots: [api/openapi.yaml] }
+        markdown: { roots: [docs] }
+        json-schema: { roots: [schemas] }
 validation:
   preset: agent-ready
   readiness:
@@ -51,3 +56,20 @@ Key fields:
 - `work.slicing.*`: hard limits used by planning and context export.
 
 Probe identity and required level are one typed configuration unit. Advance a capability only when its acceptance and behavioral verification are present; do not add catch-all ownership or planned targets to make a readiness count pass.
+
+Inventory profiles are executable build boundaries. Rust `mode`, `features`,
+`target`, and test settings determine which `cfg` artifacts are active;
+conditional artifacts remain visible to semantic comparison but cannot resolve
+as editable targets. JavaScript and TypeScript providers inventory exported and
+private declarations, OpenAPI inventories operations, Markdown inventories
+headings, and `json`, `yaml`, or `json-schema` providers inventory exact JSON
+Pointer nodes. Enabling several providers unions their semantic units; it does
+not select one language at the expense of another.
+
+Cross-language dependency scope is declared in Feature contracts, not inferred
+from import text. A contract source and its provider/consumer participants
+become readonly context whenever one participant is editable. A binding with
+role `generated` must give each output a `generated-from` claim containing
+exact source target references. Planning makes those outputs derived context:
+an implementation tool can edit the source, but it cannot directly edit the
+generated artifact.

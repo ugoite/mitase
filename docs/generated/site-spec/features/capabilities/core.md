@@ -91,6 +91,25 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-CAPABILITY-001#criterion.inventory-discovery
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-002#criterion.language-aware-inventory
+        - **id**: semantic-diff
+          - **adapter**: rust
+          - **path**: crates/syu-inventory/src/lib.rs
+          - **selector**:
+            - **kind**: symbol
+            - **name**: semantic_diff
+          - **claims**:
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-002#criterion.stable-identity
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-002#criterion.semantic-diff
+      - **owns**:
+        - **id**: inventory-manifest
+          - **adapter**: declared
+          - **path**: crates/syu-inventory/Cargo.toml
+          - **selector**:
+            - **kind**: file
 - **id**: FEAT-IDENTITY-001
   - **title**: Exact artifact identity
   - **summary**: Resolve one exact editable or observable artifact target per identity.
@@ -186,6 +205,8 @@ description: "Generated reference for docs/syu/features/capabilities/core.yaml"
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-CAPABILITY-001#criterion.change-validation
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-002#criterion.generated-change-scope
 
 ## Source YAML
 
@@ -246,7 +267,21 @@ features:
             adapter: rust
             path: crates/syu-inventory/src/lib.rs
             selector: { kind: symbol, name: InventoryRegistry }
-            claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.inventory-discovery }]
+            claims:
+              - { kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.inventory-discovery }
+              - { kind: satisfies, criterion: REQ-CAPABILITY-002#criterion.language-aware-inventory }
+          - id: semantic-diff
+            adapter: rust
+            path: crates/syu-inventory/src/lib.rs
+            selector: { kind: symbol, name: semantic_diff }
+            claims:
+              - { kind: satisfies, criterion: REQ-CAPABILITY-002#criterion.stable-identity }
+              - { kind: satisfies, criterion: REQ-CAPABILITY-002#criterion.semantic-diff }
+        owns:
+          - id: inventory-manifest
+            adapter: declared
+            path: crates/syu-inventory/Cargo.toml
+            selector: { kind: file }
 
   - id: FEAT-IDENTITY-001
     title: Exact artifact identity
@@ -280,7 +315,8 @@ features:
             adapter: rust
             path: crates/syu-workspace/src/lib.rs
             selector: { kind: symbol, name: SpecIndex }
-            claims: [{ kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.graph-index }]
+            claims:
+              - { kind: satisfies, criterion: REQ-CAPABILITY-001#criterion.graph-index }
 
   - id: FEAT-OWNERSHIP-001
     title: Ownership resolution
@@ -333,4 +369,6 @@ features:
             claims:
               - kind: satisfies
                 criterion: REQ-CAPABILITY-001#criterion.change-validation
+              - kind: satisfies
+                criterion: REQ-CAPABILITY-002#criterion.generated-change-scope
 ```

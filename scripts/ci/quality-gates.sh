@@ -47,30 +47,25 @@ case "$mode" in
       fi
 
       paths_file="$(mktemp)"
-      if [[ "$from_ref" =~ ^0+$ ]]; then
+      # A merge-queue branch is a newly created remote ref, so GitHub exposes
+      # an all-zero `before` SHA even though it is based on origin/main. Use
+      # that merge-base whenever it is available; otherwise retain the
+      # empty-tree fallback for a genuinely first push without origin/main.
+      if git rev-parse --verify --quiet origin/main >/dev/null; then
+        baseline="$(git merge-base "$to_ref" origin/main)"
+        range="$baseline..$to_ref"
+        git diff --name-only -z "$baseline" "$to_ref" >"$paths_file"
+      elif [[ "$from_ref" =~ ^0+$ ]]; then
         empty_tree="$(git hash-object -t tree /dev/null)"
         range="$empty_tree..$to_ref"
         git ls-tree -r --name-only -z "$to_ref" >"$paths_file"
       else
-        # A branch may merge origin/main before it is pushed. Comparing it to
-        # its stale remote tip would then treat main's already-governed files
-        # as new branch changes. The repository's change-validation baseline
-        # is origin/main, so use that merge-base whenever it is available.
-        if git rev-parse --verify --quiet origin/main >/dev/null; then
-          baseline="$(git merge-base "$to_ref" origin/main)"
-          range="$baseline..$to_ref"
-          git diff --name-only -z "$baseline" "$to_ref" >"$paths_file"
-        else
-          range="$from_ref..$to_ref"
-          git diff --name-only -z "$from_ref" "$to_ref" >"$paths_file"
-        fi
+        range="$from_ref..$to_ref"
+        git diff --name-only -z "$from_ref" "$to_ref" >"$paths_file"
       fi
       while IFS= read -r -d '' path; do
         paths+=("$path")
       done <"$paths_file"
-      if [[ "$from_ref" =~ ^0+$ ]]; then
-        range="$empty_tree..$to_ref"
-      fi
     else
       # CI and manual invocations without a comparison range intentionally run
       # every fast gate rather than silently accepting an unknown change set.

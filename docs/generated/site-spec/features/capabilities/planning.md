@@ -44,6 +44,12 @@ description: "Generated reference for docs/syu/features/capabilities/planning.ya
           - **claims**:
             - **kind**: satisfies
               - **criterion**: REQ-WORK-001#criterion.exact-slice
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-002#criterion.build-profile-scope
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-002#criterion.coherent-cross-language
+            - **kind**: satisfies
+              - **criterion**: REQ-CAPABILITY-002#criterion.generated-source
 - **id**: FEAT-CONTEXT-001
   - **title**: Context export
   - **summary**: Export bounded specification and artifact context for a slice.
@@ -471,6 +477,12 @@ features:
             claims:
               - kind: satisfies
                 criterion: REQ-WORK-001#criterion.exact-slice
+              - kind: satisfies
+                criterion: REQ-CAPABILITY-002#criterion.build-profile-scope
+              - kind: satisfies
+                criterion: REQ-CAPABILITY-002#criterion.coherent-cross-language
+              - kind: satisfies
+                criterion: REQ-CAPABILITY-002#criterion.generated-source
 
   - id: FEAT-CONTEXT-001
     title: Context export

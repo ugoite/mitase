@@ -114,7 +114,8 @@ pub struct PlanBasis {
     /// current ownership basis.
     pub ownership_fingerprint: String,
     /// Content and identity snapshot for every readonly or run-only target.
-    /// Editable target content is intentionally excluded from this digest.
+    /// Editable targets and derived generated outputs are intentionally
+    /// excluded from this digest.
     pub readonly_fingerprint: String,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -183,6 +184,10 @@ pub enum TargetAccessMode {
     Editable,
     RunOnly,
     Readonly,
+    /// Derived output may change during execution, but implementation tools
+    /// cannot write it directly. Its exact generated-from source must be an
+    /// editable target in the same slice.
+    Generated,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -730,9 +735,9 @@ pub struct FinalizationReceipt {
     pub completed_at: String,
 }
 
-/// Return a stable digest of the targets that are not editable by a work
-/// slice. This is the immutable execution boundary used by post-state plan
-/// validation; editable target content is deliberately omitted.
+/// Return a stable digest of immutable readonly and run-only targets. This is
+/// the guarded execution boundary used by post-state plan validation;
+/// editable source and derived generated content are deliberately omitted.
 pub fn readonly_targets_fingerprint(slices: &[ExecutionSlice]) -> String {
     let mut hash = Sha256::new();
     for slice in slices {
@@ -741,7 +746,12 @@ pub fn readonly_targets_fingerprint(slices: &[ExecutionSlice]) -> String {
             .verification_targets
             .iter()
             .chain(slice.readonly_context.iter())
-            .filter(|target| target.access != TargetAccessMode::Editable)
+            .filter(|target| {
+                matches!(
+                    target.access,
+                    TargetAccessMode::Readonly | TargetAccessMode::RunOnly
+                )
+            })
         {
             hash.update(target.reference.to_string().as_bytes());
             hash.update(format!("{:?}", target.transition).as_bytes());

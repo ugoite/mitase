@@ -13,9 +13,19 @@ use syu_spec_model::{
 };
 use syu_work_model::*;
 use syu_workspace::{
-    AnchorValue, SpecIndex, SpecWorkspace, resolve_indexed_target, resolve_target_in_workspace,
-    selector_supports_editable,
+    AnchorValue, SpecIndex, SpecWorkspace, resolve_artifact_unit, resolve_indexed_target,
+    resolve_target_in_workspace, selector_supports_editable,
 };
+
+/// A semantic seed retains its criterion and exact ownership association until
+/// the execution slice is built.  Collapsing this to an identity set loses the
+/// information needed to keep unrelated criteria out of one another's scope.
+#[derive(Debug, Clone)]
+struct ChangedArtifact {
+    identity: String,
+    reference: BoundTargetRef,
+    criteria: BTreeSet<SpecAnchor>,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -466,6 +476,7 @@ pub fn plan(
     }
     let exclude_matcher = compile_exclude_matcher(&request.constraints.exclude_paths)?;
     let mut criteria = BTreeSet::new();
+    let mut changed_artifacts = BTreeMap::<String, ChangedArtifact>::new();
     for requested in &request.requested_targets {
         let reference = requested.reference();
         let transition = requested.transition(default_transition(request.operation));
@@ -523,40 +534,21 @@ pub fn plan(
             | WorkSeed::ChangedUnit {
                 changed_unit: artifact_identity,
             } => {
-                let targets = index
-                    .target_to_artifact
-                    .iter()
-                    .filter(|(_, identity)| *identity == artifact_identity)
-                    .map(|(target, _)| target)
-                    .collect::<Vec<_>>();
-                if targets.is_empty() {
-                    if let Some(owners) = index.artifact_owners.get(artifact_identity) {
-                        for owner in owners {
-                            if let Some(binding) = index.bindings.get(&owner.binding) {
-                                criteria.extend(binding_criteria(binding));
-                            }
-                        }
-                    }
-                    if criteria.is_empty() {
+                let changed = match changed_artifact(index, artifact_identity) {
+                    Ok(changed) => changed,
+                    Err(error) => {
                         return Ok(blocked_plan(
                             request,
                             workspace,
                             index,
                             revision,
                             "SYU-WORK-001",
-                            format!("artifact identity {artifact_identity} does not resolve"),
+                            error.to_string(),
                         ));
                     }
-                }
-                for target in targets {
-                    if let Some(declared) = index.target(target) {
-                        for claim in &declared.claims {
-                            if let syu_spec_model::TargetClaim::Satisfies { criterion } = claim {
-                                criteria.insert(criterion.clone());
-                            }
-                        }
-                    }
-                }
+                };
+                criteria.extend(changed.criteria.iter().cloned());
+                changed_artifacts.insert(changed.identity.clone(), changed);
             }
         }
     }
@@ -570,48 +562,54 @@ pub fn plan(
             "seed does not select a criterion",
         ));
     }
-    let changed_identities = request
-        .seeds
-        .iter()
-        .filter_map(|seed| match seed {
-            WorkSeed::ArtifactIdentity { artifact_identity }
-            | WorkSeed::ChangedUnit {
-                changed_unit: artifact_identity,
-            } => Some(artifact_identity.clone()),
-            _ => None,
-        })
-        .collect::<BTreeSet<_>>();
     let mut slices = Vec::new();
     if request.requested_targets.is_empty() {
         for criterion in criteria {
-            for implementation in primary_targets(request, index, &criterion) {
+            let changed = changed_artifacts
+                .values()
+                .filter(|changed| changed.criteria.contains(&criterion))
+                .cloned()
+                .collect::<Vec<_>>();
+            let selected = if changed.is_empty() {
+                primary_targets(request, index, &criterion)
+            } else {
+                changed
+                    .iter()
+                    .map(|changed| changed.reference.clone())
+                    .collect()
+            };
+            for component in target_components(index, selected) {
                 if !request.constraints.include_facets.is_empty()
-                    && index
-                        .bindings
-                        .get(&implementation.binding)
-                        .is_some_and(|binding| {
+                    && component.iter().all(|target| {
+                        index.bindings.get(&target.binding).is_some_and(|binding| {
                             !request.constraints.include_facets.contains(&binding.facet)
                         })
+                    })
                 {
                     continue;
                 }
-                let mut slice = build_implementation_slice(
+                let requested = component
+                    .iter()
+                    .filter(|target| {
+                        changed.is_empty()
+                            || changed.iter().any(|changed| &changed.reference == *target)
+                    })
+                    .cloned()
+                    .map(|reference| RequestedTarget {
+                        reference,
+                        criterion: Some(criterion.clone()),
+                        transition: default_transition(request.operation),
+                    })
+                    .collect::<Vec<_>>();
+                let mut slice = build_requested_criterion_slice(
                     request,
                     workspace,
                     index,
                     &criterion,
-                    &implementation.binding,
-                    Some(&implementation),
-                    target_policy(default_transition(request.operation)),
+                    &requested,
                     exclude_matcher.as_ref(),
                 )?;
-                apply_changed_artifact_overrides(
-                    &mut slice,
-                    workspace,
-                    index,
-                    &changed_identities,
-                    Some(&criterion),
-                );
+                apply_changed_artifact_overrides(&mut slice, workspace, index, &changed);
                 slices.push(slice);
             }
         }
@@ -656,8 +654,11 @@ pub fn plan(
                         &mut slice,
                         workspace,
                         index,
-                        &changed_identities,
-                        Some(&criterion),
+                        &changed_artifacts
+                            .values()
+                            .filter(|changed| changed.criteria.contains(&criterion))
+                            .cloned()
+                            .collect::<Vec<_>>(),
                     );
                     slices.push(slice);
                 }
@@ -674,8 +675,13 @@ pub fn plan(
                             &mut slice,
                             workspace,
                             index,
-                            &changed_identities,
-                            None,
+                            &changed_artifacts
+                                .values()
+                                .filter(|changed| {
+                                    changed.reference.binding == requested.reference().binding
+                                })
+                                .cloned()
+                                .collect::<Vec<_>>(),
                         );
                         slices.push(slice);
                     }
@@ -909,6 +915,132 @@ fn primary_targets(
     targets
 }
 
+fn changed_artifact(index: &SpecIndex, identity: &str) -> Result<ChangedArtifact> {
+    let unit = index
+        .artifact_units
+        .iter()
+        .find(|unit| unit.identity == identity)
+        .ok_or_else(|| {
+            anyhow::anyhow!("changed artifact identity {identity} is not in the inventory")
+        })?;
+    if !matches!(
+        unit.reachability,
+        syu_inventory::ArtifactReachability::Active
+    ) {
+        bail!("changed artifact identity {identity} is outside the active build profile");
+    }
+    let mut candidates = index
+        .target_to_artifact
+        .iter()
+        .filter(|(_, actual)| *actual == identity)
+        .map(|(reference, _)| reference.clone())
+        .collect::<BTreeSet<_>>();
+    for owner in index.artifact_owners.get(identity).into_iter().flatten() {
+        let Some(binding) = index.bindings.get(&owner.binding) else {
+            continue;
+        };
+        let matching = binding
+            .targets
+            .iter()
+            .filter(|target| target.adapter == unit.adapter && target.path == unit.path)
+            .collect::<Vec<_>>();
+        // A scope can supply a broader declared entrypoint, but it must still
+        // identify exactly one target.  Never select the first binding target.
+        if matching.len() == 1 {
+            candidates.insert(BoundTargetRef {
+                binding: owner.binding.clone(),
+                target_id: matching[0].id.clone(),
+            });
+        }
+    }
+    if candidates.len() != 1 {
+        bail!(
+            "changed artifact identity {identity} has {} exact owner targets; refusing ambiguous ownership",
+            candidates.len()
+        );
+    }
+    let reference = candidates.into_iter().next().expect("checked exact owner");
+    let declared = index.target(&reference).expect("indexed target");
+    if declared.adapter != unit.adapter || declared.path != unit.path {
+        bail!("changed artifact identity {identity} does not match its declared owner target");
+    }
+    let criteria = declared
+        .claims
+        .iter()
+        .filter_map(|claim| match claim {
+            TargetClaim::Satisfies { criterion } | TargetClaim::Verifies { criterion, .. } => {
+                Some(criterion.clone())
+            }
+            _ => None,
+        })
+        .collect::<BTreeSet<_>>();
+    if criteria.is_empty() {
+        bail!("changed artifact identity {identity} has no associated criterion");
+    }
+    Ok(ChangedArtifact {
+        identity: identity.into(),
+        reference,
+        criteria,
+    })
+}
+
+/// Partition targets by the explicit dependency relations that are allowed to
+/// make one execution boundary: a contract, generated-from edge, or a direct
+/// generated-by edge.  Unrelated implementations of the same criterion remain
+/// independent slices.
+fn target_components(
+    index: &SpecIndex,
+    mut targets: Vec<BoundTargetRef>,
+) -> Vec<Vec<BoundTargetRef>> {
+    targets.sort();
+    targets.dedup();
+    let mut components = Vec::new();
+    while let Some(seed) = targets.pop() {
+        let mut component = vec![seed];
+        let mut cursor = 0;
+        while cursor < component.len() {
+            let current = component[cursor].clone();
+            cursor += 1;
+            let mut neighbor = 0;
+            while neighbor < targets.len() {
+                if targets_connected(index, &current, &targets[neighbor]) {
+                    component.push(targets.swap_remove(neighbor));
+                } else {
+                    neighbor += 1;
+                }
+            }
+        }
+        component.sort();
+        components.push(component);
+    }
+    components.sort_by(|left, right| left.first().cmp(&right.first()));
+    components
+}
+
+fn targets_connected(index: &SpecIndex, left: &BoundTargetRef, right: &BoundTargetRef) -> bool {
+    let left_contracts = index.contracts_by_target.get(left);
+    let right_contracts = index.contracts_by_target.get(right);
+    left_contracts.is_some_and(|contracts| {
+        right_contracts
+            .is_some_and(|other| contracts.iter().any(|contract| other.contains(contract)))
+    }) || index
+        .generated_from
+        .get(left)
+        .is_some_and(|sources| sources.contains(right))
+        || index
+            .generated_from
+            .get(right)
+            .is_some_and(|sources| sources.contains(left))
+        || index
+            .generated_by_source
+            .get(left)
+            .is_some_and(|outputs| outputs.contains(right))
+        || index
+            .generated_by_source
+            .get(right)
+            .is_some_and(|outputs| outputs.contains(left))
+}
+
 fn requested_target_slice_id(prefix: &str, requested: &[RequestedTarget]) -> String {
     let mut parts = requested
         .iter()
@@ -966,7 +1098,7 @@ fn transition_map(
     map
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(dead_code, clippy::too_many_arguments)]
 fn build_implementation_slice(
     request: &WorkRequest,
     workspace: &SpecWorkspace,
@@ -1215,11 +1347,24 @@ fn build_requested_target_slice(
         match target.access {
             TargetAccessMode::Editable => editable.push(target),
             TargetAccessMode::RunOnly => verification.push(target),
-            TargetAccessMode::Readonly => readonly.push(target),
+            TargetAccessMode::Readonly | TargetAccessMode::Generated => readonly.push(target),
         }
     }
     let mut contracts = Vec::new();
     let mut anchors = vec![reference.binding.clone()];
+    // Dependency closure is a property of the exact requested target, not of
+    // whether its binding happens to carry a Satisfies claim. A configuration
+    // source may legitimately generate output without itself implementing a
+    // requirement criterion.
+    let (more_readonly, more_contracts) = contract_readonly_context_for_target(
+        workspace,
+        index,
+        reference,
+        exclude_matcher,
+        &mut blockers,
+    );
+    readonly.extend(more_readonly);
+    contracts.extend(more_contracts);
     if let Some(criterion) = match requested.criterion().cloned() {
         Some(criterion) => Some(criterion),
         None => match requested_target_criterion(binding) {
@@ -1246,15 +1391,6 @@ fn build_requested_target_slice(
             exclude_matcher,
             &mut blockers,
         ));
-        let (more_readonly, more_contracts) = contract_readonly_context_for_target(
-            workspace,
-            index,
-            reference,
-            exclude_matcher,
-            &mut blockers,
-        );
-        readonly.extend(more_readonly);
-        contracts.extend(more_contracts);
     }
     finalize_requested_slice(
         request,
@@ -1328,7 +1464,7 @@ fn build_requested_criterion_slice(
             match target.access {
                 TargetAccessMode::Editable => editable.push(target),
                 TargetAccessMode::RunOnly => verification.push(target),
-                TargetAccessMode::Readonly => readonly.push(target),
+                TargetAccessMode::Readonly | TargetAccessMode::Generated => readonly.push(target),
             }
         }
         let (more_readonly, more_contracts) = contract_readonly_context_for_target(
@@ -1457,6 +1593,7 @@ fn finalize_requested_slice(
     mut blockers: Vec<Diagnostic>,
     criterion: Option<SpecAnchor>,
 ) -> Result<ExecutionSlice> {
+    normalize_generated_access(index, &editable, &mut readonly);
     drop_readonly_overlaps(&mut readonly, &editable, &verification);
     validate_target_access_uniqueness(
         &mut blockers,
@@ -1526,12 +1663,12 @@ fn finalize_requested_slice(
 
 fn apply_changed_artifact_overrides(
     slice: &mut ExecutionSlice,
-    _workspace: &SpecWorkspace,
+    workspace: &SpecWorkspace,
     index: &SpecIndex,
-    identities: &BTreeSet<String>,
-    criterion: Option<&SpecAnchor>,
+    changed: &[ChangedArtifact],
 ) {
-    for identity in identities {
+    for changed in changed {
+        let identity = &changed.identity;
         let Some(unit) = index
             .artifact_units
             .iter()
@@ -1544,112 +1681,106 @@ fn apply_changed_artifact_overrides(
             ));
             continue;
         };
-        let exact = index
-            .target_to_artifact
-            .iter()
-            .find(|(_, actual)| *actual == identity)
-            .map(|(reference, _)| reference.clone());
-        let owner = index
-            .artifact_owners
-            .get(identity)
-            .into_iter()
-            .flatten()
-            .find_map(|owner| {
-                index
-                    .bindings
-                    .get(&owner.binding)
-                    .map(|binding| (owner, binding))
-            });
-        let Some((reference, binding)) = exact
-            .and_then(|reference| {
-                index
-                    .bindings
-                    .get(&reference.binding)
-                    .map(|binding| (reference, binding))
-            })
-            .or_else(|| {
-                let (owner, binding) = owner?;
-                let target = binding.targets.iter().find(|target| {
-                    target.path == unit.path
-                        && target.adapter == unit.adapter
-                        && criterion.is_none_or(|criterion| {
-                            target.claims.iter().any(|claim| {
-                                matches!(claim, TargetClaim::Satisfies { criterion: actual } if actual == criterion)
-                            })
-                        })
-                }).or_else(|| {
-                    criterion.and_then(|criterion| binding.targets.iter().find(|target| {
-                        target.claims.iter().any(|claim| {
-                            matches!(claim, TargetClaim::Satisfies { criterion: actual } if actual == criterion)
-                        })
-                    }))
-                }).or_else(|| binding.targets.first())?;
-                Some((
-                    BoundTargetRef {
-                        binding: owner.binding.clone(),
-                        target_id: target.id.clone(),
-                    },
-                    binding,
-                ))
-            })
-        else {
+        if !matches!(
+            unit.reachability,
+            syu_inventory::ArtifactReachability::Active
+        ) {
             slice.blockers.push(Diagnostic::error(
                 "SYU-WORK-001",
-                format!("changed artifact identity {identity} has no ownership binding target"),
+                format!("changed artifact identity {identity} is outside the active build profile"),
+                "work-plan",
+            ));
+            continue;
+        }
+        let reference = &changed.reference;
+        let Some(binding) = index.bindings.get(&reference.binding) else {
+            slice.blockers.push(Diagnostic::error(
+                "SYU-WORK-001",
+                format!("changed artifact identity {identity} has no owner binding"),
                 "work-plan",
             ));
             continue;
         };
-        let symbol = identity.rsplit("::").next().unwrap_or(identity).to_owned();
+        if binding.role == BindingRole::Generated {
+            let mut diagnostic = Diagnostic::error(
+                "SYU-WORK-013",
+                format!(
+                    "generated semantic artifact {identity} is not directly editable; request its generated-from source target"
+                ),
+                unit.path.to_string_lossy(),
+            );
+            diagnostic.target = Some(reference.clone());
+            slice.blockers.push(diagnostic);
+            continue;
+        }
+        if binding.role != BindingRole::Implementation {
+            let mut diagnostic = Diagnostic::error(
+                "SYU-WORK-001",
+                format!(
+                    "changed semantic artifact {identity} is owned by a {:?} binding and cannot be editable",
+                    binding.role
+                ),
+                unit.path.to_string_lossy(),
+            );
+            diagnostic.target = Some(reference.clone());
+            slice.blockers.push(diagnostic);
+            continue;
+        }
+        let resolved = match resolve_artifact_unit(workspace, unit) {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                slice.blockers.push(Diagnostic::error(
+                    "SYU-TARGET-002",
+                    format!(
+                        "changed artifact identity {identity} does not resolve exactly: {error:#}"
+                    ),
+                    unit.path.to_string_lossy(),
+                ));
+                continue;
+            }
+        };
         let planned = PlannedTarget {
             reference: reference.clone(),
             artifact_identity: Some(identity.clone()),
             transition: TargetTransition::Modify,
             lifecycle: TargetLifecycle::Stable,
             access: TargetAccessMode::Editable,
-            resolved_path: unit.path.to_string_lossy().into_owned(),
+            resolved_path: resolved.path.to_string_lossy().into_owned(),
             resolved_selector: ResolvedSelector {
-                description: format!("changed semantic artifact {identity}"),
-                symbols: if matches!(unit.kind, syu_inventory::ArtifactUnitKind::File) {
-                    vec![]
-                } else {
-                    vec![symbol]
-                },
+                description: resolved.description,
+                symbols: resolved.symbols,
             },
-            content_hash: unit.digest.clone(),
-            excerpt_hash: unit.digest.clone(),
+            content_hash: resolved.content_hash,
+            excerpt_hash: resolved.excerpt_hash,
             adapter: unit.adapter.clone(),
             facet: binding.facet.clone(),
             role: binding.role,
-            byte_start: unit.span.byte_start,
-            byte_end: unit.span.byte_end,
-            line_start: unit.span.line_start,
-            line_end: unit.span.line_end,
-            budget_bytes: unit.span.byte_end.saturating_sub(unit.span.byte_start),
+            byte_start: resolved.byte_start,
+            byte_end: resolved.byte_end,
+            line_start: resolved.line_start,
+            line_end: resolved.line_end,
+            budget_bytes: resolved.byte_end.saturating_sub(resolved.byte_start),
             budget_lines: None,
             reason: "Exact changed semantic artifact; owner entrypoint is retained only for criterion closure.".into(),
         };
-        if let Some(existing) = slice
-            .editable_targets
-            .iter_mut()
-            .find(|target| target.reference == reference)
-        {
-            *existing = planned;
-        } else {
-            slice.editable_targets.push(planned);
-        }
+        slice.editable_targets.push(planned);
     }
-    slice
+    // A semantic subject narrows a declared entrypoint.  Remove that broad
+    // entrypoint while retaining every distinct semantic identity beneath it.
+    let narrowed = slice
         .editable_targets
-        .sort_by(|a, b| a.reference.cmp(&b.reference));
-    slice.editable_targets.dedup_by(|a, b| {
-        a.reference == b.reference && {
-            if a.artifact_identity.is_none() && b.artifact_identity.is_some() {
-                *a = b.clone();
-            }
-            true
-        }
+        .iter()
+        .filter_map(|target| {
+            target
+                .artifact_identity
+                .as_ref()
+                .map(|_| target.reference.clone())
+        })
+        .collect::<BTreeSet<_>>();
+    slice.editable_targets.retain(|target| {
+        target.artifact_identity.is_some() || !narrowed.contains(&target.reference)
     });
+    dedup(&mut slice.editable_targets);
     slice.budget = slice_budget(
         &slice.editable_targets,
         &slice.verification_targets,
@@ -1836,6 +1967,7 @@ fn finalize_slice(
         readonly.append(&mut verification);
         dedup(&mut readonly);
     }
+    normalize_generated_access(index, &editable, &mut readonly);
     anchors.extend(contracts.clone());
     if true {
         for rule in index.criteria_to_rules.get(criterion).into_iter().flatten() {
@@ -1936,6 +2068,34 @@ fn finalize_slice(
         confidence: PlanConfidence::Exact,
         blockers,
     })
+}
+
+fn normalize_generated_access(
+    index: &SpecIndex,
+    editable: &[PlannedTarget],
+    readonly: &mut [PlannedTarget],
+) {
+    let editable_sources = editable
+        .iter()
+        .filter(|target| target.access == TargetAccessMode::Editable)
+        .map(|target| target.reference.clone())
+        .collect::<BTreeSet<_>>();
+    for generated in readonly
+        .iter_mut()
+        .filter(|target| target.access == TargetAccessMode::Generated)
+    {
+        if !index
+            .generated_from
+            .get(&generated.reference)
+            .is_some_and(|sources| {
+                sources
+                    .iter()
+                    .any(|source| editable_sources.contains(source))
+            })
+        {
+            generated.access = TargetAccessMode::Readonly;
+        }
+    }
 }
 
 fn default_non_goals(request: &WorkRequest) -> Vec<NonGoal> {
@@ -2143,6 +2303,64 @@ fn contract_readonly_context_for_target(
             }
         }
     }
+    for generated in index
+        .generated_by_source
+        .get(implementation)
+        .cloned()
+        .unwrap_or_default()
+    {
+        if let Some(binding) = index.bindings.get(&generated.binding)
+            && let Some(target) = index.target(&generated)
+        {
+            let mut planned = one_target(
+                workspace,
+                index,
+                &generated,
+                binding,
+                target,
+                TargetPlanOptions {
+                    policy: target_policy(TargetTransition::Readonly),
+                    reason: "Generated output derived from this editable source; tools may not write it directly.",
+                    operation: WorkOperation::Modify,
+                    add_budget_bytes: None,
+                    add_budget_lines: None,
+                    exclude_matcher,
+                },
+                blockers,
+            );
+            for target in &mut planned {
+                target.access = TargetAccessMode::Generated;
+            }
+            readonly.extend(planned);
+        }
+    }
+    for source in index
+        .generated_from
+        .get(implementation)
+        .cloned()
+        .unwrap_or_default()
+    {
+        if let Some(binding) = index.bindings.get(&source.binding)
+            && let Some(target) = index.target(&source)
+        {
+            readonly.extend(one_target(
+                workspace,
+                index,
+                &source,
+                binding,
+                target,
+                TargetPlanOptions {
+                    policy: target_policy(TargetTransition::Readonly),
+                    reason: "Exact source of this generated artifact.",
+                    operation: WorkOperation::Modify,
+                    add_budget_bytes: None,
+                    add_budget_lines: None,
+                    exclude_matcher,
+                },
+                blockers,
+            ));
+        }
+    }
     (readonly, contracts)
 }
 #[allow(clippy::too_many_arguments)]
@@ -2213,6 +2431,20 @@ fn one_target(
     {
         return vec![];
     }
+    if binding.role == BindingRole::Generated
+        && matches!(options.policy.access, TargetAccessMode::Editable)
+    {
+        let mut diagnostic = Diagnostic::error(
+            "SYU-WORK-013",
+            format!(
+                "generated target {reference} is not directly editable; request one of its generated-from source targets"
+            ),
+            target.path.to_string_lossy(),
+        );
+        diagnostic.target = Some(reference.clone());
+        blockers.push(diagnostic);
+        return vec![];
+    }
     if !matches!(options.policy.transition, TargetTransition::Add)
         && !index.target_to_artifact.contains_key(reference)
     {
@@ -2229,7 +2461,12 @@ fn one_target(
         return vec![];
     }
     if matches!(options.policy.access, TargetAccessMode::Editable)
-        && !selector_supports_editable(&target.selector)
+        && (!selector_supports_editable(&target.selector)
+            // A missing semantic node has no current exact span. Creation is
+            // intentionally file-scoped; existing operations/pointers may be
+            // modified through their exact spans below.
+            || (matches!(options.policy.transition, TargetTransition::Add)
+                && matches!(target.selector, Selector::Operation { .. } | Selector::JsonPointer { .. })))
     {
         let mut d = Diagnostic::error(
             "SYU-TARGET-004",
@@ -2424,8 +2661,13 @@ fn target_budget_bytes(target: &PlannedTarget) -> usize {
         .max(target.byte_end.saturating_sub(target.byte_start))
 }
 fn dedup(values: &mut Vec<PlannedTarget>) {
-    values.sort_by(|a, b| a.reference.cmp(&b.reference));
-    values.dedup_by(|a, b| a.reference == b.reference);
+    values.sort_by(|a, b| {
+        a.reference
+            .cmp(&b.reference)
+            .then(a.artifact_identity.cmp(&b.artifact_identity))
+    });
+    values
+        .dedup_by(|a, b| a.reference == b.reference && a.artifact_identity == b.artifact_identity);
 }
 
 fn validate_target_access_uniqueness(
@@ -3605,5 +3847,465 @@ mod tests {
             .expect("support entry");
         assert_eq!(support.supports.target_id.to_string(), "handler-missing");
         assert!(support.support_id.starts_with("support:"));
+    }
+
+    fn write_dependency_workspace(root: &Path) {
+        fs::create_dir_all(root.join("spec")).expect("spec dir");
+        fs::create_dir_all(root.join("src")).expect("src dir");
+        fs::create_dir_all(root.join("web")).expect("web dir");
+        fs::write(
+            root.join("syu.yaml"),
+            concat!(
+                "schema: syu/config/v1\n",
+                "workspace: { spec_roots: [spec], excludes: [] }\n",
+                "inventory:\n",
+                "  active_profile: default\n",
+                "  profiles:\n",
+                "    - id: default\n",
+                "      providers:\n",
+                "        rust: {}\n",
+                "        javascript: { roots: [web] }\n",
+                "        declared: { roots: [generated.txt] }\n",
+                "validation:\n",
+                "  preset: standard\n",
+                "  readiness:\n",
+                "    target: off\n",
+                "    limits: { max_ownership_scope_units: 64, max_targets_per_binding: 12, max_slices_per_seed: 4 }\n",
+                "  changed: { require_owned_changes: false, require_plan: false }\n",
+                "verification: { runners: {} }\n",
+                "work:\n",
+                "  slicing: { max_editable_files: 4, max_editable_symbols: 8, max_verification_targets: 4, max_readonly_targets: 8, max_total_bytes: 8192 }\n",
+            ),
+        )
+        .expect("config");
+        fs::write(
+            root.join("spec/requirement.yaml"),
+            concat!(
+                "schema: syu/spec/v1\n",
+                "kind: requirements\n",
+                "namespace: dependency\n",
+                "category: Dependency\n",
+                "requirements:\n",
+                "  - id: REQ-DEPENDENCY-001\n",
+                "    title: Dependency\n",
+                "    description: Keep provider and consumer coherent.\n",
+                "    priority: high\n",
+                "    status: implemented\n",
+                "    criteria:\n",
+                "      - id: coherent\n",
+                "        kind: behavior\n",
+                "        statement: Provider and consumer change coherently.\n",
+                "        governed_by: []\n",
+            ),
+        )
+        .expect("requirement");
+        fs::write(
+            root.join("spec/feature.yaml"),
+            concat!(
+                "schema: syu/spec/v1\n",
+                "kind: features\n",
+                "namespace: dependency\n",
+                "category: Dependency\n",
+                "features:\n",
+                "  - id: FEAT-DEPENDENCY-001\n",
+                "    title: Dependency planning\n",
+                "    summary: Plan cross-language and generated dependencies.\n",
+                "    status: implemented\n",
+                "    bindings:\n",
+                "      - id: provider\n",
+                "        role: implementation\n",
+                "        facet: backend\n",
+                "        responsibility: Provide the API.\n",
+                "        targets:\n",
+                "          - { id: provider, adapter: rust, path: src/lib.rs, selector: { kind: symbol, name: provider }, claims: [{ kind: satisfies, criterion: REQ-DEPENDENCY-001#criterion.coherent }] }\n",
+                "      - id: consumer\n",
+                "        role: implementation\n",
+                "        facet: frontend\n",
+                "        responsibility: Consume the API.\n",
+                "        targets:\n",
+                "          - { id: consumer, adapter: javascript, path: web/client.js, selector: { kind: symbol, name: consumer }, claims: [{ kind: satisfies, criterion: REQ-DEPENDENCY-001#criterion.coherent }] }\n",
+                "      - id: contract-source\n",
+                "        role: contract-source\n",
+                "        facet: api\n",
+                "        responsibility: Define the API contract.\n",
+                "        targets:\n",
+                "          - { id: contract, adapter: javascript, path: web/client.js, selector: { kind: symbol, name: contract }, claims: [] }\n",
+                "      - id: generator\n",
+                "        role: implementation\n",
+                "        facet: generation\n",
+                "        responsibility: Generate the checked-in artifact.\n",
+                "        targets:\n",
+                "          - { id: source, adapter: rust, path: src/lib.rs, selector: { kind: symbol, name: generate }, claims: [] }\n",
+                "      - id: generated\n",
+                "        role: generated\n",
+                "        facet: generation\n",
+                "        responsibility: Record generated output.\n",
+                "        targets:\n",
+                "          - id: output\n",
+                "            adapter: declared\n",
+                "            path: generated.txt\n",
+                "            selector: { kind: file }\n",
+                "            claims:\n",
+                "              - kind: generated-from\n",
+                "                targets: [FEAT-DEPENDENCY-001#binding.generator/target.source]\n",
+                "    contracts:\n",
+                "      - id: provider-consumer\n",
+                "        kind: function\n",
+                "        source: FEAT-DEPENDENCY-001#binding.contract-source/target.contract\n",
+                "        participants:\n",
+                "          - { target: FEAT-DEPENDENCY-001#binding.provider/target.provider, role: provider }\n",
+                "          - { target: FEAT-DEPENDENCY-001#binding.consumer/target.consumer, role: consumer }\n",
+                "        guarantees: [REQ-DEPENDENCY-001#criterion.coherent]\n",
+            ),
+        )
+        .expect("feature");
+        fs::write(
+            root.join("src/lib.rs"),
+            "pub fn provider() {}\npub fn generate() {}\n",
+        )
+        .expect("rust");
+        fs::write(
+            root.join("web/client.js"),
+            "export function consumer() {}\nexport function contract() {}\n",
+        )
+        .expect("javascript");
+        fs::write(root.join("generated.txt"), "generated\n").expect("generated");
+    }
+
+    #[test]
+    fn cross_language_provider_and_consumer_share_one_contract_slice() {
+        let tempdir = tempdir().expect("tempdir");
+        write_dependency_workspace(tempdir.path());
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-DEPENDENCY-001".into(),
+            summary: "Change provider and consumer".into(),
+            operation: WorkOperation::Modify,
+            seeds: vec![],
+            constraints: WorkConstraints::default(),
+            requested_targets: vec![
+                RequestedTarget {
+                    reference: "FEAT-DEPENDENCY-001#binding.provider/target.provider"
+                        .parse()
+                        .unwrap(),
+                    criterion: None,
+                    transition: TargetTransition::Modify,
+                },
+                RequestedTarget {
+                    reference: "FEAT-DEPENDENCY-001#binding.consumer/target.consumer"
+                        .parse()
+                        .unwrap(),
+                    criterion: None,
+                    transition: TargetTransition::Modify,
+                },
+            ],
+        };
+        let combined_plan = plan(&request, &workspace, &index, "rev-contract").expect("plan");
+        assert_eq!(combined_plan.status, PlanStatus::Ready);
+        assert_eq!(combined_plan.slices.len(), 1);
+        let slice = &combined_plan.slices[0];
+        assert_eq!(
+            slice
+                .editable_targets
+                .iter()
+                .map(|target| target.adapter.as_str())
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from(["javascript", "rust"])
+        );
+        assert!(slice.contracts.iter().any(|contract| {
+            contract.to_string() == "FEAT-DEPENDENCY-001#contract.provider-consumer"
+        }));
+        assert!(slice.readonly_context.iter().any(|target| {
+            target.reference.to_string()
+                == "FEAT-DEPENDENCY-001#binding.contract-source/target.contract"
+        }));
+        let editable_refs = slice
+            .editable_targets
+            .iter()
+            .map(|target| &target.reference)
+            .collect::<BTreeSet<_>>();
+        assert!(
+            slice
+                .readonly_context
+                .iter()
+                .all(|target| !editable_refs.contains(&target.reference))
+        );
+
+        let provider_only = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-DEPENDENCY-PROVIDER".into(),
+            summary: "Change only the provider".into(),
+            operation: WorkOperation::Modify,
+            seeds: vec![],
+            constraints: WorkConstraints::default(),
+            requested_targets: vec![RequestedTarget {
+                reference: "FEAT-DEPENDENCY-001#binding.provider/target.provider"
+                    .parse()
+                    .unwrap(),
+                criterion: None,
+                transition: TargetTransition::Modify,
+            }],
+        };
+        let provider_plan =
+            plan(&provider_only, &workspace, &index, "rev-provider").expect("provider plan");
+        assert_eq!(provider_plan.status, PlanStatus::Ready);
+        assert!(
+            provider_plan.slices[0]
+                .readonly_context
+                .iter()
+                .any(|target| {
+                    target.reference.to_string()
+                        == "FEAT-DEPENDENCY-001#binding.consumer/target.consumer"
+                        && target.access == TargetAccessMode::Readonly
+                })
+        );
+    }
+
+    #[test]
+    fn criterion_and_changed_unit_seeds_preserve_one_contract_component() {
+        let tempdir = tempdir().expect("tempdir");
+        write_dependency_workspace(tempdir.path());
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let criterion_seed = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-CONTRACT-CRITERION".into(),
+            summary: "Change contract participants".into(),
+            operation: WorkOperation::Modify,
+            seeds: vec![WorkSeed::Anchor(
+                "REQ-DEPENDENCY-001#criterion.coherent".parse().unwrap(),
+            )],
+            constraints: WorkConstraints::default(),
+            requested_targets: vec![],
+        };
+        let criterion_plan = plan(&criterion_seed, &workspace, &index, "criterion").unwrap();
+        assert_eq!(criterion_plan.status, PlanStatus::Ready);
+        assert_eq!(criterion_plan.slices.len(), 1);
+        assert_eq!(criterion_plan.slices[0].editable_targets.len(), 2);
+        let provider: BoundTargetRef = "FEAT-DEPENDENCY-001#binding.provider/target.provider"
+            .parse()
+            .unwrap();
+        let consumer: BoundTargetRef = "FEAT-DEPENDENCY-001#binding.consumer/target.consumer"
+            .parse()
+            .unwrap();
+        let provider_identity = index.target_to_artifact.get(&provider).unwrap().clone();
+        let consumer_identity = index.target_to_artifact.get(&consumer).unwrap().clone();
+
+        let changed_seed = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-CONTRACT-CHANGED".into(),
+            summary: "Change contract participants".into(),
+            operation: WorkOperation::Modify,
+            seeds: vec![
+                WorkSeed::ChangedUnit {
+                    changed_unit: provider_identity.clone(),
+                },
+                WorkSeed::ChangedUnit {
+                    changed_unit: consumer_identity.clone(),
+                },
+            ],
+            constraints: WorkConstraints::default(),
+            requested_targets: vec![],
+        };
+        let changed_plan = plan(&changed_seed, &workspace, &index, "changed").unwrap();
+        assert_eq!(changed_plan.status, PlanStatus::Ready, "{changed_plan:#?}");
+        assert_eq!(changed_plan.slices.len(), 1);
+        let editable = &changed_plan.slices[0].editable_targets;
+        assert_eq!(editable.len(), 2);
+        assert_eq!(
+            editable
+                .iter()
+                .filter_map(|target| target.artifact_identity.as_deref())
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([provider_identity.as_str(), consumer_identity.as_str()]),
+        );
+        assert!(
+            changed_plan.slices[0]
+                .readonly_context
+                .iter()
+                .all(|readonly| {
+                    !editable
+                        .iter()
+                        .any(|editable| editable.reference == readonly.reference)
+                })
+        );
+    }
+
+    #[test]
+    fn changed_unit_rejects_inactive_and_generated_artifacts() {
+        let inactive_dir = tempdir().expect("tempdir");
+        write_minimal_workspace(inactive_dir.path());
+        fs::write(
+            inactive_dir.path().join("src/handler.rs"),
+            "#[cfg(feature = \"enterprise\")]\npub fn handler() {}\n",
+        )
+        .unwrap();
+        let workspace = SpecWorkspace::load(inactive_dir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let inactive = index
+            .artifact_units
+            .iter()
+            .find(|unit| {
+                unit.identity.contains("handler")
+                    && !matches!(
+                        unit.reachability,
+                        syu_inventory::ArtifactReachability::Active
+                    )
+            })
+            .expect("conditional handler")
+            .identity
+            .clone();
+        let request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-INACTIVE-CHANGED".into(),
+            summary: "Change inactive artifact".into(),
+            operation: WorkOperation::Modify,
+            seeds: vec![WorkSeed::ChangedUnit {
+                changed_unit: inactive,
+            }],
+            constraints: WorkConstraints::default(),
+            requested_targets: vec![],
+        };
+        assert_eq!(
+            plan(&request, &workspace, &index, "inactive")
+                .unwrap()
+                .status,
+            PlanStatus::Blocked
+        );
+
+        let generated = tempdir().expect("generated tempdir");
+        write_dependency_workspace(generated.path());
+        let feature = fs::read_to_string(generated.path().join("spec/feature.yaml")).unwrap()
+            .replacen("claims:\n              - kind: generated-from", "claims:\n              - { kind: satisfies, criterion: REQ-DEPENDENCY-001#criterion.coherent }\n              - kind: generated-from", 1);
+        fs::write(generated.path().join("spec/feature.yaml"), feature).unwrap();
+        let workspace = SpecWorkspace::load(generated.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let generated_target: BoundTargetRef =
+            "FEAT-DEPENDENCY-001#binding.generated/target.output"
+                .parse()
+                .unwrap();
+        let generated_identity = index
+            .target_to_artifact
+            .get(&generated_target)
+            .unwrap()
+            .clone();
+        let request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-GENERATED-CHANGED".into(),
+            summary: "Change generated artifact".into(),
+            operation: WorkOperation::Modify,
+            seeds: vec![WorkSeed::ChangedUnit {
+                changed_unit: generated_identity,
+            }],
+            constraints: WorkConstraints::default(),
+            requested_targets: vec![],
+        };
+        let plan = plan(&request, &workspace, &index, "generated").unwrap();
+        assert_eq!(plan.status, PlanStatus::Blocked);
+        assert!(
+            plan.slices
+                .iter()
+                .flat_map(|slice| &slice.blockers)
+                .any(|diagnostic| diagnostic.rule_id == "SYU-WORK-013")
+        );
+    }
+
+    #[test]
+    fn generated_outputs_are_derived_context_and_never_directly_editable() {
+        let tempdir = tempdir().expect("tempdir");
+        write_dependency_workspace(tempdir.path());
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        let source_request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-GENERATED-SOURCE".into(),
+            summary: "Change generator".into(),
+            operation: WorkOperation::Modify,
+            seeds: vec![],
+            constraints: WorkConstraints::default(),
+            requested_targets: vec![RequestedTarget {
+                reference: "FEAT-DEPENDENCY-001#binding.generator/target.source"
+                    .parse()
+                    .unwrap(),
+                criterion: None,
+                transition: TargetTransition::Modify,
+            }],
+        };
+        let source_plan =
+            plan(&source_request, &workspace, &index, "rev-generated").expect("source plan");
+        assert_eq!(source_plan.status, PlanStatus::Ready);
+        assert!(source_plan.slices[0].readonly_context.iter().any(|target| {
+            target.reference.to_string() == "FEAT-DEPENDENCY-001#binding.generated/target.output"
+                && target.access == TargetAccessMode::Generated
+        }));
+
+        let direct_request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-GENERATED-DIRECT".into(),
+            summary: "Change generated output".into(),
+            operation: WorkOperation::Modify,
+            seeds: vec![],
+            constraints: WorkConstraints::default(),
+            requested_targets: vec![RequestedTarget {
+                reference: "FEAT-DEPENDENCY-001#binding.generated/target.output"
+                    .parse()
+                    .unwrap(),
+                criterion: Some("REQ-DEPENDENCY-001#criterion.coherent".parse().unwrap()),
+                transition: TargetTransition::Modify,
+            }],
+        };
+        let direct_plan =
+            plan(&direct_request, &workspace, &index, "rev-generated").expect("direct plan");
+        assert_eq!(direct_plan.status, PlanStatus::Blocked);
+        assert!(direct_plan.slices[0].blockers.iter().any(|diagnostic| {
+            diagnostic.rule_id == "SYU-WORK-013"
+                && diagnostic.message.contains("generated-from source")
+        }));
+    }
+
+    #[test]
+    fn inactive_build_profile_target_never_enters_executable_scope() {
+        let tempdir = tempdir().expect("tempdir");
+        write_minimal_workspace(tempdir.path());
+        fs::write(
+            tempdir.path().join("src/handler.rs"),
+            "#[cfg(feature = \"enterprise\")]\npub fn handler() {}\n",
+        )
+        .expect("handler");
+        let workspace = SpecWorkspace::load(tempdir.path()).expect("workspace");
+        let index = workspace.index().expect("index");
+        assert!(index.artifact_units.iter().any(|unit| {
+            unit.identity.contains("handler")
+                && matches!(
+                    unit.reachability,
+                    syu_inventory::ArtifactReachability::Conditional { .. }
+                )
+        }));
+        let request = WorkRequest {
+            schema: WORK_REQUEST_SCHEMA.into(),
+            id: "WORK-INACTIVE".into(),
+            summary: "Change inactive target".into(),
+            operation: WorkOperation::Modify,
+            seeds: vec![],
+            constraints: WorkConstraints::default(),
+            requested_targets: vec![RequestedTarget {
+                reference: "FEAT-TEST-001#binding.impl/target.handler-present"
+                    .parse()
+                    .unwrap(),
+                criterion: None,
+                transition: TargetTransition::Modify,
+            }],
+        };
+        let plan = plan(&request, &workspace, &index, "rev-inactive").expect("plan");
+        assert_eq!(plan.status, PlanStatus::Blocked);
+        assert!(
+            plan.slices[0]
+                .blockers
+                .iter()
+                .any(|diagnostic| diagnostic.rule_id == "SYU-TARGET-002")
+        );
+        assert!(plan.slices[0].editable_targets.is_empty());
     }
 }
