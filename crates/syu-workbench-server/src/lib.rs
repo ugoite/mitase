@@ -5516,6 +5516,37 @@ mod tests {
         }
     }
 
+    fn copy_workspace_tree(source: &Path, destination: &Path) {
+        fs::create_dir_all(destination).expect("workspace destination");
+        for entry in fs::read_dir(source).expect("workspace source") {
+            let entry = entry.expect("workspace entry");
+            let name = entry.file_name();
+            if matches!(name.to_str(), Some(".git" | "target" | "node_modules")) {
+                continue;
+            }
+            let source_path = entry.path();
+            let destination_path = destination.join(&name);
+            if source_path.is_dir() {
+                copy_workspace_tree(&source_path, &destination_path);
+            } else {
+                fs::copy(source_path, destination_path).expect("copy workspace file");
+            }
+        }
+    }
+
+    /// The specification and config transaction tests must exercise real
+    /// workspace writes, but they must never mutate the repository that the
+    /// rest of `cargo test --workspace` is concurrently inventorying. Copy the
+    /// tracked workspace surface and create a fresh git baseline so candidate
+    /// validation sees the same exact targets as production.
+    fn isolated_workspace_for_transactions() -> tempfile::TempDir {
+        let root = workspace_root();
+        let temp = tempfile::tempdir().expect("transaction workspace");
+        copy_workspace_tree(&root, temp.path());
+        initialize_fixture_git(temp.path());
+        temp
+    }
+
     fn initialize_fixture_git(root: &Path) {
         for args in [
             vec!["init", "-q"],
@@ -6993,8 +7024,8 @@ mod tests {
         assert!(history.current_for("plan-current", "slice-other").is_none());
     }
 
-    async fn run_spec_transaction(app: Router) {
-        let path = workspace_root().join("docs/syu/requirements/workbench.yaml");
+    async fn run_spec_transaction(app: Router, root: &Path) {
+        let path = root.join("docs/syu/requirements/workbench.yaml");
         let original = fs::read_to_string(&path).expect("original specification");
         let (basis, csrf, _) = projection_and_basis(&app).await;
         let command = StructuredEditCommand {
@@ -7062,11 +7093,11 @@ mod tests {
         fs::write(&path, original).expect("restore specification");
     }
 
-    async fn run_config_transaction(app: Router) {
-        let path = workspace_root().join("syu.yaml");
+    async fn run_config_transaction(app: Router, root: &Path) {
+        let path = root.join("syu.yaml");
         let original = fs::read_to_string(&path).expect("original config");
         let (basis, csrf, _) = projection_and_basis(&app).await;
-        let workspace = SpecWorkspace::load(workspace_root()).unwrap();
+        let workspace = SpecWorkspace::load(root).unwrap();
         let config = workspace.config.clone();
         let command = StructuredEditCommand {
             basis: basis.clone(),
@@ -7112,14 +7143,22 @@ mod tests {
 
     #[tokio::test]
     async fn workbench_spec_edit_transaction() {
-        let _workspace_lock = workspace_test_lock().await;
-        run_spec_transaction(WorkbenchServer::new(workspace_root()).router()).await;
+        let workspace = isolated_workspace_for_transactions();
+        let root = workspace
+            .path()
+            .canonicalize()
+            .expect("canonical workspace root");
+        run_spec_transaction(WorkbenchServer::new(root.clone()).router(), &root).await;
     }
 
     #[tokio::test]
     async fn workbench_config_edit_transaction() {
-        let _workspace_lock = workspace_test_lock().await;
-        run_config_transaction(WorkbenchServer::new(workspace_root()).router()).await;
+        let workspace = isolated_workspace_for_transactions();
+        let root = workspace
+            .path()
+            .canonicalize()
+            .expect("canonical workspace root");
+        run_config_transaction(WorkbenchServer::new(root.clone()).router(), &root).await;
     }
 
     #[tokio::test]

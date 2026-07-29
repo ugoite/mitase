@@ -543,7 +543,7 @@ pub fn evaluate(
 
     if let Some(required_level) = public_probe {
         let public_subjects =
-            public_entrypoint_subjects(workspace, index, &active, revision, required_level);
+            public_entrypoint_subjects(workspace, index, revision, required_level);
         seed_subjects.extend(public_subjects);
     }
 
@@ -1084,18 +1084,30 @@ fn verification_subject(
 fn public_entrypoint_subjects(
     workspace: &SpecWorkspace,
     index: &SpecIndex,
-    active: &[&syu_inventory::ArtifactUnit],
     revision: &str,
     required_level: ReadinessLevel,
 ) -> Vec<ReadinessSubject> {
-    active
+    // Language visibility is semantic inventory metadata, not an inferred
+    // product contract. The readiness denominator must remain the explicit
+    // `exposes` declarations: each one names an exact public entrypoint and
+    // binds it to a capability target that can supply acceptance evidence.
+    index
+        .exposes_by_target
         .iter()
-        .filter(|unit| unit.exposure == syu_inventory::ArtifactExposure::Public)
-        .map(|unit| {
+        .map(|(target_ref, exposed_target)| {
             let mut blockers = Vec::new();
+            let Some(identity) = index.target_to_artifact.get(target_ref) else {
+                return subject(
+                    format!("public:{target_ref}"),
+                    public_entrypoints_scope(),
+                    required_level,
+                    false,
+                    "explicit public entrypoint target does not resolve to one active semantic artifact",
+                );
+            };
             let owners = index
                 .artifact_owners
-                .get(&unit.identity)
+                .get(identity)
                 .cloned()
                 .unwrap_or_default();
             let exact = owners
@@ -1106,13 +1118,13 @@ fn public_entrypoint_subjects(
                         binding: owner.binding.clone(),
                         target_id: id.clone(),
                     };
-                    (index.target_to_artifact.get(&reference) == Some(&unit.identity))
+                    (index.target_to_artifact.get(&reference) == Some(identity))
                         .then_some(reference)
                 })
                 .collect::<Vec<_>>();
             if exact.len() != 1 {
                 return subject(
-                    format!("public:{}", unit.identity),
+                    format!("public:{target_ref}"),
                     public_entrypoints_scope(),
                     required_level,
                     false,
@@ -1123,14 +1135,10 @@ fn public_entrypoint_subjects(
                 );
             }
             let target_ref = &exact[0];
-            if index.target_to_artifact.get(target_ref) != Some(&unit.identity) {
+            if index.target_to_artifact.get(target_ref) != Some(identity) {
                 blockers
                     .push("exact ArtifactTarget does not resolve to the public artifact".into());
             }
-            // A capability boundary may itself be public. Registry-only
-            // targets use `exposes` to point at that boundary; direct
-            // capability targets retain their own real acceptance criterion.
-            let exposed_target = index.exposes_by_target.get(target_ref).unwrap_or(target_ref);
             let criteria = index
                 .criteria_to_implementation_targets
                 .iter()
@@ -1172,7 +1180,7 @@ fn public_entrypoint_subjects(
                 }
             }
             ReadinessSubject {
-                id: format!("public:{}", unit.identity),
+                id: format!("public:{target_ref}"),
                 scope_id: public_entrypoints_scope().into(),
                 required_level,
                 ready: blockers.is_empty(),
@@ -1409,20 +1417,9 @@ mod tests {
                 .to_path_buf();
             let workspace = SpecWorkspace::load(root).expect("workspace");
             let index = workspace.index().expect("index");
-            let active = index
-                .artifact_units
-                .iter()
-                .filter(|unit| {
-                    matches!(
-                        unit.reachability,
-                        syu_inventory::ArtifactReachability::Active
-                    ) && unit.exposure != syu_inventory::ArtifactExposure::Support
-                })
-                .collect::<Vec<_>>();
             public_entrypoint_subjects(
                 &workspace,
                 &index,
-                &active,
                 "readiness-test",
                 ReadinessLevel::Seedable,
             )
