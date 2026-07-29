@@ -4795,7 +4795,7 @@ requirements:
     }
 
     #[test]
-    fn ungoverned_public_function_fails_the_public_entrypoint_probe() {
+    fn language_public_symbol_without_an_exposes_claim_is_not_a_public_contract_subject() {
         let tempdir = tempdir().unwrap();
         copy_dir(&workbench_fixture_root(), tempdir.path());
         fs::write(
@@ -4817,10 +4817,15 @@ requirements:
         let index = workspace.index().unwrap();
         let report =
             evaluate_readiness(&workspace, &index, "readiness-test", false).expect("readiness");
-        assert!(report.seedability.blockers.iter().any(|blocker| {
-            blocker.contains("ungoverned")
-                && blocker.contains("requires exactly one exact ArtifactTarget owner")
-        }));
+        assert!(
+            !report
+                .seedability
+                .blockers
+                .iter()
+                .any(|blocker| blocker.contains("ungoverned")),
+            "language visibility alone must not invent a public contract: {:?}",
+            report.seedability.blockers
+        );
     }
 
     #[test]
